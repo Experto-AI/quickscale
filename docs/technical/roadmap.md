@@ -165,16 +165,17 @@ worktree, the right column the reverse.
   roadmap handoff was committed before synchronization, the three upstream commits were merged in
   W1, and the conflict was reconciled without changing any SA167d product byte. Phase C remains
   outstanding and no green prefix from its halted attempt is reusable.
-- **`wt-track2`** remains at `f60fe2bc`, **0 ahead / 2 behind post-checkpoint `v88`**, clean. The two
-  commits it lacks are W1's retained bookkeeping checkpoint and synchronization merge, not product
-  work. SA167c's A-D product delta is merged; E and F stay outstanding. **Sync before E.**
+- **`wt-track2`** remains clean at `f60fe2bc` and will lag post-checkpoint `v88` by this W1
+  bookkeeping history, not by product work. SA167c's A-D product delta is merged; E and F stay
+  outstanding. **Sync the checkpoint history before E.**
+  ***corrected after checkpoint attestation — not independently graded***
 - **`wt-track3`** is clean at resolved candidate
   `e82355df660fa2ff8b874c444dfce68b9d01c367`. It was **0 behind / 4 ahead** of the pre-checkpoint
-  `v88` base at `f60fe2bc`; after this W1 checkpoint merges it is **2 behind / 4 ahead**, with the two
-  missing commits consisting only of this bookkeeping checkpoint and its synchronization merge. Its
-  SA135 roadmap conflict is resolved, and the exact consistency test plus SA135 release campaign are
-  green. SA135 remains open on `v88` until this candidate's successor integrates; the genuinely
-  remaining work is fresh convergence, patch-backed terminal attestation, and exact-tip integration.
+  `v88` base at `f60fe2bc`; after this W1 checkpoint merges the refs diverge by this bookkeeping
+  history on `v88` and the four retained candidate commits on W3. Its SA135 roadmap conflict is
+  resolved, and the exact consistency test plus SA135 release campaign are green. SA135 remains open
+  on `v88` until this candidate's successor integrates; the genuinely remaining work is fresh
+  convergence, patch-backed terminal attestation, and exact-tip integration.
   ***corrected after checkpoint attestation — not independently graded***
 
 W1's retained checkpoint is bookkeeping-only and does not complete SA167d. W3's retained closeout
@@ -194,10 +195,10 @@ window is complete and the standing state was restored exactly.
 
 ### Next action per lane
 
-- **W2 — sync the two bookkeeping commits, then resume SA167c (#21) at E-closeout.** Retained product
+- **W2 — sync the W1 bookkeeping checkpoint, then resume SA167c (#21) at E-closeout.** Retained product
   commit `91fd3bb6e6b638735361b511c1515cddccce5d15` carries accepted A-D. Do not reimplement A-D.
   Reconcile E, then run F's frozen-candidate release validation including `make ci-e2e`. W2 claims no
-  standing service.
+  standing service. ***corrected after checkpoint attestation — not independently graded***
 - **W1 — restart SA167d (#18) Phase C from command 1 in a new product run.** The gate that
   halted the last attempt is fixed upstream, not by W1: the exit-141 provisioning failure is repaired
   by `91fd3bb6`, and the focused suite returns 35 passed on the synchronized checkpoint. **No
@@ -221,11 +222,12 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA167c (#21) | **yes** — sync two bookkeeping commits; E is the first resumable phase | **yes** — E and F are W2-owned; `make ci-e2e` is a command, not another lane's output | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
+| **W2** | SA167c (#21) | **yes** — sync the W1 bookkeeping checkpoint; E is the first resumable phase | **yes** — E and F are W2-owned; `make ci-e2e` is a command, not another lane's output | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
 | **W1** | SA167d (#18) | **yes** — retained checkpoint merged; restart Phase C whole | **yes** — the restarted Phase C, ledger reconciliation, convergence, and attestation are W1-owned | **no for ticket completion** — the checkpoint merge clears no Phase C or release gate | no |
 | **W3** | SA135 closeout candidate | **yes** — resolved candidate `e82355df` is ready for fresh convergence | **yes** — convergence, patch-backed attestation, and integration are root/W3 closeout work | **no, not yet** — the resolved candidate still needs fresh independent review before exact-tip merge | no |
 
-The W3 readiness row was ***corrected after checkpoint attestation — not independently graded***.
+The W2 and W3 readiness rows were
+***corrected after checkpoint attestation — not independently graded***.
 
 **All three lanes can start and finish their next work, but the W1 checkpoint is not ticket
 completion and W3's resolved candidate is not yet mergeable.** W1 must rerun SA167d Phase C whole in
@@ -481,11 +483,12 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   [decisions.md → Module Presence States](decisions.md#module-presence-states). No PostgreSQL
   scheduling decision is required — W2's only cluster-addressed command runs through
   `provision_ci_postgres.sh run --profile restricted`, a private ephemeral server.
-  **Remaining plan (serial; do not reimplement A-D).** `wt-track2` is at `f60fe2bc` and needs only the
-  two bookkeeping commits from this checkpoint before product work resumes. Reviewed plan authority
+  **Remaining plan (serial; do not reimplement A-D).** `wt-track2` is at `f60fe2bc` and needs only
+  this W1 bookkeeping checkpoint history before product work resumes. Reviewed plan authority
   `EV-4` covers phases C-F; C and D are accepted. The first resumable phase is E because all of its
   dependencies are accepted. If that reference no longer resolves, this paragraph is the cold-start
   resume object and fresh reviewed-plan authority must preserve the accepted A-D boundary.
+  ***corrected after checkpoint attestation — not independently graded***
   1. **E-closeout.** Reconcile decisions, implementation contract, validation policy, ticket context,
      docs index, roadmap queue/counts, and changelog evidence. Retain the SA164 and SA166 boundaries.
      Preserve the retained product object and archived terminal-correction provenance without
