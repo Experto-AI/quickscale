@@ -76,7 +76,7 @@ v88 — three worktrees, thirteen open merge positions carrying thirteen open ti
 
 W2 (gates & declared wiring)   ★ CRITICAL PATH — committed head, band-C tail
   SA167c ─► SA166 ─► SA164     #21, #24, #25
-  (SA167c: A/B accepted, C's product delta merged as retained delivery; C-acceptance and D-F open)
+  (SA167c: A-D accepted; E closeout and F release validation remain open)
 
 W1 (module wiring + generated-output fixes)
   SA167d ─► SA165 ─► SA161 ─► SA160 ─► SA174 ─► SA175     #18, #22, #19, #20, #31, #32
@@ -185,10 +185,11 @@ window is complete and the standing state was restored exactly.
 
 ### Next action per lane
 
-- **W2 — resume SA167c (#21) at C-acceptance.** Sync `wt-track2` (23 behind), then revalidate C's
-  complete task surface on the merged retained bytes; do not reimplement A or B. Then D's negative
-  proof, E closeout, and F release validation in order, and reconcile the local-CI help/runtime
-  numbering advisory. W2 claims no standing service.
+- **W2 — resume SA167c (#21) at E-closeout.** Retained product commit
+  `91fd3bb6e6b638735361b511c1515cddccce5d15` accepts C's local/hosted gate surface and D's restored
+  negative proof, aligns local-CI help with runtime stages, and fixes the coupled child-probe race.
+  Do not reimplement A-D. Reconcile E, then run F's frozen-candidate release validation. W2 claims no
+  standing service.
 - **W1 — SA167d (#18) needs closeout, not re-implementation.** The sync is finished and `wt-track1`
   is level with `v88`, so freeze the candidate as it stands, run one Phase C validation campaign in
   order, then perform one terminal attestation **supplied with the complete base-to-tip patch as a
@@ -334,8 +335,9 @@ Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16,
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning. Position
 #15 carries SA135 alone; SA163 is closed and archived in [CHANGELOG.md](../../CHANGELOG.md).
 
-The per-lane heads are **#21 (W2), #18 (W1), and #15 (W3)**. #21 has accepted A/B plus a merged
-retained C product delta (`d31c6b41`), with C-acceptance and D-F outstanding. #18 is a
+The per-lane heads are **#21 (W2), #18 (W1), and #15 (W3)**. #21 has accepted A-D, including retained
+product commit `91fd3bb6e6b638735361b511c1515cddccce5d15`; E closeout and F release validation remain
+outstanding, so the retained checkpoint clears no gate. #18 is a
 phase-E-accepted candidate on `wt-track1` at `0930b500`, awaiting a finished sync, one validation
 campaign, and one attestation. #15 has accepted P/A/B/C/D/E0/E1/F evidence and a returned-green G
 validation campaign, with archive-and-G-FINAL outstanding and **no blocker** since the stale
@@ -438,34 +440,38 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
 
 
 
-  **State (measured 2026-08-31 against the branches): A and B are accepted; C's product delta is
-  merged.** Phase A's exact seven-command unchanged-candidate chain passed; Phase B's fail-hard
-  `check_module_app_declaration` checker and its hermetic suite are accepted. Phase C's product bytes —
-  Make target, gate-registry entry, local serial/parallel runners, hosted generator, generated `ci.yml`,
-  and parity consumers — merged into `v88` at `d31c6b41` (10 files, +862/-28) as **retained delivery**,
-  which clears no gate. The Phase-A acceptance chain, the source-bound projection probe, convergence's
-  four repaired defects, and the terminal fail-open traversal remediation are archived in
-  [CHANGELOG.md](../../CHANGELOG.md).
-  Current `v88` tip is `c0ebf34b28020b9f4cf7e397ab25af0cdc0e80a5`; this status is measured against
-  that tree, not the earlier Phase-C merge object.
-  **Outstanding: C's acceptance, then D, E, F, in that order.** C was never adjudicated — its
-  implementation return was partial and convergence repaired the combined delta afterwards, so the
-  merged bytes carry no acceptance. Release readiness is unestablished because `make ci-e2e` has not
-  run. One advisory also stands: the local-CI help text numbers conceptual checks differently from the
-  runtime stage groups; align the two models and add a help-versus-runtime parity assertion.
+  **State (measured 2026-09-01): retained partial checkpoint; A-D are accepted, E and F are
+  outstanding.** Phase A's unchanged-candidate chain and Phase B's fail-hard declaration checker stay
+  accepted. Phase C accepted the retained Make/registry/local/hosted/parity surface and aligned
+  local-CI help with the runtime's eleven non-E2E stages plus optional stage twelve. Its focused suite
+  passed 293 tests and the declaration, manifest-sync, parity, and hosted-generation checks. Phase D
+  removed `social`'s sole `apps` projection under fail-safe restoration, observed the intended
+  `missing apps declaration` exit 1, restored the exact blob, and returned both declaration and
+  manifest-sync gates green with no persistent manifest delta.
+  A task-gate run then exposed a pre-existing xdist-only child process-group probe race. Serial
+  convergence fixed that coupled lifecycle defect and passed 326 focused task tests plus the four gate
+  checks. Terminal review found one high-normal-exit classification gap; the bounded remediation now
+  preserves explicit exit 200 and real signal status, with 35 lifecycle tests green. That final
+  correction is ***applied after terminal attestation — not independently graded***.
+  The retained product object is `91fd3bb6e6b638735361b511c1515cddccce5d15`. It is partial delivery,
+  keeps SA167c open at #21, leaves SA166 dependent, and clears no release gate.
+  **Outstanding: E-closeout, then F-frozen-candidate release validation.** E was not dispatched after
+  the inherited task gate halted the forward chain; although convergence corrected that gate defect,
+  the closed implementation stage was not re-entered. F depends on E. Release readiness remains
+  unestablished because `make ci-e2e` has not run.
   **Decisions needed:** none. D3 and the declaration source authority are settled; see
   [decisions.md → Module Presence States](decisions.md#module-presence-states). No PostgreSQL
   scheduling decision is required — W2's only cluster-addressed command runs through
   `provision_ci_postgres.sh run --profile restricted`, a private ephemeral server.
-  **Remaining plan (serial; do not reimplement A or B):**
-  1. **C-acceptance.** Sync `wt-track2` (23 behind) and revalidate C's complete task surface on the
-     merged bytes — declaration gate, `make check-manifest-sync`, `make check-gate-parity`, and the
-     local/hosted runner consumers — then close the help/runtime numbering advisory.
-  2. **D-negative proof.** Remove `social`'s sole `apps` projection, require the gate to fail for the
-     intended reason, restore the exact bytes, and prove gate plus manifest sync green.
-  3. **E-closeout.** Reconcile decisions, implementation contract, validation policy, ticket context,
+  **Remaining plan (serial; do not reimplement A-D).** Reviewed plan authority `EV-4` covers phases
+  C-F; C and D are accepted. The first resumable phase is E because all of its dependencies are
+  accepted. If that reference no longer resolves, this paragraph is the cold-start resume object and
+  fresh reviewed-plan authority must preserve the accepted A-D boundary.
+  1. **E-closeout.** Reconcile decisions, implementation contract, validation policy, ticket context,
      docs index, roadmap queue/counts, and changelog evidence. Retain the SA164 and SA166 boundaries.
-  4. **F-frozen candidate.** Resync current `v88`, freeze one clean candidate, run the release campaign
+     Record the retained product object and the not-independently-graded terminal correction without
+     claiming release readiness.
+  2. **F-frozen candidate.** Resync current `v88`, freeze one clean candidate, run the release campaign
      once including `make ci-e2e`, then serial convergence and patch-backed terminal attestation before
      closeout. Merge only the attested exact tip.
   **The key itself is already gone.** `grep -rn django_apps` over `quickscale_core`,
@@ -477,8 +483,9 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   `commands/test_module_config_extended.py` fixtures — both are green on `v88` and are no longer an
   oracle for this ticket — and must not touch `quickscale_core/contracts/` or
   `quickscale_core/manifest/`.
-  **Rollback:** `git reset --hard` to the pre-C-acceptance tip in `wt-track2`; the merged retained
-  delivery on `v88` is not rewound.
+  **Retained-delivery boundary:** keep product object
+  `91fd3bb6e6b638735361b511c1515cddccce5d15`; a continuation builds E/F on that object rather than
+  rewinding or recreating accepted phases.
   **Shared conflict surface:** every `quickscale_modules/*/module.yml`, `scripts/gate_registry.json`, `scripts/{check,test}_module_app_declaration.py`, `scripts/test_gate_parity.py`, `scripts/{check_ci_locally.sh,sync_ci_gate_jobs.py}`, `Makefile`, `.github/workflows/ci.yml`, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`.
 
 - [ ] **SA167d — Complete the CLI wiring-drain acceptance.** `Band B · Tier 2 · W1 · merge #18 · deps: none · blocks SA165`
