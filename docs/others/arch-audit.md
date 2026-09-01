@@ -31,15 +31,23 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
 generated-project updater. Twelve open v88 ticket entries run on three tracks across twelve open merge
-positions; **W2 sets the release date** (SA167c is the longest open chain). W3 holds the exclusive
+positions; **W2 sets the release date** because SA167c remains open at #21 with phases A-E accepted
+on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
+`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
+SA170/W3. No completion or release-readiness claim is made. W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
 **Accepted-open SA167c checkpoint (2026-09-01).** SA167c remains open at merge position **#21**
-with SA166 still dependent on it. Phases A-D are accepted on retained product object
+with SA166 still dependent on it. Phases A-E are accepted on retained product object
 `91fd3bb6e6b638735361b511c1515cddccce5d15`: C's declaration-gate surface and focused **293-test**
 campaign are accepted, and D's fail-hard missing-app proof restored the exact bytes before both
-related gates returned green. E closeout and F release validation remain outstanding; this retained
-delivery clears no release gate, and its accepted evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
+related gates returned green. E's ordered lint/typecheck/context checkpoint passed; F halted after
+`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by SA170/W3.
+F remains outstanding and unaccepted; this retained delivery clears no release gate, and no completion
+or release-readiness claim is made. Retained-partial-only merge-back of the synchronized nine-file
+status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip
+attestation and integration remain pending. Its accepted evidence is archived in
+[CHANGELOG.md](../../CHANGELOG.md).
 
 **Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-09-01).** SA167d
 remains open and active at merge position **#18**, with SA165 still dependent on it. Phases A-E

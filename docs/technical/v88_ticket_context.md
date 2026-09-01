@@ -526,11 +526,12 @@ triggers survive the next pass.
 The artifact is
 `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, a bounded
 literal tripwire for cross-table `UPDATE … SET organization_id` migration DML; it is
-not a schema-parity proof. Its `_migdir()` helper reads the inert `django_apps:`
-manifest key and silently guesses a conventional path when absent, while its parity
-backstop still names the retired `v87` baseline. The current regenerated migrations and
-discharged S4 BYPASSRLS prerequisite are settled; SA164 owns the `_migdir()` helper
-correction and parity-backstop re-anchoring.
+not a schema-parity proof. The retired `django_apps:` manifest dependency is already gone:
+its `_migdir()` helper constructs the conventional migration path directly. The helper
+still returns `None` when that directory is absent, and the scan silently skips that module,
+while its parity backstop still names the retired `v87` baseline. The current regenerated
+migrations and discharged S4 BYPASSRLS prerequisite are settled; SA164 owns making the
+conventional-path absence fail loudly and re-anchoring the parity backstop.
 
 ### 2. Privileged-command pair — the watch item fired, and left this ticket
 
@@ -698,12 +699,14 @@ Worth holding as a set, because each appears in more than one ticket:
 
 ## SA167a / SA167c / SA167d — module wiring standardization
 
-These open roadmap entries carry conceptual context for the module-wiring standardization. The
-completed SA167a handoff is retained only as historical context, and SA167b's completed relocation
-and P4 acceptance are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c remains open in
-current `v88`: phases A-D are accepted, its product delta is retained delivery at
-`91fd3bb6`, and the focused C evidence plus D's restored-negative-proof evidence are archived in
-[CHANGELOG.md](../../CHANGELOG.md); phases E and F remain pending. SA167d remains open:
+This shared umbrella retains historical context for the module-wiring standardization. The completed
+SA167a and SA167b handoffs are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c remains open:
+phases A-E are accepted on retained product object
+`91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding after
+`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
+SA170/W3, so no completion or release-readiness claim is made. Retained-partial-only merge-back of
+the synchronized nine-file status checkpoint is authorized without accepting F, closing SA167c, or
+unblocking SA166; exact-tip attestation and integration remain pending. SA167d remains open:
 phases A-E are accepted at E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19`; retained-partial
 convergence and terminal attestation are complete, and retained-partial-only merge-back is
 authorized for the reviewed partial plus the latest-v88 status reconciliation without closing the
@@ -733,9 +736,11 @@ and a migration that no generated project ever installed.
 
 **The rule** is now written in
 [decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority): every
-module owns its adapter, and declares its apps once, in its own `module.yml`. These four
-tickets make the tree match it — `a` declares, `b` relocates, `c` retires the inert key
-and adds the gate that keeps it true, `d` drains the CLI.
+module owns its adapter, and declares its apps once, in its own `module.yml`. The retained
+module-wiring product bytes make the tree match it: declarations and adapters now live with their
+modules, the inert key is retired and its gate bytes are retained, and the CLI boundary is drained. The
+open SA167c checkpoint reflects release validation and integration state, not a product-contract
+rollback.
 
 **Why the split is by phase and not by module.** All nine core-side blocks began in one
 1,508-line file, and every phase has had to edit that same file. The phase boundary keeps one
