@@ -5,6 +5,79 @@
 ## v88 development — 2026-08-21
 
 - **SA135 archive and closeout reconciliation prepared; final release evidence remains external (2026-09-01).** SA135's accepted P/A/B/C/D/E0/E1/F evidence and returned-green Phase G campaign are archived here. This repository reconciliation removes SA135's open roadmap entry and merge position **#15**, retires its current context, updates every live scheduling and queue-count consumer, and clears SA170's former worktree-ordering dependency while preserving its transferred Docker/E2E obligations. The archived record intentionally claims neither the frozen G-FINAL campaign nor convergence, terminal attestation, or merge; those later obligations belong to the external closeout ledger and are not represented as completed in tracked bytes.
+- **SA167c phases C and D accepted; the coupled child-probe lifecycle race fixed (2026-09-01).**
+  Archived out of the roadmap, which now carries only what SA167c still owes. Phase C accepted the
+  retained Make/registry/local/hosted/parity surface and aligned `check_ci_locally.sh`'s help with the
+  runtime's **eleven** non-E2E stages plus optional stage twelve; its focused suite passed **293
+  tests** alongside the declaration, manifest-sync, parity, and hosted-generation checks. Phase D
+  removed `social`'s sole `apps` projection under fail-safe restoration, observed the intended
+  `missing apps declaration` **exit 1**, restored the exact blob, and returned both the declaration
+  and manifest-sync gates green with no persistent manifest delta. A task-gate run then exposed a
+  pre-existing **xdist-only child process-group probe race**; serial convergence fixed that coupled
+  lifecycle defect and passed **326 focused task tests** plus the four gate checks. Terminal review
+  found one high-normal-exit classification gap, and the bounded remediation now preserves explicit
+  exit 200 and real signal status with **35 lifecycle tests green** — that final correction is
+  ***applied after terminal attestation and was not independently graded***, and SA167c's phase E must
+  record it as such. The product object is `91fd3bb6e6b638735361b511c1515cddccce5d15`; it is retained
+  partial delivery, keeps SA167c open at #21, leaves SA166 dependent, and clears no release gate.
+  **Release-wide consequence:** the fix landed in `scripts/provision_ci_postgres.sh` and
+  `scripts/test_provision_ci_postgres.py`, so any lane behind `v88` inherits the old red.
+
+- **Roadmap cleanup and rebalance review (2026-09-01, fifth pass).** **No ticket closed and no audit
+  finding closed since the previous pass**, so nothing was archived as complete from
+  `docs/technical/roadmap.md`, `docs/others/arch-audit.md`, or `docs/others/tech-audit.md`; live counts
+  stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1 `privileged-command-set-multi-owner`
+  stale-by-decision until SA174 demotes it, and the queue is unchanged at **thirteen** open ticket
+  entries across **thirteen** open merge positions, one entry per position. The SA167c A-D transcript
+  was archived above and replaced in the roadmap by its boundary facts; roadmap length moved
+  **889 → 913 lines**, the increase being two newly recorded lane blockers rather than restored
+  narrative, with no open ticket, dependency, or acceptance criterion lost.
+  **Band A re-verified empty, and one reported red disproved.** W1's 2026-09-01 Phase C campaign
+  halted at `make check` on
+  `scripts/test_provision_ci_postgres.py::test_immediate_children_preserve_status_and_cleanup[success]`
+  returning **141** instead of 0, and W1's working tree proposed a Band-A prerequisite repair ticket
+  owning `scripts/provision_ci_postgres.sh`. That repair is **not owed**: the defect was already fixed
+  on `v88` by SA167c's merged `91fd3bb6`, and the suite was re-run on the current tip at **35 passed**.
+  `wt-track1` was two commits behind, nothing more. The proposed Band-A entry, the temporary SA167d
+  ownership of the provisioning script, and the four-step repair-then-restart plan were all rejected
+  and never entered the roadmap; the standing note that the script has **no open owner** was kept and
+  annotated with the fix that last touched it.
+  **Lane state re-measured against the branches and materially changed** (`v88` at `4fe2d8eb`):
+  `wt-track2` is now **0 ahead / 0 behind**, clean, and owes no sync at all; `wt-track1` is
+  **0 ahead / 2 behind** at `dc53bacd` with uncommitted roadmap notes that this pass supersedes;
+  `wt-track3` is **1 ahead / 2 behind** at `07607c49`, also with uncommitted notes. The earlier
+  "all three worktrees clean / no unmerged product delta" statement is retired: **W3 holds one
+  unmerged retained delta.**
+  **W3's SA135 closeout is authored, campaign-passed, and terminally approved at exact object
+  `07607c49d7e45929b8938d7a7d2c0a9909057c0a`, and failed only at integration** — `v88` advanced during
+  the campaign and the merge conflicted in `docs/technical/roadmap.md`, a same-fact conflict between
+  that commit's archival edits and the newer lane text. The attempt was aborted cleanly, so `v88` does
+  not contain the closeout; plan phase `G-CLOSEOUT` stays unaccepted because its implementation
+  handback was partial, which the later convergence pass could not retroactively repair. SA135's
+  remaining plan was rewritten from *archive-and-G-FINAL* to *sync, resolve the roadmap conflict in the
+  worktree, re-validate, re-converge, and re-attest the new exact tip* — the prior approval is bound to
+  the pre-conflict object and does not carry across the resolution.
+  **Track readiness: all three lanes are truly green on all three states.** W2 (SA167c, #21) starts
+  with no sync and owes E then F including `make ci-e2e`; W1 (SA167d, #18) drops its local roadmap
+  scribble, syncs two commits, and restarts Phase C whole from command 1 with no reusable green prefix;
+  W3 (SA135, #15) syncs and resolves one same-fact conflict. **Only SA167c is on the critical path** and
+  constitutes real release progress; SA167d and SA135 are truly green but off it, and the nine band-C
+  positions are filler. **No lane is blocked by another lane's ticket and no maintainer decision is
+  open** — both 2026-09-01 halts were self-clearing on their owning lane.
+  **Rebalance outcome: no cross-lane move stands, fifth consecutive pass**, and every open ticket
+  already carries a track. The structural reasons are unchanged — all three W2 tickets own
+  `scripts/gate_registry.json`, which never crosses worktrees; W1's `sa90_emission_manifests.json`
+  rebaseline is the ordered pair #19 → #20 and may not be split; SA174/SA175 carry no content
+  dependency but moving band-C slack onto W3's exclusive-slot queue or W2's release-setting queue buys
+  no release progress; and moving SA165 (#22) to W3 would make `scripts/test_isolation_conformance.sh`
+  single-lane but park DB-free work behind the slot queue. **SA171 (#28) still needs no exclusive slot**
+  and remains W3's fallback. No *code* file gained a second lane. The closeout conflict surface
+  (`CHANGELOG.md`, the roadmap, `docs/technical/v88_ticket_context.md`, and an audit document when a
+  ticket closes a live finding) is unchanged and remains covered by the execution rules'
+  sync-resolve-rerun-review merge procedure — **W3's aborted merge is that procedure working, not
+  failing**: the conflict surfaced in the worktree and `v88` was left untouched.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` was re-run in the same change and
+  exited 0 with **29 passed**.
 
 - **Roadmap cleanup and rebalance review (2026-08-31, fourth pass).** **No ticket closed and no audit
   finding closed since the previous pass**, so nothing was archived as complete from

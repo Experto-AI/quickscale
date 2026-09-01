@@ -701,8 +701,9 @@ Worth holding as a set, because each appears in more than one ticket:
 These open roadmap entries carry conceptual context for the module-wiring standardization. The
 completed SA167a handoff is retained only as historical context, and SA167b's completed relocation
 and P4 acceptance are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c remains open in
-current `v88`: phases A and B are accepted, its Phase-C product delta is retained delivery, and
-C acceptance plus phases D-F remain pending. SA167d remains open:
+current `v88`: phases A-D are accepted, its product delta is retained delivery at
+`91fd3bb6`, and the focused C evidence plus D's restored-negative-proof evidence are archived in
+[CHANGELOG.md](../../CHANGELOG.md); phases E and F remain pending. SA167d remains open:
 phases A-E are accepted at E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19`; retained-partial
 convergence and terminal attestation are complete, and retained-partial-only merge-back is
 authorized for the reviewed partial plus the latest-v88 status reconciliation without closing the

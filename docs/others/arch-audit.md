@@ -34,7 +34,14 @@ generated-project updater. Twelve open v88 ticket entries run on three tracks ac
 positions; **W2 sets the release date** (SA167c is the longest open chain). W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
-**Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-08-31).** SA167d
+**Accepted-open SA167c checkpoint (2026-09-01).** SA167c remains open at merge position **#21**
+with SA166 still dependent on it. Phases A-D are accepted on retained product object
+`91fd3bb6e6b638735361b511c1515cddccce5d15`: C's declaration-gate surface and focused **293-test**
+campaign are accepted, and D's fail-hard missing-app proof restored the exact bytes before both
+related gates returned green. E closeout and F release validation remain outstanding; this retained
+delivery clears no release gate, and its accepted evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
+
+**Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-09-01).** SA167d
 remains open and active at merge position **#18**, with SA165 still dependent on it. Phases A-E
 are accepted at E0 tip
 `bd2c291ba2d40494970464741ac51bfd45445a19`; E0 made no tracked edits. The focused command
@@ -45,6 +52,9 @@ regressions and monotonicity. Retained-partial convergence and terminal attestat
 and retained-partial-only merge-back is authorized for the reviewed partial plus the latest-v88
 status reconciliation without closing SA167d. Completion-grade Phase C convergence, terminal
 attestation, and exact-tip integration remain pending.
+The 2026-09-01 Phase C attempt then halted at `make check` on the inherited exit-141 provisioning
+probe; `scripts/test_provision_ci_postgres.py` returns **35 passed** on current `v88`, so W1 owns no
+repair and must restart its campaign after syncing two commits. No SA167d tracked byte was written.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 **Scope decision.** With the delta this small, the pass's value is re-verification plus depth

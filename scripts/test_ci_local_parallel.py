@@ -260,6 +260,23 @@ def _run_ci(
     )
 
 
+def _run_help(tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    """Capture bootstrap-free help in the same fake environment as CI runs."""
+    help_tmp_path = tmp_path / "help"
+    help_tmp_path.mkdir()
+    _, environment = _fake_environment(help_tmp_path)
+    environment["PYTHON3"] = str(help_tmp_path / "missing-python")
+    environment["GATE_REGISTRY"] = str(help_tmp_path / "missing-registry.json")
+    return subprocess.run(
+        [str(SCRIPT), "--help"],
+        cwd=SCRIPT.parents[1],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
 def _events(tmp_path: Path) -> list[str]:
     return (tmp_path / "events.log").read_text(encoding="utf-8").splitlines()
 
@@ -483,6 +500,36 @@ def test_help_skips_registry_and_interpreter_bootstrap(tmp_path: Path, option: s
     assert result.returncode == 0
     assert "Usage: ./scripts/check_ci_locally.sh [OPTIONS]" in result.stdout
     assert not (tmp_path / "python.log").exists()
+
+
+def test_help_stage_numbers_match_runtime_stage_order(tmp_path: Path) -> None:
+    """Help headings follow the stages emitted by the fake serial runtime."""
+    runtime = _run_ci(tmp_path, parallel="0")
+    assert runtime.returncode != 0  # PostgreSQL is intentionally unavailable here.
+
+    runtime_prefixes: list[tuple[int, int]] = []
+    prefix_pattern = re.compile(r"^\[(\d+)/(\d+)\]", re.MULTILINE)
+    for prefix in prefix_pattern.findall(runtime.stdout):
+        parsed = (int(prefix[0]), int(prefix[1]))
+        if parsed not in runtime_prefixes:
+            runtime_prefixes.append(parsed)
+
+    help_result = _run_help(tmp_path)
+    assert help_result.returncode == 0
+    help_headings = [
+        int(number) for number in re.findall(r"^\s*(\d+)\.\s+", help_result.stdout, re.MULTILINE)
+    ]
+
+    assert help_headings[:-1] == [number for number, _ in runtime_prefixes]
+    assert help_headings[-1] == runtime_prefixes[-1][0] + 1
+    for grouped_heading in (
+        "  6. Module app declaration and org-context primitives gates",
+        "  7. CSRF-exempt, registered script suites, dependency vulnerability, "
+        "and security static-analysis gates",
+        "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint",
+        " 12. E2E tests (optional, with --e2e flag)",
+    ):
+        assert grouped_heading in help_result.stdout
 
 
 def test_registry_addition_is_used_by_serial_and_parallel_modes(tmp_path: Path) -> None:
