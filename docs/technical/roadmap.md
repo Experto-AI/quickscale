@@ -168,10 +168,14 @@ worktree, the right column the reverse.
 - **`wt-track2`** remains at `f60fe2bc`, **0 ahead / 2 behind post-checkpoint `v88`**, clean. The two
   commits it lacks are W1's retained bookkeeping checkpoint and synchronization merge, not product
   work. SA167c's A-D product delta is merged; E and F stay outstanding. **Sync before E.**
-- **SA135 retained checkpoint `07607c49`** is **1 ahead / 5 behind post-checkpoint `v88`**. It is the authored,
-  campaign-passed, terminally-approved closeout that **failed to integrate** when `v88` moved and the
-  merge conflicted in this file. The attempt was aborted cleanly, so `v88` does not contain it.
-  **W3's preserved restart state is sync-and-reconcile; the closeout content is not re-authored.**
+- **`wt-track3`** is clean at resolved candidate
+  `e82355df660fa2ff8b874c444dfce68b9d01c367`. It was **0 behind / 4 ahead** of the pre-checkpoint
+  `v88` base at `f60fe2bc`; after this W1 checkpoint merges it is **2 behind / 4 ahead**, with the two
+  missing commits consisting only of this bookkeeping checkpoint and its synchronization merge. Its
+  SA135 roadmap conflict is resolved, and the exact consistency test plus SA135 release campaign are
+  green. SA135 remains open on `v88` until this candidate's successor integrates; the genuinely
+  remaining work is fresh convergence, patch-backed terminal attestation, and exact-tip integration.
+  ***corrected after checkpoint attestation — not independently graded***
 
 W1's retained checkpoint is bookkeeping-only and does not complete SA167d. W3's retained closeout
 remains an unmerged product-adjacent delta and cannot be merged directly.
@@ -200,14 +204,14 @@ window is complete and the standing state was restored exactly.
   provisioning repair is owed; open no repair ticket and write no byte in
   `scripts/provision_ci_postgres.sh`.** Reuse no green prefix, and finish with fresh
   convergence and one terminal attestation supplied with the complete base-to-tip patch as a file.
-- **W3 — recover the retained SA135 closeout; do not re-author it.** Closeout commit `07607c49`
-  passed its campaign and holds terminal approval; it failed only at integration, on a same-fact
-  conflict in this file after `v88` advanced. Sync current `v88` into `wt-track3`, resolve that
-  conflict **in the worktree** against the current planner, re-run the consistency test and the SA135
-  release campaign on the resulting tip, then converge, attest against a materialized patch, and
-  merge that exact tip. Do not reopen the settled PostgreSQL lifecycle, recreate SA135's
-  implementation as open work, or attempt SA170's E2E Docker work. SA171 (#28) stays the lane's
-  DB-free fallback if this recovery stalls.
+- **W3 — carry resolved candidate `e82355df` through external closeout; do not re-author it.** The
+  same-fact roadmap conflict is resolved, and the exact consistency test plus SA135 release campaign
+  are green on that candidate. Fresh convergence and a materialized-patch terminal attestation must
+  bind the final exact bytes before root accepts and integrates them; incorporating this W1
+  bookkeeping checkpoint is an integration precondition, not a reason to repeat conflict resolution
+  or the accepted lifecycle campaign. Do not reopen the settled PostgreSQL lifecycle, recreate SA135
+  as open work, or attempt SA170's E2E Docker work. SA171 (#28) stays the lane's DB-free fallback if
+  closeout stalls. ***corrected after checkpoint attestation — not independently graded***
 
 ### Track readiness — the three states
 
@@ -219,14 +223,17 @@ merge-back is not order-gated behind another lane.
 |---|---|---|---|---|---|
 | **W2** | SA167c (#21) | **yes** — sync two bookkeeping commits; E is the first resumable phase | **yes** — E and F are W2-owned; `make ci-e2e` is a command, not another lane's output | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
 | **W1** | SA167d (#18) | **yes** — retained checkpoint merged; restart Phase C whole | **yes** — the restarted Phase C, ledger reconciliation, convergence, and attestation are W1-owned | **no for ticket completion** — the checkpoint merge clears no Phase C or release gate | no |
-| **W3** | SA135 (#15) | **yes** — recover `07607c49` through sync and one same-fact roadmap conflict | **yes** — re-validation, convergence, and attestation are W3-owned | **no, not from the retained object** — conflict resolution creates a new tip requiring review and attestation | no |
+| **W3** | SA135 closeout candidate | **yes** — resolved candidate `e82355df` is ready for fresh convergence | **yes** — convergence, patch-backed attestation, and integration are root/W3 closeout work | **no, not yet** — the resolved candidate still needs fresh independent review before exact-tip merge | no |
+
+The W3 readiness row was ***corrected after checkpoint attestation — not independently graded***.
 
 **All three lanes can start and finish their next work, but the W1 checkpoint is not ticket
-completion and W3's retained object is not mergeable.** W1 must rerun SA167d Phase C whole in a new
-product run; W3 must resolve the retained closeout against current `v88`; both eventual completion
-tips require fresh review and attestation. Only **SA167c (#21)** is on the critical path and
-constitutes real release progress. Neither halt needs a maintainer decision, and the five decisions
-settled on 2026-08-31 remain closed.
+completion and W3's resolved candidate is not yet mergeable.** W1 must rerun SA167d Phase C whole in
+a new product run; W3 needs fresh convergence, patch-backed terminal attestation, and exact-tip
+integration rather than another conflict-resolution cycle. Only **SA167c (#21)** is on the critical
+path and constitutes real release progress. Neither halt needs a maintainer decision, and the five
+decisions settled on 2026-08-31 remain closed.
+***corrected after checkpoint attestation — not independently graded***
 
 ### Maintainer decisions
 
@@ -353,9 +360,10 @@ outstanding, so the retained checkpoint clears no release gate. #18 is a phase-E
 whose 2026-09-01 Phase C attempt halted before any tracked product edit on an inherited gate that is
 now green upstream; its bookkeeping handoff is merged, and it owes one whole restarted campaign,
 fresh review, and one patch-backed attestation. #15 has accepted P/A/B/C/D/E0/E1/F/G evidence **and an authored,
-campaign-passed, terminally-approved closeout commit `07607c49` retained unmerged on `wt-track3`**;
-what it owes is conflict recovery against current `v88` plus re-validation, review, and attestation of
-the resulting tip.
+campaign-passed, terminally-approved closeout commit `07607c49` carried into resolved candidate
+`e82355df` on `wt-track3`**; the conflict resolution and release validation are complete, while fresh
+convergence, patch-backed terminal attestation, and exact-tip integration remain. SA135 stays open on
+`v88` until that integration succeeds. ***corrected after checkpoint attestation — not independently graded***
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Three are
@@ -582,33 +590,28 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   P/A/B/C/D/E0/E1/F are accepted, Phase G's synchronized campaign returned all eleven commands green,
   and the E1 evidence plus the E2 scope transfer to SA170 are archived in
   [CHANGELOG.md](../../CHANGELOG.md).
-  **Retained closeout checkpoint — `07607c49d7e45929b8938d7a7d2c0a9909057c0a` on `wt-track3`.** That
-  commit archives SA135, retires merge position #15, makes SA170 the W3 head with no SA135
-  dependency, and reconciles the seven current scheduling/count consumers. It passed the ticket's
-  release campaign and holds independent terminal approval at that exact object. Relative to current
-  post-checkpoint `v88`, it is **1 ahead / 5 behind** and is not integrated.
-  **The one blocker is an integration conflict, not a defect.** `v88` advanced during the campaign,
-  and merging the reviewed object conflicted in `docs/technical/roadmap.md` — a same-fact conflict
-  between that commit's archival edits and this planner's newer lane text. The attempt was aborted
-  cleanly. Plan phase `G-CLOSEOUT` is consequently unaccepted: its implementation handback was
-  partial, and although the later convergence pass corrected every reported same-fact defect and
-  revalidated the resulting bytes, it cannot retroactively change phase coverage.
-  **What remains is conflict resolution plus re-validation, not another implementation campaign.** Do
-  not repeat Phase G, E1/F, C, or D; do not reopen `.github/workflows/`,
+  **Resolved closeout candidate — `e82355df660fa2ff8b874c444dfce68b9d01c367` on `wt-track3`.** It
+  carries retained closeout checkpoint `07607c49d7e45929b8938d7a7d2c0a9909057c0a`, archives SA135 in
+  the candidate, retires merge position #15 there, makes SA170 the candidate's W3 head, and
+  reconciles the current scheduling/count consumers. The same-fact roadmap conflict is resolved, and
+  the exact consistency test plus SA135 release campaign are green. Those candidate-only transitions
+  do not change integration state: SA135 remains open on `v88` until the final exact tip merges.
+  Plan phase `G-CLOSEOUT` remains unaccepted because its implementation handback was partial; later
+  convergence cannot retroactively change phase coverage.
+  **What remains is fresh convergence, patch-backed terminal attestation, root acceptance, and
+  exact-tip integration — not conflict resolution, re-validation, or another implementation
+  campaign.** Do not repeat Phase G, E1/F, C, or D; do not reopen `.github/workflows/`,
   `scripts/provision_ci_postgres.sh`, or `scripts/test_gate_parity.py`; do not run the full E2E
   campaign — it is SA170's; and do not recreate SA135's implementation as open work. The stale
   SA135-bound canary that once made archiving unsafe is gone: the reconciled consistency suite routes
   its unknown-dependency mutation through SA167d instead, so **nothing goes stale when SA135 is
   archived and no reviewed-plan scope extension is owed.**
-  **Remaining plan (serial).** Restart from the retained object above. Merge current `v88` into that
-  worktree and resolve the roadmap conflict **there**, preserving both lanes' accepted evidence: take
-  the current planner's lane/readiness text as the base and re-apply the archival edits over it.
-  Re-run
-  `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`
-  and the SA135 release campaign on the resolved tip, then serial convergence, a materialized complete
-  patch, and one patch-backed terminal attestation over the **new** exact tip — the prior approval is
-  bound to the pre-conflict object and does not carry across the resolution. Merge only that tip. No
-  implementation phase is re-entered after convergence.
+  **Remaining plan (serial).** Preserve resolved candidate `e82355df` and incorporate current `v88`
+  only as the ordinary exact-tip integration precondition. Run fresh serial convergence, materialize
+  the complete patch, and require one patch-backed terminal attestation over the final exact tip; the
+  approval on `07607c49` does not carry across the resolved candidate. Root then accepts and merges
+  only those exact bytes. No implementation phase is re-entered after convergence.
+  ***corrected after checkpoint attestation — not independently graded***
   **Decisions needed:** none. This is ordinary integration-conflict resolution, not a product or
   scheduling choice.
   **Cross-worktree surface:** the merged partial edits `scripts/test_isolation_conformance.sh`,
