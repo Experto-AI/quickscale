@@ -444,8 +444,8 @@ def _assert_sa167d_status(
     if state == "accepted-open":
         # Counts are derived from the roadmap parser and are checked against the
         # reviewed state contract, never against a copied prose count.
-        assert len(v88) == 13
-        assert len(positions) == 13
+        assert len(v88) == 12
+        assert len(positions) == 12
         assert v88["SA167d"].dependencies == frozenset()
         assert v88["SA167d"].merge_position == 18
         assert v88["SA165"].dependencies == frozenset({"SA167d"})

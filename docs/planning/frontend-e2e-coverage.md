@@ -4,6 +4,7 @@
 > **Purpose:** Give the maintainer enough evidence to choose a direction, then derive a ticket.
 > **Authoritative sources:** [roadmap.md](../technical/roadmap.md) (open work) | [validation_policy.md](../technical/validation_policy.md) (command authority) | [decisions.md](../technical/decisions.md) (policy) | [CHANGELOG.md](../../CHANGELOG.md) (closed work)
 > **Investigated at:** branch `v87`, commit `e1597ebf`, 2026-08-20.
+> **Current scheduling reconciled:** 2026-09-01; the technical observations remain anchored to the investigation above.
 
 ## 1. The question this answers
 
@@ -108,7 +109,7 @@ Author a user-story / case-study document (`docs/technical/` or here) naming the
 Drive real flows (org creation, member list, settings mutation) in a real browser against the Docker-composed stack, asserting on outcomes rather than just absence of errors.
 
 - **Buys:** the only option that proves the product works, not merely that it renders.
-- **Costs:** high. Needs auth/session setup, seeded data, and DB state isolation. `SA135` (owned PostgreSQL lifecycle) remains an effective **prerequisite**; stable E2E Docker image reuse is settled infrastructure rather than open backlog.
+- **Costs:** high. Needs auth/session setup, seeded data, and DB state isolation. The owned PostgreSQL lifecycle is settled infrastructure, not an open prerequisite; deterministic use of the repository E2E harness remains sequenced behind SA170's open Docker resource-contract and failure-diagnostics work.
 - **Risk:** highest flake surface; slowest gate. `validation_policy.md` budgets 5–10 min for the full E2E suite; this would strain that.
 - **Composable with:** 1, 4. Supersedes much of 2/3 if fully realized.
 
@@ -123,13 +124,13 @@ These change the answer materially and cannot be settled from the code alone:
 2. **Is there auth in front of the app?** No login/signup route appears in `App.tsx`. If Django handles auth upstream, every browser test needs a session strategy — this is the single largest unknown for Options 2/3/5.
 3. **Which module matrix is canonical for testing?** All twelve enabled, the default set, or a small matrix? Drives runtime cost directly.
 4. **Where does the gate live** — the repo's `e2e.yml`, the generated project's `ci.yml.j2`, or both? They protect different things: ours protects the template, theirs protects the user.
-5. **Does journey coverage wait on `SA135`?** If yes, Option 5 is v88-backlog-dependent by construction and only 1–4 are near-term; image reuse no longer adds a separate dependency.
+5. **How should journey coverage sequence after `SA170`?** The lifecycle itself is settled. Decide whether Option 5 joins SA170's E2E acceptance surface or follows its resource-contract and diagnostics work; do not recreate a dependency on archived SA135.
 
 ## 6. A defensible default, if a recommendation is wanted
 
-Sequence **1 → 4 → 3 (or 2)**, defer **5** behind `SA135`.
+Sequence **1 → 4 → 3 (or 2)**, defer **5** until SA170 closes the E2E harness resource-contract and failure-diagnostics work.
 
-Rationale: Option 1 fixes a defect we are actively shipping and is nearly free. Option 4 is cheap and makes every later choice better-posed. Option 3 buys the largest genuine coverage increase per unit of flake risk, and unlike Option 2 it does not introduce a hand-maintained list that will rot. Option 5 is the right end state but lands on infrastructure the roadmap already flags as unowned, so pulling it forward would mean building that infrastructure implicitly and unreviewed.
+Rationale: Option 1 fixes a defect we are actively shipping and is nearly free. Option 4 is cheap and makes every later choice better-posed. Option 3 buys the largest genuine coverage increase per unit of flake risk, and unlike Option 2 it does not introduce a hand-maintained list that will rot. Option 5 is the right end state but depends on the still-open SA170-owned harness contract, so pulling it forward would duplicate or bypass that reviewed work.
 
 This is a starting position for iteration, not a decision.
 

@@ -40,7 +40,7 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-           SA160         SA165           SA135          SA166
+           SA160         SA165           SA161          SA166
            SA164         SA152           SA161          SA172
            SA172         SA172           SA170          SA175
            SA174           │             SA171            │
@@ -64,7 +64,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 |---|---|---|
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks with one shared race | SA160, SA164, SA171, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
-| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate's former borrowed-host assumption; a fixed-tag Docker image outside the scope contract; dead code nobody deletes | SA135, SA161, SA170 |
+| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | a fixed-tag Docker image outside the scope contract; dead code nobody deletes | SA161, SA170 |
 | **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA166, SA172, SA175 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
@@ -74,80 +74,6 @@ declared gate layer they protect.
 
 The gate-layer closure evidence, including the current scripts census, registry projection,
 hosted job closure, and isolation Make entrypoint, is archived in [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-# Service-backed lifecycle
-
-The remaining lifecycle ticket asks: *who owns the lifecycle of a thing we create?*
-
-## SA135 — Give test suites an owned PostgreSQL lifecycle
-
-### The mental model
-
-Compare the two database-backed gates as they exist today:
-
-**The E2E gate owns its database.** `scripts/test_e2e.sh:535`: *"pytest-docker will automatically start PostgreSQL"*, backed by `quickscale_core/tests/docker-compose.test.yml`:
-
-```yaml
-services:
-  postgres:
-    image: postgres:18-alpine
-    ports:
-      - "5432"   # Dynamic port — Docker assigns an available host port
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
-```
-
-Started on demand, health-checked, dynamically ported, torn down after.
-
-**The integration gate now owns its local lifecycle.** `Makefile:422-427` delegates
-local runs to `scripts/provision_ci_postgres.sh run --profile restricted`, whose
-profile resolves the PostgreSQL 18 image, allocates a container with a dynamic
-loopback port, creates scoped databases, validates the restricted role, runs the
-child process, and removes only resources carrying that run's scope. Hosted CI uses
-its separately provisioned service and lease behavior; it is not a local-host
-precondition.
-
-SA135's accepted E1 evidence proves that ownership boundary against the standing
-environment, and Phase F reconciled the documentation. The remaining ticket work is
-Phase G closeout truth and G-FINAL, not a return to the former borrowed-host model.
-
-### Why the fix is delicate
-
-The role contract is not incidental. `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` — specifically `NOBYPASSRLS` — is what makes row-level-security tests **meaningful**. A superuser bypasses RLS entirely, so isolation tests running as one would pass without proving anything. The restricted profile in `scripts/provision_ci_postgres.sh` validates this tuple before the child runs; `scripts/test_isolation_conformance.sh` remains the consumer of the validated environment.
-
-A hasty containerised swap that connects as the default `postgres` superuser would leave every integration test green and every multi-tenant isolation guarantee unverified. That is the worst possible outcome for this repository, given the locked child-table RLS policy. **Preserving the role contract is the acceptance criterion that matters most.**
-
-### The negative control
-
-*"the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping"*.
-
-The tempting shape for provisioning code is:
-
-```python
-if not postgres_available():
-    pytest.skip("PostgreSQL not available")
-```
-
-That converts an infrastructure failure into a green build with silently zero integration coverage — the same silent-fallback family the closed SA150 addressed, one layer up. If provisioning fails, the gate must fail. The accepted E1 denial run observed the helper's loud `ERROR: unable to pull postgres:18` failure and no child execution; the asserted-unavailability control therefore remains fail-closed.
-
-### Proof
-
-*"`make test-integration` passes on a machine with no PostgreSQL running"*. Test it honestly — the E1 run stopped the standing container, observed no listener on port 5432, and let the owned helper allocate its dynamic loopback endpoint. The exact-scope resource set was empty after cleanup and the standing environment was restored byte-for-byte.
-
-### Documentation
-
-`docs/technical/validation_policy.md` records the owned local lifecycle and keeps the
-hosted service/lease path distinct:
-
-> Integration | `make test-integration` | ... | Owned, dynamically scoped PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER`
-
-and the Testing Standards section describes the dynamic scoped endpoint and profile
-precondition. The documentation is now aligned with the shipped Make/helper behavior,
-which is why `validation_policy.md` is on its conflict surface.
-
----
 
 ---
 
@@ -765,7 +691,7 @@ Worth holding as a set, because each appears in more than one ticket:
 - **The tautology trap**. A test that reads the authoritative value and asserts the
   authoritative value passes for any value, including nonsense. Derive *wiring* assertions;
   keep *negative controls* literal.
-- **The green-by-absence trap** (SA135, SA152, SA165). Skipping, filtering,
+- **The green-by-absence trap** (SA152, SA165). Skipping, filtering,
   and unresolvable paths all produce green. Every one of them must be made to produce red.
 
 
