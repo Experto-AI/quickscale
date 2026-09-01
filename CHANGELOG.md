@@ -4,6 +4,60 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-09-01, sixth pass) — and one false red disproved
+  at its root cause.** **No ticket closed and no audit finding closed since the previous pass**, so
+  nothing was archived as complete from `docs/technical/roadmap.md`, `docs/others/arch-audit.md`, or
+  `docs/others/tech-audit.md`; live counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**,
+  arch rank-1 `privileged-command-set-multi-owner` stale-by-decision until SA174 demotes it, and the
+  queue is unchanged at **thirteen** open ticket entries across **thirteen** open merge positions,
+  one entry per position. Roadmap length moved **943 → 939 lines**, with no open ticket, dependency,
+  or acceptance criterion lost.
+  **The roadmap was red on its own consistency gate when this pass opened.** The previous pass left
+  nine `***corrected after checkpoint attestation — not independently graded***` annotations in
+  `docs/technical/roadmap.md`, and
+  `test_v88_current_reconciliation_is_not_labelled_ungraded` forbids that string in every
+  current-status document — the roadmap included, the changelog's latest SA167d entry excluded. The
+  suite reported **1 failed / 28 passed**. All nine annotations were removed and the provenance
+  lives here instead: the W2 and W3 lane-state paragraphs, both readiness rows, the merge-order
+  note, and the SA135 and SA167c remaining-plan paragraphs were **corrected after the checkpoint
+  attestation and were not independently graded**. The suite now returns **29 passed**.
+  **`nohup` manufactures a false red, and this is the pass's finding.** Re-verifying band A on `v88`
+  at `3aa0c67f`, `scripts/test_provision_ci_postgres.py` returned **34 passed / 1 failed** —
+  `test_pre_readiness_signal_reaps_child_group_and_preserves_status[1-HUP-129]` timing out at
+  `communicate(timeout=10)`, reproducibly, 3 of 3 reruns — while the INT and TERM parametrizations
+  passed. The cause is the detachment method, not the product: `nohup` sets SIGHUP to `SIG_IGN` and
+  every descendant inherits that disposition, so the test's SIGHUP never reaches its child. The same
+  suite returns **35 passed** in the foreground. Band A therefore stays **empty**, no ticket was
+  opened, and the execution rules gained a standing amendment: detach with `setsid`, not `nohup`,
+  and treat a HUP-only failure as a harness artifact to be re-measured before it is attributed to a
+  ticket.
+  **Lane state re-measured after the W1 bookkeeping checkpoint merged** (`v88` at `3aa0c67f`):
+  `wt-track1` is **0 behind / 0 ahead** and level; `wt-track2` is **4 behind / 0 ahead**, clean at
+  `f60fe2bc`, lagging by that bookkeeping history only; `wt-track3` is **4 behind / 4 ahead**, clean
+  at resolved closeout candidate `e82355df660fa2ff8b874c444dfce68b9d01c367`. The previous pass's
+  conditional "true only after this tip is fast-forwarded" phrasing was replaced with the measured
+  post-merge fact.
+  **Track readiness: two lanes truly green, one not.** W2 (SA167c, #21) syncs four commits and owes
+  E then F including `make ci-e2e` — the only lane on the critical path. W1 (SA167d, #18) can start
+  and finish but **cannot merge as ticket completion**: the merged checkpoint is bookkeeping and
+  clears no Phase C or release gate. W3's SA135 closeout candidate can start and finish but is
+  **not yet mergeable** — it owes fresh convergence and a patch-backed terminal attestation. Both
+  "no"s are hard dependencies on the lane's own remaining work, not on another lane and not on a
+  maintainer decision. **No maintainer decision is open.**
+  **Rebalance outcome: no cross-lane move stands, sixth consecutive pass**, and every open ticket
+  already carries a track. The structural reasons are unchanged — all three W2 tickets own
+  `scripts/gate_registry.json`, which never crosses worktrees; W1's `sa90_emission_manifests.json`
+  rebaseline is the ordered pair #19 → #20 and may not be split; SA174/SA175 carry no content
+  dependency but moving band-C slack onto W3's exclusive-slot queue or W2's release-setting queue
+  buys no release progress; and moving SA165 (#22) to W3 would make
+  `scripts/test_isolation_conformance.sh` single-lane but park DB-free work behind the slot queue.
+  **SA171 (#28) still needs no exclusive slot** and remains W3's fallback. No *code* file gained a
+  second lane, and the closeout conflict surface (`CHANGELOG.md`, the roadmap,
+  `docs/technical/v88_ticket_context.md`, and an audit document when a ticket closes a live finding)
+  is unchanged and remains covered by the execution rules' sync-resolve-rerun-review merge
+  procedure. `quickscale_core/tests/test_v88_ticket_context_consistency.py` was re-run in the same
+  change and exited 0 with **29 passed**.
+
 - **SA167c phases C and D accepted; the coupled child-probe lifecycle race fixed (2026-09-01).**
   Archived out of the roadmap, which now carries only what SA167c still owes. Phase C accepted the
   retained Make/registry/local/hosted/parity surface and aligned `check_ci_locally.sh`'s help with the

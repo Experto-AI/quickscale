@@ -34,6 +34,14 @@ from here rather than marked done. No checked entry is permitted.
   written to a file, poll for the file). `make check` no longer needs it: measured at **184 s
   green** on `v88` after the `check-gate-suites` parallelisation, it fits inside a single foreground
   call.
+- **Detach with `setsid`, not `nohup` — `nohup` manufactures false reds in signal tests.** `nohup`
+  sets SIGHUP to `SIG_IGN`, and that disposition is inherited by every descendant, so a test that
+  signals its own child with SIGHUP never sees it. Measured 2026-09-01 on `v88` at `3aa0c67f`:
+  `scripts/test_provision_ci_postgres.py` returns **34 passed / 1 failed** under `nohup` —
+  `test_pre_readiness_signal_reaps_child_group_and_preserves_status[1-HUP-129]` times out
+  deterministically, 3 of 3 reruns — and **35 passed** in the foreground or under `setsid`. The
+  INT and TERM parametrizations pass either way, which is the tell. Treat a HUP-only failure as a
+  harness artifact and re-measure before attributing it to a ticket.
 - **A gate that is red on the integration branch is attributed to exactly one ticket, and is never
   deselected.** Test exclusion via `PYTEST_ADDOPTS`, `--deselect`, or a Makefile/CI edit is not a
   scheduling tool: it removes the oracle for the defect the owning ticket exists to fix. Name the
@@ -65,7 +73,7 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 
 | Band | Rule | Tickets |
 |---|---|---|
-| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **Empty — re-verified 2026-09-01 on current `v88`.** The exit-141 provisioning red that W1 hit mid-campaign was an inherited defect already repaired by SA167c's merged lifecycle-probe hardening (`91fd3bb6`); `poetry run pytest scripts/test_provision_ci_postgres.py -q -o addopts= --no-cov` returned **35 passed**. No provisioning repair is owed and no gate is red. |
+| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **Empty — re-verified 2026-09-01 on `v88` at `3aa0c67f`.** `poetry run pytest scripts/test_provision_ci_postgres.py -q -o addopts= --no-cov` returns **35 passed** in the foreground. The exit-141 red W1 hit mid-campaign was inherited and is repaired by SA167c's merged `91fd3bb6`. No provisioning repair is owed and no gate is red. |
 | **B — Release work on the critical paths** | The two longest serialized chains, one holding the exclusive service slot. | SA167c; SA135; SA170; SA167d |
 | **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA166, SA171, SA172, SA174, SA175 |
 
@@ -111,12 +119,12 @@ open tickets build on rather than re-open. The provisioning script's immediate-c
 path was last corrected inside SA167c's `91fd3bb6` and is green; **no open ticket owns it**, and a
 lane that observes it red must first confirm it is synced to current `v88` before opening anything.
 
-### Track rebalance — 2026-09-01 (fifth pass): no move stands
+### Track rebalance — 2026-09-01 (sixth pass): no move stands
 
 Lanes are **W1 6 · W2 3 · W3 4**, and every open ticket carries a track — none lacks one. Each was
 tested against the three questions — independent of the rest of its lane, is another lane idle, and is it on or feeding
-the critical path. **No cross-lane move passes**, for reasons that are structural rather than
-situational:
+the critical path. **No cross-lane move passes for the sixth consecutive pass**, for reasons that are structural
+rather than situational:
 
 - **`scripts/gate_registry.json` and `quickscale_modules/*/module.yml` never cross worktrees.** All
   three W2 tickets register or edit gate-registry entries, so moving any of them would put two lanes
@@ -149,10 +157,8 @@ sync-resolve-rerun-review step in the execution rules.
 
 ### Lane state
 
-**Post-integration checkpoint image, prepared 2026-09-01 from `v88` at `f60fe2bc`.** It is true only
-after this exact W1 bookkeeping tip is fast-forwarded into `v88`; until then the retained checkpoint
-is merely ahead in W1. Never trust a transcribed count or assume a frozen object is still level with
-a moving integration ref:
+**Measured 2026-09-01 against `v88` at `3aa0c67f`, after the W1 bookkeeping checkpoint merged.**
+Never trust a transcribed count; re-measure before acting:
 
 ```bash
 for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-right --count v88...$w; done
@@ -161,25 +167,21 @@ for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-r
 **Read that output as `behind ahead`** — the left column counts commits on `v88` and not on the
 worktree, the right column the reverse.
 
-- **`wt-track1`** is **0 ahead / 0 behind `v88`** after the exact checkpoint merge. Its retained
-  roadmap handoff was committed before synchronization, the three upstream commits were merged in
-  W1, and the conflict was reconciled without changing any SA167d product byte. Phase C remains
-  outstanding and no green prefix from its halted attempt is reusable.
-- **`wt-track2`** remains clean at `f60fe2bc` and will lag post-checkpoint `v88` by this W1
-  bookkeeping history, not by product work. SA167c's A-D product delta is merged; E and F stay
-  outstanding. **Sync the checkpoint history before E.**
-  ***corrected after checkpoint attestation — not independently graded***
-- **`wt-track3`** is clean at resolved candidate
-  `e82355df660fa2ff8b874c444dfce68b9d01c367`. It was **0 behind / 4 ahead** of the pre-checkpoint
-  `v88` base at `f60fe2bc`; after this W1 checkpoint merges the refs diverge by this bookkeeping
-  history on `v88` and the four retained candidate commits on W3. Its SA135 roadmap conflict is
-  resolved, and the exact consistency test plus SA135 release campaign are green. SA135 remains open
-  on `v88` until this candidate's successor integrates; the genuinely remaining work is fresh
-  convergence, patch-backed terminal attestation, and exact-tip integration.
-  ***corrected after checkpoint attestation — not independently graded***
+- **`wt-track1`** — **0 behind / 0 ahead**, level with `v88`. The checkpoint merge reconciled the
+  roadmap conflict without changing any SA167d product byte. Phase C is outstanding and no green
+  prefix from its halted attempt is reusable.
+- **`wt-track2`** — **4 behind / 0 ahead**, clean at `f60fe2bc`. It lags by the W1 bookkeeping
+  history only, not by product work. SA167c's A-D product delta is merged; E and F stay outstanding.
+  **Sync before E.**
+- **`wt-track3`** — **4 behind / 4 ahead**, clean at resolved closeout candidate
+  `e82355df660fa2ff8b874c444dfce68b9d01c367`. The four ahead are the retained candidate; the four
+  behind are the same W1 bookkeeping history. Its SA135 roadmap conflict is resolved, and the exact
+  consistency test plus SA135 release campaign are green on that candidate. SA135 remains open on
+  `v88` until the candidate's successor integrates; what genuinely remains is fresh convergence,
+  patch-backed terminal attestation, and exact-tip integration.
 
-W1's retained checkpoint is bookkeeping-only and does not complete SA167d. W3's retained closeout
-remains an unmerged product-adjacent delta and cannot be merged directly.
+W1's merged checkpoint is bookkeeping-only and does not complete SA167d. W3's retained closeout is an
+unmerged product-adjacent delta and cannot be merged directly.
 
 ### PostgreSQL routing — who actually claims the standing service
 
@@ -198,7 +200,7 @@ window is complete and the standing state was restored exactly.
 - **W2 — sync the W1 bookkeeping checkpoint, then resume SA167c (#21) at E-closeout.** Retained product
   commit `91fd3bb6e6b638735361b511c1515cddccce5d15` carries accepted A-D. Do not reimplement A-D.
   Reconcile E, then run F's frozen-candidate release validation including `make ci-e2e`. W2 claims no
-  standing service. ***corrected after checkpoint attestation — not independently graded***
+  standing service.
 - **W1 — restart SA167d (#18) Phase C from command 1 in a new product run.** The gate that
   halted the last attempt is fixed upstream, not by W1: the exit-141 provisioning failure is repaired
   by `91fd3bb6`, and the focused suite returns 35 passed on the synchronized checkpoint. **No
@@ -212,7 +214,7 @@ window is complete and the standing state was restored exactly.
   bookkeeping checkpoint is an integration precondition, not a reason to repeat conflict resolution
   or the accepted lifecycle campaign. Do not reopen the settled PostgreSQL lifecycle, recreate SA135
   as open work, or attempt SA170's E2E Docker work. SA171 (#28) stays the lane's DB-free fallback if
-  closeout stalls. ***corrected after checkpoint attestation — not independently graded***
+  closeout stalls.
 
 ### Track readiness — the three states
 
@@ -226,16 +228,12 @@ merge-back is not order-gated behind another lane.
 | **W1** | SA167d (#18) | **yes** — retained checkpoint merged; restart Phase C whole | **yes** — the restarted Phase C, ledger reconciliation, convergence, and attestation are W1-owned | **no for ticket completion** — the checkpoint merge clears no Phase C or release gate | no |
 | **W3** | SA135 closeout candidate | **yes** — resolved candidate `e82355df` is ready for fresh convergence | **yes** — convergence, patch-backed attestation, and integration are root/W3 closeout work | **no, not yet** — the resolved candidate still needs fresh independent review before exact-tip merge | no |
 
-The W2 and W3 readiness rows were
-***corrected after checkpoint attestation — not independently graded***.
-
 **All three lanes can start and finish their next work, but the W1 checkpoint is not ticket
 completion and W3's resolved candidate is not yet mergeable.** W1 must rerun SA167d Phase C whole in
 a new product run; W3 needs fresh convergence, patch-backed terminal attestation, and exact-tip
 integration rather than another conflict-resolution cycle. Only **SA167c (#21)** is on the critical
 path and constitutes real release progress. Neither halt needs a maintainer decision, and the five
 decisions settled on 2026-08-31 remain closed.
-***corrected after checkpoint attestation — not independently graded***
 
 ### Maintainer decisions
 
@@ -365,7 +363,7 @@ fresh review, and one patch-backed attestation. #15 has accepted P/A/B/C/D/E0/E1
 campaign-passed, terminally-approved closeout commit `07607c49` carried into resolved candidate
 `e82355df` on `wt-track3`**; the conflict resolution and release validation are complete, while fresh
 convergence, patch-backed terminal attestation, and exact-tip integration remain. SA135 stays open on
-`v88` until that integration succeeds. ***corrected after checkpoint attestation — not independently graded***
+`v88` until that integration succeeds.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Three are
@@ -488,7 +486,6 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   `EV-4` covers phases C-F; C and D are accepted. The first resumable phase is E because all of its
   dependencies are accepted. If that reference no longer resolves, this paragraph is the cold-start
   resume object and fresh reviewed-plan authority must preserve the accepted A-D boundary.
-  ***corrected after checkpoint attestation — not independently graded***
   1. **E-closeout.** Reconcile decisions, implementation contract, validation policy, ticket context,
      docs index, roadmap queue/counts, and changelog evidence. Retain the SA164 and SA166 boundaries.
      Preserve the retained product object and archived terminal-correction provenance without
@@ -614,7 +611,6 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   the complete patch, and require one patch-backed terminal attestation over the final exact tip; the
   approval on `07607c49` does not carry across the resolved candidate. Root then accepts and merges
   only those exact bytes. No implementation phase is re-entered after convergence.
-  ***corrected after checkpoint attestation — not independently graded***
   **Decisions needed:** none. This is ordinary integration-conflict resolution, not a product or
   scheduling choice.
   **Cross-worktree surface:** the merged partial edits `scripts/test_isolation_conformance.sh`,
