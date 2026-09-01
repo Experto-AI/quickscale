@@ -15,7 +15,7 @@
   - [Decisions (authoritative)](technical/decisions.md) - Technical rules and architectural decisions
   - [Scaffolding (layout & templates)](technical/scaffolding.md) - Directory structures and file layouts
   - [Roadmap](technical/roadmap.md) - Development timeline and current tasks
-  - [v88 Ticket Context](technical/v88_ticket_context.md) - Current v88 ledger: SA167c remains open after A/B acceptance and retained Phase-C delivery at `d31c6b41`; SA167d remains open at E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19`; retained-partial convergence and terminal attestation are complete; retained-partial-only merge-back is authorized and performed without closing the ticket; completion-grade Phase C convergence, terminal attestation, and exact-tip integration remain pending; thirteen open v88 ticket entries across thirteen open merge positions
+  - [v88 Ticket Context](technical/v88_ticket_context.md) - Current v88 ledger: SA167c remains open after A-D acceptance and retained delivery at `91fd3bb6`, with E and F outstanding; SA167d remains open at E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19`; retained-partial convergence and terminal attestation are complete; retained-partial-only merge-back is authorized and performed without closing the ticket; completion-grade Phase C convergence, terminal attestation, and exact-tip integration remain pending; thirteen open v88 ticket entries across thirteen open merge positions
   - [User Manual](technical/user_manual.md) - Commands and workflows
   - [Development](technical/development.md) - Dev environment setup
   - [Plan/Apply System](technical/plan-apply-system.md) - Terraform-style workflow

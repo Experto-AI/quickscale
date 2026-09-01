@@ -525,7 +525,12 @@ run_local() {
   # lifecycle signals at the exec boundary while retaining the verified new
   # session/process-group semantics.
   local child_sid="" observed_child_pgid="" parent_pgid result=0 probe_failed=false active_pid
-  parent_pgid=$(ps -o pgid= -p $$ | tr -d ' ') || die "cannot inspect the lifecycle process group"
+  local child_was_active=false
+  local child_identity="" child_termination="" extra_identity=""
+  local child_status_file="$LEASE_DIR/child-status"
+  local -a active_child_pids=()
+  parent_pgid=$(ps -o pgid= -p $$) || die "cannot inspect the lifecycle process group"
+  parent_pgid=${parent_pgid//[[:space:]]/}
   [[ "$parent_pgid" =~ ^[0-9]+$ ]] || die "lifecycle process group is invalid"
   # Defer lifecycle signals across the launch-to-ownership window.  The shell
   # records the first signal, binds both the child PID and its setsid-defined
@@ -534,27 +539,118 @@ run_local() {
   trap 'defer_signal HUP 129' HUP
   trap 'defer_signal INT 130' INT
   trap 'defer_signal TERM 143' TERM
-  setsid -- env --default-signal=HUP --default-signal=INT --default-signal=TERM "$@" & CHILD_PID=$! CHILD_PGID=$!
+  setsid -- env --default-signal=HUP --default-signal=INT --default-signal=TERM \
+    "$PYTHON" -c '
+import os
+import signal
+import sys
+
+status_file = sys.argv[1]
+command = sys.argv[2:]
+signals = {signal.SIGHUP, signal.SIGINT, signal.SIGPIPE, signal.SIGTERM}
+old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, signals)
+child_pid = os.fork()
+if child_pid == 0:
+    for signum in signals:
+        signal.signal(signum, signal.SIG_DFL)
+    signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
+    try:
+        os.execvp(command[0], command)
+    except OSError as error:
+        os.write(2, f"{command[0]}: {error.strerror}\n".encode())
+        os._exit(127)
+
+received_signal = 0
+
+def forward_received_signal(signum, _frame):
+    global received_signal
+    if received_signal == 0:
+        received_signal = signum
+    try:
+        os.kill(child_pid, signum)
+    except ProcessLookupError:
+        pass
+
+for signum in signals:
+    signal.signal(signum, forward_received_signal)
+signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
+
+while True:
+    try:
+        _, wait_status = os.waitpid(child_pid, 0)
+        break
+    except InterruptedError:
+        continue
+
+if received_signal:
+    termination_kind = "signal"
+    termination_status = received_signal
+elif os.WIFSIGNALED(wait_status):
+    termination_kind = "signal"
+    termination_status = os.WTERMSIG(wait_status)
+elif os.WIFEXITED(wait_status):
+    termination_kind = "exit"
+    termination_status = os.WEXITSTATUS(wait_status)
+else:
+    termination_kind = "unknown"
+    termination_status = 1
+
+descriptor = os.open(
+    status_file,
+    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+    0o600,
+)
+with os.fdopen(descriptor, "w", encoding="ascii") as stream:
+    stream.write(f"{termination_kind}:{termination_status}\n")
+
+if termination_kind == "signal":
+    try:
+        signal.signal(termination_status, signal.SIG_DFL)
+    except (OSError, ValueError):
+        pass
+    os.kill(os.getpid(), termination_status)
+    os._exit(128 + termination_status)
+os._exit(termination_status)
+' "$child_status_file" "$@" & CHILD_PID=$! CHILD_PGID=$!
   trap 'forward_signal HUP 129' HUP
   trap 'forward_signal INT 130' INT
   trap 'forward_signal TERM 143' TERM
   if [[ -n "$PENDING_CHILD_SIGNAL" ]]; then
     forward_signal "$PENDING_CHILD_SIGNAL" "$PENDING_CHILD_STATUS"
   fi
-  observed_child_pgid=$(ps -o pgid= -p "$CHILD_PID" | tr -d ' ') || probe_failed=true
-  if [[ "$probe_failed" == false ]]; then
-    child_sid=$(ps -o sid= -p "$CHILD_PID" | tr -d ' ') || probe_failed=true
+  # Snapshot liveness immediately before verification, then take a complete
+  # second snapshot if the probe fails.  A child that remains active is an
+  # ownership-verification error; a child that exits normally keeps its status.
+  # If a previously-active child instead dies by signal in that window, fail
+  # with the ownership diagnostic rather than leaking its 128+signal status.
+  mapfile -t active_child_pids < <(jobs -pr)
+  for active_pid in "${active_child_pids[@]}"; do
+    [[ "$active_pid" != "$CHILD_PID" ]] || child_was_active=true
+  done
+  if child_identity=$(ps -o pgid=,sid= -p "$CHILD_PID"); then
+    read -r observed_child_pgid child_sid extra_identity <<< "$child_identity"
+  else
+    probe_failed=true
   fi
   if [[ "$probe_failed" == true ]]; then
-    while read -r active_pid; do
+    active_child_pids=()
+    mapfile -t active_child_pids < <(jobs -pr)
+    for active_pid in "${active_child_pids[@]}"; do
       [[ "$active_pid" != "$CHILD_PID" ]] || die "cannot verify the process group of a live child"
-    done < <(jobs -pr)
+    done
     wait "$CHILD_PID" || result=$?
     CHILD_PID=""
     CHILD_PGID=""
+    if [[ "$child_was_active" == true ]]; then
+      if [[ -f "$child_status_file" && ! -L "$child_status_file" ]]; then
+        IFS= read -r child_termination < "$child_status_file" || true
+      fi
+      [[ "$child_termination" == "exit:$result" ]] \
+        || die "cannot verify the process group of a live child"
+    fi
     exit "$result"
   fi
-  [[ "$observed_child_pgid" =~ ^[0-9]+$ && "$observed_child_pgid" == "$CHILD_PID" ]] || die "child process group is not distinct"
+  [[ -z "$extra_identity" && "$observed_child_pgid" =~ ^[0-9]+$ && "$observed_child_pgid" == "$CHILD_PID" ]] || die "child process group is not distinct"
   [[ "$child_sid" == "$CHILD_PID" && "$observed_child_pgid" != "$parent_pgid" ]] || die "child session is not distinct"
   wait "$CHILD_PID" || result=$?
   CHILD_PID=""
