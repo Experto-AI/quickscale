@@ -4,6 +4,8 @@
 
 ## v88 development — 2026-08-21
 
+- **SA135 archive and closeout reconciliation prepared; final release evidence remains external (2026-09-01).** SA135's accepted P/A/B/C/D/E0/E1/F evidence and returned-green Phase G campaign are archived here. This repository reconciliation removes SA135's open roadmap entry and merge position **#15**, retires its current context, updates every live scheduling and queue-count consumer, and clears SA170's former worktree-ordering dependency while preserving its transferred Docker/E2E obligations. The archived record intentionally claims neither the frozen G-FINAL campaign nor convergence, terminal attestation, or merge; those later obligations belong to the external closeout ledger and are not represented as completed in tracked bytes.
+
 - **Roadmap cleanup and rebalance review (2026-08-31, fourth pass).** **No ticket closed and no audit
   finding closed since the previous pass**, so nothing was archived as complete from
   `docs/technical/roadmap.md`, `docs/others/arch-audit.md`, or `docs/others/tech-audit.md`; the live
@@ -61,8 +63,8 @@
   hit host time limits before an unchanged third attempt passed. Caller parity passed across
   `module_config`, `module_commands` embed/update/apply/remove, `regenerate_managed_wiring`,
   module-owned adapters, and the protected `entry_point.py` seam.
-  SA167d remains open at active merge position **#18**, the queue remains **thirteen open v88
-  ticket entries across thirteen open merge positions**, and SA165 remains dependent on it.
+  SA167d remains open at active merge position **#18**, the queue remains **twelve open v88
+  ticket entries across twelve open merge positions**, and SA165 remains dependent on it.
   At this dated E0 checkpoint, independent review, terminal attestation, and merge-back had
   not yet occurred. The later retained checkpoint established that retained-partial convergence
   and terminal attestation are complete, and retained-partial-only merge-back is authorized for

@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-08-31 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
+> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-09-01 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
 >
 > Live structural findings only. Findings are identified by their **slug**; the ordinal numbering
 > used in earlier passes is pass-local and is not a stable identifier (see
@@ -30,9 +30,9 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Thirteen open v88 ticket entries run on three tracks across thirteen open merge
+generated-project updater. Twelve open v88 ticket entries run on three tracks across twelve open merge
 positions; **W2 sets the release date** (SA167c is the longest open chain). W3 holds the exclusive
-PostgreSQL/Docker slot. The prior pass's leading finding rode inside SA135 and has landed.
+PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
 **Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-08-31).** SA167d
 remains open and active at merge position **#18**, with SA165 still dependent on it. Phases A-E
