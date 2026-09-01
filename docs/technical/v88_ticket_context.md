@@ -697,7 +697,7 @@ Worth holding as a set, because each appears in more than one ticket:
 
 ---
 
-## SA167a / SA167c / SA167d — module wiring standardization
+## SA167a / SA167c — module wiring standardization
 
 This shared umbrella retains historical context for the module-wiring standardization. The completed
 SA167a and SA167b handoffs are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c remains open:
@@ -706,13 +706,9 @@ phases A-E are accepted on retained product object
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
 SA170/W3, so no completion or release-readiness claim is made. Retained-partial-only merge-back of
 the synchronized nine-file status checkpoint is authorized without accepting F, closing SA167c, or
-unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. SA167d remains open:
-phases A-E are accepted at E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19`; retained-partial
-convergence and terminal attestation are complete, and retained-partial-only merge-back is
-authorized for the reviewed partial plus the latest-v88 status reconciliation without closing the
-ticket. Completion-grade Phase C convergence, terminal attestation, and exact-tip integration
-remain pending. Ticket metadata and the remaining closeout handoff live in the [roadmap](roadmap.md),
-not here.
+unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. SA167d's completion-grade Phase C is archived as a
+conditional post-integration candidate; exact-tip integration remains pending. SA165 is released
+with `deps: none`. Ticket metadata lives in the [roadmap](roadmap.md), not here.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.

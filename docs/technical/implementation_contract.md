@@ -290,12 +290,8 @@ failures owned by SA170/W3. SA167c is not complete or release-ready; SA166 remai
 SA164 remains after SA166. Retained-partial-only merge-back of the synchronized nine-file status
 checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. The settled product bytes no longer carry CLI per-module
 wiring logic. **`SA167d`**
-(v88, active merge #18) remains open: phases A-E are accepted at
-`bd2c291ba2d40494970464741ac51bfd45445a19`, with no tracked E0 edits; SA165 remains dependent
-on the ticket. Retained-partial convergence and terminal attestation are complete, and
-retained-partial-only merge-back is authorized for the reviewed partial plus the latest-v88
-status reconciliation without closing the ticket. Completion-grade Phase C convergence,
-terminal attestation, and exact-tip integration remain pending.
+(v88) is a conditional post-integration completion-grade Phase C candidate; exact-tip integration
+remains pending. SA165 is released with `deps: none`.
 The SA167a ownership guard checks executable source rather than one constructor shape,
 including helper, variable, and alternate-constructor forms.
 

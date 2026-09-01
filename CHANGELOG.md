@@ -4,6 +4,18 @@
 
 ## v88 development — 2026-08-21
 
+- **SA167d completion-grade Phase C candidate prepared (2026-09-01).** The reviewed seven distinct
+  closeout commands ultimately returned exit 0 in order: the five-file focused suite, the accepted-open
+  consistency suite, `make lint`, `make typecheck`, foreground `make check`, detached `make test`,
+  and detached `make quality`. The completion ledger removes SA167d and merge position #18, releases
+  SA165 to `deps: none`, and reconciles the queue to **eleven open v88 ticket entries across eleven
+  open merge positions** while preserving SA167c and SA170. The eight textual status consumers and
+  the executable consistency contract now agree on the same state. Completion evidence is archived
+  here as a **conditional post-integration** candidate with **exact-tip** integration still owned by
+  the root closeout path; this candidate was not independently graded for terminal review. The first
+  foreground `make check` invocation terminated with exit 143 after Make reported no child
+  processes, so it supplied no gate verdict; the exact command rerun returned exit 0.
+
 - **Roadmap cleanup and rebalance review (2026-09-01, seventh pass) — two integrations archived,
   no ticket closed.** **No ticket and no audit finding closed since the previous pass**, so the live
   counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1

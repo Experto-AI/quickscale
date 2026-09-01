@@ -4,13 +4,13 @@ The roadmap is the sole home for schedulable metadata.  The context page may exp
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
-tree state.  The accepted-open SA167d retained-partial and halted SA167c statuses are checked as
+tree state.  The integration-ready SA167d closeout and halted SA167c statuses are checked as
 current consumer contracts below; those checks are not mutation canaries.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
 context.  Retained expected-red canaries prove those parser/guard boundaries, while explicit
-current-status contracts preserve the accepted-open SA167d retained partial and the halted SA167c
+current-status contracts preserve the integration-ready SA167d closeout and the halted SA167c
 checkpoint.  The suite previously carried twelve mutation canaries across 496 lines, including one
 that mutated a hardcoded ``deps:`` literal naming a specific ticket; archiving that ticket silently
 disarmed it, as did roadmap prose that happened to spell the same literal first.  The remaining
@@ -54,21 +54,9 @@ SA167C_MOVED_V88 = "3aa0c67f843eddd779f9766de4c274a5a249f485"
 SA167C_RETAINED_CHECKPOINT = "4de75d39"
 SA167C_SYNC_BASE = "8385780fe624893dc66e1382f2f68ce1ea759a02"
 SA167C_SYNC_MERGE = "eacad160d92b37f81f593085a64e18db4fb271f0"
-RETAINED_PARTIAL_ATTESTED = (
-    "retained-partial convergence and terminal attestation are complete"
-)
-RETAINED_PARTIAL_MERGE_AUTHORIZED = "retained-partial-only merge-back is authorized"
-STALE_RETAINED_PARTIAL_STATUS_RE = re.compile(
-    r"(?ix)"
-    r"independent\s+review(?:,\s+terminal\s+attestation)?(?:,\s+|\s+)and\s+merge-back\s+"
-    r"(?:are|remain|still)\s+pending"
-    r"|pending\s+independent\s+review\s+and\s+merge-back"
-    r"|does\s+not\s+claim\s+convergence,\s+terminal\s+attestation,\s+or\s+merge-back"
-    r"|no\s+(?:independent\s+)?(?:terminal\s+)?attestation\b"
-)
 
-UMBRELLA_TITLE = "SA167a / SA167c / SA167d — module wiring standardization"
-UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c", "SA167d"})
+UMBRELLA_TITLE = "SA167a / SA167c — module wiring standardization"
+UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
 ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b"})
@@ -347,11 +335,11 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     next_actions = _roadmap_block(
         roadmap_text, "### Next action per lane", "### Track readiness"
     )
-    sa167c_ticket = _roadmap_block(
-        roadmap_text,
-        "- [ ] **SA167c — Retire `django_apps:` and gate the app declaration.**",
-        "- [ ] **SA167d — Complete the CLI wiring-drain acceptance.**",
+    sa167c_ticket_match = re.search(
+        r"(?ms)^- \[ \] \*\*SA167c\b.*?(?=^\s*---\s*$)", roadmap_text
     )
+    assert sa167c_ticket_match is not None
+    sa167c_ticket = sa167c_ticket_match.group(0)
 
     applicable_current_blocks = "\n".join(
         (priority_model, dependency_graph, next_actions, sa167c_ticket)
@@ -556,9 +544,9 @@ def _assert_sa167d_status(
     decisions_text: str,
     implementation_contract_text: str,
     module_extension_text: str,
-    state: Literal["accepted-open", "integration-ready"],
+    state: Literal["integration-ready"],
 ) -> None:
-    """Enforce the accepted-open state and the reviewed future transition state."""
+    """Enforce the reviewed integration-ready state."""
     roadmap = _roadmap_tickets(roadmap_text)
     v88 = {
         ticket: metadata
@@ -582,55 +570,24 @@ def _assert_sa167d_status(
         "docs/technical/v88_ticket_context.md": context_text,
     }
 
-    if state == "accepted-open":
-        # Counts are derived from the roadmap parser and are checked against the
-        # reviewed state contract, never against a copied prose count.
-        assert len(v88) == 12
-        assert len(positions) == 12
-        assert v88["SA167d"].dependencies == frozenset()
-        assert v88["SA167d"].merge_position == 18
-        assert v88["SA165"].dependencies == frozenset({"SA167d"})
-        assert "phases A-E accepted at E0_ACCEPTED_TIP" in roadmap_text
-        assert E0_ACCEPTED_TIP in roadmap_text
-        assert "SA165 remains dependent" in roadmap_text
-        assert re.search(
-            r"Phase C validation, convergence, terminal attestation, and exact-tip\s+"
-            r"integration remain pending",
-            roadmap_text,
-        )
-        for path, text in status_consumers.items():
-            assert E0_ACCEPTED_TIP in text, path
-            assert "SA167d" in text, path
-            normalized_text = " ".join(text.lower().split())
-            assert RETAINED_PARTIAL_ATTESTED in normalized_text, path
-            assert RETAINED_PARTIAL_MERGE_AUTHORIZED in normalized_text, path
-            assert re.search(
-                r"completion-grade phase c[^.]{0,160}\bpending", normalized_text
-            ), path
-            stale_status = STALE_RETAINED_PARTIAL_STATUS_RE.search(normalized_text)
-            assert not stale_status, (
-                path,
-                stale_status.group(0) if stale_status else None,
-            )
-        # The accepted E0 evidence is task-specific and remains required while
-        # the ticket is open; unrelated audit findings are deliberately not pinned.
-        assert "282 tests" in changelog_text
-        assert "2,880 Core passed / 1 skipped" in changelog_text
-        assert "2,098 CLI" in changelog_text
-        assert "94.54% overall mean coverage" in changelog_text
-        assert "1,318 passed" in changelog_text
-        assert "zero warning/critical/total" in changelog_text
-        return
-
     if state != "integration-ready":
         raise AssertionError(f"unknown SA167d status state: {state}")
 
     assert "SA167d" not in v88
     assert 18 not in positions
-    assert len(v88) == 9
-    assert len(positions) == 8
+    assert len(v88) == 11
+    assert len(positions) == 11
     assert v88["SA165"].dependencies == frozenset()
     assert E0_ACCEPTED_TIP in changelog_text
+    latest_sa167d_entry = re.search(
+        r"(?ms)^- \*\*SA167d\b.*?(?=^- \*\*)", changelog_text
+    )
+    assert latest_sa167d_entry is not None
+    normalized_latest_entry = " ".join(latest_sa167d_entry.group(0).split())
+    assert "terminated with exit 143" in normalized_latest_entry
+    assert "supplied no gate verdict" in normalized_latest_entry
+    assert "exact command rerun returned exit 0" in normalized_latest_entry
+    assert "Every lane is clean and behind" not in roadmap_text
     assert "SA167d" in changelog_text and re.search(
         r"archiv(?:e|ed|es)", changelog_text, re.I
     )
@@ -656,7 +613,7 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
             encoding="utf-8"
         ),
         (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
-        "accepted-open",
+        "integration-ready",
     )
     _assert_sa167c_halted_status(
         roadmap,
@@ -728,11 +685,15 @@ def test_v88_lane_assignment_drift_is_expected_red_canary(
 
 
 def test_v88_integration_ready_state_rejects_accepted_open_candidate() -> None:
-    """Keep the future retirement branch strict and explicitly unactivated in B."""
+    """Keep the integration-ready branch strict against the accepted-open state."""
     roadmap = ROADMAP.read_text(encoding="utf-8")
+    accepted_open_roadmap = (
+        roadmap
+        + "\n- [ ] **SA167d — accepted-open canary.** `Band B · Tier 2 · W1 · merge #18 · deps: none`\n"
+    )
     with pytest.raises(AssertionError, match="SA167d"):
         _assert_sa167d_status(
-            roadmap,
+            accepted_open_roadmap,
             CONTEXT.read_text(encoding="utf-8"),
             DOCS_INDEX.read_text(encoding="utf-8"),
             (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
@@ -743,35 +704,6 @@ def test_v88_integration_ready_state_rejects_accepted_open_candidate() -> None:
             ),
             (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
             "integration-ready",
-        )
-
-
-@pytest.mark.parametrize(
-    "stale_claim",
-    [
-        "SA167d independent review, terminal attestation, and merge-back are pending.",
-        "SA167d is pending independent review and merge-back.",
-        "SA167d does not claim convergence, terminal attestation, or merge-back.",
-        "SA167d has no terminal attestation.",
-    ],
-)
-def test_v88_retained_partial_status_rejects_stale_attestation_wording(
-    stale_claim: str,
-) -> None:
-    roadmap = ROADMAP.read_text(encoding="utf-8")
-    with pytest.raises(AssertionError):
-        _assert_sa167d_status(
-            roadmap,
-            CONTEXT.read_text(encoding="utf-8") + f"\n{stale_claim}\n",
-            DOCS_INDEX.read_text(encoding="utf-8"),
-            (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
-            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
-            (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
-            (ROOT / "docs/technical/implementation_contract.md").read_text(
-                encoding="utf-8"
-            ),
-            (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
-            "accepted-open",
         )
 
 
@@ -892,7 +824,7 @@ def test_v88_missing_roadmap_dependency_metadata_is_expected_red_canary() -> Non
 
 def test_v88_unknown_roadmap_dependency_is_expected_red_canary() -> None:
     roadmap, context = _load_documents()
-    mutated = roadmap.replace("deps: SA167d", "deps: SA999", 1)
+    mutated = roadmap.replace("merge #27 · deps: none", "merge #27 · deps: SA999", 1)
     with pytest.raises(AssertionError, match="dependencies do not name open tickets"):
         _assert_consistent(mutated, context)
 
@@ -929,7 +861,10 @@ def test_v88_current_reconciliation_is_not_labelled_ungraded() -> None:
     )
 
     for path in current_status_paths:
-        assert "not independently graded" not in path.read_text(encoding="utf-8"), path
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(
+            r"\bnot(?:\s+been)?\s+independently\s+graded\b", text, re.IGNORECASE
+        ), path
 
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     latest_sa167d_entry = re.search(r"(?ms)^- \*\*SA167d\b.*?(?=^- \*\*)", changelog)
