@@ -288,8 +288,7 @@ accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; 
 outstanding after `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E
 failures owned by SA170/W3. SA167c is not complete or release-ready; SA166 remains dependent and
 SA164 remains after SA166. Retained-partial-only merge-back of the synchronized nine-file status
-checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip
-attestation and integration remain pending. The settled product bytes no longer carry CLI per-module
+checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. The settled product bytes no longer carry CLI per-module
 wiring logic. **`SA167d`**
 (v88, active merge #18) remains open: phases A-E are accepted at
 `bd2c291ba2d40494970464741ac51bfd45445a19`, with no tracked E0 edits; SA165 remains dependent

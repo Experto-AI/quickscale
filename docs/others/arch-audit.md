@@ -45,8 +45,7 @@ related gates returned green. E's ordered lint/typecheck/context checkpoint pass
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by SA170/W3.
 F remains outstanding and unaccepted; this retained delivery clears no release gate, and no completion
 or release-readiness claim is made. Retained-partial-only merge-back of the synchronized nine-file
-status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip
-attestation and integration remain pending. Its accepted evidence is archived in
+status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. Its accepted evidence is archived in
 [CHANGELOG.md](../../CHANGELOG.md).
 
 **Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-09-01).** SA167d

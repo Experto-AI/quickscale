@@ -4,6 +4,54 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-09-01, seventh pass) — two integrations archived,
+  no ticket closed.** **No ticket and no audit finding closed since the previous pass**, so the live
+  counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1
+  `privileged-command-set-multi-owner` stale-by-decision until SA174 demotes it, and the queue is
+  unchanged at **twelve** open ticket entries across **twelve** open merge positions. What *did*
+  complete were two integrations, and both were archived out of the planner into the two entries
+  below: SA167c's retained-partial checkpoint merged at
+  `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`, and SA135's closeout is fully merged with no
+  implementation, merge, or closeout work left. The roadmap's dedicated *"Retained SA135 closeout
+  integration checkpoint"* log section, its duplicate W2 next-action bullet, its duplicated
+  position-#15 retirement line, and the two multi-paragraph SA167c provenance narratives were
+  removed; the resume object keeps every hash a cold start needs. Roadmap length moved
+  **933 → 893 lines** with no open ticket, dependency, acceptance criterion, or pinned resume
+  object lost.
+  **Six same-fact consumers were stale on one clause and were corrected**: `docs/index.md`,
+  `docs/technical/v88_ticket_context.md`, `docs/technical/decisions.md`,
+  `docs/technical/implementation_contract.md`, `docs/technical/module-extension.md`, and
+  `docs/others/arch-audit.md` each still said SA167c's *"exact-tip attestation and integration
+  remain pending"* after that checkpoint had merged; all six now name the merge object. The
+  roadmap also records the **operational** release path — `SA170 ─► SA167c F ─► SA166 ─► SA164` —
+  so the scheduling consequence of the block is stated where the graph is read.
+  **Band A re-verified green on `v88` at `cf71bf1e`**: `poetry run pytest
+  scripts/test_provision_ci_postgres.py -q -o addopts= --no-cov` returned **35 passed**, exit 0, in
+  the foreground. Band A stays **empty** and no provisioning ticket was opened. `grep -rn
+  django_apps` over `quickscale_core`, `quickscale_modules`, and `quickscale_cli` still returns only
+  consistency-test references, confirming the retired key stays gone.
+  **Lane state re-measured against `v88` at `cf71bf1e`:** `wt-track1` **16 behind / 0 ahead**,
+  `wt-track2` **2 behind / 0 ahead** at `cb751747`, `wt-track3` **7 behind / 0 ahead** at
+  `b530deae` — **all three working trees clean**. W1's previously recorded "local roadmap scribble"
+  no longer exists, so the instruction to discard it was removed from the next-action bullet, the
+  readiness table, and SA167d's remaining plan.
+  **Track readiness: two lanes truly green, one not — and neither "no" is a decision.** W1 (SA167d,
+  #18) and W3 (SA170, #27) are yes/yes/yes after a sync. W2 (SA167c, #21) is the only
+  critical-path lane and is no on can-start and can-finish, blocked by SA170/W3's owned E2E
+  surface — a hard upstream dependency, not something a maintainer decision can clear. The two
+  truly green lanes are therefore **off** the critical path: real progress, but not release date
+  progress. **No maintainer decision is open.**
+  **Rebalance outcome: no cross-lane move stands, seventh consecutive pass**, and every open ticket
+  already carries a track. The structural reasons are unchanged — all three W2 tickets own
+  `scripts/gate_registry.json`, which never crosses worktrees; W1's `sa90_emission_manifests.json`
+  rebaseline is the ordered pair #19 → #20 and may not be split; SA174/SA175 carry no content
+  dependency but moving band-C slack onto W3's exclusive-slot queue or W2's release-setting queue
+  buys no release progress; and moving SA165 (#22) to W3 would make
+  `scripts/test_isolation_conformance.sh` single-lane but park DB-free work behind the slot queue.
+  **SA171 (#28) still needs no exclusive slot** and remains W3's fallback. No *code* file gained a
+  second lane; this pass's conflict surface is `CHANGELOG.md` and `docs/technical/roadmap.md` only,
+  covered by the merge procedure's sync-resolve-rerun-review step.
+
 - **SA167c Phase E accepted; Phase F halted on its release gate (2026-09-01).** The current status
   consumers now agree that phases A-E are accepted on retained product object
   `91fd3bb6e6b638735361b511c1515cddccce5d15`, while SA167c remains open at #21. SA166 remains
@@ -20,11 +68,18 @@
   Retained checkpoint `4de75d39` was synchronized with `v88` base
   `8385780fe624893dc66e1382f2f68ce1ea759a02` at merge
   `eacad160d92b37f81f593085a64e18db4fb271f0`. Retained-partial-only merge-back of that synchronized
-  nine-file status checkpoint is authorized, subject to fresh exact-tip convergence and patch-backed
-  terminal attestation; integration is still pending. This authorization does not accept F, close
-  SA167c, unblock SA166, or claim release readiness.
+  nine-file status checkpoint was authorized and is now **performed**: fresh convergence and
+  patch-backed terminal attestation ran over reviewed tip
+  `32f78db07ab44a5cc962a172f575156554fe267b`, where the terminal review preserved SA167c as not
+  release-ready and raised two blocking roadmap/test contradictions — stale E-open/no-red wording
+  and a false W3 lane count. One bounded terminal-remediation pass corrected both at exact tip
+  `cb7517470df4f7e5c6890310de1a39ae0ca2c395` and passed the 35-test focused suite plus Ruff, MyPy,
+  `py_compile`, and diff checks; those two corrections were self-validated on the focused status
+  surface and carry no independent follow-up grade. Root merged that exact tip into `v88` at
+  `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. The integration is retained partial delivery only: it
+  does not accept F, close SA167c, unblock SA166, or claim release readiness.
 
-- **SA135 archive and closeout reconciliation prepared; external closeout obligations remain (2026-09-01).** SA135's accepted P/A/B/C/D/E0/E1/F evidence and returned-green Phase G campaign are archived here. This repository reconciliation removes SA135's open roadmap entry and merge position **#15**, retires its current context, updates every live scheduling and queue-count consumer, and clears SA170's former worktree-ordering dependency while preserving its transferred Docker/E2E obligations. The frozen G-FINAL campaign remains unrun and is not claimed by this archive. Release-tier convergence is complete on the settled post-correction bytes; plan phase `G-CLOSEOUT` remains a historical unaccepted partial. Terminal review, root acceptance, and exact-tip integration remain external closeout obligations. No merge into `v88` is claimed.
+- **SA135 archive and closeout reconciliation prepared; external closeout obligations remain (2026-09-01).** SA135's accepted P/A/B/C/D/E0/E1/F evidence and returned-green Phase G campaign are archived here. This repository reconciliation removes SA135's open roadmap entry and merge position **#15**, retires its current context, updates every live scheduling and queue-count consumer, and clears SA170's former worktree-ordering dependency while preserving its transferred Docker/E2E obligations. The frozen G-FINAL campaign remains unrun and is not claimed by this archive. Release-tier convergence is complete on the settled post-correction bytes; plan phase `G-CLOSEOUT` remains a historical unaccepted partial. Terminal review, root acceptance, and exact-tip integration are **complete**: retained closeout object `07607c49d7e45929b8938d7a7d2c0a9909057c0a` was reconciled against current `v88` at successor `b530deaea9ffd1a3f52a7b55eea20488ac46bf03`, which passed release-tier `make ci`, completed convergence and patch-backed terminal review, took one bounded changelog correction after attestation without an independent follow-up grade, and merged into `v88` (`218fd90d`, recorded at `8385780f`). **No SA135 implementation, merge, or closeout work remains**; plan phase `G-CLOSEOUT` stays a historical unaccepted partial and is not relabelled accepted, and SA170 owns the transferred Docker/E2E obligation.
 - **Roadmap cleanup and rebalance review (2026-09-01, sixth pass) — and one false red disproved
   at its root cause.** **No ticket closed and no audit finding closed since the previous pass**, so
   nothing was archived as complete from `docs/technical/roadmap.md`, `docs/others/arch-audit.md`, or
