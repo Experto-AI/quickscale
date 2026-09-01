@@ -20,12 +20,15 @@ import re
 import socket
 import subprocess
 import time
+from unittest.mock import Mock
 
 import pytest
 from click.testing import CliRunner
 
 from quickscale_cli.main import cli
 from quickscale_cli.utils.docker_utils import (
+    ContainerStatus,
+    DockerContainerStatusError,
     DockerComposePluginRequiredError,
     get_container_status,
     get_docker_compose_command,
@@ -142,6 +145,118 @@ def _cleanup_labelled_resources(scope: str) -> None:
             )
 
 
+def _last_container_logs(container_name: str) -> str:
+    """Return the last twenty log lines, retaining a useful failure fallback."""
+    try:
+        result = subprocess.run(
+            ["docker", "logs", "--tail", "20", container_name],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError) as error:
+        return f"<unable to read container logs: {error}>"
+    if result.returncode == 0:
+        logs = "\n".join(
+            stream.strip()
+            for stream in (result.stdout, result.stderr)
+            if stream.strip()
+        )
+        return logs or "<no container logs>"
+    detail = result.stderr.strip() or f"docker logs exited with {result.returncode}"
+    return f"<unable to read container logs: {detail}>"
+
+
+@pytest.mark.e2e
+def test_wait_for_container_running_diagnostics_include_stderr(monkeypatch):
+    """Successful Docker log capture retains both container output streams."""
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        Mock(
+            return_value=subprocess.CompletedProcess(
+                ["docker", "logs"],
+                0,
+                stdout="ordinary output\n",
+                stderr="traceback output\n",
+            )
+        ),
+    )
+
+    logs = _last_container_logs("backend")
+
+    assert logs == "ordinary output\ntraceback output"
+
+
+@pytest.mark.e2e
+def test_wait_for_container_running_exited_state_fails_immediately(monkeypatch):
+    """A crashed container reports its code/logs without another poll or sleep."""
+    status = ContainerStatus(
+        "exited", exit_code=1, display_status="Exited (1) 3 seconds ago"
+    )
+    statuses = [status]
+    monkeypatch.setattr(
+        __name__ + ".get_container_status",
+        lambda _name: statuses.pop(0),
+    )
+    monkeypatch.setattr(
+        __name__ + "._last_container_logs",
+        lambda _name: "backend failed to start",
+    )
+    monkeypatch.setattr(
+        __name__ + ".time.sleep",
+        lambda _interval: (_ for _ in ()).throw(
+            AssertionError("sleep must not follow an exited state")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="exited with code 1") as error:
+        TestDevelopmentCommandsE2E._wait_for_container_running("backend")
+
+    assert "backend failed to start" in str(error.value)
+    assert statuses == []
+
+
+@pytest.mark.e2e
+def test_wait_for_container_running_query_failure_fails_immediately(monkeypatch):
+    """A Docker query error is surfaced without treating it as an absent state."""
+    monkeypatch.setattr(
+        __name__ + ".get_container_status",
+        Mock(side_effect=DockerContainerStatusError("daemon unavailable")),
+    )
+    monkeypatch.setattr(
+        __name__ + ".time.sleep",
+        lambda _interval: (_ for _ in ()).throw(
+            AssertionError("sleep must not follow a query failure")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="status query failed"):
+        TestDevelopmentCommandsE2E._wait_for_container_running("backend")
+
+
+@pytest.mark.e2e
+def test_wait_for_container_running_timeout_reports_last_structured_state(
+    monkeypatch, capsys
+):
+    """A timeout reports the last state while retaining bounded polling behavior."""
+    get_status = Mock(return_value=ContainerStatus("created", display_status="Created"))
+    sleep = Mock()
+    monkeypatch.setattr(
+        __name__ + ".get_container_status",
+        get_status,
+    )
+    monkeypatch.setattr(__name__ + ".time.sleep", sleep)
+    assert not TestDevelopmentCommandsE2E._wait_for_container_running(
+        "backend", timeout=2.0, interval=1.0
+    )
+
+    assert get_status.call_count == 2
+    assert sleep.call_count == 2
+    assert "last observed state: created" in capsys.readouterr().out
+
+
 @pytest.mark.e2e
 class TestDevelopmentCommandsE2E:
     """End-to-end tests for development commands with real Docker containers."""
@@ -157,14 +272,33 @@ class TestDevelopmentCommandsE2E:
     def _wait_for_container_running(
         container_name: str, timeout: float = 30.0, interval: float = 1.0
     ) -> bool:
-        """Wait for a container to be in a running state."""
+        """Wait for running state, failing promptly on an actionable failure."""
         elapsed = 0.0
+        last_status: ContainerStatus | None = None
         while elapsed < timeout:
-            status = get_container_status(container_name)
-            if status and "up" in status.lower():
+            try:
+                status = get_container_status(container_name)
+            except DockerContainerStatusError as error:
+                raise RuntimeError(
+                    f"Container {container_name!r} status query failed: {error}"
+                ) from error
+            last_status = status
+            if status.state == "running":
                 return True
+            if status.state == "exited":
+                logs = _last_container_logs(container_name)
+                raise RuntimeError(
+                    f"Container {container_name!r} exited with code {status.exit_code}. "
+                    f"Last 20 log lines:\n{logs}"
+                )
             time.sleep(interval)
             elapsed += interval
+        observed = last_status.state if last_status is not None else "absent"
+        print(
+            f"Container {container_name!r} did not become running within {timeout:g}s; "
+            f"last observed state: {observed}",
+            flush=True,
+        )
         return False
 
     @staticmethod

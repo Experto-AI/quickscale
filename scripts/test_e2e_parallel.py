@@ -56,14 +56,83 @@ raise SystemExit(1 if failure else 0)
 """
 
 
-FAKE_DOCKER = r"""#!/usr/bin/env bash
-if [ -n "${FAKE_E2E_DOCKER_LOG:-}" ]; then
-    printf 'DOCKER|%s|%s\n' "$*" "${QS_E2E_LANE:-}" >> "$FAKE_E2E_DOCKER_LOG"
-fi
-if [ "${1:-}" = "info" ]; then
-    exit 0
-fi
-exit 0
+FAKE_DOCKER = r"""#!/usr/bin/env python3
+import os
+import sys
+
+
+args = sys.argv[1:]
+if os.environ.get("FAKE_E2E_DOCKER_LOG"):
+    with open(os.environ["FAKE_E2E_DOCKER_LOG"], "a", encoding="utf-8") as stream:
+        stream.write(f"DOCKER|{' '.join(args)}|{os.environ.get('QS_E2E_LANE', '')}\n")
+
+
+def image_records():
+    state_path = os.environ.get("FAKE_E2E_IMAGE_STATE")
+    if not state_path or not os.path.exists(state_path):
+        return []
+    records = []
+    with open(state_path, encoding="utf-8") as stream:
+        for line in stream:
+            fields = line.rstrip("\n").split("|")
+            if len(fields) == 7:
+                records.append(fields)
+    return records
+
+
+def save_image_records(records):
+    state_path = os.environ["FAKE_E2E_IMAGE_STATE"]
+    with open(state_path, "w", encoding="utf-8") as stream:
+        for record in records:
+            stream.write("|".join(record) + "\n")
+
+
+if args[:1] == ["info"]:
+    raise SystemExit(0)
+
+if args[:3] == ["image", "ls", "-aq"]:
+    requested_scope = next(
+        (
+            value.removeprefix("label=com.quickscale.scope=")
+            for value in args
+            if value.startswith("label=com.quickscale.scope=")
+        ),
+        None,
+    )
+    for (
+        image_id,
+        owner,
+        lifecycle,
+        listed_scope,
+        _inspect_scope,
+        _image_contract,
+        tagged,
+    ) in image_records():
+        if (
+            owner == "quickscale"
+            and lifecycle == "e2e"
+            and listed_scope == requested_scope
+            and ("dangling=false" not in args or tagged == "1")
+        ):
+            print(image_id)
+    raise SystemExit(0)
+
+if args[:2] == ["image", "inspect"]:
+    image_id = args[-1]
+    for record in image_records():
+        if record[0] == image_id:
+            print("|".join((record[1], record[2], record[4])))
+            raise SystemExit(0)
+    raise SystemExit(1)
+
+if args[:2] == ["image", "rm"]:
+    removed_ids = set(args[2:])
+    remaining = [record for record in image_records() if record[0] not in removed_ids]
+    save_image_records(remaining)
+    raise SystemExit(0)
+
+# The runner tests only need non-image resources to enumerate as empty.
+raise SystemExit(0)
 """
 
 
@@ -313,6 +382,91 @@ def test_signal_after_core_lane_completes_only_targets_active_lane(tmp_path: Pat
     events = _events(tmp_path)
     assert any(event.startswith("SIGNAL|cli|") for event in events)
     assert not any(event.startswith("SIGNAL|core|") for event in events)
+
+
+def test_two_scope_cleanup_isolates_tagged_images(tmp_path: Path) -> None:
+    """Cleaning one exact scope leaves another and foreign images untouched."""
+    state = tmp_path / "images.state"
+    state.write_text(
+        "image-a|quickscale|e2e|scope-a|scope-a|sa142|1\n"
+        "image-b|quickscale|e2e|scope-b|scope-b|sa142|1\n"
+        "foreign|other-owner|e2e|scope-b|scope-b|foreign|1\n",
+        encoding="utf-8",
+    )
+    scope_b_dir = tmp_path / "scope-b"
+    scope_b_dir.mkdir()
+    result_b = _run(
+        scope_b_dir,
+        "--cleanup-scope",
+        "scope-b",
+        FAKE_E2E_IMAGE_STATE=str(state),
+        QUICKSCALE_BACKEND_IMAGE_DIGEST="foreign-digest",
+    )
+
+    assert result_b.returncode == 0, result_b.stdout + result_b.stderr
+    assert state.read_text(encoding="utf-8"), "fake image state unexpectedly vanished"
+    remaining_after_b = state.read_text(encoding="utf-8").splitlines()
+    assert remaining_after_b == [
+        "image-a|quickscale|e2e|scope-a|scope-a|sa142|1",
+        "foreign|other-owner|e2e|scope-b|scope-b|foreign|1",
+    ]
+    docker_events = (scope_b_dir / "docker.log").read_text(encoding="utf-8").splitlines()
+    image_list_events = [event for event in docker_events if "image ls -aq" in event]
+    assert image_list_events
+    assert all(
+        "label=com.quickscale.owner=quickscale" in event
+        and "label=com.quickscale.lifecycle=e2e" in event
+        and "label=com.quickscale.scope=scope-b" in event
+        and "dangling=false" in event
+        and "label!=com.quickscale.image-contract=sa142" not in event
+        for event in image_list_events
+    )
+    assert not any("label=com.quickscale.image-digest=" in event for event in docker_events)
+    assert any("image inspect" in event and "image-b" in event for event in docker_events)
+    assert any("image rm image-b" in event for event in docker_events)
+    assert not any("image-a" in event and "image rm" in event for event in docker_events)
+    inspect_index = next(
+        index
+        for index, event in enumerate(docker_events)
+        if "image inspect" in event and "image-b" in event
+    )
+    remove_index = next(
+        index for index, event in enumerate(docker_events) if "image rm image-b" in event
+    )
+    assert inspect_index < remove_index
+
+    scope_a_dir = tmp_path / "scope-a"
+    scope_a_dir.mkdir()
+    result_a = _run(
+        scope_a_dir,
+        "--cleanup-scope",
+        "scope-a",
+        FAKE_E2E_IMAGE_STATE=str(state),
+    )
+    assert result_a.returncode == 0, result_a.stdout + result_a.stderr
+    assert state.read_text(encoding="utf-8").splitlines() == [
+        "foreign|other-owner|e2e|scope-b|scope-b|foreign|1",
+    ]
+
+
+def test_cleanup_refuses_image_label_mismatch(tmp_path: Path) -> None:
+    """A filter hit with changed labels is never deleted."""
+    state = tmp_path / "images.state"
+    original = "mismatch|quickscale|e2e|scope-a|scope-other|sa142|1"
+    state.write_text(original + "\n", encoding="utf-8")
+    mismatch_dir = tmp_path / "mismatch"
+    mismatch_dir.mkdir()
+
+    result = _run(
+        mismatch_dir,
+        "--cleanup-scope",
+        "scope-a",
+        FAKE_E2E_IMAGE_STATE=str(state),
+    )
+
+    assert result.returncode != 0
+    assert "failed label reinspection" in result.stderr
+    assert state.read_text(encoding="utf-8").splitlines() == [original]
 
 
 # ── QS_E2E_XDIST_WORKERS (Phase 2) ──────────────────────────────────────

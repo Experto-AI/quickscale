@@ -11,6 +11,8 @@ import pytest
 from quickscale_cli.utils.docker_utils import (
     BackendImageIdentity,
     BackendImageIdentityError,
+    ContainerStatus,
+    DockerContainerStatusError,
     DockerComposePluginRequiredError,
     IMAGE_DIGEST_ENV_VAR,
     IMAGE_REFERENCE_ENV_VAR,
@@ -266,26 +268,76 @@ class TestGetDockerComposeCommand:
 class TestGetContainerStatus:
     """Tests for get_container_status function."""
 
-    def test_container_running(self):
-        """Test getting status of running container."""
+    @pytest.mark.parametrize(
+        ("docker_status", "expected"),
+        [
+            (
+                "test-container\trunning\tUp 3 seconds",
+                ContainerStatus("running", display_status="Up 3 seconds"),
+            ),
+            (
+                "test-container\tcreated\tCreated",
+                ContainerStatus("created", display_status="Created"),
+            ),
+            (
+                "test-container\texited\tExited (1) 3 seconds ago",
+                ContainerStatus(
+                    "exited", exit_code=1, display_status="Exited (1) 3 seconds ago"
+                ),
+            ),
+        ],
+    )
+    def test_container_status_table(self, docker_status, expected):
+        """Parse each exact Docker state from one mocked row."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0, stdout="Up 5 minutes")
+            mock_run.return_value = Mock(returncode=0, stdout=docker_status)
             result = get_container_status("test-container")
-            assert result == "Up 5 minutes"
+            assert result == expected
+
+            command = mock_run.call_args.args[0]
+            assert "name=^/test\\-container$" in command
+            assert command[command.index("--format") + 1] == (
+                "{{.Names}}\t{{.State}}\t{{.Status}}"
+            )
 
     def test_container_not_found(self):
-        """Test when container is not found."""
+        """Successful empty output is the only absent result."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="")
             result = get_container_status("nonexistent")
-            assert result is None
+            assert result == ContainerStatus("absent")
 
-    def test_docker_error(self):
-        """Test handling Docker errors."""
+    @pytest.mark.parametrize(
+        "docker_status",
+        [
+            "test-container\trunning\tUp 3 seconds\nother-container\texited\tExited (1)",
+            "test-container\tnonsense\tUnknown",
+            "test-container\texited\tExited (not-an-integer)",
+        ],
+    )
+    def test_ambiguous_or_malformed_output_fails_loudly(self, docker_status):
+        """Multiple rows and malformed rows cannot become a usable state."""
         with patch("subprocess.run") as mock_run:
-            mock_run.side_effect = subprocess.CalledProcessError(1, "docker")
-            result = get_container_status("test-container")
-            assert result is None
+            mock_run.return_value = Mock(returncode=0, stdout=docker_status)
+            with pytest.raises(DockerContainerStatusError):
+                get_container_status("test-container")
+
+    @pytest.mark.parametrize(
+        "error", [subprocess.CalledProcessError(1, "docker"), FileNotFoundError()]
+    )
+    def test_docker_invocation_failure_fails_loudly(self, error):
+        """Docker nonzero and missing-binary failures are not absent states."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = error
+            with pytest.raises(DockerContainerStatusError):
+                get_container_status("test-container")
+
+    def test_docker_timeout_fails_loudly(self):
+        """A Docker query timeout cannot consume readiness's absent budget."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired("docker", 5)
+            with pytest.raises(DockerContainerStatusError, match="query failed"):
+                get_container_status("test-container")
 
 
 class TestExecInContainer:

@@ -4,6 +4,45 @@
 
 ## v88 development — 2026-08-21
 
+- **SA170 retained-partial checkpoint — phases A-B accepted; Phase C release acceptance is
+  unavailable (2026-09-01).** The accepted product implementation covers Phase A's exact-name
+  structured container status, fail-loud Docker query handling, immediate readiness diagnostics,
+  and caller parity in `quickscale_cli/src/quickscale_cli/utils/docker_utils.py`,
+  `quickscale_cli/tests/utils/test_docker_utils.py`, and
+  `quickscale_cli/tests/test_e2e_development_workflow.py`. Ruff, Ruff format, MyPy, **49** utility
+  tests, and **3** mocked readiness tests exited **0**. Phase B's scoped React image,
+  correctness-only build with separately reported duration/cache observations, exact-scope cleanup,
+  and hermetic two-scope isolation are retained in
+  `quickscale_cli/tests/test_react_theme_e2e.py`, `scripts/test_e2e.sh`, and
+  `scripts/test_e2e_parallel.py`; shell syntax, Ruff, format, **18** hermetic cleanup tests, and
+  **2** scoped React/timeout tests exited **0**. This records accepted A/B product delivery only;
+  SA170 remains open and unchecked at **#27**, **TA70 remains live**, and no completion or release
+  readiness is claimed.
+  **Phase C is pending.** The authoritative archived SA167c Phase-F log/status artifact needed to
+  freeze exactly four transferred row IDs is unavailable: no path or content was supplied or
+  resolved in repository artifacts. The release commands `QS_E2E_PARALLEL=0 make test-e2e` and
+  `make ci-e2e` were not run in the fallback, so no release exit, release-campaign cleanup result,
+  or release-campaign PostgreSQL before/after equality is claimed. Serial retained-partial
+  convergence subsequently repaired exact-scope image selection and timeout-cleanup diagnostics,
+  removed observed image `1a09dafc2b63` only after its exact owner/lifecycle/scope labels were
+  re-inspected, verified scopes `sa170-b-a-20260901-202225` and
+  `sa170-b-b-20260901-202225` empty, and initially left `pg18-af10` running with the same twelve
+  database owners and role flags. A post-QA recheck found the same PostgreSQL container,
+  volume/image, and role flags but a foreign-looking `qs_notifications_test` as a thirteenth owned
+  database; no PostgreSQL mutation was attempted, so current owner-row equality is not claimed.
+  The task-tier correction chain passed 49 utility, 4 readiness, 18 runner, 11 React
+  build/timeout/PostgreSQL, and 35 consistency tests. Terminal attestation raised F-009 through
+  F-011; bounded remediation selected the split correctness/duration branch, reconciled every live
+  TA70 mechanism claim while keeping TA70 open, and restored independent PostgreSQL 18 assertions
+  for `pg_dump` and `pg_restore` with a mismatched-`pg_dump` regression. Those corrections were
+  ***applied after terminal attestation — not independently graded***. **Decisions needed:** none.
+  **Remaining reviewed plan:** `EV-6` remains
+  binding; resume Phase C from the retained A/B product files, do not redo A or B, and resolve the
+  archived four-row artifact before choosing the completion branch. If it remains unavailable,
+  retain this partial checkpoint rather than guessing. The only fallback validation was
+  `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`,
+  which exited **0**.
+
 - **Roadmap cleanup and rebalance review (2026-09-01, seventh pass) — two integrations archived,
   no ticket closed.** **No ticket and no audit finding closed since the previous pass**, so the live
   counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1

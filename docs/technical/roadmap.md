@@ -592,49 +592,82 @@ triggers.
 - [ ] **SA170 — Give the E2E Docker harness a closed resource contract and a truthful failure report.** `Band B · Tier 2 · W3 · merge #27 · deps: none · PostgreSQL + Docker slot · carries the transferred E1 flake obligation and full E2E campaign`
   Closes tech-audit **TA70** (`container-status-substring-match`, S4) and the carried tooling gap
   *"no test exercises the E2E harness's own failure paths"*. Opened 2026-08-27 by root-causing the
-  two historical failures that stalled the preceding lifecycle phase E1. Neither is a provisioning defect, and
-  neither is a genuine race in Docker; both come from the **same shape** — one test opts out of the
-  per-scope resource contract every other E2E resource obeys, and the readiness helper cannot report
-  why anything failed.
-  - **The scope contract works; the React build test is outside it.** `scripts/test_e2e.sh:557`
-    derives `RUN_SCOPE` from `mktemp -d` and `:596` appends `$BASHPID` per lane, so every run and
-    lane gets a unique scope; `docker-compose.yml.j2` stamps `com.quickscale.{owner,lifecycle,scope}`
-    on every container and volume, and `cleanup_scoped_resources` reclaims by label.
-    `quickscale_cli/tests/test_react_theme_e2e.py:657` opts out: a fixed `quickscale-react-test`
-    tag, no labels, no scope prefix. Concurrent runs collide on the tag and label-driven cleanup
-    cannot see the image. Its 300-second budget also times a real frontend build plus a PostgreSQL
-    18 client install — seconds warm, minutes cold — and `subprocess.TimeoutExpired` is not caught,
-    so a timeout aborts before the assertions and leaves the partial build behind. This is a
-    benchmark wearing an assertion's clothes and **cannot be made deterministic by re-running it.**
-  - **The readiness helper destroys its own diagnostic.**
-    `quickscale_cli/tests/test_e2e_development_workflow.py:157-168` polls `get_container_status(name)`
-    and accepts `"up" in status.lower()`. `get_container_status`
-    (`quickscale_cli/src/quickscale_cli/utils/docker_utils.py:328-348`) runs
-    `docker ps -a --filter name=<name>`, where Docker's `name` filter is a **substring regex**, not
-    an exact match, and `-a` includes dead containers. So `<scope>_backend` matches any container
-    whose name contains that string, several matches concatenate into one blob before the substring
-    test, and a container that **exited immediately** yields a status the predicate reads as "not up
-    yet" — the poll burns its full 40 s and reports a generic *"Backend container did not become
-    running within 40s"*. **The crash reason is never surfaced**, which is exactly why repeated E1
-    reruns returned green-but-uninformative: when this harness fails it cannot say why.
+  two historical failures that stalled the preceding lifecycle phase E1. Neither was a provisioning defect or
+  a genuine race in Docker; at ticket opening, both came from the **same shape** — the React test
+  bypassed the per-scope resource contract every other E2E resource obeyed, and the readiness helper
+  could not report why anything failed.
+  - **At ticket opening, the React build test sat outside the working scope contract.** The harness
+    derived a unique run/lane scope and labelled its compose resources, while the React test used a
+    fixed `quickscale-react-test` tag with no labels or scope prefix. Concurrent runs could collide,
+    label-driven cleanup could not see the image, and one 300-second subprocess budget combined
+    build correctness with cold-cache duration. Phase B removed that fixed tag and duration budget,
+    applied exact-scope labels and cleanup, and reports duration/cache observations separately from
+    the build return-code assertion.
+  - **At ticket opening, the readiness helper destroyed its own diagnostic.** It accepted a
+    substring match over display text from `docker ps -a`, so similarly named or exited containers
+    could produce a blind 40-second poll and generic timeout. Phase A replaced that mechanism with
+    an anchored exact-name query, structured states, fail-loud query handling, and immediate exited
+    diagnostics with the code and last log lines.
+  **State (measured 2026-09-01): retained partial checkpoint; phases A and B are accepted and
+  Phase C is outstanding.** Phase A's exact-name structured status, fail-loud query handling,
+  immediate readiness diagnostics, and caller-parity coverage are implemented in
+  `quickscale_cli/src/quickscale_cli/utils/docker_utils.py`,
+  `quickscale_cli/tests/utils/test_docker_utils.py`, and
+  `quickscale_cli/tests/test_e2e_development_workflow.py`; its Ruff check, Ruff format check,
+  MyPy check, 49 utility tests, and 3 mocked readiness tests all exited **0**. Phase B's scoped
+  React image, correctness-only build with separately reported duration/cache observations, exact
+  cleanup, and hermetic two-scope isolation work is
+  implemented in `quickscale_cli/tests/test_react_theme_e2e.py`, `scripts/test_e2e.sh`, and
+  `scripts/test_e2e_parallel.py`; its shell-syntax, Ruff, format, 18 hermetic cleanup tests, and
+  2 scoped React/timeout tests all exited **0**. These are retained product facts, not a ticket
+  completion or release claim; **TA70 remains live** and SA170 remains open and unchecked at
+  merge position **#27**.
+  **Pending:** Phase C completion acceptance, including the exact four transferred SA167c
+  Phase-F E2E row IDs, both release campaigns, exact-scope cleanup, PostgreSQL before/after
+  equality, bounded terminal-remediation validation, and exact-tip integration. Convergence and
+  terminal attestation are complete; this remediation is not a second attestation.
+  **Blocking:** the authoritative archived SA167c Phase-F log/status artifact containing the
+  complete four-row source set is unavailable — no path or content was supplied or resolved in
+  repository artifacts — so the four IDs cannot be guessed or frozen. The release commands
+  `QS_E2E_PARALLEL=0 make test-e2e` and `make ci-e2e` were intentionally **not run** in this
+  fallback; consequently no release exit, release-campaign cleanup result, or release-campaign
+  PostgreSQL baseline comparison is claimed. Serial retained-partial convergence subsequently
+  repaired exact-scope image selection and timeout-cleanup diagnostics, removed observed image
+  `1a09dafc2b63` only after exact owner/lifecycle/scope label reinspection, verified scopes
+  `sa170-b-a-20260901-202225` and `sa170-b-b-20260901-202225` empty, and initially left
+  `pg18-af10` running with the same twelve database owners and role flags. A post-QA recheck found
+  the same PostgreSQL container, volume/image, and role flags but a foreign-looking
+  `qs_notifications_test` as a thirteenth owned database; no PostgreSQL mutation was attempted, so
+  current owner-row equality is not claimed. Its task-tier correction chain passed 49 utility,
+  4 readiness, 18 runner, 11 React build/timeout/PostgreSQL, and 35 consistency tests. Terminal
+  attestation raised F-009 through F-011; the bounded remediation selected the split
+  correctness/duration branch, reconciled TA70's live mechanism claims without closing it, and
+  restored independent PostgreSQL-client assertions. **Decisions needed:** none.
+  **Remaining reviewed plan:** plan authority `EV-6`
+  remains binding; do not redo A or B, retire TA70, mark SA170 complete, or alter SA167c's halt.
+  Resume Phase C from this retained A/B checkpoint by resolving the archived four-row artifact,
+  then follow EV-6's completion branch if it is complete and consistent, or retain this partial
+  state until the missing evidence is supplied. The focused fallback consistency command
+  `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`
+  is the only Phase C validation owed here and must exit **0**.
   **Acceptance:** the React build image is tagged from `QS_E2E_RESOURCE_SCOPE` and carries the same
   `com.quickscale.{owner,lifecycle,scope}` labels as every other E2E resource, so
   `scripts/test_e2e.sh --cleanup-scope <scope>` reclaims it and no fixed tag remains in any test;
-  `subprocess.TimeoutExpired` is caught and fails with a message naming cache state and observed
-  duration, and the build budget is either raised to a documented cold-cache figure or split into a
-  correctness assertion plus a separately-reported duration; `get_container_status` filters on an
+  Docker build correctness has no fixed subprocess duration budget: its return code is asserted
+  independently, cache state and observed duration are reported separately, and a regression oracle
+  rejects a reintroduced build timeout; `get_container_status` filters on an
   anchored exact name (`name=^<name>$`), returns a structured state rather than a display string,
   and distinguishes *absent*, *created*, *running*, and *exited(code)*; the readiness poll fails
   immediately and loudly on *exited*, naming the exit code and last log lines, instead of waiting
   out its timeout; a test asserts a second concurrent scope cannot observe or delete the first
   scope's build image; **TA70** is retired.
   **Evidence policy — this is the deterministic evidence E1 could not produce.** Each defect is
-  proved where determinism exists, with no flake reproduction: (1) a pure unit test over the
-  readiness predicate and over `get_container_status`'s argv, fed `Exited (1) 3 seconds ago`,
-  `Created`, `Up 3 seconds`, a two-container blob, and `None` — red on today's substring logic,
-  green after; (2) a labelled-resource assertion that `cleanup_scoped_resources <scope>` removes the
-  React build image — red today because the image is unlabelled, green after; (3) a two-scope test
-  proving the fixed-tag collision is gone.
+  proved where determinism exists, with no flake reproduction: (1) pure unit coverage over the
+  readiness predicate and `get_container_status` argv/states, including exited, created, running,
+  ambiguous, absent, malformed, and failed-query results; (2) a labelled-resource assertion that
+  `cleanup_scoped_resources <scope>` removes the React build image; and (3) a two-scope test proving
+  one scope cannot observe or delete the other's build image. These oracles now pass over the A/B
+  implementation; Phase C and release evidence remain the unaccepted boundary.
   **Absorbed from SA135 — the full E2E campaign.** `QS_E2E_PARALLEL=0 make test-e2e` followed by
   `make ci-e2e` on an unchanged tree, with exact cleanup and PostgreSQL baseline equality, is **SA170's
   final acceptance** and runs *after* the three fixes above, where the result is interpretable. It must

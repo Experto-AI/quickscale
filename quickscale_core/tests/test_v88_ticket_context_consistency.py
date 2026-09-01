@@ -4,14 +4,15 @@ The roadmap is the sole home for schedulable metadata.  The context page may exp
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
-tree state.  The accepted-open SA167d retained-partial and halted SA167c statuses are checked as
-current consumer contracts below; those checks are not mutation canaries.
+tree state.  The accepted-open SA167d, halted SA167c, and retained-partial SA170 statuses are
+checked as current consumer contracts below; those checks are not mutation canaries.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
 context.  Retained expected-red canaries prove those parser/guard boundaries, while explicit
-current-status contracts preserve the accepted-open SA167d retained partial and the halted SA167c
-checkpoint.  The suite previously carried twelve mutation canaries across 496 lines, including one
+current-status contracts preserve the accepted-open SA167d retained partial, the halted SA167c
+checkpoint, and the retained-partial SA170 checkpoint.  The suite previously carried twelve
+mutation canaries across 496 lines, including one
 that mutated a hardcoded ``deps:`` literal naming a specific ticket; archiving that ticket silently
 disarmed it, as did roadmap prose that happened to spell the same literal first.  The remaining
 canaries are derived from current structure or exercise still-live invariant boundaries rather than
@@ -54,6 +55,14 @@ SA167C_MOVED_V88 = "3aa0c67f843eddd779f9766de4c274a5a249f485"
 SA167C_RETAINED_CHECKPOINT = "4de75d39"
 SA167C_SYNC_BASE = "8385780fe624893dc66e1382f2f68ce1ea759a02"
 SA167C_SYNC_MERGE = "eacad160d92b37f81f593085a64e18db4fb271f0"
+SA170_PRODUCT_FILES = (
+    "quickscale_cli/src/quickscale_cli/utils/docker_utils.py",
+    "quickscale_cli/tests/utils/test_docker_utils.py",
+    "quickscale_cli/tests/test_e2e_development_workflow.py",
+    "quickscale_cli/tests/test_react_theme_e2e.py",
+    "scripts/test_e2e.sh",
+    "scripts/test_e2e_parallel.py",
+)
 RETAINED_PARTIAL_ATTESTED = (
     "retained-partial convergence and terminal attestation are complete"
 )
@@ -547,6 +556,96 @@ def _assert_sa167c_halted_status(
     assert "obtain fresh reviewed authority" in roadmap_text
 
 
+def _assert_sa170_retained_partial_status(
+    roadmap_text: str, changelog_text: str
+) -> None:
+    """Keep accepted A/B product work distinct from unavailable Phase C evidence."""
+    roadmap = _roadmap_tickets(roadmap_text)
+    assert roadmap["SA170"].merge_position == 27
+    assert roadmap["SA170"].dependencies == frozenset()
+
+    sa170_block = _roadmap_block(
+        roadmap_text,
+        "- [ ] **SA170 — Give the E2E Docker harness a closed resource contract and a truthful failure report.**",
+        "- [ ] **SA160 — Share one correct CSRF-token helper in the React theme.**",
+    )
+    latest_checkpoint = re.search(
+        r"(?ms)^- \*\*SA170 retained-partial checkpoint\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_checkpoint is not None
+    checkpoint_text = latest_checkpoint.group(0)
+
+    for name, text in (("roadmap", sa170_block), ("changelog", checkpoint_text)):
+        normalized_text = " ".join(text.split())
+        assert re.search(
+            r"phases A-B accepted|phases A and B are accepted",
+            normalized_text,
+        )
+        assert "Phase C" in normalized_text
+        assert "TA70 remains live" in normalized_text
+        assert "SA170 remains open" in normalized_text
+        assert "correctness-only" in normalized_text
+        assert "separately reported duration/cache observations" in normalized_text
+        assert re.search(
+            r"not a ticket completion or release|no completion or release",
+            normalized_text,
+            re.IGNORECASE,
+        )
+        assert "EV-6" in normalized_text
+        assert re.search(
+            r"\*{0,2}Decisions needed:\*{0,2}\s+none",
+            normalized_text,
+        )
+        for product_file in SA170_PRODUCT_FILES:
+            assert product_file in normalized_text, (name, product_file)
+
+    for text in (sa170_block, checkpoint_text):
+        normalized_text = " ".join(text.split())
+        validation_command = (
+            "poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py "
+            "-q -o addopts= --no-cov"
+        )
+        assert "authoritative archived SA167c Phase-F" in normalized_text
+        assert "four" in normalized_text
+        assert "QS_E2E_PARALLEL=0 make test-e2e" in normalized_text
+        assert "make ci-e2e" in normalized_text
+        assert "not run" in normalized_text
+        assert "PostgreSQL" in normalized_text
+        assert "convergence" in normalized_text
+        assert "terminal attestation" in normalized_text
+        assert (
+            "Serial retained-partial convergence subsequently repaired"
+            in normalized_text
+        )
+        assert "sa170-b-a-20260901-202225" in normalized_text
+        assert "sa170-b-b-20260901-202225" in normalized_text
+        assert "pg18-af10" in normalized_text
+        assert "qs_notifications_test" in normalized_text
+        assert "thirteenth owned database" in normalized_text
+        assert "no PostgreSQL mutation was attempted" in normalized_text
+        assert "current owner-row equality is not claimed" in normalized_text
+        assert re.search(
+            r"49 utility, 4 readiness, 18 runner, 11 React "
+            r"build/timeout/PostgreSQL, and 35 consistency tests",
+            normalized_text,
+        )
+        assert "Terminal attestation raised F-009 through F-011" in normalized_text
+        assert validation_command in normalized_text
+        assert re.search(
+            rf"{re.escape(validation_command)}.{{0,160}}exit(?:ed)?\s+\*\*0\*\*",
+            normalized_text,
+            re.IGNORECASE,
+        )
+
+    normalized_roadmap = " ".join(sa170_block.split())
+    assert "bounded terminal-remediation validation" in normalized_roadmap
+    assert "patch-backed terminal attestation" not in normalized_roadmap
+    assert "At ticket opening" in normalized_roadmap
+    assert "red today" not in normalized_roadmap
+    assert "opts out" not in normalized_roadmap
+
+
 def _assert_sa167d_status(
     roadmap_text: str,
     context_text: str,
@@ -669,6 +768,10 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
             encoding="utf-8"
         ),
         (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
+    )
+    _assert_sa170_retained_partial_status(
+        roadmap,
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
     )
 
 

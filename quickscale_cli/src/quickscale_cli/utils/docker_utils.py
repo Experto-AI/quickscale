@@ -11,6 +11,7 @@ import time
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Literal
 
 
 class DockerComposePluginRequiredError(RuntimeError):
@@ -19,6 +20,27 @@ class DockerComposePluginRequiredError(RuntimeError):
 
 class BackendImageIdentityError(ValueError):
     """Raised when the inputs for the development backend image are invalid."""
+
+
+class DockerContainerStatusError(RuntimeError):
+    """Raised when Docker cannot provide one valid container status result."""
+
+
+@dataclass(frozen=True, slots=True)
+class ContainerStatus:
+    """Structured state returned for one exact-name Docker container query."""
+
+    state: Literal["absent", "created", "running", "exited"]
+    exit_code: int | None = None
+    display_status: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.state not in {"absent", "created", "running", "exited"}:
+            raise ValueError(f"unknown container state: {self.state!r}")
+        if self.state == "exited" and not isinstance(self.exit_code, int):
+            raise ValueError("exited container status requires an integer exit code")
+        if self.state != "exited" and self.exit_code is not None:
+            raise ValueError("only exited container status may have an exit code")
 
 
 @dataclass(frozen=True)
@@ -325,8 +347,53 @@ def get_docker_compose_command() -> list[str]:
     return ["docker", "compose"]
 
 
-def get_container_status(container_name: str) -> str | None:
-    """Get status of a specific container."""
+def _parse_container_status(container_name: str, output: str) -> ContainerStatus:
+    """Parse one exact-name Docker status row into the structured contract."""
+    rows = output.splitlines()
+    if len(rows) != 1:
+        raise DockerContainerStatusError(
+            f"Docker status query for {container_name!r} returned {len(rows)} rows; "
+            "expected exactly one result"
+        )
+
+    fields = rows[0].split("\t")
+    if len(fields) != 3 or fields[0] != container_name:
+        raise DockerContainerStatusError(
+            f"Docker status query for {container_name!r} returned malformed output: "
+            f"{rows[0]!r}"
+        )
+
+    state = fields[1].lower()
+    display_status = fields[2]
+    if state not in {"created", "running", "exited"}:
+        raise DockerContainerStatusError(
+            f"Docker status query for {container_name!r} returned unknown state "
+            f"{fields[1]!r}"
+        )
+    if state == "exited":
+        match = re.fullmatch(r"Exited \((-?\d+)\)(?: .*)?", display_status)
+        if match is None:
+            raise DockerContainerStatusError(
+                f"Docker status query for {container_name!r} returned malformed "
+                f"exited status: {display_status!r}"
+            )
+        return ContainerStatus(
+            state="exited",
+            exit_code=int(match.group(1)),
+            display_status=display_status,
+        )
+    if state == "created":
+        return ContainerStatus(state="created", display_status=display_status)
+    return ContainerStatus(state="running", display_status=display_status)
+
+
+def get_container_status(container_name: str) -> ContainerStatus:
+    """Get one exact-name container's structured state.
+
+    Empty output is the only successful ``absent`` result. Docker invocation
+    failures and ambiguous or malformed output raise instead of masquerading as
+    an absent container.
+    """
     try:
         result = subprocess.run(
             [
@@ -334,18 +401,23 @@ def get_container_status(container_name: str) -> str | None:
                 "ps",
                 "-a",
                 "--filter",
-                f"name={container_name}",
+                f"name=^/{re.escape(container_name)}$",
                 "--format",
-                "{{.Status}}",
+                "{{.Names}}\t{{.State}}\t{{.Status}}",
             ],
             capture_output=True,
             text=True,
             check=True,
             timeout=5,
         )
-        return result.stdout.strip() or None
-    except subprocess.SubprocessError, subprocess.TimeoutExpired:
-        return None
+        output = result.stdout.strip()
+        if not output:
+            return ContainerStatus(state="absent")
+        return _parse_container_status(container_name, output)
+    except (subprocess.SubprocessError, FileNotFoundError) as error:
+        raise DockerContainerStatusError(
+            f"Docker status query failed for container {container_name!r}: {error}"
+        ) from error
 
 
 def exec_in_container(

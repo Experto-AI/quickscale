@@ -384,6 +384,7 @@ resource_ids() {
         container) docker ps -aq "${LABEL_FILTER_ARGS[@]}" ;;
         volume) docker volume ls -q "${LABEL_FILTER_ARGS[@]}" ;;
         network) docker network ls -q "${LABEL_FILTER_ARGS[@]}" ;;
+        image) docker image ls -aq "${LABEL_FILTER_ARGS[@]}" --filter dangling=false ;;
         *) echo "Unknown Docker resource type: $resource_type" >&2; return 2 ;;
     esac
 }
@@ -393,6 +394,7 @@ inspect_resource_labels() {
     case "$resource_type" in
         container) output="$(docker container inspect --format '{{index .Config.Labels "com.quickscale.owner"}}|{{index .Config.Labels "com.quickscale.lifecycle"}}|{{index .Config.Labels "com.quickscale.scope"}}' "$resource_id")" ;;
         volume|network) output="$(docker "$resource_type" inspect --format '{{index .Labels "com.quickscale.owner"}}|{{index .Labels "com.quickscale.lifecycle"}}|{{index .Labels "com.quickscale.scope"}}' "$resource_id")" ;;
+        image) output="$(docker image inspect --format '{{index .Config.Labels "com.quickscale.owner"}}|{{index .Config.Labels "com.quickscale.lifecycle"}}|{{index .Config.Labels "com.quickscale.scope"}}' "$resource_id")" ;;
         *) return 2 ;;
     esac
     [ "$output" = "quickscale|e2e|$scope" ]
@@ -424,7 +426,7 @@ cleanup_scoped_resources() {
     local -A cleanup_ids=()
     local -a ids_array=()
     validate_scope "$scope" || return 1
-    for resource_type in container volume network; do
+    for resource_type in container volume network image; do
         if ! ids="$(resource_ids "$resource_type" "$scope")"; then
             echo "Unable to enumerate labelled $resource_type resources for scope $scope" >&2
             return 1
@@ -444,6 +446,10 @@ cleanup_scoped_resources() {
         mapfile -t ids_array <<< "${cleanup_ids[container]}"
         docker rm -f "${ids_array[@]}" || return 1
     fi
+    if [ -n "${cleanup_ids[image]:-}" ]; then
+        mapfile -t ids_array <<< "${cleanup_ids[image]}"
+        docker image rm "${ids_array[@]}" || return 1
+    fi
     if [ -n "${cleanup_ids[volume]:-}" ]; then
         mapfile -t ids_array <<< "${cleanup_ids[volume]}"
         docker volume rm -f "${ids_array[@]}" || return 1
@@ -453,7 +459,7 @@ cleanup_scoped_resources() {
         docker network rm "${ids_array[@]}" || return 1
     fi
 
-    for resource_type in container volume network; do
+    for resource_type in container volume network image; do
         if ! ids="$(resource_ids "$resource_type" "$scope")"; then
             return 1
         fi
@@ -803,7 +809,6 @@ run_lanes_parallel() {
 if [ -n "$CLEANUP_SCOPE" ]; then
     validate_scope "$CLEANUP_SCOPE"
     echo -e "${BLUE}Cleaning labelled E2E resources in scope $CLEANUP_SCOPE${NC}"
-    cleanup_scoped_images "$CLEANUP_SCOPE" "${QUICKSCALE_BACKEND_IMAGE_DIGEST:-}" || exit 1
     cleanup_scoped_resources "$CLEANUP_SCOPE"
     exit $?
 fi

@@ -13,7 +13,13 @@ Note: Some tests require pnpm to be installed
 
 import json
 import os
+import re
+import shlex
 import subprocess
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -33,6 +39,111 @@ def _is_network_failure(output: str) -> bool:
         "registry.npmjs.org",
     ]
     return any(marker in lowered for marker in markers)
+
+
+def _is_docker_safe_scope(scope: str) -> bool:
+    """Match the shell cleanup contract for one frozen resource scope."""
+    return re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", scope) is not None
+
+
+def _run_react_docker_build(
+    project_path, image_ref: str, resource_scope: str
+) -> tuple[subprocess.CompletedProcess[str], float]:
+    """Run build correctness without a duration deadline and report timing."""
+    build_command = [
+        "docker",
+        "build",
+        "-t",
+        image_ref,
+        "--label",
+        "com.quickscale.owner=quickscale",
+        "--label",
+        "com.quickscale.lifecycle=e2e",
+        "--label",
+        f"com.quickscale.scope={resource_scope}",
+        ".",
+    ]
+
+    # Capture the cache inputs immediately before the build.  The command has
+    # no explicit cache-from/cache-to/no-cache setting, so only the daemon's
+    # default cache policy and the observed pre-build image state are claimed.
+    prebuild_inspect = subprocess.run(
+        ["docker", "image", "inspect", image_ref],
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    cache_evidence = (
+        f"argv={shlex.join(build_command)}; "
+        "cache_mode=default (no explicit cache flags); "
+        f"pre-build image inspect exit={prebuild_inspect.returncode}; "
+        f"stdout={prebuild_inspect.stdout.strip()!r}; "
+        f"stderr={prebuild_inspect.stderr.strip()!r}"
+    )
+
+    started = time.monotonic()
+    build_result = subprocess.run(
+        build_command,
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+    )
+    elapsed = time.monotonic() - started
+    print(
+        f"React Docker build observation: scope={resource_scope}; "
+        f"duration={elapsed:.3f}s; {cache_evidence}",
+        flush=True,
+    )
+    return build_result, elapsed
+
+
+def _assert_postgresql_18_clients(image_ref: str) -> None:
+    """Assert each required PostgreSQL client independently reports major 18."""
+    for command in ("pg_dump", "pg_restore"):
+        version_result = subprocess.run(
+            ["docker", "run", "--rm", image_ref, command, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        assert version_result.returncode == 0, (
+            f"{command} version check failed:\n"
+            f"STDOUT:\n{version_result.stdout}\n"
+            f"STDERR:\n{version_result.stderr}"
+        )
+        assert "(PostgreSQL) 18" in version_result.stdout, (
+            f"Unexpected {command} version output: {version_result.stdout}"
+        )
+
+
+@contextmanager
+def _scoped_react_docker_image(repo_root: Path, resource_scope: str) -> Iterator[None]:
+    """Require exact-scope image cleanup on every enclosed exit path."""
+    try:
+        yield
+    finally:
+        cleanup_environment = os.environ.copy()
+        cleanup_environment.pop("QUICKSCALE_BACKEND_IMAGE_DIGEST", None)
+        cleanup_result = subprocess.run(
+            [
+                str(repo_root / "scripts" / "test_e2e.sh"),
+                "--cleanup-scope",
+                resource_scope,
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=cleanup_environment,
+        )
+        if cleanup_result.returncode != 0:
+            raise AssertionError(
+                "Scoped Docker cleanup failed:\n"
+                f"STDOUT:\n{cleanup_result.stdout}\n"
+                f"STDERR:\n{cleanup_result.stderr}"
+            )
 
 
 @pytest.mark.e2e
@@ -654,47 +765,142 @@ class TestReactThemeDockerIntegration:
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "docker_build_test"
         project_path = tmp_path / project_name
-        image_tag = "quickscale-react-test"
+        resource_scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "")
+        if not _is_docker_safe_scope(resource_scope):
+            pytest.fail(
+                "QS_E2E_RESOURCE_SCOPE must be a frozen Docker-safe scope "
+                "for the React image build"
+            )
+        image_ref = f"quickscale-react-e2e:{resource_scope}"
 
         generator.generate(project_name, project_path)
 
-        try:
-            build_result = subprocess.run(
-                ["docker", "build", "-t", image_tag, "."],
-                cwd=project_path,
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minutes for build
+        repo_root = Path(__file__).resolve().parents[2]
+        with _scoped_react_docker_image(repo_root, resource_scope):
+            build_result, build_elapsed = _run_react_docker_build(
+                project_path, image_ref, resource_scope
             )
 
             assert build_result.returncode == 0, (
                 "Docker build failed:\n"
+                f"Build duration: {build_elapsed:.3f}s\n"
                 f"STDOUT:\n{build_result.stdout}\n"
                 f"STDERR:\n{build_result.stderr}"
             )
 
-            for command in ("pg_dump", "pg_restore"):
-                version_result = subprocess.run(
-                    ["docker", "run", "--rm", image_tag, command, "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
-
-                assert version_result.returncode == 0, (
-                    f"{command} version check failed:\n"
-                    f"STDOUT:\n{version_result.stdout}\n"
-                    f"STDERR:\n{version_result.stderr}"
-                )
-                assert "(PostgreSQL) 18" in version_result.stdout, (
-                    f"Unexpected {command} version output: {version_result.stdout}"
-                )
-        finally:
-            subprocess.run(
-                ["docker", "rmi", image_tag],
+            label_result = subprocess.run(
+                [
+                    "docker",
+                    "image",
+                    "inspect",
+                    "--format",
+                    '{{index .Config.Labels "com.quickscale.owner"}}|'
+                    '{{index .Config.Labels "com.quickscale.lifecycle"}}|'
+                    '{{index .Config.Labels "com.quickscale.scope"}}',
+                    image_ref,
+                ],
                 capture_output=True,
+                text=True,
                 timeout=30,
             )
+            assert label_result.returncode == 0, label_result.stderr
+            assert label_result.stdout.strip() == f"quickscale|e2e|{resource_scope}"
+
+            _assert_postgresql_18_clients(image_ref)
+
+    @pytest.mark.parametrize(
+        ("scope", "expected"),
+        [
+            ("scope-a", True),
+            ("scope_a", True),
+            ("a" * 63, True),
+            ("", False),
+            ("-scope", False),
+            ("a" * 64, False),
+        ],
+    )
+    def test_dockerfile_builds_with_react_scope_contract(self, scope, expected):
+        """React-image scope validation stays in parity with shell cleanup."""
+        assert _is_docker_safe_scope(scope) is expected
+
+    def test_docker_build_timeout_budget_is_separate_from_correctness(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A long successful build has no embedded correctness timeout budget."""
+        resource_scope = "sa170-timeout-20260901"
+        image_ref = f"quickscale-react-e2e:{resource_scope}"
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append((command, kwargs))
+            if command[:3] == ["docker", "image", "inspect"]:
+                return subprocess.CompletedProcess(
+                    command, 1, stdout="", stderr="No such image"
+                )
+            if command[:2] == ["docker", "build"]:
+                assert "timeout" not in kwargs
+                return subprocess.CompletedProcess(
+                    command, 0, stdout="built", stderr=""
+                )
+            raise AssertionError(f"unexpected subprocess: {command}")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monotonic_values = iter((100.0, 701.0))
+        monkeypatch.setattr(time, "monotonic", lambda: next(monotonic_values))
+
+        result, elapsed = _run_react_docker_build(tmp_path, image_ref, resource_scope)
+
+        diagnostics = capsys.readouterr().out
+        assert result.returncode == 0
+        assert elapsed == 601.0
+        assert f"scope={resource_scope}" in diagnostics
+        assert "duration=601.000s" in diagnostics
+        assert "cache_mode=default" in diagnostics
+        assert "pre-build image inspect exit=1" in diagnostics
+        assert calls[0][0] == ["docker", "image", "inspect", image_ref]
+        assert calls[1][0][:2] == ["docker", "build"]
+        assert "timeout" not in calls[1][1]
+
+    def test_postgresql_client_mismatch_rejects_pg_dump(self, monkeypatch):
+        """A PostgreSQL 17 pg_dump cannot hide behind a PostgreSQL 18 pg_restore."""
+        image_ref = "quickscale-react-e2e:sa170-postgresql-mismatch"
+
+        def fake_run(command, **_kwargs):
+            client = command[-2]
+            major = "17.9" if client == "pg_dump" else "18.1"
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=f"{client} (PostgreSQL) {major}\n",
+                stderr="",
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        with pytest.raises(AssertionError, match="Unexpected pg_dump version output"):
+            _assert_postgresql_18_clients(image_ref)
+
+    def test_docker_build_timeout_still_validates_scoped_cleanup(
+        self, tmp_path, monkeypatch
+    ):
+        """Cleanup failure remains visible when the build path already failed."""
+        resource_scope = "sa170-timeout-cleanup-20260901"
+        repo_root = tmp_path / "repo"
+        cleanup = subprocess.CompletedProcess(
+            ["test_e2e.sh", "--cleanup-scope", resource_scope],
+            1,
+            stdout="",
+            stderr="cleanup refused",
+        )
+        monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: cleanup)
+
+        with pytest.raises(
+            AssertionError, match="Scoped Docker cleanup failed"
+        ) as error:
+            with _scoped_react_docker_image(repo_root, resource_scope):
+                raise AssertionError("build timed out")
+
+        assert "cleanup refused" in str(error.value)
 
 
 @pytest.mark.e2e
