@@ -58,7 +58,7 @@
   is unchanged and remains covered by the execution rules' sync-resolve-rerun-review merge
   procedure. `quickscale_core/tests/test_v88_ticket_context_consistency.py` was re-run in the same
   change and exited 0 with **29 passed**.
- - **SA167c phases C and D accepted; the coupled child-probe lifecycle race fixed (2026-09-01).**
+- **SA167c phases C and D accepted; the coupled child-probe lifecycle race fixed (2026-09-01).**
   Archived out of the roadmap, which now carries only what SA167c still owes. Phase C accepted the
   retained Make/registry/local/hosted/parity surface and aligned `check_ci_locally.sh`'s help with the
   runtime's **eleven** non-E2E stages plus optional stage twelve; its focused suite passed **293
