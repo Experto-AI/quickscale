@@ -161,10 +161,10 @@ sync-resolve-rerun-review step in the execution rules.
 
 ### Lane state
 
-**Pre-merge candidate measurement (2026-09-01)** uses current `v88` at
-`3c7ab2955021dc2dcc78a359c16d9d1f7bf3a16c`. Never trust a transcribed count; re-measure before
-acting. The W1 bookkeeping checkpoint was measured level with the prior `v88` base `3aa0c67f`;
-the current status-only commit makes W1 one commit behind current `v88` and adds no product delta.
+**Post-merge measurement (2026-09-01)** uses current `v88` at retained-partial tip
+`b530deaea9ffd1a3f52a7b55eea20488ac46bf03`. Never trust a transcribed count; re-measure before
+acting. This is the exact successor that completed release convergence, patch-backed terminal review,
+the bounded terminal correction, and root-owned merge-back.
 
 ```bash
 for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-right --count v88...$w; done
@@ -173,21 +173,17 @@ for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-r
 **Read that output as `behind ahead`** — the left column counts commits on `v88` and not on the
 worktree, the right column the reverse.
 
-- **`wt-track1`** — **1 behind / 0 ahead** of current `v88`, at the prior checkpoint `3aa0c67f`.
-  The checkpoint merge reconciled the roadmap without changing any SA167d product byte. Phase C is
-  outstanding and no green prefix from its halted attempt is reusable; sync current `v88` before
-  restarting it.
-- **`wt-track2`** — **5 behind / 0 ahead**, clean at `f60fe2bc`. It lags by the W1 bookkeeping
-  history plus the current status-only commit, not by product work. SA167c's A-D product delta is
-  retained; E and F stay outstanding. **Sync before E.**
-- **`wt-track3`** — **5 behind / 5 ahead** at retained closeout base candidate
-  `218fd90d677a388c037bf4692170d08ba1f05245`. The current-v88 conflicts are resolved in that
-  committed object; this pass's settled convergence corrections layer on it before terminal review
-  and root-owned exact-tip integration.
+- **`wt-track1`** — **9 behind / 0 ahead** current `v88`. Its retained checkpoint changed no SA167d
+  product byte. Phase C is outstanding and no green prefix from its halted attempt is reusable; sync
+  current `v88` before restarting it.
+- **`wt-track2`** — **13 behind / 0 ahead** current `v88`, with SA167c's retained A-D product object
+  still in ancestry. E and F stay outstanding. **Sync before E.**
+- **`wt-track3`** — **0 behind / 0 ahead**, clean and level with `v88` at
+  `b530deaea9ffd1a3f52a7b55eea20488ac46bf03`. The retained SA135 partial is integrated; W3's next
+  open ticket is SA170.
 
-W1's checkpoint is bookkeeping-only and does not complete SA167d. The W3 candidate is retained
-delivery with release-tier convergence complete; terminal review and root-owned merge remain, so it
-is not yet integration-branch state.
+W1's checkpoint is bookkeeping-only and does not complete SA167d. W3's retained SA135 delivery is
+now integration-branch state; it closes no SA167c, SA167d, or SA170 acceptance gate.
 
 ### PostgreSQL routing — who actually claims the standing service
 
@@ -205,32 +201,30 @@ complete and the standing state was restored exactly.
 
 #### Retained SA135 closeout integration checkpoint — 2026-09-01
 
-SA135 is archived from the open queue in this candidate: merge position #15 is retired, SA170 is the
-W3 head with `deps: none`, and SA170 owns the transferred Docker/E2E obligation. This checkpoint is
-retained integration work, not a reopened SA135 ticket and not a claim that the candidate is already in
-`v88`.
+SA135 is archived from the open queue in current `v88`: merge position #15 is retired, SA170 is the
+W3 head with `deps: none`, and SA170 owns the transferred Docker/E2E obligation. This checkpoint
+records retained partial delivery; it does not reopen SA135 or claim that its historical unaccepted
+phase became accepted.
 
-- **Completed:** SA135's accepted P/A/B/C/D/E0/E1/F evidence and returned-green Phase G campaign are
-  archived in [CHANGELOG.md](../../CHANGELOG.md). The retained closeout object is
-  `07607c49d7e45929b8938d7a7d2c0a9909057c0a`, and resolved candidate
-  `218fd90d677a388c037bf4692170d08ba1f05245` carries its closeout reconciliation alongside the
-  current W1 bookkeeping history. SA167c's retained product object
-  `91fd3bb6e6b638735361b511c1515cddccce5d15` preserves accepted A-D with E/F pending. E2E remains
-  transferred to SA170.
-- **Pending:** terminal attestation, root acceptance, and exact-tip integration remain outstanding.
-  Release-tier convergence is complete on the settled post-correction bytes; predecessor evidence
-  did not transfer automatically to the bytes changed by this synchronization. Plan phase
-  `G-CLOSEOUT` remains a historical unaccepted partial and is not re-entered.
-- **Blocking:** no product or design blocker is open. The settled post-correction bytes passed
-  release-tier convergence and still require terminal attestation plus root-owned acceptance and
-  merge; until that occurs, `v88` retains its own pre-merge status and the candidate is not
-  integration-branch state.
+- **Completed:** retained closeout object `07607c49d7e45929b8938d7a7d2c0a9909057c0a` preserves the
+  accepted P/A/B/C/D/E0/E1/F evidence and returned-green Phase G campaign. Successor
+  `b530deaea9ffd1a3f52a7b55eea20488ac46bf03` synchronized current `v88`, reconciled all ten current
+  consumers, passed release-tier `make ci`, completed convergence and patch-backed terminal review,
+  received one bounded changelog correction, and merged exactly into `v88`. The changelog archives
+  that correction's post-attestation provenance and lack of an independent follow-up grade. SA167c's
+  retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` still preserves accepted
+  A-D with E/F pending.
+- **Pending:** no SA135 implementation or merge work remains. Plan phase `G-CLOSEOUT` remains a
+  historical unaccepted partial and is not re-entered or relabelled accepted. Open product work is
+  SA167c E/F on W2, SA167d Phase C on W1, and SA170's transferred Docker/E2E contract on W3.
+- **Blocking:** none for the retained SA135 checkpoint. Each open ticket is blocked only by its own
+  declared validation and acceptance work; this merge clears no open-ticket gate.
 - **Decisions needed:** none. Do not reopen the settled PostgreSQL lifecycle, redo SA167c A-D, or
   move SA170's E2E work back onto SA135.
-- **Remaining plan:** bind terminal review to the settled post-correction bytes, then perform
-  root-owned exact-tip acceptance and merge; update only facts
-  that become true after that merge. No E2E campaign or lifecycle reimplementation belongs to this
-  checkpoint.
+- **Remaining plan:** (1) W2 syncs current `v88` and resumes SA167c at E-closeout, then runs F's
+  frozen-candidate validation including `make ci-e2e`; (2) W1 syncs current `v88` and restarts
+  SA167d Phase C from command 1 with no reused green prefix; (3) W3 starts SA170 and owns its full
+  Docker/E2E acceptance. No continuation reimplements SA135 or SA167c A-D.
 
 - **W2 — sync current `v88`, then resume SA167c (#21) at E-closeout.** Retained product commit
   `91fd3bb6e6b638735361b511c1515cddccce5d15` carries accepted A-D. Do not reimplement A-D. Reconcile
@@ -242,11 +236,10 @@ retained integration work, not a reopened SA135 ticket and not a claim that the 
   current tip. **Open no repair ticket and write no byte in `scripts/provision_ci_postgres.sh`** —
   that surface has no open owner. No green prefix from the halted run is reusable. Finish with one
   terminal attestation **supplied with the complete base-to-tip patch as a file**.
-- **W3 — preserve the resolved closeout candidate and complete external closeout; do not re-author it.**
-  Release-tier convergence is complete; terminal review and root-owned exact-tip acceptance must
-  bind the settled post-correction bytes. Do not reopen the settled PostgreSQL lifecycle, recreate
-  SA135 as open work, or attempt SA170's E2E Docker work.
-  SA171 (#28) stays the lane's DB-free fallback if the W3 queue needs slack.
+- **W3 — start SA170 (#27) on current `v88`.** SA135's retained partial is merged and #27 has
+  `deps: none`; SA170 owns the transferred Docker/E2E work. Do not reopen the settled lifecycle or
+  recreate SA135 as open work. SA171 (#28) stays the lane's DB-free fallback if W3 needs slack.
+
 ### Track readiness — the three states
 
 A lane is **truly green** only when all three are yes. *Can start* = the next action is executable today.
@@ -262,8 +255,7 @@ merge-back is not order-gated behind another lane.
 **All three lanes are truly green on all three states.** Only **SA167c (#21)** is on the critical
 path and constitutes real release progress; **SA167d (#18)** and **SA170 (#27)** are truly green but
 off it. **No lane is blocked by another lane's ticket, and no ticket is blocked by a maintainer
-decision.** W1's inherited gate halt is repaired upstream; W3's integration conflict is resolved in
-this candidate.
+decision.** W1's inherited gate halt is repaired upstream; W3's retained integration is merged.
 
 ### Maintainer decisions
 
