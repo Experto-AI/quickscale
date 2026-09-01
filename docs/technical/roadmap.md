@@ -201,24 +201,34 @@ complete and the standing state was restored exactly.
 #### SA135 retained closeout checkpoint — 2026-09-01
 
 - **Completed:** the Track 3 closeout archived SA135, retired merge position #15, made SA170 the W3
-  head with no SA135 dependency, reconciled all seven current scheduling/count consumers, passed the
-  ticket's release campaign, and received independent terminal approval at exact object
-  `07607c49d7e45929b8938d7a7d2c0a9909057c0a`.
+  head with no SA135 dependency, and preserved SA167c phases A-D at
+  `91fd3bb6e6b638735361b511c1515cddccce5d15` with E/F pending. Resolved candidate
+  `e82355df660fa2ff8b874c444dfce68b9d01c367` reconciles all ten current consumers, passed the exact
+  ticket campaign, passed the policy-authorized `make ci` entrypoint on its final unchanged run,
+  completed fresh convergence, and received patch-backed terminal review. That review's only
+  blocking finding was the initially missing aggregate-entrypoint verdict; the final green `make ci`
+  run closed it without changing repository bytes. E2E remains transferred to SA170.
 - **Pending:** plan phase `G-CLOSEOUT` remains unaccepted because its implementation handback was
   partial; the later convergence pass corrected every reported same-fact defect and revalidated the
   resulting bytes, but cannot retroactively change phase coverage. The originating merge-back request
-  remains pending until this newly resolved candidate is reviewed and accepted by root.
-- **Current candidate:** `v88` has now been merged into `wt-track3` for this conflict-resolution pass.
-  The exact consistency test and SA135 release campaign returned green after resolution. This roadmap
-  is not an attestation ledger: before merging, root must require fresh convergence and patch-backed
-  terminal review bound to the exact settled bytes. The prior approval is bound to the pre-conflict
-  object and does not carry across the resolution.
-- **Decisions needed:** none. This is ordinary integration-conflict resolution, not a product or
-  scheduling choice.
-- **Remaining plan:** preserve the archived SA135 state and the incoming SA167c accepted evidence.
-  Root may merge only exact settled bytes whose external closeout ledger records fresh convergence
-  and terminal attestation. Do not reimplement the settled PostgreSQL lifecycle, recreate SA135 as
-  open work, or attempt SA170's E2E Docker work.
+  remains pending because `v88` advanced from the reviewed base `f60fe2bc` to `3aa0c67f` during
+  terminal review. The branches are now four commits behind / four ahead, so the reviewed patch is no
+  longer an exact-tip merge candidate.
+- **Blocking:** current `v88` also has an uncommitted `docs/technical/roadmap.md` edit. Its owner must
+  preserve and settle that foreign edit before another run synchronizes the candidate; this closeout
+  may neither discard it nor silently commit it. What closes the block is a clean, retained current
+  `v88` tip followed by sync and conflict resolution in `wt-track3`.
+- **Decisions needed:** decide how the uncommitted current-`v88` roadmap edit is preserved — commit it
+  as its own bookkeeping change or explicitly authorize another non-destructive disposition. No
+  product, lifecycle, SA167c, or SA170 design decision is open.
+- **Remaining plan:** retain `wt-track3` object
+  `e82355df660fa2ff8b874c444dfce68b9d01c367` and its completed evidence; do not reimplement the
+  settled PostgreSQL lifecycle, recreate SA135 as open work, redo SA167c A-D, or attempt SA170's E2E
+  Docker work. After the current-`v88` roadmap edit is safely settled, merge current `v88` into
+  `wt-track3`, reconcile every current same-fact consumer, rerun the consistency test and
+  policy-authorized release validation on the new exact bytes, then perform fresh convergence and
+  patch-backed terminal review before merging only that exact successor tip. `G-CLOSEOUT` remains a
+  historical coverage exception; do not re-enter it.
 
 - **W2 — sync current `v88`, then resume SA167c (#21) at E-closeout.** Retained product commit
   `91fd3bb6e6b638735361b511c1515cddccce5d15` carries accepted A-D. Do not reimplement A-D. Reconcile
@@ -230,12 +240,12 @@ complete and the standing state was restored exactly.
   current tip. **Open no repair ticket and write no byte in `scripts/provision_ci_postgres.sh`** —
   that surface has no open owner. No green prefix from the halted run is reusable. Finish with one
   terminal attestation **supplied with the complete base-to-tip patch as a file**.
-- **W3 — carry the retained SA135 closeout candidate through external review; do not re-author it.**
-  The resolved candidate contains current `v88` and its exact consistency test and SA135 release
-  campaign are green. Root may merge only the exact bytes bound by fresh convergence and a
-  materialized-patch terminal attestation. Do not reopen the settled PostgreSQL lifecycle, recreate
-  SA135 as open work, or attempt SA170's E2E Docker work. SA171 (#28) stays the lane's DB-free fallback
-  if closeout stalls.
+- **W3 — preserve the reviewed SA135 candidate and resynchronize; do not re-author it.** Exact object
+  `e82355df660fa2ff8b874c444dfce68b9d01c367` completed convergence, patch-backed terminal review, and
+  the final green aggregate release entrypoint, but current `v88` advanced during review and now has
+  an unsettled roadmap edit. Settle that edit first, then perform one new sync-resolve-rerun-review
+  cycle over a successor candidate. Do not reopen the lifecycle, recreate SA135 as open work, or
+  attempt SA170's E2E Docker work. SA171 (#28) stays the lane's DB-free fallback if closeout stalls.
 
 ### Track readiness — the three states
 
