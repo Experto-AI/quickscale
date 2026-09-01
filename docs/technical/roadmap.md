@@ -565,11 +565,15 @@ triggers.
   `scripts/test_e2e_parallel.py`; its shell-syntax, Ruff, format, 18 hermetic cleanup tests, and
   2 scoped React/timeout tests all exited **0**. These are retained product facts, not a ticket
   completion or release claim; **TA70 remains live** and SA170 remains open and unchecked at
-  merge position **#27**.
+  merge position **#27**. Retained product commit
+  `83aec5b0261f24cd13f1504096a63853f42648dd` was synchronized with `v88` and integrated at exact
+  merge tip `628edb05f35fcd02465e7267e6f91d11402b9713`; that retained-partial integration accepts no
+  Phase C evidence and closes neither SA170 nor TA70.
   **Pending:** Phase C completion acceptance, including the exact four transferred SA167c
   Phase-F E2E row IDs, both release campaigns, exact-scope cleanup, PostgreSQL before/after
-  equality, bounded terminal-remediation validation, and exact-tip integration. Convergence and
-  terminal attestation are complete; this remediation is not a second attestation.
+  equality, and the resulting release verdict. Convergence, terminal attestation, and bounded
+  terminal-remediation validation are complete; the remediation ran once and is not a second
+  attestation.
   **Blocking:** the authoritative archived SA167c Phase-F log/status artifact containing the
   complete four-row source set is unavailable — no path or content was supplied or resolved in
   repository artifacts — so the four IDs cannot be guessed or frozen. The release commands

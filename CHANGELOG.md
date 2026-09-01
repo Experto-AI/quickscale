@@ -17,7 +17,10 @@
   `scripts/test_e2e_parallel.py`; shell syntax, Ruff, format, **18** hermetic cleanup tests, and
   **2** scoped React/timeout tests exited **0**. This records accepted A/B product delivery only;
   SA170 remains open and unchecked at **#27**, **TA70 remains live**, and no completion or release
-  readiness is claimed.
+  readiness is claimed. Retained product commit
+  `83aec5b0261f24cd13f1504096a63853f42648dd` was synchronized with `v88` and integrated at exact
+  merge tip `628edb05f35fcd02465e7267e6f91d11402b9713`; that integration accepts no Phase C evidence
+  and closes neither SA170 nor TA70.
   **Phase C is pending.** The authoritative archived SA167c Phase-F log/status artifact needed to
   freeze exactly four transferred row IDs is unavailable: no path or content was supplied or
   resolved in repository artifacts. The release commands `QS_E2E_PARALLEL=0 make test-e2e` and
