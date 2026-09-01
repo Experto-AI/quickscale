@@ -161,16 +161,19 @@ def test_live_child_probe_failure_still_fails_distinct_group_verification(
 ) -> None:
     tools, docker_log = fake_local_lifecycle_tools(tmp_path)
     ps_count = tmp_path / "ps-count"
+    ps_calls = tmp_path / "ps-calls"
     executable(
         tools / "ps",
         f'''count=0
 if [[ -f "{ps_count}" ]]; then count=$(<"{ps_count}"); fi
 count=$((count + 1))
 printf "%s" "$count" > "{ps_count}"
+printf "%s\\n" "$*" >> "{ps_calls}"
 if [[ "$count" -eq 1 ]]; then
   echo "424242"
   exit 0
 fi
+kill -PIPE "$4"
 exit 1''',
     )
 
@@ -189,10 +192,96 @@ exit 1''',
         },
     )
 
-    assert result.returncode != 0
+    assert result.returncode == 1
     assert time.monotonic() - started < 5
     assert "cannot verify the process group of a live child" in result.stderr
     assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
+    calls = ps_calls.read_text().splitlines()
+    assert len(calls) == 2
+    assert calls[0].startswith("-o pgid= -p ")
+    assert calls[1].startswith("-o pgid=,sid= -p ")
+
+
+def test_active_child_probe_race_preserves_explicit_high_normal_exit(tmp_path: Path) -> None:
+    """A failed identity probe does not reinterpret explicit exit 200 as a signal."""
+    tools, docker_log = fake_local_lifecycle_tools(tmp_path)
+    release_child = tmp_path / "release-child"
+    ps_count = tmp_path / "ps-count"
+    executable(
+        tools / "ps",
+        f'''count=0
+if [[ -f "{ps_count}" ]]; then count=$(<"{ps_count}"); fi
+count=$((count + 1))
+printf "%s" "$count" > "{ps_count}"
+if [[ "$count" -eq 1 ]]; then
+  echo "424242"
+  exit 0
+fi
+: > "{release_child}"
+for _attempt in {{1..100}}; do
+  if [[ ! -r "/proc/$4/stat" ]]; then break; fi
+  read -r _pid _command state _rest < "/proc/$4/stat"
+  [[ "$state" == Z ]] && break
+  /bin/sleep 0.01
+done
+exit 1''',
+    )
+
+    result = invoke(
+        "run",
+        "--profile",
+        "restricted",
+        "--",
+        "/bin/bash",
+        "-c",
+        f'while [[ ! -f "{release_child}" ]]; do /bin/sleep 0.01; done; exit 200',
+        env={
+            "PATH": f"{tools}:/usr/bin",
+            "TMPDIR": str(tmp_path),
+            "QS_PROVISION_SCOPE": "high_normal_exit",
+        },
+    )
+
+    assert result.returncode == 200, result.stderr
+    assert "cannot verify the process group of a live child" not in result.stderr
+    assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
+    assert not any(path.name.startswith("quickscale-postgres.") for path in tmp_path.iterdir())
+
+
+def test_verified_child_signal_preserves_signal_status_and_cleanup(tmp_path: Path) -> None:
+    """The supervisor reports an actual child signal without flattening its status."""
+    tools, docker_log = fake_local_lifecycle_tools(tmp_path)
+    release_child = tmp_path / "release-child"
+    ps_count = tmp_path / "ps-count"
+    executable(
+        tools / "ps",
+        f'''count=0
+if [[ -f "{ps_count}" ]]; then count=$(<"{ps_count}"); fi
+count=$((count + 1))
+printf "%s" "$count" > "{ps_count}"
+/usr/bin/ps "$@"
+if [[ "$count" -eq 2 ]]; then : > "{release_child}"; fi''',
+    )
+
+    result = invoke(
+        "run",
+        "--profile",
+        "restricted",
+        "--",
+        "/bin/bash",
+        "-c",
+        f'while [[ ! -f "{release_child}" ]]; do /bin/sleep 0.01; done; kill -KILL $$',
+        env={
+            "PATH": f"{tools}:/usr/bin",
+            "TMPDIR": str(tmp_path),
+            "QS_PROVISION_SCOPE": "verified_signal",
+        },
+    )
+
+    assert result.returncode == 128 + signal.SIGKILL, result.stderr
+    assert "cannot verify the process group of a live child" not in result.stderr
+    assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
+    assert not any(path.name.startswith("quickscale-postgres.") for path in tmp_path.iterdir())
 
 
 @pytest.mark.parametrize(
