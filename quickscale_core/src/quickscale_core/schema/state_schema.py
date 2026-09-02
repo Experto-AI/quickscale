@@ -382,12 +382,17 @@ class StateManager:
             return
         try:
             with open(self.state_file) as fh:
-                data = yaml.safe_load(fh) or {}
-        except yaml.YAMLError, OSError:
-            return
+                data = yaml.safe_load(fh)
+        except (yaml.YAMLError, OSError) as error:
+            raise StateError(
+                "Failed to read state file while flushing consolidated sections: "
+                f"{error}"
+            ) from error
 
         if not isinstance(data, dict):
-            return
+            raise StateError(
+                "State file must be a YAML mapping while flushing consolidated sections"
+            )
 
         needs_write = False
         if "modules" not in data:

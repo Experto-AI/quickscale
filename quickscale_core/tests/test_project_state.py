@@ -1208,6 +1208,67 @@ class TestStateManagerErrorPaths:
         with pytest.raises(StateError, match="Failed to parse state file"):
             manager.load()
 
+    def test_flush_malformed_yaml_raises_state_error_with_yaml_cause(
+        self, tmp_path: Path
+    ) -> None:
+        manager = StateManager(tmp_path)
+        manager.state_dir.mkdir(parents=True, exist_ok=True)
+        manager.state_file.write_text(":\n  invalid: [yaml\n")
+
+        with pytest.raises(
+            StateError, match="flushing consolidated sections"
+        ) as excinfo:
+            manager.flush_empty_consolidated_sections()
+
+        assert isinstance(excinfo.value.__cause__, yaml.YAMLError)
+
+    def test_flush_read_os_error_raises_state_error_with_os_cause(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        manager = StateManager(tmp_path)
+        manager.state_dir.mkdir(parents=True, exist_ok=True)
+        manager.state_file.write_text("version: '1'\n")
+
+        def _fail_open(*args: object, **kwargs: object) -> None:
+            del args, kwargs
+            raise OSError("state read unavailable")
+
+        monkeypatch.setattr("builtins.open", _fail_open)
+
+        with pytest.raises(
+            StateError, match="flushing consolidated sections"
+        ) as excinfo:
+            manager.flush_empty_consolidated_sections()
+
+        assert isinstance(excinfo.value.__cause__, OSError)
+
+    @pytest.mark.parametrize(
+        "original_state",
+        [
+            pytest.param(b"[]\n", id="empty-list"),
+            pytest.param(b"- auth\n", id="populated-list"),
+            pytest.param(b"state\n", id="string"),
+            pytest.param(b"0\n", id="zero"),
+            pytest.param(b"false\n", id="false"),
+            pytest.param(b"null\n", id="null"),
+        ],
+    )
+    def test_flush_non_mapping_state_raises_without_modifying_bytes(
+        self,
+        tmp_path: Path,
+        original_state: bytes,
+    ) -> None:
+        manager = StateManager(tmp_path)
+        manager.state_dir.mkdir(parents=True, exist_ok=True)
+        manager.state_file.write_bytes(original_state)
+
+        with pytest.raises(StateError, match="must be a YAML mapping"):
+            manager.flush_empty_consolidated_sections()
+
+        assert manager.state_file.read_bytes() == original_state
+
 
 class TestStateManagerUpdateAndVerify:
     """Cover StateManager.update() and verify_filesystem() branches."""

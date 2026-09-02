@@ -11,6 +11,12 @@
 | `postgres` (or custom `POSTGRES_USER`) | Superuser | Full DDL, role management, BYPASSRLS | Migrations, management commands, schema changes |
 | `{{ runtime_db_role }}` | Runtime (app) | DML only (SELECT/INSERT/UPDATE/DELETE), NOSUPERUSER, NOBYPASSRLS | Normal application queries, API requests |
 
+> **Security warning — local development only:** Generated app-role names and
+> passwords are predictable defaults for local development. Replace them with
+> strong, unique, environment-managed credentials before using this project in
+> any shared environment, including staging, shared CI, or production. These
+> generated credentials must not survive into shared environments.
+
 The runtime role **cannot bypass Row-Level Security**. This is intentional — per-table RLS policies (configured in Phase 3 of tenant isolation) enforce tenant isolation at the database level. If the app ever attempts to read rows from another organization, the RLS policy rejects the query.
 
 ### Runtime role attributes

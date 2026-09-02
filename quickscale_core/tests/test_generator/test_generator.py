@@ -1058,11 +1058,22 @@ class TestSa90ExactManifestParity:
     _EXCLUDED_PREFIXES = (".venv/",)
 
     # Files whose *content* legitimately varies with the host running the
-    # generator, and so cannot carry a pinned cross-machine hash. .env
-    # embeds DOCKER_UID/DOCKER_GID from the invoking user (templates/.env.j2),
-    # which differs between a developer box and a CI runner. Their presence
-    # and mode are still asserted; only the hash is skipped.
-    _HOST_DEPENDENT_PATHS = frozenset({".env"})
+    # generator, and so cannot carry a pinned cross-machine hash. Each entry
+    # must carry its own reviewable rationale. .env embeds DOCKER_UID/DOCKER_GID
+    # from the invoking user (templates/.env.j2), which differs between a
+    # developer box and a CI runner. Its presence and mode are still asserted;
+    # only the hash is skipped.
+    _HOST_DEPENDENT_PATHS: dict[str, str] = {
+        ".env": (
+            "Embeds DOCKER_UID/DOCKER_GID from the invoking host, which differs "
+            "between developer machines and CI runners."
+        ),
+    }
+
+    # A second exception requires an explicit rationale above. Do not add a
+    # third hand-maintained exception until host dependence is derived from an
+    # authoritative generator or template property.
+    _MAX_HAND_MAINTAINED_HOST_DEPENDENCIES = 2
 
     @staticmethod
     def _canonical_mode(path: Path) -> str:
@@ -1093,6 +1104,14 @@ class TestSa90ExactManifestParity:
         assert "_provenance" in data, "Fixture must include _provenance section"
         for var_key in self._VARIANTS:
             assert var_key in data, f"Fixture missing variant {var_key!r}"
+            excluded = [
+                path
+                for path in data[var_key]
+                if path.startswith(self._EXCLUDED_PREFIXES)
+            ]
+            assert not excluded, (
+                f"Fixture variant {var_key!r} contains excluded paths: {excluded[:10]}"
+            )
 
     def test_fixture_provenance_matches_variants(self) -> None:
         """The fixture's _provenance.variants must match this test's variant table."""
@@ -1106,6 +1125,22 @@ class TestSa90ExactManifestParity:
             assert pv.get("selected_modules") == cfg["selected_modules"], (
                 f"Provenance selected_modules mismatch for {var_key}"
             )
+
+    def test_host_dependent_exceptions_are_accountable_and_bounded(self) -> None:
+        """Every host-dependent hash exemption has a rationale and policy cap."""
+        assert self._HOST_DEPENDENT_PATHS, (
+            "At least one host-dependent path is expected"
+        )
+        assert all(
+            path.strip() and rationale.strip()
+            for path, rationale in self._HOST_DEPENDENT_PATHS.items()
+        ), "Every host-dependent path must have a nonblank rationale"
+        assert len(self._HOST_DEPENDENT_PATHS) <= (
+            self._MAX_HAND_MAINTAINED_HOST_DEPENDENCIES
+        ), (
+            "A third hand-maintained host-dependent exception requires "
+            "authoritative generator/template derivation first"
+        )
 
     # ------------------------------------------------------------------
     # Manifest parity per variant
