@@ -4,6 +4,40 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-09-02, eighth pass) — SA170's Phase C blocker
+  resolved; no ticket closed.** **No ticket and no audit finding closed since the previous pass**,
+  so the live counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1
+  `privileged-command-set-multi-owner` stale-by-decision until SA174 demotes it, and the queue is
+  unchanged at **eleven** open ticket entries across **eleven** open merge positions. Lanes remain
+  **W1 5 · W2 3 · W3 3**; every open ticket carries a track and no cross-lane move stands, so no
+  code file gains a second lane and this pass creates no merge hazard.
+  **The pass's substantive result is an unblock on the critical path.** SA170 Phase C was recorded
+  as blocked on an *"authoritative archived SA167c Phase-F log/status artifact"* holding the four
+  transferred `e2e` row IDs, with no path or content resolvable in repository artifacts. That
+  artifact is the roadmap's own *Unfiltered-suite rows* subsection, removed by the cleanup pass at
+  `fd42d56c` and recoverable with `git show fd42d56c:docs/technical/roadmap.md`. All four rows were
+  recovered and re-resolved against the current tree, and every test function was confirmed present:
+  `test_logs_with_options` and `test_manage_test_command` in
+  `quickscale_cli/tests/test_e2e_development_workflow.py`,
+  `test_installed_wheel_plan_apply_up_all_modules` in
+  `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py`, and
+  `TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe` in
+  **`quickscale_core`**`/tests/test_e2e_full_workflow.py` — the archived list recorded that fourth
+  row under `quickscale_cli`, which is why the earlier resolution attempt failed. SA170 remains open
+  and unchecked at **#27** and **TA70 remains live**; this records evidence recovery only, not Phase
+  C acceptance and no release claim.
+  **Lane measurement corrected.** Re-measured 2026-09-02 against `v88` at `e007fb37`: `wt-track1`
+  3/0, `wt-track2` 4/0, `wt-track3` 1/0, all clean, all `0 ahead`. The roadmap's standing claim that
+  W1's nine-file candidate remained unintegrated was stale — every retained partial checkpoint has
+  reached `v88`, and no lane carries unintegrated work.
+  **Two self-consistency defects fixed.** The track-readiness table marked W3 as off the critical
+  path while the dependency-graph prose two sections earlier stated the effective longest chain runs
+  `SA170 ─► SA167c F ─► SA166 ─► SA164`; the table now agrees with the graph. The merge-order prose
+  announced *"three"* hard content dependencies and listed two; it now says two. The band-A row's
+  campaign narrative was compressed to the standing fact plus its re-verification command.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` returned **31 passed** before and
+  after every edit.
+
 - **SA170 retained-partial checkpoint — phases A-B accepted; Phase C release acceptance is
   unavailable (2026-09-01).** The accepted product implementation covers Phase A's exact-name
   structured container status, fail-loud Docker query handling, immediate readiness diagnostics,
