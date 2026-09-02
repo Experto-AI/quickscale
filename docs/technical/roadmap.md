@@ -778,6 +778,38 @@ triggers.
   - **`_HOST_DEPENDENT_PATHS` is a new hand-maintained exception station.** `be5cf024` added `frozenset({".env"})` to the SA90 emission byte-parity gate (`quickscale_core/tests/test_generator/test_generator.py:1023`). The justification is sound and the `755`/`644` mode normalization correctly removes a umask dependency, but this is an exception list on the repository's strictest gate: a second entry deserves scrutiny, a third deserves a derivation.
   - **Generated local-development credentials are predictable by construction.** `generator.py:507-508` derives `runtime_db_role = f"{package_name}_app"` and `runtime_db_password = f"{role}_password"` into `db/init.sql`, `docker-compose.yml`, and `.env.example`, none of which `.gitignore.j2` excludes. Safe as shipped — no published DB port, local dev only, production supplies `RUNTIME_DATABASE_URL` from the environment — but undocumented.
   **Acceptance:** `flush_empty_consolidated_sections` raises or reports rather than returning silently, with a regression test asserting the raise and not a log, and the fail-hard deviation is retired from the audit; the isolation skip allowlist keys on the two `PENDING_REMEDIATION` test identities rather than a message prefix, and a deliberately emptied ENROLLED set turns the gate red; `_HOST_DEPENDENT_PATHS` gains a written per-entry rationale and a monotonicity note stating the second/third-entry escalation, or is derived; `OPERATIONS.md` states explicitly that the generated local credentials must not survive into any shared environment; `docs/others/tech-audit.md` is updated to reflect each discharge.
+  **State (measured 2026-09-02): retained partial checkpoint; implementation phases A-C are
+  accepted and closeout Phase D is outstanding.** Retained product object
+  `573a57a34301e6a91971a7845095bd913bebd5e1` contains the fail-hard state-read behavior and
+  rollback regressions, exact identity-based isolation-skip authorization and hermetic negative
+  coverage, accountable host-dependent manifest exceptions, the rendered shared-environment
+  credential warning, and the three synchronized generated-output manifests. Task-tier convergence
+  removed excluded `.venv/` fixture records and added a recurrence guard. Terminal review then found
+  the remaining non-mapping YAML-root path; list and scalar roots, including `[]` and `null`, now
+  raise `StateError` before any write and retain byte-identical state. That correction was
+  ***applied after terminal attestation — not independently graded***. Focused state/removal coverage
+  passed with 141 tests; the combined state, removal, generator, template, and hermetic provisioning
+  evidence passed with 423 tests plus one conditional environment skip, followed by 36 provisioning
+  tests. These are retained product facts, not ticket completion or release-readiness evidence.
+
+  **Pending:** Phase D must update `docs/others/tech-audit.md` first, archive the four discharged
+  watch items in `CHANGELOG.md`, reconcile this roadmap and every current-status consumer including
+  `docs/technical/v88_ticket_context.md` and `docs/index.md`, update
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py`, and run `make ci-e2e` on the final
+  candidate. Only a green release gate may remove SA165 and merge position #22 under the roadmap's
+  open-work-only policy. **Blocking:** no product-code blocker remains; completion is withheld because
+  Phase D and its release-tier evidence have not run. **Decisions needed:** none — the maintainer chose
+  the standing open-work-only policy, so completion removes and archives SA165 rather than retaining
+  a checked roadmap item.
+
+  **Remaining reviewed plan and cold-start resume object.** Plan authority `EV-2` remains binding for
+  Phase D. Resume Phase D from retained product object
+  `573a57a34301e6a91971a7845095bd913bebd5e1`; do not redo accepted phases A-C, reopen the corrected
+  non-mapping state path, or alter SA172's later isolation-script ownership. Re-read the current
+  integration tip, reconcile the listed documentation/status consumers as one same-fact set, run the
+  ticket-context consistency test whenever a W1 state block moves, then run the single release gate.
+  If that gate is not green, keep SA165 open and record its exact returned failure rather than claiming
+  completion.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/schema/state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `quickscale_core/.../templates/OPERATIONS.md.j2`, `docs/others/tech-audit.md`.
 
 - [ ] **SA166 — Require a testimony trail for behavioural commits.** `Band C · Tier 3 · W2 · merge #24 · deps: SA167c`
