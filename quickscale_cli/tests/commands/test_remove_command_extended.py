@@ -14,7 +14,7 @@ from quickscale_cli.commands.remove_command import (
     _remove_module_directory,
     remove,
 )
-from quickscale_core.schema.state_schema import StateManager
+from quickscale_core.schema.state_schema import StateError, StateManager
 
 
 def _write_valid_remove_project(project_path: Path) -> None:
@@ -128,6 +128,22 @@ def _write_apply_recovery_state(project_path: Path, module_names: list[str]) -> 
             sort_keys=False,
         )
     )
+
+
+def _snapshot_path(path: Path) -> dict[str, tuple[str, bytes | None]]:
+    """Capture exact file bytes and entry types below a path."""
+    if not path.exists():
+        return {}
+
+    entries = [path, *sorted(path.rglob("*"))] if path.is_dir() else [path]
+    snapshot: dict[str, tuple[str, bytes | None]] = {}
+    for entry in entries:
+        relative = "." if entry == path else entry.relative_to(path).as_posix()
+        if entry.is_dir():
+            snapshot[relative] = ("directory", None)
+        else:
+            snapshot[relative] = ("file", entry.read_bytes())
+    return snapshot
 
 
 class TestRemoveHelpers:
@@ -325,6 +341,47 @@ class TestRemoveTransactionalFailures:
         assert (
             package_dir / "quickscale_managed" / "social_views.py"
         ).read_text() == original_managed
+
+    def test_post_save_flush_failure_rolls_back_byte_for_byte(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A post-save consolidated-state failure restores every mutation."""
+        _write_valid_remove_project(tmp_path)
+        _write_apply_recovery_state(tmp_path, ["auth", "blog"])
+
+        package_dir = tmp_path / "myproject"
+        snapshot_paths = {
+            "module": tmp_path / "modules" / "auth",
+            "quickscale": tmp_path / "quickscale.yml",
+            "state": tmp_path / ".quickscale" / "state.yml",
+            "apply_recovery": tmp_path / ".quickscale" / "apply-recovery.yml",
+            "managed_settings": package_dir / "settings" / "modules.py",
+            "managed_urls": package_dir / "urls_modules.py",
+            "managed_package": package_dir / "quickscale_managed",
+        }
+        snapshots = {
+            name: _snapshot_path(path) for name, path in snapshot_paths.items()
+        }
+
+        monkeypatch.chdir(tmp_path)
+        with patch.object(
+            StateManager,
+            "flush_empty_consolidated_sections",
+            side_effect=StateError("post-save flush failed"),
+        ):
+            result = CliRunner().invoke(
+                remove,
+                ["auth", "--force"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code != 0
+        assert "Remove failed" in result.output
+        assert "post-save flush failed" in result.output
+        for name, path in snapshot_paths.items():
+            assert _snapshot_path(path) == snapshots[name], name
 
 
 class TestRemoveCommandIntegration:

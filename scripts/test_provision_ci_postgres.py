@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import signal
 import stat
 import subprocess
@@ -15,6 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/provision_ci_postgres.sh"
+ISOLATION_HELPER = ROOT / "scripts/test_isolation_conformance.sh"
 
 
 def _invoke_environment(env: dict[str, str] | None = None) -> dict[str, str]:
@@ -895,3 +897,67 @@ def test_make_local_lifecycle_keeps_hosted_callers_compatible() -> None:
     ) in makefile
     assert '[[ "${GITHUB_ACTIONS:-}" != true ]]' in integration
     assert '[[ "${GITHUB_ACTIONS:-}" != true ]]' in isolation
+
+
+def _run_isolation_classifier(
+    tmp_path: Path, testcase_names: tuple[str, ...]
+) -> subprocess.CompletedProcess[str]:
+    """Run the production isolation classifier against synthetic JUnit XML."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    xml_cases = "".join(
+        f'<testcase classname="synthetic" name="{name}">'
+        '<skipped message="got empty parameter set [entry]"/>'
+        "</testcase>"
+        for name in testcase_names
+    )
+    xml = f'<testsuite name="synthetic">{xml_cases}</testsuite>'
+    xml_literal = shlex.quote(xml)
+    executable(
+        tools / "poetry",
+        f"""xml={xml_literal}
+xml_file=""
+for argument in "$@"; do
+  case "$argument" in
+    --junitxml=*) xml_file="${{argument#--junitxml=}}" ;;
+  esac
+done
+printf '%s' "$xml" > "$xml_file"
+""",
+    )
+    return subprocess.run(
+        ["/bin/bash", str(ISOLATION_HELPER)],
+        cwd=ROOT,
+        env={
+            "PATH": f"{tools}:/usr/bin",
+            "GITHUB_ACTIONS": "true",
+            "PYTHONPATH": str(ROOT / "quickscale_core/src"),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_isolation_empty_parameter_skip_authorization_is_identity_based(
+    tmp_path: Path,
+) -> None:
+    """Only the two pending-remediation identities may be empty-param skips."""
+    authorized = _run_isolation_classifier(
+        tmp_path / "authorized",
+        (
+            "test_pending_remediation_has_equality_footprint[form-field]",
+            "test_pending_remediation_parent_fk_matches_seam[form-field]",
+        ),
+    )
+    assert authorized.returncode == 0, authorized.stdout + authorized.stderr
+    assert "No isolation tests skipped" in authorized.stdout
+
+    enrolled = _run_isolation_classifier(
+        tmp_path / "enrolled",
+        ("test_enrolled_model_has_organization_id[forms.FormField]",),
+    )
+    assert enrolled.returncode != 0
+    assert "Some isolation tests were skipped" in enrolled.stdout
+    assert "test_enrolled_model_has_organization_id[forms.FormField]" in enrolled.stdout

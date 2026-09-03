@@ -3548,6 +3548,23 @@ class TestDevOpsTemplateRendering:
             "OPERATIONS.md should include ALTER DEFAULT PRIVILEGES for sequences"
         )
 
+    def test_operations_md_warns_generated_credentials_are_local_only(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Rendered operations guidance must prohibit shared use of defaults."""
+        template = jinja_env.get_template("OPERATIONS.md.j2")
+        output = template.render(test_context)
+        output_lower = output.lower()
+
+        assert "generated app-role names and" in output_lower
+        assert "passwords are predictable defaults" in output_lower
+        assert "local development" in output_lower
+        assert "strong, unique, environment-managed credentials" in output_lower
+        assert "before using this project in" in output_lower
+        assert "shared environment" in output_lower
+        assert "must not survive into shared environments" in output_lower
+        assert "production" in output_lower
+
     def test_lint_script_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
