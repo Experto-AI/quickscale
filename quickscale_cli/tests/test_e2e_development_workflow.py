@@ -413,6 +413,7 @@ class TestDevelopmentCommandsE2E:
             "QS_E2E_CONTAINER_PREFIX": self._container_prefix(),
             "QS_E2E_RESOURCE_SCOPE": self._container_prefix(),
             "QUICKSCALE_RESOURCE_PREFIX": self._container_prefix(),
+            "COMPOSE_PROJECT_NAME": self._container_prefix(),
             "QS_E2E_PROJECT_SLUG": _stable_test_project_slug(),
         }
 
@@ -517,6 +518,7 @@ class TestDevelopmentCommandsE2E:
             "QS_E2E_CONTAINER_PREFIX": resource_scope,
             "QS_E2E_RESOURCE_SCOPE": resource_scope,
             "QUICKSCALE_RESOURCE_PREFIX": resource_scope,
+            "COMPOSE_PROJECT_NAME": resource_scope,
         }
 
         with runner.isolated_filesystem(temp_dir=tmp_path):

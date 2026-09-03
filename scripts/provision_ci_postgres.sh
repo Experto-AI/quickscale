@@ -225,7 +225,7 @@ psql_run() {
   # psql only performs variable interpolation for script input (not a
   # command supplied with -c on current client releases). Feeding the
   # validated statement through stdin preserves quoted variables and gexec.
-  printf '%s\n' "$sql" | "${args[@]}"
+  "${args[@]}" <<< "$sql"
 }
 
 export_environment() {
@@ -388,7 +388,7 @@ provision_role() {
   psql_run postgres "SELECT format('CREATE ROLE %I WITH ${flags}', :'role_name') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role_name') \\gexec" "role_name=$ROLE_NAME"
   psql_run postgres "SELECT format('ALTER ROLE %I WITH ${flags}', :'role_name') \\gexec" "role_name=$ROLE_NAME"
   local actual
-    actual=$(printf '%s\n' "SELECT rolcanlogin,rolcreatedb,rolinherit,rolbypassrls,rolsuper,rolcreaterole FROM pg_roles WHERE rolname=:'role_name'" | psql -X -At -v ON_ERROR_STOP=1 -h "$PGHOST_VALUE" -p "$PGPORT_VALUE" -U "${PGUSER:-postgres}" -d postgres -v "role_name=$ROLE_NAME") || die "role postcondition query failed"
+    actual=$(psql -X -At -v ON_ERROR_STOP=1 -h "$PGHOST_VALUE" -p "$PGPORT_VALUE" -U "${PGUSER:-postgres}" -d postgres -v "role_name=$ROLE_NAME" <<< "SELECT rolcanlogin,rolcreatedb,rolinherit,rolbypassrls,rolsuper,rolcreaterole FROM pg_roles WHERE rolname=:'role_name'") || die "role postcondition query failed"
   if [[ "$PROFILE" == bypassrls ]]; then
     [[ "$actual" == "t|t|f|t|f|f" ]] || die "BYPASSRLS role postcondition failed: $actual"
   else
@@ -503,9 +503,10 @@ run_local() {
   export PGHOST=localhost PGPORT="$PGPORT_VALUE"
   DESCRIPTION_DIGEST=$(printf '%s' "$(description_json)" | sha256sum | cut -d' ' -f1)
   sed -i "s/^endpoint_host=.*/endpoint_host=localhost/; s/^endpoint_port=.*/endpoint_port=$PGPORT_VALUE/; s/^description_digest=.*/description_digest=$DESCRIPTION_DIGEST/" "$LEASE_FILE"
-  local ready=false attempt
+  local ready=false attempt ready_output
   for attempt in {1..60}; do
-    if psql -X -At -v ON_ERROR_STOP=1 -h "$PGHOST_VALUE" -p "$PGPORT_VALUE" -U postgres -d postgres -c 'SELECT current_setting('\''server_version_num'\'')' 2>/dev/null | grep -q '^18'; then ready=true; break; fi
+    if ready_output=$(psql -X -At -v ON_ERROR_STOP=1 -h "$PGHOST_VALUE" -p "$PGPORT_VALUE" -U postgres -d postgres -c 'SELECT current_setting('\''server_version_num'\'')' 2>/dev/null) \
+      && [[ "$ready_output" == 18* ]]; then ready=true; break; fi
     sleep 1
   done
   [[ "$ready" == true ]] || die "PostgreSQL server did not report major 18"

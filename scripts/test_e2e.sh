@@ -336,6 +336,8 @@ echo ""
 # cleanup is armed below before Docker can be touched.
 WORKER_TEMP_DIR=""
 RUN_SCOPE=""
+CORE_APP_PORT=""
+CLI_APP_PORT=""
 declare -a WORKER_PIDS=()
 declare -a WORKER_ORDER=()
 
@@ -565,6 +567,26 @@ RUN_SCOPE="${RUN_SCOPE:0:63}"
 validate_scope "$RUN_SCOPE"
 export QS_E2E_RUN_SCOPE="$RUN_SCOPE"
 
+# Allocate lane ports in the parent before concurrent workers are launched.
+# Asking the kernel for a free port independently inside each worker can return
+# the same just-released ephemeral port to both lanes, making otherwise
+# isolated Compose projects contend for one host socket.
+if [ -n "${QS_E2E_APP_PORT:-}" ]; then
+    CORE_APP_PORT="$QS_E2E_APP_PORT"
+else
+    CORE_APP_PORT="$(find_free_port)"
+fi
+if [ "$E2E_PARALLEL" = false ] && [ -n "${QS_E2E_APP_PORT:-}" ]; then
+    CLI_APP_PORT="$QS_E2E_APP_PORT"
+else
+    CLI_APP_PORT="$(find_free_port)"
+    while [ "$CLI_APP_PORT" = "$CORE_APP_PORT" ]; do
+        CLI_APP_PORT="$(find_free_port)"
+    done
+fi
+validate_app_port "$CORE_APP_PORT"
+validate_app_port "$CLI_APP_PORT"
+
 run_e2e_lane() {
     local lane="$1"
     local lane_label
@@ -608,10 +630,10 @@ run_e2e_lane() {
     lane_compose_project="${lane_compose_project:0:63}"
     lane_image_digest="${QUICKSCALE_BACKEND_IMAGE_DIGEST:-}"
 
-    if [ -n "${QS_E2E_APP_PORT:-}" ] && { [ "$E2E_PARALLEL" = false ] || [ "$lane" = "core" ]; }; then
-        lane_app_port="$QS_E2E_APP_PORT"
+    if [ "$lane" = "core" ]; then
+        lane_app_port="$CORE_APP_PORT"
     else
-        lane_app_port="$(find_free_port)"
+        lane_app_port="$CLI_APP_PORT"
     fi
 
     export QS_E2E_LANE="$lane"

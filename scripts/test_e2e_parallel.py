@@ -195,6 +195,14 @@ def _events(tmp_path: Path) -> list[str]:
     return (tmp_path / "events.log").read_text(encoding="utf-8").splitlines()
 
 
+def _lane_ports(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    return {
+        line.removeprefix("[").split("]", 1)[0].lower(): line.rsplit(":", 1)[1].strip()
+        for line in result.stdout.splitlines()
+        if "App host port:" in line
+    }
+
+
 def _max_active(events: list[str]) -> int:
     active = 0
     maximum = 0
@@ -248,6 +256,24 @@ def test_serial_opt_out_forwards_flags_and_preserves_cleanup_mode(tmp_path: Path
     assert any("CALL|cli|" in event and "-k smoke" in event for event in calls)
     assert all(" -q" not in event for event in calls)
     assert result.stdout.count("Skipping cleanup (--no-cleanup specified)") == 2
+
+
+def test_parallel_explicit_port_is_reserved_for_core_lane(tmp_path: Path) -> None:
+    """A caller port belongs to Core while CLI receives a distinct parent allocation."""
+    result = _run(tmp_path, QS_E2E_APP_PORT="43123")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    ports = _lane_ports(result)
+    assert ports["core"] == "43123"
+    assert ports["cli"] != "43123"
+
+
+def test_serial_explicit_port_is_reused_by_sequential_lanes(tmp_path: Path) -> None:
+    """Serial lanes may intentionally share the caller-selected host port."""
+    result = _run(tmp_path, QS_E2E_PARALLEL="0", QS_E2E_APP_PORT="43123")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _lane_ports(result) == {"core": "43123", "cli": "43123"}
 
 
 def test_memory_guard_falls_back_to_serial_when_headroom_is_low(tmp_path: Path) -> None:

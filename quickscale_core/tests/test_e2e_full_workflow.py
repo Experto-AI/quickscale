@@ -314,7 +314,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
             in pyproject_content
         )
         assert 'django-filter = "^26.1"' in pyproject_content
-        assert 'djangorestframework = "^3.17.1"' in pyproject_content
+        assert 'djangorestframework = "^3.17.2"' in pyproject_content
 
         assert _install_module_dependencies(project_path, "forms") is True
 

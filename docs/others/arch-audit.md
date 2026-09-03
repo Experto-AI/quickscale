@@ -46,7 +46,15 @@ related gates returned green. E's ordered lint/typecheck/context checkpoint pass
 F remains outstanding and unaccepted; this retained delivery clears no release gate, and no completion
 or release-readiness claim is made. Retained-partial-only merge-back of the synchronized nine-file
 status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. Its accepted evidence is archived in
-[CHANGELOG.md](../../CHANGELOG.md).
+  [CHANGELOG.md](../../CHANGELOG.md).
+
+**SA170 convergence retained-partial checkpoint (2026-09-02).** The dependency and return-141 static
+blockers are repaired: the vulnerability gate is green and all 1356 registered script tests pass.
+The ordered serial E2E campaign remains green (Core 38, CLI 53) with exact-scope cleanup, but
+unchanged-byte `make ci-e2e` reached stage 12 and exited 2 with 2 Core and 8 CLI failures on the
+concurrent generated-PostgreSQL start surface. Standing PostgreSQL container/catalog/role comparisons
+remain equal. SA170 remains open and TA70 remains live, SA167c remains halted, and no completion or
+release-readiness claim is made.
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
 and the completion ledger archived SA167d and retired merge position #18. SA165 is released with

@@ -4,6 +4,32 @@
 
 ## v88 development — 2026-08-21
 
+- **SA170 convergence retained-partial checkpoint — static blockers repaired; concurrent release E2E
+  remains red (2026-09-02).** The root lock now resolves djangorestframework **3.17.2** and sqlparse
+  **0.6.0**; the three module constraints require DRF `^3.17.2`, obsolete sqlparse suppressions were
+  removed, and the Dependency Vulnerability Gate reports zero unsuppressed findings. The intermittent
+  Registered Script Test Suites return **141** was reproduced in a second row and repaired by removing
+  pipefail-sensitive producer pipelines from `provision_ci_postgres.sh`; the release campaign then ran
+  all **1356** registered script tests green. The E2E harness also now gives each xdist worker its own
+  Compose project and allocates distinct Core/CLI host ports before concurrent lane launch.
+  The four frozen rows (`test_logs_with_options`, `test_manage_test_command`,
+  `test_installed_wheel_plan_apply_up_all_modules`, and
+  `TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe`) were collected and passed.
+  In the mandated order on unchanged product bytes (`7325b976284d970519829559cff82a66747dfe3e71119f371f482daeb425efc6`),
+  `QS_E2E_PARALLEL=0 make test-e2e` exited **0** (Core **38 passed**, CLI **53 passed**) and exact
+  cleanup scopes `qs_e2e_tmp_d5vozxq4ru_core_3887565` and
+  `qs_e2e_tmp_d5vozxq4ru_cli_3912451` reported cleanup complete. `make ci-e2e` reached stage 12 after
+  every static, coverage, unit, and integration gate passed, then exited **2** in its concurrent E2E
+  campaign: 2 Core SA142 Docker rows failed after their generated PostgreSQL containers exited 1,
+  and 8 CLI Docker lifecycle rows failed on the same database-start surface. A focused retained
+  diagnostic run later produced one CLI `test_apply_with_docker_runs_migrations_in_container` failure
+  because its generated PostgreSQL database did not exist; it did not establish a safe fifth repair.
+  All diagnostic resources were removed by exact owner/lifecycle/scope labels. The standing
+  `pg18-af10` container/image/volume, selected catalog rows, and `quickscale_test_role` flags were
+  byte-equal before and after; no standing PostgreSQL mutation was attempted. SA170 remains open and
+  unchecked at #27, TA70 remains live, Phase C is unaccepted, SA167c remains halted, and no completion,
+  release-readiness, or downstream-unblocking claim is made. **Decisions needed:** none.
+
 - **Roadmap cleanup and rebalance review (2026-09-02, eighth pass) — SA170's Phase C blocker
   resolved; no ticket closed.** **No ticket and no audit finding closed since the previous pass**,
   so the live counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1

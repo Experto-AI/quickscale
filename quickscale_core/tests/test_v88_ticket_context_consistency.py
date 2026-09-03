@@ -331,6 +331,13 @@ def _roadmap_block(text: str, start: str, end: str) -> str:
     return block
 
 
+def _required_status_block(text: str, pattern: str, name: str) -> str:
+    match = re.search(pattern, text)
+    if match is None:
+        raise AssertionError(f"current SA170 status block is missing: {name}")
+    return match.group(0)
+
+
 def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     """Reject contradictions inside the current Band-A and open-work blocks."""
     priority_model = _roadmap_block(
@@ -545,9 +552,11 @@ def _assert_sa167c_halted_status(
 
 
 def _assert_sa170_retained_partial_status(
-    roadmap_text: str, changelog_text: str
+    roadmap_text: str,
+    changelog_text: str,
+    status_consumers: dict[str, str],
 ) -> None:
-    """Keep accepted A/B product work distinct from unavailable Phase C evidence."""
+    """Keep the current retained-partial Phase C checkpoint in sync everywhere."""
     roadmap = _roadmap_tickets(roadmap_text)
     assert roadmap["SA170"].merge_position == 27
     assert roadmap["SA170"].dependencies == frozenset()
@@ -558,80 +567,96 @@ def _assert_sa170_retained_partial_status(
         "- [ ] **SA160 — Share one correct CSRF-token helper in the React theme.**",
     )
     latest_checkpoint = re.search(
-        r"(?ms)^- \*\*SA170 retained-partial checkpoint\b.*?(?=^- \*\*)",
+        r"(?ms)^- \*\*SA170 convergence retained-partial checkpoint\b.*?(?=^- \*\*)",
         changelog_text,
     )
     assert latest_checkpoint is not None
     checkpoint_text = latest_checkpoint.group(0)
 
-    for name, text in (("roadmap", sa170_block), ("changelog", checkpoint_text)):
+    roadmap_checkpoint = re.search(
+        r"(?ms)^\s*\*\*SA170 convergence retained-partial checkpoint\b.*?"
+        r"(?=^\s*\*\*Acceptance:)",
+        sa170_block,
+    )
+    assert roadmap_checkpoint is not None
+    roadmap_checkpoint_text = roadmap_checkpoint.group(0)
+
+    rows_block = _roadmap_block(
+        roadmap_text,
+        "  **Unfiltered-suite rows — SA170's four, recovered 2026-09-02.**",
+        "  **Absorbed from SA135 — the full E2E campaign.**",
+    )
+    frozen_rows = re.findall(r"^\s*- `([^`]+)`", rows_block, re.MULTILINE)
+    assert len(frozen_rows) == 4
+    expected_rows = [row.rsplit("::", 1)[-1].split()[0] for row in frozen_rows]
+    cleanup_scopes = re.search(
+        r"exact cleanup scopes `([^`]+)`\s+and `([^`]+)`", roadmap_checkpoint_text
+    )
+    assert cleanup_scopes is not None
+    scopes = list(cleanup_scopes.groups())
+
+    source_documents = {
+        "roadmap": roadmap_checkpoint_text,
+        "changelog": checkpoint_text,
+        **status_consumers,
+    }
+    for name, text in source_documents.items():
         normalized_text = " ".join(text.split())
+        assert "SA170" in normalized_text, name
         assert re.search(
-            r"phases A-B accepted|phases A and B are accepted",
+            r"QS_E2E_PARALLEL=0 make test-e2e|serial E2E campaign",
             normalized_text,
-        )
-        assert "Phase C" in normalized_text
-        assert "TA70 remains live" in normalized_text
-        assert "SA170 remains open" in normalized_text
-        assert "correctness-only" in normalized_text
-        assert "separately reported duration/cache observations" in normalized_text
+        ), name
+        assert "make ci-e2e" in normalized_text, name
+        assert re.search(r"exit(?:ed)?\s+\*{0,2}2\b", normalized_text), name
+        assert re.search(r"Core \*{0,2}38", normalized_text), name
+        assert re.search(r"CLI \*{0,2}53", normalized_text), name
+        assert "dependency" in normalized_text.lower(), name
         assert re.search(
-            r"not a ticket completion or release|no completion or release",
+            r"return.{0,8}141|pipefail-sensitive",
             normalized_text,
             re.IGNORECASE,
-        )
-        assert "EV-6" in normalized_text
+        ), name
+        assert "stage 12" in normalized_text, name
+        assert re.search(r"\*{0,2}2\*{0,2} Core", normalized_text), name
+        assert re.search(r"\*{0,2}8\*{0,2} CLI", normalized_text), name
+        assert re.search(r"generated[- ]PostgreSQL", normalized_text), name
+        assert "PostgreSQL" in normalized_text, name
+        assert "equal" in normalized_text, name
         assert re.search(
-            r"\*{0,2}Decisions needed:\*{0,2}\s+none",
+            r"TA70 (?:remains live|remains open|remain open|is unaccepted)",
             normalized_text,
-        )
-        for product_file in SA170_PRODUCT_FILES:
-            assert product_file in normalized_text, (name, product_file)
-
-    for text in (sa170_block, checkpoint_text):
-        normalized_text = " ".join(text.split())
-        validation_command = (
-            "poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py "
-            "-q -o addopts= --no-cov"
-        )
-        assert "authoritative archived SA167c Phase-F" in normalized_text
-        assert "four" in normalized_text
-        assert "QS_E2E_PARALLEL=0 make test-e2e" in normalized_text
-        assert "make ci-e2e" in normalized_text
-        assert "not run" in normalized_text
-        assert "PostgreSQL" in normalized_text
-        assert "convergence" in normalized_text
-        assert "terminal attestation" in normalized_text
-        assert (
-            "Serial retained-partial convergence subsequently repaired"
-            in normalized_text
-        )
-        assert "sa170-b-a-20260901-202225" in normalized_text
-        assert "sa170-b-b-20260901-202225" in normalized_text
-        assert "pg18-af10" in normalized_text
-        assert "qs_notifications_test" in normalized_text
-        assert "thirteenth owned database" in normalized_text
-        assert "no PostgreSQL mutation was attempted" in normalized_text
-        assert "current owner-row equality is not claimed" in normalized_text
+        ), name
         assert re.search(
-            r"49 utility, 4 readiness, 18 runner, 11 React "
-            r"build/timeout/PostgreSQL, and 35 consistency tests",
-            normalized_text,
-        )
-        assert "Terminal attestation raised F-009 through F-011" in normalized_text
-        assert validation_command in normalized_text
+            r"SA170 (?:remains open|remain open|is unaccepted)", normalized_text
+        ), name
         assert re.search(
-            rf"{re.escape(validation_command)}.{{0,160}}exit(?:ed)?\s+\*\*0\*\*",
+            r"no completion(?:\s+or|,)\s+release-readiness"
+            r"(?:,\s+or\s+downstream-unblocking)?\s+claim",
             normalized_text,
             re.IGNORECASE,
-        )
+        ), name
 
-    normalized_roadmap = " ".join(sa170_block.split())
-    assert "bounded terminal-remediation validation" in normalized_roadmap
-    assert "patch-backed terminal attestation" not in normalized_roadmap
-    assert "At ticket opening" in normalized_roadmap
-    assert "red today" not in normalized_roadmap
-    assert "opts out" not in normalized_roadmap
+    for source_name, source_text in {
+        "roadmap": roadmap_checkpoint_text,
+        "changelog": checkpoint_text,
+    }.items():
+        normalized_source = " ".join(source_text.split())
+        for row in expected_rows:
+            assert row in normalized_source, (source_name, row)
+        for scope in scopes:
+            assert scope in normalized_source, (source_name, scope)
+
+    for source_text in (roadmap_checkpoint_text, checkpoint_text):
+        normalized_source = " ".join(source_text.split())
+        assert re.search(
+            r"QS_E2E_PARALLEL=0 make test-e2e`.{0,40}exited \*\*0\*\*",
+            normalized_source,
+        )
+        assert re.search(
+            r"make ci-e2e`.{0,140}exited \*\*2\*\*",
+            normalized_source,
+        )
 
 
 def _assert_sa167d_status(
@@ -729,6 +754,47 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     _assert_sa170_retained_partial_status(
         roadmap,
         (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        {
+            "docs/index.md": _required_status_block(
+                docs_index,
+                r"(?m)^  - \[v88 Ticket Context\].*$",
+                "docs/index.md",
+            ),
+            "docs/others/arch-audit.md": _required_status_block(
+                (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
+                r"(?ms)^\*\*SA170 convergence retained-partial checkpoint.*?(?=^\s*$)",
+                "docs/others/arch-audit.md",
+            ),
+            "docs/others/tech-audit.md": _required_status_block(
+                (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+                r"(?ms)^- \*\*TA70 ·.*?(?=^\s*$)",
+                "docs/others/tech-audit.md",
+            ),
+            "docs/technical/decisions.md": _required_status_block(
+                (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
+                r"(?m)^\| `django_apps:`.*SA170.*\|$",
+                "docs/technical/decisions.md",
+            ),
+            "docs/technical/implementation_contract.md": _required_status_block(
+                (ROOT / "docs/technical/implementation_contract.md").read_text(
+                    encoding="utf-8"
+                ),
+                r"(?ms)^The \*\*SA170 convergence retained-partial checkpoint.*?(?=\n\n)",
+                "docs/technical/implementation_contract.md",
+            ),
+            "docs/technical/module-extension.md": _required_status_block(
+                (ROOT / "docs/technical/module-extension.md").read_text(
+                    encoding="utf-8"
+                ),
+                r"(?ms)^The \*\*SA170 convergence retained-partial checkpoint.*?(?=\n\n)",
+                "docs/technical/module-extension.md",
+            ),
+            "docs/technical/v88_ticket_context.md": _required_status_block(
+                CONTEXT.read_text(encoding="utf-8"),
+                r"(?ms)^### SA170 convergence retained-partial checkpoint.*?(?=^### )",
+                "docs/technical/v88_ticket_context.md",
+            ),
+        },
     )
 
 

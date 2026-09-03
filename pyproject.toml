@@ -11,6 +11,8 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.14,<3.15"
+djangorestframework = "3.17.2"
+sqlparse = "0.6.0"
 quickscale = {path = "./quickscale", develop = true}
 quickscale-core = {path = "./quickscale_core", develop = true}
 quickscale-cli = {path = "./quickscale_cli", develop = true}

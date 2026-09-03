@@ -347,6 +347,13 @@ remains after SA166. Retained-partial-only merge-back of the synchronized nine-f
 is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. This does not alter the module-extension contract
 or authorize edits to the settled manifest implementation.
 
+The **SA170 convergence retained-partial checkpoint (2026-09-02)** records repaired dependency and
+return-141 blockers, a green serial E2E campaign (Core 38 and CLI 53), exact-scope cleanup, and
+standing PostgreSQL equality. `make ci-e2e` exited 2 at stage 12 with 2 Core and 8 CLI failures on
+the concurrent generated-PostgreSQL start surface. SA170 remains open and TA70 remains live,
+SA167c remains halted, and no
+completion or release-readiness claim is made.
+
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure
 

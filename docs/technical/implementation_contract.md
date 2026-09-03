@@ -292,6 +292,12 @@ checkpoint is authorized without accepting F, closing SA167c, or unblocking SA16
 wiring logic. **`SA167d`**
 (v88) is a conditional post-integration completion-grade Phase C candidate; exact-tip integration
 remains pending. SA165 is released with `deps: none`.
+The **SA170 convergence retained-partial checkpoint (2026-09-02)** records repaired dependency and
+return-141 blockers, a green `QS_E2E_PARALLEL=0 make test-e2e` campaign (Core 38 and CLI 53),
+exact-scope cleanup and standing PostgreSQL equality, but `make ci-e2e` exited 2 at stage 12 with
+2 Core and 8 CLI failures on the concurrent generated-PostgreSQL start surface.
+This is release evidence only: SA170 remains open and TA70 remains live, SA167c remains halted, and
+no completion or release-readiness claim is made.
 The SA167a ownership guard checks executable source rather than one constructor shape,
 including helper, variable, and alternate-constructor forms.
 

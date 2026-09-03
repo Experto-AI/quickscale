@@ -103,10 +103,11 @@ either.
 
 **Operationally, the release path runs through W3 first.** The formal chain is W2's, but SA167c's F
 verdict cannot be re-run until SA170 (#27) makes the E2E surface green, so the *effective* longest
-chain to the release gate is **SA170 ─► SA167c F ─► (SA166 ─► SA164, band-C tail)**. That makes
-**SA170 Phase C the single critical-path action**, and as of 2026-09-02 it is executable: its only
-recorded blocker, the four transferred `e2e` row IDs, is resolved in its ticket body. Run it now on
-W3 and treat W1's band-C queue as parallel slack. No maintainer decision gates any of it.
+chain to the release gate is **SA170 ─► SA167c F ─► (SA166 ─► SA164, band-C tail)**. SA170's four
+transferred rows, dependency gate, registered-script gate, and serial E2E campaign are green, but its
+unchanged-byte release campaign remains red on the concurrent generated-PostgreSQL start surface.
+The single critical-path action is therefore to diagnose and safely repair that exact W3-owned
+surface before repeating the ordered campaigns; no maintainer decision gates the work.
 
 **No formal cross-worktree ticket dependency edge remains.** The failed F verdict is an operational
 cross-worktree blocker until SA170/W3's owned E2E surface is green. One cross-worktree *shared file*
@@ -228,13 +229,14 @@ complete and the standing state was restored exactly.
   SA167c F on W2 and SA170's Docker/E2E contract on W3.
 - **W1 — start SA165 (#22).** SA167d's completion-grade closeout is archived as a conditional post-integration candidate; SA165 now has `deps: none` and remains W1-owned. Finish with the
   lane's ordinary sync, verification, and exact-tip merge procedure.
-- **W3 — sync current `v88`, then run SA170 (#27) Phase C.** This is now the only work that moves
-  the release date. #27 has `deps: none`, its A/B product is already integration-branch state, and
-  its sole recorded blocker — the four transferred `e2e` row IDs — is **resolved in the ticket body
-  below**. Phase C is executable today: freeze the four rows, take the exclusive Docker slot, and
-  run `QS_E2E_PARALLEL=0 make test-e2e` then `make ci-e2e` with exact-scope cleanup and PostgreSQL
-  before/after equality. Do not reopen the settled PostgreSQL lifecycle. SA171 (#28) stays the
-  lane's DB-free fallback only if the Docker slot is unavailable.
+- **W3 — retain SA170 (#27) and repair its concurrent generated-PostgreSQL start failure.** This is
+  the only work that moves the release date. #27 has `deps: none`; its A/B product, dependency and
+  return-141 repairs, four frozen rows, and serial campaign are green, but Phase C remains
+  unaccepted after `make ci-e2e` failed at stage 12. Reproduce and diagnose that exact concurrent
+  surface without mutating the standing service or blindly rerunning unchanged bytes; after a safe
+  correction, run `QS_E2E_PARALLEL=0 make test-e2e` then `make ci-e2e` with exact-scope cleanup and
+  PostgreSQL before/after equality. SA171 (#28) stays the lane's DB-free fallback only if the Docker
+  slot is unavailable.
 
 ### Track readiness — the three states
 
@@ -244,15 +246,15 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W3** | SA170 (#27) | **yes** — `deps: none`; A/B are integration-branch state and the four-row blocker is resolved | **yes** — Phase C acceptance is entirely W3-owned; it needs only the exclusive Docker slot, which W3 holds | **yes** — no ticket is ordered ahead of #27 | **yes** — it now gates the release verdict |
+| **W3** | SA170 (#27) | **yes** — `deps: none`; the retained checkpoint names the exact concurrent generated-PostgreSQL surface to diagnose | **yes** — a safe repair and both ordered campaigns remain W3-owned; release acceptance is not yet demonstrated | **yes** — no ticket is ordered ahead of #27 | **yes** — it gates the release verdict |
 | **W1** | SA165 (#22) | **yes** — `deps: none`; sync current `v88` before acting | **yes** — the remaining watchlist discharge is W1-owned | **yes** — no cross-lane branch-state gate remains | no |
 | **W2** | SA167c (#21) | **no** — F is halted on 2 Core and 8 CLI E2E failures owned by SA170/W3 | **no** — F requires a fresh release verdict after its owner is green | **retained partial merged**; **no for ticket completion** until F is green | **yes** — release-committed, but downstream of W3 |
 
-**Truly green: W3 and W1.** W3 is the one that matters: with the four-row artifact recovered, SA170
-(#27) is the only ticket that is simultaneously startable, finishable in-lane, mergeable, and on the
-critical path — **it is the sole piece of real release progress available today**. W1's SA165 (#22)
-is also truly green but sits off the critical path, so it is filler: real work, no effect on the
-release date.
+**Scheduling-green: W3 and W1.** W3 is the one that matters: SA170 (#27) is startable,
+finishable in-lane, mergeable, and on the critical path because its remaining release failure is
+W3-owned. This is a scheduling statement, not an acceptance verdict: SA170 and TA70 remain open
+until both ordered campaigns are green. W1's SA165 (#22) is also scheduling-green but sits off the
+critical path, so it is filler: real work, no effect on the release date.
 
 **W2 is not green and cannot be made green from inside W2.** Both of its "no"s trace to one ticket,
 **SA170 (#27)**, and both are **hard dependencies** — no maintainer decision clears them, only the
@@ -279,14 +281,10 @@ privileged-command set — are archived with their full reasoning in
 ticket bodies, and in the
 [deliberately-not-ticketed table](#audit-items-deliberately-not-ticketed).
 
-**One accepted red is scheduled rather than owned.** The four `sqlparse` CVE suppressions in
-`scripts/security_suppressions.json` expire **2026-09-30**. `check_security_gates.py:545` compares
-`expires` against `date.today()` and raises `GateError` on a stale entry — a pure date comparison
-needing no scanner and no network — so from **2026-10-01** the security gate fails **locally as well
-as in CI**, on the suppression file rather than on any finding, and it fails even if `sqlparse` is
-patched. This is the one knowingly accepted red with no owning ticket. Nothing pins `sqlparse`
-(Django's constraint is `>=0.5.0`, unbounded) and 0.6.0 is published, so a lockfile bump plus a
-rescan is the cheap exit. **Revisit on 2026-09-30, not before.**
+**The former accepted dependency red is repaired.** The root now pins `sqlparse` 0.6.0 and
+djangorestframework 3.17.2, the billing/CRM/forms package and manifest constraints carry the fixed
+DRF minimum, and the four obsolete sqlparse suppressions are removed. The vulnerability gate is
+green, so there is no expiry-date revisit or unowned accepted red left on this surface.
 
 D3 and the placeholder-declaration policy remain settled and are not reopened here.
 
@@ -387,7 +385,8 @@ product commit `91fd3bb6e6b638735361b511c1515cddccce5d15`; F release validation 
 after 2 Core and 8 CLI E2E failures, so the retained checkpoint clears no gate. #22 is now eligible
 with `deps: none` after SA167d's conditional closeout candidate.
 #27 is W3's head, carries the transferred Docker/E2E obligation with `deps: none`, and is
-**the only runnable critical-path ticket** — its Phase C blocker is resolved.
+**the only runnable critical-path ticket**. Its static and serial blockers are resolved; its Phase C
+release blocker is the concurrent generated-PostgreSQL start failure recorded in the ticket body.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Two are
@@ -575,8 +574,8 @@ triggers.
     could produce a blind 40-second poll and generic timeout. Phase A replaced that mechanism with
     an anchored exact-name query, structured states, fail-loud query handling, and immediate exited
     diagnostics with the code and last log lines.
-  **State (measured 2026-09-01): retained partial checkpoint; phases A and B are accepted and
-  Phase C is outstanding.** Phase A's exact-name structured status, fail-loud query handling,
+  **State (measured 2026-09-02): retained partial checkpoint; phases A and B are accepted and
+  Phase C remains unaccepted.** Phase A's exact-name structured status, fail-loud query handling,
   immediate readiness diagnostics, and caller-parity coverage are implemented in
   `quickscale_cli/src/quickscale_cli/utils/docker_utils.py`,
   `quickscale_cli/tests/utils/test_docker_utils.py`, and
@@ -597,36 +596,25 @@ triggers.
   equality, and the resulting release verdict. Convergence, terminal attestation, and bounded
   terminal-remediation validation are complete; the remediation ran once and is not a second
   attestation.
-  **Blocking — resolved 2026-09-02; this is the unblock.** The authoritative archived SA167c
-  Phase-F log/status artifact containing the complete four-row source set was recorded as
-  unavailable, so the four IDs could not be guessed or frozen. They are **recovered**: the artifact
-  is this roadmap's own removed *Unfiltered-suite rows* subsection, deleted by an earlier cleanup
-  pass and retrievable at `git show fd42d56c:docs/technical/roadmap.md`. The four rows are restored
-  verbatim under *Unfiltered-suite rows* below, with each path re-resolved against the current tree,
-  and all four test functions were confirmed present. Phase C no longer waits on evidence
-  discovery. The release commands
-  `QS_E2E_PARALLEL=0 make test-e2e` and `make ci-e2e` were intentionally **not run** in this
-  fallback; consequently no release exit, release-campaign cleanup result, or release-campaign
-  PostgreSQL baseline comparison is claimed. Serial retained-partial convergence subsequently
-  repaired exact-scope image selection and timeout-cleanup diagnostics, removed observed image
-  `1a09dafc2b63` only after exact owner/lifecycle/scope label reinspection, verified scopes
-  `sa170-b-a-20260901-202225` and `sa170-b-b-20260901-202225` empty, and initially left
-  `pg18-af10` running with the same twelve database owners and role flags. A post-QA recheck found
-  the same PostgreSQL container, volume/image, and role flags but a foreign-looking
-  `qs_notifications_test` as a thirteenth owned database; no PostgreSQL mutation was attempted, so
-  current owner-row equality is not claimed. Its task-tier correction chain passed 49 utility,
-  4 readiness, 18 runner, 11 React build/timeout/PostgreSQL, and 35 consistency tests. Terminal
-  attestation raised F-009 through F-011; the bounded remediation selected the split
-  correctness/duration branch, reconciled TA70's live mechanism claims without closing it, and
-  restored independent PostgreSQL-client assertions. **Decisions needed:** none.
-  **Remaining reviewed plan:** plan authority `EV-6`
-  remains binding; do not redo A or B, retire TA70, mark SA170 complete, or alter SA167c's halt.
-  Resume Phase C from this retained A/B checkpoint. The four-row artifact is **resolved above**, so
-  EV-6's completion branch is now the live branch: freeze the four rows as listed, run both release
-  campaigns, and record exact-scope cleanup plus PostgreSQL before/after equality. The retain-partial
-  fallback is no longer the expected outcome. The focused fallback consistency command
-  `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`
-  is the only Phase C validation owed here and must exit **0**.
+  **SA170 convergence retained-partial checkpoint (measured 2026-09-02): no completion claim.**
+  The dependency lock now resolves djangorestframework 3.17.2 and sqlparse 0.6.0 with a green
+  vulnerability gate, and the pipefail-sensitive provisioning paths were repaired; all 1356
+  Registered Script Test Suites rows pass. The four frozen rows (`test_logs_with_options`,
+  `test_manage_test_command`, `test_installed_wheel_plan_apply_up_all_modules`, and
+  `TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe`) were collected and passed.
+  The ordered `QS_E2E_PARALLEL=0 make test-e2e` campaign
+  exited **0** with Core **38 passed** and CLI **53 passed**. The exact cleanup scopes `qs_e2e_tmp_d5vozxq4ru_core_3887565`
+  and `qs_e2e_tmp_d5vozxq4ru_cli_3912451` reported cleanup
+  complete. On unchanged product bytes, `make ci-e2e` passed every static, coverage, unit, and
+  integration gate, reached stage 12, then exited **2** with 2 Core SA142 Docker failures and 8
+  CLI Docker lifecycle failures on the concurrent generated-PostgreSQL start surface. A focused
+  retained diagnostic later observed one generated database-missing failure but did not establish a
+  safe fifth repair; all retained diagnostic resources were removed by exact labels. PostgreSQL
+  `pg18-af10` container/image/volume, selected catalog rows, and `quickscale_test_role` flags were
+  byte-equal before and after; no standing PostgreSQL mutation was attempted. Phase C is therefore
+  unaccepted, TA70 remains live, SA170 remains open and unchecked at #27, and SA167c remains halted;
+  no completion or release-readiness claim is made and no downstream ticket is unblocked. The
+  retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md). **Decisions needed:** none.
   **Acceptance:** the React build image is tagged from `QS_E2E_RESOURCE_SCOPE` and carries the same
   `com.quickscale.{owner,lifecycle,scope}` labels as every other E2E resource, so
   `scripts/test_e2e.sh --cleanup-scope <scope>` reclaims it and no fixed tag remains in any test;
@@ -844,7 +832,7 @@ Recorded so the absence is a decision rather than an oversight.
 | `org-model-universe-hand-enumerated` (arch rank 4) | arch, deferred | Same rule. Trigger: `teams` adds a tenant model, or a module adds a `PROTECT`/non-deferrable dependency among purge-owned rows. |
 | Tooling gaps — dependency-vulnerability scanner, security static analysis | tech | Closed by SA123's implemented and accepted Trivy/Bandit gates; evidence archived in [CHANGELOG.md](../../CHANGELOG.md). |
 | Watch items recorded as deliberate | tech *Notes* | Integration-branch CI, generator lock-generation policy, the DB-free healthcheck, CRM/billing cross-tenant `all_objects` count fallbacks, and rename-atomic-but-not-durable state writes are each argued and accepted in the audit; re-examine only on the triggers stated there. |
-| Four suppressed `sqlparse` CVEs | tech *Notes* | **Settled 2026-08-31: left as-is by explicit decision.** `CVE-2026-54284/-59893/-71491/-59894` expire **2026-09-30**; from **2026-10-01** `check_security_gates.py:545` raises `GateError` on the stale entries — a pure date check, so it fails locally as well as in CI, on the file rather than on any finding. This is the one knowingly accepted red with no owning ticket. Revisit on the expiry date. |
+| Four formerly suppressed `sqlparse` CVEs | tech *Notes* | **Repaired 2026-09-02 during SA170 convergence.** The root pins sqlparse 0.6.0, the obsolete suppressions are removed, and the vulnerability gate is green. No expiry-date revisit remains. |
 | `blog/feeds.py` double System-org resolution | tech *Notes* | Narrow trigger (a corrupt singleton row). Not promoted; re-examine if a second fail-closed feed path appears. |
 | `table_has_force_rls` schema qualification | tech *Notes* | Single-schema deployments unaffected. Trigger: a schema-per-tenant option. |
 | Tooling gap — CSRF helper test | tech | An acceptance criterion inside **SA160**, not a separate item. |
