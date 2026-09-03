@@ -615,6 +615,23 @@ triggers.
   unaccepted, TA70 remains live, SA170 remains open and unchecked at #27, and SA167c remains halted;
   no completion or release-readiness claim is made and no downstream ticket is unblocked. The
   retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md). **Decisions needed:** none.
+  **Truthful handoff checkpoint.** **Completed:** the dependency-security, manifest-parity,
+  provisioning pipefail, lane-port, cleanup-evidence, and current-status consistency corrections
+  are retained on `wt-track3` at `696c57e7aca9579793ce1f91d707fe0dc84fc877` for merge to `v88`.
+  **Pending:** Phase C still needs one reproducible correction for the concurrent generated-
+  PostgreSQL startup failure, followed on unchanged product bytes by
+  `QS_E2E_PARALLEL=0 make test-e2e` and `make ci-e2e`, exact-scope cleanup, and standing PostgreSQL
+  before/after equality. **Blocking:** the product delta received no independent terminal grade
+  because the review-authority transport expired before the reviewer could consume the prepared
+  base-to-tip patch; close that review gap with a fresh patch-backed review of the retained commit,
+  and close the product blocker by capturing the first generated database-container exit-1 log and
+  applying the smallest lifecycle correction that makes both campaigns green. **Decisions needed:**
+  none. **Remaining plan:** do not redo the retained dependency, manifest, provisioning, port, or
+  status corrections; first diagnose the concurrent generated-PostgreSQL startup seam across the
+  recorded 2 Core and 8 CLI rows, add deterministic coverage for the captured cause, then rerun the
+  ordered campaign and close SA170/TA70 only on green evidence. No reusable durable reviewed-plan
+  reference remains, so the retained commit and this exact resume sequence are the cold-start
+  authority.
   **Acceptance:** the React build image is tagged from `QS_E2E_RESOURCE_SCOPE` and carries the same
   `com.quickscale.{owner,lifecycle,scope}` labels as every other E2E resource, so
   `scripts/test_e2e.sh --cleanup-scope <scope>` reclaims it and no fixed tag remains in any test;
