@@ -792,7 +792,7 @@ triggers.
   removed excluded `.venv/` fixture records and added a recurrence guard. Terminal review then found
   the remaining non-mapping YAML-root path; list and scalar roots, including `[]` and `null`, now
   raise `StateError` before any write and retain byte-identical state. That correction was
-  ***applied after terminal attestation — not independently graded***. Focused state/removal coverage
+  applied after terminal attestation and carries only the remediation author's grade. Focused state/removal coverage
   passed with 141 tests; the combined state, removal, generator, template, and hermetic provisioning
   evidence passed with 423 tests plus one conditional environment skip, followed by 36 provisioning
   tests. These are retained product facts, not ticket completion or release-readiness evidence.
