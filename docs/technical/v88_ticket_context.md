@@ -345,7 +345,7 @@ This edits generated-project templates, so the SA90 emission-parity fixture need
 
 ---
 
-## SA174 — Give the sanctioned privileged-command set one owner
+## SA174 — Correct the false SSOT claim on the privileged-command set
 
 ### The mental model — a contract with two endpoints and four declarations
 
@@ -389,18 +389,21 @@ The **sibling** contract in the same file is single-owner and coherent:
 template-side, both frozen at the same vintage, so they cannot drift. Same file, same release, same
 pattern. The privileged set is the one that grew extra owners.
 
-### Implementation shape — reuse the seam that already exists
+### What the 2026-08-31 permanence decision did to this ticket
 
-`generator/runtime_pins.py` already does this job for Python, Django, and PostgreSQL versions: one
-declaration, rendered into templates through `generator.py:521-526`, read by tests rather than
-transcribed. Put the command set there.
+The sanctioned set was settled as **permanent at two commands**, `{"migrate", "createcachetable"}`.
+With the set frozen, the drift this ticket existed to prevent cannot occur, so the structural work
+collapses and only the false instruction remains. The consolidation plan — rendering the set through
+the `runtime_pins` seam, replacing the transcribing oracle with a deriving one, and rebaselining
+emission parity — is **archived unimplemented** in the changelog, and is reinstated only if the
+watchlist trigger fires: a third sanctioned command, or any two stations disagreeing.
 
-The emitted copy **stays** — a generated project must render standalone with no import back into
-QuickScale, and "100% yours, no vendor lock-in" is the product's central promise. What changes is
-its status: a *rendering* of the declaration rather than a restatement of it. The CLI and module
-copies, which ship on the same release line as core, become imports. The oracle stops matching a
-literal and starts comparing the rendered set against the imported ones — the same move made for the
-planning documents when literal ticket IDs were replaced by derived counts.
+### The shape of what is left
+
+A comment correction. `apps.py:34-52` must say what is true — that this frozenset is one of four
+independent fail-closed declarations, that it is **not** a single source of truth, and that adding a
+sanctioned command means updating all four stations, named. The arch audit demotes the finding from
+rank 1 to a watchlist item with that trigger armed, and does not close it.
 
 ### The one thing that must not be simplified away
 
@@ -412,8 +415,8 @@ one decider.
 
 ### Emission parity
 
-This changes emitted bytes, so the SA90 emission-parity fixture needs a rebaseline with per-file
-rationale, following the established convention and preserving every prior `baseline_evidence` entry.
+**None is owed.** No emitted byte changes and no declaration moves, so no generator run and no SA90
+emission-parity rebaseline is required. That is what took this work out of the ordered rebaseline run.
 
 ---
 
@@ -459,9 +462,11 @@ a third generated-project consumer, a public updater, an emitted-file expansion,
 and the blast radius stays small meanwhile because `quickscale_devtools` is maintainer-only, excluded
 by name from the publish scripts.
 
-What is in scope: name the contract's participating paths once, sourced from the single declaration
-rather than re-listed, and assert that members of one named group cannot take dispositions from
-opposite families. One assertion, one named group, and a red-then-green proof.
+What is in scope: name the contract's three participating paths once — `settings/production.py`,
+`start.sh`, and `Dockerfile` — in this work's own assertion, and assert that members of one named
+group cannot take dispositions from opposite families. There is no single upstream declaration to
+source them from, because the command set was settled as permanent rather than consolidated. One
+assertion, one named group, and a red-then-green proof.
 
 ---
 

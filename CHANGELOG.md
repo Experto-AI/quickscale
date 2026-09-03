@@ -4,6 +4,64 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-09-03, ninth pass) — one lane move stands; a
+  completion freeze is named.** **No ticket and no audit finding closed since the previous pass**,
+  so live counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1
+  `privileged-command-set-multi-owner` stale-by-decision until SA174 demotes it, and the queue is
+  unchanged at **eleven** open ticket entries across **eleven** open merge positions.
+  **The move: SA174 (#31) and SA175 (#32) leave W1 for W2**, making lanes **W1 3 · W2 5 · W3 3**.
+  Both are `deps: none` and DB-free, neither touches `scripts/gate_registry.json`,
+  `quickscale_modules/*/module.yml`, `quickscale_core/contracts/`, or `quickscale_core/manifest/`,
+  and neither shares a code file with any W2 ticket. W2's band-B head is halted rather than busy,
+  which is the case the standing band-C displacement rule was written for. The move **strictly
+  reduces sharing**: `docs/others/arch-audit.md` had three owners across two lanes and is now
+  single-lane W2 under the runnable order #31 → #32 with #25 later, while
+  `quickscale_modules/orgs/.../apps.py` and `quickscale_devtools/.../beta_migration.py` move from
+  W1-only to W2-only. No code file gains a second lane and no merge hazard is created. W1 is left as
+  one coherent generated-output chain, #22 ─► #19 ─► #20.
+  **Readiness correction — the freeze was previously understated.** The prior pass recorded W1 as
+  scheduling-green on all three states. It is not: SA165's Phase D ends in `make ci-e2e`, that gate
+  is red on the integration branch, and the standing red-gate rule attributes it to SA170 (#27) and
+  forbids completing any other ticket merge until its owner is green. W1 and W2 can therefore start
+  work and merge **retained partial checkpoints**, but cannot reach a checked box. **Only W3 is
+  truly green, and it is the only lane on the critical path.** SA165's `deps:` correctly stay
+  `none` — this is a gate-ownership freeze, not a ticket dependency.
+  **Lane measurement re-taken** against `v88` at `10163566`: `wt-track1` 5/0 at `a14ea029`,
+  `wt-track2` 11/0 at `35dfa3c9`, `wt-track3` 0/0 and level with `v88`. Every retained partial
+  checkpoint has reached `v88`; no lane carries unintegrated work.
+  **Self-consistency defects fixed.** `docs/technical/v88_ticket_context.md` still carried SA174's
+  pre-shrink consolidation plan as its implementation shape — the `runtime_pins` rendering, the
+  deriving oracle, and an emission rebaseline — contradicting the 2026-08-31 permanence decision
+  that archived that plan unimplemented; the section is retitled and rewritten to the comment
+  correction that actually remains, and its emission-parity note now states that none is owed.
+  SA175's context section claimed its participating paths are "sourced from the single declaration",
+  which the same decision cancelled; it now names its own three paths. The roadmap's dependency-graph
+  and rebalance prose still called W1 the longest lane. `docs/others/tech-audit.md` still listed the
+  four `sqlparse` suppressions as live with a 2026-09-30 expiry cliff; they were retired by the
+  0.6.0 upgrade on 2026-09-02 and the note is closed with a reconciliation-log line.
+  **Two maintainer decisions are now open** and are stated with alternatives in the roadmap: how far
+  a completion-frozen lane may advance (park, advance on retained partials, or batch the release
+  gate), and whether to confirm or reverse this lane move while it is still free to reverse.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` returned **31 passed** before and
+  after every edit.
+
+- **SA165 retained-partial checkpoint integrated — phases A-C accepted; Phase D outstanding
+  (2026-09-02).** Retained product object `573a57a34301e6a91971a7845095bd913bebd5e1` carries the
+  fail-hard state-read behaviour with rollback regressions, identity-based isolation-skip
+  authorization with hermetic negative coverage, accountable `_HOST_DEPENDENT_PATHS` exceptions, the
+  rendered shared-environment credential warning in `OPERATIONS.md.j2`, and three synchronized
+  generated-output manifests. Task-tier convergence removed excluded `.venv/` fixture records and
+  added a recurrence guard; terminal review then found the remaining non-mapping YAML-root path, so
+  list and scalar roots including `[]` and `null` now raise `StateError` before any write and retain
+  byte-identical state — that correction was applied after terminal attestation and carries only the
+  remediation author's grade. Focused state/removal coverage passed with **141** tests; combined
+  state, removal, generator, template, and hermetic provisioning evidence passed with **423** tests
+  plus one conditional environment skip, followed by **36** provisioning tests. Integrated into
+  `v88` at `3f925b96` as retained partial delivery only. **SA165 remains open and unchecked at #22**
+  and its four tech-audit watch items remain live: Phase D's documentation reconciliation and its
+  single release gate have not run, and that gate is red under SA170's ownership. No completion or
+  release-readiness claim is made. **Decisions needed:** none for this ticket.
+
 - **SA170 convergence retained-partial checkpoint — static blockers repaired; concurrent release E2E
   remains red (2026-09-02).** The root lock now resolves djangorestframework **3.17.2** and sqlparse
   **0.6.0**; the three module constraints require DRF `^3.17.2`, obsolete sqlparse suppressions were
