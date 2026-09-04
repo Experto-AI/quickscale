@@ -41,13 +41,13 @@ The open release work is one principle with four failure modes. Every ticket is 
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
            SA160         SA165           SA161          SA166
-           SA164         SA152           SA161          SA172
-           SA172         SA172           SA170          SA175
-           SA174           │             SA171            │
+           SA164         SA152           SA171          SA172
+           SA172         SA172             │            SA175
+           SA174           │               │              │
              │             │               │        (testimony
-       (cookies,      (state/tool     (DB, locks,      trail,
-        watchlists,    fallbacks,      dead code,    policy-text
-        command sets,  silent skips)    Docker)      assertions,
+        (cookies,      (state/tool     (locks, dead     trail,
+         watchlists,    fallbacks,      code)         policy-text
+         command sets,  silent skips)                assertions,
         RLS docstring)                              file-group
                                                      coherence)
 ```
@@ -64,7 +64,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 |---|---|---|
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks with one shared race | SA160, SA164, SA171, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
-| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | a fixed-tag Docker image outside the scope contract; dead code nobody deletes | SA161, SA170 |
+| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | a lock whose stale-owner transition is not atomic; dead code nobody deletes | SA161, SA171 |
 | **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA166, SA172, SA175 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
@@ -169,90 +169,6 @@ tree. The model's real table name is available from `apps.get_model(...)._meta.d
 sibling conformance helper already uses.
 
 ---
-
-## SA170 — Give the E2E Docker harness a closed resource contract
-
-### The mental model
-
-Every E2E resource this project creates is stamped with a **scope** — a unique string minted once
-per run — and every cleanup reclaims resources by asking Docker "give me everything labelled with
-this scope". Nothing is found by name. That is what lets two runs share one Docker daemon without
-touching each other's containers, and what lets cleanup be exhaustive without guessing.
-
-The design holds everywhere except two places, and both stalled a phase of another ticket for
-several passes. Understanding why they stalled it is the point of this ticket.
-
-### Why the symptoms looked like flakes
-
-A flake is a failure that appears and disappears without the code changing. Both symptoms here —
-a container that could not be found, and a build that ran out of time — have that surface.
-Underneath, neither is random:
-
-**Shared mutable name.** One test builds its Docker image under a hardcoded tag instead of a
-scoped one, and deletes that tag when it finishes. Two runs on one machine therefore reach for the
-same object, and whichever finishes first deletes it out from under the other. The collision needs
-two runs to overlap, so it looks like chance — but it is a missing scope, not a race.
-
-**A budget that measures the machine.** The same test allows five minutes for a Docker build. A
-warm build takes seconds because Docker reuses cached layers; a cold one recompiles a frontend and
-installs a database client. Whether five minutes is generous or insufficient depends on the cache,
-not on the code. Re-running it on a warm machine will pass forever and prove nothing.
-
-### The finding that actually explains the stall
-
-The third defect is the reason the first two were never diagnosed.
-
-The helper that waits for a container to start asks Docker for containers *whose name contains* a
-string — a substring match, not an exact one — and asks for **all** containers, including ones that
-have already died. It then decides "is it running?" by looking for the word `up` somewhere in the
-reply. A container that crashed one second after starting does not produce that word, so the helper
-concludes "not ready *yet*" and keeps waiting. Forty seconds later it reports *"the container did
-not become running in time"* — which is true, and useless. The crash and its exit code are never
-shown.
-
-So the harness's failure report cannot distinguish **"still starting"** from **"already dead"**.
-That is why repeatedly re-running the suite produced greens that taught nobody anything: on the runs
-that did fail, the harness had already thrown away the reason.
-
-### SA170 convergence retained-partial checkpoint (2026-09-04)
-
-The latest ordered serial campaign used `setsid --wait env QS_E2E_PARALLEL=0
-QS_E2E_INTEGRATION_REF=v88 make test-e2e` and exited **2**: Core reported **38 passed**, while CLI
-reported **52 passed / 1 failed** at the installed-wheel lifecycle row,
-`quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py::test_installed_wheel_plan_apply_up_all_modules`
-after `poetry install` aborted following dependency synchronization. The concurrent
-`setsid --wait env QS_E2E_INTEGRATION_REF=v88 make ci-e2e` campaign was not run because the serial
-prerequisite was red. Exact-scope cleanup passed, standing PostgreSQL `pg18-af10` identity/volume/catalog/role
-projections were byte-equal before and after, and the quiet transcript did not individually attest
-the other three frozen rows. Phase C is unaccepted, TA70 remains live, SA170 remains open, and no
-completion, release-readiness, or downstream-unblocking claim is made. A convergence-only focused
-rerun of the installed-wheel row passed in **165.84s**, and `poetry install -vvv` returned 0 in a
-diagnostic copy of the retained project. Those checks neither reveal the historical lower-level cause
-nor replace the required fresh ordered serial campaign followed, only if green, by the concurrent
-campaign, with exact-scope cleanup and standing PostgreSQL equality. Reviewed-plan phase C-correct is
-since accepted and retained at `dcfb136f5980195afd69c2c168afc81e02e118c7` — generated projects hold
-backend startup until the end-of-init database sentinel is observable — while phase C-release remains
-unaccepted.
-
-### Why the old acceptance criterion could not be met
-
-The blocked phase required *red-before / green-after* evidence: show the failure happening, apply
-the fix, show it gone. That is the right standard for a deterministic defect. It cannot be met for a
-collision between two runs that must be scheduled to overlap, and it cannot be met for a timeout
-whose outcome depends on cache state.
-
-The resolution is not to lower the standard. It is to **apply it one level down**, where the
-behaviour *is* deterministic: the readiness decision is a pure function of a status string, so it
-can be fed a crashed container's status and shown to answer wrongly today and correctly after; and
-whether cleanup can see an image is a labelled-resource query, which either finds it or does not.
-Both give genuine red-before/green-after evidence in milliseconds, with no flake to reproduce.
-
-### The reasoning trap this illustrates
-
-*Re-running a test is evidence about the test's environment, not about the code.* When a suite keeps
-passing but a failure is known to exist, the useful question is not "how do I make it fail again"
-but "what would this harness have told me if it had failed" — and if the answer is "nothing
-specific", that is the first defect to fix.
 
 ## SA160 — Share one correct CSRF-token helper in the React theme
 
@@ -729,19 +645,17 @@ SA167a and SA167b handoffs are archived in [CHANGELOG.md](../../CHANGELOG.md). S
 phases A-E are accepted on retained product object
 `91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3, so no completion or release-readiness claim is made. Retained-partial-only merge-back of
+SA170/W3 at that time. SA170's final acceptance has since cleared that blocker, but no fresh SA167c
+F verdict has run, so no SA167c completion or release-readiness claim is made. Retained-partial-only merge-back of
 the synchronized nine-file status checkpoint is authorized without accepting F, closing SA167c, or
 unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. SA167d's completion-grade Phase C is archived as a
 conditional post-integration candidate; exact-tip integration remains pending. SA165 is released
 with `deps: none`. Ticket metadata lives in the [roadmap](roadmap.md), not here.
 
-The **latest SA170 convergence retained-partial checkpoint (2026-09-04)** records an ordered serial
-campaign that exited 2 with Core 38 passed and CLI 52 passed / 1 failed at the installed-wheel row;
-the concurrent campaign was not run. Exact-scope cleanup and standing PostgreSQL equality passed,
-but the other three frozen rows lack individual pass oracles. A convergence-only focused rerun of
-the installed-wheel row and a diagnostic-copy install both passed without identifying the retained
-campaign's lower-level cause. SA167c therefore remains halted pending a fresh ordered
-serial-then-concurrent campaign, and no downstream ticket is unblocked.
+SA170's later ordered serial and concurrent campaigns both passed; their final acceptance and the
+earlier retained-partial history are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c is now
+blocked only on fresh reviewed authority for Phase F and remains open until that newly authorized verdict
+passes. Current dependency metadata remains in the roadmap.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.

@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-09-01 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
+> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-09-04 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
 >
 > Live structural findings only. Findings are identified by their **slug**; the ordinal numbering
 > used in earlier passes is pass-local and is not a stable identifier (see
@@ -30,11 +30,12 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Eleven open v88 ticket entries run on three tracks across eleven open merge
+generated-project updater. Ten open v88 ticket entries run on three tracks across ten open merge
 positions; **W2 sets the release date** because SA167c remains open at #21 with phases A-E accepted
 on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3. No completion or release-readiness claim is made. W3 holds the exclusive
+SA170/W3 at that time. SA170's final acceptance has cleared those failures; fresh reviewed authority
+for a new SA167c F verdict is now the release-path gate. W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
 **Accepted-open SA167c checkpoint (2026-09-01).** SA167c remains open at merge position **#21**
@@ -43,30 +44,21 @@ with SA166 still dependent on it. Phases A-E are accepted on retained product ob
 campaign are accepted, and D's fail-hard missing-app proof restored the exact bytes before both
 related gates returned green. E's ordered lint/typecheck/context checkpoint passed; F halted after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by SA170/W3.
-F remains outstanding and unaccepted; this retained delivery clears no release gate, and no completion
+Those upstream failures are now closed, but F remains outstanding and unaccepted pending fresh
+reviewed authority; this retained delivery clears no release gate, and no completion
 or release-readiness claim is made. Retained-partial-only merge-back of the synchronized nine-file
 status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. Its accepted evidence is archived in
   [CHANGELOG.md](../../CHANGELOG.md).
 
-**SA170 convergence retained-partial checkpoint (2026-09-04).** The dependency and return-141 static
-blockers remain repaired. The latest ordered serial E2E campaign used `setsid --wait env
-QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e` and exited 2: Core reported 38 passed and
-CLI reported 52 passed / 1 failed at the installed-wheel lifecycle row after `poetry install` aborted
-following dependency synchronization. The concurrent `setsid --wait env QS_E2E_INTEGRATION_REF=v88 make
-ci-e2e` campaign was not run because the serial prerequisite was red. Exact-scope cleanup and standing
-PostgreSQL container/catalog/role comparisons remained equal, but the quiet transcript did not
-individually attest the other three frozen rows. SA170 remains open and TA70 remains live, SA167c
-remains halted, and no completion or release-readiness claim is made. A convergence-only focused
-rerun of the installed-wheel row and a diagnostic-copy `poetry install -vvv` both passed; neither
-retroactively greens the failed campaign or identifies its unretained lower-level cause. Closure
-still requires a fresh ordered serial-then-concurrent campaign with exact-scope cleanup and standing
-PostgreSQL equality. Reviewed-plan phase C-correct is since accepted and retained at
-`dcfb136f5980195afd69c2c168afc81e02e118c7` — generated projects now hold backend startup until the
-end-of-init database sentinel is observable — while phase C-release remains unaccepted.
+**SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
+exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
+local corrections. Exact Core/CLI cleanup completed and the standing PostgreSQL identity, volume,
+catalog, ownership, and role flags remained intact. SA170 and TA70 are closed; W3 now heads at SA171,
+and the full release and retained-partial history is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
 and the completion ledger archived SA167d and retired merge position #18. SA165 is released with
-`deps: none`; the current queue is eleven open v88 ticket entries across eleven open merge positions.
+`deps: none`; the current queue is ten open v88 ticket entries across ten open merge positions.
 The ledger is a **conditional post-integration** candidate with **exact-tip** integration and terminal
 attestation still pending in the root closeout path. The first
 foreground `make check` invocation terminated with exit 143 after Make reported no child processes

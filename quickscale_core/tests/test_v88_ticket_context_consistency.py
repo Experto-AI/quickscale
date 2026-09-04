@@ -4,14 +4,14 @@ The roadmap is the sole home for schedulable metadata.  The context page may exp
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
-tree state.  The integration-ready SA167d closeout, halted SA167c, and retained-partial SA170
+tree state.  The integration-ready SA167d closeout, authority-gated SA167c, and closed SA170
 statuses are checked as current consumer contracts below; those checks are not mutation canaries.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
 context.  Retained expected-red canaries prove those parser/guard boundaries, while explicit
-current-status contracts preserve the integration-ready SA167d closeout, the halted SA167c
-checkpoint, and the retained-partial SA170 checkpoint.  The suite previously carried twelve
+current-status contracts preserve the integration-ready SA167d closeout, authority-gated SA167c
+checkpoint, and final SA170 closeout.  The suite previously carried twelve
 mutation canaries across 496 lines, including one
 that mutated a hardcoded ``deps:`` literal naming a specific ticket; archiving that ticket silently
 disarmed it, as did roadmap prose that happened to spell the same literal first.  The remaining
@@ -55,15 +55,6 @@ SA167C_MOVED_V88 = "3aa0c67f843eddd779f9766de4c274a5a249f485"
 SA167C_RETAINED_CHECKPOINT = "4de75d39"
 SA167C_SYNC_BASE = "8385780fe624893dc66e1382f2f68ce1ea759a02"
 SA167C_SYNC_MERGE = "eacad160d92b37f81f593085a64e18db4fb271f0"
-SA170_PRODUCT_FILES = (
-    "quickscale_cli/src/quickscale_cli/utils/docker_utils.py",
-    "quickscale_cli/tests/utils/test_docker_utils.py",
-    "quickscale_cli/tests/test_e2e_development_workflow.py",
-    "quickscale_cli/tests/test_react_theme_e2e.py",
-    "scripts/test_e2e.sh",
-    "scripts/test_e2e_parallel.py",
-)
-
 UMBRELLA_TITLE = "SA167a / SA167c — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
@@ -331,13 +322,6 @@ def _roadmap_block(text: str, start: str, end: str) -> str:
     return block
 
 
-def _required_status_block(text: str, pattern: str, name: str) -> str:
-    match = re.search(pattern, text)
-    if match is None:
-        raise AssertionError(f"current SA170 status block is missing: {name}")
-    return match.group(0)
-
-
 def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     """Reject contradictions inside the current Band-A and open-work blocks."""
     priority_model = _roadmap_block(
@@ -366,12 +350,12 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     assert not stale_e_open, stale_e_open.group(0) if stale_e_open else None
 
     assert "no provisioning gate is red" in priority_model.lower()
-    assert "F halted on the red release gate" in dependency_graph
-    assert re.search(
-        r"\bOpen product work is\s+SA167c F on W2\b",
-        next_actions,
-        re.IGNORECASE,
-    )
+    if "remaining Phase-F gate is fresh reviewed authority" not in dependency_graph:
+        raise AssertionError(
+            "SA167c dependency graph must name fresh reviewed authority"
+        )
+    if "obtain fresh reviewed authority for SA167c (#21) Phase F" not in next_actions:
+        raise AssertionError("SA167c next action must obtain fresh reviewed authority")
 
 
 def _assert_lane_assignment_parity(roadmap_text: str) -> None:
@@ -482,7 +466,7 @@ def _assert_status_consumers_agree(roadmap_text: str, docs_index_text: str) -> N
             )
 
 
-def _assert_sa167c_halted_status(
+def _assert_sa167c_current_status(
     roadmap_text: str,
     context_text: str,
     docs_index_text: str,
@@ -492,22 +476,18 @@ def _assert_sa167c_halted_status(
     implementation_contract_text: str,
     module_extension_text: str,
 ) -> None:
-    """Keep the retained A-E product distinct from the failed F release verdict."""
+    """Keep accepted A-E distinct from the authority-gated F verdict."""
     roadmap = _roadmap_tickets(roadmap_text)
     assert roadmap["SA167c"].merge_position == 21
     assert roadmap["SA166"].dependencies == frozenset({"SA167c"})
     assert roadmap["SA164"].dependencies == frozenset({"SA166"})
 
-    latest_changelog_entry = re.search(
-        r"(?ms)^- \*\*SA167c Phase E accepted; Phase F halted\b.*?(?=^- \*\*)",
-        changelog_text,
-    )
-    assert latest_changelog_entry is not None
+    latest_closeout = re.search(r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text)
+    assert latest_closeout is not None
     current_status_consumers = {
-        "CHANGELOG.md": latest_changelog_entry.group(0),
+        "CHANGELOG.md": latest_closeout.group(0),
         "docs/index.md": docs_index_text,
         "docs/others/arch-audit.md": arch_audit_text,
-        "docs/technical/decisions.md": decisions_text,
         "docs/technical/implementation_contract.md": implementation_contract_text,
         "docs/technical/module-extension.md": module_extension_text,
         "docs/technical/roadmap.md": roadmap_text,
@@ -515,31 +495,27 @@ def _assert_sa167c_halted_status(
     }
     for path, text in current_status_consumers.items():
         normalized_text = " ".join(text.split())
-        assert SA167C_RETAINED_PRODUCT in normalized_text, path
-        assert re.search(r"phases A-E (?:are )?accepted", normalized_text, re.I), path
+        assert "SA167c" in normalized_text, path
         assert re.search(
-            r"F (?:is |remains )?(?:outstanding|unaccepted)|Phase F halted",
+            r"(?:fresh reviewed authority|Phase F awaiting fresh reviewed authority)",
             normalized_text,
             re.I,
         ), path
-        assert "QS_E2E_INTEGRATION_REF=v88 make ci-e2e" in normalized_text, path
-        assert re.search(r"exit(?:ed)? \**2\b", normalized_text, re.I), path
-        assert re.search(r"\b2 Core\b|Core reported \**2\b", normalized_text), path
-        assert re.search(r"\b8 CLI\b|CLI reported \**8\b", normalized_text), path
-        assert re.search(
-            r"no completion or release-readiness claim|not complete or release-ready",
-            normalized_text,
-            re.I,
-        ), path
-        assert "retained-partial-only merge-back" in normalized_text.lower(), path
-        assert re.search(
-            r"without accepting F|does not accept F", normalized_text, re.I
-        ), path
-        assert re.search(
-            r"without (?:accepting F, )?closing SA167c|does not .*close SA167c",
-            normalized_text,
-            re.I,
-        ), path
+
+    assert (
+        "Phase F release status and downstream sequencing live in the roadmap"
+        in decisions_text
+    )
+    for text in (
+        roadmap_text,
+        context_text,
+        arch_audit_text,
+        implementation_contract_text,
+        module_extension_text,
+    ):
+        normalized_text = " ".join(text.split())
+        assert SA167C_RETAINED_PRODUCT in normalized_text
+        assert re.search(r"phases A-E (?:are )?accepted", normalized_text, re.I)
 
     assert SA167C_FROZEN_BASE in roadmap_text
     assert SA167C_MOVED_V88 in roadmap_text
@@ -551,116 +527,44 @@ def _assert_sa167c_halted_status(
     assert "obtain fresh reviewed authority" in roadmap_text
 
 
-def _assert_sa170_retained_partial_status(
+def _assert_sa170_final_closeout(
     roadmap_text: str,
+    context_text: str,
     changelog_text: str,
     status_consumers: dict[str, str],
 ) -> None:
-    """Keep the current retained-partial Phase C checkpoint in sync everywhere."""
+    """Keep SA170 closed in live ledgers while preserving final evidence."""
     roadmap = _roadmap_tickets(roadmap_text)
-    assert roadmap["SA170"].merge_position == 27
-    assert roadmap["SA170"].dependencies == frozenset()
+    assert "SA170" not in roadmap
+    assert all(item.merge_position != 27 for item in roadmap.values())
+    assert "## SA170" not in context_text
+    assert "#27 are **retired and not" in roadmap_text
+    assert roadmap["SA171"].dependencies == frozenset()
 
-    sa170_block = _roadmap_block(
-        roadmap_text,
-        "- [ ] **SA170 — Give the E2E Docker harness a closed resource contract and a truthful failure report.**",
-        "- [ ] **SA160 — Share one correct CSRF-token helper in the React theme.**",
-    )
-    latest_checkpoint = re.search(
-        r"(?ms)^- \*\*SA170 convergence retained-partial checkpoint\b.*?(?=^- \*\*)",
-        changelog_text,
-    )
-    assert latest_checkpoint is not None
-    checkpoint_text = latest_checkpoint.group(0)
+    latest_closeout = re.search(r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text)
+    assert latest_closeout is not None
+    normalized_closeout = " ".join(latest_closeout.group(0).split())
+    assert "QS_E2E_PARALLEL=0" in normalized_closeout
+    assert "make test-e2e" in normalized_closeout
+    assert "make ci-e2e" in normalized_closeout
+    assert "exited **0**" in normalized_closeout
+    assert "Core reported **38 passed" in normalized_closeout
+    assert "CLI reported **54 passed" in normalized_closeout
+    assert "both exact lane cleanups complete" in normalized_closeout
+    assert "PostgreSQL `pg18-af10`" in normalized_closeout
 
-    roadmap_checkpoint = re.search(
-        r"(?ms)^\s*\*\*SA170 convergence retained-partial checkpoint\b.*?"
-        r"(?=^\s*\*\*Acceptance:)",
-        sa170_block,
-    )
-    assert roadmap_checkpoint is not None
-    roadmap_checkpoint_text = roadmap_checkpoint.group(0)
-
-    rows_block = _roadmap_block(
-        roadmap_text,
-        "  **Unfiltered-suite rows — SA170's four, recovered 2026-09-02.**",
-        "  **Absorbed from SA135 — the full E2E campaign.**",
-    )
-    frozen_rows = re.findall(r"^\s*- `([^`]+)`", rows_block, re.MULTILINE)
-    assert len(frozen_rows) == 4
-    expected_rows = [row.rsplit("::", 1)[-1].split()[0] for row in frozen_rows]
-    cleanup_scopes = re.search(
-        r"exact cleanup scopes\s+`([^`]+)`\s+and `([^`]+)`",
-        roadmap_checkpoint_text,
+    stale_status = re.compile(
+        r"SA170 (?:remains|remain|is) open|phase C-release remains unaccepted",
         re.IGNORECASE,
     )
-    assert cleanup_scopes is not None
-    scopes = list(cleanup_scopes.groups())
-
-    source_documents = {
-        "roadmap": roadmap_checkpoint_text,
-        "changelog": checkpoint_text,
-        **status_consumers,
-    }
-    for name, text in source_documents.items():
+    for name, text in status_consumers.items():
         normalized_text = " ".join(text.split())
-        assert "SA170" in normalized_text, name
-        assert (
-            "setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e"
-            in normalized_text
-        ), name
-        assert "make ci-e2e" in normalized_text, name
-        assert re.search(r"exit(?:ed)?\s+\*{0,2}2\b", normalized_text), name
-        assert re.search(r"Core (?:reported )?\*{0,2}38", normalized_text), name
-        assert re.search(r"CLI (?:reported )?\*{0,2}52", normalized_text), name
-        assert "installed-wheel" in normalized_text, name
-        assert "dependency synchronization" in normalized_text, name
-        assert re.search(r"concurrent .*campaign was not run", normalized_text), name
-        assert re.search(r"exact-scope cleanup", normalized_text, re.IGNORECASE), name
-        assert "PostgreSQL" in normalized_text, name
-        assert "equal" in normalized_text, name
-        assert re.search(
-            r"TA70 (?:remains live|remains open|remain open|is unaccepted)",
-            normalized_text,
-        ), name
-        assert re.search(
-            r"SA170 (?:remains open|remain open|is unaccepted)", normalized_text
-        ), name
-        assert re.search(
-            r"no completion(?:\s+or|,)\s+release-readiness"
-            r"(?:,\s+or\s+downstream-unblocking)?\s+claim",
-            normalized_text,
-            re.IGNORECASE,
-        ), name
-        assert "focused rerun" in normalized_text, name
-        assert re.search(
-            r"fresh ordered serial(?:-then-concurrent| campaign)", normalized_text
-        ), name
-
-    for row in expected_rows:
-        assert row in rows_block, row
-    for source_name, source_text in {
-        "roadmap": roadmap_checkpoint_text,
-        "changelog": checkpoint_text,
-    }.items():
-        normalized_source = " ".join(source_text.split())
-        for scope in scopes:
-            assert scope in normalized_source, (source_name, scope)
-
-    for source_text in (roadmap_checkpoint_text, checkpoint_text):
-        normalized_source = " ".join(source_text.split())
-        assert re.search(
-            r"setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e`"
-            r".{0,80}(?:exited|returned(?: child)? exit) \*{0,2}2\*{0,2}",
-            normalized_source,
-        )
-        assert re.search(r"concurrent .*campaign was not run", normalized_source)
+        assert not stale_status.search(normalized_text), name
 
 
 def _assert_sa167d_status(
     roadmap_text: str,
     context_text: str,
-    docs_index_text: str,
     arch_audit_text: str,
     changelog_text: str,
     decisions_text: str,
@@ -683,7 +587,6 @@ def _assert_sa167d_status(
 
     status_consumers = {
         "CHANGELOG.md": changelog_text,
-        "docs/index.md": docs_index_text,
         "docs/others/arch-audit.md": arch_audit_text,
         "docs/technical/decisions.md": decisions_text,
         "docs/technical/implementation_contract.md": implementation_contract_text,
@@ -697,8 +600,8 @@ def _assert_sa167d_status(
 
     assert "SA167d" not in v88
     assert 18 not in positions
-    assert len(v88) == 11
-    assert len(positions) == 11
+    assert len(v88) == 10
+    assert len(positions) == 10
     assert v88["SA165"].dependencies == frozenset()
     assert E0_ACCEPTED_TIP in changelog_text
     latest_sa167d_entry = re.search(
@@ -727,7 +630,6 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     _assert_sa167d_status(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
-        docs_index,
         (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
         (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
         (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
@@ -737,7 +639,7 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
         (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
         "integration-ready",
     )
-    _assert_sa167c_halted_status(
+    _assert_sa167c_current_status(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
         docs_index,
@@ -749,49 +651,26 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
         ),
         (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
     )
-    _assert_sa170_retained_partial_status(
+    _assert_sa170_final_closeout(
         roadmap,
+        CONTEXT.read_text(encoding="utf-8"),
         (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
         {
-            "docs/index.md": _required_status_block(
-                docs_index,
-                r"(?m)^  - \[v88 Ticket Context\].*$",
-                "docs/index.md",
+            "docs/index.md": docs_index,
+            "docs/others/arch-audit.md": (ROOT / "docs/others/arch-audit.md").read_text(
+                encoding="utf-8"
             ),
-            "docs/others/arch-audit.md": _required_status_block(
-                (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
-                r"(?ms)^\*\*SA170 convergence retained-partial checkpoint.*?(?=^\s*$)",
-                "docs/others/arch-audit.md",
-            ),
-            "docs/others/tech-audit.md": _required_status_block(
-                (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
-                r"(?ms)^- \*\*TA70 ·.*?(?=^\s*$)",
-                "docs/others/tech-audit.md",
-            ),
-            "docs/technical/decisions.md": _required_status_block(
-                (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
-                r"(?m)^\| `django_apps:`.*SA170.*\|$",
-                "docs/technical/decisions.md",
-            ),
-            "docs/technical/implementation_contract.md": _required_status_block(
-                (ROOT / "docs/technical/implementation_contract.md").read_text(
-                    encoding="utf-8"
-                ),
-                r"(?ms)^The \*\*SA170 convergence retained-partial checkpoint.*?(?=\n\n)",
-                "docs/technical/implementation_contract.md",
-            ),
-            "docs/technical/module-extension.md": _required_status_block(
-                (ROOT / "docs/technical/module-extension.md").read_text(
-                    encoding="utf-8"
-                ),
-                r"(?ms)^The \*\*SA170 convergence retained-partial checkpoint.*?(?=\n\n)",
-                "docs/technical/module-extension.md",
-            ),
-            "docs/technical/v88_ticket_context.md": _required_status_block(
-                CONTEXT.read_text(encoding="utf-8"),
-                r"(?ms)^### SA170 convergence retained-partial checkpoint.*?(?=^### )",
-                "docs/technical/v88_ticket_context.md",
-            ),
+            "docs/planning/frontend-e2e-coverage.md": (
+                ROOT / "docs/planning/frontend-e2e-coverage.md"
+            ).read_text(encoding="utf-8"),
+            "docs/technical/implementation_contract.md": (
+                ROOT / "docs/technical/implementation_contract.md"
+            ).read_text(encoding="utf-8"),
+            "docs/technical/module-extension.md": (
+                ROOT / "docs/technical/module-extension.md"
+            ).read_text(encoding="utf-8"),
+            "docs/technical/roadmap.md": roadmap,
+            "docs/technical/v88_ticket_context.md": CONTEXT.read_text(encoding="utf-8"),
         },
     )
 
@@ -805,9 +684,9 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
             "no gate is red",
         ),
         (
-            "Open product work is\n  SA167c F on W2",
-            "Open product work is\n  SA167c E/F on W2",
-            "SA167c E/F",
+            "remaining Phase-F gate is fresh reviewed authority",
+            "remaining Phase-F gate is SA170",
+            "fresh reviewed authority",
         ),
     ],
 )
@@ -826,10 +705,10 @@ def test_v88_sa167c_current_roadmap_blocks_reject_contradictions(
 @pytest.mark.parametrize(
     ("current_claim", "drifted_claim", "error_match"),
     [
-        ("W3 3**", "W3 4**", "lane count drift"),
+        ("W3 2**", "W3 3**", "lane count drift"),
         (
+            "its two positions are a *queue*",
             "its three positions are a *queue*",
-            "its four positions are a *queue*",
             "W3 dependency-graph prose",
         ),
         (
@@ -862,7 +741,6 @@ def test_v88_integration_ready_state_rejects_accepted_open_candidate() -> None:
         _assert_sa167d_status(
             accepted_open_roadmap,
             CONTEXT.read_text(encoding="utf-8"),
-            DOCS_INDEX.read_text(encoding="utf-8"),
             (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
             (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
             (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
@@ -991,7 +869,14 @@ def test_v88_missing_roadmap_dependency_metadata_is_expected_red_canary() -> Non
 
 def test_v88_unknown_roadmap_dependency_is_expected_red_canary() -> None:
     roadmap, context = _load_documents()
-    mutated = roadmap.replace("merge #27 · deps: none", "merge #27 · deps: SA999", 1)
+    entry = next(
+        match
+        for match in OPEN_TICKET_RE.finditer(roadmap)
+        if "deps: none" in match.group(2)
+    )
+    mutated_entry = entry.group(0).replace("deps: none", "deps: SA999", 1)
+    mutated = roadmap.replace(entry.group(0), mutated_entry, 1)
+    assert mutated != roadmap
     with pytest.raises(AssertionError, match="dependencies do not name open tickets"):
         _assert_consistent(mutated, context)
 
@@ -1045,7 +930,7 @@ def test_v88_current_reconciliation_is_not_labelled_ungraded() -> None:
     assert "not independently graded" in latest_sa167c_entry.group(0)
 
 
-def _assert_latest_changelog_status_uses_current_queue_counts(
+def _assert_latest_closeout_uses_current_queue_counts(
     roadmap_text: str, changelog_text: str
 ) -> None:
     roadmap = _roadmap_tickets(roadmap_text)
@@ -1063,22 +948,22 @@ def _assert_latest_changelog_status_uses_current_queue_counts(
         f"{_number_word(len(v88))} open v88 ticket entries across "
         f"{_number_word(len(positions))} open merge positions"
     )
-    latest_sa167d_entry = re.search(
-        r"(?ms)^- \*\*SA167d\b.*?(?=^- \*\*)", changelog_text
+    latest_closeout_entry = re.search(
+        r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text
     )
-    assert latest_sa167d_entry is not None
-    normalized_entry = " ".join(latest_sa167d_entry.group(0).split())
+    assert latest_closeout_entry is not None
+    normalized_entry = " ".join(latest_closeout_entry.group(0).split())
     assert expected in normalized_entry
 
 
-def test_v88_latest_changelog_status_uses_current_queue_counts() -> None:
-    _assert_latest_changelog_status_uses_current_queue_counts(
+def test_v88_latest_closeout_uses_current_queue_counts() -> None:
+    _assert_latest_closeout_uses_current_queue_counts(
         ROADMAP.read_text(encoding="utf-8"),
         (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
     )
 
 
-def test_v88_latest_changelog_count_drift_is_expected_red_canary() -> None:
+def test_v88_latest_closeout_count_drift_is_expected_red_canary() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     v88 = {
@@ -1104,7 +989,7 @@ def test_v88_latest_changelog_count_drift_is_expected_red_canary() -> None:
 
     assert replacement_count == 1
     with pytest.raises(AssertionError):
-        _assert_latest_changelog_status_uses_current_queue_counts(roadmap, mutated)
+        _assert_latest_closeout_uses_current_queue_counts(roadmap, mutated)
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:

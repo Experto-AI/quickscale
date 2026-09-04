@@ -342,24 +342,16 @@ yourself editing either to register a module, the module's own declaration is in
 The companion declaration-gate work remains open under **`SA167c`** at merge #21. Phases A-E are
 accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding
 after `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3. No completion or release-readiness claim is made, SA166 remains dependent, and SA164
+SA170/W3 at that time. SA170's accepted release campaigns have cleared that upstream blocker, but
+fresh reviewed authority and a new F verdict are still required. No SA167c completion or
+release-readiness claim is made, SA166 remains dependent, and SA164
 remains after SA166. Retained-partial-only merge-back of the synchronized nine-file status checkpoint
 is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. This does not alter the module-extension contract
 or authorize edits to the settled manifest implementation.
 
-The **SA170 convergence retained-partial checkpoint (2026-09-04)** records the latest ordered serial
-E2E campaign using `setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e`,
-which exited 2:
-Core reported 38 passed and CLI reported 52 passed / 1 failed at the installed-wheel lifecycle row
-after `poetry install` aborted following dependency synchronization. The concurrent `setsid --wait
-env QS_E2E_INTEGRATION_REF=v88 make ci-e2e` campaign was not run because the serial prerequisite was
-red. Exact-scope cleanup and standing PostgreSQL equality passed, but the quiet transcript did not
-individually attest the other three frozen rows. SA170 remains open and TA70 remains live, and no
-completion, release-readiness, or downstream-unblocking claim is made. A convergence-only focused
-rerun of the installed-wheel row and a diagnostic-copy `poetry install -vvv` both passed, without
-identifying the historical lower-level cause or replacing the required fresh ordered
-serial-then-concurrent campaign with exact-scope cleanup and standing PostgreSQL equality. Reviewed-plan phase C-correct is since accepted and retained at `dcfb136f5980195afd69c2c168afc81e02e118c7` — generated projects hold backend startup until the
-end-of-init database sentinel is observable — while phase C-release remains unaccepted.
+SA170's final ordered serial and concurrent campaigns passed against retained product object
+`dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed local corrections. SA170 and TA70 are
+closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure

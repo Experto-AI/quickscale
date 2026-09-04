@@ -158,6 +158,37 @@ exit 1''',
     assert "LIFECYCLE_" + "RECORD=" not in result.stderr
 
 
+def test_local_lease_security_does_not_leak_restrictive_umask_to_child(
+    tmp_path: Path,
+) -> None:
+    """Lease permissions stay private without making generated files unreadable."""
+    tools, _ = fake_local_lifecycle_tools(tmp_path)
+    expected_umask = subprocess.run(
+        ["/bin/bash", "-c", "umask"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+    result = invoke(
+        "run",
+        "--profile",
+        "restricted",
+        "--",
+        "/bin/bash",
+        "-c",
+        "umask",
+        env={
+            "PATH": f"{tools}:/usr/bin",
+            "TMPDIR": str(tmp_path),
+            "QS_PROVISION_SCOPE": "umask_child",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == expected_umask
+
+
 def test_live_child_probe_failure_still_fails_distinct_group_verification(
     tmp_path: Path,
 ) -> None:

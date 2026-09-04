@@ -31,7 +31,8 @@
       "sa107-cr-002-final-fix": "Regenerated 2026-07-20 — inherited/non-enumerable required-flag regression fix (SA107-CR-002): key in seam.modules replaced with Object.prototype.hasOwnProperty.call; typeof boolean check collapsed into same required-key loop. 4 inherited/non-enumerable regression tests added to validateQuickScaleSeam.test.ts. 2 fixture hashes updated: validateQuickScaleSeam.ts, validateQuickScaleSeam.test.ts (all 3 variants).",
       "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 — added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants).",
       "sa112d": "Regenerated 2026-08-18 — Dockerfile collectstatic now sets one-shot QUICKSCALE_ALLOW_BYPASSRLS=1 alongside QUICKSCALE_NON_DB_COMMAND so the orgs startup guard does not probe the deliberately absent build-time database. 1 fixture hash updated: Dockerfile (all 3 variants).",
-      "sa142": "Regenerated 2026-08-25 — Dockerfile: added fixed QuickScale owner/SA142 contract/bound-digest final-image labels and their digest/contract build args; docker-compose.yml: added stable backend image/direct-Compose fallback, validated resource-prefix interpolation, and fixed owner/lifecycle/scope labels for every generated service, named volume, and default network. Only these two generated files changed; all unrelated paths, hashes, and modes remain authoritative."
+      "sa142": "Regenerated 2026-08-25 — Dockerfile: added fixed QuickScale owner/SA142 contract/bound-digest final-image labels and their digest/contract build args; docker-compose.yml: added stable backend image/direct-Compose fallback, validated resource-prefix interpolation, and fixed owner/lifecycle/scope labels for every generated service, named volume, and default network. Only these two generated files changed; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa170-c-correct": "Regenerated 2026-09-04 — db/init.sql now records the quickscale.init_complete database sentinel after every required initialization statement succeeds; docker-compose.yml now probes that sentinel instead of accepting PostgreSQL connection readiness alone. Only these two generated files changed in all three variants; all unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -89,11 +90,11 @@
     },
     "db/init.sql": {
       "mode": "664",
-      "sha256": "ec11a8e596fa16508ca1b6d402e009c46291b6d6a6c064f7dc524767b768a0d8"
+      "sha256": "34c142c65675abf1dae878e20f0708f500d76a08287c27bba7315c411b081628"
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "88c9eeb943a1dd1f8609d86d5bfc798e1d7be7ebf733323a576044ff3962043e"
+      "sha256": "6f78a4bb546e05c0e789905e228b6e051fb68b3240951a3a115e8a83d99aa546"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -547,11 +548,11 @@
     },
     "db/init.sql": {
       "mode": "664",
-      "sha256": "ec11a8e596fa16508ca1b6d402e009c46291b6d6a6c064f7dc524767b768a0d8"
+      "sha256": "34c142c65675abf1dae878e20f0708f500d76a08287c27bba7315c411b081628"
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "88c9eeb943a1dd1f8609d86d5bfc798e1d7be7ebf733323a576044ff3962043e"
+      "sha256": "6f78a4bb546e05c0e789905e228b6e051fb68b3240951a3a115e8a83d99aa546"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -1005,11 +1006,11 @@
     },
     "db/init.sql": {
       "mode": "664",
-      "sha256": "ec11a8e596fa16508ca1b6d402e009c46291b6d6a6c064f7dc524767b768a0d8"
+      "sha256": "34c142c65675abf1dae878e20f0708f500d76a08287c27bba7315c411b081628"
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "88c9eeb943a1dd1f8609d86d5bfc798e1d7be7ebf733323a576044ff3962043e"
+      "sha256": "6f78a4bb546e05c0e789905e228b6e051fb68b3240951a3a115e8a83d99aa546"
     },
     "frontend/.prettierignore": {
       "mode": "664",

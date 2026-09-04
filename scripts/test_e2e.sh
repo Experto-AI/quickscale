@@ -598,6 +598,7 @@ run_e2e_lane() {
     local lane_container_prefix
     local lane_compose_project
     local lane_resource_scope
+    local lane_pid
     local lane_app_port
     local lane_image_digest
     local lane_cleanup_done=false
@@ -619,14 +620,18 @@ run_e2e_lane() {
     # Every lane gets its own Compose project, container-name prefix, and host
     # port.  In serial mode an explicitly requested port remains unchanged;
     # in concurrent mode it is reserved for Core and CLI receives a free port.
+    # Capture the lane shell PID before command substitution. BASHPID changes
+    # inside each $(...), which previously minted different resource and Compose
+    # suffixes while the log presented them as one Docker scope.
+    lane_pid="$BASHPID"
     lane_prefix_base="$(sanitize_scope "${RUN_SCOPE}-${lane}")"
     lane_prefix_base="${lane_prefix_base:0:48}"
-    lane_resource_scope="$(sanitize_scope "${lane_prefix_base}-${BASHPID}")"
+    lane_resource_scope="$(sanitize_scope "${lane_prefix_base}-${lane_pid}")"
     lane_resource_scope="${lane_resource_scope:0:63}"
     lane_container_prefix="$lane_resource_scope"
     lane_compose_base="$(sanitize_scope "${QS_E2E_COMPOSE_PROJECT_NAME:-$lane_prefix_base}")"
     lane_compose_base="${lane_compose_base:0:48}"
-    lane_compose_project="$(sanitize_scope "${lane_compose_base}-${BASHPID}")"
+    lane_compose_project="$(sanitize_scope "${lane_compose_base}-${lane_pid}")"
     lane_compose_project="${lane_compose_project:0:63}"
     lane_image_digest="${QUICKSCALE_BACKEND_IMAGE_DIGEST:-}"
 
@@ -651,27 +656,44 @@ run_e2e_lane() {
     export QS_E2E_APP_PORT="$lane_app_port"
     export COMPOSE_PROJECT_NAME="$lane_compose_project"
 
+    lane_exact_scopes() {
+        local worker_index
+        printf '%s\n' "$lane_resource_scope"
+        if [ "${E2E_XDIST_WORKERS:-0}" -ge 2 ]; then
+            for ((worker_index = 0; worker_index < E2E_XDIST_WORKERS; worker_index++)); do
+                printf '%s-gw%s\n' "$lane_resource_scope" "$worker_index"
+            done
+        fi
+    }
+
     cleanup_lane() {
+        local exact_scope
         if [ "$lane_cleanup_done" = true ]; then
             return
         fi
         lane_cleanup_done=true
         if [ "$CLEANUP" = true ]; then
-            echo -e "\n${YELLOW}[$lane_label] Cleaning up labelled Docker scope $lane_resource_scope...${NC}"
-            cleanup_scoped_images "$lane_resource_scope" "$lane_image_digest" || cleanup_status=$?
-            cleanup_scoped_resources "$lane_resource_scope" || cleanup_status=$?
+            echo -e "\n${YELLOW}[$lane_label] Cleaning up labelled Docker scopes rooted at $lane_resource_scope...${NC}"
+            while IFS= read -r exact_scope; do
+                cleanup_scoped_images "$exact_scope" "$lane_image_digest" || cleanup_status=$?
+                cleanup_scoped_resources "$exact_scope" || cleanup_status=$?
+            done < <(lane_exact_scopes)
             if [ "${cleanup_status:-0}" -ne 0 ]; then
-                echo -e "${RED}[$lane_label] ✗ Cleanup failed for scope $lane_resource_scope${NC}" >&2
-                echo "[$lane_label] Cleanup command: $SCRIPT_DIR/test_e2e.sh --cleanup-scope $lane_resource_scope" >&2
+                echo -e "${RED}[$lane_label] ✗ Cleanup failed for scopes rooted at $lane_resource_scope${NC}" >&2
+                while IFS= read -r exact_scope; do
+                    echo "[$lane_label] Cleanup command: $SCRIPT_DIR/test_e2e.sh --cleanup-scope $exact_scope" >&2
+                done < <(lane_exact_scopes)
                 return 1
             fi
             echo -e "${GREEN}[$lane_label] ✓ Cleanup complete${NC}"
         else
             echo -e "\n${YELLOW}[$lane_label] Skipping cleanup (--no-cleanup specified)${NC}"
-            echo -e "${BLUE}[$lane_label] Diagnostic scope: $lane_resource_scope${NC}"
-            echo "  docker ps -a --filter label=com.quickscale.owner=quickscale --filter label=com.quickscale.lifecycle=e2e --filter label=com.quickscale.scope=$lane_resource_scope"
-            echo "  docker logs ${lane_container_prefix}_backend"
-            echo "  $SCRIPT_DIR/test_e2e.sh --cleanup-scope $lane_resource_scope"
+            echo -e "${BLUE}[$lane_label] Diagnostic scopes:${NC}"
+            while IFS= read -r exact_scope; do
+                echo "  $exact_scope"
+                echo "    docker ps -a --filter label=com.quickscale.owner=quickscale --filter label=com.quickscale.lifecycle=e2e --filter label=com.quickscale.scope=$exact_scope"
+                echo "    $SCRIPT_DIR/test_e2e.sh --cleanup-scope $exact_scope"
+            done < <(lane_exact_scopes)
         fi
     }
 
@@ -681,7 +703,7 @@ run_e2e_lane() {
 
     echo -e "${BLUE}[$lane_label] Lane: $QS_E2E_LANE${NC}"
     echo "[$lane_label] App host port: $QS_E2E_APP_PORT"
-    echo "[$lane_label] Docker scope: $QS_E2E_COMPOSE_PROJECT_NAME"
+    echo "[$lane_label] Docker scope: $QS_E2E_RESOURCE_SCOPE"
     echo ""
 
     echo -e "${BLUE}[$lane_label] Cleaning up any orphaned test containers...${NC}"

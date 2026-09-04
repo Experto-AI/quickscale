@@ -308,16 +308,19 @@ install_hosted_clients() {
 
 write_lease() {
   local base="$1" mode="$2" endpoint_host="$3" endpoint_port="$4"
+  local previous_umask
   [[ -n "$base" && -d "$base" ]] || die "lease parent is unavailable"
   LEASE_DIR=$(mktemp -d "$base/quickscale-postgres.XXXXXX")
   chmod 700 "$LEASE_DIR"
   LEASE_FILE="$LEASE_DIR/lease"
+  previous_umask=$(umask)
   umask 077
   LEASE_TOKEN=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
   [[ ${#LEASE_TOKEN} -eq 64 ]] || die "high-entropy lease token unavailable"
   printf 'mode=%s\nprofile=%s\nendpoint_host=%s\nendpoint_port=%s\nscope=%s\ncontainer_id=%s\nhelper_pid=%s\ndescription_digest=%s\ntoken=%s\n' \
     "$mode" "$PROFILE" "$endpoint_host" "$endpoint_port" "$SCOPE" "$CONTAINER_ID" "$$" "$DESCRIPTION_DIGEST" "$LEASE_TOKEN" > "$LEASE_FILE"
   chmod 600 "$LEASE_FILE"
+  umask "$previous_umask"
   export QUICKSCALE_POSTGRES_LEASE="$LEASE_FILE" QUICKSCALE_POSTGRES_LEASE_TOKEN="$LEASE_TOKEN"
 }
 

@@ -203,6 +203,14 @@ def _lane_ports(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
     }
 
 
+def _lane_docker_scopes(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    return {
+        line.removeprefix("[").split("]", 1)[0].lower(): line.rsplit(":", 1)[1].strip()
+        for line in result.stdout.splitlines()
+        if "Docker scope:" in line
+    }
+
+
 def _max_active(events: list[str]) -> int:
     active = 0
     maximum = 0
@@ -256,6 +264,52 @@ def test_serial_opt_out_forwards_flags_and_preserves_cleanup_mode(tmp_path: Path
     assert any("CALL|cli|" in event and "-k smoke" in event for event in calls)
     assert all(" -q" not in event for event in calls)
     assert result.stdout.count("Skipping cleanup (--no-cleanup specified)") == 2
+
+
+def test_diagnostic_output_names_every_exact_xdist_scope(tmp_path: Path) -> None:
+    """The presented Docker scope and retained worker scopes must be actionable."""
+    result = _run(
+        tmp_path,
+        "--no-cleanup",
+        QS_E2E_XDIST_WORKERS="3",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    output_lines = result.stdout.splitlines()
+    for lane, root_scope in _lane_docker_scopes(result).items():
+        lane_label = "Core" if lane == "core" else "CLI"
+        diagnostic_header = next(
+            index
+            for index, line in enumerate(output_lines)
+            if f"[{lane_label}] Diagnostic scopes:" in line
+        )
+        next_lane = next(
+            (
+                index
+                for index in range(diagnostic_header + 1, len(output_lines))
+                if output_lines[index].endswith("Lane: core")
+                or output_lines[index].endswith("Lane: cli")
+            ),
+            len(output_lines),
+        )
+        diagnostic_block = output_lines[diagnostic_header:next_lane]
+        assert f"  {root_scope}" in diagnostic_block
+        for worker_index in range(3):
+            assert f"  {root_scope}-gw{worker_index}" in diagnostic_block
+
+
+def test_normal_cleanup_enumerates_every_exact_xdist_scope(tmp_path: Path) -> None:
+    """Lane cleanup must reclaim parent and worker-labelled resources."""
+    result = _run(tmp_path, QS_E2E_XDIST_WORKERS="3")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    docker_events = (tmp_path / "docker.log").read_text(encoding="utf-8").splitlines()
+    for root_scope in _lane_docker_scopes(result).values():
+        expected_scopes = [root_scope, *(f"{root_scope}-gw{i}" for i in range(3))]
+        for exact_scope in expected_scopes:
+            assert any(
+                f"label=com.quickscale.scope={exact_scope}" in event for event in docker_events
+            )
 
 
 def test_parallel_explicit_port_is_reserved_for_core_lane(tmp_path: Path) -> None:

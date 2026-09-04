@@ -4,6 +4,28 @@
 
 ## v88 development — 2026-08-21
 
+- **SA170 and TA70 closed — ordered serial and concurrent release campaigns accepted
+  (2026-09-04).** Final acceptance ran against retained product object
+  `dcfb136f5980195afd69c2c168afc81e02e118c7` on `v88` at `78fcfc3a` plus the reviewed local
+  corrections. First, `setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make
+  test-e2e` exited **0**: Core reported **38 passed in 412.69s**, CLI reported **54 passed in
+  623.94s**, both lane scopes completed pre-cleanup and exact labelled cleanup, and the runner
+  reported `✓ All E2E Tests Passed!`. Only after that green prerequisite,
+  `setsid --wait env QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited **0**: all twelve CI stages
+  passed, including the registered static, coverage, unit, integration, and concurrent E2E gates;
+  the concurrent E2E stage reported Core **37 passed / 1 environment skip** (the npm-registry probe)
+  and CLI **54 passed**, with both exact lane cleanups complete and final `✓ All CI Checks Passed!`.
+  The four frozen rows were included in the green Core/CLI E2E collections. Post-campaign inspection
+  found no scoped E2E containers; the standing `qscaletest` resources and PostgreSQL `pg18-af10`
+  identity, mount, catalog ownership, and role flags remained intact. This accepts phase C-release,
+  closes SA170 and tech-audit TA70, retires merge position **#27**, and removes their current
+  planner/context entries under the open-work-only policy. The queue is now **ten open v88 ticket
+  entries across ten open merge positions**, lanes are **W1 3 · W2 5 · W3 2**, and SA171 is W3's
+  head with `deps: none`. The release gate is green, so SA165 is no longer completion-frozen and
+  SA167c Phase F is no longer blocked by W3; SA167c remains open and unaccepted at F until a
+  maintainer grants fresh reviewed authority and a fresh verdict is run. **Decisions needed:** fresh
+  SA167c Phase-F authority; confirmation or reversal of the still-unstarted SA174/SA175 lane move.
+
 - **SA170 phase C-correct accepted — initialized-database readiness retained (2026-09-04).**
   Generated projects now hold backend startup until a query against the target database observes the
   end-of-init sentinel; the Docker behavior regression proves PostgreSQL accepting connections before

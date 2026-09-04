@@ -145,6 +145,12 @@ def _cleanup_labelled_resources(scope: str) -> None:
             )
 
 
+def _prepare_e2e_resource_scope(scope: str, port: int) -> None:
+    """Remove prior-test resources even when the next failure will be retained."""
+    _cleanup_labelled_resources(scope)
+    wait_for_port_release(port, timeout=5.0)
+
+
 def _last_container_logs(container_name: str) -> str:
     """Return the last twenty log lines, retaining a useful failure fallback."""
     try:
@@ -258,6 +264,24 @@ def test_wait_for_container_running_timeout_reports_last_structured_state(
 
 
 @pytest.mark.e2e
+def test_retention_mode_still_precleans_prior_test_resources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Diagnostic retention must not feed one successful test's state to the next."""
+    cleanup = Mock()
+    wait = Mock()
+    monkeypatch.setenv("QS_E2E_NO_CLEANUP", "1")
+    monkeypatch.setattr(__name__ + "._cleanup_labelled_resources", cleanup)
+    monkeypatch.setattr(__name__ + ".wait_for_port_release", wait)
+
+    _prepare_e2e_resource_scope("run-scope-gw0", 43123)
+
+    assert _retain_e2e_resources()
+    cleanup.assert_called_once_with("run-scope-gw0")
+    wait.assert_called_once_with(43123, timeout=5.0)
+
+
+@pytest.mark.e2e
 class TestDevelopmentCommandsE2E:
     """End-to-end tests for development commands with real Docker containers."""
 
@@ -349,14 +373,11 @@ class TestDevelopmentCommandsE2E:
         """Ensure this lane's containers are stopped before each test."""
         if request.node.name.startswith("test_sa142"):
             return
-        if _retain_e2e_resources():
-            return
         container_prefix = self._container_prefix()
         try:
-            _cleanup_labelled_resources(container_prefix)
-            # Wait for Docker's proxy process to release ports
-            wait_for_port_release(
-                int(os.environ.get("QS_E2E_APP_PORT", "8000")), timeout=5.0
+            _prepare_e2e_resource_scope(
+                container_prefix,
+                int(os.environ.get("QS_E2E_APP_PORT", "8000")),
             )
         except Exception as error:
             raise RuntimeError(f"labelled pre-test cleanup failed: {error}") from error
@@ -534,9 +555,6 @@ class TestDevelopmentCommandsE2E:
             os.chdir(project_name)
 
             try:
-                # Remove stale volumes from previous interrupted runs for this project name.
-                runner.invoke(cli, ["down", "--volumes"], env=env)
-
                 # show_docker_output=N -> proceed=Y
                 apply_input = "n\ny\n"
                 result = runner.invoke(
@@ -552,7 +570,8 @@ class TestDevelopmentCommandsE2E:
                 assert "Migrations failed" not in result.output
 
             finally:
-                runner.invoke(cli, ["down", "--volumes"], env=env)
+                if not _retain_e2e_resources():
+                    runner.invoke(cli, ["down", "--volumes"], env=env)
                 os.chdir(original_cwd)
 
     def test_up_down_lifecycle(self, test_project, ensure_docker_running, docker_env):
