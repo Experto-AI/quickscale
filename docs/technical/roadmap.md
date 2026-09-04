@@ -655,20 +655,33 @@ triggers.
   unretained lower-level cause. A fresh ordered serial campaign followed, only if green, by the
   concurrent campaign remains required, with exact-scope cleanup and standing PostgreSQL equality.
   **Decisions needed:** none.
-  **Truthful handoff checkpoint.** **Completed:** the dependency-security, manifest-parity,
-  provisioning pipefail, lane-port, cleanup-evidence, and current-status consistency corrections
-  are retained at `696c57e7aca9579793ce1f91d707fe0dc84fc877` and are now integration-branch state,
-  merged into `v88` at `da48feca`; `wt-track3` is level with `v88`.
-  **Pending:** Phase C still needs a fresh ordered `QS_E2E_PARALLEL=0 make test-e2e` campaign followed,
-  only if green, by `make ci-e2e`, exact-scope cleanup, and standing PostgreSQL before/after equality.
-  **Blocking:** release acceptance remains unavailable until a fresh ordered serial campaign passes
-  and the concurrent campaign then passes on unchanged product bytes. **Decisions needed:** none.
-  **Remaining plan:** do not redo the retained dependency, manifest, provisioning, port, or status
-  corrections. Run the fresh serial campaign first; if the installed-wheel failure recurs, retain its
+  **Truthful handoff checkpoint (measured 2026-09-04; retained partial, no completion claim).**
+  **Completed:** reviewed-plan phase C-correct is accepted. Fresh generated projects now hold backend
+  startup until a query against the target database observes the end-of-init sentinel, and the Docker
+  behavior regression proved PostgreSQL accepting connections before initialization remains unhealthy
+  while completed initialization becomes healthy. The dependency-security, manifest-parity,
+  provisioning pipefail, lane-port, cleanup-evidence, current-status consistency, and initialized-
+  database readiness corrections are retained in product object
+  `dcfb136f5980195afd69c2c168afc81e02e118c7`, fast-forwarded into `v88`. The readiness correction was
+  applied after terminal attestation and carries only the terminal-remediation author's grade; its
+  focused behavior check passed with one test in 4.95 seconds, but that is not release evidence.
+  **Pending:** reviewed-plan phase C-release remains unaccepted. On unchanged retained product bytes, run
+  `setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e`; only if it exits 0,
+  run `setsid --wait env QS_E2E_INTEGRATION_REF=v88 make ci-e2e`. Preserve individual results for the
+  four frozen rows, prove exact-scope cleanup and private-provision cleanup, and compare the standing
+  PostgreSQL identity, volume, catalog, and role projections byte-for-byte before and after.
+  **Blocking:** the latest serial campaign exited 2 after Core reported 38 passed and CLI reported
+  52 passed / 1 failed at the installed-wheel lifecycle dependency-install row. The concurrent campaign
+  therefore did not run, so release acceptance remains unavailable. If that failure recurs, retain its
   complete lower-level Poetry output and apply only a causally supported correction before restarting
-  the ordered campaigns. Close SA170/TA70 only on green serial-then-concurrent evidence with exact-scope
-  cleanup and standing PostgreSQL equality. The retained commit and this exact resume sequence are the
-  cold-start authority.
+  the ordered campaigns. **Decisions needed:** none.
+  **Remaining plan:** plan authority `EV-6` remains binding for the unfinished release work in phase
+  C-release. Resume from retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` and the first
+  serial command above; do not redo accepted phase C-correct or the earlier retained dependency,
+  manifest, provisioning, port, cleanup, or status corrections. Close SA170/TA70 only on green
+  serial-then-concurrent evidence with all four row oracles, exact cleanup, and standing PostgreSQL
+  equality. SA170 remains open and unchecked, TA70 remains live, and no downstream-unblocking claim is
+  authorized.
   **Acceptance:** the React build image is tagged from `QS_E2E_RESOURCE_SCOPE` and carries the same
   `com.quickscale.{owner,lifecycle,scope}` labels as every other E2E resource, so
   `scripts/test_e2e.sh --cleanup-scope <scope>` reclaims it and no fixed tag remains in any test;
