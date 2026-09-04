@@ -110,11 +110,11 @@ lengthen it. W1's three positions are band-C generated-output work and set no da
 **Operationally, the release path runs through W3 first.** The formal chain is W2's, but SA167c's F
 verdict cannot be re-run until SA170 (#27) makes the E2E surface green, so the *effective* longest
 chain to the release gate is **SA170 ─► SA167c F ─► (SA166 ─► SA164, band-C tail)**. SA170's static
-blockers remain repaired, but the latest ordered serial E2E campaign exited 2 on the installed-wheel
-CLI row before the concurrent release campaign could run. The single critical-path action is therefore
-to run a fresh ordered serial-then-concurrent campaign after a convergence-only focused rerun and a
-diagnostic-copy install both passed without identifying the historical lower-level cause; no
-maintainer decision gates the work.
+blockers remain repaired and its phase **C-correct is accepted**: generated projects now hold backend
+startup until the end-of-init sentinel is observable, retained at
+`dcfb136f5980195afd69c2c168afc81e02e118c7`. The single critical-path action is phase **C-release** —
+one ordered serial campaign on those unchanged product bytes and, only if it exits 0, the concurrent
+campaign. No maintainer decision gates the work.
 
 **No formal cross-worktree ticket dependency edge remains.** The failed F verdict is an operational
 cross-worktree blocker until SA170/W3's owned E2E surface is green. One cross-worktree *shared file*
@@ -181,7 +181,7 @@ W1 and W2 state blocks moved.
 
 ### Lane state
 
-**Measured 2026-09-03** against `v88` at `10163566460ab3fa68c8480dc793d905092bdb40`. Never trust a
+**Measured 2026-09-04** against `v88` at `8758a849a3e38cd25ef147334eca8a4b00ec8fd1`. Never trust a
 transcribed count; re-measure before acting.
 
 ```bash
@@ -193,9 +193,9 @@ worktree, the right column the reverse.
 
 | Worktree | behind / ahead | Tip | Standing |
 |---|---|---|---|
-| `wt-track1` | 5 / 0 | `a14ea029` | clean; SA167d's conditional post-integration candidate is integrated at exact-tip, and SA165's retained A-C product merged at `3f925b96` |
-| `wt-track2` | 11 / 0 | `35dfa3c9` | clean; SA167c's retained A-E product object remains authoritative and F remains halted |
-| `wt-track3` | 0 / 0 | `10163566` | clean and level with `v88`; SA170's retained A/B product and its convergence handoff merged at `da48feca` |
+| `wt-track1` | 8 / 0 | `a14ea029` | clean; SA167d's conditional post-integration candidate is integrated at exact-tip, and SA165's retained A-C product merged at `3f925b96` |
+| `wt-track2` | 14 / 0 | `35dfa3c9` | clean; SA167c's retained A-E product object remains authoritative and F remains halted |
+| `wt-track3` | 0 / 0 | `8758a849` | clean and level with `v88`; SA170's retained A/B product, its convergence handoff, and the accepted C-correct readiness fix are all integrated |
 
 **No lane carries unintegrated work — all three are `0 ahead`.** Every retained partial checkpoint
 has reached `v88`, so nothing is waiting on an integration step; each lane syncs current `v88` and
@@ -234,17 +234,16 @@ complete and the standing state was restored exactly.
   `make ci-e2e`, and that gate is currently red for SA170-owned reasons, so **SA165 can be advanced
   but not completed today**. That is a gate-ownership constraint under the standing red-gate rule,
   not a ticket dependency: SA165's `deps:` stay `none`.
-- **W3 — retain SA170 (#27) and resolve the latest ordered E2E failure.** This is the only work that
-  moves the release date. #27 has `deps: none`; its A/B product and dependency/return-141 repairs
-  remain retained, but the 2026-09-04 serial campaign exited 2 at
-  `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py::test_installed_wheel_plan_apply_up_all_modules`
-  when `poetry install` aborted after dependency sync. The concurrent `make ci-e2e` campaign was not
-  run because the ordered serial prerequisite was red. Diagnose that exact failure without mutating
-  the standing service or retrying either campaign. A convergence-only focused rerun and a
-  diagnostic-copy install both passed, but did not identify the historical lower-level cause; run a
-  fresh ordered serial campaign followed, only if green, by the concurrent campaign, with exact-scope
-  cleanup and PostgreSQL before/after equality. SA171 (#28) stays the lane's DB-free fallback only if
-  the Docker slot is unavailable.
+- **W3 — retain SA170 (#27) and run phase C-release.** This is the only work that moves the release
+  date. #27 has `deps: none`; its A/B product, the dependency/return-141 repairs, and the accepted
+  C-correct initialized-database readiness fix are retained in `dcfb136f`. On those unchanged product
+  bytes run `setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e`; only if it
+  exits 0, run `setsid --wait env QS_E2E_INTEGRATION_REF=v88 make ci-e2e`. Preserve individual results
+  for the four frozen rows, prove exact-scope and private-provision cleanup, and compare the standing
+  PostgreSQL identity, volume, catalog, and role projections before and after. If the installed-wheel
+  dependency-install row fails again, retain its complete lower-level Poetry output and apply only a
+  causally supported correction before restarting the ordered campaigns. SA171 (#28) stays the lane's
+  DB-free fallback only if the Docker slot is unavailable.
 
 ### Track readiness — the three states
 
@@ -254,7 +253,7 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W3** | SA170 (#27) | **yes** — `deps: none`; the focused installed-wheel row is green and the fresh ordered campaign is runnable | **yes** — both ordered campaigns remain W3-owned; release acceptance is not yet demonstrated | **yes** — no ticket is ordered ahead of #27 | **yes** — it gates the release verdict |
+| **W3** | SA170 (#27) | **yes** — `deps: none`; C-correct is accepted and the ordered C-release campaign is runnable on retained bytes | **yes** — both ordered campaigns remain W3-owned; release acceptance is not yet demonstrated | **yes** — no ticket is ordered ahead of #27 | **yes** — it gates the release verdict |
 | **W2** | SA174 (#31) | **yes** — `deps: none`, DB-free, no shared file with the halted chain | **no** — its closeout needs a green release gate, owned by SA170 (#27) | **retained partial yes; completion no** until SA170 (#27) is green | no |
 | **W1** | SA165 (#22) | **yes** — `deps: none`; Phase D's documentation reconciliation is runnable today | **no** — Phase D ends in `make ci-e2e`, red for reasons owned by SA170 (#27) | **retained partial yes; completion no** until SA170 (#27) is green | no |
 
@@ -382,9 +381,8 @@ Before any ticket work, measure each lane against current `v88`; when a worktree
   queue.
 - **Band-C filler must not displace a *runnable* band-B leg** (amended and settled 2026-08-31). A
   band-B leg halted on an open decision does not hold its lane idle; the intent is no queue-jumping
-  ahead of work that could actually proceed. It briefly authorized SA171 (#28) to take W3's head while
-  the prior band-B head was halted; that head then became runnable, so #28 returned to its place. The rule is what keeps a
-  decision-halted lane from idling next time.
+  ahead of work that could actually proceed. It is what keeps a
+  decision-halted lane from idling.
 
 ### Merge order
 
@@ -418,9 +416,9 @@ product commit `91fd3bb6e6b638735361b511c1515cddccce5d15`; F release validation 
 after 2 Core and 8 CLI E2E failures, so the retained checkpoint clears no gate. #22 is now eligible
 with `deps: none` after SA167d's conditional closeout candidate.
 #27 is W3's head, carries the transferred Docker/E2E obligation with `deps: none`, and is
-**the only runnable critical-path ticket**. Its static blockers remain resolved and the focused
-installed-wheel row is green; Phase C still requires a fresh ordered serial campaign followed, only
-if green, by the concurrent campaign.
+**the only runnable critical-path ticket**. Its static blockers remain resolved and phase C-correct
+is accepted; phase C-release still requires a fresh ordered serial campaign followed, only if green,
+by the concurrent campaign.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Two are
@@ -936,9 +934,7 @@ Recorded so the absence is a decision rather than an oversight.
 | `generated-file-ownership-unmodeled` (arch rank 2) — **substance only** | arch, deferred | Held by the standing **"neither"** rule, and by the settled decision that **`quickscale_devtools` is maintainer-internal and will not be published** (2026-08-31) — the fact that holds this finding's severity down. Trigger: a third generated-project consumer, public updater, emitted-file expansion, or second theme. Options 1 and 2 (typed disposition metadata; a versioned ownership manifest with vintage negotiation) stay behind it. Its **trigger-independent first step is ticketed as SA175 (#32)** under the carve-out in the standing rules. Related weakness tracked in SA152. |
 | `deletion-invariants-per-boundary-reimplementation` (arch rank 3) | arch, deferred | Same rule. Trigger: `teams`, a GDPR erasure command, bulk-admin deletion, or a second deletion boundary. Design together with `org-model-universe-hand-enumerated` at `teams` kickoff. |
 | `org-model-universe-hand-enumerated` (arch rank 4) | arch, deferred | Same rule. Trigger: `teams` adds a tenant model, or a module adds a `PROTECT`/non-deferrable dependency among purge-owned rows. |
-| Tooling gaps — dependency-vulnerability scanner, security static analysis | tech | Closed by SA123's implemented and accepted Trivy/Bandit gates; evidence archived in [CHANGELOG.md](../../CHANGELOG.md). |
 | Watch items recorded as deliberate | tech *Notes* | Integration-branch CI, generator lock-generation policy, the DB-free healthcheck, CRM/billing cross-tenant `all_objects` count fallbacks, and rename-atomic-but-not-durable state writes are each argued and accepted in the audit; re-examine only on the triggers stated there. |
-| Four formerly suppressed `sqlparse` CVEs | tech *Notes* | **Repaired 2026-09-02 during SA170 convergence.** The root pins sqlparse 0.6.0, the obsolete suppressions are removed, and the vulnerability gate is green. No expiry-date revisit remains. |
 | `blog/feeds.py` double System-org resolution | tech *Notes* | Narrow trigger (a corrupt singleton row). Not promoted; re-examine if a second fail-closed feed path appears. |
 | `table_has_force_rls` schema qualification | tech *Notes* | Single-schema deployments unaffected. Trigger: a schema-per-tenant option. |
 | Tooling gap — CSRF helper test | tech | An acceptance criterion inside **SA160**, not a separate item. |

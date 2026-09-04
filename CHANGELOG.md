@@ -4,6 +4,35 @@
 
 ## v88 development — 2026-08-21
 
+- **SA170 phase C-correct accepted — initialized-database readiness retained (2026-09-04).**
+  Generated projects now hold backend startup until a query against the target database observes the
+  end-of-init sentinel; the Docker behavior regression proves PostgreSQL accepting connections before
+  initialization stays unhealthy while completed initialization becomes healthy. Retained in product
+  object `dcfb136f5980195afd69c2c168afc81e02e118c7` and fast-forwarded into `v88` at `8758a849`. The
+  correction was applied after terminal attestation and carries only the terminal-remediation author's
+  grade; its focused behavior check passed with one test in 4.95 s, which is not release evidence.
+  Phase C-release remains unaccepted, SA170 stays open at #27, and TA70 stays live.
+
+- **Roadmap cleanup and rebalance review (2026-09-04, tenth pass) — no ticket closed; the queue and
+  the lane assignment are unchanged.** Live counts stand at tech S3 **2** / S4 **3** / **5 open** and
+  the queue at eleven open ticket entries across eleven open merge positions; lanes remain **W1 3 ·
+  W2 5 · W3 3** and every open ticket carries a track. The 2026-09-03 SA174/SA175 move to W2 was
+  re-tested against the three questions and still stands, so **no new move is proposed** and Decision 2
+  remains open and still free to reverse. **Freshness corrections:** lane measurement re-taken against
+  `v88` at `8758a849` — `wt-track1` 8/0 at `a14ea029`, `wt-track2` 14/0 at `35dfa3c9`, `wt-track3` 0/0
+  and level; the critical-path, next-action, merge-order, and readiness prose replaced "diagnose the
+  installed-wheel failure" with the accepted C-correct fix and the runnable C-release campaign; and
+  `docs/index.md`, both audits, `v88_ticket_context.md`, `implementation_contract.md`, and
+  `module-extension.md` each record the C-correct acceptance alongside the unchanged campaign status.
+  **Fluff removed:** the two closed rows in the deliberately-not-ticketed table (the Trivy/Bandit
+  tooling gaps closed by SA123 and the four `sqlparse` CVE suppressions retired by the 0.6.0 upgrade),
+  both already archived here, and the retired band-C displacement anecdote about SA171 briefly taking
+  W3's head. **Readiness is unchanged:** only W3 is truly green and on the critical path; W1 and W2
+  can start and can merge retained partials but cannot reach a checked box while `make ci-e2e` is red
+  under SA170's ownership — a hard dependency no maintainer decision clears.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` returned **31 passed** before and
+  after every edit.
+
 - **SA170 convergence retained-partial checkpoint — C-release serial campaign red; concurrent campaign not
   entered (2026-09-04).** C-correct's two product files were verified byte-identical to reviewed
   state `a5582444f594ccbe64178ce10a620d8c53d61f0a` before the external run and unchanged after it.

@@ -302,7 +302,8 @@ individually attest the other three frozen rows. A convergence-only focused reru
 row and a diagnostic-copy `poetry install -vvv` both passed, but neither identifies the historical
 lower-level cause or replaces a fresh ordered serial-then-concurrent campaign with exact-scope cleanup
 and standing PostgreSQL equality. This is release evidence only: SA170 remains open and TA70 remains
-live, SA167c remains halted, and no completion or release-readiness claim is made.
+live, SA167c remains halted, and no completion or release-readiness claim is made. Reviewed-plan phase C-correct is since accepted and retained at `dcfb136f5980195afd69c2c168afc81e02e118c7` — generated projects hold backend startup until the
+end-of-init database sentinel is observable — while phase C-release remains unaccepted.
 The SA167a ownership guard checks executable source rather than one constructor shape,
 including helper, variable, and alternate-constructor forms.
 

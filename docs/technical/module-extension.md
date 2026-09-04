@@ -358,7 +358,8 @@ individually attest the other three frozen rows. SA170 remains open and TA70 rem
 completion, release-readiness, or downstream-unblocking claim is made. A convergence-only focused
 rerun of the installed-wheel row and a diagnostic-copy `poetry install -vvv` both passed, without
 identifying the historical lower-level cause or replacing the required fresh ordered
-serial-then-concurrent campaign with exact-scope cleanup and standing PostgreSQL equality.
+serial-then-concurrent campaign with exact-scope cleanup and standing PostgreSQL equality. Reviewed-plan phase C-correct is since accepted and retained at `dcfb136f5980195afd69c2c168afc81e02e118c7` — generated projects hold backend startup until the
+end-of-init database sentinel is observable — while phase C-release remains unaccepted.
 
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure

@@ -60,7 +60,9 @@ remains halted, and no completion or release-readiness claim is made. A converge
 rerun of the installed-wheel row and a diagnostic-copy `poetry install -vvv` both passed; neither
 retroactively greens the failed campaign or identifies its unretained lower-level cause. Closure
 still requires a fresh ordered serial-then-concurrent campaign with exact-scope cleanup and standing
-PostgreSQL equality.
+PostgreSQL equality. Reviewed-plan phase C-correct is since accepted and retained at
+`dcfb136f5980195afd69c2c168afc81e02e118c7` — generated projects now hold backend startup until the
+end-of-init database sentinel is observable — while phase C-release remains unaccepted.
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
 and the completion ledger archived SA167d and retired merge position #18. SA165 is released with

@@ -229,7 +229,10 @@ completion, release-readiness, or downstream-unblocking claim is made. A converg
 rerun of the installed-wheel row passed in **165.84s**, and `poetry install -vvv` returned 0 in a
 diagnostic copy of the retained project. Those checks neither reveal the historical lower-level cause
 nor replace the required fresh ordered serial campaign followed, only if green, by the concurrent
-campaign, with exact-scope cleanup and standing PostgreSQL equality.
+campaign, with exact-scope cleanup and standing PostgreSQL equality. Reviewed-plan phase C-correct is
+since accepted and retained at `dcfb136f5980195afd69c2c168afc81e02e118c7` — generated projects hold
+backend startup until the end-of-init database sentinel is observable — while phase C-release remains
+unaccepted.
 
 ### Why the old acceptance criterion could not be met
 
