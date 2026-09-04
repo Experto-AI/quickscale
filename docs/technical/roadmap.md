@@ -176,7 +176,7 @@ W1 and W2 state blocks moved.
 
 ### Lane state
 
-**Measured 2026-09-04** against `v88` at `78fcfc3a30b5ecf1f42f0b44dcf7c7a307ce4e83`. Never trust a
+**Measured 2026-09-04** against `v88` at `ef2297f8`. Never trust a
 transcribed count; re-measure before acting.
 
 ```bash
@@ -190,19 +190,18 @@ worktree, the right column the reverse.
 |---|---|---|---|
 | `wt-track1` | 9 / 0 | `a14ea029` | clean; SA167d's conditional post-integration candidate is integrated at exact-tip, and SA165's retained A-C product merged at `3f925b96` |
 | `wt-track2` | 15 / 0 | `35dfa3c9` | clean; SA167c's retained A-E product object remains authoritative and F awaits fresh authority |
-| `wt-track3` | 0 / 0 | `78fcfc3a` | accepted SA170 closeout candidate in the working tree |
+| `wt-track3` | 0 / 0 | `ef2297f8` | clean; accepted SA170 closeout delivered to `v88` |
 
-**No lane branch is ahead, but W3 carries the accepted SA170 closeout as a reviewed working-tree
-candidate.** It is ready for maintainer commit and merge through the normal ref-authority path before
-the other lanes are synced. SA167c remains open because Phase F has not received a fresh authority
-or verdict.
+**No lane branch is ahead, and W3's accepted SA170 closeout was committed and fast-forward merged
+into `v88` at `ef2297f8`.** SA167c remains open because Phase F has not received fresh authority or a
+verdict.
 
-### SA170 retained closeout handoff — exact-diff review complete; Git delivery remains
+### SA170 retained closeout handoff — reviewed and delivered
 
-**Selected-task status at this handoff (2026-09-04): no SA170 implementation or validation phase
-remains.** The retained 17-file working-tree candidate is intentionally preserved. Calling the
-working tree a *partial improvement* describes its uncommitted/unmerged delivery state, not an
-unfinished SA170 product phase. The roadmap therefore carries no checked SA170 entry: under the
+**Selected-task status after delivery (2026-09-04): no SA170 implementation, validation, review, or
+delivery phase remains.** The retained 17-file candidate was preserved and delivered at `ef2297f8`.
+Calling it a *partial improvement* described its former uncommitted/unmerged state, not an unfinished
+SA170 product phase. The roadmap therefore carries no checked SA170 entry: under the
 open-work-only policy its completed work is archived in [CHANGELOG.md](../../CHANGELOG.md), while
 this section records the exact boundary the next maintainer must preserve.
 
@@ -222,25 +221,24 @@ this section records the exact boundary the next maintainer must preserve.
    is retired, SA171 is the dependency-free W3 head, the queue/lane counts are reconciled, and the
    focused consistency contract covers the new state.
 
-**Pending or blocking for this selected task:** no product, test, documentation, reviewed-plan
-implementation, or exact-diff review phase is pending. The complete 17-file candidate was reviewed
-as one closeout set on 2026-09-04; no substantive correctness, scope, compatibility, or integration
-defect was found. The required focused consistency command returned **31 passed**, and the generated
-emission-manifest parity class returned **7 passed**. The only remaining boundary is repository
-delivery: preserve the reviewed candidate and let a maintainer with Git authority commit and merge it
-into `v88`. The prior second-pass reviewer's incomplete report blocked that delivery step; it did not
-produce a correctness finding and does not reopen SA170, TA70, or any accepted phase.
+**Pending or blocking for this selected task:** none. No product, test, documentation, reviewed-plan
+implementation, exact-diff review, or Git-delivery phase is pending. The complete 17-file candidate
+was reviewed as one closeout set on 2026-09-04; no substantive correctness, scope, compatibility, or
+integration defect was found. The required focused consistency command returned **31 passed**, and
+the generated emission-manifest parity class returned **7 passed**. A maintainer with Git authority
+committed the reviewed candidate and fast-forward merged it into `v88` at `ef2297f8`. The prior
+second-pass reviewer's incomplete report delayed that delivery; it did not produce a correctness
+finding and does not reopen SA170, TA70, or any accepted phase.
 
 **Decisions required to continue cleanly:** none for SA170. The two open maintainer decisions below
 belong to future queue execution — fresh SA167c Phase-F authority and confirmation or reversal of
 the unstarted SA174/SA175 lane move. They must not be represented as unfinished SA170 work or used
 to hold this accepted candidate open.
 
-**Remaining delivery plan (not a new implementation plan):**
+**Completed delivery plan (not a new implementation plan):**
 
-1. A maintainer with ref authority commits the reviewed 17-file candidate and merges it into `v88`; no sync
-   merge is needed while both tips remain at `78fcfc3a`. Once this handoff is present on `v88`, that
-   delivery boundary is satisfied by definition.
+1. **Done:** a maintainer with ref authority committed the reviewed 17-file candidate as `ef2297f8`
+   and fast-forward merged it into `v88`.
 2. Re-measure all lane tips before starting future tickets, then execute the per-lane actions below.
    Do not rerun SA170's accepted release campaign merely because delivery moved the ref.
 
