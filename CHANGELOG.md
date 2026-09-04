@@ -4,6 +4,31 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-09-04, eleventh pass) — no ticket closed; the queue
+  and the lane assignment are unchanged.** The queue stands at **ten** open v88 ticket entries across
+  **ten** open merge positions, lanes at **W1 3 · W2 5 · W3 2**, and every open ticket carries a
+  track. Live audit counts are unchanged at tech S3 **2** / S4 **3** / **5 open**, with arch rank-1
+  `privileged-command-set-multi-owner` stale-by-decision until SA174 demotes it.
+  **Fluff removed:** the roadmap's `SA170 retained closeout handoff — reviewed and delivered`
+  section was deleted in full. Its four completed phases, its delivery narrative, and its
+  "nothing pending" attestation are a completion record, not open work, and are already archived in
+  the SA170 closeout entry below; under the open-work-only policy the planner keeps no such log.
+  The per-lane next actions, the merge-order table, and the shared-surface notes already carried
+  every forward-looking claim it made, so nothing schedulable was lost.
+  **Freshness correction:** lane measurement re-taken against `v88` at `b2cf0ca5` — `wt-track1`
+  11/0 at `a14ea029`, `wt-track2` 17/0 at `35dfa3c9`, `wt-track3` 0/0 and level.
+  **Rebalance:** the three questions were re-run against every open ticket and **no new move is
+  proposed.** The critical path is a single authority-gated ticket (SA167c on W2), so no relocation
+  of band-C filler can shorten it; W1's #22 ─► #19 ─► #20 is one ordered generated-output chain and
+  W3's #28 ─► #29 shares an advisory-lock topology. The 2026-09-03 SA174/SA175 move to W2 still
+  stands and Decision 2 remains open and free to reverse at no cost.
+  **Readiness:** W1 (SA165 #22) and W3 (SA171 #28) are **truly green** on all three states but are
+  both off the critical path — filler. W2 is the only critical-path lane and its *can start* and
+  *can finish* cells are "no" for one reason: fresh reviewed authority for SA167c Phase F. That is a
+  **maintainer decision**, not a hard upstream dependency; no other ticket blocks it.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` returned **31 passed** before and
+  after every edit.
+
 - **SA170 and TA70 closed — ordered serial and concurrent release campaigns accepted
   (2026-09-04).** Final acceptance ran against retained product object
   `dcfb136f5980195afd69c2c168afc81e02e118c7` on `v88` at `78fcfc3a` plus the reviewed local
