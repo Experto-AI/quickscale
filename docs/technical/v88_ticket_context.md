@@ -653,9 +653,9 @@ conditional post-integration candidate; exact-tip integration remains pending. S
 with `deps: none`. Ticket metadata lives in the [roadmap](roadmap.md), not here.
 
 SA170's later ordered serial and concurrent campaigns both passed; their final acceptance and the
-earlier retained-partial history are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c is now
-blocked only on fresh reviewed authority for Phase F and remains open until that newly authorized verdict
-passes. Current dependency metadata remains in the roadmap.
+earlier retained-partial history are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c carries no
+blocker: Phase-F authority `EV-7` was granted on 2026-09-04, and it remains open until that
+authorized verdict is run and passes. Current dependency metadata remains in the roadmap.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.

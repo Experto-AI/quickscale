@@ -34,8 +34,9 @@ generated-project updater. Ten open v88 ticket entries run on three tracks acros
 positions; **W2 sets the release date** because SA167c remains open at #21 with phases A-E accepted
 on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3 at that time. SA170's final acceptance has cleared those failures; fresh reviewed authority
-for a new SA167c F verdict is now the release-path gate. W3 holds the exclusive
+SA170/W3 at that time. SA170's final acceptance has cleared those failures and the maintainer
+granted Phase-F authority `EV-7` on 2026-09-04, so running that authorized F verdict is now the
+release-path gate. W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
 **Accepted-open SA167c checkpoint (2026-09-01).** SA167c remains open at merge position **#21**

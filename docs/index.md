@@ -15,7 +15,7 @@
   - [Decisions (authoritative)](technical/decisions.md) - Technical rules and architectural decisions
   - [Scaffolding (layout & templates)](technical/scaffolding.md) - Directory structures and file layouts
   - [Roadmap](technical/roadmap.md) - Development timeline and current tasks
-  - [v88 Ticket Context](technical/v88_ticket_context.md) - Current v88 ledger: ten open v88 ticket entries across ten open merge positions, lanes W1 3 · W2 5 · W3 2; SA170/TA70 are closed after accepted ordered serial and concurrent release campaigns; SA167c remains open at #21 with phases A-E accepted and Phase F awaiting fresh reviewed authority; SA165 and SA171 are runnable with `deps: none`
+  - [v88 Ticket Context](technical/v88_ticket_context.md) - Current v88 ledger: ten open v88 ticket entries across ten open merge positions, lanes W1 3 · W2 5 · W3 2; SA170/TA70 are closed after accepted ordered serial and concurrent release campaigns; SA167c remains open at #21 with phases A-E accepted and its authorized Phase-F verdict (`EV-7`, granted 2026-09-04) not yet run; SA165 and SA171 are runnable with `deps: none`
   - [User Manual](technical/user_manual.md) - Commands and workflows
   - [Development](technical/development.md) - Dev environment setup
   - [Plan/Apply System](technical/plan-apply-system.md) - Terraform-style workflow

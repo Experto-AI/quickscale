@@ -4,14 +4,15 @@ The roadmap is the sole home for schedulable metadata.  The context page may exp
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
-tree state.  The integration-ready SA167d closeout, authority-gated SA167c, and closed SA170
-statuses are checked as current consumer contracts below; those checks are not mutation canaries.
+tree state.  The integration-ready SA167d closeout, authorized-but-unrun SA167c Phase F, and closed
+SA170 statuses are checked as current consumer contracts below; those checks are not mutation
+canaries.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
 context.  Retained expected-red canaries prove those parser/guard boundaries, while explicit
-current-status contracts preserve the integration-ready SA167d closeout, authority-gated SA167c
-checkpoint, and final SA170 closeout.  The suite previously carried twelve
+current-status contracts preserve the integration-ready SA167d closeout, the SA167c checkpoint
+whose Phase F is authorized under ``EV-7`` and not yet run, and the final SA170 closeout.  The suite previously carried twelve
 mutation canaries across 496 lines, including one
 that mutated a hardcoded ``deps:`` literal naming a specific ticket; archiving that ticket silently
 disarmed it, as did roadmap prose that happened to spell the same literal first.  The remaining
@@ -350,12 +351,17 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     assert not stale_e_open, stale_e_open.group(0) if stale_e_open else None
 
     assert "no provisioning gate is red" in priority_model.lower()
-    if "remaining Phase-F gate is fresh reviewed authority" not in dependency_graph:
+    if (
+        "remaining Phase-F work is running the authorized verdict itself"
+        not in dependency_graph
+    ):
         raise AssertionError(
-            "SA167c dependency graph must name fresh reviewed authority"
+            "SA167c dependency graph must name running the authorized verdict"
         )
-    if "obtain fresh reviewed authority for SA167c (#21) Phase F" not in next_actions:
-        raise AssertionError("SA167c next action must obtain fresh reviewed authority")
+    if "run SA167c (#21) Phase F under the granted authority" not in next_actions:
+        raise AssertionError(
+            "SA167c next action must run Phase F under the granted authority"
+        )
 
 
 def _assert_lane_assignment_parity(roadmap_text: str) -> None:
@@ -476,7 +482,7 @@ def _assert_sa167c_current_status(
     implementation_contract_text: str,
     module_extension_text: str,
 ) -> None:
-    """Keep accepted A-E distinct from the authority-gated F verdict."""
+    """Keep accepted A-E distinct from the authorized-but-unrun F verdict."""
     roadmap = _roadmap_tickets(roadmap_text)
     assert roadmap["SA167c"].merge_position == 21
     assert roadmap["SA166"].dependencies == frozenset({"SA167c"})
@@ -496,8 +502,9 @@ def _assert_sa167c_current_status(
     for path, text in current_status_consumers.items():
         normalized_text = " ".join(text.split())
         assert "SA167c" in normalized_text, path
-        assert re.search(
-            r"(?:fresh reviewed authority|Phase F awaiting fresh reviewed authority)",
+        assert re.search(r"EV-7", normalized_text), path
+        assert not re.search(
+            r"fresh reviewed authority (?:is|are|and a new F verdict are) (?:still )?required",
             normalized_text,
             re.I,
         ), path
@@ -524,7 +531,9 @@ def _assert_sa167c_current_status(
     assert SA167C_SYNC_MERGE in roadmap_text
     assert "plan authority `EV-6` remains binding" in roadmap_text
     assert "do not redo A-E" in roadmap_text
-    assert "obtain fresh reviewed authority" in roadmap_text
+    assert "`EV-7` covers exactly one F verdict" in roadmap_text
+    # The grant authorizes one verdict; it must never read as an accepted result.
+    assert not re.search(r"phase F (?:is |was )?accepted", roadmap_text, re.I)
 
 
 def _assert_sa170_final_closeout(
@@ -684,9 +693,9 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
             "no gate is red",
         ),
         (
-            "remaining Phase-F gate is fresh reviewed authority",
-            "remaining Phase-F gate is SA170",
-            "fresh reviewed authority",
+            "remaining Phase-F work is running the authorized verdict itself",
+            "remaining Phase-F work is SA170 remediation",
+            "authorized verdict",
         ),
     ],
 )

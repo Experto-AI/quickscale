@@ -342,8 +342,8 @@ yourself editing either to register a module, the module's own declaration is in
 The companion declaration-gate work remains open under **`SA167c`** at merge #21. Phases A-E are
 accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding
 after `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3 at that time. SA170's accepted release campaigns have cleared that upstream blocker, but
-fresh reviewed authority and a new F verdict are still required. No SA167c completion or
+SA170/W3 at that time. SA170's accepted release campaigns have cleared that upstream blocker and
+Phase-F authority `EV-7` is granted, but the authorized F verdict has not yet been run. No SA167c completion or
 release-readiness claim is made, SA166 remains dependent, and SA164
 remains after SA166. Retained-partial-only merge-back of the synchronized nine-file status checkpoint
 is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. This does not alter the module-extension contract

@@ -287,7 +287,7 @@ The declaration-gate product bytes are retained under **`SA167c`** (v88, merge #
 accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; F remains
 outstanding after `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E
 failures then owned by SA170/W3. SA170's accepted release campaigns have cleared those upstream
-failures, but fresh reviewed authority and a new F verdict are still required. SA167c is not complete
+failures and Phase-F authority `EV-7` is granted, but the authorized F verdict has not yet been run. SA167c is not complete
 or release-ready; SA166 remains dependent and
 SA164 remains after SA166. Retained-partial-only merge-back of the synchronized nine-file status
 checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. The settled product bytes no longer carry CLI per-module

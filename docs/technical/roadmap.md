@@ -81,10 +81,10 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 ```text
 v88 — three worktrees, ten open merge positions carrying ten open ticket entries, one merge queue
 
-W2 (gates & declared wiring)   ★ CRITICAL PATH — authority-gated head, runnable band-C filler
+W2 (gates & declared wiring)   ★ CRITICAL PATH — runnable head, band-C tail
   SA167c ─► SA166 ─► SA164     #21, #24, #25
-  SA174 · SA175                #31, #32   ← runnable while fresh F authority is pending
-  (SA167c: A-E accepted; F is unaccepted and awaits fresh reviewed authority)
+  SA174 · SA175                #31, #32   ← band-C tail; must not displace #21
+  (SA167c: A-E accepted; F authorized as EV-7 and runnable, not yet run)
 
 W1 (module wiring + generated-output fixes)
   SA165 ─► SA161 ─► SA160      #22, #19, #20
@@ -94,24 +94,25 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
   (SA171 is DB-free and now heads W3)
 ```
 
-**Position numbers are identifiers, not run order.** Until fresh SA167c Phase-F authority is granted,
-W2's runnable order is #31 then #32. Once authority is granted, band-B SA167c resumes ahead of that
-filler, followed by #24 and #25.
+**Position numbers are identifiers, not run order.** W2's runnable order is **#21 first**, then #24,
+#25, and the #31/#32 tail. Phase-F authority `EV-7` was granted on 2026-09-04, so band-B SA167c is a
+*runnable* leg again and the standing displacement rule forbids band-C filler from jumping ahead of
+it.
 
 **W2 sets the release date.** Its chain is `SA167c ─► SA166 ─► SA164`, with **#24 and #25** band-C
 tail positions that may slip past the release. The release-committed critical path is therefore
 **SA167c**. Its formal ticket chain is entirely inside W2. The W3-owned E2E failures are closed and
-the release gate is green; the remaining Phase-F gate is fresh reviewed authority for a new verdict,
+the release gate is green; the remaining Phase-F work is running the authorized verdict itself,
 not product remediation. W3 holds the exclusive slot and takes scheduling priority while one of its
 Docker-backed legs is active, but its two positions are a *queue*, not a chain. W2 is the longest
-lane at five positions, but its two extra positions are runnable band-C filler moved there on
-2026-09-03 and do not lengthen the release chain. W1's three positions and W3's two positions are
+lane at five positions, but its two extra positions are band-C tail confirmed onto this lane on
+2026-09-04 and do not lengthen the release chain. W1's three positions and W3's two positions are
 band-C work and set no date.
 
 **Operationally, the release path is now W2-only.** SA170's ordered serial and concurrent campaigns
 are accepted and archived in [CHANGELOG.md](../../CHANGELOG.md), so the former W3 blocker is gone.
-The effective path is **fresh SA167c F authority ─► SA167c F ─► (SA166 ─► SA164, band-C tail)**.
-Granting that authority is the single decision that moves the release date.
+The effective path is **SA167c F ─► (SA166 ─► SA164, band-C tail)**. Authority `EV-7` is granted, so
+no decision stands between the queue and the release date — only execution of the F verdict.
 
 **No cross-worktree ticket or release-gate blocker remains.** One cross-worktree *shared file* does,
 made one-directional by merge order: `scripts/test_isolation_conformance.sh` (SA135's merged
@@ -131,34 +132,27 @@ open tickets build on rather than re-open. The provisioning script's immediate-c
 path was last corrected in retained tree state and is green; **no open ticket owns it**, and a
 lane that observes it red must first confirm it is synced to current `v88` before opening anything.
 
-### Track rebalance — one move stands
+### Track rebalance — settled lane assignment
 
 Lanes are **W1 3 · W2 5 · W3 2**, and every open ticket carries a track — none lacks one. Each was
 tested against the three questions: is it independent of the rest of its lane, is another lane idle,
-and is it on or feeding the critical path.
+and is it on or feeding the critical path. **No move is proposed.** The critical path is a single
+ticket, SA167c on W2, so no relocation of band-C work can shorten it.
 
-**The move: SA174 (#31) and SA175 (#32) leave W1 for W2.** Both are `deps: none`, both are DB-free,
-neither touches `scripts/gate_registry.json`, `quickscale_modules/*/module.yml`,
-`quickscale_core/contracts/`, or `quickscale_core/manifest/`, and neither shares a code file with
-any W2 ticket — SA174 owns `quickscale_modules/orgs/.../apps.py`, SA175 owns
-`quickscale_devtools/.../beta_migration.py` and its conformance test, and no other open ticket
-touches any of the three. W2's band-B head is **authority-gated**, not busy, which is precisely the case the
-standing band-C displacement rule was written for: filler may take a lane whose band-B leg cannot
-proceed. The move gives W2 two runnable tickets instead of an idle lane, and leaves W1 as one
-coherent generated-output chain, #22 ─► #19 ─► #20.
+**SA174 (#31) and SA175 (#32) sit on W2 by a confirmed decision (2026-09-04), not a provisional
+one.** Both are `deps: none` and DB-free, neither touches `scripts/gate_registry.json`,
+`quickscale_modules/*/module.yml`, `quickscale_core/contracts/`, or `quickscale_core/manifest/`, and
+neither shares a code file with any W2 ticket — SA174 owns `quickscale_modules/orgs/.../apps.py`,
+SA175 owns `quickscale_devtools/.../beta_migration.py` and its conformance test, and no other open
+ticket touches any of the three. The assignment keeps `docs/others/arch-audit.md` **single-lane and
+one-directional** (its three owners SA174, SA175, and SA164 are all W2, running #31 → #32 with #25
+merging later) and leaves W1 as one coherent generated-output chain, #22 ─► #19 ─► #20. No code file
+carries a second lane and no merge hazard exists. The move's original idle-lane rationale is spent —
+W2's head is runnable again under `EV-7` — but the conflict-surface gain is permanent, which is why
+the assignment stands rather than reverting. **They are now tail, not filler:** the standing
+displacement rule forbids them from running ahead of the runnable band-B #21.
 
-**Conflict surface of this move — it strictly reduces sharing.** `docs/others/arch-audit.md` had
-three owners split across two lanes (SA174 and SA175 on W1, SA164 on W2); all three are now W2, so
-the file becomes **single-lane and one-directional** under the runnable order #31 → #32 with #25
-merging later. `apps.py` and `beta_migration.py` move from W1-only to W2-only. **No code file gains
-a second lane and no merge hazard is created.** The pass writes the shared closeout files —
-`CHANGELOG.md`, this roadmap, `docs/technical/v88_ticket_context.md`, and `docs/index.md`, whose
-ledger summary changes — plus `docs/others/tech-audit.md` for one stale resolved note. Those are
-covered by the merge procedure's sync-resolve-rerun-review step in the execution rules, and
-`quickscale_core/tests/test_v88_ticket_context_consistency.py` is re-run in the same change because
-W1 and W2 state blocks moved.
-
-**The moves that still do not stand, for structural reasons rather than situational ones:**
+**The moves that do not stand, for structural reasons rather than situational ones:**
 
 - **`scripts/gate_registry.json` and `quickscale_modules/*/module.yml` never cross worktrees.** All
   three chain tickets on W2 register or edit gate-registry entries, so none of them may leave W2 and
@@ -189,12 +183,11 @@ worktree, the right column the reverse.
 | Worktree | behind / ahead | Tip | Standing |
 |---|---|---|---|
 | `wt-track1` | 11 / 0 | `a14ea029` | clean; SA167d's conditional post-integration candidate is integrated at exact-tip, and SA165's retained A-C product merged at `3f925b96` |
-| `wt-track2` | 17 / 0 | `35dfa3c9` | clean; SA167c's retained A-E product object remains authoritative and F awaits fresh authority |
+| `wt-track2` | 17 / 0 | `35dfa3c9` | clean; SA167c's retained A-E product object remains authoritative and F is authorized under `EV-7`, not yet run |
 | `wt-track3` | 0 / 0 | `b2cf0ca5` | clean; accepted SA170 closeout delivered to `v88` |
 
-**No lane branch is ahead, and W3's accepted SA170 closeout was committed and fast-forward merged
-into `v88` at `ef2297f8`.** SA167c remains open because Phase F has not received fresh authority or a
-verdict.
+**No lane branch is ahead.** SA167c remains open because its authorized Phase-F verdict has not yet
+been run. `wt-track2` must be synced with current `v88` before F is frozen and run.
 
 ### PostgreSQL routing — who actually claims the standing service
 
@@ -210,16 +203,20 @@ complete and the standing state was restored exactly.
 
 ### Next action per lane
 
-- **W2 — obtain fresh reviewed authority for SA167c (#21) Phase F; if it is not immediately
-  available, start SA174 (#31), the band-C filler moved onto this lane.** Do not start SA166.
-  Phases A-E are accepted on retained product object
+- **W2 — run SA167c (#21) Phase F under the granted authority `EV-7`.** This is the release-path
+  action and it outranks the #31/#32 tail. Phases A-E are accepted on retained product object
   `91fd3bb6e6b638735361b511c1515cddccce5d15`; do not reimplement or re-close them. F is unaccepted
   after its sole `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` run exited 2 with 2 Core and 8 CLI E2E
-  failures then owned by SA170/W3. The nine-file status checkpoint merged only as retained-partial-only
-  merge-back at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`, without accepting F and without closing
-  SA167c. The upstream failure is now closed, but that retained checkpoint still makes no completion
-  claim. Obtain fresh reviewed authority, freeze the then-current `v88`, and run one fresh F release
-  verdict including `make ci-e2e`. W2 claims no standing service.
+  failures then owned by SA170/W3; those failures are closed. The nine-file status checkpoint merged
+  only as retained-partial-only merge-back at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`, without
+  accepting F and without closing SA167c; that checkpoint still makes no completion claim.
+  **Procedure:** sync `v88` into `wt-track2` and resolve there, freeze the then-current `v88` tip and
+  record it, then run exactly one `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` detached with `setsid`
+  and a generous budget, capturing the exit code to a file. A cutoff-killed run is not evidence and
+  is not a verdict. If it exits 0, proceed to completion-grade convergence, patch-backed terminal
+  attestation, and exact-tip integration; if it exits non-zero, record the exact failure rows and
+  keep F unaccepted — a red verdict does not consume `EV-7`'s successor, it requires a repair ticket
+  first. W2 claims no standing service.
 - **W1 — retain SA165 (#22) and run its Phase D documentation reconciliation, then hold.** SA167d's
   completion-grade closeout is archived as a conditional post-integration candidate; SA165 has
   `deps: none`, remains W1-owned, and its phases A-C are accepted on retained product object
@@ -238,29 +235,31 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA167c (#21) | **no** — fresh reviewed authority is required before Phase F | **no** — the same authority gates a fresh verdict | **yes after authority and a green verdict** | **yes** — it is the remaining release-committed work |
+| **W2** | SA167c (#21) | **yes** — `EV-7` is granted; sync, freeze, and run the F verdict | **yes if the verdict is green** — the run is W2-owned and no other lane feeds it | **yes** — nothing is ordered ahead of #21 | **yes** — it is the remaining release-committed work |
 | **W1** | SA165 (#22) | **yes** — `deps: none`; Phase D is runnable and the repository-wide gate is green | **yes** — its own Phase-D release verification remains W1-owned | **yes** — no cross-lane blocker remains | no |
 | **W3** | SA171 (#28) | **yes** — `deps: none` and DB-free | **yes** — all work is W3-owned | **yes** — no ticket is ordered ahead of #28 | no |
 
-**W1 and W3 are truly green.** W2 is no longer blocked by another lane; its two "no" cells are the
-explicit authority gate for SA167c Phase F. SA174 and SA175 remain runnable filler on W2 while that
-decision is pending, but they do not move the release date.
+**All three lanes are truly green, and W2 is the only one on the critical path.** W1 and W3 remain
+off-path filler. W2's *can finish* carries the only genuine uncertainty left in the queue, and it is
+an empirical one — whether the authorized `make ci-e2e` verdict comes back green — not a decision and
+not a cross-lane dependency. SA174 and SA175 stay on W2 as tail behind #21.
 
 ### Maintainer decisions
 
-**Two decisions are open.**
+**No maintainer decision is open.** Both standing decisions were settled on 2026-09-04 and their
+reasoning is archived in [CHANGELOG.md](../../CHANGELOG.md):
 
-**Decision 1 — grant fresh release authority for SA167c Phase F.** Phase F is a *release verdict*,
-not ordinary implementation: re-running it requires fresh reviewed authority against a freshly frozen
-`v88`. SA170's upstream E2E surface is green, so this authorization is now the only condition behind
-W2's two "no" cells and the decision that moves the release date.
+- **Phase-F release authority for SA167c is granted** as `EV-7`, against a `v88` tip frozen at the
+  moment W2 syncs. It authorizes exactly one `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict. It
+  does **not** authorize re-running accepted A-E, reinterpreting the historical red as accepted, or
+  a second verdict if the first comes back red — a red result needs a repair ticket and then fresh
+  authority.
+- **The SA174/SA175 lane assignment to W2 is confirmed** and is no longer reversible at zero cost.
+  Its permanent justification is the conflict-surface gain (`docs/others/arch-audit.md` single-lane),
+  not the idle-lane condition that has since passed.
 
-**Decision 2 — confirm or reverse the SA174/SA175 lane move.** The 2026-09-03 pass moved both tickets from W1
-to W2 on the reasoning in [Track rebalance](#track-rebalance--one-move-stands). It is cheap to
-reverse today (no work has started on either) and expensive after either ticket is in flight.
-Confirming it keeps filler available while W2 waits for authority and makes
-`docs/others/arch-audit.md` single-lane; reversing it returns W1 to five positions. No work has
-started on either ticket, so this is the last low-cost point to decide.
+Nothing else in the queue waits on a maintainer. Every remaining "no" anywhere in this planner is an
+empirical gate — a command that must be run and come back green — not a judgement call.
 
 The five decisions settled on 2026-08-31 — the `sqlparse` suppressions, `quickscale_devtools`
 publication, the consistency test's canary reduction, the band-C displacement rule, and the
@@ -350,7 +349,7 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 | 25 | **SA164** | C | 3 | W2 | SA166 | no |
 | 28 | **SA171** | C | 2 | W3 | none | no |
 | 29 | **SA172** | C | 3 | W3 | SA171 | no |
-| 31 | **SA174** | C | 3 | W2 | — *(runnable while SA167c awaits authority)* | no |
+| 31 | **SA174** | C | 3 | W2 | — *(band-C tail; must not displace #21)* | no |
 | 32 | **SA175** | C | 3 | W2 | SA174 *(lane only)* | no |
 
 SA167c's synchronized status checkpoint merged under its retained-partial authorization after fresh
@@ -363,8 +362,8 @@ reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELO
 
 The per-lane heads are **#21 (W2), #22 (W1), and #28 (W3)**. #21 has accepted A-E, including retained
 product commit `91fd3bb6e6b638735361b511c1515cddccce5d15`; F release validation remains outstanding
-after the historical 2 Core and 8 CLI E2E failures; SA170 has cleared those failures, but fresh
-authority is still required before a new F verdict. #22 and #28 are eligible with `deps: none`.
+after the historical 2 Core and 8 CLI E2E failures. SA170 cleared those failures and authority
+`EV-7` is granted, so the F verdict is runnable now. #22 and #28 are eligible with `deps: none`.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Two are
@@ -373,9 +372,9 @@ the pair must not be split, so the run is ordered #19, #20 — **SA174 left this
 when the privileged-command set was settled as permanent and its emitted-byte change was dropped), **SA164's substance after SA166** (its
 `test_sa92_migration_squash_guardrail.py` work needs `django_apps:` retired). Band-C positions
 (19, 20, 22, 24, 25, 28, 29, 31, 32) are *earliest-eligible*, not commitments, and may slip past the
-release. **SA174 (#31) and SA175 (#32) were pulled forward onto idle W2 on 2026-09-03**: neither has a
+release. **SA174 (#31) and SA175 (#32) sit on W2 by the confirmed 2026-09-04 assignment**: neither has a
 content dependency, neither needs an exclusive slot, and SA174 is now a comment correction plus an
-  audit demotion. They may run while W2's authority-gated head is waiting.
+  audit demotion. They are tail behind the runnable #21, not filler ahead of it.
 
 ### Shared conflict surfaces
 
@@ -483,13 +482,13 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   could not merge then. The later retained status checkpoint reconciled the moved base and merged
   without accepting F.
 
-  **Completed:** phases A-E and the retained product object above. **Pending:** fresh reviewed
-  authority, F release validation,
-  then completion-grade convergence, patch-backed terminal attestation, and exact-tip integration.
-  **Blocking:** fresh reviewed authority for a new F verdict. The moved integration base is reconciled
-  and the former SA170/W3 blocker is green. **Decisions needed:** grant that authority. **Remaining
-  reviewed plan:** plan authority `EV-6` remains binding for accepted A-E; do not redo A-E,
-  reinterpret the historical red as accepted, or reopen SA170/W3 here.
+  **Completed:** phases A-E and the retained product object above. **Pending:** the authorized F
+  release verdict, then completion-grade convergence, patch-backed terminal attestation, and
+  exact-tip integration. **Blocking:** nothing — the moved integration base is reconciled, the former
+  SA170/W3 blocker is green, and Phase-F authority `EV-7` was granted on 2026-09-04. **Decisions
+  needed:** none. **Remaining reviewed plan:** plan authority `EV-6` remains binding for accepted
+  A-E and `EV-7` covers exactly one F verdict; do not redo A-E, reinterpret the historical red as
+  accepted, or reopen SA170/W3 here.
 
   **Exact cold-start resume object.** Resume from retained product object
   `91fd3bb6e6b638735361b511c1515cddccce5d15` with phases A-E accepted and F unaccepted, from the
@@ -501,11 +500,12 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   `eacad160d92b37f81f593085a64e18db4fb271f0`, converged and terminally attested, remediated to exact
   tip `cb7517470df4f7e5c6890310de1a39ae0ca2c395`, and merged at
   `ef712e2d649d73aec0bdd9b4d3ca0b23913da419` as retained partial delivery only — the review
-  narrative is archived in [CHANGELOG.md](../../CHANGELOG.md). The former SA170/W3 blocker is green;
-  obtain fresh reviewed authority preserving `EV-6`, re-freeze the
-  then-current `v88`, reconcile only the retained status surface, and run one newly authorized F
-  release verdict before completion-grade convergence and patch-backed attestation. Retain rather
-  than restore any halted candidate, and never redo accepted A-E.
+  narrative is archived in [CHANGELOG.md](../../CHANGELOG.md). The former SA170/W3 blocker is green
+  and authority `EV-7` is granted preserving `EV-6`; sync `wt-track2`, re-freeze and record the
+  then-current `v88`, reconcile only the retained status surface, and run the one authorized F
+  release verdict — detached under `setsid`, exit code captured to a file — before completion-grade
+  convergence and patch-backed attestation. Retain rather than restore any halted candidate, and
+  never redo accepted A-E.
 
   **The key itself is already gone.** `grep -rn django_apps` over `quickscale_core`,
   `quickscale_modules`, and `quickscale_cli` returns nothing: the manifests, `ModuleManifest`, loader,

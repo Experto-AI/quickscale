@@ -4,6 +4,42 @@
 
 ## v88 development — 2026-08-21
 
+- **Both open maintainer decisions settled (2026-09-04) — Phase-F authority granted as `EV-7`, and
+  the SA174/SA175 lane assignment confirmed.** No maintainer decision remains open anywhere in the
+  v88 queue.
+  **Decision 1 — SA167c Phase-F release authority: granted.** Phase F is a release *verdict* rather
+  than implementation, so re-running it required fresh reviewed authority against a freshly frozen
+  `v88`. SA170's accepted campaigns had already cleared the 2 Core and 8 CLI E2E failures that
+  stopped the historical F run, leaving authorization as the sole gate. `EV-7` authorizes **exactly
+  one** `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict against the `v88` tip frozen at the moment
+  `wt-track2` syncs. It does not authorize redoing accepted A-E (which stay bound to `EV-6` and to
+  retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`), reinterpreting the historical
+  red as accepted, reopening closed SA170/W3 work, or a second verdict — a red result requires a
+  repair ticket and then fresh authority. The run must be detached under `setsid` with its exit code
+  captured to a file, per the standing rule that a cutoff-killed run is not evidence.
+  **Decision 2 — SA174/SA175 lane assignment: confirmed on W2.** The 2026-09-03 move was made
+  because W2's band-B head was authority-gated and the lane would otherwise idle. That condition has
+  now passed, but the assignment stands on its durable justification instead: it keeps
+  `docs/others/arch-audit.md` single-lane and one-directional (all three of its owners — SA174,
+  SA175, SA164 — on W2) and leaves W1 as one coherent generated-output chain `#22 ─► #19 ─► #20`. No
+  code file carries a second lane. **Their status changes with the grant:** SA174 and SA175 are now
+  band-C *tail*, not filler, and the standing displacement rule forbids them running ahead of the
+  once-again-runnable band-B #21.
+  **Resulting readiness — all three lanes are truly green,** and W2 is the only one on the critical
+  path. W2's *can finish* now turns on an empirical question (does the authorized verdict come back
+  green?) rather than on a judgement call; W1 (SA165 #22) and W3 (SA171 #28) remain green but
+  off-path. The queue is unchanged at ten open ticket entries across ten open merge positions, lanes
+  **W1 3 · W2 5 · W3 2**, and no ticket closed.
+  **Documents reconciled:** the roadmap's dependency graph, rebalance section, lane state, per-lane
+  next actions, readiness table, maintainer-decisions section, merge-order notes, and SA167c ticket
+  body; plus `docs/index.md`, `docs/others/arch-audit.md`, `docs/technical/v88_ticket_context.md`,
+  `docs/technical/implementation_contract.md`, and `docs/technical/module-extension.md`.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` was updated in the same change —
+  its SA167c current-status contract now binds the authorized-but-unrun state (`EV-7` named by every
+  live consumer, no "fresh reviewed authority still required" prose, and a new guard rejecting any
+  claim that Phase F is *accepted*), and its dependency-graph and next-action canaries were re-aimed
+  at the granted-authority wording. It returned **31 passed**.
+
 - **Roadmap cleanup and rebalance review (2026-09-04, eleventh pass) — no ticket closed; the queue
   and the lane assignment are unchanged.** The queue stands at **ten** open v88 ticket entries across
   **ten** open merge positions, lanes at **W1 3 · W2 5 · W3 2**, and every open ticket carries a
@@ -48,8 +84,10 @@
   entries across ten open merge positions**, lanes are **W1 3 · W2 5 · W3 2**, and SA171 is W3's
   head with `deps: none`. The release gate is green, so SA165 is no longer completion-frozen and
   SA167c Phase F is no longer blocked by W3; SA167c remains open and unaccepted at F until a
-  maintainer grants fresh reviewed authority and a fresh verdict is run. **Decisions needed:** fresh
+  maintainer grants fresh reviewed authority and a fresh verdict is run. **Decisions needed at the time:** fresh
   SA167c Phase-F authority; confirmation or reversal of the still-unstarted SA174/SA175 lane move.
+  **Both were settled later the same day** — Phase-F authority granted as `EV-7` and the lane
+  assignment confirmed; see the maintainer-decisions entry above.
 
 - **SA170 phase C-correct accepted — initialized-database readiness retained (2026-09-04).**
   Generated projects now hold backend startup until a query against the target database observes the
