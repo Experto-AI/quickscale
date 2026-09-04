@@ -48,13 +48,19 @@ or release-readiness claim is made. Retained-partial-only merge-back of the sync
 status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. Its accepted evidence is archived in
   [CHANGELOG.md](../../CHANGELOG.md).
 
-**SA170 convergence retained-partial checkpoint (2026-09-02).** The dependency and return-141 static
-blockers are repaired: the vulnerability gate is green and all 1356 registered script tests pass.
-The ordered serial E2E campaign remains green (Core 38, CLI 53) with exact-scope cleanup, but
-unchanged-byte `make ci-e2e` reached stage 12 and exited 2 with 2 Core and 8 CLI failures on the
-concurrent generated-PostgreSQL start surface. Standing PostgreSQL container/catalog/role comparisons
-remain equal. SA170 remains open and TA70 remains live, SA167c remains halted, and no completion or
-release-readiness claim is made.
+**SA170 convergence retained-partial checkpoint (2026-09-04).** The dependency and return-141 static
+blockers remain repaired. The latest ordered serial E2E campaign used `setsid --wait env
+QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e` and exited 2: Core reported 38 passed and
+CLI reported 52 passed / 1 failed at the installed-wheel lifecycle row after `poetry install` aborted
+following dependency synchronization. The concurrent `setsid --wait env QS_E2E_INTEGRATION_REF=v88 make
+ci-e2e` campaign was not run because the serial prerequisite was red. Exact-scope cleanup and standing
+PostgreSQL container/catalog/role comparisons remained equal, but the quiet transcript did not
+individually attest the other three frozen rows. SA170 remains open and TA70 remains live, SA167c
+remains halted, and no completion or release-readiness claim is made. A convergence-only focused
+rerun of the installed-wheel row and a diagnostic-copy `poetry install -vvv` both passed; neither
+retroactively greens the failed campaign or identifies its unretained lower-level cause. Closure
+still requires a fresh ordered serial-then-concurrent campaign with exact-scope cleanup and standing
+PostgreSQL equality.
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
 and the completion ledger archived SA167d and retired merge position #18. SA165 is released with

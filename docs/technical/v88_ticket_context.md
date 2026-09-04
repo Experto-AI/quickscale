@@ -214,21 +214,22 @@ So the harness's failure report cannot distinguish **"still starting"** from **"
 That is why repeatedly re-running the suite produced greens that taught nobody anything: on the runs
 that did fail, the harness had already thrown away the reason.
 
-### SA170 convergence retained-partial checkpoint (2026-09-02)
+### SA170 convergence retained-partial checkpoint (2026-09-04)
 
-The dependency and return-141 static blockers are repaired: the vulnerability gate reports zero
-unsuppressed findings and all 1356 registered script tests pass. `QS_E2E_PARALLEL=0 make test-e2e`
-exited **0** with Core **38 passed** and CLI **53 passed**; exact cleanup scopes
-`qs_e2e_tmp_d5vozxq4ru_core_3887565` and `qs_e2e_tmp_d5vozxq4ru_cli_3912451` reported cleanup
-complete. On unchanged product bytes, `make ci-e2e` reached stage 12 and exited **2** with 2 Core
-and 8 CLI failures on the concurrent generated-PostgreSQL start surface.
-The four frozen rows were collected and passed in that mandated campaign:
-`test_logs_with_options`, `test_manage_test_command`,
-`test_installed_wheel_plan_apply_up_all_modules`, and
-`TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe`.
-The standing `pg18-af10` container/image/volume, catalog-owner rows, and
-`quickscale_test_role` flags `f|f|t|t|f` were byte-equal before and after. Phase C is unaccepted,
-TA70 remains live, SA170 remains open, and no completion or release-readiness claim is made.
+The latest ordered serial campaign used `setsid --wait env QS_E2E_PARALLEL=0
+QS_E2E_INTEGRATION_REF=v88 make test-e2e` and exited **2**: Core reported **38 passed**, while CLI
+reported **52 passed / 1 failed** at the installed-wheel lifecycle row,
+`quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py::test_installed_wheel_plan_apply_up_all_modules`
+after `poetry install` aborted following dependency synchronization. The concurrent
+`setsid --wait env QS_E2E_INTEGRATION_REF=v88 make ci-e2e` campaign was not run because the serial
+prerequisite was red. Exact-scope cleanup passed, standing PostgreSQL `pg18-af10` identity/volume/catalog/role
+projections were byte-equal before and after, and the quiet transcript did not individually attest
+the other three frozen rows. Phase C is unaccepted, TA70 remains live, SA170 remains open, and no
+completion, release-readiness, or downstream-unblocking claim is made. A convergence-only focused
+rerun of the installed-wheel row passed in **165.84s**, and `poetry install -vvv` returned 0 in a
+diagnostic copy of the retained project. Those checks neither reveal the historical lower-level cause
+nor replace the required fresh ordered serial campaign followed, only if green, by the concurrent
+campaign, with exact-scope cleanup and standing PostgreSQL equality.
 
 ### Why the old acceptance criterion could not be met
 
@@ -731,11 +732,13 @@ unblocking SA166; exact-tip attestation is complete and that checkpoint merged a
 conditional post-integration candidate; exact-tip integration remains pending. SA165 is released
 with `deps: none`. Ticket metadata lives in the [roadmap](roadmap.md), not here.
 
-The **SA170 convergence retained-partial checkpoint (2026-09-02)** records repaired dependency and
-return-141 blockers, a green serial E2E campaign and exact-scope cleanup, but `make ci-e2e` exited 2
-at stage 12 with 2 Core and 8 CLI failures on the concurrent generated-PostgreSQL start surface.
-Standing PostgreSQL before/after comparisons were equal. SA167c therefore remains halted and no
-downstream ticket is unblocked.
+The **latest SA170 convergence retained-partial checkpoint (2026-09-04)** records an ordered serial
+campaign that exited 2 with Core 38 passed and CLI 52 passed / 1 failed at the installed-wheel row;
+the concurrent campaign was not run. Exact-scope cleanup and standing PostgreSQL equality passed,
+but the other three frozen rows lack individual pass oracles. A convergence-only focused rerun of
+the installed-wheel row and a diagnostic-copy install both passed without identifying the retained
+campaign's lower-level cause. SA167c therefore remains halted pending a fresh ordered
+serial-then-concurrent campaign, and no downstream ticket is unblocked.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.

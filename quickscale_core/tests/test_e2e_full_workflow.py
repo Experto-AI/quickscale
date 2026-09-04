@@ -16,6 +16,7 @@ Run with: pytest -m e2e
 import json
 import os
 import re
+import selectors
 import shlex
 import shutil
 import subprocess
@@ -551,7 +552,7 @@ class TestFullE2EWorkflow:
             screenshot_name="homepage_screenshot_react.png",
         )
 
-    def test_docker_compose_configuration(self, tmp_path):
+    def test_docker_compose_configuration(self, tmp_path, docker_available):
         """Verify docker-compose.yml is valid and can be parsed by docker compose."""
         from quickscale_core.generator import ProjectGenerator
 
@@ -639,6 +640,199 @@ class TestFullE2EWorkflow:
             injected_services["backend"]["labels"]["com.quickscale.scope"]
             == "run-bound"
         )
+
+        db_service = services["db"]
+        healthcheck_command = db_service["healthcheck"]["test"][1]
+        postgres_environment = db_service["environment"]
+        postgres_db = postgres_environment["POSTGRES_DB"]
+        postgres_password = postgres_environment["POSTGRES_PASSWORD"]
+        resource_scope = f"quickscale-f002-{os.getpid()}-{time.time_ns()}"
+        container_name = f"{resource_scope}-db"
+        volume_name = f"{resource_scope}-data"
+        resource_labels = [
+            "--label",
+            "com.quickscale.owner=quickscale",
+            "--label",
+            "com.quickscale.lifecycle=e2e",
+            "--label",
+            f"com.quickscale.scope={resource_scope}",
+        ]
+        log_process = None
+
+        try:
+            volume_result = subprocess.run(
+                ["docker", "volume", "create", *resource_labels, volume_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert volume_result.returncode == 0, volume_result.stderr
+
+            start_result = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--detach",
+                    "--name",
+                    container_name,
+                    *resource_labels,
+                    "--env",
+                    f"POSTGRES_DB={postgres_db}",
+                    "--env",
+                    f"POSTGRES_PASSWORD={postgres_password}",
+                    "--volume",
+                    f"{volume_name}:/var/lib/postgresql",
+                    db_service["image"],
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert start_result.returncode == 0, start_result.stderr
+
+            log_process = subprocess.Popen(
+                ["docker", "logs", "--follow", container_name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            assert log_process.stdout is not None
+            log_selector = selectors.DefaultSelector()
+            log_selector.register(log_process.stdout, selectors.EVENT_READ)
+            deadline = time.monotonic() + 60
+            init_process_complete = False
+            server_accepting = False
+            try:
+                while not server_accepting:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    if not log_selector.select(remaining):
+                        break
+                    line = log_process.stdout.readline()
+                    if not line and log_process.poll() is not None:
+                        break
+                    if "PostgreSQL init process complete; ready for start up." in line:
+                        init_process_complete = True
+                    if (
+                        init_process_complete
+                        and "database system is ready to accept connections" in line
+                    ):
+                        server_accepting = True
+            finally:
+                log_selector.close()
+
+            assert server_accepting, "PostgreSQL did not reach final accepting state"
+
+            accepting_probe = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    container_name,
+                    "pg_isready",
+                    "--username",
+                    "postgres",
+                    "--dbname",
+                    postgres_db,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert accepting_probe.returncode == 0, accepting_probe.stderr
+
+            incomplete_probe = subprocess.run(
+                ["docker", "exec", container_name, "sh", "-c", healthcheck_command],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert incomplete_probe.returncode != 0, (
+                "Generated healthcheck must stay unhealthy while PostgreSQL accepts "
+                "connections but generated initialization is incomplete"
+            )
+
+            init_result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "--interactive",
+                    container_name,
+                    "psql",
+                    "--set",
+                    "ON_ERROR_STOP=1",
+                    "--username",
+                    "postgres",
+                    "--dbname",
+                    postgres_db,
+                ],
+                input=(project_path / "db" / "init.sql").read_text(),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert init_result.returncode == 0, init_result.stderr
+
+            complete_probe = subprocess.run(
+                ["docker", "exec", container_name, "sh", "-c", healthcheck_command],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert complete_probe.returncode == 0, complete_probe.stderr
+        finally:
+            if log_process is not None:
+                log_process.terminate()
+                try:
+                    log_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    log_process.kill()
+                    log_process.wait(timeout=5)
+            subprocess.run(
+                ["docker", "rm", "--force", "--volumes", container_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            subprocess.run(
+                ["docker", "volume", "rm", "--force", volume_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            remaining_containers = subprocess.run(
+                [
+                    "docker",
+                    "container",
+                    "ls",
+                    "--all",
+                    "--filter",
+                    f"label=com.quickscale.scope={resource_scope}",
+                    "--format",
+                    "{{.ID}}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            remaining_volumes = subprocess.run(
+                [
+                    "docker",
+                    "volume",
+                    "ls",
+                    "--filter",
+                    f"label=com.quickscale.scope={resource_scope}",
+                    "--format",
+                    "{{.Name}}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert remaining_containers.returncode == 0, remaining_containers.stderr
+            assert remaining_containers.stdout.strip() == ""
+            assert remaining_volumes.returncode == 0, remaining_volumes.stderr
+            assert remaining_volumes.stdout.strip() == ""
 
     def test_generated_project_tests_run(self, tmp_path, e2e_postgres_url):
         """Verify the generated project's test suite runs successfully."""

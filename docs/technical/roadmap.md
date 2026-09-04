@@ -109,11 +109,12 @@ lengthen it. W1's three positions are band-C generated-output work and set no da
 
 **Operationally, the release path runs through W3 first.** The formal chain is W2's, but SA167c's F
 verdict cannot be re-run until SA170 (#27) makes the E2E surface green, so the *effective* longest
-chain to the release gate is **SA170 ─► SA167c F ─► (SA166 ─► SA164, band-C tail)**. SA170's four
-transferred rows, dependency gate, registered-script gate, and serial E2E campaign are green, but its
-unchanged-byte release campaign remains red on the concurrent generated-PostgreSQL start surface.
-The single critical-path action is therefore to diagnose and safely repair that exact W3-owned
-surface before repeating the ordered campaigns; no maintainer decision gates the work.
+chain to the release gate is **SA170 ─► SA167c F ─► (SA166 ─► SA164, band-C tail)**. SA170's static
+blockers remain repaired, but the latest ordered serial E2E campaign exited 2 on the installed-wheel
+CLI row before the concurrent release campaign could run. The single critical-path action is therefore
+to run a fresh ordered serial-then-concurrent campaign after a convergence-only focused rerun and a
+diagnostic-copy install both passed without identifying the historical lower-level cause; no
+maintainer decision gates the work.
 
 **No formal cross-worktree ticket dependency edge remains.** The failed F verdict is an operational
 cross-worktree blocker until SA170/W3's owned E2E surface is green. One cross-worktree *shared file*
@@ -233,14 +234,17 @@ complete and the standing state was restored exactly.
   `make ci-e2e`, and that gate is currently red for SA170-owned reasons, so **SA165 can be advanced
   but not completed today**. That is a gate-ownership constraint under the standing red-gate rule,
   not a ticket dependency: SA165's `deps:` stay `none`.
-- **W3 — retain SA170 (#27) and repair its concurrent generated-PostgreSQL start failure.** This is
-  the only work that moves the release date. #27 has `deps: none`; its A/B product, dependency and
-  return-141 repairs, four frozen rows, and serial campaign are green, but Phase C remains
-  unaccepted after `make ci-e2e` failed at stage 12. Reproduce and diagnose that exact concurrent
-  surface without mutating the standing service or blindly rerunning unchanged bytes; after a safe
-  correction, run `QS_E2E_PARALLEL=0 make test-e2e` then `make ci-e2e` with exact-scope cleanup and
-  PostgreSQL before/after equality. SA171 (#28) stays the lane's DB-free fallback only if the Docker
-  slot is unavailable.
+- **W3 — retain SA170 (#27) and resolve the latest ordered E2E failure.** This is the only work that
+  moves the release date. #27 has `deps: none`; its A/B product and dependency/return-141 repairs
+  remain retained, but the 2026-09-04 serial campaign exited 2 at
+  `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py::test_installed_wheel_plan_apply_up_all_modules`
+  when `poetry install` aborted after dependency sync. The concurrent `make ci-e2e` campaign was not
+  run because the ordered serial prerequisite was red. Diagnose that exact failure without mutating
+  the standing service or retrying either campaign. A convergence-only focused rerun and a
+  diagnostic-copy install both passed, but did not identify the historical lower-level cause; run a
+  fresh ordered serial campaign followed, only if green, by the concurrent campaign, with exact-scope
+  cleanup and PostgreSQL before/after equality. SA171 (#28) stays the lane's DB-free fallback only if
+  the Docker slot is unavailable.
 
 ### Track readiness — the three states
 
@@ -250,7 +254,7 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W3** | SA170 (#27) | **yes** — `deps: none`; the retained checkpoint names the exact concurrent generated-PostgreSQL surface to diagnose | **yes** — a safe repair and both ordered campaigns remain W3-owned; release acceptance is not yet demonstrated | **yes** — no ticket is ordered ahead of #27 | **yes** — it gates the release verdict |
+| **W3** | SA170 (#27) | **yes** — `deps: none`; the focused installed-wheel row is green and the fresh ordered campaign is runnable | **yes** — both ordered campaigns remain W3-owned; release acceptance is not yet demonstrated | **yes** — no ticket is ordered ahead of #27 | **yes** — it gates the release verdict |
 | **W2** | SA174 (#31) | **yes** — `deps: none`, DB-free, no shared file with the halted chain | **no** — its closeout needs a green release gate, owned by SA170 (#27) | **retained partial yes; completion no** until SA170 (#27) is green | no |
 | **W1** | SA165 (#22) | **yes** — `deps: none`; Phase D's documentation reconciliation is runnable today | **no** — Phase D ends in `make ci-e2e`, red for reasons owned by SA170 (#27) | **retained partial yes; completion no** until SA170 (#27) is green | no |
 
@@ -414,8 +418,9 @@ product commit `91fd3bb6e6b638735361b511c1515cddccce5d15`; F release validation 
 after 2 Core and 8 CLI E2E failures, so the retained checkpoint clears no gate. #22 is now eligible
 with `deps: none` after SA167d's conditional closeout candidate.
 #27 is W3's head, carries the transferred Docker/E2E obligation with `deps: none`, and is
-**the only runnable critical-path ticket**. Its static and serial blockers are resolved; its Phase C
-release blocker is the concurrent generated-PostgreSQL start failure recorded in the ticket body.
+**the only runnable critical-path ticket**. Its static blockers remain resolved and the focused
+installed-wheel row is green; Phase C still requires a fresh ordered serial campaign followed, only
+if green, by the concurrent campaign.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Two are
@@ -627,43 +632,43 @@ triggers.
   equality, and the resulting release verdict. Convergence, terminal attestation, and bounded
   terminal-remediation validation are complete; the remediation ran once and is not a second
   attestation.
-  **SA170 convergence retained-partial checkpoint (measured 2026-09-02): no completion claim.**
-  The dependency lock now resolves djangorestframework 3.17.2 and sqlparse 0.6.0 with a green
-  vulnerability gate, and the pipefail-sensitive provisioning paths were repaired; all 1356
-  Registered Script Test Suites rows pass. The four frozen rows (`test_logs_with_options`,
-  `test_manage_test_command`, `test_installed_wheel_plan_apply_up_all_modules`, and
-  `TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe`) were collected and passed.
-  The ordered `QS_E2E_PARALLEL=0 make test-e2e` campaign
-  exited **0** with Core **38 passed** and CLI **53 passed**. The exact cleanup scopes `qs_e2e_tmp_d5vozxq4ru_core_3887565`
-  and `qs_e2e_tmp_d5vozxq4ru_cli_3912451` reported cleanup
-  complete. On unchanged product bytes, `make ci-e2e` passed every static, coverage, unit, and
-  integration gate, reached stage 12, then exited **2** with 2 Core SA142 Docker failures and 8
-  CLI Docker lifecycle failures on the concurrent generated-PostgreSQL start surface. A focused
-  retained diagnostic later observed one generated database-missing failure but did not establish a
-  safe fifth repair; all retained diagnostic resources were removed by exact labels. PostgreSQL
-  `pg18-af10` container/image/volume, selected catalog rows, and `quickscale_test_role` flags were
-  byte-equal before and after; no standing PostgreSQL mutation was attempted. Phase C is therefore
+  **SA170 convergence retained-partial checkpoint (measured 2026-09-04): no completion claim.**
+  The dependency lock, vulnerability gate, and pipefail-sensitive provisioning repairs remain retained;
+  the latest ordered command was exactly `setsid --wait env QS_E2E_PARALLEL=0
+  QS_E2E_INTEGRATION_REF=v88 make test-e2e` and its child exited **2**. Core reported **38 passed**;
+  CLI reported **52 passed / 1 failed**, the installed-wheel
+  `test_installed_wheel_plan_apply_up_all_modules` row, after `poetry install` aborted following
+  dependency synchronization. The concurrent `setsid --wait env QS_E2E_INTEGRATION_REF=v88 make
+  ci-e2e` campaign was not run because the serial prerequisite was red. Exact cleanup scopes
+  `qs_e2e_tmp_xuesjxvet9_core_936404` and `qs_e2e_tmp_xuesjxvet9_cli_970972` reported complete;
+  the emitted lane scopes were `qs_e2e_tmp_xuesjxvet9_core_936414` and
+  `qs_e2e_tmp_xuesjxvet9_cli_970982`; the frozen E2E
+  container/volume/network/image ID sets were equal after cleanup. Private PostgreSQL provisioning was
+  not entered because `ci-e2e` was not run. Standing `pg18-af10` identity, volume, catalog, and role
+  projections were byte-equal before and after. The quiet transcript does not provide individual pass
+  oracles for the other three frozen rows, so no four-row completion claim is made. Phase C is
   unaccepted, TA70 remains live, SA170 remains open and unchecked at #27, and SA167c remains halted;
-  no completion or release-readiness claim is made and no downstream ticket is unblocked. The
-  retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md). **Decisions needed:** none.
+  no completion, release-readiness, or downstream-unblocking claim is made. The retained-partial
+  evidence is archived in [CHANGELOG.md](../../CHANGELOG.md). A convergence-only focused rerun of the
+  installed-wheel row passed in **165.84s**, and `poetry install -vvv` returned 0 in a diagnostic copy
+  of the retained project. Those checks do not retroactively green the serial campaign or reveal its
+  unretained lower-level cause. A fresh ordered serial campaign followed, only if green, by the
+  concurrent campaign remains required, with exact-scope cleanup and standing PostgreSQL equality.
+  **Decisions needed:** none.
   **Truthful handoff checkpoint.** **Completed:** the dependency-security, manifest-parity,
   provisioning pipefail, lane-port, cleanup-evidence, and current-status consistency corrections
   are retained at `696c57e7aca9579793ce1f91d707fe0dc84fc877` and are now integration-branch state,
   merged into `v88` at `da48feca`; `wt-track3` is level with `v88`.
-  **Pending:** Phase C still needs one reproducible correction for the concurrent generated-
-  PostgreSQL startup failure, followed on unchanged product bytes by
-  `QS_E2E_PARALLEL=0 make test-e2e` and `make ci-e2e`, exact-scope cleanup, and standing PostgreSQL
-  before/after equality. **Blocking:** the product delta received no independent terminal grade
-  because the review-authority transport expired before the reviewer could consume the prepared
-  base-to-tip patch; close that review gap with a fresh patch-backed review of the retained commit,
-  and close the product blocker by capturing the first generated database-container exit-1 log and
-  applying the smallest lifecycle correction that makes both campaigns green. **Decisions needed:**
-  none. **Remaining plan:** do not redo the retained dependency, manifest, provisioning, port, or
-  status corrections; first diagnose the concurrent generated-PostgreSQL startup seam across the
-  recorded 2 Core and 8 CLI rows, add deterministic coverage for the captured cause, then rerun the
-  ordered campaign and close SA170/TA70 only on green evidence. No reusable durable reviewed-plan
-  reference remains, so the retained commit and this exact resume sequence are the cold-start
-  authority.
+  **Pending:** Phase C still needs a fresh ordered `QS_E2E_PARALLEL=0 make test-e2e` campaign followed,
+  only if green, by `make ci-e2e`, exact-scope cleanup, and standing PostgreSQL before/after equality.
+  **Blocking:** release acceptance remains unavailable until a fresh ordered serial campaign passes
+  and the concurrent campaign then passes on unchanged product bytes. **Decisions needed:** none.
+  **Remaining plan:** do not redo the retained dependency, manifest, provisioning, port, or status
+  corrections. Run the fresh serial campaign first; if the installed-wheel failure recurs, retain its
+  complete lower-level Poetry output and apply only a causally supported correction before restarting
+  the ordered campaigns. Close SA170/TA70 only on green serial-then-concurrent evidence with exact-scope
+  cleanup and standing PostgreSQL equality. The retained commit and this exact resume sequence are the
+  cold-start authority.
   **Acceptance:** the React build image is tagged from `QS_E2E_RESOURCE_SCOPE` and carries the same
   `com.quickscale.{owner,lifecycle,scope}` labels as every other E2E resource, so
   `scripts/test_e2e.sh --cleanup-scope <scope>` reclaims it and no fixed tag remains in any test;

@@ -4,6 +4,34 @@
 
 ## v88 development — 2026-08-21
 
+- **SA170 convergence retained-partial checkpoint — C-release serial campaign red; concurrent campaign not
+  entered (2026-09-04).** C-correct's two product files were verified byte-identical to reviewed
+  state `a5582444f594ccbe64178ce10a620d8c53d61f0a` before the external run and unchanged after it.
+  The mandated command `setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make
+  test-e2e` returned child exit **2**: Core reported **38 passed** and CLI reported **52 passed / 1
+  failed** at `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py::test_installed_wheel_plan_apply_up_all_modules`.
+  The first relevant log was `Installing dependencies (poetry install) failed` after dependency
+  synchronization, followed by `Apply failed`; the command's stderr was `Aborted!`. The concurrent
+  `setsid --wait env QS_E2E_INTEGRATION_REF=v88 make ci-e2e` campaign was not run because the serial
+  prerequisite was red, and private PostgreSQL provisioning was not entered. The exact cleanup
+  scopes `qs_e2e_tmp_xuesjxvet9_core_936404` and `qs_e2e_tmp_xuesjxvet9_cli_970972` reported cleanup
+  complete; the emitted lane scopes were
+  `qs_e2e_tmp_xuesjxvet9_core_936414` and `qs_e2e_tmp_xuesjxvet9_cli_970982`. The four
+  frozen rows were `test_logs_with_options`, `test_manage_test_command`,
+  `test_installed_wheel_plan_apply_up_all_modules`, and
+  `TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe`; only the installed-wheel row
+  has an individual failure oracle in the quiet transcript. The full frozen E2E container, volume,
+  network, and image ID sets were equal after exact-scope cleanup, and standing
+  `pg18-af10` identity, volume, catalog, and role projections were byte-equal before and after. The
+  quiet transcript did not individually attest the other three frozen rows. SA170 remains open and
+  unchecked at #27, TA70 remains live, and no completion or release-readiness claim is made;
+  downstream unblocking and four-row acceptance are not claimed. A convergence-only focused rerun of
+  the installed-wheel row subsequently passed in **165.84s**, and `poetry install -vvv` returned 0 in
+  a diagnostic copy of the retained generated project. Those focused results do not retroactively
+  green the failed serial campaign or reveal its unretained lower-level cause. Completion still
+  requires a fresh ordered serial campaign followed, only if green, by the concurrent campaign, with
+  exact-scope cleanup and standing PostgreSQL equality. **Decisions needed:** none.
+
 - **Roadmap cleanup and rebalance review (2026-09-03, ninth pass) — one lane move stands; a
   completion freeze is named.** **No ticket and no audit finding closed since the previous pass**,
   so live counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1

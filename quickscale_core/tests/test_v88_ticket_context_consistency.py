@@ -590,7 +590,9 @@ def _assert_sa170_retained_partial_status(
     assert len(frozen_rows) == 4
     expected_rows = [row.rsplit("::", 1)[-1].split()[0] for row in frozen_rows]
     cleanup_scopes = re.search(
-        r"exact cleanup scopes `([^`]+)`\s+and `([^`]+)`", roadmap_checkpoint_text
+        r"exact cleanup scopes\s+`([^`]+)`\s+and `([^`]+)`",
+        roadmap_checkpoint_text,
+        re.IGNORECASE,
     )
     assert cleanup_scopes is not None
     scopes = list(cleanup_scopes.groups())
@@ -603,24 +605,18 @@ def _assert_sa170_retained_partial_status(
     for name, text in source_documents.items():
         normalized_text = " ".join(text.split())
         assert "SA170" in normalized_text, name
-        assert re.search(
-            r"QS_E2E_PARALLEL=0 make test-e2e|serial E2E campaign",
-            normalized_text,
+        assert (
+            "setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e"
+            in normalized_text
         ), name
         assert "make ci-e2e" in normalized_text, name
         assert re.search(r"exit(?:ed)?\s+\*{0,2}2\b", normalized_text), name
-        assert re.search(r"Core \*{0,2}38", normalized_text), name
-        assert re.search(r"CLI \*{0,2}53", normalized_text), name
-        assert "dependency" in normalized_text.lower(), name
-        assert re.search(
-            r"return.{0,8}141|pipefail-sensitive",
-            normalized_text,
-            re.IGNORECASE,
-        ), name
-        assert "stage 12" in normalized_text, name
-        assert re.search(r"\*{0,2}2\*{0,2} Core", normalized_text), name
-        assert re.search(r"\*{0,2}8\*{0,2} CLI", normalized_text), name
-        assert re.search(r"generated[- ]PostgreSQL", normalized_text), name
+        assert re.search(r"Core (?:reported )?\*{0,2}38", normalized_text), name
+        assert re.search(r"CLI (?:reported )?\*{0,2}52", normalized_text), name
+        assert "installed-wheel" in normalized_text, name
+        assert "dependency synchronization" in normalized_text, name
+        assert re.search(r"concurrent .*campaign was not run", normalized_text), name
+        assert re.search(r"exact-scope cleanup", normalized_text, re.IGNORECASE), name
         assert "PostgreSQL" in normalized_text, name
         assert "equal" in normalized_text, name
         assert re.search(
@@ -636,27 +632,29 @@ def _assert_sa170_retained_partial_status(
             normalized_text,
             re.IGNORECASE,
         ), name
+        assert "focused rerun" in normalized_text, name
+        assert re.search(
+            r"fresh ordered serial(?:-then-concurrent| campaign)", normalized_text
+        ), name
 
+    for row in expected_rows:
+        assert row in rows_block, row
     for source_name, source_text in {
         "roadmap": roadmap_checkpoint_text,
         "changelog": checkpoint_text,
     }.items():
         normalized_source = " ".join(source_text.split())
-        for row in expected_rows:
-            assert row in normalized_source, (source_name, row)
         for scope in scopes:
             assert scope in normalized_source, (source_name, scope)
 
     for source_text in (roadmap_checkpoint_text, checkpoint_text):
         normalized_source = " ".join(source_text.split())
         assert re.search(
-            r"QS_E2E_PARALLEL=0 make test-e2e`.{0,40}exited \*\*0\*\*",
+            r"setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make test-e2e`"
+            r".{0,80}(?:exited|returned(?: child)? exit) \*{0,2}2\*{0,2}",
             normalized_source,
         )
-        assert re.search(
-            r"make ci-e2e`.{0,140}exited \*\*2\*\*",
-            normalized_source,
-        )
+        assert re.search(r"concurrent .*campaign was not run", normalized_source)
 
 
 def _assert_sa167d_status(

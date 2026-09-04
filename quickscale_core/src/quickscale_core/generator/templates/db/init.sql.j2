@@ -48,3 +48,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- Ensure future sequences also grant USAGE automatically.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT USAGE ON SEQUENCES TO {{ runtime_db_role }};
+
+-- Mark generated initialization complete only after every required statement succeeds.
+ALTER DATABASE "{{ package_name }}" SET quickscale.init_complete TO 'true';
