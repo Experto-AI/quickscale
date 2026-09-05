@@ -61,7 +61,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA174 |
-| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; SA165's retained corrections now await an exact-manifest fixture repair, a fresh green review, and a final-candidate release verdict; SA152 still carries an independent green-by-absence path | SA165, SA152 |
+| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; SA165's retained corrections now await a fresh green review and a final-candidate release verdict; SA152 still carries an independent green-by-absence path | SA165, SA152 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | dead code nobody deletes | SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA172, SA175 |
 
@@ -399,23 +399,27 @@ derived; and generated operations guidance rejects predictable local credentials
 environments.
 
 Those product bytes are retained and are not reopened by the documentation closeout. A fresh
-product-only terminal review found one direct generated-output consumer missing from the candidate:
-the three authoritative `OPERATIONS.md` hashes still describe the pre-warning output. Focused
-behaviour tests are green, but exact-manifest parity is predictably red. A maintainer must now
-authorize either a bounded SA165 widening or a separate immediately preceding W1 repair ticket; both
-shapes update only those three hashes plus provenance, preserve unrelated fixture entries, and end
-with another fresh terminal review. The replacement release run remains authorized as `EV-8`, but
-cannot launch before that repair, a green review, and `FROZEN-CHECK`; until then this section and the
-four audit notes remain live and no closure is claimed.
+product-only terminal review reported that the three authoritative `OPERATIONS.md` hashes still
+describe the pre-warning output. **That finding is refuted by measurement** — the rebaseline landed
+with the template edit in the same commit, and the parity variants are green. What the finding
+actually exposed is a defect in the *candidate*: a four-file patch that excluded the emission fixture
+showed a template change with no accompanying rebaseline, which is indistinguishable from a real
+staleness bug. The candidate is therefore five files, binding the fixture as reviewable context
+without granting SA165 any edit to it. The replacement release run remains authorized as `EV-8` but
+cannot launch before a fresh green review and `FROZEN-CHECK`; until then this section and the four
+audit notes remain live and no closure is claimed.
 
 ### Why the distinction matters
 
 A release verdict is evidence about exact bytes, not about an intention or an almost-identical
 candidate. Reusing the earlier exit 0 after a status file changed would turn the finality guard into
-a prose assertion; so would ignoring a generated-output fixture that independently describes the
-template's bytes. The roadmap retains the executable continuation, scope decision, plan authority,
-and exact handoff; this companion retains only the conceptual boundary between accepted product work
-and the still-pending repair and closeout.
+a prose assertion. The converse trap is newer and cost a cycle here: a candidate narrowed below the
+size of one logical change makes the reviewer's evidence incomplete, and an incomplete patch can
+manufacture a blocking finding about bytes that are actually correct. Narrowing protects a review
+from recording its own result; it must never separate a generated-output fixture from the template
+whose bytes it pins. The roadmap retains the executable continuation, plan authority, and exact
+handoff; this companion retains only the conceptual boundary between accepted product work and the
+pending closeout.
 
 ---
 
@@ -623,8 +627,8 @@ base `21a33fbf22b033cab07ba63b592e21b999667fb2`, with all twelve CI stages and b
 green. Merge position #21 is retired.
 SA167d's completion-grade Phase C is archived as a conditional post-integration candidate;
 exact-tip integration remains pending. SA165 remains open as an integrated retained partial with
-`deps: none`; fresh SA165-R1 is blocking on the stale exact-manifest consumer, and the bounded repair
-scope still needs maintainer authority. Ticket metadata
+`deps: none`; the fresh SA165-R1's one blocking finding is refuted by measurement, so no repair is
+owed and the next action is a fresh five-file review. Ticket metadata
 lives in the [roadmap](roadmap.md), not here.
 
 SA170's later ordered serial and concurrent campaigns both passed; their final acceptance and the

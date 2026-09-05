@@ -2,6 +2,37 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Refuted — the blocking SA165 review finding, and the repair-scope decision withdrawn as moot
+  (2026-09-05).** A fresh terminal SA165-R1 over the narrowed four-file product candidate graded
+  **blocking**, reporting that `OPERATIONS.md.j2` adds rendered warning text while the
+  `react_default`, `react_empty`, and `react_selected` records in `sa90_emission_manifests.json`
+  retain the pre-change `OPERATIONS.md` hash. That is not what the tree contains. Commit `a14ea029`
+  — the SA165 product commit itself — changed the template **and** rebaselined all three hashes from
+  `c8e6c725…` to `94165c64…` in one change, inside the reviewed range `5a7ee965..69f39e2b`.
+  Re-measured on `v88`: the three `test_generated_tree_matches_manifest` variants pass, and a
+  freshly generated `react_default` tree renders `OPERATIONS.md` to exactly
+  `94165c648f7b631bdcf53182fe06bceaf2037c9ebc2646dfeca556ece9ce0a40` with the warning text present.
+  No repair is owed, so the maintainer decision opened to authorize one — option **A** (widen SA165
+  to the three hashes plus provenance) versus option **B** (a separate preceding W1 repair ticket) —
+  is **withdrawn as moot**, neither option chosen, because both described work already in the tree.
+  **The defect was in the candidate, not the code.** `OPERATIONS.md.j2` and its three fixture hashes
+  are one logical change. The four-file candidate cut the fixture out of the patch, so a reviewer
+  holding only that patch saw a template edit with no accompanying rebaseline and correctly inferred
+  staleness from incomplete evidence. The candidate therefore widens to **five files**, binding
+  `quickscale_core/tests/fixtures/sa90_emission_manifests.json` as read-only review context; SA165
+  writes no byte to it and SA161 → SA160 remain its only open editors. This is the mirror of the
+  2026-09-05 narrowing: exclude the documents that *record* a review, include the files the reviewed
+  bytes depend on. Both corrections are now stated together in the ticket's frozen-set paragraph.
+  **Consequences for the planner.** W1's *can start* returns to **yes**, its next action being a
+  fresh five-file terminal SA165-R1; *can finish* stays **no** until that review and the unspent
+  `EV-8` verdict are green. SA165's pending plan drops from six ordered steps to three, the two
+  removed steps having existed only to perform and re-review the phantom repair. The v88 queue again
+  carries **no open maintainer decision**. No band, lane, merge position, dependency edge, ticket
+  count, or audit finding changed; the roadmap, `docs/index.md`,
+  `docs/technical/v88_ticket_context.md`, and the executable consistency contract are reconciled in
+  the same change, with the SA165 assertion group repinned to the corrected state and a canary that
+  now goes red if the refuted finding is re-asserted as live. The suite passes **48 tests**.
+
 - **Roadmap simplification pass — two either/or acceptance criteria settled (2026-09-05).** Both
   open tickets that offered a choice between fixing the defect and documenting it now name the fix.
   **SA172** commits to the two-line `DROP POLICY IF EXISTS` prefix on `_FORCE_RLS_FORWARD_SQL`
