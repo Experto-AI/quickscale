@@ -9,6 +9,38 @@ This is the current task planner. It holds **open work only**. Completed tickets
 review evidence, and release records are archived in [CHANGELOG.md](../../CHANGELOG.md) and removed
 from here rather than marked done. No checked entry is permitted.
 
+### Unmerged closeout checkpoint — SA167c Phase F
+
+This is the controlling current-status block for the unmerged W2 branch. The post-merge queue prose
+below is the reviewed target state, not a claim that `v88` already contains it.
+
+- **Completed:** SA167c phases A-E remain accepted on retained product object
+  `91fd3bb6e6b638735361b511c1515cddccce5d15`. Its single authorized Phase-F
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict ran on frozen `v88` object
+  `21a33fbf22b033cab07ba63b592e21b999667fb2` and exited 0 with all twelve stages, both E2E lanes,
+  and exact-scope cleanup green. The eight-file closeout was converged and terminally reviewed at
+  W2 commit `53bc7a13440dfec6391f1ffc55a1819e83fa8706`; the one blocking scheduling-prose finding raised
+  there was corrected and independently graded at W2 commit
+  `60447bd42174468d97d8f22eee678b2b871ffc7a`.
+- **Pending:** merge current `v88` into `wt-track2`, reconcile the five shared status surfaces
+  (`CHANGELOG.md`, `docs/index.md`, this roadmap, `docs/technical/v88_ticket_context.md`, and
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py`), preserve both SA165's retained
+  partial checkpoint and SA167c's green closeout, validate the reconciled candidate, review its exact
+  tip, and merge that tip back to `v88`.
+- **Blocking:** `v88` advanced after SA167c's verdict and review from frozen object `21a33fbf` to
+  `56b6d44425d109c2f976852aedb0dcf808ea91c5` through the SA165 retained-partial checkpoint, leaving
+  `wt-track2` two commits ahead and two behind. The reviewed W2 tip therefore cannot be fast-forwarded
+  or merged as an exact reviewed state. This closes when the moved base is reconciled in W2 and that
+  reconciliation receives fresh validation and review.
+- **Decisions needed:** decide whether the green Phase-F verdict on `21a33fbf` may be reused after the
+  status-only SA165 integration, or grant one fresh verdict against the reconciled base. The safer
+  default is fresh one-run authority because the merge rules require ticket verification on the exact
+  candidate being integrated.
+- **Remaining plan:** start from branch `wt-track2` at
+  `60447bd42174468d97d8f22eee678b2b871ffc7a` and integration branch `v88` at
+  `56b6d44425d109c2f976852aedb0dcf808ea91c5`; merge `v88` into W2, resolve the five shared status
+  surfaces without dropping either ticket's evidence, rerun `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`, apply the authority decision above, then run convergence and patch-backed terminal attestation before exact-tip merge-back. Do not start SA166 until this checkpoint is integrated.
+
 ### Execution rules
 
 - Work develops in three worktrees (**W1** module wiring + generated-output fixes, **W2** gate layer + declared wiring, **W3** service lifecycle and its exclusive PostgreSQL/Docker slot) and merges into the clean `v88` integration branch. Never implement directly on the integration branch. A ticket that does not fit an existing lane is sequenced inside one, not given a new lane.
