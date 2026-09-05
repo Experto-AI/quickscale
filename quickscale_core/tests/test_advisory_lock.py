@@ -89,6 +89,7 @@ class TestAdvisoryLockAcquireRelease:
                 data = yaml.safe_load(f)
             assert data["pid"] == os.getpid()
             assert data["operation"] == "apply"
+            assert data["_acquisition_token"] == lock._acquisition_token
         finally:
             lock.release()
 
@@ -168,7 +169,7 @@ class TestAdvisoryLockAcquireRelease:
         lock.acquire()
         acquired_identity = (lock.lock_path.stat().st_dev, lock.lock_path.stat().st_ino)
         replacement_data = yaml.safe_load(lock.lock_path.read_text())
-        replacement_data[lock_module._ACQUISITION_TOKEN_KEY] = "replacement-token"
+        replacement_data["_acquisition_token"] = "replacement-token"
         lock.lock_path.write_text(yaml.dump(replacement_data, sort_keys=False))
 
         assert (lock.lock_path.stat().st_dev, lock.lock_path.stat().st_ino) == (
@@ -178,9 +179,7 @@ class TestAdvisoryLockAcquireRelease:
 
         assert lock.lock_path.exists()
         assert (
-            yaml.safe_load(lock.lock_path.read_text())[
-                lock_module._ACQUISITION_TOKEN_KEY
-            ]
+            yaml.safe_load(lock.lock_path.read_text())["_acquisition_token"]
             == "replacement-token"
         )
         assert lock.is_held_locally is False

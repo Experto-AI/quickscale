@@ -72,14 +72,14 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 
 | Band | Rule | Tickets |
 |---|---|---|
-| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **SA176** — `make ci` runs red on HEAD: Bandit reports B105 at `quickscale_core/src/quickscale_core/advisory_lock.py:41`. Provisioning is separately clean — re-verify with `poetry run pytest scripts/test_provision_ci_postgres.py -q -o addopts= --no-cov` in the foreground (last measured **35 passed**); no provisioning repair is owed and no provisioning gate is red. |
+| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **Empty — SA176 is archived green and `make ci` passes.** Provisioning is separately clean — re-verify with `poetry run pytest scripts/test_provision_ci_postgres.py -q -o addopts= --no-cov` in the foreground (last measured **35 passed**); no provisioning repair is owed and no provisioning gate is red. |
 | **B — Release work on the critical path** | The serialized release-verdict chain. | **Empty — SA167c is archived green.** |
 | **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA166, SA172, SA174, SA175 |
 
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, nine open merge positions carrying nine open ticket entries, one merge queue
+v88 — three worktrees, eight open merge positions carrying eight open ticket entries, one merge queue
 
 W2 (gates & declared wiring)          band-C tail
   SA166 ─► SA164                #24, #25
@@ -88,23 +88,22 @@ W2 (gates & declared wiring)          band-C tail
 W1 (module wiring + generated-output fixes)
   SA165 ─► SA161 ─► SA160      #22, #19, #20
 
-W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   ★ critical path
-  SA176 ─► SA172               #33, #29
+W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
+  SA172                         #29
 ```
 
 **Position numbers are identifiers, not run order.** W2's remaining order is #24, #25, and the
 #31/#32 tail. **SA174 and SA175 remain W2 tail by current lane ordering; the band-C displacement
 rule imposes no present constraint because no runnable band-B leg remains.**
 
-The release-committed SA167c verdict is green and archived. W2 now carries the four-position
-band-C queue `SA166 ─► SA164` with SA174 and SA175 as its tail. W3 holds the exclusive slot and
-takes scheduling priority while one of its Docker-backed legs is active, but its two positions are a *queue*
-ordered by lane rather than a content chain — SA172 keeps `deps: none`. W1's three positions, W2's four
-positions, and W3's SA172 are band-C work; **W3's SA176 (#33) is band-A and is the one open ticket on the
-release critical path**, because `make ci` is red on HEAD until it closes.
+The release-committed SA167c verdict is green and archived, and SA176's release-gate correction is
+green and archived. W2 now carries the four-position band-C queue `SA166 ─► SA164` with SA174 and
+SA175 as its tail. W3 holds the exclusive slot and takes scheduling priority while its Docker-backed
+leg is active; its one position is a *queue* of one, and SA172 keeps `deps: none`. W1's three
+positions, W2's four positions, and W3's one position are all band-C work.
+**No open ticket remains on the release critical path; `make ci` is green on the corrected tree.**
 
-**No cross-worktree ticket blocker remains.** SA176 (#33, W3) owns the one open release-gate
-blocker and holds only its own lane. One cross-worktree *shared file* does,
+**No cross-worktree ticket blocker or open release-gate blocker remains.** One cross-worktree *shared file* does,
 made one-directional by merge order: `scripts/test_isolation_conformance.sh` (SA135's merged
 partial wrote it; SA165's retained product edit is awaiting closeout before the remaining W1 pair).
 `.../settings/production.py.j2` has one open owner, SA161 on W1; SA164's settled scope excludes it.
@@ -124,12 +123,11 @@ lane that observes it red must first confirm it is synced to current `v88` befor
 
 ### Track rebalance — settled lane assignment
 
-Lanes are **W1 3 · W2 4 · W3 2**, and every open ticket carries a track — none lacks one. Each was
+Lanes are **W1 3 · W2 4 · W3 1**, and every open ticket carries a track — none lacks one. Each was
 tested against the three questions: is it independent of the rest of its lane, is another lane idle,
-and is it on or feeding the critical path. **No move is proposed.** The remaining W2 queue is
-lane-ordered band-C work, so no relocation of it can shorten the release path, and the one
-critical-path ticket, SA176, cannot leave W3: it edits `quickscale_core/advisory_lock.py`, whose
-retained SA171 product provenance is W3's.
+and is it on or feeding the critical path. **No move is proposed.** The remaining queues are
+lane-ordered band-C work, so no relocation can shorten the release path. W3's sole ticket, SA172,
+cannot leave the lane because its acceptance owns the exclusive PostgreSQL/Docker slot.
 
 **SA174 (#31) and SA175 (#32) sit on W2 by a confirmed decision (2026-09-04), not a provisional
 one.** Both are `deps: none` and DB-free, neither touches `scripts/gate_registry.json`,
@@ -153,10 +151,9 @@ remains.**
   split, and SA165 (#22) precedes the pair by lane order.
 - **SA165 (#22) stays on W1.** Its product changes are retained and its only pending acceptance is
   the final-candidate release verdict. Moving a validation-only closeout buys no critical-path time.
-- **SA176 (#33) heads W3 and SA172 (#29) follows it by lane order.** SA176 is the DB-free release
-  correction of the retained SA171 candidate and claims no exclusive slot; SA172 remains the
-  W3-owned PostgreSQL-backed leg and keeps `deps: none`. Neither may move: SA176 carries W3's
-  retained lock provenance, and SA172 needs the exclusive PostgreSQL/Docker slot that only W3 holds.
+- **SA172 (#29) heads W3.** The DB-free SA176 release correction is archived green. SA172 is the
+  remaining W3-owned PostgreSQL-backed leg, keeps `deps: none`, and cannot move because it needs the
+  exclusive PostgreSQL/Docker slot that only W3 holds.
 
 ### Lane state
 
@@ -190,18 +187,21 @@ complete and the standing state was restored exactly.
   complete on the retained product/frozen-base evidence archived in [CHANGELOG.md](../../CHANGELOG.md).
   SA166 now has `deps: none` and is the W2 head; SA164 remains after SA166, with SA174 and SA175
   as the band-C tail. W2 claims no standing service.
-- **W1 — retain SA165 (#22).** Phase D reconciliation is integrated; one-run authority is granted as
-  `EV-8`, and the next action is SA165-R1 independent review followed by the single authorized
-  final-candidate verdict. SA167d's
+- **W1 — retain SA165 (#22).** SA165-R1 independent review passed over the historical six-file
+  candidate from `b23eb1fd47114dc9f176cd930ee35468f823e4cf` to
+  `f3f29d915f5971c8f47e558a82c292ccfc86add0`, but the checkpoint recording that result necessarily
+  changed the roadmap blob and invalidated the exact-byte binding for further action. One-run
+  authority remains granted and unspent as `EV-8`. The focused status/test reconciliation is green;
+  the next action is a fresh terminal SA165-R1 over those exact bytes. Only a later root run may then
+  enter `FROZEN-CHECK` and the single authorized final-candidate verdict. SA167d's
   completion-grade closeout is archived as a conditional post-integration candidate; SA165 has
   `deps: none`, remains W1-owned, and its phases A-C are accepted on retained product object
   `573a57a34301e6a91971a7845095bd913bebd5e1`, merged at `3f925b96`. The final-candidate release
   verdict is still outstanding.
-- **W3 — start SA176 (#33).** SA176 is the ticketed release correction of the retained SA171
-  candidate: `make ci` is red on Bandit B105 for `_ACQUISITION_TOKEN_KEY = "_acquisition_token"`.
-  It has `deps: none`, is DB-free, claims no exclusive slot, and is executable today. SA172 (#29)
-  is held behind it by lane order only. SA170's final acceptance is archived in `CHANGELOG.md`;
-  do not reopen its release campaign.
+- **W3 — start SA172 (#29).** SA176's B105 release correction release-accepted retained SA171 lock work
+  after the exact serialized acquisition key was preserved and `make ci` returned green. SA172
+  has `deps: none`, now heads W3, and owns the lane's exclusive PostgreSQL/Docker slot. SA170's final
+  acceptance is archived in `CHANGELOG.md`; do not reopen its release campaign.
 
 ### Track readiness — the three states
 
@@ -212,18 +212,15 @@ merge-back is not order-gated behind another lane.
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
 | **W2** | SA166 (#24) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #24 | no |
-| **W1** | SA165 (#22) | **yes** — `deps: none`; Phase D reconciliation is integrated; one-run authority is granted as `EV-8`, and the next action is SA165-R1 independent review followed by the single authorized final-candidate verdict | **no** — the `EV-8`-authorized final-candidate release verdict has not yet returned green | **yes after a green verdict** — no cross-lane blocker remains | no |
-| **W3** | SA176 (#33) | **yes** — `deps: none`, DB-free, and the defect is located and reproducible | **yes** — correcting B105, rerunning `make ci`, and independent review are all W3-owned | **yes** — nothing is ordered ahead of #33 | **yes — the only ticket on it** |
-| **W3 tail** | SA172 (#29) | **no** — held behind SA176 by lane order | **yes** — `deps: none`; its acceptance is proved against W3's own PostgreSQL slot | **yes after SA176 merges** — lane ordering, clearable by you reordering the lane | no |
+| **W1** | SA165 (#22) | **yes** — `deps: none`; the focused status/test reconciliation is green, and the next action is a fresh terminal SA165-R1 before entering the reviewed remainder | **no** — the current bytes lack a fresh SA165-R1 and the `EV-8`-authorized verdict has not returned green | **yes after fresh review and a green verdict** — no cross-lane blocker remains | no |
+| **W3** | SA172 (#29) | **yes** — `deps: none` and W3 owns the required PostgreSQL slot | **yes** — its acceptance is proved against W3's own PostgreSQL slot | **yes** — nothing is ordered ahead of #29 | no |
 
-**W2 and W3 are truly green; W1 can start but cannot finish until SA165's `EV-8`-authorized
-final-candidate verdict is green, and the retained SA171 B105 blocker is now ticketed as SA176.**
-**SA176 (#33, W3) is the only truly-green ticket on the release critical path** — it is what makes
-`make ci` green again, and every other lane's acceptance is discharged by that gate. SA166 (#24, W2)
-is truly green but off the critical path: real, useful, and filler with respect to the release date.
-W1's *cannot finish* is empirical, not a decision — the authorized verdict either returns green or
-it does not. W3's SA172 tail is order-gated behind SA176 by lane ordering alone, which you can clear
-by reordering the lane; it is not a hard dependency. SA174 and SA175 stay on W2 as its tail.
+**W2 and W3 are truly green; W1 can start but cannot finish until a fresh SA165-R1 is green and
+SA165's `EV-8`-authorized final-candidate verdict is green.** **No open ticket remains on the release critical path:** SA176
+restored the full `make ci` gate and is archived. SA166 (#24, W2) and SA172 (#29, W3) are truly green
+but off the critical path: real, useful, and filler with respect to the release date. W1's *cannot
+finish* is empirical, not a decision — the authorized verdict either returns green or it does not.
+SA174 and SA175 stay on W2 as its tail.
 
 ### Maintainer decisions
 
@@ -322,20 +319,19 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 | 22 | **SA165** | C | 3 | W1 | — | no |
 | 24 | **SA166** | C | 3 | W2 | — | no |
 | 25 | **SA164** | C | 3 | W2 | SA166 | no |
-| 29 | **SA172** | C | 3 | W3 | SA176 *(lane only)* | no |
+| 29 | **SA172** | C | 3 | W3 | — | no |
 | 31 | **SA174** | C | 3 | W2 | — *(band-C tail)* | no |
 | 32 | **SA175** | C | 3 | W2 | SA174 *(lane only)* | no |
-| 33 | **SA176** | A | 1 | W3 | — | no |
 
 Entries carry their declared queue or content dependencies, subject to fresh branch remeasurement
 before execution.
 
-Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #17, #18, #21, #23, #26, #27, #28 are **retired and not
+Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #17, #18, #21, #23, #26, #27, #28, #33 are **retired and not
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning.
 
-The per-lane heads are **#24 (W2), #22 (W1), and #33 (W3)**. SA167c's #21 release verdict is
-complete and archived. #33 is the only head on the release critical path; #29 sits behind it by
-lane order.
+The per-lane heads are **#24 (W2), #22 (W1), and #29 (W3)**. SA167c's #21 release verdict and
+SA176's #33 release-gate correction are complete and archived. No open head is on the release
+critical path.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Two are
@@ -343,7 +339,7 @@ by a maintainer reordering the lane**. Two are
 the pair must not be split, so the run is ordered #19, #20), **SA164's substance after SA166** (its
 `test_sa92_migration_squash_guardrail.py` work needs `django_apps:` retired). Band-C positions
 (19, 20, 22, 24, 25, 29, 31, 32) are *earliest-eligible*, not commitments, and may slip past the
-release; **band-A #33 is not** — it gates the release gate itself. **SA174 (#31) and SA175 (#32) sit on W2 by the confirmed 2026-09-04 assignment**: neither has a
+release. The band-A #33 release-gate correction is complete and retired. **SA174 (#31) and SA175 (#32) sit on W2 by the confirmed 2026-09-04 assignment**: neither has a
 content dependency, neither needs an exclusive slot, and SA174 is now a comment correction plus an
 audit demotion. They remain W2 tail work.
 
@@ -359,7 +355,6 @@ Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`, 
 | SA165 | `docs/others/tech-audit.md`, `quickscale_core/.../state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `OPERATIONS.md.j2` | retained watchlist discharge; final-candidate release verdict pending on W1 |
 | SA166 | `scripts/gate_registry.json`, `Makefile`, CI workflow, `docs/others/tech-audit.md` | new process gate |
 | SA172 | `quickscale_modules/orgs/.../tenancy.py`, `scripts/test_isolation_conformance.sh`, `docs/others/tech-audit.md` | RLS policy templates and their conformance assertion; **W3** — proved against a live PostgreSQL |
-| SA176 | `quickscale_core/src/quickscale_core/advisory_lock.py`, `quickscale_core/tests/test_v88_ticket_context_consistency.py`, `docs/others/tech-audit.md`, `docs/others/arch-audit.md` | release correction of the retained SA171 candidate; **W3** — no other open ticket touches the advisory lock, and no other lane may edit it |
 | SA174 | `quickscale_modules/orgs/.../apps.py`, `docs/others/arch-audit.md` | **shrunk 2026-08-31** to correcting the false SSOT comment and demoting the finding; no emitted bytes, no generator surface, no emission fixture |
 | SA175 | `quickscale_cli/tests/test_beta_migration_ownership_conformance.py`, `quickscale_devtools/.../beta_migration.py`, `docs/others/arch-audit.md` | disposition-coherence assertion for the launcher↔settings contract; **W2** — no other open ticket touches either file |
 
@@ -465,17 +460,42 @@ triggers.
   credentials must not survive into shared environments. Focused A-C evidence and the retained-only
   integration are archived in [CHANGELOG.md](../../CHANGELOG.md); do not redo those phases.
 
-  **State (measured 2026-09-05): integrated retained Phase D candidate; final-candidate release
-  verdict outstanding.** The retained A-C product and the six current closeout files reconcile the
-  audit, current queue, context, docs hub, changelog, and executable consistency contract. The sole
+  **State (measured 2026-09-05): retained Phase D candidate; historical SA165-R1 passed; current
+  candidate reconciled and awaiting fresh review; final-candidate release verdict outstanding.** Independent read-only review
+  accepted the complete six-file patch from `b23eb1fd47114dc9f176cd930ee35468f823e4cf` to
+  `f3f29d915f5971c8f47e558a82c292ccfc86add0` with no blocking finding. This checkpoint then changed
+  `docs/technical/roadmap.md`, one of the six bound blobs, so that review is historical evidence and
+  does not authorize `FROZEN-CHECK` or `EV-8` against the current bytes. The retained A-C product
+  remains unchanged. The sole
   SA165 release run returned exit 0 with Core 38 passed and CLI 54 passed, but `CHANGELOG.md` changed
   afterward. It therefore does not cover the settled candidate and closes neither SA165 nor its four
-  audit notes. SA165-R1 remains tracked for independent review of the reconciled temporal lane-state
-  handoff; lane state must be remeasured at action time rather than persisted as a current merge
-  assertion.
+  audit notes. A fresh SA165-R1 is required after the current status consumers and executable
+  consistency contract are reconciled; the old result must not be rebound. Lane state must be
+  remeasured at action time rather than persisted as a current merge assertion.
 
-  **Pending, in order.** (1) Obtain independent review of the reconciled candidate (SA165-R1).
-  (2) Freeze the final candidate and rerun the focused context suite. (3) Spend **`EV-8`** — the
+  **Pre-R1 reconciliation completed (2026-09-05).** The current same-fact consumers and consistency
+  module now describe the truthful historical-pass/current-review-required state. The stale
+  `test_v88_sa165_readiness_rejects_green_without_release_authority` name now describes rejection
+  before the `EV-8` verdict, its assertions remain intact, and the focused suite is green. A fresh
+  terminal SA165-R1 over the resulting exact six blobs remains required.
+
+  **Observed focused checkpoint (2026-09-05).** After synchronizing the retained checkpoint with
+  current `v88` and preserving W3's SA176 state, the exact focused command returned **4 failed / 36
+  passed**. The failures are the expected evidence for this retained stop: the helper still requires
+  `SA165-R1 remains tracked`; the readiness and current-action canaries still target the pre-R1
+  wording; and the current-status guard rejected the prior checkpoint's ungraded-correction marker.
+  Removing that stale marker before this checkpoint's independent review made its guard green; the
+  exact command then returned **3 failed / 37 passed**, leaving the three intended pre-R1
+  status/action failures above. The bounded reconciliation then updated those contracts without
+  weakening their assertions; the exact command returned **40 passed**. `EV-8` remains unspent.
+
+  **Decisions needed to continue cleanly: none.** The existing authority already defines the next
+  safe path: obtain a fresh terminal SA165-R1 before entering the reviewed remainder. A new maintainer decision is required
+  only if that work changes scope, or if the eventual one-use `EV-8` verdict is red or unreturned and
+  replacement authority is needed.
+
+  **Pending, in order.** (1) Obtain a fresh terminal SA165-R1 over the reconciled six-file candidate.
+  (2) In a later root run, revalidate the fresh review binding and execute `FROZEN-CHECK`. (3) Spend **`EV-8`** — the
   single replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict granted 2026-09-05 — launching
   it under `setsid` with its exit code captured atomically to a file, and retain exact
   cleanup/provenance evidence. A green verdict permits completion-grade convergence, patch-backed
@@ -483,12 +503,19 @@ triggers.
   unreturned verdict keeps this checkpoint open and requires a repair ticket plus fresh authority;
   `EV-8` covers no second run.
 
-  **Remaining reviewed plan and handoff.** Plan authority `EV-2` remains binding. Resume from the
-  retained product object and the present six-file Phase D candidate: `CHANGELOG.md`, `docs/index.md`,
+  **Remaining reviewed plan and handoff.** Reviewed plan authority `EV-6` still governs the
+  `FROZEN-CHECK` and `EV8-CLOSEOUT` remainder, but its fresh-R1 entry precondition is not currently
+  met and neither phase is dispatchable. The next root run must terminate at the required fresh
+  SA165-R1; only a subsequent root run may reuse `EV-6`. Retain product object
+  `573a57a34301e6a91971a7845095bd913bebd5e1`; do not treat historical reviewed tip
+  `f3f29d915f5971c8f47e558a82c292ccfc86add0` as the current candidate. The six-file Phase D set
+  remains `CHANGELOG.md`, `docs/index.md`,
   `docs/others/tech-audit.md`, `docs/technical/roadmap.md`,
   `docs/technical/v88_ticket_context.md`, and
-  `quickscale_core/tests/test_v88_ticket_context_consistency.py`. Review the SA165-R1 temporal
-  handoff, then spend `EV-8` on the release-verdict step. Preserve historical SA170 and
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py`. After a fresh R1 and a later
+  `FROZEN-CHECK` return green, the root records `EV-8` as launched before dispatching
+  `EV8-CLOSEOUT`; a dispatch or launch failure is spent/unreturned and is not retryable. Only a valid
+  green verdict permits the six-file closeout reconciliation. Preserve historical SA170 and
   SA167c/SA167d evidence, do not reopen A-C product files, and do not alter SA172's later ownership
   of the isolation script.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/schema/state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `quickscale_core/.../templates/OPERATIONS.md.j2`, `docs/others/tech-audit.md`.
@@ -599,29 +626,6 @@ triggers.
   Closes the tech audit's carried tooling gap *"no gate requires a changelog/ticket trail for behavioural commits"*. `d3d4c633` and `d4b0e834` were both titled "v0.87.0: QuickScale 0.87.0" while in fact changing hosted and publish provisioning, and `d3d4c633` left a repository conformance test red (TA66/SA158). Both audits independently flagged the same shape: a release-shaped message carrying a CI-topology change. Recorded in the audit as maintainer-process risk rather than a source finding, which is why this is Tier 3.
   **Acceptance:** a change touching `.github/workflows/`, `scripts/gate_registry.json`, or the provisioning stations requires either a roadmap ticket reference or a `CHANGELOG.md` entry, enforced mechanically rather than by convention; the check is registered in `scripts/gate_registry.json` and passes `scripts/check_gate_parity.py`; the gate fails on a deliberately introduced untitled workflow change, reverted before merge; false-positive cost is measured on the existing history and the rule is narrowed until it is quiet on legitimate release commits; the tooling gap is retired from the tech audit.
   **Shared conflict surface:** `scripts/gate_registry.json`, `Makefile`, CI workflow, `docs/others/tech-audit.md`.
-
-- [ ] **SA176 — Clear the B105 release blocker on the retained SA171 lock candidate.** `Band A · Tier 1 · W3 · merge #33 · deps: none`
-  Reviewed SA171 parent `6c87a35a2b8e8e63f292d20149c37490e9c85a63` is merged into `v88` as
-  authorized retained partial delivery, but repository release acceptance is not complete, so this
-  ticket carries the remainder. **SA172 remains held behind it by lane order.** The implementation
-  evidence — inode-bound stale reclamation, ownership-bound release, and the deterministic lock
-  regressions — is archived in [CHANGELOG.md](../../CHANGELOG.md) and is not reopened here.
-  **The blocker.** `make ci` exits non-zero because Bandit reports **B105** (`hardcoded_password_string`)
-  at `quickscale_core/src/quickscale_core/advisory_lock.py:41` for
-  `_ACQUISITION_TOKEN_KEY = "_acquisition_token"`. The constant is a YAML metadata key name, not a
-  secret; B105 fires on the substring `token` in the assigned string literal. Because a gate that is
-  red on the integration branch is attributed to exactly one ticket and is never deselected, every
-  other lane's evidence is provisional until this closes.
-  **Acceptance:** the key no longer triggers B105 without suppressing the rule and without weakening
-  the ownership invariant — the acquisition identity stays private and release still refuses to
-  unlink a replacement; the focused lock and status suites and full `make ci` are green on the exact
-  corrected tree, `make ci` launched detached under `setsid` with its exit code captured atomically
-  to a file; the corrected exact tip is independently reviewed; and every SA171 completion consumer
-  (`CHANGELOG.md`, this file, `docs/index.md`, `docs/technical/v88_ticket_context.md`, both audits)
-  is reconciled to the resulting release evidence.
-  **Measured starting state (2026-09-05):** `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`
-  is green after this planning pass; `make ci` is red on B105 alone.
-  **Shared conflict surface:** `quickscale_core/src/quickscale_core/advisory_lock.py`, `quickscale_core/tests/test_v88_ticket_context_consistency.py`, `docs/others/tech-audit.md`, `docs/others/arch-audit.md`.
 
 - [ ] **SA172 — Make `apply_force_rls`'s idempotency claim true.** `Band C · Tier 3 · W3 · merge #29 · deps: none`
   Closes tech-audit **TA72** (`force-rls-apply-idempotency-claim`, S4, opened 2026-08-28).

@@ -38,7 +38,7 @@ from typing import Any, Iterator
 import yaml
 
 
-_ACQUISITION_TOKEN_KEY = "_acquisition_token"
+_LOCK_OWNER_KEY = "_acquisition_token"
 
 
 class AdvisoryLockError(Exception):
@@ -182,7 +182,7 @@ class AdvisoryLock:
             acquired_identity = _file_identity_from_descriptor(fd)
             fcntl.flock(fd, fcntl.LOCK_EX)
             payload_data = metadata.to_dict()
-            payload_data[_ACQUISITION_TOKEN_KEY] = acquisition_token
+            payload_data[_LOCK_OWNER_KEY] = acquisition_token
             payload = yaml.dump(
                 payload_data,
                 default_flow_style=False,
@@ -249,7 +249,7 @@ class AdvisoryLock:
                         return
                     if (
                         data.get("pid") != acquired_pid
-                        or data.get(_ACQUISITION_TOKEN_KEY) != acquisition_token
+                        or data.get(_LOCK_OWNER_KEY) != acquisition_token
                     ):
                         return
                     try:
