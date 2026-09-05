@@ -345,7 +345,8 @@ authorized Phase-F verdict under `EV-7` exited 0 on frozen base
 `21a33fbf22b033cab07ba63b592e21b999667fb2`, with all twelve CI stages, both E2E lanes, and
 exact-scope cleanup green. Closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md),
 and merge position #21 is retired. SA166's subsequent testimony gate is also complete, merge
-position #24 is retired, and SA164 now has `deps: none`.
+position #24 is retired, and SA164's fail-loud migration-guardrail repair is complete with merge
+position #25 retired; SA178 now heads W2 at `deps: none`.
 This does not alter the module-extension contract or authorize edits to the settled manifest implementation.
 
 SA170's final ordered serial and concurrent campaigns passed against retained product object

@@ -40,9 +40,9 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-            SA160         SA165          SA161          SA177
-            SA164         SA152                         SA175
-            SA174           │               │              │
+            SA160         SA165          SA161          SA172
+            SA174         SA152                         SA175
+              │             │               │              │
               │             │               │        (policy-text
          (cookies,      (state/tool     (dead code)    assertions,
           watchlists,    fallbacks,                    file-group
@@ -60,7 +60,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA164, SA174 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; SA165's retained state-read and isolation-skip corrections await a final-candidate release verdict; SA152 still carries an independent green-by-absence path | SA165, SA152 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | dead code nobody deletes | SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA177, SA175 |
@@ -115,6 +115,55 @@ in scope. Fixing the shape twice is bounded; unifying them is a design change th
 band-C ticket into an architectural one.
 
 -->
+
+---
+
+## SA172 — Make `apply_force_rls`'s idempotency claim true
+
+### The mental model
+
+PostgreSQL row-level security is switched on per table by a small SQL sequence: enable RLS, force it
+(so even the table owner is subject to it), then create the policies that say which rows a session
+may see and write. `apply_force_rls` runs that sequence and its docstring says it is **idempotent** —
+safe to run twice.
+
+It is not. PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so the second run raises
+`42710 duplicate_object` and aborts the migration that called it.
+
+### Why nothing is broken today
+
+Exactly one caller re-applies: `refresh_force_rls_policies`. It calls `revert_force_rls` first, and
+the reverse SQL correctly uses `DROP POLICY IF EXISTS`. So the only path that could hit the defect
+already avoids it — by accident of ordering, not by contract.
+
+The hazard is the next module migration. Its author reads "idempotent", calls the helper on an
+already-enrolled table, and the migration fails in production rather than in review.
+
+### The resolution
+
+Two resolutions were available: make the documentation match the code (say it is not idempotent and
+must be preceded by `revert_force_rls`), or make the code match the documentation by prefixing the
+forward template with the same `DROP POLICY IF EXISTS` pair the reverse template already carries.
+The second is settled: it is two lines and leaves the repository with a true contract instead of a
+warning. The acceptance criteria name it rather than offering the choice.
+
+### The assertion that is missing is a separate concern
+
+The conformance gates check that a policy *exists* — `relrowsecurity` and `relforcerowsecurity` true,
+and at least one row in `pg_policies`. A table carrying a permissive `USING (true)` policy would pass
+every isolation check the repository runs. That gap is real, but it is a tooling improvement over the
+whole enrolled-table set rather than a repair of the idempotency claim, and it is carried separately
+so this ticket stays the size of its defect: prefix the forward template, prove the contract by
+applying twice, done.
+
+### The watch item folded in
+
+`refresh_force_rls_policies` derives each table name from the Django default convention and drops
+any name it cannot resolve, silently. All 21 enrolled tables happen to match the convention today,
+so this is latent rather than live — but the moment an enrolled model declares its own `db_table`,
+its policy refresh becomes a no-op with no warning, on the most security-critical helper in the
+tree. The model's real table name is available from `apps.get_model(...)._meta.db_table`, which the
+sibling conformance helper already uses.
 
 ---
 
@@ -196,9 +245,9 @@ correct.
 
 ### Implementation shape
 
-Delete both, or leave each as a comment pointing at the orgs helper. **Either way remove the
-misleading behavioural comment at `production.py.j2:119-122`** — that is the part that must
-not survive.
+Delete both. Annotating unreachable code keeps it in the emitted tree for no benefit, so the
+acceptance criteria name deletion rather than offering the choice. **Remove the misleading
+behavioural comment at `production.py.j2:119-122`** — that is the part that must not survive.
 
 Keep unchanged: the uppercase settings themselves, and the `REST_FRAMEWORK["NUM_PROXIES"]`
 recomputation. Both are live.
@@ -400,52 +449,6 @@ claim in the audit that no evidence supports — the exact failure the rule exis
 It carries no product behaviour and touches no code under the generator, the core package, or
 `scripts/`. That is deliberate and load-bearing: a documentation ticket that also edited product
 files would re-create the entanglement it exists to remove.
-
----
-
-## SA164 — Make the SA92 migration-squash guardrail fail loudly
-
-### The mental model
-
-A watch item is a bet: *"this is not a problem yet, and here is the trigger that would make
-it one."* A watch item whose trigger **cannot be evaluated** has stopped being a bet and
-become debt — it costs a read every audit pass and can never fire.
-
-The watchlist was rewritten by the 2026-08-28 pass: one item's parent finding was resolved, one
-item fired and was promoted, and three new ones were minted inside the landed provisioning
-derivation. Exactly one of the survivors carries executable work, and that is what this ticket now
-is. The naming question and the restatement are documentation and are carried separately.
-
-### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains open work
-
-The artifact is
-`quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, a bounded
-literal tripwire for cross-table `UPDATE … SET organization_id` migration DML; it is
-not a schema-parity proof. The retired `django_apps:` manifest dependency is already gone:
-its `_migdir()` helper constructs the conventional migration path directly. The helper
-still returns `None` when that directory is absent, and the scan silently skips that module,
-while its parity backstop still names the retired `v87` baseline. The current regenerated
-migrations and discharged S4 BYPASSRLS prerequisite are settled; SA164 owns making the
-conventional-path absence fail loudly and re-anchoring the parity backstop.
-
-### 2. Privileged-command pair — the watch item fired, and left this ticket
-
-This was carried for two passes as *"values agree, claimed authority does not"*. The 2026-08-28
-structural pass re-counted the owners and found **four**, not two — the trigger fired, and the item
-was promoted out of the watchlist into a ranked finding. It is no longer adjudication work and no
-longer belongs here; **SA174** carries it, with the full census and the chosen shape.
-
-What survives in this ticket is the shape of the lesson, which the remaining items share: a watch
-item is a bet, and when the bet resolves, the item stops being a watch item. Restating it here as a
-watch item a third time would be the error.
-
-### Why the repair is worth isolating
-
-A tripwire that returns `None` and skips is worse than no tripwire, because the green result reads
-as *"no cross-table organization DML found"* when it actually means *"nothing was read"*. That is the
-same silent-fallback shape the tech audit tracks elsewhere in the tree, on the guardrail protecting
-tenant isolation in migrations. Bundling it behind documentation work was the only reason it had not
-landed.
 
 ---
 
