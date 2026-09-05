@@ -52,6 +52,7 @@ MERGE_ORDER_ENTRY_RE = re.compile(
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 E0_ACCEPTED_TIP = "bd2c291ba2d40494970464741ac51bfd45445a19"
 SA167C_RETAINED_PRODUCT = "91fd3bb6e6b638735361b511c1515cddccce5d15"
+SA165_RETAINED_PRODUCT = "573a57a34301e6a91971a7845095bd913bebd5e1"
 UMBRELLA_TITLE = "SA167a / SA167c — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
@@ -1252,6 +1253,18 @@ def test_v88_current_reconciliation_is_not_labelled_ungraded() -> None:
     assert "not independently graded" in latest_sa167c_entry.group(0)
 
 
+def _assert_sa165_pending_plan_order(pending_plan: str) -> None:
+    """Require every numbered SA165 step to appear in strict order."""
+    step_positions = [pending_plan.find(f"({step})") for step in range(1, 7)]
+    missing_steps = [
+        step for step, position in enumerate(step_positions, 1) if position < 0
+    ]
+    assert not missing_steps, f"SA165 pending plan lacks steps {missing_steps}"
+    assert all(
+        earlier < later for earlier, later in zip(step_positions, step_positions[1:])
+    ), f"SA165 pending plan steps are out of order: {step_positions}"
+
+
 def _assert_sa165_retained_partial(
     roadmap_text: str,
     context_text: str,
@@ -1271,9 +1284,53 @@ def _assert_sa165_retained_partial(
     assert roadmap["SA161"].dependencies == frozenset({"SA165"})
     assert 22 in positions
     assert "## SA165" in context_text
-    assert "historical SA165-R1 passed" in roadmap_text
-    assert "SA165-R1 remains tracked" in context_text
+    assert "fresh product-only SA165-R1 returned\n  blocking" in roadmap_text
+    assert "fresh SA165-R1 is blocking" in context_text
     assert not re.search(r"#22, .*\bare \*\*retired and not", roadmap_text)
+
+    sa165_ticket = _roadmap_block(
+        roadmap_text,
+        "- [ ] **SA165 — Discharge the tech-audit watch items that carry an action.**",
+        "- [ ] **SA179 — Reconcile SA165's documentation and retire its four audit notes.**",
+    )
+    normalized_sa165_ticket = " ".join(sa165_ticket.split())
+    assert SA165_RETAINED_PRODUCT in normalized_sa165_ticket
+    assert "`EV-8` remains unspent" in normalized_sa165_ticket
+    assert (
+        "Retiring the four tech-audit notes is **not** this ticket's step"
+        in normalized_sa165_ticket
+    )
+    assert "SA179 performs it" in normalized_sa165_ticket
+
+    pending_plan = normalized_sa165_ticket.partition("**Pending, in order.**")[2]
+    assert pending_plan
+    _assert_sa165_pending_plan_order(pending_plan)
+    assert "authorize either the recommended bounded SA165 widening" in pending_plan
+    assert "update only their `OPERATIONS.md` hashes" in pending_plan
+    assert "another fresh independent terminal SA165-R1" in pending_plan
+    assert "that review ends its root run. (5) In a later root run" in pending_plan
+    assert (
+        "revalidate the fresh review binding and execute `FROZEN-CHECK`" in pending_plan
+    )
+    assert "Spend **`EV-8`**" in pending_plan
+
+    maintainer_decisions = _roadmap_block(
+        roadmap_text, "### Maintainer decisions", "### Handoff checklist"
+    )
+    normalized_decisions = " ".join(maintainer_decisions.split())
+    assert "One maintainer decision is open" in normalized_decisions
+    assert "**A (recommended)**" in normalized_decisions
+    assert "**B**" in normalized_decisions
+    assert "three hashes plus one provenance entry" in normalized_decisions
+
+    normalized_context = " ".join(context_text.split())
+    assert SA165_RETAINED_PRODUCT in normalized_context
+    assert (
+        "cannot launch before that repair, a green review, and `FROZEN-CHECK`"
+        in normalized_context
+    )
+    assert "## SA179 — Reconcile the retained documentation" in context_text
+    assert "It carries no product behaviour" in context_text
 
     current_w1_action_blocks = {
         "next action": _roadmap_block(
@@ -1285,7 +1342,12 @@ def _assert_sa165_retained_partial(
     }
     for block_name, block in current_w1_action_blocks.items():
         normalized_block = " ".join(block.split())
-        assert "fresh terminal SA165-R1" in normalized_block, block_name
+        expected_review_wording = (
+            "fresh terminal SA165-R1"
+            if block_name == "next action"
+            else "fresh SA165-R1"
+        )
+        assert expected_review_wording in normalized_block, block_name
         assert "`EV-8`" in normalized_block, block_name
         assert "run its Phase D documentation reconciliation" not in normalized_block, (
             block_name
@@ -1293,27 +1355,29 @@ def _assert_sa165_retained_partial(
 
     normalized_next_action = " ".join(current_w1_action_blocks["next action"].split())
     assert (
-        "SA165-R1 independent review passed over the historical"
-        in normalized_next_action
-    )
-    assert "focused status/test reconciliation is green" in normalized_next_action
+        "fresh terminal SA165-R1 completed over the narrowed four-file product candidate "
+        "and returned **blocking**" in normalized_next_action
+    ), "next action must record the blocking SA165-R1 result"
+    assert "maintainer scope decision" in normalized_next_action
 
     normalized_readiness = " ".join(current_w1_action_blocks["track readiness"].split())
-    assert "focused status/test reconciliation is green" in normalized_readiness
+    assert "no — pending scope authority" in normalized_readiness
+    assert "exact-manifest parity is unsettled" in normalized_readiness
 
     readiness = _roadmap_block(
         roadmap_text, "### Track readiness", "### Maintainer decisions"
     )
     normalized_readiness = " ".join(readiness.split())
     assert re.search(
-        r"\| \*\*W1\*\* \| SA165 \(#22\).*?\| \*\*no\*\* — the current bytes "
-        r"lack a fresh SA165-R1 and the `EV-8`-authorized verdict has not returned green \|",
+        r"\| \*\*W1\*\* \| SA165 \(#22\).*?\| \*\*no — pending scope authority\*\* — "
+        r"`deps: none`, but fresh SA165-R1 found stale exact-manifest hashes and the "
+        r"bounded repair must be authorized first \|",
         normalized_readiness,
     )
     assert (
-        "W2 and W3 are truly green; W1 can start but cannot finish until a fresh "
-        "SA165-R1 is green and SA165's "
-        "`EV-8`-authorized final-candidate verdict is green."
+        "W2 and W3 are truly green; W1 is scope-blocked until the SA165 exact-manifest "
+        "repair is authorized, then cannot finish until a fresh SA165-R1 and SA165's "
+        "`EV-8`-authorized final-candidate verdict are green."
     ) in normalized_readiness
 
     latest_status = re.search(r"(?ms)^- \*\*SA165\b.*?(?=^- \*\*)", changelog_text)
@@ -1341,14 +1405,15 @@ def _assert_sa165_retained_partial(
     ):
         assert retained_note in notes
     assert "SA165 heads W1 with `deps: none`" in docs_index_text
-    assert "SA165-R1 still tracked" in docs_index_text
+    assert "fresh product-only SA165-R1 returned blocking" in docs_index_text
+    assert "release verdict EV-8 remains authorized and unspent" in docs_index_text
 
 
 def test_v88_sa165_readiness_rejects_green_before_ev8_verdict() -> None:
     roadmap, context = _load_documents()
     stale_claim = (
-        "**no** — the current bytes lack a fresh SA165-R1 and the `EV-8`-authorized "
-        "verdict has not returned green"
+        "**no — pending scope authority** — `deps: none`, but fresh SA165-R1 found stale "
+        "exact-manifest hashes and the bounded repair must be authorized first"
     )
     mutated = roadmap.replace(
         stale_claim,
@@ -1366,15 +1431,15 @@ def test_v88_sa165_readiness_rejects_green_before_ev8_verdict() -> None:
         )
 
 
-def test_v88_sa165_current_action_rejects_stale_reconciliation_wording() -> None:
+def test_v88_sa165_current_action_rejects_nonblocking_review_wording() -> None:
     roadmap, context = _load_documents()
     current_claim = (
-        "The focused status/test reconciliation is green;\n"
-        "  the next action is a fresh terminal SA165-R1"
+        "A fresh terminal SA165-R1 completed over the narrowed four-file\n"
+        "  product candidate and returned **blocking**"
     )
     stale_claim = (
-        "run its Phase D documentation reconciliation, then continue to SA165-R1\n"
-        "  independent review, fresh one-run authority, and a final-candidate verdict"
+        "A fresh terminal SA165-R1 completed over the narrowed four-file\n"
+        "  product candidate and returned **green**"
     )
     mutated = roadmap.replace(current_claim, stale_claim, 1)
     assert mutated != roadmap
@@ -1388,9 +1453,102 @@ def test_v88_sa165_current_action_rejects_stale_reconciliation_wording() -> None
         )
 
 
+@pytest.mark.parametrize(
+    ("current_claim", "stale_claim"),
+    [
+        (
+            "between **A (recommended)** — widen SA165's bounded product repair",
+            "between **A** — widen SA165's bounded product repair",
+        ),
+        ("`EV-8` remains unspent.", "`EV-8` has already been spent."),
+        (
+            "Retiring the four tech-audit notes is **not** this ticket's\n  step",
+            "Retiring the four tech-audit notes is this ticket's\n  step",
+        ),
+        (
+            "that review ends its\n  root run. (5) In a later root run",
+            "that review continues in the same\n  root run. (5) In that root run",
+        ),
+    ],
+)
+def test_v88_sa165_checkpoint_contract_rejects_stale_claims(
+    current_claim: str, stale_claim: str
+) -> None:
+    roadmap, context = _load_documents()
+    mutated = roadmap.replace(current_claim, stale_claim, 1)
+    assert mutated != roadmap
+    with pytest.raises(AssertionError):
+        _assert_sa165_retained_partial(
+            mutated,
+            context,
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        )
+
+
+def test_v88_sa165_checkpoint_rejects_retained_product_drift() -> None:
+    roadmap, context = _load_documents()
+    mutated = roadmap.replace(
+        SA165_RETAINED_PRODUCT,
+        "0000000000000000000000000000000000000000",
+    )
+    assert mutated != roadmap
+    with pytest.raises(AssertionError):
+        _assert_sa165_retained_partial(
+            mutated,
+            context,
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        )
+
+
+def test_v88_sa165_checkpoint_rejects_ev8_without_frozen_check() -> None:
+    roadmap, context = _load_documents()
+    current_claim = (
+        "cannot launch before that repair, a green review, and `FROZEN-CHECK`"
+    )
+    mutated_context = context.replace(
+        current_claim,
+        "can launch before the repair, green review, and `FROZEN-CHECK`",
+        1,
+    )
+    assert mutated_context != context
+    with pytest.raises(AssertionError):
+        _assert_sa165_retained_partial(
+            roadmap,
+            mutated_context,
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        )
+
+
+def test_v88_sa165_pending_plan_order_is_expected_red_canary() -> None:
+    roadmap, _ = _load_documents()
+    sa165_ticket = _roadmap_block(
+        roadmap,
+        "- [ ] **SA165 — Discharge the tech-audit watch items that carry an action.**",
+        "- [ ] **SA179 — Reconcile SA165's documentation and retire its four audit notes.**",
+    )
+    pending_plan = " ".join(sa165_ticket.split()).partition("**Pending, in order.**")[2]
+    mutated_plan = pending_plan.replace("(2)", "(SA165-SWAP)", 1)
+    mutated_plan = mutated_plan.replace("(3)", "(2)", 1)
+    mutated_plan = mutated_plan.replace("(SA165-SWAP)", "(3)", 1)
+    assert mutated_plan != pending_plan
+
+    with pytest.raises(AssertionError, match="steps are out of order"):
+        _assert_sa165_pending_plan_order(mutated_plan)
+
+
 def test_v88_sa165_dependency_release_does_not_imply_ticket_release() -> None:
     expected_scoped_claims = {
         ROOT / "docs/others/arch-audit.md": "SA165 became unblocked with\n`deps: none`",
+        ROOT / "docs/technical/decisions.md": (
+            "its former dependency edge into SA165 is released, so SA165 remains open "
+            "with `deps: none`"
+        ),
         ROOT / "docs/technical/implementation_contract.md": (
             "SA165 remains open with `deps: none`"
         ),
