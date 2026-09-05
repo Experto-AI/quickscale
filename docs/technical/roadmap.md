@@ -193,11 +193,12 @@ complete and the standing state was restored exactly.
   complete on the retained product/frozen-base evidence archived in [CHANGELOG.md](../../CHANGELOG.md).
   SA166 now has `deps: none` and is the W2 head; SA164 remains after SA166, with SA174 and SA175
   as the band-C tail. W2 claims no standing service.
-- **W1 — retain SA165 (#22) and run its Phase D documentation reconciliation, then hold.** SA167d's
+- **W1 — retain SA165 (#22).** Phase D reconciliation is integrated; the next action is SA165-R1
+  independent review, followed by fresh one-run authority and a final-candidate verdict. SA167d's
   completion-grade closeout is archived as a conditional post-integration candidate; SA165 has
   `deps: none`, remains W1-owned, and its phases A-C are accepted on retained product object
-  `573a57a34301e6a91971a7845095bd913bebd5e1`, merged at `3f925b96`. SA165-R1 remains tracked, and
-  Phase D's final-candidate release verdict is still outstanding.
+  `573a57a34301e6a91971a7845095bd913bebd5e1`, merged at `3f925b96`. The final-candidate release
+  verdict is still outstanding.
 - **W3 — start SA171 (#28).** SA170's final acceptance is archived in `CHANGELOG.md`; do not reopen
   its release campaign. SA171 has `deps: none`, is DB-free, and leaves the exclusive service slot
   available for SA172.
@@ -211,7 +212,7 @@ merge-back is not order-gated behind another lane.
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
 | **W2** | SA166 (#24) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #24 | no |
-| **W1** | SA165 (#22) | **yes** — `deps: none`; documentation reconciliation and independent review can proceed | **no** — fresh one-run authority and a green final-candidate release verdict remain outstanding | **yes after a green verdict** — no cross-lane blocker remains | no |
+| **W1** | SA165 (#22) | **yes** — `deps: none`; Phase D reconciliation is integrated; the next action is SA165-R1 independent review, followed by fresh one-run authority and a final-candidate verdict | **no** — fresh one-run authority and a green final-candidate release verdict remain outstanding | **yes after a green verdict** — no cross-lane blocker remains | no |
 | **W3** | SA171 (#28) | **yes** — `deps: none` and DB-free | **yes** — all work is W3-owned | **yes** — no ticket is ordered ahead of #28 | no |
 
 **W2 and W3 are truly green; W1 can start but cannot finish until SA165 receives fresh one-run

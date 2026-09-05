@@ -1111,6 +1111,26 @@ def _assert_sa165_retained_partial(
     assert "SA165-R1 remains tracked" in context_text
     assert not re.search(r"#22, .*\bare \*\*retired and not", roadmap_text)
 
+    expected_w1_action = (
+        "Phase D reconciliation is integrated; the next action is SA165-R1 "
+        "independent review, followed by fresh one-run authority and a "
+        "final-candidate verdict"
+    )
+    current_w1_action_blocks = {
+        "next action": _roadmap_block(
+            roadmap_text, "### Next action per lane", "### Track readiness"
+        ),
+        "track readiness": _roadmap_block(
+            roadmap_text, "### Track readiness", "### Maintainer decisions"
+        ),
+    }
+    for block_name, block in current_w1_action_blocks.items():
+        normalized_block = " ".join(block.split())
+        assert expected_w1_action in normalized_block, block_name
+        assert "run its Phase D documentation reconciliation" not in normalized_block, (
+            block_name
+        )
+
     readiness = _roadmap_block(
         roadmap_text, "### Track readiness", "### Maintainer decisions"
     )
@@ -1171,6 +1191,29 @@ def test_v88_sa165_readiness_rejects_green_without_release_authority() -> None:
     )
     assert mutated != roadmap
     with pytest.raises(AssertionError):
+        _assert_sa165_retained_partial(
+            mutated,
+            context,
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        )
+
+
+def test_v88_sa165_current_action_rejects_stale_reconciliation_wording() -> None:
+    roadmap, context = _load_documents()
+    current_claim = (
+        "Phase D reconciliation is integrated; the next action is SA165-R1\n"
+        "  independent review, followed by fresh one-run authority and a "
+        "final-candidate verdict"
+    )
+    stale_claim = (
+        "run its Phase D documentation reconciliation, then continue to SA165-R1\n"
+        "  independent review, fresh one-run authority, and a final-candidate verdict"
+    )
+    mutated = roadmap.replace(current_claim, stale_claim, 1)
+    assert mutated != roadmap
+    with pytest.raises(AssertionError, match="next action"):
         _assert_sa165_retained_partial(
             mutated,
             context,
