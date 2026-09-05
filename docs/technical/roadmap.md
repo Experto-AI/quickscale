@@ -188,13 +188,19 @@ complete and the standing state was restored exactly.
   complete on the retained product/frozen-base evidence archived in [CHANGELOG.md](../../CHANGELOG.md).
   SA166 now has `deps: none` and is the W2 head; SA164 remains after SA166, with SA174 and SA175
   as the band-C tail. W2 claims no standing service.
-- **W1 — retain SA165 (#22).** Phase D reconciliation is integrated; one-run authority is granted as
-  `EV-8`, and the next action is SA165-R1 independent review followed by the single authorized
-  final-candidate verdict. SA167d's
-  completion-grade closeout is archived as a conditional post-integration candidate; SA165 has
+- **W1 — retain SA165 (#22).** SA165-R1 independent review passed over the historical six-file
+  candidate from `b23eb1fd47114dc9f176cd930ee35468f823e4cf` to
+  `f3f29d915f5971c8f47e558a82c292ccfc86add0`, but the checkpoint recording that result necessarily
+  changed the roadmap blob and invalidated the exact-byte binding for further action. One-run
+  authority remains granted and unspent as `EV-8`. The next action is pre-R1 reconciliation of the
+  current status consumers and consistency test, including the stale test name, followed by the
+  focused suite and a fresh terminal SA165-R1 over those exact bytes. Only a later root run may then
+  enter `FROZEN-CHECK` and the single authorized final-candidate verdict. SA167d's completion-grade
+  closeout is archived as a conditional post-integration candidate; SA165 has
   `deps: none`, remains W1-owned, and its phases A-C are accepted on retained product object
   `573a57a34301e6a91971a7845095bd913bebd5e1`, merged at `3f925b96`. The final-candidate release
-  verdict is still outstanding.
+  verdict is still outstanding. ***corrected after checkpoint attestation — not independently
+  graded***
 - **W3 — start SA171 (#28).** SA170's final acceptance is archived in `CHANGELOG.md`; do not reopen
   its release campaign. SA171 has `deps: none`, is DB-free, and leaves the exclusive service slot
   available for SA172.
@@ -208,7 +214,7 @@ merge-back is not order-gated behind another lane.
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
 | **W2** | SA166 (#24) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #24 | no |
-| **W1** | SA165 (#22) | **yes** — `deps: none`; Phase D reconciliation is integrated; one-run authority is granted as `EV-8`, and the next action is SA165-R1 independent review followed by the single authorized final-candidate verdict | **no** — the `EV-8`-authorized final-candidate release verdict has not yet returned green | **yes after a green verdict** — no cross-lane blocker remains | no |
+| **W1** | SA165 (#22) | **yes** — `deps: none`; reconcile the post-R1 status/test drift, run the focused suite, and obtain a fresh terminal SA165-R1 before entering the reviewed remainder; ***corrected after checkpoint attestation — not independently graded*** | **no** — the current bytes lack a fresh SA165-R1 and the `EV-8`-authorized verdict has not returned green | **yes after fresh review and a green verdict** — no cross-lane blocker remains | no |
 | **W3** | SA171 (#28) | **yes** — `deps: none` and DB-free | **yes** — all work is W3-owned | **yes** — no ticket is ordered ahead of #28 | no |
 
 **W2 and W3 are truly green; W1 can start but cannot finish until SA165's `EV-8`-authorized
@@ -455,32 +461,58 @@ triggers.
   credentials must not survive into shared environments. Focused A-C evidence and the retained-only
   integration are archived in [CHANGELOG.md](../../CHANGELOG.md); do not redo those phases.
 
-  **State (measured 2026-09-05): integrated retained Phase D candidate; final-candidate release
-  verdict outstanding.** The retained A-C product and the six current closeout files reconcile the
-  audit, current queue, context, docs hub, changelog, and executable consistency contract. The sole
+  **State (measured 2026-09-05): retained Phase D candidate; historical SA165-R1 passed; current
+  candidate drifted; final-candidate release verdict outstanding.** Independent read-only review
+  accepted the complete six-file patch from `b23eb1fd47114dc9f176cd930ee35468f823e4cf` to
+  `f3f29d915f5971c8f47e558a82c292ccfc86add0` with no blocking finding. This checkpoint then changed
+  `docs/technical/roadmap.md`, one of the six bound blobs, so that review is historical evidence and
+  does not authorize `FROZEN-CHECK` or `EV-8` against the current bytes. ***corrected after checkpoint
+  attestation — not independently graded*** The retained A-C product remains unchanged. The sole
   SA165 release run returned exit 0 with Core 38 passed and CLI 54 passed, but `CHANGELOG.md` changed
   afterward. It therefore does not cover the settled candidate and closes neither SA165 nor its four
-  audit notes. SA165-R1 remains tracked for independent review of the reconciled temporal lane-state
-  handoff; lane state must be remeasured at action time rather than persisted as a current merge
-  assertion.
+  audit notes. A fresh SA165-R1 is required after the current status consumers and executable
+  consistency contract are reconciled; the old result must not be rebound. Lane state must be
+  remeasured at action time rather than persisted as a current merge assertion. ***corrected after
+  checkpoint attestation — not independently graded***
 
-  **Pending, in order.** (1) Obtain independent review of the reconciled candidate (SA165-R1).
-  (2) Freeze the final candidate and rerun the focused context suite. (3) Spend **`EV-8`** — the
+  **Blocking checkpoint.** The roadmap now reports the historical R1 result while
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` still requires the old R1-pending
+  wording; the exact focused command is therefore predictably red, and the current roadmap blob no
+  longer matches the historical R1 binding. Close this blocker by reconciling every current
+  same-fact consumer and the consistency module to the truthful historical-pass/current-drift state,
+  renaming `test_v88_sa165_readiness_rejects_green_without_release_authority` to describe rejection
+  before the `EV-8` verdict without weakening its assertions, running the focused suite green, and
+  obtaining a fresh terminal SA165-R1 over the resulting exact six blobs. ***corrected after
+  checkpoint attestation — not independently graded***
+
+  **Pending, in order.** (1) Complete that pre-R1 reconciliation and run
+  `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts=
+  --no-cov`. (2) Obtain a fresh terminal SA165-R1 over the reconciled six-file candidate. (3) In a
+  later root run, revalidate the fresh review binding and execute `FROZEN-CHECK`. (4) Spend **`EV-8`** — the
   single replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict granted 2026-09-05 — launching
   it under `setsid` with its exit code captured atomically to a file, and retain exact
   cleanup/provenance evidence. A green verdict permits completion-grade convergence, patch-backed
   terminal attestation, exact-tip integration, audit-note retirement, and #22 retirement. A red or
   unreturned verdict keeps this checkpoint open and requires a repair ticket plus fresh authority;
-  `EV-8` covers no second run.
+  `EV-8` covers no second run. ***corrected after checkpoint attestation — not independently graded***
 
-  **Remaining reviewed plan and handoff.** Plan authority `EV-2` remains binding. Resume from the
-  retained product object and the present six-file Phase D candidate: `CHANGELOG.md`, `docs/index.md`,
+  **Remaining reviewed plan and handoff.** Reviewed plan authority `EV-6` still governs the
+  `FROZEN-CHECK` and `EV8-CLOSEOUT` remainder, but its fresh-R1 entry precondition is not currently
+  met and neither phase is dispatchable. The next root run must first plan and implement the bounded
+  pre-R1 status/test reconciliation above, then terminate at the required fresh SA165-R1; only a
+  subsequent root run may reuse `EV-6`. Retain product object
+  `573a57a34301e6a91971a7845095bd913bebd5e1`; do not treat historical reviewed tip
+  `f3f29d915f5971c8f47e558a82c292ccfc86add0` as the current candidate. The six-file Phase D set
+  remains `CHANGELOG.md`, `docs/index.md`,
   `docs/others/tech-audit.md`, `docs/technical/roadmap.md`,
   `docs/technical/v88_ticket_context.md`, and
-  `quickscale_core/tests/test_v88_ticket_context_consistency.py`. Review the SA165-R1 temporal
-  handoff, then spend `EV-8` on the release-verdict step. Preserve historical SA170 and
-  SA167c/SA167d evidence, do not reopen A-C product files, and do not alter SA172's later ownership
-  of the isolation script.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py`. After a fresh R1 and a later
+  `FROZEN-CHECK` return green,
+  the root records `EV-8` as launched before dispatching `EV8-CLOSEOUT`; a dispatch or launch failure
+  is spent/unreturned and is not retryable. Only a valid green verdict permits the six-file closeout
+  reconciliation. Preserve historical SA170 and SA167c/SA167d evidence, do not reopen A-C product
+  files, and do not alter SA172's later ownership of the isolation script. ***corrected after
+  checkpoint attestation — not independently graded***
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/schema/state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `quickscale_core/.../templates/OPERATIONS.md.j2`, `docs/others/tech-audit.md`.
 
 - [ ] **SA174 — Correct the false SSOT claim on the privileged-command set.** `Band C · Tier 3 · W2 · merge #31 · deps: none · shrunk 2026-08-31 · moved to W2 2026-09-03`
