@@ -4,9 +4,9 @@ The roadmap is the sole home for schedulable metadata.  The context page may exp
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
-tree state.  The integration-ready SA167d closeout, green SA167c Phase F, and closed
-SA170 statuses are checked as current consumer contracts below; those checks are not mutation
-canaries.
+tree state.  The integration-ready SA167d closeout, green SA167c Phase F, closed SA170 status,
+and retained-partial SA165 closeout are checked as current consumer contracts below; those checks
+are not mutation canaries.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
@@ -51,7 +51,6 @@ MERGE_ORDER_ENTRY_RE = re.compile(
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 E0_ACCEPTED_TIP = "bd2c291ba2d40494970464741ac51bfd45445a19"
 SA167C_RETAINED_PRODUCT = "91fd3bb6e6b638735361b511c1515cddccce5d15"
-CURRENT_V88_TIP = "21a33fbf22b033cab07ba63b592e21b999667fb2"
 UMBRELLA_TITLE = "SA167a / SA167c — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
@@ -453,34 +452,34 @@ def _assert_lane_assignment_parity(roadmap_text: str) -> None:
         )
 
 
-def _assert_lane_state_snapshot(roadmap_text: str) -> None:
-    """Bind the closeout snapshot without conflating refs with dirty worktrees."""
+def _assert_lane_state_is_not_persisted(roadmap_text: str) -> None:
+    """Keep transient worktree measurements out of the open-work planner."""
     lane_state = _roadmap_block(
         roadmap_text, "### Lane state", "### PostgreSQL routing"
     )
-    rows = {
-        worktree: (divergence, tip, standing)
-        for worktree, divergence, tip, standing in re.findall(
-            r"^\| `(wt-track[123])` \| (\d+ / \d+) \| `([0-9a-f]{8})` \| (.*?) \|$",
-            lane_state,
-            re.MULTILINE,
-        )
-    }
-    assert set(rows) == {"wt-track1", "wt-track2", "wt-track3"}
-    for worktree, (divergence, tip, standing) in rows.items():
-        assert divergence == "0 / 0", worktree
-        assert tip == CURRENT_V88_TIP[:8], worktree
-        assert "branch synchronized" in standing, worktree
-        assert "worktree dirty" in standing, worktree
-        assert not re.search(r"\bclean\b", standing, re.IGNORECASE), worktree
+    assert "git rev-list --left-right --count v88...$w" in lane_state
+    assert "Inspect working-tree status separately" in lane_state
+    assert "transient closeout evidence" in lane_state
 
-    assert (
-        "distinguishes branch-ref synchronization from working-tree state" in lane_state
+    persisted_row = re.search(
+        r"^\| `wt-track[123]` \| \d+ / \d+ \| `[0-9a-f]+` \|",
+        lane_state,
+        re.MULTILINE,
     )
-    assert re.search(
-        r"rather\s+than treating this closeout snapshot as live state", lane_state
+    if persisted_row:
+        raise AssertionError(
+            f"lane state persists an ephemeral row: {persisted_row.group(0)!r}"
+        )
+
+    ephemeral_claim = re.search(
+        r"\b(?:closeout snapshot|snapshot captured|worktree (?:dirty|clean)|at capture time)\b",
+        lane_state,
+        re.IGNORECASE,
     )
-    assert "At capture time, no lane branch was ahead" in lane_state
+    if ephemeral_claim:
+        raise AssertionError(
+            f"lane state persists an ephemeral claim: {ephemeral_claim.group(0)!r}"
+        )
 
 
 def _assert_status_consumers_agree(roadmap_text: str, docs_index_text: str) -> None:
@@ -667,13 +666,15 @@ def _assert_sa167d_status(
         if metadata.merge_position is not None
     }
 
+    # The roadmap is open-work only; its archived SA167d prose was removed before
+    # this SA165 closeout, so the historical candidate contract belongs to the archive
+    # and companion status documents rather than this live ledger.
     status_consumers = {
         "CHANGELOG.md": changelog_text,
         "docs/others/arch-audit.md": arch_audit_text,
         "docs/technical/decisions.md": decisions_text,
         "docs/technical/implementation_contract.md": implementation_contract_text,
         "docs/technical/module-extension.md": module_extension_text,
-        "docs/technical/roadmap.md": roadmap_text,
         "docs/technical/v88_ticket_context.md": context_text,
     }
 
@@ -682,8 +683,6 @@ def _assert_sa167d_status(
 
     assert "SA167d" not in v88
     assert 18 not in positions
-    assert len(v88) == 9
-    assert len(positions) == 9
     assert v88["SA165"].dependencies == frozenset()
     assert E0_ACCEPTED_TIP in changelog_text
     latest_sa167d_entry = re.search(
@@ -710,7 +709,7 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     _assert_sa167c_current_roadmap_blocks(roadmap)
     _assert_sa174_sa175_current_displacement_rule(roadmap)
     _assert_lane_assignment_parity(roadmap)
-    _assert_lane_state_snapshot(roadmap)
+    _assert_lane_state_is_not_persisted(roadmap)
     _assert_sa167d_status(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
@@ -756,6 +755,13 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
             "docs/technical/roadmap.md": roadmap,
             "docs/technical/v88_ticket_context.md": CONTEXT.read_text(encoding="utf-8"),
         },
+    )
+    _assert_sa165_retained_partial(
+        roadmap,
+        CONTEXT.read_text(encoding="utf-8"),
+        docs_index,
+        (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
     )
 
 
@@ -829,24 +835,29 @@ def test_v88_lane_assignment_drift_is_expected_red_canary(
         _assert_lane_assignment_parity(mutated)
 
 
-@pytest.mark.parametrize(
-    ("current_claim", "drifted_claim"),
-    [
-        (
-            "| `wt-track1` | 0 / 0 | `21a33fbf` |",
-            "| `wt-track1` | 1 / 0 | `a14ea029` |",
-        ),
-        ("branch synchronized; worktree dirty", "clean"),
-    ],
-)
-def test_v88_lane_state_snapshot_rejects_stale_rows(
-    current_claim: str, drifted_claim: str
-) -> None:
+def test_v88_lane_state_rejects_persisted_ephemeral_row() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
-    mutated = roadmap.replace(current_claim, drifted_claim, 1)
+    marker = "**Read that output as `behind ahead`**"
+    ephemeral_row = (
+        "| `wt-track1` | 0 / 0 | `21a33fbf` | branch synchronized; worktree dirty |\n\n"
+    )
+    mutated = roadmap.replace(marker, ephemeral_row + marker, 1)
     assert mutated != roadmap
-    with pytest.raises(AssertionError):
-        _assert_lane_state_snapshot(mutated)
+    with pytest.raises(AssertionError, match="persists an ephemeral row"):
+        _assert_lane_state_is_not_persisted(mutated)
+
+
+def test_v88_lane_state_rejects_persisted_ephemeral_claim() -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    marker = "**Read that output as `behind ahead`**"
+    mutated = roadmap.replace(
+        marker,
+        "**Closeout snapshot captured today.**\n\n" + marker,
+        1,
+    )
+    assert mutated != roadmap
+    with pytest.raises(AssertionError, match="persists an ephemeral claim"):
+        _assert_lane_state_is_not_persisted(mutated)
 
 
 def test_v88_sa167c_current_status_rejects_open_dependency_claim() -> None:
@@ -1075,6 +1086,98 @@ def test_v88_current_reconciliation_is_not_labelled_ungraded() -> None:
     )
     assert latest_sa167c_entry is not None
     assert "not independently graded" in latest_sa167c_entry.group(0)
+
+
+def _assert_sa165_retained_partial(
+    roadmap_text: str,
+    context_text: str,
+    docs_index_text: str,
+    tech_audit_text: str,
+    changelog_text: str,
+) -> None:
+    """Keep retained SA165 delivery distinct from final-candidate acceptance."""
+    roadmap = _roadmap_tickets(roadmap_text)
+    positions = {
+        metadata.merge_position
+        for metadata in roadmap.values()
+        if metadata.merge_position is not None
+    }
+    assert roadmap["SA165"].merge_position == 22
+    assert roadmap["SA165"].dependencies == frozenset()
+    assert roadmap["SA161"].dependencies == frozenset({"SA165"})
+    assert 22 in positions
+    assert "## SA165" in context_text
+    assert "SA165-R1 remains tracked" in roadmap_text
+    assert "SA165-R1 remains tracked" in context_text
+    assert not re.search(r"#22, .*\bare \*\*retired and not", roadmap_text)
+
+    readiness = _roadmap_block(
+        roadmap_text, "### Track readiness", "### Maintainer decisions"
+    )
+    normalized_readiness = " ".join(readiness.split())
+    assert re.search(
+        r"\| \*\*W1\*\* \| SA165 \(#22\).*?\| \*\*no\*\* — fresh one-run authority "
+        r"and a green final-candidate release verdict remain outstanding \|",
+        normalized_readiness,
+    )
+    assert "W2 and W3 are truly green; W1 can start but cannot finish" in readiness
+
+    latest_status = re.search(r"(?ms)^- \*\*SA165\b.*?(?=^- \*\*)", changelog_text)
+    assert latest_status is not None
+    normalized_status = " ".join(latest_status.group(0).split())
+    for discharged in (
+        "flush_empty_consolidated_sections",
+        "identity-blind isolation skip",
+        "_HOST_DEPENDENT_PATHS",
+        "predictable generated local credentials",
+    ):
+        assert discharged in normalized_status
+    assert (
+        "ten open v88 ticket entries across ten open merge positions"
+        in normalized_status
+    )
+    assert "SA165 therefore remains open and unchecked at **#22**" in normalized_status
+    assert "does **not** cover the settled candidate bytes" in normalized_status
+    assert "no second run is authorized by this checkpoint" in normalized_status
+    assert "Plan authority `EV-2` remains binding" in normalized_status
+    notes = tech_audit_text.partition("## Notes (watch items)")[2].partition(
+        "## Reconciliation log"
+    )[0]
+    for retained_note in (
+        "flush_empty_consolidated_sections",
+        "identity-bound",
+        "_HOST_DEPENDENT_PATHS",
+        "Generated local-development credentials",
+    ):
+        assert retained_note in notes
+    assert re.search(
+        r"nine open v88 ticket entries across nine open merge positions",
+        docs_index_text,
+    )
+    assert "SA165 heads W1 with `deps: none`" in docs_index_text
+    assert "SA165-R1 still tracked" in docs_index_text
+
+
+def test_v88_sa165_readiness_rejects_green_without_release_authority() -> None:
+    roadmap, context = _load_documents()
+    stale_claim = (
+        "**no** — fresh one-run authority and a green final-candidate release verdict "
+        "remain outstanding"
+    )
+    mutated = roadmap.replace(
+        stale_claim,
+        "**yes** — release verification remains W1-owned",
+        1,
+    )
+    assert mutated != roadmap
+    with pytest.raises(AssertionError):
+        _assert_sa165_retained_partial(
+            mutated,
+            context,
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        )
 
 
 def _assert_latest_closeout_uses_current_queue_counts(

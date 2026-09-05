@@ -15,12 +15,36 @@
   cleanup scopes completed, and the final banner was `✓ All CI Checks Passed!`. Phases A-E
   remain accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`.
   This green verdict closes SA167c and retires merge position **#21**; it releases SA166 to
-  `deps: none` while preserving SA164 after SA166. The open queue is now **nine open v88
-  ticket entries across nine open merge positions**, lanes **W1 3 · W2 4 · W3 2**, with no
-  checked roadmap entry. Completion remains subject to root-owned convergence, terminal
+  `deps: none` while preserving SA164 after SA166. After the SA165 retained-partial integration,
+  the open queue is now **nine open v88 ticket entries across nine open merge positions**, lanes
+  **W1 3 · W2 4 · W3 2**, with SA165 still open at **#22** and SA165-R1 still tracked. No checked
+  roadmap entry is permitted. Completion remains subject to root-owned convergence, terminal
   attestation, and exact-tip integration.
 
 ## v88 development — 2026-08-21
+
+- **SA165 Phase D retained-partial candidate — final-candidate release verdict outstanding
+  (2026-09-05).** The retained product object `573a57a34301e6a91971a7845095bd913bebd5e1` and
+  its accepted A-C evidence remain unchanged. The Phase D candidate reconciles the four
+  action-bearing tech-audit notes — `flush_empty_consolidated_sections`, the identity-blind
+  isolation skip, `_HOST_DEPENDENT_PATHS`, and predictable generated local credentials — but does
+  **not** close them or SA165 yet. The sole release run,
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` under `setsid`, returned **exit 0** with Core **38
+  passed**, CLI **54 passed**, `✓ All CI Checks Passed!`, no out-of-date banner, and complete cleanup
+  of exact scopes `qs_e2e_tmp_6surncu5st_core_3080175` and
+  `qs_e2e_tmp_6surncu5st_cli_3080176`. That evidence is retained, but `CHANGELOG.md` changed after
+  the run, so it does **not** cover the settled candidate bytes and is not final-candidate
+  acceptance. SA165 therefore remains open and unchecked at **#22**; the queue remains **ten open
+  v88 ticket entries across ten open merge positions**, lanes **W1 3 · W2 5 · W3 2**, with SA165
+  still W1's head at `deps: none` before the SA161 → SA160 emission-parity pair.
+  **Pending:** obtain fresh authority for exactly one replacement verdict on the settled candidate,
+  then run `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`; no second run is authorized by this checkpoint.
+  Plan authority `EV-2` remains binding. Resume from the retained A-C object and this six-file
+  Phase D candidate (`CHANGELOG.md`, `docs/index.md`, `docs/others/tech-audit.md`,
+  `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py`); do not redo A-C or rewrite
+  historical SA170/SA167 evidence. Only a green verdict over those settled bytes may archive the
+  four notes, remove SA165, retire #22, and release SA161 as W1's head.
 
 - **Both open maintainer decisions settled (2026-09-04) — Phase-F authority granted as `EV-7`, and
   the SA174/SA175 lane assignment confirmed.** No maintainer decision remains open anywhere in the
