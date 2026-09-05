@@ -882,10 +882,10 @@ def test_v88_sa174_sa175_current_displacement_rule_rejects_contradiction() -> No
 @pytest.mark.parametrize(
     ("current_claim", "drifted_claim", "error_match"),
     [
-        ("W3 1**", "W3 2**", "lane count drift"),
+        ("W3 2**", "W3 3**", "lane count drift"),
         (
-            "its one position is a *queue*",
             "its two positions are a *queue*",
+            "its three positions are a *queue*",
             "W3 dependency-graph prose",
         ),
         (
@@ -1253,9 +1253,9 @@ def _assert_sa165_retained_partial(
         normalized_readiness,
     )
     assert (
-        "W2 is truly green; W1 can start but cannot finish until SA165 receives fresh one-run "
-        "authority and its final-candidate verdict is green, while W3 is held by the retained "
-        "SA171 B105 blocker."
+        "W2 and W3 are truly green; W1 can start but cannot finish until SA165's "
+        "`EV-8`-authorized final-candidate verdict is green, and the retained SA171 B105 "
+        "blocker is now ticketed as SA176."
     ) in normalized_readiness
 
     latest_status = re.search(r"(?ms)^- \*\*SA165\b.*?(?=^- \*\*)", changelog_text)
