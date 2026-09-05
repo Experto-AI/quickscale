@@ -232,9 +232,10 @@ complete and the standing state was restored exactly.
   integration; if red or unreturned, keep this retained partial open and record the exact result.
   Plan authority `EV-2` remains binding; do not redo A-C. No second release run is authorized by the
   current checkpoint. SA161 remains behind SA165 by W1 lane order.
-- **W3 — start SA172 (#29).** SA170's final acceptance and the preceding lock correction are archived
-  in `CHANGELOG.md`; do not reopen either campaign. SA172 has `deps: none` and owns the remaining
-  W3 PostgreSQL-backed work.
+- **W3 — hold SA172 (#29) behind the retained SA171 closeout candidate.** SA172 still has
+  `deps: none`, but the preceding lock correction is not merge-ready: the exact synchronized tree's
+  `make ci` run is red on Bandit B105 for `_ACQUISITION_TOKEN_KEY = "_acquisition_token"`.
+  Correct and re-review that release blocker before starting the next W3 ticket.
 
 ### Track readiness — the three states
 
@@ -245,7 +246,7 @@ merge-back is not order-gated behind another lane.
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
 | **W2** | SA167c (#21) | **yes** — `EV-7` is granted; sync, freeze, and run the F verdict | **yes if the verdict is green** — the run is W2-owned and no other lane feeds it | **yes** — nothing is ordered ahead of #21 | **yes** — it is the remaining release-committed work |
-| **W3** | SA172 (#29) | **yes** — `deps: none` | **yes** — all work is W3-owned | **yes** — no ticket is ordered ahead of #29 | no |
+| **W3** | SA172 (#29) | **no** — the retained SA171 candidate has an open B105 release blocker | **no** — the synchronized candidate still needs correction, a green `make ci`, and review | **yes after SA171 closes** — #29 itself has `deps: none` | no |
 | **W1** | SA165 (#22) | **no** — the replacement final-candidate release verdict needs fresh one-run authority | **no** — the settled bytes still need that green verdict | **yes after a green verdict** — no cross-lane blocker remains | no |
 
 **W2 and W3 are truly green; W1 is authority-gated off the critical path.** W2's *can finish* turns
@@ -373,7 +374,34 @@ The per-lane heads are **#21 (W2), #22 (W1), and #29 (W3)**. #21 has accepted A-
 product commit `91fd3bb6e6b638735361b511c1515cddccce5d15`; F release validation remains outstanding
 after the historical 2 Core and 8 CLI E2E failures. SA170 cleared those failures and authority
 `EV-7` is granted, so the F verdict is runnable now. #22 has `deps: none` but needs fresh authority
-for its replacement final-candidate verdict; #29 is eligible with `deps: none`.
+for its replacement final-candidate verdict; #29 has `deps: none` but remains held until the retained
+SA171 candidate closes its release blocker.
+
+### SA171 retained-candidate checkpoint (2026-09-05)
+
+This checkpoint supersedes the earlier SA171 completion and archival wording in this roadmap and
+its consumer summaries. The task's implementation is retained, but its release acceptance and
+merge to `v88` are not complete.
+
+- **Completed:** atomic stale-lock reclamation, ownership-bound release, deterministic lock
+  regressions, and the SA171 documentation candidate are preserved on branch `wt-track3` at
+  `6678a8c4e337ce8437b8e0552ca96fa372737084`, synchronized with `v88` object
+  `56b6d44425d109c2f976852aedb0dcf808ea91c5`. Focused lock and status verification passed with
+  87 tests, and core Ruff and MyPy checks passed.
+- **Pending:** correct the B105 finding without weakening the ownership invariant, rerun the focused
+  lock/status checks and full `make ci`, obtain independent review over the corrected exact tip,
+  reconcile every SA171 completion consumer, and merge that reviewed tip into `v88`.
+- **Blocking:** `make ci` exits non-zero because Bandit reports B105 at
+  `quickscale_core/src/quickscale_core/advisory_lock.py:41` for the hardcoded-looking metadata key
+  `_ACQUISITION_TOKEN_KEY = "_acquisition_token"`. This closes only when the key naming no longer
+  triggers B105, the ownership-token behavior remains covered, and the exact corrected tree passes
+  the full release gate.
+- **Decisions needed:** none; this is a bounded release correction, not an API or scope decision.
+- **Remaining plan:** start from branch `wt-track3` at
+  `6678a8c4e337ce8437b8e0552ca96fa372737084`; correct the B105 naming in the advisory-lock metadata,
+  run focused and full validation, independently review the exact corrected state, update the
+  roadmap, changelog, ticket-context, index, audit, and consistency-test consumers to the resulting
+  evidence, then merge the reviewed commit into `v88`. Do not start SA172 first.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Two are
