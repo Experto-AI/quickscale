@@ -2,6 +2,24 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA167c Phase F release verdict green (2026-09-05).** The sole `EV-7`-authorized
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` invocation ran once from clean frozen base
+  `21a33fbf22b033cab07ba63b592e21b999667fb2` at `wt-track2` (HEAD and `v88` remained equal).
+  The detached `setsid` wrapper completed normally with PID `2907741`, atomic exit file
+  `/tmp/sa167c-phase-f.Fm4lzS/ci-e2e.exit` containing `0`, and complete log
+  `/tmp/sa167c-phase-f.Fm4lzS/ci-e2e.log`. The provenance banner reported the checkout up to
+  date with `v88`; all twelve CI stages passed, including 1,360 registered script tests,
+  5,079 core/CLI coverage tests, 332 backups tests, 94.54% module integration coverage,
+  and successful dependency, static-analysis, type, frontend, and coverage gates. Stage 12
+  ran concurrently: Core reported **38 passed** and CLI **54 passed**; both exact labelled
+  cleanup scopes completed, and the final banner was `✓ All CI Checks Passed!`. Phases A-E
+  remain accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`.
+  This green verdict closes SA167c and retires merge position **#21**; it releases SA166 to
+  `deps: none` while preserving SA164 after SA166. The open queue is now **nine open v88
+  ticket entries across nine open merge positions**, lanes **W1 3 · W2 4 · W3 2**, with no
+  checked roadmap entry. Completion remains subject to root-owned convergence, terminal
+  attestation, and exact-tip integration.
+
 ## v88 development — 2026-08-21
 
 - **Both open maintainer decisions settled (2026-09-04) — Phase-F authority granted as `EV-7`, and

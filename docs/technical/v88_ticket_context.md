@@ -641,21 +641,18 @@ Worth holding as a set, because each appears in more than one ticket:
 ## SA167a / SA167c — module wiring standardization
 
 This shared umbrella retains historical context for the module-wiring standardization. The completed
-SA167a and SA167b handoffs are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c remains open:
-phases A-E are accepted on retained product object
-`91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding after
-`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3 at that time. SA170's final acceptance has since cleared that blocker, but no fresh SA167c
-F verdict has run, so no SA167c completion or release-readiness claim is made. Retained-partial-only merge-back of
-the synchronized nine-file status checkpoint is authorized without accepting F, closing SA167c, or
-unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. SA167d's completion-grade Phase C is archived as a
-conditional post-integration candidate; exact-tip integration remains pending. SA165 is released
-with `deps: none`. Ticket metadata lives in the [roadmap](roadmap.md), not here.
+SA167a, SA167b, and SA167c handoffs are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c's
+phases A-E remain accepted on retained product object
+`91fd3bb6e6b638735361b511c1515cddccce5d15`; its sole Phase-F release verdict under `EV-7` exited 0 on frozen
+base `21a33fbf22b033cab07ba63b592e21b999667fb2`, with all twelve CI stages and both E2E lanes
+green. Merge position #21 is retired.
+SA167d's completion-grade Phase C is archived as a conditional post-integration candidate;
+exact-tip integration remains pending. SA165 is released with `deps: none`. Ticket metadata
+lives in the [roadmap](roadmap.md), not here.
 
 SA170's later ordered serial and concurrent campaigns both passed; their final acceptance and the
-earlier retained-partial history are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c carries no
-blocker: Phase-F authority `EV-7` was granted on 2026-09-04, and it remains open until that
-authorized verdict is run and passes. Current dependency metadata remains in the roadmap.
+earlier retained-partial history are archived in [CHANGELOG.md](../../CHANGELOG.md). Current
+dependency metadata remains in the roadmap.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.
@@ -682,8 +679,8 @@ and a migration that no generated project ever installed.
 module owns its adapter, and declares its apps once, in its own `module.yml`. The retained
 module-wiring product bytes make the tree match it: declarations and adapters now live with their
 modules, the inert key is retired and its gate bytes are retained, and the CLI boundary is drained. The
-open SA167c checkpoint reflects release validation and integration state, not a product-contract
-rollback.
+  archived SA167c checkpoint and green Phase-F verdict reflect release validation and integration
+  state, not a product-contract rollback.
 
 **Why the split is by phase and not by module.** All nine core-side blocks began in one
 1,508-line file, and every phase has had to edit that same file. The phase boundary keeps one

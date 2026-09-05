@@ -339,15 +339,13 @@ yourself editing either to register a module, the module's own declaration is in
 > conditional post-integration candidate; exact-tip integration remains pending. SA165 is released
 > with `deps: none`. This is a closeout candidate, not an exact-tip integration claim.
 
-The companion declaration-gate work remains open under **`SA167c`** at merge #21. Phases A-E are
-accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding
-after `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3 at that time. SA170's accepted release campaigns have cleared that upstream blocker and
-Phase-F authority `EV-7` is granted, but the authorized F verdict has not yet been run. No SA167c completion or
-release-readiness claim is made, SA166 remains dependent, and SA164
-remains after SA166. Retained-partial-only merge-back of the synchronized nine-file status checkpoint
-is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. This does not alter the module-extension contract
-or authorize edits to the settled manifest implementation.
+The companion declaration-gate work was completed under **`SA167c`** at merge #21. Phases A-E were
+accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; the sole
+authorized Phase-F verdict under `EV-7` exited 0 on frozen base
+`21a33fbf22b033cab07ba63b592e21b999667fb2`, with all twelve CI stages, both E2E lanes, and
+exact-scope cleanup green. Closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md),
+and merge position #21 is retired. SA166 is now `deps: none`, while SA164 remains after SA166.
+This does not alter the module-extension contract or authorize edits to the settled manifest implementation.
 
 SA170's final ordered serial and concurrent campaigns passed against retained product object
 `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed local corrections. SA170 and TA70 are

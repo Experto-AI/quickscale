@@ -4,15 +4,15 @@ The roadmap is the sole home for schedulable metadata.  The context page may exp
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
-tree state.  The integration-ready SA167d closeout, authorized-but-unrun SA167c Phase F, and closed
+tree state.  The integration-ready SA167d closeout, green SA167c Phase F, and closed
 SA170 statuses are checked as current consumer contracts below; those checks are not mutation
 canaries.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
 context.  Retained expected-red canaries prove those parser/guard boundaries, while explicit
-current-status contracts preserve the integration-ready SA167d closeout, the SA167c checkpoint
-whose Phase F is authorized under ``EV-7`` and not yet run, and the final SA170 closeout.  The suite previously carried twelve
+current-status contracts preserve the integration-ready SA167d closeout, the green SA167c
+Phase-F verdict authorized under ``EV-7``, and the final SA170 closeout.  The suite previously carried twelve
 mutation canaries across 496 lines, including one
 that mutated a hardcoded ``deps:`` literal naming a specific ticket; archiving that ticket silently
 disarmed it, as did roadmap prose that happened to spell the same literal first.  The remaining
@@ -51,16 +51,12 @@ MERGE_ORDER_ENTRY_RE = re.compile(
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 E0_ACCEPTED_TIP = "bd2c291ba2d40494970464741ac51bfd45445a19"
 SA167C_RETAINED_PRODUCT = "91fd3bb6e6b638735361b511c1515cddccce5d15"
-SA167C_FROZEN_BASE = "f60fe2bcb6efba654782c96ee1113ea6c90b74ee"
-SA167C_MOVED_V88 = "3aa0c67f843eddd779f9766de4c274a5a249f485"
-SA167C_RETAINED_CHECKPOINT = "4de75d39"
-SA167C_SYNC_BASE = "8385780fe624893dc66e1382f2f68ce1ea759a02"
-SA167C_SYNC_MERGE = "eacad160d92b37f81f593085a64e18db4fb271f0"
+CURRENT_V88_TIP = "21a33fbf22b033cab07ba63b592e21b999667fb2"
 UMBRELLA_TITLE = "SA167a / SA167c — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
-ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b"})
+ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b", "SA167c"})
 SHARED_POSITION_GROUPS: frozenset[frozenset[str]] = frozenset()
 
 
@@ -277,6 +273,14 @@ STALE_SA167C_E_OPEN_RE = re.compile(
     r"|\bSA167c\b[^.\n]{0,80}\b(?:E/F|E\s+(?:and|then)\s+F)\b"
     r"[^.\n]{0,80}\b(?:open|pending|outstanding)\b"
 )
+STALE_SA167C_CURRENT_RE = re.compile(
+    r"\bSA167c\s+(?:remains|is still)\s+open\b"
+    r"|\bSA167c\s+is\s+not\s+(?:complete|release-ready)\b"
+    r"|\bSA166\s+remains\s+dependent\b"
+    r"|\bSA166\b[^.\n]{0,80}\bdeps:\s*SA167c\b"
+    r"|\b(?:merge\s+)?position\s+#?21\b[^.\n]{0,80}\b(?:open|head|runnable)\b",
+    re.IGNORECASE,
+)
 
 
 def _load_documents() -> tuple[str, str]:
@@ -336,14 +340,8 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     next_actions = _roadmap_block(
         roadmap_text, "### Next action per lane", "### Track readiness"
     )
-    sa167c_ticket_match = re.search(
-        r"(?ms)^- \[ \] \*\*SA167c\b.*?(?=^\s*---\s*$)", roadmap_text
-    )
-    assert sa167c_ticket_match is not None
-    sa167c_ticket = sa167c_ticket_match.group(0)
-
     applicable_current_blocks = "\n".join(
-        (priority_model, dependency_graph, next_actions, sa167c_ticket)
+        (priority_model, dependency_graph, next_actions)
     )
     broad_no_red = BROAD_NO_RED_GATE_RE.search(applicable_current_blocks)
     assert not broad_no_red, broad_no_red.group(0) if broad_no_red else None
@@ -351,17 +349,10 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     assert not stale_e_open, stale_e_open.group(0) if stale_e_open else None
 
     assert "no provisioning gate is red" in priority_model.lower()
-    if (
-        "remaining Phase-F work is running the authorized verdict itself"
-        not in dependency_graph
-    ):
-        raise AssertionError(
-            "SA167c dependency graph must name running the authorized verdict"
-        )
-    if "run SA167c (#21) Phase F under the granted authority" not in next_actions:
-        raise AssertionError(
-            "SA167c next action must run Phase F under the granted authority"
-        )
+    assert "SA167c verdict is green and archived" in dependency_graph, (
+        "SA167c dependency graph must record the archived green verdict"
+    )
+    assert "start SA166 (#24)" in next_actions
 
 
 def _assert_lane_assignment_parity(roadmap_text: str) -> None:
@@ -423,6 +414,36 @@ def _assert_lane_assignment_parity(roadmap_text: str) -> None:
         )
 
 
+def _assert_lane_state_snapshot(roadmap_text: str) -> None:
+    """Bind the closeout snapshot without conflating refs with dirty worktrees."""
+    lane_state = _roadmap_block(
+        roadmap_text, "### Lane state", "### PostgreSQL routing"
+    )
+    rows = {
+        worktree: (divergence, tip, standing)
+        for worktree, divergence, tip, standing in re.findall(
+            r"^\| `(wt-track[123])` \| (\d+ / \d+) \| `([0-9a-f]{8})` \| (.*?) \|$",
+            lane_state,
+            re.MULTILINE,
+        )
+    }
+    assert set(rows) == {"wt-track1", "wt-track2", "wt-track3"}
+    for worktree, (divergence, tip, standing) in rows.items():
+        assert divergence == "0 / 0", worktree
+        assert tip == CURRENT_V88_TIP[:8], worktree
+        assert "branch synchronized" in standing, worktree
+        assert "worktree dirty" in standing, worktree
+        assert not re.search(r"\bclean\b", standing, re.IGNORECASE), worktree
+
+    assert (
+        "distinguishes branch-ref synchronization from working-tree state" in lane_state
+    )
+    assert re.search(
+        r"rather\s+than treating this closeout snapshot as live state", lane_state
+    )
+    assert "At capture time, no lane branch was ahead" in lane_state
+
+
 def _assert_status_consumers_agree(roadmap_text: str, docs_index_text: str) -> None:
     """Live counts are *derived* from the roadmap, never pinned to a literal.
 
@@ -482,13 +503,17 @@ def _assert_sa167c_current_status(
     implementation_contract_text: str,
     module_extension_text: str,
 ) -> None:
-    """Keep accepted A-E distinct from the authorized-but-unrun F verdict."""
+    """Keep accepted A-E distinct from the completed F verdict."""
     roadmap = _roadmap_tickets(roadmap_text)
-    assert roadmap["SA167c"].merge_position == 21
-    assert roadmap["SA166"].dependencies == frozenset({"SA167c"})
+    assert "SA167c" not in roadmap
+    assert 21 not in {metadata.merge_position for metadata in roadmap.values()}
+    assert roadmap["SA166"].dependencies == frozenset()
     assert roadmap["SA164"].dependencies == frozenset({"SA166"})
 
-    latest_closeout = re.search(r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text)
+    latest_closeout = re.search(
+        r"(?ms)^- \*\*SA167c Phase F release verdict green\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
     assert latest_closeout is not None
     current_status_consumers = {
         "CHANGELOG.md": latest_closeout.group(0),
@@ -503,18 +528,25 @@ def _assert_sa167c_current_status(
         normalized_text = " ".join(text.split())
         assert "SA167c" in normalized_text, path
         assert re.search(r"EV-7", normalized_text), path
+        assert re.search(
+            r"(?:green|passed|complete|archived)", normalized_text, re.I
+        ), path
         assert not re.search(
-            r"fresh reviewed authority (?:is|are|and a new F verdict are) (?:still )?required",
+            r"(?:not yet run|remains outstanding|F remains outstanding|unaccepted|fresh reviewed authority (?:is|are|and a new F verdict are) (?:still )?required)",
             normalized_text,
             re.I,
         ), path
+        stale_current = STALE_SA167C_CURRENT_RE.search(normalized_text)
+        assert not stale_current, (
+            path,
+            stale_current.group(0) if stale_current else None,
+        )
 
     assert (
         "Phase F release status and downstream sequencing live in the roadmap"
         in decisions_text
     )
     for text in (
-        roadmap_text,
         context_text,
         arch_audit_text,
         implementation_contract_text,
@@ -522,18 +554,20 @@ def _assert_sa167c_current_status(
     ):
         normalized_text = " ".join(text.split())
         assert SA167C_RETAINED_PRODUCT in normalized_text
-        assert re.search(r"phases A-E (?:are )?accepted", normalized_text, re.I)
+        assert re.search(
+            r"phases A-E (?:(?:are|were|remain) )?accepted", normalized_text, re.I
+        )
 
-    assert SA167C_FROZEN_BASE in roadmap_text
-    assert SA167C_MOVED_V88 in roadmap_text
-    assert SA167C_RETAINED_CHECKPOINT in roadmap_text
-    assert SA167C_SYNC_BASE in roadmap_text
-    assert SA167C_SYNC_MERGE in roadmap_text
-    assert "plan authority `EV-6` remains binding" in roadmap_text
-    assert "do not redo A-E" in roadmap_text
-    assert "`EV-7` covers exactly one F verdict" in roadmap_text
-    # The grant authorizes one verdict; it must never read as an accepted result.
-    assert not re.search(r"phase F (?:is |was )?accepted", roadmap_text, re.I)
+    latest_sa167c_entry = re.search(
+        r"(?ms)^- \*\*SA167c Phase F release verdict green\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_sa167c_entry is not None
+    normalized_entry = " ".join(latest_sa167c_entry.group(0).split())
+    assert "exit file" in normalized_entry and "containing `0`" in normalized_entry
+    assert "all twelve CI stages passed" in normalized_entry
+    assert "Core reported **38 passed" in normalized_entry
+    assert "CLI **54 passed" in normalized_entry
 
 
 def _assert_sa170_final_closeout(
@@ -609,8 +643,8 @@ def _assert_sa167d_status(
 
     assert "SA167d" not in v88
     assert 18 not in positions
-    assert len(v88) == 10
-    assert len(positions) == 10
+    assert len(v88) == 9
+    assert len(positions) == 9
     assert v88["SA165"].dependencies == frozenset()
     assert E0_ACCEPTED_TIP in changelog_text
     latest_sa167d_entry = re.search(
@@ -636,6 +670,7 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     _assert_status_consumers_agree(roadmap, docs_index)
     _assert_sa167c_current_roadmap_blocks(roadmap)
     _assert_lane_assignment_parity(roadmap)
+    _assert_lane_state_snapshot(roadmap)
     _assert_sa167d_status(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
@@ -693,9 +728,9 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
             "no gate is red",
         ),
         (
-            "remaining Phase-F work is running the authorized verdict itself",
-            "remaining Phase-F work is SA170 remediation",
-            "authorized verdict",
+            "SA167c verdict is green and archived",
+            "SA167c verdict is pending",
+            "SA167c dependency graph",
         ),
     ],
 )
@@ -737,6 +772,54 @@ def test_v88_lane_assignment_drift_is_expected_red_canary(
     assert mutated != roadmap
     with pytest.raises(AssertionError, match=error_match):
         _assert_lane_assignment_parity(mutated)
+
+
+@pytest.mark.parametrize(
+    ("current_claim", "drifted_claim"),
+    [
+        (
+            "| `wt-track1` | 0 / 0 | `21a33fbf` |",
+            "| `wt-track1` | 1 / 0 | `a14ea029` |",
+        ),
+        ("branch synchronized; worktree dirty", "clean"),
+    ],
+)
+def test_v88_lane_state_snapshot_rejects_stale_rows(
+    current_claim: str, drifted_claim: str
+) -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    mutated = roadmap.replace(current_claim, drifted_claim, 1)
+    assert mutated != roadmap
+    with pytest.raises(AssertionError):
+        _assert_lane_state_snapshot(mutated)
+
+
+def test_v88_sa167c_current_status_rejects_open_dependency_claim() -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    context = CONTEXT.read_text(encoding="utf-8")
+    docs_index = DOCS_INDEX.read_text(encoding="utf-8")
+    arch_audit = (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8")
+    current_claim = "SA167c is closed and archived; SA166 is now `deps: none`."
+    assert current_claim in arch_audit
+    mutated_arch_audit = arch_audit.replace(
+        current_claim,
+        "SA167c remains open and archived; SA166 remains dependent.",
+        1,
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_sa167c_current_status(
+            roadmap,
+            context,
+            docs_index,
+            mutated_arch_audit,
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+            (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
+            (ROOT / "docs/technical/implementation_contract.md").read_text(
+                encoding="utf-8"
+            ),
+            (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
+        )
 
 
 def test_v88_integration_ready_state_rejects_accepted_open_candidate() -> None:
@@ -958,7 +1041,8 @@ def _assert_latest_closeout_uses_current_queue_counts(
         f"{_number_word(len(positions))} open merge positions"
     )
     latest_closeout_entry = re.search(
-        r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text
+        r"(?ms)^- \*\*SA167c Phase F release verdict green\b.*?(?=^- \*\*)",
+        changelog_text,
     )
     assert latest_closeout_entry is not None
     normalized_entry = " ".join(latest_closeout_entry.group(0).split())

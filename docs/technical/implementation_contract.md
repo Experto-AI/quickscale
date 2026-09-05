@@ -283,15 +283,14 @@ state, not an alternate wiring path.
 The "compatibility fallback for bundled/installed contexts" rationale previously recorded
 here was retired by the AF7 fail-hard decision, which removed the context it described. The
 inert ``django_apps:`` surface and its parsed-but-unread implementation have been removed.
-The declaration-gate product bytes are retained under **`SA167c`** (v88, merge #21): phases A-E are
-accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; F remains
-outstanding after `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E
-failures then owned by SA170/W3. SA170's accepted release campaigns have cleared those upstream
-failures and Phase-F authority `EV-7` is granted, but the authorized F verdict has not yet been run. SA167c is not complete
-or release-ready; SA166 remains dependent and
-SA164 remains after SA166. Retained-partial-only merge-back of the synchronized nine-file status
-checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. The settled product bytes no longer carry CLI per-module
-wiring logic. **`SA167d`**
+The declaration-gate product bytes were delivered under **`SA167c`** (v88, merge #21): phases A-E
+were accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`, and the
+sole authorized Phase-F release verdict under `EV-7` subsequently exited 0 on frozen base
+`21a33fbf22b033cab07ba63b592e21b999667fb2`. Its twelve-stage CI chain reached the final
+all-checks-passed banner, with Core and CLI E2E plus exact-scope cleanup green. The release
+evidence is archived in [CHANGELOG.md](../../CHANGELOG.md); SA167c is complete and merge
+position #21 is retired. SA166 is now `deps: none`, while SA164 remains after SA166. The
+settled product bytes no longer carry CLI per-module wiring logic. **`SA167d`**
 (v88) is a conditional post-integration completion-grade Phase C candidate; exact-tip integration
 remains pending. SA165 is released with `deps: none`.
 SA170's final ordered serial and concurrent campaigns passed against retained product object
