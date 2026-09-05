@@ -2,6 +2,29 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Roadmap hygiene pass — archived narrative removed, one closed watch item retired (2026-09-05).**
+  No open ticket completed in this pass and no ticket state changed: the v88 queue remains
+  **nine open ticket entries** on **nine open merge positions**, lanes **W1 3 · W2 4 · W3 2**, with heads
+  SA166 (#24, W2), SA165 (#22, W1), and SA171 (#28, W3).
+  **Removed from the roadmap as archived history, not as open work:** the "Operationally, the release
+  path is complete" paragraph restating SA170's campaigns and SA167c's Phase-F verdict (both already
+  archived above); the spent idle-lane rationale for the SA174/SA175 W2 assignment, which now stands
+  on its permanent conflict-surface justification alone; the 2026-08-31 dated narrative of SA174
+  leaving the `sa90_emission_manifests.json` rebaseline run and of its shrink to a comment correction,
+  both of which survive as the ticket body's own settled scope; and the maintainer-decisions section's
+  restatement of the settled `EV-7` grant and the confirmed SA174/SA175 assignment, which is now a
+  single pointer to this file. The section's live content is the one open authority.
+  **Retired from `docs/others/tech-audit.md`:** the *Notes* entry for the four `sqlparse` CVE
+  suppressions, which the entry itself recorded as closed on 2026-09-02 and "no longer a watch item".
+  Verified against the tree before removal: `poetry.lock` pins `sqlparse` 0.6.0 and
+  `scripts/security_suppressions.json` carries zero `sqlparse` entries. The reconciliation-log line
+  dated 2026-09-02 is preserved, and the dependency-hygiene table cell no longer forward-references
+  the removed note.
+  **Verification:** `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py
+  -q -o addopts= --no-cov` — **37 passed**, before and after. No W1/W2/W3 state block changed lanes,
+  no ticket metadata, merge position, dependency, or lane count moved, and no checked roadmap entry
+  was introduced.
+
 - **SA167c Phase F release verdict green (2026-09-05).** The sole `EV-7`-authorized
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` invocation ran once from clean frozen base
   `21a33fbf22b033cab07ba63b592e21b999667fb2` at `wt-track2` (HEAD and `v88` remained equal).

@@ -103,10 +103,6 @@ takes scheduling priority while one of its Docker-backed legs is active, but its
 not a chain. No open ticket now sets the release date; W1's three positions, W2's four
 positions, and W3's two positions are band-C work.
 
-**Operationally, the release path is complete.** SA170's ordered serial and concurrent campaigns,
-and SA167c's authorized Phase-F verdict, are accepted and archived in [CHANGELOG.md](../../CHANGELOG.md).
-No release-committed ticket remains; the surviving W2 work is band-C tail work.
-
 **No cross-worktree ticket or release-gate blocker remains.** One cross-worktree *shared file* does,
 made one-directional by merge order: `scripts/test_isolation_conformance.sh` (SA135's merged
 partial wrote it; SA165's retained product edit is awaiting closeout before the remaining W1 pair).
@@ -140,9 +136,8 @@ SA175 owns `quickscale_devtools/.../beta_migration.py` and its conformance test,
 ticket touches any of the three. The assignment keeps `docs/others/arch-audit.md` **single-lane and
 one-directional** (its three owners SA174, SA175, and SA164 are all W2, running #31 → #32 with #25
 merging later) and leaves W1 as one coherent generated-output chain, #22 ─► #19 ─► #20. No code file
-carries a second lane and no merge hazard exists. The move's original idle-lane rationale is spent —
-SA167c's former head is archived under `EV-7` — but the conflict-surface gain is permanent, which is why
-the assignment stands rather than reverting. **SA174 and SA175 remain W2 tail by current lane
+carries a second lane and no merge hazard exists. The assignment stands on that permanent
+conflict-surface gain rather than on the idle-lane condition that produced it. **SA174 and SA175 remain W2 tail by current lane
 ordering; the band-C displacement rule imposes no present constraint because no runnable band-B leg
 remains.**
 
@@ -225,26 +220,17 @@ tail.
 **One maintainer authority is open:** grant or decline exactly one replacement
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict for SA165's settled six-file Phase D candidate. The
 prior green run is retained but cannot be reused because `CHANGELOG.md` changed afterward; this pass
-does not authorize a second run. Both other standing decisions were settled on 2026-09-04 and their
-reasoning is archived in [CHANGELOG.md](../../CHANGELOG.md):
+does not authorize a second run. Nothing else in the queue waits on a maintainer, and after SA165
+receives one-run authority its remaining question is empirical: whether the final-candidate command
+returns green.
 
-- **Phase-F release authority for SA167c was consumed successfully** as `EV-7`: exactly one
-  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict ran on the frozen synchronized base and exited 0.
-  Its completion evidence is archived in [CHANGELOG.md](../../CHANGELOG.md); accepted A-E work was
-  not re-run.
-- **The SA174/SA175 lane assignment to W2 is confirmed** and is no longer reversible at zero cost.
-  Its permanent justification is the conflict-surface gain (`docs/others/arch-audit.md` single-lane),
-  not the idle-lane condition that has since passed.
-
-Nothing else in the queue waits on a maintainer. After SA165 receives one-run authority, its remaining
-question is empirical: whether the final-candidate command returns green.
-
-The five decisions settled on 2026-08-31 — the `sqlparse` suppressions, `quickscale_devtools`
-publication, the consistency test's canary reduction, the band-C displacement rule, and the
-permanence of the privileged-command set — are archived with their full reasoning in
-[CHANGELOG.md](../../CHANGELOG.md). Only their standing consequences live on here: in
-[Standing rules](#standing-rules-carried-from-closed-decisions), in the shrunk SA174 and SA175
-ticket bodies, and in the
+Every other decision is settled and archived with its full reasoning in
+[CHANGELOG.md](../../CHANGELOG.md) — SA167c's Phase-F authority (consumed successfully as `EV-7`),
+the confirmed SA174/SA175 lane assignment to W2, and the five decisions of 2026-08-31 (the
+`sqlparse` suppressions, `quickscale_devtools` publication, the consistency test's canary reduction,
+the band-C displacement rule, and the permanence of the privileged-command set). Only their standing
+consequences live on here: in [Standing rules](#standing-rules-carried-from-closed-decisions), in the
+shrunk SA174 and SA175 ticket bodies, and in the
 [deliberately-not-ticketed table](#audit-items-deliberately-not-ticketed). D3 and the
 placeholder-declaration policy remain settled and are not reopened here.
 
@@ -327,9 +313,8 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 | 31 | **SA174** | C | 3 | W2 | — *(band-C tail)* | no |
 | 32 | **SA175** | C | 3 | W2 | SA174 *(lane only)* | no |
 
-SA167c's synchronized status checkpoint and green Phase-F release evidence are archived in
-[CHANGELOG.md](../../CHANGELOG.md). Other entries carry their declared queue or content dependencies,
-subject to fresh branch remeasurement before execution.
+Entries carry their declared queue or content dependencies, subject to fresh branch remeasurement
+before execution.
 
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #17, #18, #21, #23, #26, #27 are **retired and not
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning.
@@ -340,13 +325,11 @@ complete and archived; #24, #22, and #28 are eligible with `deps: none`.
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. Two are
 **hard content dependencies** that no reorder clears: **SA160 after SA161** (shared emission-parity rebaseline of `sa90_emission_manifests.json`;
-the pair must not be split, so the run is ordered #19, #20 — **SA174 left this run on 2026-08-31**
-when the privileged-command set was settled as permanent and its emitted-byte change was dropped), **SA164's substance after SA166** (its
+the pair must not be split, so the run is ordered #19, #20), **SA164's substance after SA166** (its
 `test_sa92_migration_squash_guardrail.py` work needs `django_apps:` retired). Band-C positions
 (19, 20, 22, 24, 25, 28, 29, 31, 32) are *earliest-eligible*, not commitments, and may slip past the
-release. **SA174 (#31) and SA175 (#32) sit on W2 by the confirmed 2026-09-04 assignment**: neither has a
-content dependency, neither needs an exclusive slot, and SA174 is now a comment correction plus an
-  audit demotion. They remain W2 tail work.
+release. **SA174 (#31) and SA175 (#32) are W2 tail work**: neither has a content dependency and
+neither needs an exclusive slot.
 
 ### Shared conflict surfaces
 
