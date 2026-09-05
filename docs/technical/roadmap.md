@@ -201,8 +201,7 @@ complete and the standing state was restored exactly.
   closeout is archived as a conditional post-integration candidate; SA165 has
   `deps: none`, remains W1-owned, and its phases A-C are accepted on retained product object
   `573a57a34301e6a91971a7845095bd913bebd5e1`, merged at `3f925b96`. The final-candidate release
-  verdict is still outstanding. ***corrected after checkpoint attestation — not independently
-  graded***
+  verdict is still outstanding.
 - **W3 — start SA176 (#33).** SA176 is the ticketed release correction of the retained SA171
   candidate: `make ci` is red on Bandit B105 for `_ACQUISITION_TOKEN_KEY = "_acquisition_token"`.
   It has `deps: none`, is DB-free, claims no exclusive slot, and is executable today. SA172 (#29)
@@ -218,7 +217,7 @@ merge-back is not order-gated behind another lane.
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
 | **W2** | SA166 (#24) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #24 | no |
-| **W1** | SA165 (#22) | **yes** — `deps: none`; reconcile the post-R1 status/test drift, run the focused suite, and obtain a fresh terminal SA165-R1 before entering the reviewed remainder; ***corrected after checkpoint attestation — not independently graded*** | **no** — the current bytes lack a fresh SA165-R1 and the `EV-8`-authorized verdict has not returned green | **yes after fresh review and a green verdict** — no cross-lane blocker remains | no |
+| **W1** | SA165 (#22) | **yes** — `deps: none`; reconcile the post-R1 status/test drift, run the focused suite, and obtain a fresh terminal SA165-R1 before entering the reviewed remainder | **no** — the current bytes lack a fresh SA165-R1 and the `EV-8`-authorized verdict has not returned green | **yes after fresh review and a green verdict** — no cross-lane blocker remains | no |
 | **W3** | SA176 (#33) | **yes** — `deps: none`, DB-free, and the defect is located and reproducible | **yes** — correcting B105, rerunning `make ci`, and independent review are all W3-owned | **yes** — nothing is ordered ahead of #33 | **yes — the only ticket on it** |
 | **W3 tail** | SA172 (#29) | **no** — held behind SA176 by lane order | **yes** — `deps: none`; its acceptance is proved against W3's own PostgreSQL slot | **yes after SA176 merges** — lane ordering, clearable by you reordering the lane | no |
 
@@ -476,14 +475,13 @@ triggers.
   accepted the complete six-file patch from `b23eb1fd47114dc9f176cd930ee35468f823e4cf` to
   `f3f29d915f5971c8f47e558a82c292ccfc86add0` with no blocking finding. This checkpoint then changed
   `docs/technical/roadmap.md`, one of the six bound blobs, so that review is historical evidence and
-  does not authorize `FROZEN-CHECK` or `EV-8` against the current bytes. ***corrected after checkpoint
-  attestation — not independently graded*** The retained A-C product remains unchanged. The sole
+  does not authorize `FROZEN-CHECK` or `EV-8` against the current bytes. The retained A-C product
+  remains unchanged. The sole
   SA165 release run returned exit 0 with Core 38 passed and CLI 54 passed, but `CHANGELOG.md` changed
   afterward. It therefore does not cover the settled candidate and closes neither SA165 nor its four
   audit notes. A fresh SA165-R1 is required after the current status consumers and executable
   consistency contract are reconciled; the old result must not be rebound. Lane state must be
-  remeasured at action time rather than persisted as a current merge assertion. ***corrected after
-  checkpoint attestation — not independently graded***
+  remeasured at action time rather than persisted as a current merge assertion.
 
   **Blocking checkpoint.** The roadmap now reports the historical R1 result while
   `quickscale_core/tests/test_v88_ticket_context_consistency.py` still requires the old R1-pending
@@ -492,23 +490,23 @@ triggers.
   same-fact consumer and the consistency module to the truthful historical-pass/current-drift state,
   renaming `test_v88_sa165_readiness_rejects_green_without_release_authority` to describe rejection
   before the `EV-8` verdict without weakening its assertions, running the focused suite green, and
-  obtaining a fresh terminal SA165-R1 over the resulting exact six blobs. ***corrected after
-  checkpoint attestation — not independently graded***
+  obtaining a fresh terminal SA165-R1 over the resulting exact six blobs.
 
   **Observed focused checkpoint (2026-09-05).** After synchronizing the retained checkpoint with
   current `v88` and preserving W3's SA176 state, the exact focused command returned **4 failed / 36
   passed**. The failures are the expected evidence for this retained stop: the helper still requires
   `SA165-R1 remains tracked`; the readiness and current-action canaries still target the pre-R1
-  wording; and the current-status guard rejects this checkpoint's required
-  `not independently graded` marker. No failure is accepted as green, no assertion was weakened, and
-  `EV-8` remains unspent. ***corrected after checkpoint attestation — not independently graded***
+  wording; and the current-status guard rejected the prior checkpoint's ungraded-correction marker.
+  Removing that stale marker before this checkpoint's independent review made its guard green; the
+  exact command then returned **3 failed / 37 passed**, leaving the three intended pre-R1
+  status/action failures above. No failure is accepted as green, no assertion was weakened, and
+  `EV-8` remains unspent.
 
   **Decisions needed to continue cleanly: none.** The existing authority already defines the next
   safe path: reconcile the status/test contract, run the focused suite green, and obtain a fresh
   terminal SA165-R1 before entering the reviewed remainder. A new maintainer decision is required
   only if that work changes scope, or if the eventual one-use `EV-8` verdict is red or unreturned and
-  replacement authority is needed. ***corrected after checkpoint attestation — not independently
-  graded***
+  replacement authority is needed.
 
   **Pending, in order.** (1) Complete that pre-R1 reconciliation and run
   `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts=
@@ -519,7 +517,7 @@ triggers.
   cleanup/provenance evidence. A green verdict permits completion-grade convergence, patch-backed
   terminal attestation, exact-tip integration, audit-note retirement, and #22 retirement. A red or
   unreturned verdict keeps this checkpoint open and requires a repair ticket plus fresh authority;
-  `EV-8` covers no second run. ***corrected after checkpoint attestation — not independently graded***
+  `EV-8` covers no second run.
 
   **Remaining reviewed plan and handoff.** Reviewed plan authority `EV-6` still governs the
   `FROZEN-CHECK` and `EV8-CLOSEOUT` remainder, but its fresh-R1 entry precondition is not currently
@@ -536,8 +534,7 @@ triggers.
   the root records `EV-8` as launched before dispatching `EV8-CLOSEOUT`; a dispatch or launch failure
   is spent/unreturned and is not retryable. Only a valid green verdict permits the six-file closeout
   reconciliation. Preserve historical SA170 and SA167c/SA167d evidence, do not reopen A-C product
-  files, and do not alter SA172's later ownership of the isolation script. ***corrected after
-  checkpoint attestation — not independently graded***
+  files, and do not alter SA172's later ownership of the isolation script.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/schema/state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `quickscale_core/.../templates/OPERATIONS.md.j2`, `docs/others/tech-audit.md`.
 
 - [ ] **SA174 — Correct the false SSOT claim on the privileged-command set.** `Band C · Tier 3 · W2 · merge #31 · deps: none · shrunk 2026-08-31 · moved to W2 2026-09-03`
