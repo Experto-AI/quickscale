@@ -15,7 +15,7 @@
   - [Decisions (authoritative)](technical/decisions.md) - Technical rules and architectural decisions
   - [Scaffolding (layout & templates)](technical/scaffolding.md) - Directory structures and file layouts
   - [Roadmap](technical/roadmap.md) - Development timeline and current tasks
-  - [v88 Ticket Context](technical/v88_ticket_context.md) - Current v88 ledger: nine open v88 ticket entries across nine open merge positions, lanes W1 3 · W2 5 · W3 1; SA170/TA70 and the accepted lock correction are archived after their accepted evidence; SA167c remains open at #21 with phases A-E accepted and its authorized Phase-F verdict (`EV-7`, granted 2026-09-04) not yet run; SA165 heads W1 with `deps: none`, with its Phase D candidate retained but a fresh-authority release verdict still pending; SA172 heads W3 with `deps: none`
+  - [v88 Ticket Context](technical/v88_ticket_context.md) - Current v88 ledger: eight open v88 ticket entries across eight open merge positions, lanes W1 3 · W2 4 · W3 1; SA170/TA70 and SA167c (EV-7) are archived after their accepted release campaigns; SA166 is now runnable with `deps: none`; SA165 heads W1 with `deps: none` as an integrated retained partial with SA165-R1 still tracked; SA171 is implemented and retained but not release-accepted because Bandit B105 remains open, so SA172 is held
   - [User Manual](technical/user_manual.md) - Commands and workflows
   - [Development](technical/development.md) - Dev environment setup
   - [Plan/Apply System](technical/plan-apply-system.md) - Terraform-style workflow

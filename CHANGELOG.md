@@ -17,6 +17,37 @@
   checks passed, and the settled three-suite task command passed **80 tests**. TA71 and merge position
   #28 are retired; the roadmap now derives **nine** open v88 entries across **nine** open merge
   positions, with SA172 as W3's head and `deps: none`.
+- **SA167c Phase F release verdict green (2026-09-05).** The sole `EV-7`-authorized
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` invocation ran once from clean frozen base
+  `21a33fbf22b033cab07ba63b592e21b999667fb2` at `wt-track2` (HEAD and `v88` remained equal).
+  The detached `setsid` wrapper completed normally with PID `2907741`, atomic exit file
+  `/tmp/sa167c-phase-f.Fm4lzS/ci-e2e.exit` containing `0`, and complete log
+  `/tmp/sa167c-phase-f.Fm4lzS/ci-e2e.log`. The provenance banner reported the checkout up to
+  date with `v88`; all twelve CI stages passed, including 1,360 registered script tests,
+  5,079 core/CLI coverage tests, 332 backups tests, 94.54% module integration coverage,
+  and successful dependency, static-analysis, type, frontend, and coverage gates. Stage 12
+  ran concurrently: Core reported **38 passed** and CLI **54 passed**; both exact labelled
+  cleanup scopes completed, and the final banner was `✓ All CI Checks Passed!`. Phases A-E
+  remain accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`.
+  This green verdict closes SA167c and retires merge position **#21**; it releases SA166 to
+  `deps: none` while preserving SA164 after SA166. After the SA165 retained-partial integration,
+  the open queue is now **nine open v88 ticket entries across nine open merge positions**, lanes
+  **W1 3 · W2 4 · W3 2**, with SA165 still open at **#22** and SA165-R1 still tracked. No checked
+  roadmap entry is permitted. Completion remains subject to root-owned convergence, terminal
+  attestation, and exact-tip integration.
+
+- **SA171 retained-partial checkpoint — release acceptance remains blocked (2026-09-05).** The
+  earlier SA171 closeout entry above is retained as historical implementation evidence, but this
+  later checkpoint supersedes its merge-readiness claim: the corrected lock implementation remains
+  retained on `wt-track3` and is not release-accepted or merged into `v88`. Focused lock/status
+  validation passed **87 tests**, and the scoped core lint and type checks passed. The product
+  implementation is not being changed in this checkpoint. **Blocking:** the exact synchronized
+  tree's `make ci` remains red on Bandit B105 at
+  `quickscale_core/src/quickscale_core/advisory_lock.py:41`,
+  `_ACQUISITION_TOKEN_KEY = "_acquisition_token"`. Do not fix or suppress B105 here; the next
+  release-correction pass must preserve the ownership-token invariant, rerun the focused checks and
+  full `make ci`, independently review the corrected exact tip, reconcile its status consumers, and
+  merge only the reviewed result. **SA172 remains held behind this blocker.**
 
 ## v88 development — 2026-08-21
 

@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-09-04 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
+> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-09-05 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
 >
 > Live structural findings only. Findings are identified by their **slug**; the ordinal numbering
 > used in earlier passes is pass-local and is not a stable identifier (see
@@ -30,37 +30,35 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Nine open v88 ticket entries run on three tracks across nine open merge
-positions; **W2 sets the release date** because SA167c remains open at #21 with phases A-E accepted
-on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
-`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3 at that time. SA170's final acceptance has cleared those failures and the maintainer
-granted Phase-F authority `EV-7` on 2026-09-04, so running that authorized F verdict is now the
-release-path gate. W3 holds the exclusive
+generated-project updater. Eight open v88 ticket entries run on three tracks across eight open merge
+positions; SA167c's authorized Phase-F verdict under `EV-7` is green and archived, so no open ticket sets the
+release date. W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
-**Accepted-open SA167c checkpoint (2026-09-01).** SA167c remains open at merge position **#21**
-with SA166 still dependent on it. Phases A-E are accepted on retained product object
-`91fd3bb6e6b638735361b511c1515cddccce5d15`: C's declaration-gate surface and focused **293-test**
-campaign are accepted, and D's fail-hard missing-app proof restored the exact bytes before both
-related gates returned green. E's ordered lint/typecheck/context checkpoint passed; F halted after
-`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by SA170/W3.
-Those upstream failures are now closed, but F remains outstanding and unaccepted pending fresh
-reviewed authority; this retained delivery clears no release gate, and no completion
-or release-readiness claim is made. Retained-partial-only merge-back of the synchronized nine-file
-status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. Its accepted evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md).
+**SA167c release reconciliation (2026-09-05).** SA167c's phases A-E remain accepted on retained
+product object `91fd3bb6e6b638735361b511c1515cddccce5d15`, and its sole authorized Phase-F
+`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict exited 0 on frozen base
+`21a33fbf22b033cab07ba63b592e21b999667fb2`. All twelve stages, Core/CLI E2E, and exact-scope
+cleanup passed. SA167c is closed and archived; SA166 is now `deps: none`. Evidence is archived in
+[CHANGELOG.md](../../CHANGELOG.md).
 
 **SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
 exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
 local corrections. Exact Core/CLI cleanup completed and the standing PostgreSQL identity, volume,
-catalog, ownership, and role flags remained intact. SA170 and TA70 are closed; the accepted lock
-correction is archived and W3 now has only its remaining PostgreSQL-backed head. The full release and
-retained-partial history is archived in [CHANGELOG.md](../../CHANGELOG.md).
+catalog, ownership, and role flags remained intact. SA170 and TA70 are closed; the lock correction is
+retained as the SA171 candidate but is not release-accepted while its B105 blocker remains open. W3
+therefore holds SA172 behind that correction. The full release and retained-partial history is archived
+in [CHANGELOG.md](../../CHANGELOG.md).
+
+**SA171 retained-partial status (2026-09-05).** The lock implementation is retained but not
+release-accepted: the synchronized candidate's `make ci` remains blocked by Bandit B105 at
+`quickscale_core/src/quickscale_core/advisory_lock.py:41` for the acquisition-token metadata key.
+The blocker is deliberately not fixed or suppressed here, and SA172 remains held behind the
+release correction. The implementation and its focused evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
-and the completion ledger archived SA167d and retired merge position #18. SA165 is released with
-`deps: none`; the current queue is nine open v88 ticket entries across nine open merge positions.
+and the completion ledger archived SA167d and retired merge position #18. SA165 became unblocked with
+`deps: none`; at that checkpoint the queue was nine open v88 ticket entries across nine open merge positions.
 The ledger is a **conditional post-integration** candidate with **exact-tip** integration and terminal
 attestation still pending in the root closeout path. The first
 foreground `make check` invocation terminated with exit 143 after Make reported no child processes
@@ -503,11 +501,11 @@ independent of the other two and should be designed together at `teams` kickoff.
 
 ## Watchlist
 
-- **Two independent filesystem-lock implementations.** The accepted lock correction repaired the
+- **Two independent filesystem-lock implementations.** The retained SA171 candidate repairs the
   stale-reclamation race and acquisition-bound release identity in both implementations without
-  introducing a shared primitive. This is a non-defect structural question only: revisit consolidation
-  if a third implementation appears, behavior or platform support diverges, or both public contracts
-  can no longer be preserved independently.
+  introducing a shared primitive; its release acceptance remains blocked by B105. This is otherwise
+  a non-defect structural question only: revisit consolidation if a third implementation appears,
+  behavior or platform support diverges, or both public contracts can no longer be preserved independently.
 - **Hand-pinned literals inside the new provisioning derivation.** `provision_ci_postgres.sh:96`
   (`== 12`) and `:93` (`!= teams`) re-introduce a module count and a module name into a script whose
   whole point is deriving them. *Doesn't qualify:* both fail loudly and immediately, and the count check
