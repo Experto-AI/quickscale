@@ -25,14 +25,20 @@ The lock file lives at ``.quickscale/<name>.lock`` next to ``state.yml``.
 from __future__ import annotations
 
 import errno
+import fcntl
 import os
+import secrets
 import socket
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml
+
+
+_ACQUISITION_TOKEN_KEY = "_acquisition_token"
 
 
 class AdvisoryLockError(Exception):
@@ -122,6 +128,9 @@ class AdvisoryLock:
         self.operation = operation
         self._acquired = False
         self._metadata: AdvisoryLockMetadata | None = None
+        self._acquired_identity: tuple[int, int] | None = None
+        self._acquired_pid: int | None = None
+        self._acquisition_token: str | None = None
 
     @property
     def is_held_locally(self) -> bool:
@@ -141,8 +150,10 @@ class AdvisoryLock:
         """
         self.state_dir.mkdir(parents=True, exist_ok=True)
 
+        acquisition_pid = os.getpid()
+        acquisition_token = secrets.token_urlsafe(32)
         metadata = AdvisoryLockMetadata(
-            pid=os.getpid(),
+            pid=acquisition_pid,
             hostname=socket.gethostname(),
             operation=self.operation,
         )
@@ -166,18 +177,36 @@ class AdvisoryLock:
                 f"Failed to acquire advisory lock {self.lock_path}: {error}"
             ) from error
 
+        acquired_identity: tuple[int, int] | None = None
         try:
+            acquired_identity = _file_identity_from_descriptor(fd)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            payload_data = metadata.to_dict()
+            payload_data[_ACQUISITION_TOKEN_KEY] = acquisition_token
             payload = yaml.dump(
-                metadata.to_dict(),
+                payload_data,
                 default_flow_style=False,
                 sort_keys=False,
             )
-            os.write(fd, payload.encode("utf-8"))
+            _write_all(fd, payload.encode("utf-8"))
+        except OSError as error:
+            try:
+                current_identity = _file_identity_from_path(self.lock_path)
+            except FileNotFoundError:
+                current_identity = None
+            if current_identity == acquired_identity:
+                self.lock_path.unlink(missing_ok=True)
+            raise AdvisoryLockError(
+                f"Failed to acquire advisory lock {self.lock_path}: {error}"
+            ) from error
         finally:
             os.close(fd)
 
         self._acquired = True
         self._metadata = metadata
+        self._acquired_identity = acquired_identity
+        self._acquired_pid = acquisition_pid
+        self._acquisition_token = acquisition_token
         return metadata
 
     def release(self) -> None:
@@ -193,18 +222,54 @@ class AdvisoryLock:
         if not self._acquired:
             return
 
+        acquired_identity = self._acquired_identity
+        acquired_pid = self._acquired_pid
+        acquisition_token = self._acquisition_token
         try:
-            self.lock_path.unlink()
-        except FileNotFoundError:
-            # Already gone — nothing to do.
-            pass
-        except OSError as error:
-            raise AdvisoryLockError(
-                f"Failed to release advisory lock {self.lock_path}: {error}"
-            ) from error
+            if (
+                acquired_identity is None
+                or acquired_pid is None
+                or acquisition_token is None
+                or os.getpid() != acquired_pid
+            ):
+                return
+
+            try:
+                with _opened_locked_candidate(self.lock_path) as (
+                    descriptor,
+                    opened_identity,
+                ):
+                    if opened_identity != acquired_identity:
+                        return
+                    try:
+                        data = yaml.safe_load(_read_descriptor(descriptor)) or {}
+                    except UnicodeError, yaml.YAMLError:
+                        return
+                    if not isinstance(data, dict):
+                        return
+                    if (
+                        data.get("pid") != acquired_pid
+                        or data.get(_ACQUISITION_TOKEN_KEY) != acquisition_token
+                    ):
+                        return
+                    try:
+                        current_identity = _file_identity_from_path(self.lock_path)
+                    except FileNotFoundError:
+                        return
+                    if current_identity == acquired_identity:
+                        self.lock_path.unlink()
+            except FileNotFoundError:
+                return
+            except OSError as error:
+                raise AdvisoryLockError(
+                    f"Failed to release advisory lock {self.lock_path}: {error}"
+                ) from error
         finally:
             self._acquired = False
             self._metadata = None
+            self._acquired_identity = None
+            self._acquired_pid = None
+            self._acquisition_token = None
 
     def read_metadata(self) -> AdvisoryLockMetadata | None:
         """Read the metadata from an existing lock file.
@@ -214,12 +279,10 @@ class AdvisoryLock:
             parseable, ``None`` otherwise.
 
         """
-        if not self.lock_path.exists():
-            return None
         try:
-            with open(self.lock_path) as handle:
-                data = yaml.safe_load(handle) or {}
-        except yaml.YAMLError, OSError:
+            with _opened_locked_candidate(self.lock_path) as (descriptor, _identity):
+                data = yaml.safe_load(_read_descriptor(descriptor)) or {}
+        except FileNotFoundError, yaml.YAMLError, OSError:
             return None
         if not isinstance(data, dict) or "pid" not in data:
             return None
@@ -287,21 +350,41 @@ class AdvisoryLock:
             AdvisoryLockError: If the lock file cannot be removed.
 
         """
-        if not self.is_stale(max_age_seconds=max_age_seconds):
-            return False
-
         try:
-            self.lock_path.unlink()
+            with _opened_locked_candidate(self.lock_path) as (descriptor, identity):
+                data = yaml.safe_load(_read_descriptor(descriptor)) or {}
+                if not isinstance(data, dict) or "pid" not in data:
+                    stale = True
+                else:
+                    try:
+                        metadata = AdvisoryLockMetadata.from_dict(data)
+                    except KeyError, TypeError, ValueError:
+                        stale = True
+                    else:
+                        stale = _metadata_is_stale(
+                            metadata, max_age_seconds=max_age_seconds
+                        )
+                if not stale:
+                    return False
+                try:
+                    current_identity = _file_identity_from_path(self.lock_path)
+                except FileNotFoundError:
+                    return True
+                if current_identity != identity:
+                    return True
+                self.lock_path.unlink()
         except FileNotFoundError:
-            return True  # Already gone.
+            return True
         except OSError as error:
             raise AdvisoryLockError(
                 f"Failed to clear stale advisory lock {self.lock_path}: {error}"
             ) from error
 
-        # If this instance held the lock, mark it released.
         self._acquired = False
         self._metadata = None
+        self._acquired_identity = None
+        self._acquired_pid = None
+        self._acquisition_token = None
         return True
 
     def __enter__(self) -> "AdvisoryLock":
@@ -334,3 +417,63 @@ def _pid_is_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+@contextmanager
+def _opened_locked_candidate(
+    lock_path: Path,
+) -> Iterator[tuple[int, tuple[int, int]]]:
+    """Open and exclusively flock one candidate lock inode."""
+    descriptor = os.open(lock_path, os.O_RDONLY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield descriptor, _file_identity_from_descriptor(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _read_descriptor(descriptor: int) -> str:
+    """Read all UTF-8 text from a locked descriptor without changing ownership."""
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    chunks: list[bytes] = []
+    while chunk := os.read(descriptor, 8192):
+        chunks.append(chunk)
+    return b"".join(chunks).decode("utf-8")
+
+
+def _write_all(descriptor: int, payload: bytes) -> None:
+    """Write a complete lock payload or fail when the write makes no progress."""
+    offset = 0
+    while offset < len(payload):
+        written = os.write(descriptor, payload[offset:])
+        if written <= 0:
+            raise OSError(errno.EIO, "advisory lock metadata write made no progress")
+        offset += written
+
+
+def _file_identity_from_descriptor(descriptor: int) -> tuple[int, int]:
+    """Return the device and inode identity held by an open descriptor."""
+    stat_result = os.fstat(descriptor)
+    return stat_result.st_dev, stat_result.st_ino
+
+
+def _file_identity_from_path(lock_path: Path) -> tuple[int, int]:
+    """Return the current device and inode identity at a lock pathname."""
+    stat_result = lock_path.stat()
+    return stat_result.st_dev, stat_result.st_ino
+
+
+def _metadata_is_stale(
+    metadata: AdvisoryLockMetadata,
+    *,
+    max_age_seconds: float,
+) -> bool:
+    """Apply the public stale-lock PID and age policy to parsed metadata."""
+    if not _pid_is_alive(metadata.pid):
+        return True
+    try:
+        acquired = datetime.fromisoformat(metadata.acquired_at)
+        age = (datetime.now(timezone.utc) - acquired).total_seconds()
+        return age > max_age_seconds
+    except ValueError, TypeError:
+        return True

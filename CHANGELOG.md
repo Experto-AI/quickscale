@@ -2,6 +2,42 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Roadmap hygiene pass — the SA171 release correction is ticketed as SA176 (2026-09-05).**
+  The roadmap held the remaining SA171 release work as a narrative checkpoint section rather than as
+  a schedulable entry, so the one gate red on the integration branch had no owner, no lane, and no
+  merge position. This pass converts it into **SA176 — Clear the B105 release blocker on the retained
+  SA171 lock candidate**, `Band A · Tier 1 · W3 · merge #33 · deps: none`, heading W3 with SA172 (#29)
+  behind it by lane order only (SA172 keeps `deps: none`). SA176 is the **only open ticket on the
+  release critical path**: under the standing rule that a red integration gate is attributed to
+  exactly one ticket and never deselected, every other lane's green is provisional until `make ci`
+  is green again.
+  **Derived counts moved with it**, not by hand: **nine** open v88 ticket entries across **nine** open
+  merge positions, lanes **W1 3 · W2 4 · W3 2**, heads SA165 (#22, W1), SA166 (#24, W2), SA176
+  (#33, W3). Reconciled in `docs/index.md`, `docs/others/arch-audit.md`,
+  `docs/others/tech-audit.md`, and `docs/technical/v88_ticket_context.md` (new conceptual `## SA176`
+  section).
+  **Removed from the roadmap as archived history, not as open work:** the whole
+  "SA171 retained-partial integration checkpoint" section, whose completed-implementation,
+  blocking, and remaining-plan content is already archived in the two SA171 entries below and now
+  lives in SA176's acceptance criteria; and the "The SA170/SA167c release-verdict path is complete"
+  paragraph, which restated two campaigns already archived here. Both carried the
+  ***corrected after checkpoint attestation — not independently graded*** marker, which belongs on
+  the archived narrative in this file and not on a current-status planner page; the two SA171
+  entries below retain it.
+  **Executable status contract reconciled in the same change**, as the SA171 checkpoint's own first
+  pending item required: `quickscale_core/tests/test_v88_ticket_context_consistency.py` had three
+  failures on the integration tree — a readiness assertion still pinned to pre-`EV-8` SA165 wording,
+  the SA171 false-release canary binding to a duplicate "repository release acceptance is not"
+  phrase in the removed SA170/SA167c paragraph instead of the SA171 sentence, and the ungraded-label
+  guard tripping on the roadmap's own attestation markers. All three are closed by asserting the
+  granted `EV-8` state and preserving the SA171/B105 blocker; the W3 lane-count and queue-prose drift
+  canaries were re-derived from the new lane census. **Verification:** `poetry run pytest
+  quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov` — **40
+  passed** (was 3 failed / 37 passed before the pass).
+  **Not done here, deliberately:** B105 itself is untouched. Correcting or suppressing it inside a
+  status reconciliation is exactly what the checkpoint forbade; it is SA176's work and needs its own
+  review of the exact corrected tip.
+
 - **Final-candidate release authority for SA165 granted as `EV-8` (2026-09-05).** The one maintainer
   decision left open by the preceding hygiene pass is settled. **Decision: granted.** `EV-8`
   authorizes **exactly one** replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict over
@@ -53,6 +89,22 @@
   no ticket metadata, merge position, dependency, or lane count moved, and no checked roadmap entry
   was introduced.
 
+- **SA171 / TA71 closeout — both lock implementations are repaired and archived (2026-09-05).**
+  The accepted Phase-A correction makes stale reclamation inode-bound in both
+  `quickscale_core/dr_engine/_lock.py` and `quickscale_core/advisory_lock.py`, while freezing
+  acquisition identity privately so release cannot unlink a replacement. The public
+  `_release_backup_lock(Path)` signature/import seam and `AdvisoryLock` seams remain unchanged; no
+  shared lock primitive was introduced. The reviewed red-before proof and deterministic
+  replacement/race coverage were retained, followed by `make lint -- --core` (exit 0), `make
+  typecheck -- --core` (exit 0), and the focused two-suite pytest command (exit 0, **47 passed in
+  0.13s**). That total records Phase-A evidence only and does not duplicate the separate closeout
+  `make ci` verdict. Convergence then made unowned DR release a no-op, bound local ownership to the
+  process, thread, path, inode, and a private acquisition token so inode reuse cannot authorize an
+  earlier holder, and made failed-write cleanup preserve a replacement; scoped core lint and type
+  checks passed, and the settled three-suite task command passed **80 tests**. TA71 and merge position
+  #28 are retired; the roadmap now derives **eight** open v88 entries across **eight** open merge
+  positions, lanes **W1 3 · W2 4 · W3 1**, with SA172 as W3's head and `deps: none`.
+  ***corrected after checkpoint attestation — not independently graded***
 - **SA167c Phase F release verdict green (2026-09-05).** The sole `EV-7`-authorized
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` invocation ran once from clean frozen base
   `21a33fbf22b033cab07ba63b592e21b999667fb2` at `wt-track2` (HEAD and `v88` remained equal).
@@ -71,6 +123,22 @@
   **W1 3 · W2 4 · W3 2**, with SA165 still open at **#22** and SA165-R1 still tracked. No checked
   roadmap entry is permitted. Completion remains subject to root-owned convergence, terminal
   attestation, and exact-tip integration.
+
+- **SA171 retained-partial checkpoint — release acceptance remains blocked (2026-09-05).** The
+  earlier SA171 closeout entry above is retained as historical implementation evidence, but this
+  later checkpoint supersedes its merge-readiness claim: reviewed SA171 parent
+  `6c87a35a2b8e8e63f292d20149c37490e9c85a63` has been merged into `v88` as retained partial
+  delivery, but is not release-accepted. Pre-integration remediation passed **95 focused tests** and
+  the scoped core lint and type checks. On the synchronized integration tree, the same 95-test
+  collection returned **2 failed / 93 passed** because two executable status-contract expectations
+  still reflect the pre-integration wording. **Blocking:** the exact synchronized tree's `make ci`
+  also remains red on Bandit B105 at
+  `quickscale_core/src/quickscale_core/advisory_lock.py:41`,
+  `_ACQUISITION_TOKEN_KEY = "_acquisition_token"`. Do not fix or suppress B105 here; the next
+  release-correction pass must preserve the ownership-token invariant, rerun the focused checks and
+  full `make ci`, independently review the corrected exact tip, and reconcile its status consumers.
+  The retained-partial integration closes no release gate. **SA172 remains held behind these
+  blockers.** ***corrected after checkpoint attestation — not independently graded***
 
 ## v88 development — 2026-08-21
 

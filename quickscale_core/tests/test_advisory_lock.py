@@ -8,15 +8,19 @@ introduced in Phase 2 (M2).
 from __future__ import annotations
 
 import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
 
+from quickscale_core import advisory_lock as lock_module
 from quickscale_core.advisory_lock import (
     AdvisoryLock,
     AdvisoryLockContentionError,
+    AdvisoryLockError,
     AdvisoryLockMetadata,
     _pid_is_alive,
 )
@@ -115,6 +119,129 @@ class TestAdvisoryLockAcquireRelease:
         lock = AdvisoryLock(tmp_path, operation="test")
         lock.release()  # Should not raise.
         assert lock.is_held_locally is False
+
+    def test_release_preserves_replacement_inode(self, tmp_path: Path) -> None:
+        """A replacement created after acquire is not removed by release."""
+        lock = AdvisoryLock(tmp_path, operation="original")
+        lock.acquire()
+        acquired_identity = (lock.lock_path.stat().st_dev, lock.lock_path.stat().st_ino)
+        replacement_source = tmp_path / "replacement-source"
+        replacement_source.write_text("replacement")
+        lock.lock_path.unlink()
+        replacement_source.rename(lock.lock_path)
+        replacement_identity = (
+            lock.lock_path.stat().st_dev,
+            lock.lock_path.stat().st_ino,
+        )
+
+        lock.release()
+
+        assert replacement_identity != acquired_identity
+        assert lock.lock_path.read_text() == "replacement"
+        assert lock.is_held_locally is False
+        assert lock._acquired_identity is None
+        lock.lock_path.unlink()
+
+    def test_inherited_pid_cannot_release_acquiring_process_lock(
+        self, tmp_path: Path
+    ) -> None:
+        """A fork-inherited instance fails closed outside its acquiring PID."""
+        lock = AdvisoryLock(tmp_path, operation="parent")
+        lock.acquire()
+        acquiring_pid = lock._acquired_pid
+        assert acquiring_pid is not None
+
+        with patch.object(lock_module.os, "getpid", return_value=acquiring_pid + 1):
+            lock.release()
+
+        assert lock.lock_path.exists()
+        assert lock.is_held_locally is False
+        assert lock._acquired_pid is None
+        assert lock._acquisition_token is None
+        lock.lock_path.unlink()
+
+    def test_release_preserves_same_inode_with_different_token(
+        self, tmp_path: Path
+    ) -> None:
+        """Identity reuse cannot bypass private acquisition-token parity."""
+        lock = AdvisoryLock(tmp_path, operation="original")
+        lock.acquire()
+        acquired_identity = (lock.lock_path.stat().st_dev, lock.lock_path.stat().st_ino)
+        replacement_data = yaml.safe_load(lock.lock_path.read_text())
+        replacement_data[lock_module._ACQUISITION_TOKEN_KEY] = "replacement-token"
+        lock.lock_path.write_text(yaml.dump(replacement_data, sort_keys=False))
+
+        assert (lock.lock_path.stat().st_dev, lock.lock_path.stat().st_ino) == (
+            acquired_identity
+        )
+        lock.release()
+
+        assert lock.lock_path.exists()
+        assert (
+            yaml.safe_load(lock.lock_path.read_text())[
+                lock_module._ACQUISITION_TOKEN_KEY
+            ]
+            == "replacement-token"
+        )
+        assert lock.is_held_locally is False
+        lock.lock_path.unlink()
+
+    def test_partial_writes_complete_parseable_metadata_and_release(
+        self, tmp_path: Path
+    ) -> None:
+        """Short writes are retried until metadata is complete and releasable."""
+        lock = AdvisoryLock(tmp_path, operation="short-write")
+        real_write = lock_module.os.write
+        write_sizes: list[int] = []
+
+        def short_write(descriptor: int, payload: bytes) -> int:
+            chunk = payload[: max(1, len(payload) // 2)]
+            written = real_write(descriptor, chunk)
+            write_sizes.append(written)
+            return written
+
+        with patch.object(lock_module.os, "write", side_effect=short_write):
+            lock.acquire()
+
+        metadata = lock.read_metadata()
+        assert len(write_sizes) > 1
+        assert metadata is not None
+        assert metadata.pid == os.getpid()
+        assert metadata.operation == "short-write"
+
+        lock.release()
+        assert not lock.lock_path.exists()
+        assert lock.is_held_locally is False
+
+    def test_zero_progress_write_fails_and_cleans_up(self, tmp_path: Path) -> None:
+        """A zero-progress metadata write cannot report acquisition success."""
+        lock = AdvisoryLock(tmp_path, operation="zero-progress")
+
+        with patch.object(lock_module.os, "write", return_value=0):
+            with pytest.raises(
+                AdvisoryLockError, match="Failed to acquire advisory lock"
+            ):
+                lock.acquire()
+
+        lock.release()
+        assert not lock.lock_path.exists()
+        assert lock.is_held_locally is False
+        assert lock._acquired_identity is None
+        assert lock._acquired_pid is None
+        assert lock._acquisition_token is None
+
+    def test_failed_write_cleans_up_created_lock(self, tmp_path: Path) -> None:
+        """A failed metadata write does not leave a lock or local ownership."""
+        lock = AdvisoryLock(tmp_path, operation="write-failure")
+        with patch.object(lock_module.os, "write", side_effect=OSError("write failed")):
+            with pytest.raises(
+                AdvisoryLockError, match="Failed to acquire advisory lock"
+            ):
+                lock.acquire()
+
+        assert not lock.lock_path.exists()
+        assert lock.is_held_locally is False
+        assert lock._acquired_identity is None
 
     def test_context_manager(self, tmp_path: Path) -> None:
         lock = AdvisoryLock(tmp_path, operation="test")
@@ -216,6 +343,85 @@ class TestAdvisoryLockStaleDetection:
             assert lock.lock_path.exists()
         finally:
             lock.release()
+
+    def test_clear_stale_race_preserves_replacement_and_contention(
+        self, tmp_path: Path
+    ) -> None:
+        """A locked stale inode cannot clear a replacement pathname."""
+        stale = AdvisoryLock(tmp_path, operation="stale-clear")
+        replacement = AdvisoryLock(tmp_path, operation="replacement")
+        contender = AdvisoryLock(tmp_path, operation="contender")
+        stale.state_dir.mkdir(parents=True, exist_ok=True)
+        stale_metadata = AdvisoryLockMetadata(
+            pid=999999999,
+            hostname="test",
+            operation="stale",
+        )
+        with open(stale.lock_path, "w") as handle:
+            yaml.dump(stale_metadata.to_dict(), handle)
+        seeded_identity = (stale.lock_path.stat().st_dev, stale.lock_path.stat().st_ino)
+        replacement_source = tmp_path / "replacement-source"
+        replacement_source.write_text("replacement")
+        candidate_locked = threading.Event()
+        contended = threading.Event()
+        replacement_ready = threading.Event()
+        real_flock = lock_module.fcntl.flock
+        hook_armed = True
+        hook_guard = threading.Lock()
+
+        def coordinated_flock(descriptor: int, operation: int) -> None:
+            nonlocal hook_armed
+            real_flock(descriptor, operation)
+            with hook_guard:
+                should_coordinate = hook_armed
+                hook_armed = False
+            if should_coordinate:
+                candidate_locked.set()
+                assert contended.wait(timeout=5)
+                stale.lock_path.unlink()
+                replacement_source.rename(stale.lock_path)
+                replacement._acquired = True
+                replacement._acquired_identity = (
+                    stale.lock_path.stat().st_dev,
+                    stale.lock_path.stat().st_ino,
+                )
+                replacement_ready.set()
+
+        clear_result: list[bool] = []
+        contention_result: list[str] = []
+
+        def clear_worker() -> None:
+            clear_result.append(stale.clear_stale())
+
+        def contender_worker() -> None:
+            assert candidate_locked.wait(timeout=5)
+            try:
+                contender.acquire()
+            except AdvisoryLockContentionError:
+                contention_result.append("contention")
+                contended.set()
+
+        try:
+            with patch.object(lock_module.fcntl, "flock", coordinated_flock):
+                clear_thread = threading.Thread(target=clear_worker)
+                contender_thread = threading.Thread(target=contender_worker)
+                clear_thread.start()
+                contender_thread.start()
+                clear_thread.join(timeout=5)
+                contender_thread.join(timeout=5)
+                assert not clear_thread.is_alive()
+                assert not contender_thread.is_alive()
+            assert clear_result == [True]
+            assert contention_result == ["contention"]
+            assert replacement_ready.is_set()
+            assert stale.lock_path.exists()
+            current_identity = (
+                stale.lock_path.stat().st_dev,
+                stale.lock_path.stat().st_ino,
+            )
+            assert current_identity != seeded_identity
+        finally:
+            replacement.release()
 
 
 # ---------------------------------------------------------------------------

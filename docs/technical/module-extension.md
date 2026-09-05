@@ -336,7 +336,7 @@ yourself editing either to register a module, the module's own declaration is in
 > The former CLI wiring deviation is retired: the desired-configuration-only boundary is
 > implemented and accepted through phase E at E0 tip
 > `bd2c291ba2d40494970464741ac51bfd45445a19`. **`SA167d`** completion-grade Phase C is a
-> conditional post-integration candidate; exact-tip integration remains pending. SA165 is released
+> conditional post-integration candidate; exact-tip integration remains pending. SA165 remains open
 > with `deps: none`. This is a closeout candidate, not an exact-tip integration claim.
 
 The companion declaration-gate work was completed under **`SA167c`** at merge #21. Phases A-E were

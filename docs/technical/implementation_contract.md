@@ -292,7 +292,7 @@ evidence is archived in [CHANGELOG.md](../../CHANGELOG.md); SA167c is complete a
 position #21 is retired. SA166 is now `deps: none`, while SA164 remains after SA166. The
 settled product bytes no longer carry CLI per-module wiring logic. **`SA167d`**
 (v88) is a conditional post-integration completion-grade Phase C candidate; exact-tip integration
-remains pending. SA165 is released with `deps: none`.
+remains pending. SA165 remains open with `deps: none`.
 SA170's final ordered serial and concurrent campaigns passed against retained product object
 `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed local corrections. SA170 and TA70 are
 closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
