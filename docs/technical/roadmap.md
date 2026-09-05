@@ -169,8 +169,11 @@ displacement rule forbids them from running ahead of the runnable band-B #21.
 
 ### Lane state
 
-**Measured 2026-09-05** against `v88` at `21a33fbf22b033cab07ba63b592e21b999667fb2`. Never trust a
-transcribed count; re-measure before acting.
+**Snapshot boundary.** The table below is provenance for the clean state observed immediately before
+the terminal-remediation edits; it is not a claim about the later correction or checkpoint bytes.
+It was measured 2026-09-05 against `v88` at
+`21a33fbf22b033cab07ba63b592e21b999667fb2`. Never trust a transcribed count or use this snapshot as
+the current merge tip; re-measure before acting.
 
 ```bash
 for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-right --count v88...$w; done
@@ -181,12 +184,14 @@ worktree, the right column the reverse.
 
 | Worktree | behind / ahead | Tip | Standing |
 |---|---|---|---|
-| `wt-track1` | 0 / 0 | `21a33fbf22b033cab07ba63b592e21b999667fb2` | synchronized with `v88` but dirty with the six-file SA165 Phase D candidate; final-candidate release verdict pending |
+| `wt-track1` | 0 / 1 | `1c66b738bca4cbf692be8048d723213c2b7cc863` | pre-remediation snapshot: clean at the committed SA165 Phase D retained checkpoint; later correction/checkpoint bytes are not represented |
 | `wt-track2` | 17 / 0 | `35dfa3c9` | clean; SA167c's retained A-E product object remains authoritative and F is authorized under `EV-7`, not yet run |
 | `wt-track3` | 0 / 0 | `b2cf0ca5` | clean; accepted SA170 closeout delivered to `v88` |
 
-**No lane branch is ahead.** SA167c remains open because its authorized Phase-F verdict has not yet
-been run. `wt-track2` must be synced with current `v88` before F is frozen and run.
+**At that pre-remediation snapshot, only `wt-track1` was ahead, by one commit.** SA167c remains open
+because its authorized Phase-F verdict has not yet been run. `wt-track2` must be synced with current
+`v88` before F is frozen and run. Re-measure every lane before using this historical snapshot for a
+merge or validation decision.
 
 ### PostgreSQL routing — who actually claims the standing service
 
@@ -217,8 +222,11 @@ complete and the standing state was restored exactly.
   keep F unaccepted — a red verdict does not consume `EV-7`'s successor, it requires a repair ticket
   first. W2 claims no standing service.
 - **W1 — hold SA165 (#22) for a final-candidate release verdict.** The A-C product is retained at
-  `573a57a34301e6a91971a7845095bd913bebd5e1`, and the six-file Phase D documentation/test candidate
-  is present on the synchronized worktree. Its sole green `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`
+  `573a57a34301e6a91971a7845095bd913bebd5e1`. The last independently attested six-file Phase D
+  checkpoint before terminal remediation is commit `1c66b738bca4cbf692be8048d723213c2b7cc863`;
+  the lane-state table records the clean pre-remediation observation only, not the later two-file
+  correction or this truthful-checkpoint update.
+  Its sole green `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`
   run predates the settled `CHANGELOG.md` bytes and cannot close the ticket. Obtain fresh authority
   for exactly one replacement run, freeze the settled six-file candidate, rerun the focused context
   suite, then run that exact release command under `setsid` with an atomic exit record. If green,
@@ -565,7 +573,17 @@ triggers.
   Core 38 passed and CLI 54 passed, but `CHANGELOG.md` changed afterward. It therefore does not cover
   the settled candidate and closes neither SA165 nor its four audit notes.
 
-  **Pending:** obtain fresh authority for exactly one replacement
+  **Blocking:** terminal remediation attempted to make the lane-state handoff current by pinning
+  pre-remediation commit `1c66b738bca4cbf692be8048d723213c2b7cc863`, divergence `0 / 1`, and a
+  clean worktree in both this roadmap and the focused consistency test. Its own two-file correction
+  made that snapshot non-current, and remediation attestation graded the result blocking. Before
+  any replacement release verdict, replace that self-referential current-state assertion with a
+  temporal contract that labels measured snapshots as provenance and independently establishes the
+  post-correction state; update or remove the hard-coded test oracle accordingly, rerun the focused
+  consistency suite, and obtain independent review. The correction bytes remain retained and are
+  not accepted as closing this blocker.
+
+  **Pending:** after the lane-state blocker above is closed, obtain fresh authority for exactly one replacement
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` run over the frozen final candidate. Before it, rerun
   `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts=
   --no-cov`; launch the release command under `setsid`, capture its exit atomically, and retain exact
@@ -578,9 +596,11 @@ triggers.
   retained product object and the present six-file Phase D candidate: `CHANGELOG.md`, `docs/index.md`,
   `docs/others/tech-audit.md`, `docs/technical/roadmap.md`,
   `docs/technical/v88_ticket_context.md`, and
-  `quickscale_core/tests/test_v88_ticket_context_consistency.py`. Preserve historical SA170 and
-  SA167c/SA167d evidence, do not reopen A-C product files, and do not alter SA172's later ownership of
-  the isolation script.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py`. The first resumable work is the
+  lane-state temporal-boundary/test correction described in **Blocking**; only after its independent
+  acceptance does the fresh-authority release-verdict step resume. Preserve historical SA170 and
+  SA167c/SA167d evidence, do not reopen A-C product files, and do not alter SA172's later ownership
+  of the isolation script.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/schema/state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `quickscale_core/.../templates/OPERATIONS.md.j2`, `docs/others/tech-audit.md`.
 
 - [ ] **SA174 — Correct the false SSOT claim on the privileged-command set.** `Band C · Tier 3 · W2 · merge #31 · deps: none · shrunk 2026-08-31 · moved to W2 2026-09-03`

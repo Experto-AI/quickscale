@@ -57,6 +57,8 @@ SA167C_MOVED_V88 = "3aa0c67f843eddd779f9766de4c274a5a249f485"
 SA167C_RETAINED_CHECKPOINT = "4de75d39"
 SA167C_SYNC_BASE = "8385780fe624893dc66e1382f2f68ce1ea759a02"
 SA167C_SYNC_MERGE = "eacad160d92b37f81f593085a64e18db4fb271f0"
+V88_LANE_BASE = "21a33fbf22b033cab07ba63b592e21b999667fb2"
+WT_TRACK1_COMMITTED_TIP = "1c66b738bca4cbf692be8048d723213c2b7cc863"
 UMBRELLA_TITLE = "SA167a / SA167c — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
@@ -322,6 +324,36 @@ def _roadmap_block(text: str, start: str, end: str) -> str:
     if not end_separator:
         raise AssertionError(f"roadmap block end is missing: {end}")
     return block
+
+
+def _assert_wt_track1_committed_lane_state(roadmap_text: str) -> None:
+    """Bind the current W1 handoff to its clean committed checkpoint."""
+    lane_state = _roadmap_block(
+        roadmap_text, "### Lane state", "### PostgreSQL routing"
+    )
+    assert f"against `v88` at `{V88_LANE_BASE}`" in lane_state
+
+    row = re.search(
+        r"^\| `wt-track1` \| (?P<behind>\d+) / (?P<ahead>\d+) \| "
+        r"`(?P<tip>[0-9a-f]+)` \| (?P<standing>[^|\n]+) \|$",
+        lane_state,
+        re.MULTILINE,
+    )
+    assert row is not None
+    if (row.group("behind"), row.group("ahead")) != ("0", "1"):
+        raise AssertionError(
+            "wt-track1 lane-state divergence is not 0 behind / 1 ahead"
+        )
+    if row.group("tip") != WT_TRACK1_COMMITTED_TIP:
+        raise AssertionError("wt-track1 lane-state tip is not the committed checkpoint")
+
+    standing = row.group("standing").lower()
+    if "clean" not in standing or "committed" not in standing or "dirty" in standing:
+        raise AssertionError(
+            "wt-track1 lane-state cleanliness is not clean and committed"
+        )
+    if "only `wt-track1` is ahead, by one commit" not in lane_state.lower():
+        raise AssertionError("wt-track1 lane-state ahead summary is stale")
 
 
 def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
@@ -636,6 +668,7 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     _assert_status_consumers_agree(roadmap, docs_index)
     _assert_sa167c_current_roadmap_blocks(roadmap)
     _assert_lane_assignment_parity(roadmap)
+    _assert_wt_track1_committed_lane_state(roadmap)
     _assert_sa167d_status(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
@@ -773,6 +806,30 @@ def test_v88_status_consumer_count_drift_is_expected_red_canary() -> None:
     mutated_index = "The queue holds forty open v88 ticket entries across two open merge positions.\n"
     with pytest.raises(AssertionError, match="does not restate the roadmap"):
         _assert_status_consumers_agree(roadmap, mutated_index)
+
+
+@pytest.mark.parametrize(
+    ("current_claim", "stale_claim", "error_match"),
+    [
+        ("0 / 1", "0 / 0", "divergence"),
+        (WT_TRACK1_COMMITTED_TIP, V88_LANE_BASE, "tip"),
+        (
+            "clean; committed SA165 Phase D retained checkpoint",
+            "dirty with the six-file SA165 Phase D candidate",
+            "cleanliness",
+        ),
+    ],
+)
+def test_v88_wt_track1_committed_lane_state_rejects_precommit_prose(
+    current_claim: str,
+    stale_claim: str,
+    error_match: str,
+) -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    mutated = roadmap.replace(current_claim, stale_claim, 1)
+    assert mutated != roadmap
+    with pytest.raises(AssertionError, match=error_match):
+        _assert_wt_track1_committed_lane_state(mutated)
 
 
 def test_v88_current_context_covers_roadmap_open_tickets() -> None:
