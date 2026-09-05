@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
+from quickscale_core.dr_engine import _lock as lock_module
 from quickscale_core.dr_engine._lock import (
     BackupLockError,
     StagedAdminRestoreUpload,
@@ -101,6 +103,7 @@ class TestAcquireBackupLock:
         data = json.loads(lock_path.read_text())
         assert data["pid"] == os.getpid()
         assert "created_at" in data
+        assert len(data["owner_token"]) == 32
 
     def test_with_explicit_now(self, tmp_path: Path) -> None:
         """Passing an explicit 'now' uses that timestamp in the payload."""
@@ -145,15 +148,48 @@ class TestAcquireBackupLock:
             with pytest.raises(BackupError, match="Unable to create backup lock"):
                 _acquire_backup_lock(tmp_path)
 
-    def test_oserror_on_write_fdopen(self, tmp_path: Path) -> None:
-        """An OSError from os.fdopen json-dump flushes to BackupError with cleanup."""
-        with patch("os.fdopen") as mock_fdopen:
-            mock_handle = mock_fdopen.return_value.__enter__.return_value
-            mock_handle.flush.side_effect = OSError("write failed")
+    def test_oserror_on_write(self, tmp_path: Path) -> None:
+        """An OSError from os.write raises BackupError and cleans up."""
+        with patch.object(lock_module.os, "write", side_effect=OSError("write failed")):
             with pytest.raises(BackupError, match="Unable to write backup lock") as exc:
                 _acquire_backup_lock(tmp_path)
             error_text = str(exc.value)
             assert "write failed" in error_text
+
+    def test_partial_write_completes_lock_metadata(self, tmp_path: Path) -> None:
+        """A short regular-file write is completed before acquisition returns."""
+        real_write = lock_module.os.write
+        write_calls = 0
+
+        def short_first_write(descriptor: int, payload: bytes) -> int:
+            nonlocal write_calls
+            write_calls += 1
+            chunk = payload[:1] if write_calls == 1 else payload
+            return real_write(descriptor, chunk)
+
+        with patch.object(lock_module.os, "write", side_effect=short_first_write):
+            lock_path = _acquire_backup_lock(tmp_path)
+
+        assert write_calls >= 2
+        assert json.loads(lock_path.read_text())["pid"] == os.getpid()
+        _release_backup_lock(lock_path)
+
+    def test_failed_write_preserves_replacement_inode(self, tmp_path: Path) -> None:
+        """Failed acquisition cleanup cannot remove a replacement pathname."""
+        lock_path = tmp_path / ".quickscale-backup-create.lock"
+        replacement_source = tmp_path / "replacement-source"
+        replacement_source.write_text("replacement")
+
+        def replace_then_fail(*_args, **_kwargs) -> None:
+            lock_path.unlink()
+            replacement_source.rename(lock_path)
+            raise OSError("write failed")
+
+        with patch.object(lock_module.os, "write", side_effect=replace_then_fail):
+            with pytest.raises(BackupError, match="Unable to write backup lock"):
+                _acquire_backup_lock(tmp_path)
+
+        assert lock_path.read_text() == "replacement"
 
 
 # ---------------------------------------------------------------------------
@@ -203,12 +239,14 @@ class TestClearStaleBackupLock:
 
 
 class TestReleaseBackupLock:
-    def test_releases_lock_file(self, tmp_path: Path) -> None:
-        """Normal release removes the lock file."""
+    def test_release_without_acquisition_preserves_lock_file(
+        self, tmp_path: Path
+    ) -> None:
+        """An unowned release cannot remove another execution's lock."""
         lock_path = tmp_path / ".lock"
         lock_path.write_text("data")
         _release_backup_lock(lock_path)
-        assert not lock_path.exists()
+        assert lock_path.read_text() == "data"
 
     def test_release_file_not_found_is_silent(self, tmp_path: Path) -> None:
         """Releasing a lock that does not exist is a no-op."""
@@ -217,11 +255,183 @@ class TestReleaseBackupLock:
 
     def test_release_oserror_raises_backup_error(self, tmp_path: Path) -> None:
         """OSError during release raises BackupError."""
-        lock_path = tmp_path / ".lock"
-        lock_path.write_text("data")
+        lock_path = _acquire_backup_lock(tmp_path)
         with patch.object(Path, "unlink", side_effect=OSError("unlink failed")):
             with pytest.raises(BackupError, match="Unable to remove backup lock"):
                 _release_backup_lock(lock_path)
+        lock_path.unlink()
+
+    def test_release_preserves_replacement_inode(self, tmp_path: Path) -> None:
+        """A replacement created after acquire is not removed by release."""
+        lock_path = _acquire_backup_lock(tmp_path)
+        acquired_identity = (lock_path.stat().st_dev, lock_path.stat().st_ino)
+        replacement_source = tmp_path / "replacement-source"
+        replacement_source.write_text("replacement")
+        lock_path.unlink()
+        replacement_source.rename(lock_path)
+        replacement_identity = (lock_path.stat().st_dev, lock_path.stat().st_ino)
+
+        _release_backup_lock(lock_path)
+
+        assert replacement_identity != acquired_identity
+        assert lock_path.read_text() == "replacement"
+        assert all(
+            identity != acquired_identity
+            for identity, _token in lock_module._backup_lock_ownership.values()
+        )
+        lock_path.unlink()
+
+    def test_release_preserves_same_inode_with_changed_owner_token(
+        self, tmp_path: Path
+    ) -> None:
+        """An inode match alone cannot authorize release of a later owner."""
+        lock_path = _acquire_backup_lock(tmp_path)
+        replacement = json.loads(lock_path.read_text())
+        replacement["owner_token"] = "later-owner"
+        lock_path.write_text(json.dumps(replacement))
+
+        _release_backup_lock(lock_path)
+
+        assert json.loads(lock_path.read_text())["owner_token"] == "later-owner"
+
+    def test_release_keeps_later_thread_acquisition(self, tmp_path: Path) -> None:
+        """An earlier holder cannot release a later holder's replacement."""
+        first_acquired = threading.Event()
+        second_acquired = threading.Event()
+        release_first = threading.Event()
+        first_released = threading.Event()
+        release_second = threading.Event()
+        second_identity: list[tuple[int, int]] = []
+        errors: list[Exception] = []
+
+        def first_holder() -> None:
+            try:
+                lock_path = _acquire_backup_lock(tmp_path)
+                first_acquired.set()
+                if not release_first.wait(timeout=5):
+                    raise AssertionError("first release was not signaled")
+                _release_backup_lock(lock_path)
+                first_released.set()
+            except (AssertionError, BackupError, OSError) as exc:
+                errors.append(exc)
+
+        def second_holder() -> None:
+            try:
+                if not first_acquired.wait(timeout=5):
+                    raise AssertionError("first acquisition did not complete")
+                lock_path = tmp_path / ".quickscale-backup-create.lock"
+                lock_path.unlink()
+                lock_path = _acquire_backup_lock(tmp_path)
+                second_identity.append(
+                    (lock_path.stat().st_dev, lock_path.stat().st_ino)
+                )
+                second_acquired.set()
+                if not release_second.wait(timeout=5):
+                    raise AssertionError("second release was not signaled")
+                _release_backup_lock(lock_path)
+            except (AssertionError, BackupError, OSError) as exc:
+                errors.append(exc)
+
+        first_thread = threading.Thread(target=first_holder)
+        second_thread = threading.Thread(target=second_holder)
+        first_thread.start()
+        second_thread.start()
+        assert second_acquired.wait(timeout=5)
+        release_first.set()
+        assert first_released.wait(timeout=5)
+
+        lock_path = tmp_path / ".quickscale-backup-create.lock"
+        assert (lock_path.stat().st_dev, lock_path.stat().st_ino) == second_identity[0]
+
+        release_second.set()
+        first_thread.join(timeout=5)
+        second_thread.join(timeout=5)
+        assert not first_thread.is_alive()
+        assert not second_thread.is_alive()
+        assert errors == []
+        assert not lock_path.exists()
+
+
+class TestBackupLockReplacementRace:
+    def test_stale_clear_race_has_one_holder_and_one_contention(
+        self, tmp_path: Path
+    ) -> None:
+        """A stale candidate is serialized before its replacement is created."""
+        lock_path = tmp_path / ".quickscale-backup-create.lock"
+        lock_path.write_text("seeded stale")
+        old_stamp = time.time() - 600
+        os.utime(lock_path, (old_stamp, old_stamp))
+        seeded_identity = (lock_path.stat().st_dev, lock_path.stat().st_ino)
+        seeded_descriptor = os.open(lock_path, os.O_RDONLY)
+        flock_barrier = threading.Barrier(2)
+        acquired = threading.Event()
+        contended = threading.Event()
+        release_holder = threading.Event()
+        real_flock = lock_module.fcntl.flock
+        flock_calls = 0
+        flock_calls_guard = threading.Lock()
+        replacement_guard = tmp_path / "replacement-inode-guard"
+        original_open = lock_module.os.open
+
+        def create_without_inode_reuse(file, flags, mode=0o777, *, dir_fd=None):
+            if Path(file) == lock_path and flags & os.O_EXCL and not lock_path.exists():
+                replacement_guard.write_text("inode guard")
+            if dir_fd is None:
+                return original_open(file, flags, mode)
+            return original_open(file, flags, mode, dir_fd=dir_fd)
+
+        def coordinated_flock(descriptor: int, operation: int) -> None:
+            nonlocal flock_calls
+            with flock_calls_guard:
+                should_rendezvous = flock_calls < 2
+                flock_calls += 1
+            if should_rendezvous:
+                flock_barrier.wait(timeout=5)
+            real_flock(descriptor, operation)
+
+        results: list[str] = []
+
+        def worker(label: str) -> None:
+            try:
+                result = _acquire_backup_lock(tmp_path)
+                results.append(f"{label}: holder")
+                acquired.set()
+                if not release_holder.wait(timeout=5):
+                    raise AssertionError("holder release was not signaled")
+                _release_backup_lock(result)
+            except BackupLockError:
+                results.append(f"{label}: contention")
+                contended.set()
+
+        try:
+            with (
+                patch.object(lock_module.fcntl, "flock", coordinated_flock),
+                patch.object(lock_module.os, "open", create_without_inode_reuse),
+            ):
+                threads = [
+                    threading.Thread(target=worker, args=(f"worker-{number}",))
+                    for number in (1, 2)
+                ]
+                for thread in threads:
+                    thread.start()
+                assert acquired.wait(timeout=5)
+                assert contended.wait(timeout=5)
+                assert lock_path.exists()
+                current_identity = (lock_path.stat().st_dev, lock_path.stat().st_ino)
+                assert current_identity != seeded_identity
+                release_holder.set()
+                for thread in threads:
+                    thread.join(timeout=5)
+        finally:
+            release_holder.set()
+            os.close(seeded_descriptor)
+            replacement_guard.unlink(missing_ok=True)
+        assert (
+            sorted(results).count("worker-1: holder")
+            + sorted(results).count("worker-2: holder")
+            == 1
+        )
+        assert len([result for result in results if result.endswith("contention")]) == 1
 
 
 # ---------------------------------------------------------------------------

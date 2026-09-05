@@ -30,7 +30,7 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Ten open v88 ticket entries run on three tracks across ten open merge
+generated-project updater. Nine open v88 ticket entries run on three tracks across nine open merge
 positions; **W2 sets the release date** because SA167c remains open at #21 with phases A-E accepted
 on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
@@ -54,12 +54,13 @@ status checkpoint is authorized without accepting F, closing SA167c, or unblocki
 **SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
 exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
 local corrections. Exact Core/CLI cleanup completed and the standing PostgreSQL identity, volume,
-catalog, ownership, and role flags remained intact. SA170 and TA70 are closed; W3 now heads at SA171,
-and the full release and retained-partial history is archived in [CHANGELOG.md](../../CHANGELOG.md).
+catalog, ownership, and role flags remained intact. SA170 and TA70 are closed; the accepted lock
+correction is archived and W3 now has only its remaining PostgreSQL-backed head. The full release and
+retained-partial history is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
 and the completion ledger archived SA167d and retired merge position #18. SA165 is released with
-`deps: none`; the current queue is ten open v88 ticket entries across ten open merge positions.
+`deps: none`; the current queue is nine open v88 ticket entries across nine open merge positions.
 The ledger is a **conditional post-integration** candidate with **exact-tip** integration and terminal
 attestation still pending in the root closeout path. The first
 foreground `make check` invocation terminated with exit 143 after Make reported no child processes
@@ -502,6 +503,11 @@ independent of the other two and should be designed together at `teams` kickoff.
 
 ## Watchlist
 
+- **Two independent filesystem-lock implementations.** The accepted lock correction repaired the
+  stale-reclamation race and acquisition-bound release identity in both implementations without
+  introducing a shared primitive. This is a non-defect structural question only: revisit consolidation
+  if a third implementation appears, behavior or platform support diverges, or both public contracts
+  can no longer be preserved independently.
 - **Hand-pinned literals inside the new provisioning derivation.** `provision_ci_postgres.sh:96`
   (`== 12`) and `:93` (`!= teams`) re-introduce a module count and a module name into a script whose
   whole point is deriving them. *Doesn't qualify:* both fail loudly and immediately, and the count check

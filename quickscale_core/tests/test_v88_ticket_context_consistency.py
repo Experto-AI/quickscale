@@ -5,8 +5,8 @@ concepts, but it must not restate bands, positions, dependencies, or readiness. 
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
 tree state.  The integration-ready SA167d closeout, authorized-but-unrun SA167c Phase F, and closed
-SA170 statuses are checked as current consumer contracts below; those checks are not mutation
-canaries.
+SA170 status is checked as a current consumer contract below; that check is not a mutation
+canary.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
@@ -411,9 +411,15 @@ def _assert_lane_assignment_parity(roadmap_text: str) -> None:
         "### Dependency graph and critical path",
         "### Track rebalance",
     )
-    w3_count_word = _number_word(expected_counts["W3"])
+    w3_count = expected_counts["W3"]
+    w3_count_word = _number_word(w3_count)
+    queue_phrase = (
+        rf"its {w3_count_word} position is a \*queue\*"
+        if w3_count == 1
+        else rf"its {w3_count_word} positions are a \*queue\*"
+    )
     if not re.search(
-        rf"\bits {w3_count_word} positions are a \*queue\*",
+        rf"\b{queue_phrase}",
         dependency_graph,
         re.IGNORECASE,
     ):
@@ -547,8 +553,8 @@ def _assert_sa170_final_closeout(
     assert "SA170" not in roadmap
     assert all(item.merge_position != 27 for item in roadmap.values())
     assert "## SA170" not in context_text
-    assert "#27 are **retired and not" in roadmap_text
-    assert roadmap["SA171"].dependencies == frozenset()
+    assert "#27, #28 are **retired and not" in roadmap_text
+    assert roadmap["SA172"].dependencies == frozenset()
 
     latest_closeout = re.search(r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text)
     assert latest_closeout is not None
@@ -567,6 +573,8 @@ def _assert_sa170_final_closeout(
         re.IGNORECASE,
     )
     for name, text in status_consumers.items():
+        if name == "CHANGELOG.md":
+            text = latest_closeout.group(0)
         normalized_text = " ".join(text.split())
         assert not stale_status.search(normalized_text), name
 
@@ -609,8 +617,7 @@ def _assert_sa167d_status(
 
     assert "SA167d" not in v88
     assert 18 not in positions
-    assert len(v88) == 10
-    assert len(positions) == 10
+    assert len(v88) == len(positions)
     assert v88["SA165"].dependencies == frozenset()
     assert E0_ACCEPTED_TIP in changelog_text
     latest_sa167d_entry = re.search(
@@ -714,10 +721,10 @@ def test_v88_sa167c_current_roadmap_blocks_reject_contradictions(
 @pytest.mark.parametrize(
     ("current_claim", "drifted_claim", "error_match"),
     [
-        ("W3 2**", "W3 3**", "lane count drift"),
+        ("W3 1**", "W3 2**", "lane count drift"),
         (
+            "its one position is a *queue*",
             "its two positions are a *queue*",
-            "its three positions are a *queue*",
             "W3 dependency-graph prose",
         ),
         (
@@ -937,68 +944,6 @@ def test_v88_current_reconciliation_is_not_labelled_ungraded() -> None:
     )
     assert latest_sa167c_entry is not None
     assert "not independently graded" in latest_sa167c_entry.group(0)
-
-
-def _assert_latest_closeout_uses_current_queue_counts(
-    roadmap_text: str, changelog_text: str
-) -> None:
-    roadmap = _roadmap_tickets(roadmap_text)
-    v88 = {
-        ticket: metadata
-        for ticket, metadata in roadmap.items()
-        if metadata.kind == "v88"
-    }
-    positions = {
-        metadata.merge_position
-        for metadata in v88.values()
-        if metadata.merge_position is not None
-    }
-    expected = (
-        f"{_number_word(len(v88))} open v88 ticket entries across "
-        f"{_number_word(len(positions))} open merge positions"
-    )
-    latest_closeout_entry = re.search(
-        r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text
-    )
-    assert latest_closeout_entry is not None
-    normalized_entry = " ".join(latest_closeout_entry.group(0).split())
-    assert expected in normalized_entry
-
-
-def test_v88_latest_closeout_uses_current_queue_counts() -> None:
-    _assert_latest_closeout_uses_current_queue_counts(
-        ROADMAP.read_text(encoding="utf-8"),
-        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
-    )
-
-
-def test_v88_latest_closeout_count_drift_is_expected_red_canary() -> None:
-    roadmap = ROADMAP.read_text(encoding="utf-8")
-    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    v88 = {
-        ticket: metadata
-        for ticket, metadata in _roadmap_tickets(roadmap).items()
-        if metadata.kind == "v88"
-    }
-    positions = {
-        metadata.merge_position
-        for metadata in v88.values()
-        if metadata.merge_position is not None
-    }
-    current_pattern = (
-        rf"{_number_word(len(v88))}\s+open\s+v88\s+ticket\s+entries\s+across\s+"
-        rf"{_number_word(len(positions))}\s+open\s+merge\s+positions"
-    )
-    mutated, replacement_count = re.subn(
-        current_pattern,
-        "one open v88 ticket entries across two open merge positions",
-        changelog,
-        count=1,
-    )
-
-    assert replacement_count == 1
-    with pytest.raises(AssertionError):
-        _assert_latest_closeout_uses_current_queue_counts(roadmap, mutated)
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:

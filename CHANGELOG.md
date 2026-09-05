@@ -2,6 +2,22 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA171 / TA71 closeout — both lock implementations are repaired and archived (2026-09-05).**
+  The accepted Phase-A correction makes stale reclamation inode-bound in both
+  `quickscale_core/dr_engine/_lock.py` and `quickscale_core/advisory_lock.py`, while freezing
+  acquisition identity privately so release cannot unlink a replacement. The public
+  `_release_backup_lock(Path)` signature/import seam and `AdvisoryLock` seams remain unchanged; no
+  shared lock primitive was introduced. The reviewed red-before proof and deterministic
+  replacement/race coverage were retained, followed by `make lint -- --core` (exit 0), `make
+  typecheck -- --core` (exit 0), and the focused two-suite pytest command (exit 0, **47 passed in
+  0.13s**). That total records Phase-A evidence only and does not duplicate the separate closeout
+  `make ci` verdict. Convergence then made unowned DR release a no-op, bound local ownership to the
+  process, thread, path, inode, and a private acquisition token so inode reuse cannot authorize an
+  earlier holder, and made failed-write cleanup preserve a replacement; scoped core lint and type
+  checks passed, and the settled three-suite task command passed **80 tests**. TA71 and merge position
+  #28 are retired; the roadmap now derives **nine** open v88 entries across **nine** open merge
+  positions, with SA172 as W3's head and `deps: none`.
+
 ## v88 development — 2026-08-21
 
 - **Both open maintainer decisions settled (2026-09-04) — Phase-F authority granted as `EV-7`, and

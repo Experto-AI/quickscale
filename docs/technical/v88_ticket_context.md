@@ -41,8 +41,8 @@ The open release work is one principle with four failure modes. Every ticket is 
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
            SA160         SA165           SA161          SA166
-           SA164         SA152           SA171          SA172
-           SA172         SA172             │            SA175
+            SA164         SA152                          SA172
+            SA172                          │            SA175
            SA174           │               │              │
              │             │               │        (testimony
         (cookies,      (state/tool     (locks, dead     trail,
@@ -62,9 +62,9 @@ and SA162 correction are now complete, with their evidence archived in the chang
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks with one shared race | SA160, SA164, SA171, SA174 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA164, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
-| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | a lock whose stale-owner transition is not atomic; dead code nobody deletes | SA161, SA171 |
+| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | dead code nobody deletes | SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA166, SA172, SA175 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
@@ -81,14 +81,10 @@ hosted job closure, and isolation Make entrypoint, is archived in [CHANGELOG.md]
 
 Each has a small, well-understood blast radius and remains bounded to its stated concern.
 
-## SA171 — Make stale-lock clearing atomic in both file locks
-
-### The mental model
-
-A "stale lock" reclaim is a decision followed by an action:
+<!-- The detailed stale-lock rationale is archived in CHANGELOG.md.
 
 ```python
-# _lock.py:119-137 — the check and the act are two separate syscalls
+# historical code shape archived
 if _is_stale(path):        # stat: who holds it, how old is it
     path.unlink()          # act: take it away
 ```
@@ -119,6 +115,8 @@ green-after obligation rather than the softened evidence policy SA170 needed.
 The audit's structural question — why two hand-rolled locks exist at all — is deliberately **not**
 in scope. Fixing the shape twice is bounded; unifying them is a design change that would widen a
 band-C ticket into an architectural one.
+
+-->
 
 ---
 
