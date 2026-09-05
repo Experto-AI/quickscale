@@ -2,6 +2,26 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA166 behavioural-commit testimony gate completed (2026-09-05).** Added the fail-closed
+  `scripts/check_commit_testimony.py` range checker and registered `make check-commit-testimony`
+  across local serial/parallel validation and hosted CI. Every non-merge commit that changes
+  `.github/workflows/**`, `scripts/gate_registry.json`, or a provisioning-station line must now carry
+  an `SA` ticket, an integer `vNN` roadmap reference, or a same-commit `CHANGELOG.md` entry. The
+  generated hosted job checks out full history and joins the `test` dependency set; the publish,
+  lint, isolation, and public CLI surfaces are unchanged.
+  **Acceptance evidence.** The hermetic checker suite returned **14 passed**; the complete parity
+  suite returned **235 passed**; direct parity and generated-workflow checks returned exit 0. The
+  deliberate untitled-workflow probe failed for the intended testimony reason inside its temporary
+  repository, while the workspace workflow SHA-256 remained exactly
+  `4e28dc9bab8a7167ddd683a5d319631c1513bdeca63ad152d754790deeb17cef` before and after. Auditing
+  `0.86.0..HEAD` examined 2,084 historical commits and reported nine protected behavioural commits
+  without testimony (0.43%); all nine genuinely changed a protected control, including the motivating
+  `d4b0e8342c03` and `d3d4c63355c1` release-shaped commits, so no known legitimate no-behaviour release
+  commit was rejected. The carried tech-audit tooling gap is retired.
+  SA166 is removed from the open-work-only roadmap and context, merge position **#24** is retired,
+  SA164 becomes W2 head with `deps: none`, and the queue is now **eight open v88 ticket entries across
+  eight open merge positions**, lanes **W1 3 · W2 3 · W3 2**.
+
 - **Final-candidate release authority for SA165 granted as `EV-8` (2026-09-05).** The one maintainer
   decision left open by the preceding hygiene pass is settled. **Decision: granted.** `EV-8`
   authorizes **exactly one** replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict over

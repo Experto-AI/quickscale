@@ -29,7 +29,7 @@ show_help() {
     echo "  4. Module-core import linter (check_module_core_imports)"
     echo "  5. Manifest sync gate (sync_module_manifests)"
     echo "  6. Module app declaration and org-context primitives gates"
-    echo "  7. CSRF-exempt, registered script suites, dependency vulnerability, and security static-analysis gates"
+    echo "  7. CSRF-exempt, commit-testimony, registered script suites, dependency vulnerability, and security static-analysis gates"
     echo "  8. Type check (mypy)"
     echo "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint"
     echo "     (frontend lint runs when Node.js and pnpm are available)"
@@ -292,6 +292,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ All csrf_exempt callsites are protected"
             LOCAL_GATE_FAILURE_LABEL="CSRF-Exempt Gate"
             ;;
+        check-commit-testimony)
+            LOCAL_GATE_DESCRIPTION="Running behavioural commit testimony gate..."
+            LOCAL_GATE_SUCCESS="✓ Behavioural commits carry required testimony"
+            LOCAL_GATE_FAILURE_LABEL="Commit Testimony Gate"
+            ;;
         check-dependency-vulnerabilities)
             LOCAL_GATE_DESCRIPTION="Running dependency vulnerability gate..."
             LOCAL_GATE_SUCCESS="✓ Dependency vulnerability gate passed"
@@ -345,6 +350,9 @@ run_serial_conformance_gate() {
                 ;;
             check-csrf-exempt)
                 echo "║   ✗ CSRF-Exempt Gate Failed            ║"
+                ;;
+            check-commit-testimony)
+                echo "║   ✗ Commit Testimony Gate Failed        ║"
                 ;;
             check-dependency-vulnerabilities)
                 echo "║   ✗ Dependency Vulnerability Gate Failed║"
@@ -487,6 +495,11 @@ report_static_failure_banner() {
         csrf-exempt|check-csrf-exempt)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ CSRF-Exempt Gate Failed            ║"
+            echo "╚════════════════════════════════════════╝"
+            ;;
+        commit-testimony|check-commit-testimony)
+            echo "╔════════════════════════════════════════╗"
+            echo "║   ✗ Commit Testimony Gate Failed       ║"
             echo "╚════════════════════════════════════════╝"
             ;;
         check-gate-suites)

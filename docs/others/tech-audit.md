@@ -232,7 +232,6 @@ The sibling implementation `AdvisoryLock.clear_stale` (`advisory_lock.py:272-296
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The shared-helper fix is the real prevention |
 | No concurrency test exercises either lock's stale-clear path | **TA71** | A two-thread barrier test around the `stat`/`unlink` gap, as described in TA71's *Verification*. Moving to `flock` removes the need for the test along with the defect |
 | RLS policy assertions check existence, not predicate text | **TA72**, structural smell #3 | Extend the isolation conformance suite to assert the policy `qual`/`with_check` text from `pg_policies` matches the `_FORCE_RLS_FORWARD_SQL` template for each enrolled table — this pins the operator-read/tenant-write split as a gate rather than a comment |
-| No gate requires a changelog/ticket trail for behavioural commits | — | **Carried.** Remains maintainer-process risk rather than a source finding |
 
 ---
 

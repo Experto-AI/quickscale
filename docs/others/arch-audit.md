@@ -30,7 +30,7 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Nine open v88 ticket entries run on three tracks across nine open merge
+generated-project updater. Eight open v88 ticket entries run on three tracks across eight open merge
 positions; SA167c's authorized Phase-F verdict under `EV-7` is green and archived, so no open ticket sets the
 release date. W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
@@ -39,8 +39,14 @@ PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived 
 product object `91fd3bb6e6b638735361b511c1515cddccce5d15`, and its sole authorized Phase-F
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict exited 0 on frozen base
 `21a33fbf22b033cab07ba63b592e21b999667fb2`. All twelve stages, Core/CLI E2E, and exact-scope
-cleanup passed. SA167c is closed and archived; SA166 is now `deps: none`. Evidence is archived in
+cleanup passed. SA167c is closed and archived; its completed verdict released SA166. Evidence is archived in
 [CHANGELOG.md](../../CHANGELOG.md).
+
+**SA166 testimony-gate closeout (2026-09-05).** The registered gate now requires an SA ticket,
+integer vNN roadmap reference, or same-commit changelog testimony whenever a non-merge commit changes
+hosted workflows, the gate registry, or a provisioning station. Its hermetic suite, full parity suite,
+generated workflow check, deliberate untitled-workflow failure probe, and historical audit are green.
+SA166 and merge position #24 are archived; SA164 now heads W2 at `deps: none`.
 
 **SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
 exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
@@ -50,7 +56,7 @@ and the full release and retained-partial history is archived in [CHANGELOG.md](
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
 and the completion ledger archived SA167d and retired merge position #18. SA165 is released with
-`deps: none`; the current queue is nine open v88 ticket entries across nine open merge positions.
+`deps: none`; the current queue is eight open v88 ticket entries across eight open merge positions.
 The ledger is a **conditional post-integration** candidate with **exact-tip** integration and terminal
 attestation still pending in the root closeout path. The first
 foreground `make check` invocation terminated with exit 143 after Make reported no child processes

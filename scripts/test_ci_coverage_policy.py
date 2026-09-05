@@ -646,6 +646,7 @@ class TestMakefileGateTargetDerivation:
         "check-module-app-declaration",
         "check-org-context-primitives",
         "check-csrf-exempt",
+        "check-commit-testimony",
         "check-gate-suites",
         "check-dependency-vulnerabilities",
         "check-security-static-analysis",
@@ -728,7 +729,8 @@ class TestRegisteredScriptGateTarget:
                     print(
                         "check-core-compat check-module-core-imports check-manifest-sync "
                         "check-module-app-declaration "
-                        "check-org-context-primitives check-csrf-exempt check-gate-suites "
+                        "check-org-context-primitives check-csrf-exempt "
+                        "check-commit-testimony check-gate-suites "
                         "check-dependency-vulnerabilities check-security-static-analysis"
                     )
                     raise SystemExit(0)
@@ -1060,6 +1062,7 @@ class TestMakefileCoveragePipeline:
                         "check-module-app-declaration "
                         "check-org-context-primitives "
                         "check-csrf-exempt "
+                        "check-commit-testimony "
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
                         "check-security-static-analysis"
@@ -1529,6 +1532,7 @@ class TestCheckQuietSectionDispatch:
                         "check-module-app-declaration "
                         "check-org-context-primitives "
                         "check-csrf-exempt "
+                        "check-commit-testimony "
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
                         "check-security-static-analysis"
@@ -2582,6 +2586,7 @@ class TestCheckNormalFrontendLint:
                         "check-module-app-declaration "
                         "check-org-context-primitives "
                         "check-csrf-exempt "
+                        "check-commit-testimony "
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
                         "check-security-static-analysis"
