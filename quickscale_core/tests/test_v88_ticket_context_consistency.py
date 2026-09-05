@@ -1403,7 +1403,7 @@ def _assert_latest_closeout_uses_current_queue_counts(
         f"{_number_word(len(positions))} open merge positions"
     )
     latest_closeout_entry = re.search(
-        r"(?ms)^- \*\*SA166 behavioural-commit testimony gate\b.*?(?=^- \*\*)",
+        r"(?ms)^- \*\*Roadmap ticket splits\b.*?(?=^- \*\*)",
         changelog_text,
     )
     assert latest_closeout_entry is not None

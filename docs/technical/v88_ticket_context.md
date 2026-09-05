@@ -147,13 +147,14 @@ the same `DROP POLICY IF EXISTS` pair the reverse template already carries. The 
 and leaves the repository with a true contract instead of a warning, which is why the acceptance
 criteria prefer it while permitting either.
 
-### The assertion that is actually missing
+### The assertion that is missing is a separate concern
 
 The conformance gates check that a policy *exists* — `relrowsecurity` and `relforcerowsecurity` true,
 and at least one row in `pg_policies`. A table carrying a permissive `USING (true)` policy would pass
-every isolation check the repository runs. Comparing the stored `qual` / `with_check` text against
-the template turns the operator-read / tenant-write split from a comment into a gate, and it is the
-natural place to prove whichever idempotency contract is chosen.
+every isolation check the repository runs. That gap is real, but it is a tooling improvement over the
+whole enrolled-table set rather than a repair of the idempotency claim, and it is carried separately
+so this ticket stays the size of its defect: prefix the forward template, prove the contract by
+applying twice, done.
 
 ### The watch item folded in
 
@@ -414,7 +415,44 @@ still-pending closeout.
 
 ---
 
-## SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items
+## SA179 — Reconcile the retained documentation and retire the four audit notes
+
+### The mental model
+
+A release verdict is evidence about **exact bytes**. The repository's standing rule is that a
+ticket's evidence must cover its own settled candidate, which is what caught an earlier
+stale-but-green run.
+
+That rule interacts badly with a candidate that contains the documents used to *record* reviews. The
+planner, the docs hub, the ticket-context page, the changelog, and the executable consistency test
+are precisely where a passing review gets written down. When they sat inside the frozen set, writing
+"the review passed" edited a bound blob and invalidated the review being recorded. Two cycles were
+spent on that loop before the shape was named.
+
+### What separating them buys
+
+A candidate made only of product bytes cannot be disturbed by recording its own result. The
+documentation reconciliation then becomes ordinary work with an ordinary gate — the consistency
+suite — rather than something needing a frozen-byte review it can never survive.
+
+### Why the four notes cannot be retired early
+
+`flush_empty_consolidated_sections` failing hard, the identity-bound isolation skip,
+`_HOST_DEPENDENT_PATHS` accountability, and the generated local-credential warning are all
+**implemented** in retained product bytes. The tech audit nevertheless holds each note live *until a
+release verdict covers the settled candidate*, because an implemented change with no verdict over it
+is an intention, not an accepted fact. Retiring a note before that verdict returns green would put a
+claim in the audit that no evidence supports — the exact failure the rule exists to prevent.
+
+### What this ticket is not
+
+It carries no product behaviour and touches no code under the generator, the core package, or
+`scripts/`. That is deliberate and load-bearing: a documentation ticket that also edited product
+files would re-create the entanglement it exists to remove.
+
+---
+
+## SA164 — Make the SA92 migration-squash guardrail fail loudly
 
 ### The mental model
 
@@ -424,9 +462,8 @@ become debt — it costs a read every audit pass and can never fire.
 
 The watchlist was rewritten by the 2026-08-28 pass: one item's parent finding was resolved, one
 item fired and was promoted, and three new ones were minted inside the landed provisioning
-derivation. What remains here is one item carrying an explicit action, one naming question that
-becomes load-bearing on a specific trigger, and the restatement of the three new items so their
-triggers survive the next pass.
+derivation. Exactly one of the survivors carries executable work, and that is what this ticket now
+is. The naming question and the restatement are documentation and are carried separately.
 
 ### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains open work
 
@@ -451,21 +488,39 @@ What survives in this ticket is the shape of the lesson, which the remaining ite
 item is a bet, and when the bet resolves, the item stops being a watch item. Restating it here as a
 watch item a third time would be the error.
 
-### 3. `trigger_inputs` has drifted from its name
+### Why the repair is worth isolating
 
-`check_gate_parity.py:2652-2690` uses the field as a **bidirectional partition of
-`e2e.yml`'s path allowlist**, not as *"what changes should trigger this gate"*. That is why
-`check-core-compat`'s trigger reads `quickscale_modules/backups/**`.
+A tripwire that returns `None` and skips is worse than no tripwire, because the green result reads
+as *"no cross-table organization DML found"* when it actually means *"nothing was read"*. That is the
+same silent-fallback shape the tech audit tracks elsewhere in the tree, on the guardrail protecting
+tenant isolation in migrations. Bundling it behind documentation work was the only reason it had not
+landed.
 
-**Not a defect** — the check it performs is real and exact. It is a name that lies about a
-correct mechanism. It becomes load-bearing the moment a gate is ever *skipped* on the basis
-of `trigger_inputs`, because then the name's meaning and the field's meaning diverge in
-production.
+---
 
-Rename it, or record the actual semantics plus that promotion trigger in the docstring and
-schema description.
+## SA178 — Restate the arch-audit watchlist and correct the `trigger_inputs` name
 
-### And restate the three that are not fired
+### The mental model
+
+A watch item is a bet: *"this is not a problem yet, and here is the trigger that would make it
+one."* The bet is worthless if the trigger is lost, and it is worse than worthless if a later pass
+restates a **superseded** version of the list, because the audit then carries conclusions nobody
+re-derived. Restating is therefore the work; removing is not.
+
+### 1. `trigger_inputs` has drifted from its name
+
+`check_gate_parity.py:2652-2690` uses the field as a **bidirectional partition of `e2e.yml`'s path
+allowlist**, not as *"what changes should trigger this gate"*. That is why `check-core-compat`'s
+trigger reads `quickscale_modules/backups/**`.
+
+**Not a defect** — the check it performs is real and exact. It is a name that lies about a correct
+mechanism. It becomes load-bearing the moment a gate is ever *skipped* on the basis of
+`trigger_inputs`, because then the name's meaning and the field's meaning diverge in production.
+
+Rename it, or record the actual semantics plus that promotion trigger in the docstring and schema
+description.
+
+### 2. The three that are not fired
 
 The **current** three, not the superseded pre-resolution list: the two hand-pinned literals minted
 inside the new provisioning derivation (`provision_ci_postgres.sh:93,96` — `!= teams` and `== 12`,
@@ -474,16 +529,53 @@ the second copy of the PostgreSQL major (`provision_ci_postgres.sh:15` against `
 two values that are arguably correct because the repo toolchain and the generated project are
 genuinely independent); and the roughly six count-pinned oracles in `scripts/test_gate_parity.py`.
 
-Each is not fired, each fails loudly, and each has a written trigger. Keep the triggers intact —
-restating is the work, not removing. Note the shape: all three were **created by a fix**, which is
-the ordinary cost of centralization and the reason the fix-regression question is asked every pass.
+Each is not fired, each fails loudly, and each has a written trigger. Note the shape: all three were
+**created by a fix**, which is the ordinary cost of centralization and the reason the fix-regression
+question is asked every pass.
+
+### Why this is documentation and nothing else
+
+No gate changes behaviour here. Nothing is closed. The value is that the next audit pass inherits an
+accurate list instead of re-deriving one, and that a correct mechanism stops carrying a misleading
+name.
 
 ---
 
 # Post-v88 — recorded backlog
 
-These three are in the roadmap so the findings are not lost. Listing a sub-item here does not
+These four are in the roadmap so the findings are not lost. Listing a sub-item here does not
 authorize implementing it.
+
+## SA177 — Assert RLS policy predicate text, not just policy existence
+
+### The mental model
+
+Row-level security is only as strong as what the policy *says*. The repository's isolation and
+conformance gates currently prove that a table has RLS enabled, RLS forced, and at least one row in
+`pg_policies`. None of them reads the policy predicate.
+
+So a table carrying a permissive `USING (true)` policy — the classic way RLS is accidentally
+neutered — passes every isolation check the repository runs. The tenancy model's actual invariant is
+a split: writes are scoped to the current organization, while reads may cross tenants **only** when
+an operator flag is set, and that read policy is deliberately `FOR SELECT` so operator access can
+never become write or delete visibility. Today that split is enforced by a code comment.
+
+### Why comparing text is the right shape
+
+The rendered template is the specification, and `pg_policies` stores what the database actually
+believes. Comparing the stored `qual` and `with_check` text against the rendered template for each
+enrolled table turns the comment into a gate, and it fails loudly on any drift rather than degrading
+silently.
+
+### Why it is not in v88
+
+It needs a live PostgreSQL, an enrolled-table walk, and a proof step that weakens a predicate to
+observe red and then restores exact bytes. That is a materially larger unit than the two-line
+forward-template repair it was bundled with, and it improves tooling rather than fixing the defect
+that repair addresses. It should be pulled forward the moment the policy templates are edited again,
+because that is when drift becomes likely rather than theoretical.
+
+---
 
 ## SA152 — Refresh the beta-migration maintainer targets
 

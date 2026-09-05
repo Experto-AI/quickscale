@@ -30,8 +30,8 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Seven open v88 ticket entries run on three tracks across seven open merge
-positions; SA167c's authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full
+generated-project updater. Nine open v88 ticket entries run on three tracks across nine open merge
+positions after the 2026-09-05 in-lane ticket splits; SA167c's authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full
 `make ci` correction are green and archived. No open ticket remains on the release path. W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
@@ -139,7 +139,7 @@ What *is* live is the residue: two hand-pinned literals minted inside the new de
 second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at `:15`, against
 `runtime_pins.POSTGRES_VERSION = "18"`). Both fail loudly, so both were carried rather than
 promoted. They are stated in full with their triggers on the [watchlist](#watchlist) and owned by
-SA164.
+SA178.
 
 ---
 
@@ -533,7 +533,8 @@ independent of the other two and should be designed together at `teams` kickoff.
   remains a bounded literal tripwire: `_migdir()` (line 52) still falls back to a conventional path, and the
   parity backstop comment (line 25) still names the retired `v87` baseline. *Doesn't qualify:* the
   catalog/policy/data parity gate is the authoritative proof. **Trigger:** another migration-bearing module,
-  or the tuple omitting one — **not fired**. SA164 owns the remediation.
+  or the tuple omitting one — **not fired**. SA164 owns the remediation; its restatement here is
+  SA178's.
 - **`trigger_inputs` has drifted from its name.** `check_gate_parity.py:2652-2690` uses the field as a
   bidirectional partition of `e2e.yml`'s path allowlist, not as a trigger condition. *Doesn't qualify:* the
   check it performs is real and exact. **Trigger:** a gate ever being *skipped* on the basis of
@@ -571,7 +572,7 @@ Recorded here only so a future pass using an older interpreter does not re-raise
 
 - 2026-08-28 — `ci-environment-hand-replicated`: **resolved** and archived; the full fix-regression
   narrative is in [CHANGELOG.md](../../CHANGELOG.md). Only its residue stays live here — the two
-  hand-pinned literals on the watchlist, owned by SA164.
+  hand-pinned literals on the watchlist, owned by SA178 since the 2026-09-05 split.
 - 2026-08-28 — `privileged-command-set-multi-owner`: **new**, promoted from the prior watchlist item
   "privileged-command template/runtime pair", whose trigger ("a third sanctioned command, or a mismatch")
   **fired** — not as a value mismatch but as a third and fourth *owner*. `3523f9f8` (2026-08-18, labeled
@@ -595,6 +596,12 @@ Recorded here only so a future pass using an older interpreter does not re-raise
   module keys* **not fired** (universe unchanged at twelve); *privileged-command pair* **fired — promoted**;
   *`trigger_inputs` name drift* **not fired**, verified against `check_gate_parity.py:498-524`. Two items
   added from the fix-regression audit; one added for the count-pinned oracles.
+- 2026-09-05 — **Watchlist ownership split, no finding changed.** SA164 was carrying one executable
+  repair plus two documentation obligations. The repair — making the SA92 guardrail's `_migdir()`
+  fail loudly and re-anchoring its `v87` backstop — stays with **SA164**. The `trigger_inputs` naming
+  correction and the restatement of the three not-fired items move to **SA178**, which stays on the
+  same worktree so this document keeps a single lane. No item was closed, promoted, demoted, or had
+  its trigger altered; the ranked findings and their deferrals are untouched.
 - 2026-08-28 — Prior red flags: none were open at the last pass and none opened this pass.
 
 *Lenses scanned with no qualifying finding this pass: data/state model integrity, concurrency and state

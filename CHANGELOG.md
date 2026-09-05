@@ -2,6 +2,33 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Roadmap ticket splits — three bundled tickets separated in lane (2026-09-05).** Each of the
+  three lane heads carried a small executable defect bundled with documentation or evidence work
+  whose cost dominated the reviewed unit. The splits are **SA164 → SA164 + SA178** (both W2),
+  **SA165 → SA165 + SA179** (both W1), and **SA172 → SA172 + SA177**, with SA177 leaving the v88
+  queue for the post-v88 backlog. **No child changes worktree**, so no conflict surface gains a
+  second lane: `docs/others/arch-audit.md` stays single-lane on W2 across its now four owners, and
+  `scripts/test_isolation_conformance.sh` drops to a single open owner because SA172's policy-text
+  assertion left with SA177.
+  **SA165's split is the one that removes a defect in the process itself.** Its reviewed candidate
+  included the six documents that record its own review, so every checkpoint writing "the review
+  passed" edited a bound blob and invalidated the review it was recording; two cycles were spent in
+  that loop. SA179 now owns those six files and SA165 keeps only product bytes, which re-scopes
+  **`EV-8`** to the product candidate — a narrowing, not a new grant: still exactly one
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict, no retry, no reuse of the stale run. SA179 holds
+  the only new hard content dependency, `deps: SA165`, because the four live tech-audit notes may not
+  be retired until a verdict covers the product bytes that discharge them.
+  **Derived counts moved with the split**, not by hand: nine open v88 ticket entries across
+  nine open merge positions, lanes **W1 4 · W2 4 · W3 1**, heads SA165 (#22, W1), SA164 (#25,
+  W2), SA172 (#29, W3). New merge positions **#34** (SA178, W2) and **#35** (SA179, W1); SA177 takes
+  no position and no worktree. Reconciled in `docs/index.md` and
+  `docs/technical/v88_ticket_context.md` (new conceptual `## SA177`, `## SA178`, and `## SA179`
+  sections), with the consistency suite's latest-closeout anchor moved to this entry.
+  **Splitting adds no work and closes no finding.** The ticket count rises because reviewed units got
+  smaller; every acceptance criterion is preserved in exactly one child, and no audit finding, watch
+  item, or trigger is closed, weakened, or dropped by this pass. Verified with
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py`.
+
 - **Maintainer decision — the v88 release keeps SA165's verdict as a gate (2026-09-05).** The one
   discretionary question left by the roadmap hygiene pass is settled. **Decision: keep the gate
   (Option A).** The alternative considered was deferring SA165 past v88, promoting SA161 to W1's
