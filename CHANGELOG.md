@@ -2,6 +2,28 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA176 — B105 release blocker cleared; SA171 release-accepted (2026-09-05).** The Python
+  metadata-key identifier in `quickscale_core/advisory_lock.py` is now `_LOCK_OWNER_KEY`, so Bandit
+  no longer mistakes the key constant for a hardcoded credential. The serialized YAML key remains
+  exactly `"_acquisition_token"`; an explicit regression reads the emitted lock file and binds that
+  spelling to the private acquisition value, while the replacement-token regression still proves
+  release refuses to unlink a lock it does not own. No `# nosec` marker or suppression-ledger entry
+  was added, so the B105 correction is accepted without a suppression.
+  **Verification:** the advisory/DR lock campaign passed **55 tests**; the v88 status consistency
+  suite passed **40 tests**; and `make check-security-static-analysis` reported Bandit 1.9.4 over
+  **237 source files**, seven existing accountable suppressions, and **zero unsuppressed findings**.
+  The final exact-tree `make ci` ran in its own `setsid` session with complete output at
+  `/tmp/opencode/sa176-review-final-3/ci.log` and an atomically renamed
+  `/tmp/opencode/sa176-review-final-3/ci.exit` containing `0`. It passed all eleven stages: **1,360**
+  registered script tests; **5,101 passed / 2 skipped** across Core and CLI; **332 passed / 1
+  skipped** for backups; Core/CLI coverage above the 90% equal-weight threshold; and all twelve
+  module integration suites at **94.54%** mean coverage.
+  This release-accepts the retained SA171 lock correction, retires SA176 and merge position **#33**,
+  and restores an empty release critical path. The open-only roadmap now derives **eight open v88
+  ticket entries across eight open merge positions**, lanes **W1 3 · W2 4 · W3 1**; SA172 now heads
+  W3 with `deps: none`. Current status consumers and their executable consistency contract were
+  reconciled in the same change. This records repository release acceptance, not publication.
+
 - **Roadmap hygiene pass — the SA171 release correction is ticketed as SA176 (2026-09-05).**
   The roadmap held the remaining SA171 release work as a narrative checkpoint section rather than as
   a schedulable entry, so the one gate red on the integration branch had no owner, no lane, and no

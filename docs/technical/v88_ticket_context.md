@@ -119,40 +119,6 @@ band-C ticket into an architectural one.
 
 ---
 
-## SA176 — Clear the B105 release blocker on the retained lock candidate
-
-### The mental model
-
-Bandit is a static security linter. Its **B105** check, `hardcoded_password_string`, flags a string
-literal assigned to a name that looks credential-shaped — a name containing `password`, `secret`,
-`token`, and similar. It is a name-and-literal heuristic; it does not and cannot know what the value
-is used for.
-
-The advisory lock writes a small YAML mapping into its lock file. One of the keys in that mapping
-records the identity of the acquisition that owns the lock, so that a later release call can refuse
-to unlink a lock file that some other process has since replaced. The *key name* for that mapping
-entry is a module-level constant. Its value is the literal spelling of a YAML key, which is why the
-check is a false positive on substance — and still a real red gate on the release path.
-
-### Why it is its own entry rather than a footnote
-
-The repository rule is that a gate red on the integration branch is attributed to exactly one owner
-and is never deselected, because deselection removes the oracle for the very defect the work exists
-to fix. Until an owner exists, the red belongs to nobody and every other lane's green is provisional.
-Naming the correction as an entry gives the red an owner, a lane, and an acceptance test.
-
-### The shape of the fix
-
-Two honest routes exist and both preserve behaviour: rename the constant so the heuristic no longer
-reads it as credential-shaped, or construct the key so that no credential-shaped name is bound
-directly to a string literal. Neither changes the on-disk key text, so existing lock files stay
-readable. What is not acceptable is a `# nosec` suppression: the suppression ledger is an
-accountable surface, and adding an entry there trades a two-character rename for a permanent
-exception.
-
-The invariant that must survive the edit is the one the constant exists to protect: the acquisition
-identity is private, and release refuses to unlink a lock file it does not own.
-
 ## SA172 — Make `apply_force_rls`'s idempotency claim true
 
 ### The mental model

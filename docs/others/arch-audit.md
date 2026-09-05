@@ -30,9 +30,9 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Nine open v88 ticket entries run on three tracks across nine open merge
-positions; SA167c's authorized Phase-F verdict under `EV-7` is green and archived. The one open
-ticket on the release path is SA176 (W3), which clears the Bandit B105 red on `make ci`. W3 holds the exclusive
+generated-project updater. Eight open v88 ticket entries run on three tracks across eight open merge
+positions; SA167c's authorized Phase-F verdict under `EV-7` and SA176's full `make ci` correction are
+green and archived. No open ticket remains on the release path. W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
 **SA167c release reconciliation (2026-09-05).** SA167c's phases A-E remain accepted on retained
@@ -45,16 +45,17 @@ cleanup passed. SA167c is closed and archived; SA166 is now `deps: none`. Eviden
 **SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
 exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
 local corrections. Exact Core/CLI cleanup completed and the standing PostgreSQL identity, volume,
-catalog, ownership, and role flags remained intact. SA170 and TA70 are closed; the lock correction is
-retained as the SA171 candidate but is not release-accepted while its B105 blocker remains open. W3
-therefore holds SA172 behind that correction. The full release and retained-partial history is archived
-in [CHANGELOG.md](../../CHANGELOG.md).
+catalog, ownership, and role flags remained intact. SA170 and TA70 are closed. The later SA176
+correction release-accepted the retained SA171 lock work without changing its on-disk metadata key;
+SA172 now heads W3. The full release and retained-partial history is archived in
+[CHANGELOG.md](../../CHANGELOG.md).
 
-**SA171 retained-partial status (2026-09-05, ticketed 2026-09-05).** The lock implementation is
-retained but not release-accepted: the synchronized candidate's `make ci` remains blocked by Bandit
-B105 at `quickscale_core/src/quickscale_core/advisory_lock.py:41` for the acquisition-token metadata
-key. The blocker is deliberately not fixed or suppressed here; it is owned by **SA176 (#33, W3)**,
-and SA172 remains held behind that correction. The implementation and its focused evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
+**SA171 release acceptance (2026-09-05).** The retained lock implementation is release-accepted
+after SA176 renamed the Python metadata-key constant while preserving the serialized
+`"_acquisition_token"` key. Bandit reports zero unsuppressed findings, the focused lock regressions
+remain green, and the full `make ci` gate passes without a B105 suppression. SA176 and merge position
+#33 are retired; SA172 now heads W3 with `deps: none`. The implementation, retained-partial history,
+and final release evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
 and the completion ledger archived SA167d and retired merge position #18. SA165 became unblocked with
@@ -501,11 +502,12 @@ independent of the other two and should be designed together at `teams` kickoff.
 
 ## Watchlist
 
-- **Two independent filesystem-lock implementations.** The retained SA171 candidate repairs the
-  stale-reclamation race and acquisition-bound release identity in both implementations without
-  introducing a shared primitive; its release acceptance remains blocked by B105. This is otherwise
-  a non-defect structural question only: revisit consolidation if a third implementation appears,
-  behavior or platform support diverges, or both public contracts can no longer be preserved independently.
+- **Two independent filesystem-lock implementations.** The release-accepted SA171 correction repairs
+  the stale-reclamation race and acquisition-bound release identity in both implementations without
+  introducing a shared primitive; SA176 cleared its B105 gate without changing the serialized key.
+  This is otherwise a non-defect structural question only: revisit consolidation if a third
+  implementation appears, behavior or platform support diverges, or both public contracts can no
+  longer be preserved independently.
 - **Hand-pinned literals inside the new provisioning derivation.** `provision_ci_postgres.sh:96`
   (`== 12`) and `:93` (`!= teams`) re-introduce a module count and a module name into a script whose
   whole point is deriving them. *Doesn't qualify:* both fail loudly and immediately, and the count check
