@@ -95,7 +95,15 @@ correction. W2 carries the three-position band-C queue headed by SA178, with SA1
 tail. W3 holds the exclusive slot and takes scheduling priority while its Docker-backed leg is
 active; its one position is a *queue* of one, and SA172 keeps `deps: none`. All eight positions are
 band-C work.
-**No open ticket remains on the release critical path; `make ci` is green on the corrected tree.**
+**No open ticket remains on the release critical path; `make ci` is green on the corrected
+tree.** That is the *band-B release-verdict* sense of the term, and it is the sense used
+everywhere below. In the
+*remaining-work* sense — the longest dependency chain still standing between here and the last
+merge — the critical path is **W1: #22 ─► #19 ─► #20**, four of the eight open entries in one
+strictly serial chain, with #35 branching off #22. W2's #34 ─► #31 ─► #32 is lane ordering only and
+W3 carries one entry, so both lanes drain long before W1 does. Nothing on W1 can be shortened by
+moving it (see [Track rebalance](#track-rebalance--settled-lane-assignment)); the only lever on the
+overall finish date is the length of #22's own evidence sequence.
 
 **No cross-worktree ticket blocker or open release-gate blocker remains.** One cross-worktree *shared file* does,
 made one-directional by merge order: `scripts/test_isolation_conformance.sh` (SA135's merged
@@ -112,17 +120,26 @@ tickets build on rather than re-open.
 
 ### Track rebalance — settled lane assignment
 
-Lanes are **W1 4 · W2 3 · W3 1**, and every open ticket carries a track. **No move is proposed**:
-the remaining queues are lane-ordered band-C work, so no relocation can shorten the release path.
+Lanes are **W1 4 · W2 3 · W3 1**, and every open ticket carries a track. **No move is proposed**,
+and the reason is a hard constraint rather than a judgement call: W1 is the long lane, but every
+ticket on it is pinned there.
 
-**Three tickets were split on 2026-09-05, in lane, without relocation.** Each carried a small real
-defect bundled with documentation or evidence work whose cost dominated the reviewed unit, and in
-SA165's case whose file set made the ticket's own evidence self-invalidating. The splits are
-**SA164 → SA164 + SA178** (both W2), **SA165 → SA165 + SA179** (both W1), and **SA172 → SA172 +
-SA177** (SA177 leaves v88 for the post-v88 backlog because it is the only part needing a live
-PostgreSQL beyond the two-line fix). No child changes lane, so no conflict surface gains a second
-worktree; splitting raises the ticket count without adding work, and lets each lane's real fix reach
-a checked box without waiting on its documentation half.
+**Why the imbalance cannot be relieved by relocation.** The four candidate moves were each checked
+against the standing test — independent of the rest of its lane, target lane idle, on or feeding the
+critical path — and each fails on the *same* structural rule, that **no conflict surface may gain a
+second worktree**:
+
+| Candidate move | Rejected because |
+|---|---|
+| SA161 + SA160 (#19, #20) → W3 | Both edit `sa90_emission_manifests.json` and `docs/others/tech-audit.md`; the fixture is bound read-only by SA165's frozen candidate on W1, so the move would put a live surface on two lanes *and* leave the temporal dependency intact. Relocating cannot clear a dependency that is about bytes, not lanes. |
+| SA179 (#35) → W3 | Shares `docs/others/tech-audit.md` with SA160/SA161 on W1, and its dependency on SA165's verdict is content, not ordering. |
+| SA174 / SA175 / SA178 (#31, #32, #34) → W3 | All three edit `docs/others/arch-audit.md`. Keeping them single-lane on W2 is the constraint that forced SA178's split to stay in W2; moving any one re-introduces the two-lane hazard the split was shaped to avoid. |
+| SA172 (#29) → W1 or W2 | Its acceptance requires the exclusive PostgreSQL/Docker slot, which only W3 holds. |
+
+The residual imbalance is therefore real and is **not** a scheduling defect: W2 and W3 drain early
+and then idle, and the finish date is set by W1's serial chain alone. The only remaining lever is
+the length of SA165's own evidence sequence, which is a maintainer question rather than a
+lane-assignment one.
 
 **SA174 (#31) and SA175 (#32) sit on W2 by a confirmed decision (2026-09-04), not a provisional
 one.** The assignment keeps `docs/others/arch-audit.md` **single-lane and one-directional** — its
@@ -179,11 +196,16 @@ complete and the standing state was restored exactly.
   context, so the same false positive cannot recur; only a later root run may then enter
   `FROZEN-CHECK` and the single `EV-8` verdict. SA179 (#35) still owns documentation reconciliation
   and audit-note retirement after SA165 is green.
-- **W3 — start SA172 (#29).** SA176's B105 correction release-accepted retained SA171 lock work,
-  and SA172 now heads W3 owning the lane's exclusive PostgreSQL/Docker slot. The split reduced it to
-  the forward-template fix, its apply-twice proof, and the `db_table` derivation; the predicate-text
-  conformance assertion moved to post-v88 SA177. SA170's final acceptance is archived in
-  `CHANGELOG.md`; do not reopen its release campaign.
+- **W3 — finish SA172 (#29); its implementation exists and is unmerged.** SA176's B105 correction
+  release-accepted retained SA171 lock work, and SA172 now heads W3 owning the lane's exclusive
+  PostgreSQL/Docker slot. The split reduced it to the forward-template fix, its apply-twice proof,
+  and the `db_table` derivation; the predicate-text conformance assertion moved to post-v88 SA177.
+  **The next action is terminal review, not implementation.** The forward template, the `db_table`
+  derivation, and their regressions are already written on W3 and have never reached the integration
+  branch: a prior final-review attempt returned no verdict, self-review, validation report, or
+  touched-file list, which is a harness non-return and not a red grade. Re-run terminal attestation
+  against a materialized base-to-tip patch, then merge on the exact reviewed tip. SA170's final
+  acceptance is archived in `CHANGELOG.md`; do not reopen its release campaign.
 
 ### Track readiness — the three states
 
@@ -191,22 +213,38 @@ A lane is **truly green** only when all three are yes. *Can start* = the next ac
 *Can finish* = the ticket can reach a checked box using only work on its own lane. *Can merge* =
 merge-back is not order-gated behind another lane.
 
-| Lane | Head | Can start | Can finish | Can merge | On the critical path |
+| Lane | Head | Can start | Can finish | Can merge | On the remaining-work critical path |
 |---|---|---|---|---|---|
-| **W2** | SA178 (#34) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #34 | no |
-| **W1** | SA165 (#22) | **yes** — `deps: none`; the one blocking finding is refuted by measurement, so the next action is a fresh terminal SA165-R1 over the five-file candidate | **no** — that fresh SA165-R1 has not returned green and the `EV-8`-authorized verdict has not been spent | **yes after a fresh green review and a green verdict** — no cross-lane blocker remains | no |
-| **W3** | SA172 (#29) | **yes** — `deps: none` and W3 owns the required PostgreSQL slot | **yes** — its acceptance is proved against W3's own PostgreSQL slot | **yes** — nothing is ordered ahead of #29 | no |
+| **W2** | SA178 (#34) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #34 | no — W2 drains and then idles |
+| **W1** | SA165 (#22) | **yes** — `deps: none`; the one blocking finding is refuted by measurement, so the next action is a fresh terminal SA165-R1 over the five-file candidate | **no** — that fresh SA165-R1 has not returned green and the `EV-8`-authorized verdict has not been spent | **yes after a fresh green review and a green verdict** — no cross-lane blocker remains | **yes — W1 is the whole of it** |
+| **W3** | SA172 (#29) | **yes** — `deps: none` and W3 owns the required PostgreSQL slot | **yes** — its acceptance is proved against W3's own PostgreSQL slot | **yes** — nothing is ordered ahead of #29 | no — one entry, then the lane is empty |
 
 **W2 and W3 are truly green; W1 can start but cannot finish until a fresh SA165-R1 and SA165's
-`EV-8`-authorized final-candidate verdict are green.** **No open ticket remains on the
-release critical path**, so W2's and W3's green heads are real, useful work that is nonetheless
-filler with respect to the release date. W1's *cannot finish* is empirical, not a decision — the
-authorized verdict either returns green or it does not.
+`EV-8`-authorized final-candidate verdict are green.** Two of the three lane heads are therefore
+executable end to end today, and neither is on the remaining-work critical path: W2's #34 and W3's
+#29 are real, useful work that is nonetheless **filler with respect to the finish date**, because
+completing both leaves W1's chain exactly as long as it was. W1's *cannot finish* is **empirical,
+not a decision** — no maintainer answer clears it; the authorized verdict either returns green or it
+does not, and only the upstream evidence sequence can clear it.
+
+**W3's head is green but not fresh.** #29's implementation is already written and unmerged, so its
+*can start* is a resume rather than a beginning, and the outstanding step is terminal attestation
+plus merge-back. That does not change any of the three states — nothing is ordered ahead of it and
+nothing outside W3 gates it — but it does mean the lane's remaining cost is a review cycle rather
+than an implementation cycle.
 
 **Behind the heads, the split changed one answer.** SA179 (#35, W1) can start —
 its documentation work is executable today — but cannot finish, because retiring the four tech-audit
 notes requires SA165's verdict to have covered the product bytes first. That is a hard dependency on
-upstream work, not a decision. SA177 is post-v88 and is not scheduled here at all.
+upstream work, not a decision.
+
+**The other two W1 entries answer the same way.** SA161 (#19) **cannot start**: its rebaseline writes
+`sa90_emission_manifests.json`, which SA165's frozen candidate binds read-only, so starting it before
+#22's verdict destroys the review #22 is waiting on. SA160 (#20) **cannot start** behind it, on the
+ordered-pair rule for the same fixture. Both are hard dependencies on upstream work; **no maintainer
+decision clears either**, and no lane move clears them because the constraint is on bytes, not lanes.
+That is what makes all four W1 entries one serial chain and W1 the remaining-work critical path.
+SA177 is post-v88 and is not scheduled here at all.
 
 ### Maintainer decisions
 
@@ -331,13 +369,18 @@ The per-lane heads are **#34 (W2), #22 (W1), and #29 (W3)**. SA167c's #21 releas
 SA166's #24 testimony gate, and SA176's #33 release-gate correction are complete and archived. No
 open head is on the release critical path.
 
-Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
-by a maintainer reordering the lane**. One is a **hard content dependency** that no reorder clears:
+Exactly one "Merges after" edge is lane ordering — **SA175 after SA174**, a queue position clearable
+by the upstream work **or by a maintainer reordering the lane**. **All three W1 edges are hard content dependencies** that no
+reorder clears, which is why W1's four entries are one strictly serial chain:
 **SA160 after SA161** (shared emission-parity rebaseline of `sa90_emission_manifests.json`;
-the pair must not be split, so the run is ordered #19, #20). **SA179 after SA165** is the second hard content dependency, added by the
-2026-09-05 split: SA179 retires the four tech-audit notes, and a note may only be retired once a
-verdict has covered the product bytes that discharge it. Band-C positions (19, 20, 22, 29, 31,
-32, 34, 35) are *earliest-eligible*, not
+the pair must not be split, so the run is ordered #19, #20); **SA179 after SA165**, added by the
+2026-09-05 split, because SA179 retires the four tech-audit notes and a note may only be retired
+once a verdict has covered the product bytes that discharge it; and **SA161 after SA165**, which
+is *not* the worktree ordering it was previously labelled — SA165's frozen five-file candidate binds
+`sa90_emission_manifests.json` as read-only review context, and SA161's rebaseline writes that exact
+file, so landing SA161 first would break the binding of the review SA165 is waiting on.
+
+Band-C positions (19, 20, 22, 29, 31, 32, 34, 35) are *earliest-eligible*, not
 commitments, and may slip past the release. **SA174 (#31) and SA175 (#32) are W2 tail work**:
 neither has a content dependency and neither needs an exclusive slot.
 
@@ -379,6 +422,8 @@ Surfaces needing an explicit ordering note beyond the table:
   since SA174 left the run. SA165 binds the file for review but writes no byte to it: its
   `OPERATIONS.md` rebaseline already landed with the template edit in `a14ea029`. Every rebaseline
   appends its own `baseline_evidence` entry with per-file rationale and preserves all prior entries.
+  **No rebaseline may land while SA165's candidate binding is live** — that read-only binding is what
+  makes #19 after #22 a content dependency rather than lane ordering.
 - `scripts/test_e2e.sh` has no open owner after SA170's accepted closeout. Preserve its settled
   exact-scope cleanup contract.
 
@@ -422,7 +467,7 @@ surface.
   **Acceptance:** one shared helper in `src/lib/` iterates cookies rather than counting split segments — splitting on `'; '`, matching the name exactly, and `decodeURIComponent`-ing the value, per Django's own documented `getCookie` — and both call sites import it with no third variant remaining; a `vitest` table test covers `'csrftoken=A; csrftoken=B'`, `'sessionid=x; csrftoken=A'`, `'csrftoken=A'`, and `''`, with the first three returning a non-empty token; the tech-audit finding is retired.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/`, generator emission parity baselines, `docs/others/tech-audit.md`.
 
-- [ ] **SA161 — Remove the dead `get_client_ip` definitions from generated settings.** `Band C · Tier 3 · W1 · merge #19 · deps: SA165 (worktree ordering)`
+- [ ] **SA161 — Remove the dead `get_client_ip` definitions from generated settings.** `Band C · Tier 3 · W1 · merge #19 · deps: SA165 (frozen-candidate fixture binding)`
   Closes tech-audit **TA68** (`generated-settings-dead-client-ip`, S4). `templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` both define a module-level `get_client_ip(request)`, and the production copy rebinds it under a comment claiming the rebind exists "so that production defaults … are actually in effect at request time". Neither is reachable: Django's `Settings` copies only **uppercase** names off the settings module, so `django.conf.settings.get_client_ip` does not exist, and grep across all templates returns only the two definitions. The live implementation is `quickscale_modules_orgs.current_org.get_client_ip`, which reads the uppercase `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is correct.
   **Acceptance:** both definitions are deleted — dead code that no caller reaches is removed rather than annotated; the uppercase settings and the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation are retained unchanged; the misleading behavioural comment at `production.py.j2:119-122` is removed either way; a generated project boots and proxy-aware client-IP resolution is unchanged, asserted by a test; emission parity is rebaselined with rationale; the tech-audit finding is retired.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/`, emission parity baselines, `docs/others/tech-audit.md`.
