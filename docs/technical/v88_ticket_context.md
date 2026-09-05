@@ -41,8 +41,8 @@ The open release work is one principle with four failure modes. Every ticket is 
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
             SA160         SA165          SA161          SA172
-            SA164         SA152                         SA175
-            SA174           │               │              │
+            SA174         SA152                         SA175
+              │             │               │              │
               │             │               │        (policy-text
          (cookies,      (state/tool     (dead code)    assertions,
           watchlists,    fallbacks,                    file-group
@@ -60,7 +60,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA164, SA174 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; SA165's retained state-read and isolation-skip corrections await a final-candidate release verdict; SA152 still carries an independent green-by-absence path | SA165, SA152 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | dead code nobody deletes | SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA172, SA175 |
@@ -449,52 +449,6 @@ claim in the audit that no evidence supports — the exact failure the rule exis
 It carries no product behaviour and touches no code under the generator, the core package, or
 `scripts/`. That is deliberate and load-bearing: a documentation ticket that also edited product
 files would re-create the entanglement it exists to remove.
-
----
-
-## SA164 — Make the SA92 migration-squash guardrail fail loudly
-
-### The mental model
-
-A watch item is a bet: *"this is not a problem yet, and here is the trigger that would make
-it one."* A watch item whose trigger **cannot be evaluated** has stopped being a bet and
-become debt — it costs a read every audit pass and can never fire.
-
-The watchlist was rewritten by the 2026-08-28 pass: one item's parent finding was resolved, one
-item fired and was promoted, and three new ones were minted inside the landed provisioning
-derivation. Exactly one of the survivors carries executable work, and that is what this ticket now
-is. The naming question and the restatement are documentation and are carried separately.
-
-### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains open work
-
-The artifact is
-`quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, a bounded
-literal tripwire for cross-table `UPDATE … SET organization_id` migration DML; it is
-not a schema-parity proof. The retired `django_apps:` manifest dependency is already gone:
-its `_migdir()` helper constructs the conventional migration path directly. The helper
-still returns `None` when that directory is absent, and the scan silently skips that module,
-while its parity backstop still names the retired `v87` baseline. The current regenerated
-migrations and discharged S4 BYPASSRLS prerequisite are settled; SA164 owns making the
-conventional-path absence fail loudly and re-anchoring the parity backstop.
-
-### 2. Privileged-command pair — the watch item fired, and left this ticket
-
-This was carried for two passes as *"values agree, claimed authority does not"*. The 2026-08-28
-structural pass re-counted the owners and found **four**, not two — the trigger fired, and the item
-was promoted out of the watchlist into a ranked finding. It is no longer adjudication work and no
-longer belongs here; **SA174** carries it, with the full census and the chosen shape.
-
-What survives in this ticket is the shape of the lesson, which the remaining items share: a watch
-item is a bet, and when the bet resolves, the item stops being a watch item. Restating it here as a
-watch item a third time would be the error.
-
-### Why the repair is worth isolating
-
-A tripwire that returns `None` and skips is worse than no tripwire, because the green result reads
-as *"no cross-table organization DML found"* when it actually means *"nothing was read"*. That is the
-same silent-fallback shape the tech audit tracks elsewhere in the tree, on the guardrail protecting
-tenant isolation in migrations. Bundling it behind documentation work was the only reason it had not
-landed.
 
 ---
 

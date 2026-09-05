@@ -290,7 +290,8 @@ sole authorized Phase-F release verdict under `EV-7` subsequently exited 0 on fr
 all-checks-passed banner, with Core and CLI E2E plus exact-scope cleanup green. The release
 evidence is archived in [CHANGELOG.md](../../CHANGELOG.md); SA167c is complete and merge
 position #21 is retired. SA166's subsequent testimony gate is also complete, merge position #24 is
-retired, and SA164 now has `deps: none`. The
+retired, and SA164's fail-loud migration-guardrail repair is complete with merge position #25
+retired; SA178 now heads W2 at `deps: none`. The
 settled product bytes no longer carry CLI per-module wiring logic. **`SA167d`**
 (v88) is a conditional post-integration completion-grade Phase C candidate; exact-tip integration
 remains pending. SA165 remains open with `deps: none`.

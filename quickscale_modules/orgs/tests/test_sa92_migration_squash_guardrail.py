@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -22,7 +23,8 @@ MODS = ROOT / "quickscale_modules"
 # Intentionally not a full SQL parser. Catches the most common cross-table
 # DML shape: ``UPDATE <table> SET organization_id = <non-literal>``.
 # False negatives are accepted because the pg_policies/catalog/data parity
-# gate against v87 is the authoritative proof the class stays empty.
+# gate over the current regenerated migration baseline is the authoritative
+# proof the class stays empty.
 _CROSS_TABLE_ORG_DML = re.compile(
     r"\bUPDATE\s+\w+(?:\s+(?:AS\s+)?\w+)?\s+SET\s+"
     r'["\'`]?organization_id["\'`]?\s*=\s*'
@@ -49,9 +51,30 @@ def _manifest() -> dict[str, dict[str, Any]]:
     return result
 
 
-def _migdir(name: str) -> Path | None:
+def _migdir(name: str) -> Path:
     d = MODS / name / "src" / f"quickscale_modules_{name}" / "migrations"
-    return d if d.is_dir() else None
+    if not d.is_dir():
+        raise FileNotFoundError(f"Migration directory missing for module {name!r}: {d}")
+    return d
+
+
+def _scan_migrations(manifest: dict[str, dict[str, Any]]) -> tuple[list[str], int]:
+    findings: list[str] = []
+    scanned = 0
+    for name in manifest:
+        if name in ("analytics", "storage", "teams"):
+            continue
+        for pf in sorted(_migdir(name).iterdir()):
+            if pf.suffix != ".py" or pf.name == "__init__.py" or not pf.is_file():
+                continue
+            scanned += 1
+            text = pf.read_text(encoding="utf-8")
+            for match in _CROSS_TABLE_ORG_DML.finditer(text):
+                if any(allowed.search(match.group()) for allowed in _ALLOWLIST):
+                    continue
+                line_num = text[: match.start()].count("\n") + 1
+                findings.append(f"{name}/{pf.name}:{line_num}: {match.group()!r}")
+    return findings, scanned
 
 
 # -- Tests ----------------------------------------------------------------------
@@ -72,34 +95,24 @@ def test_discovery() -> None:
         "notifications",
         "backups",
     ):
-        assert name in m and _migdir(name) is not None
+        assert name in m
+        _migdir(name)
     assert len(m) >= 12
 
 
 def test_no_cross_table_org_dml() -> None:
     """Bounded tripwire: no migration contains cross-table organization_id DML."""
-    findings: list[str] = []
-    scanned = 0
-    for name in _manifest():
-        if name in ("analytics", "storage", "teams"):
-            continue
-        d = _migdir(name)
-        if d is None:
-            continue
-        for pf in sorted(d.iterdir()):
-            if pf.suffix != ".py" or pf.name == "__init__.py" or not pf.is_file():
-                continue
-            scanned += 1
-            text = pf.read_text(encoding="utf-8")
-            for match in _CROSS_TABLE_ORG_DML.finditer(text):
-                if any(a.search(match.group()) for a in _ALLOWLIST):
-                    continue
-                line_num = text[: match.start()].count("\n") + 1
-                findings.append(f"{name}/{pf.name}:{line_num}: {match.group()!r}")
+    findings, scanned = _scan_migrations(_manifest())
     assert scanned > 0, "No migration files scanned"
     assert not findings, "Cross-table organization_id DML detected:\n" + "\n".join(
         findings
     )
+
+
+def test_missing_migration_directory_fails_loudly() -> None:
+    """A manifest module without migrations cannot make the scan pass by absence."""
+    with pytest.raises(FileNotFoundError, match="module 'missing'"):
+        _scan_migrations({"missing": {}})
 
 
 # -- Canary tests (bounded) -----------------------------------------------------

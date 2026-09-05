@@ -5,8 +5,8 @@ concepts, but it must not restate bands, positions, dependencies, or readiness. 
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
 tree state.  The integration-ready SA167d closeout, green SA167c Phase F, closed SA170 status,
-and retained-partial SA165 closeout are checked as current consumer contracts below; those checks
-are not mutation canaries.
+the completed SA164 guardrail repair, and retained-partial SA165 closeout are checked as current
+consumer contracts below; those checks are not mutation canaries.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
@@ -261,11 +261,6 @@ SEMANTIC_SCHEDULING_RE = re.compile(
     r"[^.\n]{0,100}\bSA\d+[a-z]?\b"
     r"|\bSA\d+[a-z]?\b\s*(?:→|->)\s*\bSA\d+[a-z]?\b"
 )
-RETIRED_DJANGO_APPS_DEPENDENCY_RE = re.compile(
-    r"\b_migdir\(\)[^.\n]{0,160}\b(?:reads?|uses?|depends?\s+on)\b"
-    r"[^.\n]{0,100}`?django_apps:?`?",
-    re.IGNORECASE,
-)
 BROAD_NO_RED_GATE_RE = re.compile(r"\bno gates? (?:is|are) red\b", re.IGNORECASE)
 STALE_SA167C_E_OPEN_RE = re.compile(
     r"(?ix)"
@@ -363,7 +358,7 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     assert "SA167c verdict is green and archived" in dependency_graph, (
         "SA167c dependency graph must record the archived green verdict"
     )
-    assert "start SA164 (#25)" in next_actions
+    assert "start SA178 (#34)" in next_actions
 
 
 def _assert_sa174_sa175_current_displacement_rule(roadmap_text: str) -> None:
@@ -538,6 +533,32 @@ def _assert_status_consumers_agree(roadmap_text: str, docs_index_text: str) -> N
             )
 
 
+def _assert_sa164_closeout(
+    roadmap_text: str, context_text: str, changelog_text: str
+) -> None:
+    """Keep the fail-loud guardrail repair archived and its successor released."""
+    roadmap = _roadmap_tickets(roadmap_text)
+    positions = {
+        metadata.merge_position
+        for metadata in roadmap.values()
+        if metadata.merge_position is not None
+    }
+    assert "SA164" not in roadmap
+    assert 25 not in positions
+    assert "## SA164" not in context_text
+    assert roadmap["SA178"].dependencies == frozenset()
+
+    latest_closeout = re.search(
+        r"(?ms)^- \*\*SA164 migration-squash guardrail completed\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_closeout is not None
+    normalized = " ".join(latest_closeout.group(0).split())
+    assert "FileNotFoundError" in normalized
+    assert "current regenerated migration baseline" in normalized
+    assert "merge position **#25**" in normalized
+
+
 def _assert_sa167c_current_status(
     roadmap_text: str,
     context_text: str,
@@ -555,7 +576,7 @@ def _assert_sa167c_current_status(
     assert "SA166" not in roadmap
     assert 24 not in {metadata.merge_position for metadata in roadmap.values()}
     assert "## SA166" not in context_text
-    assert roadmap["SA164"].dependencies == frozenset()
+    assert roadmap["SA178"].dependencies == frozenset()
 
     latest_sa166_closeout = re.search(
         r"(?ms)^- \*\*SA166 behavioural-commit testimony gate\b.*?(?=^- \*\*)",
@@ -798,6 +819,11 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     _assert_sa174_sa175_current_displacement_rule(roadmap)
     _assert_lane_assignment_parity(roadmap)
     _assert_lane_state_is_not_persisted(roadmap)
+    _assert_sa164_closeout(
+        roadmap,
+        CONTEXT.read_text(encoding="utf-8"),
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+    )
     _assert_sa167d_status(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
@@ -1070,12 +1096,6 @@ def test_v88_context_restates_no_schedulable_roadmap_metadata() -> None:
     _, context = _load_documents()
     assert not SCHEDULABLE_METADATA_RE.findall(context)
     assert not SEMANTIC_SCHEDULING_RE.findall(context)
-
-
-def test_v88_sa164_context_rejects_retired_django_apps_dependency_claim() -> None:
-    _, context = _load_documents()
-    sa164_context = _context_sections(context)["SA164"]
-    assert not RETIRED_DJANGO_APPS_DEPENDENCY_RE.search(sa164_context)
 
 
 @pytest.mark.parametrize(
@@ -1403,7 +1423,7 @@ def _assert_latest_closeout_uses_current_queue_counts(
         f"{_number_word(len(positions))} open merge positions"
     )
     latest_closeout_entry = re.search(
-        r"(?ms)^- \*\*Roadmap ticket splits\b.*?(?=^- \*\*)",
+        r"(?ms)^- \*\*SA164 migration-squash guardrail completed\b.*?(?=^- \*\*)",
         changelog_text,
     )
     assert latest_closeout_entry is not None

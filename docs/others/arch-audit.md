@@ -30,10 +30,11 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Nine open v88 ticket entries run on three tracks across nine open merge
-positions after the 2026-09-05 in-lane ticket splits; SA167c's authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full
-`make ci` correction are green and archived. No open ticket remains on the release path. W3 holds the exclusive
-PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
+generated-project updater. Eight open v88 ticket entries run on three tracks across eight open merge
+positions after the 2026-09-05 in-lane ticket splits and SA164's completed guardrail repair. SA167c's
+authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full `make ci`
+correction are green and archived. No open ticket remains on the release path. W3 holds the
+exclusive PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
 **SA167c release reconciliation (2026-09-05).** SA167c's phases A-E remain accepted on retained
 product object `91fd3bb6e6b638735361b511c1515cddccce5d15`, and its sole authorized Phase-F
@@ -46,7 +47,8 @@ cleanup passed. SA167c is closed and archived; its completed verdict released SA
 integer vNN roadmap reference, or same-commit changelog testimony whenever a non-merge commit changes
 hosted workflows, the gate registry, or a provisioning station. Its hermetic suite, full parity suite,
 generated workflow check, deliberate untitled-workflow failure probe, and historical audit are green.
-SA166 and merge position #24 are archived; SA164 now heads W2 at `deps: none`.
+SA166 and merge position #24 are archived. SA164's later guardrail repair is also archived, merge
+position #25 is retired, and SA178 now heads W2 at `deps: none`.
 
 **SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
 exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
@@ -530,11 +532,11 @@ independent of the other two and should be designed together at `teams` kickoff.
   more than two oracle edits, or the counts disagreeing across two oracles — at which point apply the
   derivation principle `48e0a62a` just established for the planning gate.
 - **SA92 migration-squash discovery tuple.** `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`
-  remains a bounded literal tripwire: `_migdir()` (line 52) still falls back to a conventional path, and the
-  parity backstop comment (line 25) still names the retired `v87` baseline. *Doesn't qualify:* the
-  catalog/policy/data parity gate is the authoritative proof. **Trigger:** another migration-bearing module,
-  or the tuple omitting one — **not fired**. SA164 owns the remediation; its restatement here is
-  SA178's.
+  remains a bounded literal tripwire, now re-anchored to the current regenerated migration baseline:
+  `_migdir()` raises when a manifest module's conventional migration directory is absent, and a
+  regression proves the scan cannot pass by reading nothing. The catalog/policy/data parity gate
+  remains the authoritative proof. **Trigger:** another migration-bearing module, or the tuple
+  omitting one — **not fired**. SA178 owns its future restatement; the item remains open.
 - **`trigger_inputs` has drifted from its name.** `check_gate_parity.py:2652-2690` uses the field as a
   bidirectional partition of `e2e.yml`'s path allowlist, not as a trigger condition. *Doesn't qualify:* the
   check it performs is real and exact. **Trigger:** a gate ever being *skipped* on the basis of
@@ -602,6 +604,11 @@ Recorded here only so a future pass using an older interpreter does not re-raise
   correction and the restatement of the three not-fired items move to **SA178**, which stays on the
   same worktree so this document keeps a single lane. No item was closed, promoted, demoted, or had
   its trigger altered; the ranked findings and their deferrals are untouched.
+- 2026-09-05 — **SA164 guardrail repair completed.** The SA92 tripwire now raises on a missing
+  conventional migration directory instead of skipping the module, its regression proves the scan
+  cannot pass by absence, and its backstop wording points at the current regenerated migration
+  baseline rather than retired `v87`. The watch item remains open with its trigger unchanged and
+  future restatement owned by SA178; no ranked finding changed.
 - 2026-08-28 — Prior red flags: none were open at the last pass and none opened this pass.
 
 *Lenses scanned with no qualifying finding this pass: data/state model integrity, concurrency and state
