@@ -40,10 +40,9 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-           SA160         SA165           SA161          SA166
-            SA164         SA152                          SA172
-            SA172                          │            SA175
-           SA174           │               │              │
+            SA160         SA165          SA161          SA166
+            SA164         SA152                         SA172
+            SA174           │               │           SA175
              │             │               │        (testimony
         (cookies,      (state/tool     (locks, dead     trail,
          watchlists,    fallbacks,      code)         policy-text
@@ -63,7 +62,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA164, SA174 |
-| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
+| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; SA165's retained state-read and isolation-skip corrections await a final-candidate release verdict; SA152 still carries an independent green-by-absence path | SA165, SA152 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | dead code nobody deletes | SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA166, SA172, SA175 |
 
@@ -390,59 +389,28 @@ assertion, one named group, and a red-then-green proof.
 
 ## SA165 — Discharge the tech-audit watch items that carry an action
 
-### The mental model
+### The retained product boundary
 
-The tech audit's *Notes* hold thirteen items. Most are **accepted trade-offs** or are owned
-elsewhere — the closed SA150 discharged the local-wheelhouse seam, while integration-branch CI,
-generator lock generation, the DB-free healthcheck, the
-CRM count fallbacks, and non-durable atomic state writes are each recorded as **deliberate
-and explicitly out of this ticket's scope**.
+The accepted A-C product object `573a57a34301e6a91971a7845095bd913bebd5e1` addresses four
+action-bearing audit notes. State consolidation raises on corrupt and non-mapping YAML roots before
+writing; the isolation gate authorizes empty-parameter skips by the two intended test identities;
+the host-dependent emission exception records why `.env` is exceptional and when the list must be
+derived; and generated operations guidance rejects predictable local credentials in shared
+environments.
 
-Do not re-litigate those. Four items carry a concrete action; this ticket is exactly those
-four.
+Those product bytes are retained and are not reopened by the documentation closeout. The remaining
+obligation is evidentiary: a release verdict must cover the settled Phase D bytes. The only green
+release run happened before the final `CHANGELOG.md` edit, so it is useful historical evidence but
+not acceptance of the current candidate. Until a replacement run is expressly authorized and
+returns green, this section and the four audit notes remain live and no closure is claimed.
 
-### 1. `flush_empty_consolidated_sections` swallows a corrupt state file
+### Why the distinction matters
 
-`quickscale_core/src/quickscale_core/schema/state_schema.py:386-388` returns silently on
-`yaml.YAMLError, OSError`, skipping the explicit `modules: {}` / `managed_files: []`
-markers that downstream readers use to distinguish *"M2 has spoken"* from *pre-M2 state*.
-
-The trigger is narrow — the file was just written successfully by `save()` — but this is
-precisely the shape the Fail-Hard Principle names (`decisions.md:634`, `:716-732`), and
-`tech-audit.md` is the declared SSOT for that class. Same family as the closed SA150, one layer over.
-
-**Raise or report. A regression test must assert the raise, not a log line.**
-
-### 2. The isolation-gate skip allowlist matches on message, not identity
-
-`scripts/test_isolation_conformance.sh:184` keys on
-`message.startswith('got empty parameter set')`. That silences an empty parameter set on
-**any** of the eleven parametrized tests in `test_tenant_table_conformance.py` — not only
-the two `PENDING_REMEDIATION` ones its own comment describes.
-
-A message prefix is not an identity. Narrowing it to the two test names costs one line.
-Prove it: deliberately empty the ENROLLED set and confirm the gate turns **red**.
-
-### 3. `_HOST_DEPENDENT_PATHS` is a new hand-maintained exception station
-
-`be5cf024` added `frozenset({".env"})` to the SA90 emission byte-parity gate
-(`quickscale_core/tests/test_generator/test_generator.py:1023`). The justification is sound
-and the `755`/`644` mode normalization correctly removes a umask dependency.
-
-But this is an **exception list on the repository's strictest gate**. The monotonicity rule
-to write down: a second entry deserves scrutiny, a third deserves a derivation. Add the
-per-entry rationale and that escalation note — or derive it now.
-
-### 4. Generated local-development credentials are predictable by construction
-
-`generator.py:507-508` derives `runtime_db_role = f"{package_name}_app"` and
-`runtime_db_password = f"{role}_password"` into `db/init.sql`, `docker-compose.yml`, and
-`.env.example` — none of which `.gitignore.j2` excludes.
-
-**Safe as shipped**: no published DB port, local dev only, production supplies
-`RUNTIME_DATABASE_URL` from the environment. The gap is that it is undocumented. State
-explicitly in `OPERATIONS.md` that these credentials must not survive into any shared
-environment. Documentation only — do not change the derivation.
+A release verdict is evidence about exact bytes, not about an intention or an almost-identical
+candidate. Reusing the earlier exit 0 after a status file changed would turn the finality guard into
+a prose assertion. The roadmap retains the executable continuation, plan authority, and exact
+handoff; this companion retains only the conceptual boundary between accepted product work and the
+still-unaccepted closeout.
 
 ---
 
@@ -576,7 +544,7 @@ gaps:
 - **Silent skip in the conformance gate.** `_template_emitted_paths()` calls
   `pytest.skip()` when the template tree is not found, so a path-resolution regression turns
   the ownership gate **green instead of red**. Same silent-fallback family as the closed SA150 and
-  SA165.
+  the discharged state-read and isolation work.
 - **Stale doc provenance.** `beta-site-migration.md` is headed *"shipped in v0.81.0"*
   against `VERSION` 0.87.0, and describes the tool as *"backed by Python scripts under
   `scripts/`"* when `scripts/beta_migrate.py` is an eight-line wrapper over
@@ -630,7 +598,7 @@ Worth holding as a set, because each appears in more than one ticket:
 - **The tautology trap**. A test that reads the authoritative value and asserts the
   authoritative value passes for any value, including nonsense. Derive *wiring* assertions;
   keep *negative controls* literal.
-- **The green-by-absence trap** (SA152, SA165). Skipping, filtering,
+- **The green-by-absence trap** (SA152, with SA165's retained fixes as the pending closeout example). Skipping, filtering,
   and unresolvable paths all produce green. Every one of them must be made to produce red.
 
 
@@ -647,8 +615,8 @@ SA170/W3 at that time. SA170's final acceptance has since cleared that blocker, 
 F verdict has run, so no SA167c completion or release-readiness claim is made. Retained-partial-only merge-back of
 the synchronized nine-file status checkpoint is authorized without accepting F, closing SA167c, or
 unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. SA167d's completion-grade Phase C is archived as a
-conditional post-integration candidate; exact-tip integration remains pending. SA165 is released
-with `deps: none`. Ticket metadata lives in the [roadmap](roadmap.md), not here.
+conditional post-integration candidate; exact-tip integration remains pending. Ticket metadata lives
+in the [roadmap](roadmap.md), not here.
 
 SA170's later ordered serial and concurrent campaigns both passed; their final acceptance and the
 earlier retained-partial history are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c carries no
