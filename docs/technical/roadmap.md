@@ -234,6 +234,15 @@ must be detached under `setsid` with its exit code captured atomically to a file
 rule that a cutoff-killed run is not evidence. W1's remaining question is therefore empirical:
 whether the authorized command returns green.
 
+**Confirmed 2026-09-05 — SA165's release verdict stays a v88 gate.** The one discretionary question
+this planner could still have raised was whether to defer SA165 past the release, promote SA161 to
+W1's head, and turn all three lanes green immediately. **Decision: keep the gate.** Deferral buys no
+release time, because SA165 is not on the release critical path; it would only carry four open
+tech-audit notes into the next release and break the rule that a ticket's evidence must cover its
+own settled bytes — the rule that caught the stale-but-green run here. SA165 therefore keeps merge
+position **#22** and W1's head, and the `EV-8` verdict remains its acceptance gate. This question is
+settled and is not reopened; reasoning is archived in [CHANGELOG.md](../../CHANGELOG.md).
+
 Every other decision is settled and archived with its full reasoning in
 [CHANGELOG.md](../../CHANGELOG.md) — SA167c's Phase-F authority (consumed successfully as `EV-7`),
 the confirmed SA174/SA175 lane assignment to W2, and the five decisions of 2026-08-31 (the

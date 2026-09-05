@@ -2,6 +2,19 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Maintainer decision — the v88 release keeps SA165's verdict as a gate (2026-09-05).** The one
+  discretionary question left by the roadmap hygiene pass is settled. **Decision: keep the gate
+  (Option A).** The alternative considered was deferring SA165 past v88, promoting SA161 to W1's
+  head, and turning all three lanes green immediately. It was rejected: SA165 carries no release
+  critical-path time, so deferral moves no date; it would carry four open tech-audit notes
+  (`flush_empty_consolidated_sections`, the identity-blind isolation skip, `_HOST_DEPENDENT_PATHS`,
+  and predictable generated local credentials) into the next release; and it would break the
+  standing rule that a ticket's evidence must cover its own settled bytes — the rule that caught the
+  stale-but-green run on this very ticket. SA165 keeps merge position **#22** and W1's head at
+  `deps: none`, and the `EV-8` verdict remains its acceptance gate. No queue count, lane assignment,
+  merge position, or dependency changes. The question is settled and is not reopened; the roadmap's
+  maintainer-decisions section records the standing consequence.
+
 - **SA176 — B105 release blocker cleared; SA171 release-accepted (2026-09-05).** The Python
   metadata-key identifier in `quickscale_core/advisory_lock.py` is now `_LOCK_OWNER_KEY`, so Bandit
   no longer mistakes the key constant for a hardcoded credential. The serialized YAML key remains
