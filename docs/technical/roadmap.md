@@ -188,8 +188,9 @@ complete and the standing state was restored exactly.
   complete on the retained product/frozen-base evidence archived in [CHANGELOG.md](../../CHANGELOG.md).
   SA166 now has `deps: none` and is the W2 head; SA164 remains after SA166, with SA174 and SA175
   as the band-C tail. W2 claims no standing service.
-- **W1 — retain SA165 (#22).** Phase D reconciliation is integrated; the next action is SA165-R1
-  independent review, followed by fresh one-run authority and a final-candidate verdict. SA167d's
+- **W1 — retain SA165 (#22).** Phase D reconciliation is integrated; one-run authority is granted as
+  `EV-8`, and the next action is SA165-R1 independent review followed by the single authorized
+  final-candidate verdict. SA167d's
   completion-grade closeout is archived as a conditional post-integration candidate; SA165 has
   `deps: none`, remains W1-owned, and its phases A-C are accepted on retained product object
   `573a57a34301e6a91971a7845095bd913bebd5e1`, merged at `3f925b96`. The final-candidate release
@@ -207,22 +208,27 @@ merge-back is not order-gated behind another lane.
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
 | **W2** | SA166 (#24) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #24 | no |
-| **W1** | SA165 (#22) | **yes** — `deps: none`; Phase D reconciliation is integrated; the next action is SA165-R1 independent review, followed by fresh one-run authority and a final-candidate verdict | **no** — fresh one-run authority and a green final-candidate release verdict remain outstanding | **yes after a green verdict** — no cross-lane blocker remains | no |
+| **W1** | SA165 (#22) | **yes** — `deps: none`; Phase D reconciliation is integrated; one-run authority is granted as `EV-8`, and the next action is SA165-R1 independent review followed by the single authorized final-candidate verdict | **no** — the `EV-8`-authorized final-candidate release verdict has not yet returned green | **yes after a green verdict** — no cross-lane blocker remains | no |
 | **W3** | SA171 (#28) | **yes** — `deps: none` and DB-free | **yes** — all work is W3-owned | **yes** — no ticket is ordered ahead of #28 | no |
 
-**W2 and W3 are truly green; W1 can start but cannot finish until SA165 receives fresh one-run
-authority and its final-candidate verdict is green.** No open ticket is on the release critical path.
+**W2 and W3 are truly green; W1 can start but cannot finish until SA165's `EV-8`-authorized
+final-candidate verdict returns green.** W1's remaining blocker is now empirical rather than a
+maintainer decision. No open ticket is on the release critical path.
 All three lanes carry only independent or lane-ordered band-C work. SA174 and SA175 stay on W2 as its
 tail.
 
 ### Maintainer decisions
 
-**One maintainer authority is open:** grant or decline exactly one replacement
-`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict for SA165's settled six-file Phase D candidate. The
-prior green run is retained but cannot be reused because `CHANGELOG.md` changed afterward; this pass
-does not authorize a second run. Nothing else in the queue waits on a maintainer, and after SA165
-receives one-run authority its remaining question is empirical: whether the final-candidate command
-returns green.
+**No maintainer decision is open anywhere in the v88 queue.** The last one was granted on
+2026-09-05 as **`EV-8`**: exactly one replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict
+over SA165's settled six-file Phase D candidate, frozen at the moment `wt-track1` syncs. `EV-8`
+authorizes that one verdict and nothing else — not a second run, not redoing accepted A-C (which
+stay bound to `EV-2` and to retained product object
+`573a57a34301e6a91971a7845095bd913bebd5e1`), and not reusing the earlier stale-but-green run as
+acceptance. A red or unreturned result requires a repair ticket and then fresh authority. The run
+must be detached under `setsid` with its exit code captured atomically to a file, per the standing
+rule that a cutoff-killed run is not evidence. W1's remaining question is therefore empirical:
+whether the authorized command returns green.
 
 Every other decision is settled and archived with its full reasoning in
 [CHANGELOG.md](../../CHANGELOG.md) — SA167c's Phase-F authority (consumed successfully as `EV-7`),
@@ -458,20 +464,21 @@ triggers.
   handoff; lane state must be remeasured at action time rather than persisted as a current merge
   assertion.
 
-  **Pending:** obtain independent review of the reconciled candidate, then obtain authority for
-  exactly one replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` run over the frozen final
-  candidate. Before it, rerun the focused context suite; launch the release command under `setsid`,
-  capture its exit atomically, and retain exact cleanup/provenance evidence. A green verdict permits
-  completion-grade convergence, patch-backed terminal attestation, exact-tip integration, audit-note
-  retirement, and #22 retirement. A red or unreturned verdict keeps this checkpoint open. No
-  replacement run is authorized by this checkpoint.
+  **Pending, in order.** (1) Obtain independent review of the reconciled candidate (SA165-R1).
+  (2) Freeze the final candidate and rerun the focused context suite. (3) Spend **`EV-8`** — the
+  single replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict granted 2026-09-05 — launching
+  it under `setsid` with its exit code captured atomically to a file, and retain exact
+  cleanup/provenance evidence. A green verdict permits completion-grade convergence, patch-backed
+  terminal attestation, exact-tip integration, audit-note retirement, and #22 retirement. A red or
+  unreturned verdict keeps this checkpoint open and requires a repair ticket plus fresh authority;
+  `EV-8` covers no second run.
 
   **Remaining reviewed plan and handoff.** Plan authority `EV-2` remains binding. Resume from the
   retained product object and the present six-file Phase D candidate: `CHANGELOG.md`, `docs/index.md`,
   `docs/others/tech-audit.md`, `docs/technical/roadmap.md`,
   `docs/technical/v88_ticket_context.md`, and
   `quickscale_core/tests/test_v88_ticket_context_consistency.py`. Review the SA165-R1 temporal
-  handoff, then resume the fresh-authority release-verdict step. Preserve historical SA170 and
+  handoff, then spend `EV-8` on the release-verdict step. Preserve historical SA170 and
   SA167c/SA167d evidence, do not reopen A-C product files, and do not alter SA172's later ownership
   of the isolation script.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/schema/state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `quickscale_core/.../templates/OPERATIONS.md.j2`, `docs/others/tech-audit.md`.

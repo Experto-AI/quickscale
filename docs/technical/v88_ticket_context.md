@@ -404,8 +404,9 @@ environments.
 Those product bytes are retained and are not reopened by the documentation closeout. The remaining
 obligation is evidentiary: a release verdict must cover the settled Phase D bytes. The only green
 release run happened before the final `CHANGELOG.md` edit, so it is useful historical evidence but
-not acceptance of the current candidate. Until a replacement run is expressly authorized and
-returns green, this section and the four audit notes remain live and no closure is claimed.
+not acceptance of the current candidate. The replacement run is now expressly authorized as `EV-8`;
+until it returns green over the frozen candidate, this section and the four audit notes remain live
+and no closure is claimed.
 
 ### Why the distinction matters
 

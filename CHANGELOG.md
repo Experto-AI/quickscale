@@ -2,6 +2,34 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Final-candidate release authority for SA165 granted as `EV-8` (2026-09-05).** The one maintainer
+  decision left open by the preceding hygiene pass is settled. **Decision: granted.** `EV-8`
+  authorizes **exactly one** replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict over
+  SA165's settled six-file Phase D candidate, frozen at the moment `wt-track1` syncs.
+  **Reasoning.** SA165's product work is accepted and retained on object
+  `573a57a34301e6a91971a7845095bd913bebd5e1`; the sole obligation left was evidentiary. Its earlier
+  release run exited 0 (Core 38 passed, CLI 54 passed) but predates the final `CHANGELOG.md` edit,
+  so it describes bytes that are no longer the candidate. Reusing it would turn the finality guard
+  into a prose assertion. This is the same shape as SA167c's Phase-F situation, settled the same way
+  as `EV-7` on 2026-09-04, so the grant is consistent with standing precedent rather than a new
+  exception.
+  **`EV-8` does not authorize:** a second verdict, redoing accepted A-C work (which stays bound to
+  plan authority `EV-2` and the retained product object), reinterpreting the stale-but-green run as
+  acceptance, or widening SA165's scope. A red or unreturned result requires a repair ticket and
+  then fresh authority. The run must be detached under `setsid` with its exit code captured
+  atomically to a file, per the standing rule that a cutoff-killed run is not evidence. SA165-R1
+  independent review runs first, and the focused context suite is rerun over the frozen candidate
+  immediately before the verdict.
+  **Resulting readiness.** W1's *can finish* is now blocked on an empirical question rather than a
+  maintainer decision; W2 (SA166 #24) and W3 (SA171 #28) remain truly green and off the critical
+  path. **No maintainer decision is open anywhere in the v88 queue.** No ticket closed and no ticket
+  metadata moved: the v88 queue remains **nine open ticket entries** on **nine open merge
+  positions**, lanes **W1 3 · W2 4 · W3 2**.
+  **Documents reconciled:** the roadmap's next-action bullet, readiness table, maintainer-decisions
+  section, and SA165 ticket body; `docs/index.md`; `docs/technical/v88_ticket_context.md`; and
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py`, whose pinned W1 action, readiness
+  reason, and stale-wording canary were updated in the same change — **37 passed**.
+
 - **Roadmap hygiene pass — archived narrative removed, one closed watch item retired (2026-09-05).**
   No open ticket completed in this pass and no ticket state changed: the v88 queue remains
   **nine open ticket entries** on **nine open merge positions**, lanes **W1 3 · W2 4 · W3 2**, with heads

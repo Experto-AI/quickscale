@@ -1112,9 +1112,9 @@ def _assert_sa165_retained_partial(
     assert not re.search(r"#22, .*\bare \*\*retired and not", roadmap_text)
 
     expected_w1_action = (
-        "Phase D reconciliation is integrated; the next action is SA165-R1 "
-        "independent review, followed by fresh one-run authority and a "
-        "final-candidate verdict"
+        "Phase D reconciliation is integrated; one-run authority is granted as "
+        "`EV-8`, and the next action is SA165-R1 independent review followed by "
+        "the single authorized final-candidate verdict"
     )
     current_w1_action_blocks = {
         "next action": _roadmap_block(
@@ -1136,8 +1136,8 @@ def _assert_sa165_retained_partial(
     )
     normalized_readiness = " ".join(readiness.split())
     assert re.search(
-        r"\| \*\*W1\*\* \| SA165 \(#22\).*?\| \*\*no\*\* — fresh one-run authority "
-        r"and a green final-candidate release verdict remain outstanding \|",
+        r"\| \*\*W1\*\* \| SA165 \(#22\).*?\| \*\*no\*\* — the `EV-8`-authorized "
+        r"final-candidate release verdict has not yet returned green \|",
         normalized_readiness,
     )
     assert "W2 and W3 are truly green; W1 can start but cannot finish" in readiness
@@ -1181,8 +1181,8 @@ def _assert_sa165_retained_partial(
 def test_v88_sa165_readiness_rejects_green_without_release_authority() -> None:
     roadmap, context = _load_documents()
     stale_claim = (
-        "**no** — fresh one-run authority and a green final-candidate release verdict "
-        "remain outstanding"
+        "**no** — the `EV-8`-authorized final-candidate release verdict has not yet "
+        "returned green"
     )
     mutated = roadmap.replace(
         stale_claim,
@@ -1203,9 +1203,9 @@ def test_v88_sa165_readiness_rejects_green_without_release_authority() -> None:
 def test_v88_sa165_current_action_rejects_stale_reconciliation_wording() -> None:
     roadmap, context = _load_documents()
     current_claim = (
-        "Phase D reconciliation is integrated; the next action is SA165-R1\n"
-        "  independent review, followed by fresh one-run authority and a "
-        "final-candidate verdict"
+        "Phase D reconciliation is integrated; one-run authority is granted as\n"
+        "  `EV-8`, and the next action is SA165-R1 independent review followed by "
+        "the single authorized\n  final-candidate verdict"
     )
     stale_claim = (
         "run its Phase D documentation reconciliation, then continue to SA165-R1\n"
