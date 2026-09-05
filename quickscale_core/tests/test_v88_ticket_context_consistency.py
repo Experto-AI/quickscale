@@ -281,6 +281,17 @@ STALE_SA167C_CURRENT_RE = re.compile(
     r"|\b(?:merge\s+)?position\s+#?21\b[^.\n]{0,80}\b(?:open|head|runnable)\b",
     re.IGNORECASE,
 )
+SA174_SA175_CURRENT_RULE = (
+    "SA174 and SA175 remain W2 tail by current lane ordering; "
+    "the band-C displacement rule imposes no present constraint because no runnable "
+    "band-B leg remains."
+)
+CONTRADICTORY_SA174_SA175_DISPLACEMENT_RE = re.compile(
+    r"\b(?:the\s+)?(?:standing\s+)?(?:band-C\s+)?displacement rule\b"
+    r"[^.\n]{0,80}\b(?:applies to (?:SA174(?:/| and )SA175|them)|"
+    r"forbids (?:SA174(?:/| and )SA175|them))\b",
+    re.IGNORECASE,
+)
 
 
 def _load_documents() -> tuple[str, str]:
@@ -353,6 +364,34 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
         "SA167c dependency graph must record the archived green verdict"
     )
     assert "start SA166 (#24)" in next_actions
+
+
+def _assert_sa174_sa175_current_displacement_rule(roadmap_text: str) -> None:
+    """Require both current planner passages to state one displacement rule."""
+    current_blocks = {
+        "dependency graph": _roadmap_block(
+            roadmap_text,
+            "### Dependency graph and critical path",
+            "### Track rebalance",
+        ),
+        "track rebalance": _roadmap_block(
+            roadmap_text,
+            "### Track rebalance",
+            "### Lane state",
+        ),
+    }
+    for block_name, block in current_blocks.items():
+        normalized = " ".join(block.split())
+        contradiction = CONTRADICTORY_SA174_SA175_DISPLACEMENT_RE.search(normalized)
+        if contradiction:
+            raise AssertionError(
+                f"{block_name} has contradictory current SA174/SA175 displacement "
+                f"prose: {contradiction.group(0)!r}"
+            )
+        if SA174_SA175_CURRENT_RULE not in normalized:
+            raise AssertionError(
+                f"{block_name} lacks the current SA174/SA175 displacement rule"
+            )
 
 
 def _assert_lane_assignment_parity(roadmap_text: str) -> None:
@@ -669,6 +708,7 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     docs_index = DOCS_INDEX.read_text(encoding="utf-8")
     _assert_status_consumers_agree(roadmap, docs_index)
     _assert_sa167c_current_roadmap_blocks(roadmap)
+    _assert_sa174_sa175_current_displacement_rule(roadmap)
     _assert_lane_assignment_parity(roadmap)
     _assert_lane_state_snapshot(roadmap)
     _assert_sa167d_status(
@@ -744,6 +784,21 @@ def test_v88_sa167c_current_roadmap_blocks_reject_contradictions(
     assert mutated != roadmap
     with pytest.raises(AssertionError, match=error_match):
         _assert_sa167c_current_roadmap_blocks(mutated)
+
+
+def test_v88_sa174_sa175_current_displacement_rule_rejects_contradiction() -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    current_rule_fragment = (
+        "rule imposes no present constraint because no runnable band-B leg remains."
+    )
+    mutated = roadmap.replace(
+        current_rule_fragment,
+        "rule applies to them.",
+        1,
+    )
+    assert mutated != roadmap
+    with pytest.raises(AssertionError, match="contradictory current SA174/SA175"):
+        _assert_sa174_sa175_current_displacement_rule(mutated)
 
 
 @pytest.mark.parametrize(

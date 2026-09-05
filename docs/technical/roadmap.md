@@ -94,8 +94,8 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
 ```
 
 **Position numbers are identifiers, not run order.** W2's remaining order is #24, #25, and the
-#31/#32 tail. The former band-B release leg is archived green, so no band-C displacement rule applies
-to the surviving queue.
+#31/#32 tail. **SA174 and SA175 remain W2 tail by current lane ordering; the band-C displacement
+rule imposes no present constraint because no runnable band-B leg remains.**
 
 The release-committed SA167c verdict is green and archived. W2 now carries the four-position
 band-C queue `SA166 ─► SA164` with SA174 and SA175 as its tail. W3 holds the exclusive slot and
@@ -142,8 +142,9 @@ one-directional** (its three owners SA174, SA175, and SA164 are all W2, running 
 merging later) and leaves W1 as one coherent generated-output chain, #22 ─► #19 ─► #20. No code file
 carries a second lane and no merge hazard exists. The move's original idle-lane rationale is spent —
 SA167c's former head is archived under `EV-7` — but the conflict-surface gain is permanent, which is why
-the assignment stands rather than reverting. **They are now tail, not filler:** the standing
-displacement rule applies to them.
+the assignment stands rather than reverting. **SA174 and SA175 remain W2 tail by current lane
+ordering; the band-C displacement rule imposes no present constraint because no runnable band-B leg
+remains.**
 
 **The moves that do not stand, for structural reasons rather than situational ones:**
 
