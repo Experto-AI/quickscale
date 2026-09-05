@@ -20,7 +20,6 @@
 #   make check SECTIONS="core modules" - Run checks for multiple sections without `--`
 #   make test-cov             - Run tests with coverage (aggregates DR-engine coverage from backups module when PostgreSQL is available)
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)
-#   make test-agent           - Run agentic flow adapter tests
 #   make test-ci-local-parallel - Run TP1 local-CI parallelism regression tests
 #   make lint                 - Run linting
 #   make lint-fix             - Fix linting issues
@@ -52,7 +51,7 @@
 #   make clean                - Remove build artifacts
 
 .PHONY: setup bootstrap smoke-install install \
-        test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-agent test-postgres-provisioning \
+        test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-postgres-provisioning \
         lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality fix check ci ci-e2e \
         docs \
@@ -190,7 +189,6 @@ help:
 	@echo "  make test-integration     - Integration tests for quickscale_modules/* (requires PostgreSQL)"
 	@echo "  make test-cov             - Tests with coverage report (aggregates backups DR-engine coverage when PostgreSQL is available)"
 	@echo "  make test-e2e             - E2E tests (needs Docker + Playwright)"
-	@echo "  make test-agent           - Agentic flow adapter tests"
 	@echo "  make quality              - Full quality analysis (dead code, complexity, duplication)"
 	@echo "  make lint-frontend        - Lint React theme templates (ESLint + TypeScript)"
 	@echo "  make frontend-proof       - Render showcase_react and run pnpm install/type-check/build"
@@ -451,10 +449,6 @@ test-bypassrls:
 # Run E2E tests (starts PostgreSQL container, installs Playwright browsers)
 test-e2e:
 	@scripts/test_e2e.sh
-
-# Run agentic flow adapter tests only
-test-agent:
-	@scripts/test_agentic_flow.sh
 
 # Run tests with coverage (90% equal-weight package mean, 80% per-file threshold)
 #

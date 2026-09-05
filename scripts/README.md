@@ -29,7 +29,6 @@ Preferred maintainer-facing command map:
 | `./scripts/compile_docs.sh` | `make docs` |
 | `./scripts/test_unit.sh` | `make test` or `make test-unit` |
 | `./scripts/test_e2e.sh` | `make test-e2e` |
-| `./scripts/test_agentic_flow.sh` | `make test-agent` |
 | `./scripts/publish.sh build` | `make publish-build` |
 | `./scripts/publish.sh test` | `make publish-test` |
 | `./scripts/publish.sh prod` | `make publish-prod` |
@@ -86,7 +85,6 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 
 - [test_unit.sh](./test_unit.sh) — runs unit tests only (prefer `make test` or `make test-unit`)
 - [test_e2e.sh](./test_e2e.sh) — runs local end-to-end tests and supporting setup (`make test-e2e`)
-- [test_agentic_flow.sh](./test_agentic_flow.sh) — runs focused agentic-flow adapter tests (`make test-agent`)
 
 ### Release and distribution
 
