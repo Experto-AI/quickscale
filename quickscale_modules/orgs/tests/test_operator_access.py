@@ -22,6 +22,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from quickscale_modules_orgs.tenancy import (
     TENANT_TABLE_REGISTRY,
+    TenantTableEntry,
     TenantTableStatus,
     refresh_force_rls_policies,
 )
@@ -389,6 +390,64 @@ class TestRefreshForceRlsPoliciesPostgres:
         create_idx = max(i for i, c in enumerate(calls) if "CREATE POLICY" in c[0][0])
         # The last drop should precede the first create.
         assert drop_idx < create_idx
+
+    def test_uses_registered_models_non_conventional_db_table(
+        self, pg_schema_editor: MagicMock
+    ) -> None:
+        """Refresh resolves the physical table from Django model metadata."""
+        entry = TenantTableEntry(
+            app_label="quickscale_modules_forms",
+            model_name="Form",
+            status=TenantTableStatus.ENROLLED,
+            policy_name="forms_form_org_isolation",
+        )
+        model = MagicMock()
+        model._meta.db_table = "tenant_forms"
+        app_config = MagicMock()
+        app_config.get_model.return_value = model
+        cursor = pg_schema_editor.connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = (True,)
+
+        with (
+            patch(
+                "quickscale_modules_orgs.tenancy.TENANT_TABLE_REGISTRY",
+                (entry,),
+            ),
+            patch(
+                "django.apps.apps.get_app_config", return_value=app_config
+            ) as get_app_config,
+        ):
+            refresh_force_rls_policies(pg_schema_editor)
+
+        get_app_config.assert_called_once_with("quickscale_modules_forms")
+        app_config.get_model.assert_called_once_with("Form")
+        assert cursor.execute.call_args.args[1] == ["tenant_forms"]
+        all_sql = " ".join(c[0][0] for c in pg_schema_editor.execute.call_args_list)
+        assert "tenant_forms" in all_sql
+        assert "quickscale_modules_forms_form" not in all_sql
+
+    def test_skips_registry_entries_for_uninstalled_optional_apps(
+        self, pg_schema_editor: MagicMock
+    ) -> None:
+        """Refresh remains usable when an optional tenant module is not installed."""
+        entry = TenantTableEntry(
+            app_label="quickscale_modules_forms",
+            model_name="Form",
+            status=TenantTableStatus.ENROLLED,
+            policy_name="forms_form_org_isolation",
+        )
+
+        with (
+            patch(
+                "quickscale_modules_orgs.tenancy.TENANT_TABLE_REGISTRY",
+                (entry,),
+            ),
+            patch("django.apps.apps.get_app_config", side_effect=LookupError),
+        ):
+            refresh_force_rls_policies(pg_schema_editor)
+
+        pg_schema_editor.connection.cursor.assert_not_called()
+        pg_schema_editor.execute.assert_not_called()
 
 
 # =========================================================================

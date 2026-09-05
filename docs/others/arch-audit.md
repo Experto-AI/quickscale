@@ -30,10 +30,10 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Nine open v88 ticket entries run on three tracks across nine open merge
+generated-project updater. Eight open v88 ticket entries run on two active tracks across eight open merge
 positions after the 2026-09-05 in-lane ticket splits; SA167c's authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full
 `make ci` correction are green and archived. No open ticket remains on the release path. W3 holds the exclusive
-PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
+PostgreSQL/Docker slot, but **W3's queue is empty** after SA172's accepted closeout. The prior pass's leading finding landed and is archived under SA135.
 
 **SA167c release reconciliation (2026-09-05).** SA167c's phases A-E remain accepted on retained
 product object `91fd3bb6e6b638735361b511c1515cddccce5d15`, and its sole authorized Phase-F
@@ -53,14 +53,14 @@ exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118
 local corrections. Exact Core/CLI cleanup completed and the standing PostgreSQL identity, volume,
 catalog, ownership, and role flags remained intact. SA170 and TA70 are closed. The later SA176
 correction release-accepted the retained SA171 lock work without changing its on-disk metadata key;
-SA172 now heads W3. The full release and retained-partial history is archived in
+SA172 subsequently closed TA72 and emptied W3's v88 queue. The full release and retained-partial history is archived in
 [CHANGELOG.md](../../CHANGELOG.md).
 
 **SA171 release acceptance (2026-09-05).** The retained lock implementation is release-accepted
 after SA176 renamed the Python metadata-key constant while preserving the serialized
 `"_acquisition_token"` key. Bandit reports zero unsuppressed findings, the focused lock regressions
 remain green, and the full `make ci` gate passes without a B105 suppression. SA176 and merge position
-#33 are retired; SA172 now heads W3 with `deps: none`. The implementation, retained-partial history,
+#33 are retired; SA172 later retired #29 after its PostgreSQL-backed correction. The implementation, retained-partial history,
 and final release evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,

@@ -222,54 +222,64 @@ class AdvisoryLock:
         if not self._acquired:
             return
 
+        try:
+            ownership = self._releasable_ownership()
+            if ownership is None:
+                return
+            self._remove_owned_lock(*ownership)
+        finally:
+            self._reset_local_ownership()
+
+    def _releasable_ownership(self) -> tuple[tuple[int, int], int, str] | None:
+        """Return complete ownership state when this process may release it."""
         acquired_identity = self._acquired_identity
         acquired_pid = self._acquired_pid
         acquisition_token = self._acquisition_token
-        try:
-            if (
-                acquired_identity is None
-                or acquired_pid is None
-                or acquisition_token is None
-                or os.getpid() != acquired_pid
-            ):
-                return
+        if (
+            acquired_identity is None
+            or acquired_pid is None
+            or acquisition_token is None
+            or os.getpid() != acquired_pid
+        ):
+            return None
+        return acquired_identity, acquired_pid, acquisition_token
 
-            try:
-                with _opened_locked_candidate(self.lock_path) as (
+    def _remove_owned_lock(
+        self,
+        acquired_identity: tuple[int, int],
+        acquired_pid: int,
+        acquisition_token: str,
+    ) -> None:
+        """Remove the lock only while its inode and private ownership still match."""
+        try:
+            with _opened_locked_candidate(self.lock_path) as (
+                descriptor,
+                opened_identity,
+            ):
+                if opened_identity != acquired_identity:
+                    return
+                if not _descriptor_matches_owner(
                     descriptor,
-                    opened_identity,
+                    acquired_pid=acquired_pid,
+                    acquisition_token=acquisition_token,
                 ):
-                    if opened_identity != acquired_identity:
-                        return
-                    try:
-                        data = yaml.safe_load(_read_descriptor(descriptor)) or {}
-                    except UnicodeError, yaml.YAMLError:
-                        return
-                    if not isinstance(data, dict):
-                        return
-                    if (
-                        data.get("pid") != acquired_pid
-                        or data.get(_LOCK_OWNER_KEY) != acquisition_token
-                    ):
-                        return
-                    try:
-                        current_identity = _file_identity_from_path(self.lock_path)
-                    except FileNotFoundError:
-                        return
-                    if current_identity == acquired_identity:
-                        self.lock_path.unlink()
-            except FileNotFoundError:
-                return
-            except OSError as error:
-                raise AdvisoryLockError(
-                    f"Failed to release advisory lock {self.lock_path}: {error}"
-                ) from error
-        finally:
-            self._acquired = False
-            self._metadata = None
-            self._acquired_identity = None
-            self._acquired_pid = None
-            self._acquisition_token = None
+                    return
+                if _path_matches_identity(self.lock_path, acquired_identity):
+                    self.lock_path.unlink()
+        except FileNotFoundError:
+            return
+        except OSError as error:
+            raise AdvisoryLockError(
+                f"Failed to release advisory lock {self.lock_path}: {error}"
+            ) from error
+
+    def _reset_local_ownership(self) -> None:
+        """Clear ownership state retained by this lock instance."""
+        self._acquired = False
+        self._metadata = None
+        self._acquired_identity = None
+        self._acquired_pid = None
+        self._acquisition_token = None
 
     def read_metadata(self) -> AdvisoryLockMetadata | None:
         """Read the metadata from an existing lock file.
@@ -352,25 +362,12 @@ class AdvisoryLock:
         """
         try:
             with _opened_locked_candidate(self.lock_path) as (descriptor, identity):
-                data = yaml.safe_load(_read_descriptor(descriptor)) or {}
-                if not isinstance(data, dict) or "pid" not in data:
-                    stale = True
-                else:
-                    try:
-                        metadata = AdvisoryLockMetadata.from_dict(data)
-                    except KeyError, TypeError, ValueError:
-                        stale = True
-                    else:
-                        stale = _metadata_is_stale(
-                            metadata, max_age_seconds=max_age_seconds
-                        )
-                if not stale:
+                if not _descriptor_metadata_is_stale(
+                    descriptor,
+                    max_age_seconds=max_age_seconds,
+                ):
                     return False
-                try:
-                    current_identity = _file_identity_from_path(self.lock_path)
-                except FileNotFoundError:
-                    return True
-                if current_identity != identity:
+                if not _path_matches_identity(self.lock_path, identity):
                     return True
                 self.lock_path.unlink()
         except FileNotFoundError:
@@ -380,11 +377,7 @@ class AdvisoryLock:
                 f"Failed to clear stale advisory lock {self.lock_path}: {error}"
             ) from error
 
-        self._acquired = False
-        self._metadata = None
-        self._acquired_identity = None
-        self._acquired_pid = None
-        self._acquisition_token = None
+        self._reset_local_ownership()
         return True
 
     def __enter__(self) -> "AdvisoryLock":
@@ -461,6 +454,48 @@ def _file_identity_from_path(lock_path: Path) -> tuple[int, int]:
     """Return the current device and inode identity at a lock pathname."""
     stat_result = lock_path.stat()
     return stat_result.st_dev, stat_result.st_ino
+
+
+def _path_matches_identity(lock_path: Path, identity: tuple[int, int]) -> bool:
+    """Return whether a pathname still resolves to the expected lock inode."""
+    try:
+        return _file_identity_from_path(lock_path) == identity
+    except FileNotFoundError:
+        return False
+
+
+def _descriptor_matches_owner(
+    descriptor: int,
+    *,
+    acquired_pid: int,
+    acquisition_token: str,
+) -> bool:
+    """Return whether locked descriptor metadata matches private ownership."""
+    try:
+        data = yaml.safe_load(_read_descriptor(descriptor)) or {}
+    except UnicodeError, yaml.YAMLError:
+        return False
+    return (
+        isinstance(data, dict)
+        and data.get("pid") == acquired_pid
+        and data.get(_LOCK_OWNER_KEY) == acquisition_token
+    )
+
+
+def _descriptor_metadata_is_stale(
+    descriptor: int,
+    *,
+    max_age_seconds: float,
+) -> bool:
+    """Return the stale policy verdict for metadata on a locked descriptor."""
+    data = yaml.safe_load(_read_descriptor(descriptor)) or {}
+    if not isinstance(data, dict) or "pid" not in data:
+        return True
+    try:
+        metadata = AdvisoryLockMetadata.from_dict(data)
+    except KeyError, TypeError, ValueError:
+        return True
+    return _metadata_is_stale(metadata, max_age_seconds=max_age_seconds)
 
 
 def _metadata_is_stale(

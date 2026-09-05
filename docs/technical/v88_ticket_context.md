@@ -40,7 +40,7 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-            SA160         SA165          SA161          SA172
+            SA160         SA165          SA161          SA177
             SA164         SA152                         SA175
             SA174           │               │              │
               │             │               │        (policy-text
@@ -63,7 +63,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA164, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; SA165's retained state-read and isolation-skip corrections await a final-candidate release verdict; SA152 still carries an independent green-by-absence path | SA165, SA152 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | dead code nobody deletes | SA161 |
-| **Unenforced policy** — a rule exists only in a human's head | RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA172, SA175 |
+| **Unenforced policy** — a rule exists only in a human's head | RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA177, SA175 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
 context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md), so the
@@ -115,55 +115,6 @@ in scope. Fixing the shape twice is bounded; unifying them is a design change th
 band-C ticket into an architectural one.
 
 -->
-
----
-
-## SA172 — Make `apply_force_rls`'s idempotency claim true
-
-### The mental model
-
-PostgreSQL row-level security is switched on per table by a small SQL sequence: enable RLS, force it
-(so even the table owner is subject to it), then create the policies that say which rows a session
-may see and write. `apply_force_rls` runs that sequence and its docstring says it is **idempotent** —
-safe to run twice.
-
-It is not. PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so the second run raises
-`42710 duplicate_object` and aborts the migration that called it.
-
-### Why nothing is broken today
-
-Exactly one caller re-applies: `refresh_force_rls_policies`. It calls `revert_force_rls` first, and
-the reverse SQL correctly uses `DROP POLICY IF EXISTS`. So the only path that could hit the defect
-already avoids it — by accident of ordering, not by contract.
-
-The hazard is the next module migration. Its author reads "idempotent", calls the helper on an
-already-enrolled table, and the migration fails in production rather than in review.
-
-### The two honest resolutions
-
-Either make the documentation match the code (say it is not idempotent and must be preceded by
-`revert_force_rls`), or make the code match the documentation by prefixing the forward template with
-the same `DROP POLICY IF EXISTS` pair the reverse template already carries. The second is two lines
-and leaves the repository with a true contract instead of a warning, which is why the acceptance
-criteria prefer it while permitting either.
-
-### The assertion that is missing is a separate concern
-
-The conformance gates check that a policy *exists* — `relrowsecurity` and `relforcerowsecurity` true,
-and at least one row in `pg_policies`. A table carrying a permissive `USING (true)` policy would pass
-every isolation check the repository runs. That gap is real, but it is a tooling improvement over the
-whole enrolled-table set rather than a repair of the idempotency claim, and it is carried separately
-so this ticket stays the size of its defect: prefix the forward template, prove the contract by
-applying twice, done.
-
-### The watch item folded in
-
-`refresh_force_rls_policies` derives each table name from the Django default convention and drops
-any name it cannot resolve, silently. All 21 enrolled tables happen to match the convention today,
-so this is latent rather than live — but the moment an enrolled model declares its own `db_table`,
-its policy refresh becomes a no-op with no warning, on the most security-critical helper in the
-tree. The model's real table name is available from `apps.get_model(...)._meta.db_table`, which the
-sibling conformance helper already uses.
 
 ---
 

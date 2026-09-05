@@ -2,6 +2,22 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA172 / TA72 closeout — FORCE-RLS forward application is genuinely idempotent (2026-09-05).**
+  `_FORCE_RLS_FORWARD_SQL` now runs `DROP POLICY IF EXISTS` for both policy names before recreating
+  them, so a repeated application no longer raises PostgreSQL `42710 duplicate_object`. The
+  read/write split is unchanged: the tenant-scoped `FOR ALL` policy still governs writes, and the
+  separate operator-read `FOR SELECT` policy remains read-only. A live PostgreSQL regression applies
+  `apply_force_rls` twice to an enrolled table and then verifies RLS enabled and forced with exactly
+  the write and operator-read policies present. `refresh_force_rls_policies` now resolves every
+  physical table through its registered Django model's `_meta.db_table`, retiring the adjacent
+  convention-derived-name watch item and covering a non-conventional name in a focused regression.
+  The initial two-node PostgreSQL and metadata-focused command passed **2 tests**. The separate
+  predicate-text conformance gap remains open under post-v88 SA177.
+  TA72 is retired; SA172 is removed from the open-only roadmap and context, merge position **#29** is
+  retired, and W3's v88 queue is empty while its exclusive PostgreSQL/Docker slot remains reserved.
+  The current queue derives to **eight open v88 ticket entries across eight open merge positions**,
+  lanes **W1 4 · W2 4 · W3 0**. This records repository completion, not publication.
+
 - **Roadmap ticket splits — three bundled tickets separated in lane (2026-09-05).** Each of the
   three lane heads carried a small executable defect bundled with documentation or evidence work
   whose cost dominated the reviewed unit. The splits are **SA164 → SA164 + SA178** (both W2),

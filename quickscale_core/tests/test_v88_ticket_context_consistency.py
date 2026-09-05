@@ -299,6 +299,7 @@ def _load_documents() -> tuple[str, str]:
 
 
 _NUMBER_WORDS = {
+    0: "zero",
     1: "one",
     2: "two",
     3: "three",
@@ -443,11 +444,12 @@ def _assert_lane_assignment_parity(roadmap_text: str) -> None:
     )
     w3_count = expected_counts["W3"]
     w3_count_word = _number_word(w3_count)
-    queue_phrase = (
-        rf"its {w3_count_word} position is a \*queue\*"
-        if w3_count == 1
-        else rf"its {w3_count_word} positions are a \*queue\*"
-    )
+    if w3_count == 0:
+        queue_phrase = r"W3's queue is empty"
+    elif w3_count == 1:
+        queue_phrase = rf"its {w3_count_word} position is a \*queue\*"
+    else:
+        queue_phrase = rf"its {w3_count_word} positions are a \*queue\*"
     if not re.search(
         rf"\b{queue_phrase}",
         dependency_graph,
@@ -644,8 +646,6 @@ def _assert_sa171_release_acceptance(
     }
     assert "SA176" not in roadmap
     assert 33 not in positions
-    assert roadmap["SA172"].dependencies == frozenset()
-    assert roadmap["SA172"].merge_position == 29
 
     latest_checkpoint = re.search(
         r"(?ms)^- \*\*SA176 — B105 release blocker cleared\b.*?(?=^- \*\*)",
@@ -678,20 +678,52 @@ def _assert_sa171_release_acceptance(
             stale_blocker.group(0) if stale_blocker else None,
         )
 
-    for path, text in current_status_consumers.items():
-        if path == "docs/others/tech-audit.md":
-            continue
-        assert re.search(
-            r"(?:SA172 (?:now )?heads W3|W3[^.\n]{0,80}SA172)",
-            " ".join(text.split()),
-            re.IGNORECASE,
-        ), path
-
     normalized_checkpoint = " ".join(latest_checkpoint.group(0).split())
     assert '"_acquisition_token"' in normalized_checkpoint
     assert "_LOCK_OWNER_KEY" in normalized_checkpoint
     assert "without a suppression" in normalized_checkpoint
     assert "No open ticket remains on the release critical path" in roadmap_text
+
+
+def _assert_sa172_closeout(
+    roadmap_text: str,
+    context_text: str,
+    docs_index_text: str,
+    changelog_text: str,
+) -> None:
+    """Keep the FORCE-RLS correction archived and its live finding retired."""
+    roadmap = _roadmap_tickets(roadmap_text)
+    positions = {
+        metadata.merge_position
+        for metadata in roadmap.values()
+        if metadata.merge_position is not None
+    }
+    assert "SA172" not in roadmap
+    assert 29 not in positions
+    assert "## SA172" not in context_text
+
+    for path, text in {
+        "docs/index.md": docs_index_text,
+        "docs/technical/roadmap.md": roadmap_text,
+    }.items():
+        assert "W3's queue is empty" in text, path
+
+    latest_closeout = re.search(
+        r"(?ms)^- \*\*SA172 / TA72 closeout\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_closeout is not None
+    normalized_closeout = " ".join(latest_closeout.group(0).split())
+    for evidence in (
+        "DROP POLICY IF EXISTS",
+        "applies `apply_force_rls` twice",
+        "RLS enabled and forced",
+        "write and operator-read policies",
+        "`_meta.db_table`",
+        "TA72",
+        "merge position **#29**",
+    ):
+        assert evidence in normalized_closeout
 
 
 def _assert_sa170_final_closeout(
@@ -705,9 +737,6 @@ def _assert_sa170_final_closeout(
     assert "SA170" not in roadmap
     assert all(item.merge_position != 27 for item in roadmap.values())
     assert "## SA170" not in context_text
-    assert "#27, #28, #33 are **retired and not" in roadmap_text
-    assert roadmap["SA172"].dependencies == frozenset()
-
     latest_closeout = re.search(r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text)
     assert latest_closeout is not None
     normalized_closeout = " ".join(latest_closeout.group(0).split())
@@ -829,6 +858,12 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
         (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
         (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
     )
+    _assert_sa172_closeout(
+        roadmap,
+        CONTEXT.read_text(encoding="utf-8"),
+        docs_index,
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+    )
     _assert_sa170_final_closeout(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
@@ -905,15 +940,15 @@ def test_v88_sa174_sa175_current_displacement_rule_rejects_contradiction() -> No
 @pytest.mark.parametrize(
     ("current_claim", "drifted_claim", "error_match"),
     [
-        ("W3 1**", "W3 2**", "lane count drift"),
+        ("W3 0**", "W3 1**", "lane count drift"),
         (
-            "its one position is a *queue*",
-            "its two positions are a *queue*",
+            "W3's queue is empty",
+            "W3's queue has one position",
             "W3 dependency-graph prose",
         ),
         (
-            "| 29 | **SA172** | C | 3 | W3 |",
-            "| 29 | **SA172** | C | 3 | W2 |",
+            "| 25 | **SA164** | C | 3 | W2 |",
+            "| 25 | **SA164** | C | 3 | W3 |",
             "lane assignment drift",
         ),
     ],
@@ -986,17 +1021,17 @@ def test_v88_sa167c_current_status_rejects_open_dependency_claim() -> None:
 
 
 def test_v88_sa171_release_acceptance_rejects_retained_blocker_claim() -> None:
-    roadmap = ROADMAP.read_text(encoding="utf-8")
-    mutated = roadmap.replace(
-        "release-accepted retained SA171 lock work",
-        "retained but not release-accepted SA171 lock work",
+    docs_index = DOCS_INDEX.read_text(encoding="utf-8")
+    mutated = docs_index.replace(
+        "release-accepted SA171/SA176 correction",
+        "not release-accepted SA171/SA176 correction",
         1,
     )
-    assert mutated != roadmap
+    assert mutated != docs_index
     with pytest.raises(AssertionError):
         _assert_sa171_release_acceptance(
+            ROADMAP.read_text(encoding="utf-8"),
             mutated,
-            DOCS_INDEX.read_text(encoding="utf-8"),
             (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
             (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
             (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
@@ -1291,7 +1326,7 @@ def _assert_sa165_retained_partial(
         normalized_readiness,
     )
     assert (
-        "W2 and W3 are truly green; W1 can start but cannot finish until a fresh "
+        "W2 is truly green; W3 is idle; W1 can start but cannot finish until a fresh "
         "SA165-R1 is green and SA165's "
         "`EV-8`-authorized final-candidate verdict is green."
     ) in normalized_readiness
@@ -1403,7 +1438,7 @@ def _assert_latest_closeout_uses_current_queue_counts(
         f"{_number_word(len(positions))} open merge positions"
     )
     latest_closeout_entry = re.search(
-        r"(?ms)^- \*\*Roadmap ticket splits\b.*?(?=^- \*\*)",
+        r"(?ms)^- \*\*SA172 / TA72 closeout\b.*?(?=^- \*\*)",
         changelog_text,
     )
     assert latest_closeout_entry is not None

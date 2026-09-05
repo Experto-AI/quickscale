@@ -67,12 +67,12 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 |---|---|---|
 | **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **Empty — SA176 is archived green and `make ci` passes.** Provisioning is separately clean: no provisioning repair is owed and no provisioning gate is red. Re-verify with `poetry run pytest scripts/test_provision_ci_postgres.py -q -o addopts= --no-cov` in the foreground. |
 | **B — Release work on the critical path** | The serialized release-verdict chain. | **Empty — SA167c is archived green.** |
-| **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA172, SA174, SA175, SA178, SA179 |
+| **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA174, SA175, SA178, SA179 |
 
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, nine open merge positions carrying nine open ticket entries, one merge queue
+v88 — three worktrees, eight open merge positions carrying eight open ticket entries, one merge queue
 
 W2 (gates & declared wiring)          band-C tail
   SA164 · SA178                #25, #34
@@ -83,7 +83,7 @@ W1 (module wiring + generated-output fixes)
          └─► SA161 ─► SA160    #19, #20
 
 W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
-  SA172                         #29
+  (empty — the slot remains reserved for future Docker-backed work)
 ```
 
 **Position numbers are identifiers, not run order.** W2's remaining order is #25, then #34, then the
@@ -92,9 +92,8 @@ rule imposes no present constraint because no runnable band-B leg remains.**
 
 SA167c verdict is green and archived, as are SA166's testimony gate and SA176's release-gate
 correction. W2 carries the four-position band-C queue headed by SA164, with SA178 behind it and SA174
-and SA175 as its tail. W3 holds the exclusive slot and takes scheduling priority while its Docker-backed leg is
-active; its one position is a *queue* of one, and SA172 keeps `deps: none`. All nine positions are
-band-C work.
+and SA175 as its tail. W3 holds the exclusive slot and takes scheduling priority whenever a
+Docker-backed leg is active; **W3's queue is empty.** All eight positions are band-C work.
 **No open ticket remains on the release critical path; `make ci` is green on the corrected tree.**
 
 **No cross-worktree ticket blocker or open release-gate blocker remains.** One cross-worktree *shared file* does,
@@ -112,7 +111,7 @@ tickets build on rather than re-open.
 
 ### Track rebalance — settled lane assignment
 
-Lanes are **W1 4 · W2 4 · W3 1**, and every open ticket carries a track. **No move is proposed**:
+Lanes are **W1 4 · W2 4 · W3 0**, and every open ticket carries a track. **No move is proposed**:
 the remaining queues are lane-ordered band-C work, so no relocation can shorten the release path.
 
 **Three tickets were split on 2026-09-05, in lane, without relocation.** Each carried a small real
@@ -137,7 +136,7 @@ present constraint because no runnable band-B leg remains.**
 Two structural constraints outlive the decision and bind any future move: **`scripts/gate_registry.json`
 and `quickscale_modules/*/module.yml` never cross worktrees**, which pins the gate tickets to W2; and
 **W1's `sa90_emission_manifests.json` rebaseline is one ordered pair** (#19 → #20) that may not be
-split. SA172 cannot leave W3 because its acceptance owns the exclusive PostgreSQL/Docker slot.
+split. Future work requiring the exclusive PostgreSQL/Docker slot remains pinned to W3.
 
 ### Lane state
 
@@ -178,11 +177,10 @@ complete and the standing state was restored exactly.
   then enter `FROZEN-CHECK` and the single authorized final-candidate verdict. The ticket body below
   holds the full state, evidence bindings, and pending order. SA165's candidate is now product-only;
   SA179 (#35) carries the documentation reconciliation that used to sit inside it.
-- **W3 — start SA172 (#29).** SA176's B105 correction release-accepted retained SA171 lock work,
-  and SA172 now heads W3 owning the lane's exclusive PostgreSQL/Docker slot. The split reduced it to
-  the forward-template fix, its apply-twice proof, and the `db_table` derivation; the predicate-text
-  conformance assertion moved to post-v88 SA177. SA170's final acceptance is archived in
-  `CHANGELOG.md`; do not reopen its release campaign.
+- **W3 — idle.** SA176's B105 correction release-accepted retained SA171 lock work, and SA172's
+  PostgreSQL-backed correction is now complete and archived. The lane has no open v88 ticket; its
+  exclusive PostgreSQL/Docker slot remains reserved for future work that requires it. SA177's
+  predicate-text conformance assertion remains post-v88 and unscheduled.
 
 ### Track readiness — the three states
 
@@ -194,12 +192,12 @@ merge-back is not order-gated behind another lane.
 |---|---|---|---|---|---|
 | **W2** | SA164 (#25) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #25 | no |
 | **W1** | SA165 (#22) | **yes** — `deps: none`; the focused status/test reconciliation is green, and the next action is a fresh terminal SA165-R1 before entering the reviewed remainder | **no** — the current bytes lack a fresh SA165-R1 and the `EV-8`-authorized verdict has not returned green | **yes after fresh review and a green verdict** — no cross-lane blocker remains | no |
-| **W3** | SA172 (#29) | **yes** — `deps: none` and W3 owns the required PostgreSQL slot | **yes** — its acceptance is proved against W3's own PostgreSQL slot | **yes** — nothing is ordered ahead of #29 | no |
+| **W3** | — *(empty)* | n/a — no open v88 ticket | n/a — no open v88 ticket | n/a — no merge pending | no |
 
-**W2 and W3 are truly green; W1 can start but cannot finish until a fresh SA165-R1 is green and
+**W2 is truly green; W3 is idle; W1 can start but cannot finish until a fresh SA165-R1 is green and
 SA165's `EV-8`-authorized final-candidate verdict is green.** **No open ticket remains on the
-release critical path**, so W2's and W3's green heads are real, useful work that is nonetheless
-filler with respect to the release date. W1's *cannot finish* is empirical, not a decision — the
+release critical path**, so W2's green head is real, useful work that is nonetheless filler with
+respect to the release date. W1's *cannot finish* is empirical, not a decision — the
 authorized verdict either returns green or it does not.
 
 **Behind the heads, the split changed two answers.** SA178 (#34, W2) is `deps: none` and W2-owned, so
@@ -308,7 +306,6 @@ One queue, one reviewed child at a time per worktree; merge-back follows the
 | 20 | **SA160** | C | 2 | W1 | SA161 | no |
 | 22 | **SA165** | C | 3 | W1 | — | no |
 | 25 | **SA164** | C | 3 | W2 | — | no |
-| 29 | **SA172** | C | 3 | W3 | — | no |
 | 31 | **SA174** | C | 3 | W2 | — *(band-C tail)* | no |
 | 32 | **SA175** | C | 3 | W2 | SA174 *(lane only)* | no |
 | 34 | **SA178** | C | 3 | W2 | SA164 *(lane only)* | no |
@@ -317,12 +314,12 @@ One queue, one reviewed child at a time per worktree; merge-back follows the
 Entries carry their declared queue or content dependencies, subject to fresh branch remeasurement
 before execution.
 
-Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #17, #18, #21, #23, #24, #26, #27, #28, #33 are **retired and not
+Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #17, #18, #21, #23, #24, #26, #27, #28, #29, #33 are **retired and not
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning.
 
-The per-lane heads are **#25 (W2), #22 (W1), and #29 (W3)**. SA167c's #21 release verdict,
-SA166's #24 testimony gate, and SA176's #33 release-gate correction are complete and archived. No
-open head is on the release critical path.
+The active per-lane heads are **#25 (W2) and #22 (W1)**; W3's queue is empty. SA167c's #21 release
+verdict, SA166's #24 testimony gate, SA172's #29 FORCE-RLS correction, and SA176's #33 release-gate
+correction are complete and archived. No open head is on the release critical path.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable by the upstream work **or
 by a maintainer reordering the lane**. One is a **hard content dependency** that no reorder clears:
@@ -330,8 +327,8 @@ by a maintainer reordering the lane**. One is a **hard content dependency** that
 the pair must not be split, so the run is ordered #19, #20). SA164's former prerequisite is settled:
 `django_apps:` is retired. **SA179 after SA165** is the second hard content dependency, added by the
 2026-09-05 split: SA179 retires the four tech-audit notes, and a note may only be retired once a
-verdict has covered the product bytes that discharge it. Band-C positions (19, 20, 22, 25, 29, 31,
-32, 34, 35) are *earliest-eligible*, not
+verdict has covered the product bytes that discharge it. Band-C positions (19, 20, 22, 25, 31, 32,
+34, 35) are *earliest-eligible*, not
 commitments, and may slip past the release. **SA174 (#31) and SA175 (#32) are W2 tail work**:
 neither has a content dependency and neither needs an exclusive slot.
 
@@ -347,7 +344,6 @@ Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`, 
 | SA178 | `scripts/gate_registry.json`, `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`, `docs/others/arch-audit.md` | **split from SA164 2026-09-05**; watchlist restatement and the `trigger_inputs` naming correction; **W2** — the registry never crosses worktrees |
 | SA165 | `quickscale_core/.../state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `OPERATIONS.md.j2` | retained product discharge; final-candidate release verdict pending on W1. **Documentation surfaces moved to SA179 2026-09-05**, which is what keeps the frozen candidate free of the files that record its own review |
 | SA179 | `docs/others/tech-audit.md`, `docs/index.md`, `docs/technical/v88_ticket_context.md`, `quickscale_core/tests/test_v88_ticket_context_consistency.py` | **split from SA165 2026-09-05**; audit-note retirement and status reconciliation; **W1** — no code file, and its own edits cannot invalidate a product verdict |
-| SA172 | `quickscale_modules/orgs/.../tenancy.py`, `docs/others/tech-audit.md` | **shrunk 2026-09-05** to the forward-template fix, its apply-twice proof, and the `db_table` derivation; **W3** — proved against a live PostgreSQL. The predicate-text assertion and its `scripts/test_isolation_conformance.sh` edit moved to post-v88 SA177, which is why SA172 no longer shares that file |
 | SA174 | `quickscale_modules/orgs/.../apps.py`, `docs/others/arch-audit.md` | **shrunk 2026-08-31** to correcting the false SSOT comment and demoting the finding; no emitted bytes, no generator surface, no emission fixture |
 | SA175 | `quickscale_cli/tests/test_beta_migration_ownership_conformance.py`, `quickscale_devtools/.../beta_migration.py`, `docs/others/arch-audit.md` | disposition-coherence assertion for the launcher↔settings contract; **W2** — no other open ticket touches either file |
 
@@ -391,7 +387,7 @@ marks as trigger-independent.
 `docs/technical/v88_ticket_context.md` at closeout. `docs/index.md` and any other current same-fact
 consumer join when the closeout changes a summarized count, status, dependency, schedule, or owner;
 `docs/others/tech-audit.md` is shared by
-SA160, SA161, SA172, and SA179 — SA165's own tech-audit edits moved to SA179 in the 2026-09-05
+SA160, SA161, and SA179 — SA165's own tech-audit edits moved to SA179 in the 2026-09-05
 split — and `docs/others/arch-audit.md` by SA164, SA174, SA175, and SA178, all four on W2. That is
 by design and is discharged by the handoff checklist. No lane assignment above puts a *code* file on
 two lanes.
@@ -469,8 +465,8 @@ surface.
   `573a57a34301e6a91971a7845095bd913bebd5e1`; do not treat historical reviewed tip
   `f3f29d915f5971c8f47e558a82c292ccfc86add0` as the current candidate. SA167d's completion-grade
   closeout stays archived as a conditional post-integration candidate. Preserve historical SA170 and
-  SA167c/SA167d evidence, do not reopen A-C product files, and do not alter SA172's later ownership
-  of the isolation script.
+  SA167c/SA167d evidence, do not reopen A-C product files, and do not alter SA177's post-v88
+  ownership of the isolation script.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/schema/state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `quickscale_core/.../templates/OPERATIONS.md.j2`, `docs/others/tech-audit.md`.
 
 - [ ] **SA179 — Reconcile SA165's documentation and retire its four audit notes.** `Band C · Tier 3 · W1 · merge #35 · deps: SA165 (verdict evidence)`
@@ -614,38 +610,6 @@ surface.
   **Verification:** `poetry run pytest scripts/test_gate_parity.py -q -o addopts= --no-cov`;
   `make check-gate-parity`; `make quality` no worse than found.
   **Shared conflict surface:** `scripts/gate_registry.json`, `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`, `docs/others/arch-audit.md`.
-
-- [ ] **SA172 — Make `apply_force_rls`'s idempotency claim true.** `Band C · Tier 3 · W3 · merge #29 · deps: none · shrunk 2026-09-05`
-  Closes tech-audit **TA72** (`force-rls-apply-idempotency-claim`, S4, opened 2026-08-28).
-  `quickscale_modules/orgs/.../tenancy.py:536-546` documents `apply_force_rls` as "**Idempotent**",
-  but `_FORCE_RLS_FORWARD_SQL` issues bare `CREATE POLICY` at `:510` and `:521`, and PostgreSQL has
-  no `CREATE POLICY IF NOT EXISTS`. A second application against an already-enrolled table aborts
-  the migration with `42710 duplicate_object`. The claim is safe today only because the one
-  re-applying caller, `refresh_force_rls_policies` (`:584`), calls `revert_force_rls` first, and the
-  reverse template already uses `DROP POLICY IF EXISTS`. The hazard is a future module migration
-  calling the helper on the documented assurance that doing so is safe — on the repository's most
-  security-critical migration helper.
-  **Scope reduced 2026-09-05.** The predicate-text conformance assertion this ticket used to carry
-  is the only part needing more than the two-line repair, and it is a *tooling* improvement rather
-  than a fix for TA72. It moved out to post-v88 **SA177** so this ticket can reach a checked box on
-  W3's slot in one short run. The tech audit's *"RLS policy assertions check existence, not predicate
-  text"* tooling gap therefore **stays open** and is not claimed here.
-  **Acceptance:** the forward template is prefixed with the same `DROP POLICY IF EXISTS` pair the
-  reverse template already carries, making the documented contract real (the two-line fix), **or**
-  the docstring is corrected to state the helper is not idempotent and must be preceded by
-  `revert_force_rls` — with a test asserting whichever contract is chosen by applying twice against
-  a real table and observing success rather than `42710 duplicate_object`; the read/write policy
-  split (`FOR ALL` tenant write plus `FOR SELECT` with the `operator_access` OR clause) is unchanged;
-  **TA72** is retired.
-  **Also carried here (watch items, not findings):** `refresh_force_rls_policies:596-620` derives
-  table names from the Django default convention and drops misses through `to_regclass(...) IS NOT
-  NULL` without warning — latent today (all 21 enrolled tables match the convention, empirically
-  verified) but a silent no-op the moment an enrolled model declares a non-conventional `db_table`.
-  Deriving from `apps.get_model(...)._meta.db_table`, the same source `check_tenant_model_isolation`
-  already uses, closes it in the same change. This item is retained here and **not** deferred with
-  SA177: it is a one-line source change, and a silent no-op in RLS enrollment is the failure mode
-  this ticket exists to remove.
-  **Shared conflict surface:** `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`, `docs/others/tech-audit.md`.
 
 ### Audit items deliberately **not** ticketed
 
