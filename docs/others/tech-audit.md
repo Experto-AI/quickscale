@@ -169,7 +169,6 @@ function getCsrfToken(): string {
 |---|---|---|
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The shared-helper fix is the real prevention |
 | RLS policy assertions check existence, not predicate text | **TA72**, structural smell #3 | Extend the isolation conformance suite to assert the policy `qual`/`with_check` text from `pg_policies` matches the `_FORCE_RLS_FORWARD_SQL` template for each enrolled table — this pins the operator-read/tenant-write split as a gate rather than a comment |
-| No gate requires a changelog/ticket trail for behavioural commits | — | **Carried.** Remains maintainer-process risk rather than a source finding |
 
 ---
 

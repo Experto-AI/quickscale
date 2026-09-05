@@ -953,20 +953,20 @@ class TestMalformedSources:
 class TestParserPrecision:
     """Extraction functions correctly identify gates in each source."""
 
-    def test_serial_extracts_all_nine_registered_conformance_gates(self) -> None:
-        """The serial path in check_ci_locally.sh has all nine registered gates."""
+    def test_serial_extracts_all_ten_registered_conformance_gates(self) -> None:
+        """The serial path in check_ci_locally.sh has all ten registered gates."""
         targets = _extract_check_ci_serial_gates(CHECK_CI)
         expected = set(_registry_local_gate_targets())
         assert targets == expected, f"Serial extraction returned {targets}, expected {expected}"
 
-    def test_parallel_extracts_all_nine_registered_conformance_gates(self) -> None:
-        """The parallel path in check_ci_locally.sh has all nine registered gates."""
+    def test_parallel_extracts_all_ten_registered_conformance_gates(self) -> None:
+        """The parallel path in check_ci_locally.sh has all ten registered gates."""
         targets = _extract_check_ci_parallel_gates(CHECK_CI)
         expected = set(_registry_local_gate_targets())
         assert targets == expected, f"Parallel extraction returned {targets}, expected {expected}"
 
-    def test_hosted_has_all_nine_registered_conformance_jobs(self) -> None:
-        """ci.yml job names include all nine registered conformance jobs."""
+    def test_hosted_has_all_ten_registered_conformance_jobs(self) -> None:
+        """ci.yml job names include all ten registered conformance jobs."""
         ci_jobs = _extract_ci_job_names(CI_YML)
         expected_jobs: frozenset[str] = frozenset(
             {
@@ -976,6 +976,7 @@ class TestParserPrecision:
                 "module-app-declaration-gate",
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
+                "commit-testimony-gate",
                 "check-gate-suites",
                 "dependency-vulnerabilities-gate",
                 "security-static-analysis-gate",
@@ -1011,7 +1012,7 @@ class TestParserPrecision:
         """Serial extraction should not pick gates that only exist in parallel."""
         serial = _extract_check_ci_serial_gates(CHECK_CI)
         parallel = _extract_check_ci_parallel_gates(CHECK_CI)
-        # All nine registered conformance gates are in both — verify this holds
+        # All ten registered conformance gates are in both — verify this holds
         assert serial == parallel, (
             f"Serial and parallel extraction disagree: serial={serial}, parallel={parallel}"
         )
@@ -1192,6 +1193,7 @@ class TestParserPrecision:
             "dependency-vulnerabilities-gate": (),
             "security-static-analysis-gate": (),
             "csrf-exempt-gate": (),
+            "commit-testimony-gate": (),
             "isolation-conformance": (
                 "backups-validation",
                 "module-manifest-contract",
@@ -1224,14 +1226,15 @@ class TestParserPrecision:
                 "module-app-declaration-gate",
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
+                "commit-testimony-gate",
                 "check-gate-suites",
                 "dependency-vulnerabilities-gate",
                 "security-static-analysis-gate",
             ),
         }
 
-    def test_all_eighteen_bound_hosted_run_values_match_current_source(self) -> None:
-        """The nine bound hosted jobs expose their eighteen exact run values."""
+    def test_all_twenty_bound_hosted_run_values_match_current_source(self) -> None:
+        """The ten bound hosted jobs expose their twenty exact run values."""
         bound_jobs = {
             "module-core-compat",
             "module-core-import-linter",
@@ -1239,6 +1242,7 @@ class TestParserPrecision:
             "module-app-declaration-gate",
             "org-context-primitives-gate",
             "csrf-exempt-gate",
+            "commit-testimony-gate",
             "check-gate-suites",
             "dependency-vulnerabilities-gate",
             "security-static-analysis-gate",
@@ -1259,6 +1263,10 @@ class TestParserPrecision:
                 "make check-org-context-primitives\n",
             ),
             "csrf-exempt-gate": ("poetry install --with dev\n", "make check-csrf-exempt\n"),
+            "commit-testimony-gate": (
+                "poetry install --with dev\n",
+                "make check-commit-testimony\n",
+            ),
             "check-gate-suites": ("poetry install --with dev\n", "make check-gate-suites\n"),
             "dependency-vulnerabilities-gate": (
                 "poetry install --with dev\n",
@@ -2863,6 +2871,7 @@ class TestMakefileTargetParsing:
         targets = _extract_makefile_targets(makefile)
         for target in (
             "check-core-compat",
+            "check-commit-testimony",
             "check-csrf-exempt",
             "check-dependency-vulnerabilities",
             "check-gate-parity",
@@ -2893,7 +2902,7 @@ class TestYamlStructuralParsing:
     def test_ci_job_names_extracted(self) -> None:
         """ci.yml job names are extracted via structural YAML parsing."""
         jobs = _extract_ci_job_names(CI_YML)
-        # Should include the nine registered conformance gate job names
+        # Should include the ten registered conformance gate job names
         for job in (
             "module-core-compat",
             "module-core-import-linter",
@@ -2901,6 +2910,7 @@ class TestYamlStructuralParsing:
             "module-app-declaration-gate",
             "org-context-primitives-gate",
             "csrf-exempt-gate",
+            "commit-testimony-gate",
             "check-gate-suites",
             "dependency-vulnerabilities-gate",
             "security-static-analysis-gate",
@@ -3337,7 +3347,7 @@ class TestMakeRegistryDerivation:
         assert (
             "make check-core-compat check-module-core-imports check-manifest-sync "
             "check-module-app-declaration check-org-context-primitives "
-            "check-csrf-exempt check-gate-suites "
+            "check-csrf-exempt check-commit-testimony check-gate-suites "
             "check-dependency-vulnerabilities check-security-static-analysis check-gate-parity"
         ) in output
 
@@ -3382,7 +3392,7 @@ class TestMakeRegistryDerivation:
         assert (
             "make check-core-compat check-module-core-imports check-manifest-sync "
             "check-module-app-declaration check-org-context-primitives "
-            "check-csrf-exempt check-gate-suites "
+            "check-csrf-exempt check-commit-testimony check-gate-suites "
             "check-dependency-vulnerabilities check-security-static-analysis"
         ) in output
         assert "make temporary-local-non-check" not in output
@@ -3425,7 +3435,7 @@ class TestHostedCiGateGeneration:
         workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
         registry = _parse_registry(DEFAULT_REGISTRY)
         jobs, needs, run_values = self._projection(workflow_text)
-        assert len(jobs) == 15
+        assert len(jobs) == 16
         assert needs["test"] == (
             "backups-validation",
             "module-manifest-contract",
@@ -3435,6 +3445,7 @@ class TestHostedCiGateGeneration:
             "module-app-declaration-gate",
             "org-context-primitives-gate",
             "csrf-exempt-gate",
+            "commit-testimony-gate",
             "check-gate-suites",
             "dependency-vulnerabilities-gate",
             "security-static-analysis-gate",
@@ -3519,7 +3530,8 @@ class TestHostedCiGateGeneration:
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
             "org-context-primitives-gate, "
-            "csrf-exempt-gate, check-gate-suites, dependency-vulnerabilities-gate, "
+            "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
+            "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
@@ -3571,7 +3583,8 @@ class TestHostedCiGateGeneration:
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
             "org-context-primitives-gate, "
-            "csrf-exempt-gate, check-gate-suites, dependency-vulnerabilities-gate, "
+            "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
+            "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
@@ -3610,7 +3623,8 @@ class TestHostedCiGateGeneration:
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
             "org-context-primitives-gate, "
-            "csrf-exempt-gate, check-gate-suites, dependency-vulnerabilities-gate, "
+            "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
+            "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate]" in written
         )
 

@@ -60,6 +60,27 @@
   status reconciliation is exactly what the checkpoint forbade; it is SA176's work and needs its own
   review of the exact corrected tip.
 
+- **SA166 behavioural-commit testimony gate completed (2026-09-05).** Added the fail-closed
+  `scripts/check_commit_testimony.py` range checker and registered `make check-commit-testimony`
+  across local serial/parallel validation and hosted CI. Every non-merge commit that changes
+  `.github/workflows/**`, `scripts/gate_registry.json`, or a provisioning-station line must now carry
+  an `SA` ticket, an integer `vNN` roadmap reference, or a same-commit `CHANGELOG.md` entry. The
+  generated hosted job checks out full history and joins the `test` dependency set; the publish,
+  lint, isolation, and public CLI surfaces are unchanged.
+  **Acceptance evidence.** The hermetic checker suite returned **14 passed**; the complete parity
+  suite returned **235 passed**; direct parity and generated-workflow checks returned exit 0. The
+  deliberate untitled-workflow probe failed for the intended testimony reason inside its temporary
+  repository, while the workspace workflow SHA-256 remained exactly
+  `4e28dc9bab8a7167ddd683a5d319631c1513bdeca63ad152d754790deeb17cef` before and after. Auditing
+  then-current `0.86.0..HEAD` range examined 1,279 non-merge commits and reported nine protected
+  behavioural commits without testimony (0.70%); all nine genuinely changed a protected control,
+  including the motivating `d4b0e8342c03` and `d3d4c63355c1` release-shaped commits, so no known
+  legitimate no-behaviour release commit was rejected. The carried tech-audit tooling gap is retired.
+  SA166 is removed from the open-work-only roadmap and context, merge position **#24** is retired,
+  SA164 becomes W2 head with `deps: none`, and the queue is now **seven open v88 ticket entries across
+  seven open merge positions**, lanes **W1 3 · W2 3 · W3 1**. SA171 and SA176 remain archived, and
+  SA172 remains W3 head with `deps: none`.
+
 - **Final-candidate release authority for SA165 granted as `EV-8` (2026-09-05).** The one maintainer
   decision left open by the preceding hygiene pass is settled. **Decision: granted.** `EV-8`
   authorizes **exactly one** replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict over
@@ -186,6 +207,19 @@
   `quickscale_core/tests/test_v88_ticket_context_consistency.py`); do not redo A-C or rewrite
   historical SA170/SA167 evidence. Only a green verdict over those settled bytes may archive the
   four notes, remove SA165, retire #22, and release SA161 as W1's head.
+
+  **Pre-R1 reconciliation measurement trail (2026-09-05).** After synchronizing the retained
+  checkpoint with current `v88` and preserving W3's SA176 state, the exact focused command
+  `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`
+  returned **4 failed / 36 passed** — the expected evidence for this retained stop: the helper still
+  required `SA165-R1 remains tracked`, the readiness and current-action canaries still targeted the
+  pre-R1 wording, and the current-status guard rejected the prior checkpoint's ungraded-correction
+  marker. Removing that stale marker made the guard green and the same command returned **3 failed /
+  37 passed**, leaving the three intended pre-R1 status/action failures. The bounded reconciliation
+  then updated those contracts without weakening any assertion — the stale
+  `test_v88_sa165_readiness_rejects_green_without_release_authority` name now describes rejection
+  before the `EV-8` verdict — and the exact command returned **40 passed**. `EV-8` remains unspent
+  and a fresh terminal SA165-R1 over the reconciled six blobs is still required.
 
 - **Both open maintainer decisions settled (2026-09-04) — Phase-F authority granted as `EV-7`, and
   the SA174/SA175 lane assignment confirmed.** No maintainer decision remains open anywhere in the

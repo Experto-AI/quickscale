@@ -363,7 +363,7 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     assert "SA167c verdict is green and archived" in dependency_graph, (
         "SA167c dependency graph must record the archived green verdict"
     )
-    assert "start SA166 (#24)" in next_actions
+    assert "start SA164 (#25)" in next_actions
 
 
 def _assert_sa174_sa175_current_displacement_rule(roadmap_text: str) -> None:
@@ -552,8 +552,21 @@ def _assert_sa167c_current_status(
     roadmap = _roadmap_tickets(roadmap_text)
     assert "SA167c" not in roadmap
     assert 21 not in {metadata.merge_position for metadata in roadmap.values()}
-    assert roadmap["SA166"].dependencies == frozenset()
-    assert roadmap["SA164"].dependencies == frozenset({"SA166"})
+    assert "SA166" not in roadmap
+    assert 24 not in {metadata.merge_position for metadata in roadmap.values()}
+    assert "## SA166" not in context_text
+    assert roadmap["SA164"].dependencies == frozenset()
+
+    latest_sa166_closeout = re.search(
+        r"(?ms)^- \*\*SA166 behavioural-commit testimony gate\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_sa166_closeout is not None
+    normalized_sa166_closeout = " ".join(latest_sa166_closeout.group(0).split())
+    assert "make check-commit-testimony" in normalized_sa166_closeout
+    assert "14 passed" in normalized_sa166_closeout
+    assert "235 passed" in normalized_sa166_closeout
+    assert "merge position **#24**" in normalized_sa166_closeout
 
     latest_closeout = re.search(
         r"(?ms)^- \*\*SA167c Phase F release verdict green\b.*?(?=^- \*\*)",
@@ -947,7 +960,9 @@ def test_v88_sa167c_current_status_rejects_open_dependency_claim() -> None:
     context = CONTEXT.read_text(encoding="utf-8")
     docs_index = DOCS_INDEX.read_text(encoding="utf-8")
     arch_audit = (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8")
-    current_claim = "SA167c is closed and archived; SA166 is now `deps: none`."
+    current_claim = (
+        "SA167c is closed and archived; its completed verdict released SA166."
+    )
     assert current_claim in arch_audit
     mutated_arch_audit = arch_audit.replace(
         current_claim,
@@ -1367,6 +1382,69 @@ def test_v88_sa165_dependency_release_does_not_imply_ticket_release() -> None:
         text = path.read_text(encoding="utf-8")
         assert expected_claim in text, path
         assert "SA165 is released with `deps: none`" not in text, path
+
+
+def _assert_latest_closeout_uses_current_queue_counts(
+    roadmap_text: str, changelog_text: str
+) -> None:
+    roadmap = _roadmap_tickets(roadmap_text)
+    v88 = {
+        ticket: metadata
+        for ticket, metadata in roadmap.items()
+        if metadata.kind == "v88"
+    }
+    positions = {
+        metadata.merge_position
+        for metadata in v88.values()
+        if metadata.merge_position is not None
+    }
+    expected = (
+        f"{_number_word(len(v88))} open v88 ticket entries across "
+        f"{_number_word(len(positions))} open merge positions"
+    )
+    latest_closeout_entry = re.search(
+        r"(?ms)^- \*\*SA166 behavioural-commit testimony gate\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_closeout_entry is not None
+    normalized_entry = " ".join(latest_closeout_entry.group(0).split())
+    assert expected in normalized_entry
+
+
+def test_v88_latest_closeout_uses_current_queue_counts() -> None:
+    _assert_latest_closeout_uses_current_queue_counts(
+        ROADMAP.read_text(encoding="utf-8"),
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+    )
+
+
+def test_v88_latest_closeout_count_drift_is_expected_red_canary() -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    v88 = {
+        ticket: metadata
+        for ticket, metadata in _roadmap_tickets(roadmap).items()
+        if metadata.kind == "v88"
+    }
+    positions = {
+        metadata.merge_position
+        for metadata in v88.values()
+        if metadata.merge_position is not None
+    }
+    current_pattern = (
+        rf"{_number_word(len(v88))}\s+open\s+v88\s+ticket\s+entries\s+across\s+"
+        rf"{_number_word(len(positions))}\s+open\s+merge\s+positions"
+    )
+    mutated, replacement_count = re.subn(
+        current_pattern,
+        "one open v88 ticket entries across two open merge positions",
+        changelog,
+        count=1,
+    )
+
+    assert replacement_count == 1
+    with pytest.raises(AssertionError):
+        _assert_latest_closeout_uses_current_queue_counts(roadmap, mutated)
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:

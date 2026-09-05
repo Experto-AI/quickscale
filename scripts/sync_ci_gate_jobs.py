@@ -64,6 +64,7 @@ HOSTED_GATE_ORDER = (
     "check-module-app-declaration",
     "check-org-context-primitives",
     "check-csrf-exempt",
+    "check-commit-testimony",
     "check-gate-suites",
     "check-dependency-vulnerabilities",
     "check-security-static-analysis",
@@ -119,6 +120,7 @@ class HostedJobSpec:
 
     display_name: str
     check_step_name: str
+    full_history: bool = False
 
 
 HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
@@ -145,6 +147,11 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     "check-csrf-exempt": HostedJobSpec(
         "CSRF-Exempt Gate (SA46)",
         "Verify every csrf_exempt callsite pairs with _enforce_csrf or signature verification",
+    ),
+    "check-commit-testimony": HostedJobSpec(
+        "Behavioural Commit Testimony Gate (SA166)",
+        "Verify behavioural commits carry an SA reference or changelog entry",
+        full_history=True,
     ),
     "check-gate-suites": HostedJobSpec(
         "Registered Script Gate Suites",
@@ -322,7 +329,7 @@ def _locate_hosted_jobs(
     jobs: dict[str, Any], label: str, *, allow_missing: bool = False
 ) -> dict[str, str]:
     """
-    Locate the nine hosted jobs by their static catalog display names.
+    Locate the ten hosted jobs by their static catalog display names.
 
     Display metadata is helper-owned and static, so the generated job IDs may
     be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
@@ -399,7 +406,13 @@ def _validate_workflow_projection(
         actual_uses = tuple(step.get("uses") for step in steps if "uses" in step)
         if actual_uses != expected_uses:
             raise GeneratorError(f"ci.yml: jobs.{job_id} action versions/ordering drifted")
-        if steps[0] != {"name": "Checkout code", "uses": "actions/checkout@v6"}:
+        expected_checkout: dict[str, Any] = {
+            "name": "Checkout code",
+            "uses": "actions/checkout@v6",
+        }
+        if spec.full_history:
+            expected_checkout["with"] = {"fetch-depth": "0"}
+        if steps[0] != expected_checkout:
             raise GeneratorError(f"ci.yml: jobs.{job_id} checkout step drifted")
         if steps[1] != {
             "name": "Set up Python 3.14",
@@ -462,14 +475,16 @@ def _validate_workflow_projection(
 
 def _render_job(gate_id: str, job_id: str, make_target: str) -> str:
     spec = HOSTED_JOB_CATALOG[gate_id]
+    checkout = "    - name: Checkout code\n      uses: actions/checkout@v6\n" + (
+        "      with:\n        fetch-depth: 0\n" if spec.full_history else ""
+    )
     return (
         f"  {job_id}:\n"
         f"    name: {spec.display_name}\n"
         "    runs-on: ubuntu-24.04\n"
         "\n"
         "    steps:\n"
-        "    - name: Checkout code\n"
-        "      uses: actions/checkout@v6\n"
+        f"{checkout}"
         "\n"
         "    - name: Set up Python 3.14\n"
         "      uses: actions/setup-python@v6\n"
@@ -642,7 +657,7 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
 
 def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
     """
-    Locate the nine hosted job header lines by their display names.
+    Locate the ten hosted job header lines by their display names.
 
     Use static display metadata to find the (possibly stale) hosted job IDs;
     this permits a registry ``ci_job`` (F-005) or Make-target edit while

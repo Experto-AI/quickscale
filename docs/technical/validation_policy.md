@@ -24,6 +24,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
+- `make check-commit-testimony` - Require each behavioural control commit to carry an SA ticket, integer vNN roadmap reference, or same-commit changelog testimony.
 - `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
 - `make check-dependency-vulnerabilities` - Run the blocking Trivy v0.74.0 scan of both committed Poetry lockfiles.
 - `make check-security-static-analysis` - Run the blocking focused Bandit 1.9.4 source scan.
@@ -37,6 +38,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - Select the test command from the validation tier below rather than defaulting to the widest one. `make test` is a `task`/`release`-tier command and is never the per-change check.
 - Use `make ci-e2e` for release-gate validation when the full hardening and release path needs E2E coverage.
 - Use `make version-check` when verifying repository package-version parity.
+- Use `make check-commit-testimony` to validate hosted-workflow, gate-registry, and provisioning-station commit testimony over the selected Git range.
 - Use `make check-gate-suites` when validating the registry's complete `scripts/` conformance population; it is cache-free and does not contribute product coverage.
 - Use `make isolation-conformance` when Docker, PostgreSQL 18 client tools, and Poetry dependencies are available. The target delegates to the owned isolation profile, which provisions scoped databases on a dynamic loopback endpoint; hosted service/lease behavior remains distinct.
 - Do not invent or document nonexistent helper scripts such as `./scripts/test_all.sh`.
@@ -115,9 +117,9 @@ pick the tier, run its command once.
 
 ### Registered script-gate and isolation execution
 
-The registry-derived local and hosted conformance flow includes eight registered hosted
-gates: the six established conformance gates plus blocking Trivy dependency-vulnerability
-and Bandit static-security gates. `make check-gate-suites` is the owning execution context for all current
+The registry-derived local and hosted conformance flow includes ten registered hosted
+gates, including the CSRF-exempt contract, behavioural-commit testimony, blocking Trivy
+dependency-vulnerability, and Bandit static-security gates. `make check-gate-suites` is the owning execution context for all current
 `scripts/test_*.py` suites and invokes exactly:
 
 ```text
@@ -126,7 +128,7 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains six
-separately justified unowned jobs, for fourteen jobs total. `isolation-conformance` is
+separately justified unowned jobs, for sixteen jobs total. `isolation-conformance` is
 one of those hosted-unowned jobs: Make exposes the same runner for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by
 `scripts/provision_ci_postgres.sh`: Docker allocates a dynamic loopback endpoint and

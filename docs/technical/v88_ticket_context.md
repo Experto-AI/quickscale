@@ -40,15 +40,14 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-            SA160         SA165          SA161          SA166
-            SA164         SA152                         SA172
-            SA174           │               │           SA175
-             │             │               │        (testimony
-        (cookies,      (state/tool     (locks, dead     trail,
-         watchlists,    fallbacks,      code)         policy-text
-         command sets,  silent skips)                assertions,
-        RLS docstring)                              file-group
-                                                     coherence)
+            SA160         SA165          SA161          SA172
+            SA164         SA152                         SA175
+            SA174           │               │              │
+              │             │               │        (policy-text
+         (cookies,      (state/tool     (dead code)    assertions,
+          watchlists,    fallbacks,                    file-group
+          command sets,  silent skips)                 coherence)
+          RLS docstring)
 ```
 
 **The one sentence:** *Every fact should have exactly one home, and every consumer should
@@ -64,7 +63,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks remain a bounded structural watch question | SA160, SA164, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; SA165's retained state-read and isolation-skip corrections await a final-candidate release verdict; SA152 still carries an independent green-by-absence path | SA165, SA152 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | dead code nobody deletes | SA161 |
-| **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA166, SA172, SA175 |
+| **Unenforced policy** — a rule exists only in a human's head | RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA172, SA175 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
 context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md), so the
@@ -478,47 +477,6 @@ genuinely independent); and the roughly six count-pinned oracles in `scripts/tes
 Each is not fired, each fails loudly, and each has a written trigger. Keep the triggers intact —
 restating is the work, not removing. Note the shape: all three were **created by a fix**, which is
 the ordinary cost of centralization and the reason the fix-regression question is asked every pass.
-
----
-
-## SA166 — Require a testimony trail for behavioural commits
-
-### The mental model
-
-Every other ticket in this release makes a *machine* tell the truth. This one makes a
-*commit* tell the truth.
-
-### The evidence
-
-`d3d4c633` and `d4b0e834` were both titled **"v0.87.0: QuickScale 0.87.0"** while in fact
-changing hosted and publish provisioning. `d3d4c633` also left a repository conformance test
-red — a stale publish-parity oracle, since repaired and closed.
-
-Both audits independently flagged the same shape: **a release-shaped message carrying a CI
-topology change**. It was read closely only because the arch audit's delta-classification
-step treats unlabeled-behavioural commits as read-at-full-depth. Absent that convention, it
-would have shipped unexamined — and it did ship a red test.
-
-### Why it is Tier 3
-
-The audit records this as **maintainer-process risk**, not a source finding. The registered
-gate layer is an executed context, so this ticket can add its process evidence without
-reopening the gate-suite work.
-
-### The design constraint that decides whether this succeeds
-
-*"false-positive cost is measured on the existing history and the rule is narrowed until it
-is quiet on legitimate release commits."*
-
-A noisy process gate gets a bypass flag, and a bypass flag gets used by default. Measure the
-rule against real history **before** turning it on. If it fires on legitimate release
-commits, narrow it — do not add an override.
-
-Scope: a change touching `.github/workflows/`, `scripts/gate_registry.json`, or the
-provisioning stations requires a roadmap ticket reference or a `CHANGELOG.md` entry,
-enforced mechanically. Registered in `scripts/gate_registry.json`, passing
-`scripts/check_gate_parity.py`. Prove it with a deliberately introduced untitled workflow
-change, reverted before merge.
 
 ---
 

@@ -142,6 +142,22 @@
             ]
         },
         {
+            "id": "check-commit-testimony",
+            "description": "Behavioural commits carry an SA roadmap reference or same-commit changelog entry",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted"
+            ],
+            "bindings": {
+                "make_target": "check-commit-testimony",
+                "ci_job": "commit-testimony-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
             "id": "frontend-proof",
             "description": "Render showcase_react and run pnpm install/type-check/build",
             "required_contexts": [

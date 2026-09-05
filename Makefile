@@ -63,7 +63,7 @@
         version-check version-update bump-version \
         check-core-compat check-module-core-imports check-manifest-sync \
         check-module-app-declaration check-org-context-primitives \
-         check-csrf-exempt check-gate-suites isolation-conformance \
+         check-csrf-exempt check-commit-testimony check-gate-suites isolation-conformance \
          check-dependency-vulnerabilities check-security-static-analysis security-negative-probes \
          check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
@@ -237,6 +237,7 @@ help:
 	@echo "  make check-module-app-declaration - Evidence-bearing modules declare Django apps wiring"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
+	@echo "  make check-commit-testimony       - Behavioural commits carry an SA reference or same-commit changelog entry"
 	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability scan"
 	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts"
@@ -908,6 +909,14 @@ check-org-context-primitives:
 # Exits 1 on any unprotected csrf_exempt usage.
 check-csrf-exempt:
 	@$(PYTHON) scripts/check_csrf_exempt_gate.py
+
+# --- Behavioural Commit Testimony Gate (SA166) ---
+
+# Inspect every non-merge commit in the selected base-to-head range. Changes
+# to workflows, the gate registry, or PostgreSQL provisioning stations require
+# either an SA roadmap-ticket reference or a same-commit changelog entry.
+check-commit-testimony:
+	@$(PYTHON) scripts/check_commit_testimony.py
 
 # --- SA123 Security Gates ---
 
