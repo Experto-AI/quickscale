@@ -139,13 +139,13 @@ already avoids it — by accident of ordering, not by contract.
 The hazard is the next module migration. Its author reads "idempotent", calls the helper on an
 already-enrolled table, and the migration fails in production rather than in review.
 
-### The two honest resolutions
+### The resolution
 
-Either make the documentation match the code (say it is not idempotent and must be preceded by
-`revert_force_rls`), or make the code match the documentation by prefixing the forward template with
-the same `DROP POLICY IF EXISTS` pair the reverse template already carries. The second is two lines
-and leaves the repository with a true contract instead of a warning, which is why the acceptance
-criteria prefer it while permitting either.
+Two resolutions were available: make the documentation match the code (say it is not idempotent and
+must be preceded by `revert_force_rls`), or make the code match the documentation by prefixing the
+forward template with the same `DROP POLICY IF EXISTS` pair the reverse template already carries.
+The second is settled: it is two lines and leaves the repository with a true contract instead of a
+warning. The acceptance criteria name it rather than offering the choice.
 
 ### The assertion that is missing is a separate concern
 
@@ -245,9 +245,9 @@ correct.
 
 ### Implementation shape
 
-Delete both, or leave each as a comment pointing at the orgs helper. **Either way remove the
-misleading behavioural comment at `production.py.j2:119-122`** — that is the part that must
-not survive.
+Delete both. Annotating unreachable code keeps it in the emitted tree for no benefit, so the
+acceptance criteria name deletion rather than offering the choice. **Remove the misleading
+behavioural comment at `production.py.j2:119-122`** — that is the part that must not survive.
 
 Keep unchanged: the uppercase settings themselves, and the `REST_FRAMEWORK["NUM_PROXIES"]`
 recomputation. Both are live.

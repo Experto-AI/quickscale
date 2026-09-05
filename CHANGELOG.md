@@ -2,6 +2,28 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Roadmap simplification pass — two either/or acceptance criteria settled (2026-09-05).** Both
+  open tickets that offered a choice between fixing the defect and documenting it now name the fix.
+  **SA172** commits to the two-line `DROP POLICY IF EXISTS` prefix on `_FORCE_RLS_FORWARD_SQL`
+  rather than permitting a docstring correction: the repair leaves the repository with a true
+  idempotency contract instead of a warning on its most security-critical migration helper, and the
+  apply-twice proof is the same test either way. **SA161** commits to deleting both dead
+  `get_client_ip` definitions rather than permitting a pointer comment: `django.conf.settings`
+  copies only uppercase names, so neither definition is reachable, and annotating unreachable code
+  keeps it in the emitted tree for no benefit. The misleading behavioural comment at
+  `production.py.j2:119-122` was already unconditional and is unchanged. The W2 dependency-graph
+  row also now draws `SA174 ─► SA175`, matching the merge-order table's lane-ordering edge that the
+  bare `·` separator obscured.
+  **Nothing was closed, widened, or rescheduled by this pass.** No band, lane, merge position,
+  dependency edge, conflict surface, or audit finding changed; the queue, its lane split, and its
+  three heads are exactly as the SA164 closeout below derives them, and this entry deliberately
+  restates no derived count so that closeout keeps the consistency contract's latest-closeout
+  anchor. `docs/technical/v88_ticket_context.md` is reconciled
+  in the same change and `quickscale_core/tests/test_v88_ticket_context_consistency.py` passes
+  **41 tests** with no assertion weakened. The audit documents were deliberately left untouched:
+  their closed-ticket narratives are pinned verbatim by that consistency contract, and the
+  consistency test belongs to **SA179**, which cannot finish until SA165's `EV-8` verdict returns.
+
 - **SA164 migration-squash guardrail completed (2026-09-05).** The W2 head had `deps: none`,
   every task prerequisite was settled, and the roadmap carried no open maintainer decision, so the
   bounded repair proceeded. `test_sa92_migration_squash_guardrail.py` now makes `_migdir()` raise

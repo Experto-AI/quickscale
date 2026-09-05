@@ -76,7 +76,7 @@ v88 — three worktrees, eight open merge positions carrying eight open ticket e
 
 W2 (gates & declared wiring)          band-C tail
   SA178                        #34
-  SA174 · SA175                #31, #32
+  SA174 ─► SA175              #31, #32
 
 W1 (module wiring + generated-output fixes)
   SA165 ─┬─► SA179             #22, #35
@@ -413,7 +413,7 @@ surface.
 
 - [ ] **SA161 — Remove the dead `get_client_ip` definitions from generated settings.** `Band C · Tier 3 · W1 · merge #19 · deps: SA165 (worktree ordering)`
   Closes tech-audit **TA68** (`generated-settings-dead-client-ip`, S4). `templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` both define a module-level `get_client_ip(request)`, and the production copy rebinds it under a comment claiming the rebind exists "so that production defaults … are actually in effect at request time". Neither is reachable: Django's `Settings` copies only **uppercase** names off the settings module, so `django.conf.settings.get_client_ip` does not exist, and grep across all templates returns only the two definitions. The live implementation is `quickscale_modules_orgs.current_org.get_client_ip`, which reads the uppercase `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is correct.
-  **Acceptance:** both definitions are deleted, or each carries a comment pointing at the orgs helper as the live implementation; the uppercase settings and the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation are retained unchanged; the misleading behavioural comment at `production.py.j2:119-122` is removed either way; a generated project boots and proxy-aware client-IP resolution is unchanged, asserted by a test; emission parity is rebaselined with rationale; the tech-audit finding is retired.
+  **Acceptance:** both definitions are deleted — dead code that no caller reaches is removed rather than annotated; the uppercase settings and the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation are retained unchanged; the misleading behavioural comment at `production.py.j2:119-122` is removed either way; a generated project boots and proxy-aware client-IP resolution is unchanged, asserted by a test; emission parity is rebaselined with rationale; the tech-audit finding is retired.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/`, emission parity baselines, `docs/others/tech-audit.md`.
 
 - [ ] **SA165 — Discharge the tech-audit watch items that carry an action.** `Band C · Tier 3 · W1 · merge #22 · deps: none`
@@ -608,10 +608,10 @@ surface.
   W3's slot in one short run. The tech audit's *"RLS policy assertions check existence, not predicate
   text"* tooling gap therefore **stays open** and is not claimed here.
   **Acceptance:** the forward template is prefixed with the same `DROP POLICY IF EXISTS` pair the
-  reverse template already carries, making the documented contract real (the two-line fix), **or**
-  the docstring is corrected to state the helper is not idempotent and must be preceded by
-  `revert_force_rls` — with a test asserting whichever contract is chosen by applying twice against
-  a real table and observing success rather than `42710 duplicate_object`; the read/write policy
+  reverse template already carries, making the documented contract real — the two-line fix, chosen
+  over correcting the docstring because it leaves a true contract rather than a warning; a test
+  asserts it by applying twice against a real table and observing success rather than
+  `42710 duplicate_object`; the read/write policy
   split (`FOR ALL` tenant write plus `FOR SELECT` with the `operator_access` OR clause) is unchanged;
   **TA72** is retired.
   **Also carried here (watch items, not findings):** `refresh_force_rls_policies:596-620` derives
