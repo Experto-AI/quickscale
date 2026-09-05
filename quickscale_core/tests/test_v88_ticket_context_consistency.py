@@ -12,7 +12,8 @@ Scope, deliberately narrow (2026-08-31).  The three primary live invariants are 
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
 context.  Retained expected-red canaries prove those parser/guard boundaries, while explicit
 current-status contracts preserve the integration-ready SA167d closeout, the green SA167c
-Phase-F verdict authorized under ``EV-7``, and the final SA170 closeout.  The suite previously carried twelve
+Phase-F verdict authorized under ``EV-7``, the final SA170 closeout, and the retained SA171
+B105 release blocker.  The suite previously carried twelve
 mutation canaries across 496 lines, including one
 that mutated a hardcoded ``deps:`` literal naming a specific ticket; archiving that ticket silently
 disarmed it, as did roadmap prose that happened to spell the same literal first.  The remaining
@@ -440,9 +441,15 @@ def _assert_lane_assignment_parity(roadmap_text: str) -> None:
         "### Dependency graph and critical path",
         "### Track rebalance",
     )
-    w3_count_word = _number_word(expected_counts["W3"])
+    w3_count = expected_counts["W3"]
+    w3_count_word = _number_word(w3_count)
+    queue_phrase = (
+        rf"its {w3_count_word} position is a \*queue\*"
+        if w3_count == 1
+        else rf"its {w3_count_word} positions are a \*queue\*"
+    )
     if not re.search(
-        rf"\bits {w3_count_word} positions are a \*queue\*",
+        rf"\b{queue_phrase}",
         dependency_graph,
         re.IGNORECASE,
     ):
@@ -608,6 +615,62 @@ def _assert_sa167c_current_status(
     assert "CLI **54 passed" in normalized_entry
 
 
+def _assert_sa171_retained_blocker(
+    roadmap_text: str,
+    docs_index_text: str,
+    arch_audit_text: str,
+    tech_audit_text: str,
+    changelog_text: str,
+) -> None:
+    """Keep retained lock work distinct from repository release acceptance."""
+    latest_checkpoint = re.search(
+        r"(?ms)^- \*\*SA171 retained-partial checkpoint\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_checkpoint is not None
+    current_status_consumers = {
+        "CHANGELOG.md": latest_checkpoint.group(0),
+        "docs/index.md": docs_index_text,
+        "docs/others/arch-audit.md": arch_audit_text,
+        "docs/others/tech-audit.md": tech_audit_text,
+        "docs/technical/roadmap.md": roadmap_text,
+    }
+    for path, text in current_status_consumers.items():
+        normalized_text = " ".join(text.split())
+        assert "SA171" in normalized_text, path
+        assert "B105" in normalized_text, path
+        assert re.search(
+            r"(?:not release-accepted|release acceptance (?:remains )?blocked|"
+            r"repository release acceptance is not|release-gate blocker)",
+            normalized_text,
+            re.IGNORECASE,
+        ), path
+        false_release_claim = re.search(
+            r"(?:\b(?:accepted|closed|release[- ]complete)\s+SA171\b|"
+            r"\bSA171\s+(?:is\s+|was\s+|has been\s+)?"
+            r"(?:accepted|closed|release[- ]complete)\b|"
+            r"\bSA171\b[^.\n]{0,160}\brepository release acceptance is complete\b)",
+            normalized_text,
+            re.IGNORECASE,
+        )
+        assert not false_release_claim, (
+            path,
+            false_release_claim.group(0) if false_release_claim else None,
+        )
+
+    for path, text in current_status_consumers.items():
+        if path == "docs/others/tech-audit.md":
+            continue
+        assert re.search(
+            r"(?:SA172 (?:remains |is )?held|hold(?:s)? SA172)",
+            " ".join(text.split()),
+            re.IGNORECASE,
+        ), path
+
+    assert "Operationally, the release path is complete" not in roadmap_text
+    assert "repository release acceptance is not" in roadmap_text
+
+
 def _assert_sa170_final_closeout(
     roadmap_text: str,
     context_text: str,
@@ -619,8 +682,8 @@ def _assert_sa170_final_closeout(
     assert "SA170" not in roadmap
     assert all(item.merge_position != 27 for item in roadmap.values())
     assert "## SA170" not in context_text
-    assert "#27 are **retired and not" in roadmap_text
-    assert roadmap["SA171"].dependencies == frozenset()
+    assert "#27, #28 are **retired and not" in roadmap_text
+    assert roadmap["SA172"].dependencies == frozenset()
 
     latest_closeout = re.search(r"(?ms)^- \*\*SA170\b.*?(?=^- \*\*)", changelog_text)
     assert latest_closeout is not None
@@ -639,6 +702,8 @@ def _assert_sa170_final_closeout(
         re.IGNORECASE,
     )
     for name, text in status_consumers.items():
+        if name == "CHANGELOG.md":
+            text = latest_closeout.group(0)
         normalized_text = " ".join(text.split())
         assert not stale_status.search(normalized_text), name
 
@@ -734,6 +799,13 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
         ),
         (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
     )
+    _assert_sa171_retained_blocker(
+        roadmap,
+        docs_index,
+        (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
+        (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+    )
     _assert_sa170_final_closeout(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
@@ -810,10 +882,10 @@ def test_v88_sa174_sa175_current_displacement_rule_rejects_contradiction() -> No
 @pytest.mark.parametrize(
     ("current_claim", "drifted_claim", "error_match"),
     [
-        ("W3 2**", "W3 3**", "lane count drift"),
+        ("W3 1**", "W3 2**", "lane count drift"),
         (
+            "its one position is a *queue*",
             "its two positions are a *queue*",
-            "its three positions are a *queue*",
             "W3 dependency-graph prose",
         ),
         (
@@ -885,6 +957,46 @@ def test_v88_sa167c_current_status_rejects_open_dependency_claim() -> None:
                 encoding="utf-8"
             ),
             (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
+        )
+
+
+def test_v88_sa171_retained_blocker_rejects_full_release_claim() -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    mutated = roadmap.replace(
+        "repository release acceptance is not",
+        "repository release acceptance is complete",
+        1,
+    )
+    assert mutated != roadmap
+    with pytest.raises(AssertionError):
+        _assert_sa171_retained_blocker(
+            mutated,
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        )
+
+
+@pytest.mark.parametrize("status", ["accepted", "closed", "release-complete"])
+def test_v88_sa171_retained_blocker_rejects_unqualified_tech_audit_claim(
+    status: str,
+) -> None:
+    tech_audit = (ROOT / "docs/others/tech-audit.md").read_text(encoding="utf-8")
+    retained_claim = "retired by the retained, implemented SA171 lock correction"
+    mutated_tech_audit = tech_audit.replace(
+        retained_claim,
+        f"retired by {status} SA171",
+        1,
+    )
+    assert mutated_tech_audit != tech_audit
+    with pytest.raises(AssertionError, match="docs/others/tech-audit.md"):
+        _assert_sa171_retained_blocker(
+            ROADMAP.read_text(encoding="utf-8"),
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
+            mutated_tech_audit,
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
         )
 
 
@@ -1140,7 +1252,11 @@ def _assert_sa165_retained_partial(
         r"final-candidate release verdict has not yet returned green \|",
         normalized_readiness,
     )
-    assert "W2 and W3 are truly green; W1 can start but cannot finish" in readiness
+    assert (
+        "W2 is truly green; W1 can start but cannot finish until SA165 receives fresh one-run "
+        "authority and its final-candidate verdict is green, while W3 is held by the retained "
+        "SA171 B105 blocker."
+    ) in normalized_readiness
 
     latest_status = re.search(r"(?ms)^- \*\*SA165\b.*?(?=^- \*\*)", changelog_text)
     assert latest_status is not None
@@ -1152,10 +1268,6 @@ def _assert_sa165_retained_partial(
         "predictable generated local credentials",
     ):
         assert discharged in normalized_status
-    assert (
-        "ten open v88 ticket entries across ten open merge positions"
-        in normalized_status
-    )
     assert "SA165 therefore remains open and unchecked at **#22**" in normalized_status
     assert "does **not** cover the settled candidate bytes" in normalized_status
     assert "no second run is authorized by this checkpoint" in normalized_status
@@ -1170,10 +1282,6 @@ def _assert_sa165_retained_partial(
         "Generated local-development credentials",
     ):
         assert retained_note in notes
-    assert re.search(
-        r"nine open v88 ticket entries across nine open merge positions",
-        docs_index_text,
-    )
     assert "SA165 heads W1 with `deps: none`" in docs_index_text
     assert "SA165-R1 still tracked" in docs_index_text
 
@@ -1223,67 +1331,20 @@ def test_v88_sa165_current_action_rejects_stale_reconciliation_wording() -> None
         )
 
 
-def _assert_latest_closeout_uses_current_queue_counts(
-    roadmap_text: str, changelog_text: str
-) -> None:
-    roadmap = _roadmap_tickets(roadmap_text)
-    v88 = {
-        ticket: metadata
-        for ticket, metadata in roadmap.items()
-        if metadata.kind == "v88"
+def test_v88_sa165_dependency_release_does_not_imply_ticket_release() -> None:
+    expected_scoped_claims = {
+        ROOT / "docs/others/arch-audit.md": "SA165 became unblocked with\n`deps: none`",
+        ROOT / "docs/technical/implementation_contract.md": (
+            "SA165 remains open with `deps: none`"
+        ),
+        ROOT / "docs/technical/module-extension.md": (
+            "SA165 remains open\n> with `deps: none`"
+        ),
     }
-    positions = {
-        metadata.merge_position
-        for metadata in v88.values()
-        if metadata.merge_position is not None
-    }
-    expected = (
-        f"{_number_word(len(v88))} open v88 ticket entries across "
-        f"{_number_word(len(positions))} open merge positions"
-    )
-    latest_closeout_entry = re.search(
-        r"(?ms)^- \*\*SA167c Phase F release verdict green\b.*?(?=^- \*\*)",
-        changelog_text,
-    )
-    assert latest_closeout_entry is not None
-    normalized_entry = " ".join(latest_closeout_entry.group(0).split())
-    assert expected in normalized_entry
-
-
-def test_v88_latest_closeout_uses_current_queue_counts() -> None:
-    _assert_latest_closeout_uses_current_queue_counts(
-        ROADMAP.read_text(encoding="utf-8"),
-        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
-    )
-
-
-def test_v88_latest_closeout_count_drift_is_expected_red_canary() -> None:
-    roadmap = ROADMAP.read_text(encoding="utf-8")
-    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    v88 = {
-        ticket: metadata
-        for ticket, metadata in _roadmap_tickets(roadmap).items()
-        if metadata.kind == "v88"
-    }
-    positions = {
-        metadata.merge_position
-        for metadata in v88.values()
-        if metadata.merge_position is not None
-    }
-    current_pattern = (
-        rf"{_number_word(len(v88))}\s+open\s+v88\s+ticket\s+entries\s+across\s+"
-        rf"{_number_word(len(positions))}\s+open\s+merge\s+positions"
-    )
-    mutated, replacement_count = re.subn(
-        current_pattern,
-        "one open v88 ticket entries across two open merge positions",
-        changelog,
-        count=1,
-    )
-
-    assert replacement_count == 1
-    with pytest.raises(AssertionError):
-        _assert_latest_closeout_uses_current_queue_counts(roadmap, mutated)
+    for path, expected_claim in expected_scoped_claims.items():
+        text = path.read_text(encoding="utf-8")
+        assert expected_claim in text, path
+        assert "SA165 is released with `deps: none`" not in text, path
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:

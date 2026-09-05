@@ -53,6 +53,22 @@
   no ticket metadata, merge position, dependency, or lane count moved, and no checked roadmap entry
   was introduced.
 
+- **SA171 / TA71 closeout — both lock implementations are repaired and archived (2026-09-05).**
+  The accepted Phase-A correction makes stale reclamation inode-bound in both
+  `quickscale_core/dr_engine/_lock.py` and `quickscale_core/advisory_lock.py`, while freezing
+  acquisition identity privately so release cannot unlink a replacement. The public
+  `_release_backup_lock(Path)` signature/import seam and `AdvisoryLock` seams remain unchanged; no
+  shared lock primitive was introduced. The reviewed red-before proof and deterministic
+  replacement/race coverage were retained, followed by `make lint -- --core` (exit 0), `make
+  typecheck -- --core` (exit 0), and the focused two-suite pytest command (exit 0, **47 passed in
+  0.13s**). That total records Phase-A evidence only and does not duplicate the separate closeout
+  `make ci` verdict. Convergence then made unowned DR release a no-op, bound local ownership to the
+  process, thread, path, inode, and a private acquisition token so inode reuse cannot authorize an
+  earlier holder, and made failed-write cleanup preserve a replacement; scoped core lint and type
+  checks passed, and the settled three-suite task command passed **80 tests**. TA71 and merge position
+  #28 are retired; the roadmap now derives **eight** open v88 entries across **eight** open merge
+  positions, lanes **W1 3 · W2 4 · W3 1**, with SA172 as W3's head and `deps: none`.
+  ***corrected after checkpoint attestation — not independently graded***
 - **SA167c Phase F release verdict green (2026-09-05).** The sole `EV-7`-authorized
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` invocation ran once from clean frozen base
   `21a33fbf22b033cab07ba63b592e21b999667fb2` at `wt-track2` (HEAD and `v88` remained equal).
@@ -71,6 +87,22 @@
   **W1 3 · W2 4 · W3 2**, with SA165 still open at **#22** and SA165-R1 still tracked. No checked
   roadmap entry is permitted. Completion remains subject to root-owned convergence, terminal
   attestation, and exact-tip integration.
+
+- **SA171 retained-partial checkpoint — release acceptance remains blocked (2026-09-05).** The
+  earlier SA171 closeout entry above is retained as historical implementation evidence, but this
+  later checkpoint supersedes its merge-readiness claim: reviewed SA171 parent
+  `6c87a35a2b8e8e63f292d20149c37490e9c85a63` has been merged into `v88` as retained partial
+  delivery, but is not release-accepted. Pre-integration remediation passed **95 focused tests** and
+  the scoped core lint and type checks. On the synchronized integration tree, the same 95-test
+  collection returned **2 failed / 93 passed** because two executable status-contract expectations
+  still reflect the pre-integration wording. **Blocking:** the exact synchronized tree's `make ci`
+  also remains red on Bandit B105 at
+  `quickscale_core/src/quickscale_core/advisory_lock.py:41`,
+  `_ACQUISITION_TOKEN_KEY = "_acquisition_token"`. Do not fix or suppress B105 here; the next
+  release-correction pass must preserve the ownership-token invariant, rerun the focused checks and
+  full `make ci`, independently review the corrected exact tip, and reconcile its status consumers.
+  The retained-partial integration closes no release gate. **SA172 remains held behind these
+  blockers.** ***corrected after checkpoint attestation — not independently graded***
 
 ## v88 development — 2026-08-21
 

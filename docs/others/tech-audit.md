@@ -55,11 +55,10 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
 | `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | still-open |
-| `backup-lock-stale-clear-toctou` (TA71) | **S3** | Concurrency | Stale-lock clearing is `stat`-then-`unlink`, so two backup runs can both acquire the "exclusive" backup lock | Small | High (race) / Medium (cost) | new |
 | `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | still-open |
 | `force-rls-apply-idempotency-claim` (TA72) | S4 | Documentation vs. behaviour (security-adjacent) | `apply_force_rls` documents itself as idempotent; `CREATE POLICY` has no `IF NOT EXISTS`, so a second call raises | Trivial | High | new |
 
-**Counts:** S1 **0** · S2 **0** · S3 **2** · S4 **2** · **Total 4 open.** Quick wins (⚡ Trivial-effort S3/S4): TA67.
+**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **2** · **Total 3 open.** Quick wins (⚡ Trivial-effort S3/S4): TA67.
 
 ---
 
@@ -108,67 +107,6 @@ function getCsrfToken(): string {
 
 ---
 
-### TA71 — Stale backup-lock clearing is `stat`-then-`unlink`, so two runs can both hold the "exclusive" lock
-
-**ID:** `backup-lock-stale-clear-toctou`
-
-**Severity:** **S3.** The guard whose entire stated purpose is to "prevent overlapping backup runs" can fail to do so. Deployment reality #3 (the generated project's backups module). Two preconditions must both hold — a pre-existing stale lock, and a sub-millisecond interleaving between two starts — so reachability drops two notches from the impact ceiling; no data-corruption path was verified (see *Refutation*), which is what holds this at S3 rather than higher.
-
-**Category:** §4.II Concurrency (check-then-act / TOCTOU).
-
-**Confidence:** **High** that the race exists (verified by reading the two functions together and walking the interleaving line by line). **Medium** on its cost, because the worst outcome — a concurrent prune deleting the other run's artifact — is inferred from the prune call site rather than executed.
-
-**Location:** `quickscale_core/src/quickscale_core/dr_engine/_lock.py:119-137` (`_clear_stale_backup_lock`), reached from the acquire loop at `:75-86` (`_acquire_backup_lock`), taken by `_backup_creation_lock` at `dr_engine/orchestration.py:1113` and `:1321`.
-
-**Defect:** `_clear_stale_backup_lock` reads the lock file's mtime, decides staleness, and *then* unlinks — with no atomicity between the two steps. A second process that sampled the same stale mtime a moment earlier can unlink the **fresh** lock a winner has since created, after which both processes successfully `O_EXCL`-create and both believe they hold the lock.
-
-**Failure scenario:** A previous backup crashes (container OOM, Railway redeploy mid-dump), leaving `.quickscale-backup-create.lock` behind with an mtime older than `_LOCK_TIMEOUT_SECONDS` (300 s). An operator clicks **Create backup now** in the `BackupPolicy` admin (`backups/admin.py:694` `create_backup_now`) at the same moment a scheduled `backups_create` management command fires. Both hit `FileExistsError`; both call `_clear_stale_backup_lock`; both `stat()` the old lock and judge it stale. Process A unlinks and re-creates the lock, entering the critical section. Process B — already past its own `stat()` — then executes `unlink()` at `:130`, deleting **A's live lock**, and its own `O_EXCL` create at `:77` succeeds. Two `pg_dump` runs now proceed concurrently against the same PostgreSQL 18 instance. Each mints a distinct `snapshot_id` and `snapshot_root`, so their dump files do not collide, but each run ends in `_complete_capture_after_dump`, whose final step is a prune — a retention pass evaluating a set that now contains another run's just-registered artifact.
-
-**Evidence:**
-
-```python
-# _lock.py:119-137 — the check and the act are two separate syscalls
-def _clear_stale_backup_lock(lock_path: Path, *, now: datetime) -> bool:
-    try:
-        lock_mtime = lock_path.stat().st_mtime      # <-- check
-    except FileNotFoundError:
-        return True
-    if (now.timestamp() - lock_mtime) <= _LOCK_TIMEOUT_SECONDS:
-        return False
-    try:
-        lock_path.unlink()                           # <-- act (may remove a *different*, live lock)
-```
-
-The acquire loop retries exactly twice around it:
-
-```python
-# _lock.py:75-83
-for _ in range(2):
-    try:
-        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        if not _clear_stale_backup_lock(lock_path, now=lock_time):
-            raise BackupLockError(...)
-```
-
-Note that `now=lock_time` is captured **once** before the loop (`:73`), so the staleness comparison on the second iteration is evaluated against a timestamp taken before the first attempt — widening, not narrowing, the window.
-
-**Refutation:** Attempted three ways, and the finding survived all three, though the third bounds its severity.
-(1) *Is the `O_EXCL` create itself sufficient?* No — `O_EXCL` makes creation atomic, but nothing binds the unlink to the file the caller inspected. The benign interleavings (B stats *after* A re-creates; B stats during the gap and fails on the second `O_EXCL`) were both walked and do terminate correctly with `BackupLockError`; only the stat-before/unlink-after ordering escapes, and nothing excludes it.
-(2) *Is there a second guard one layer up?* Searched `orchestration.py` for a DB-level backstop — no `pg_advisory_lock`, no `select_for_update` on the policy row, and no unique constraint or status check preventing two concurrent `pending` snapshots. `create_backup` at `:1321` goes straight from the filesystem lock into `create_snapshot`.
-(3) *Does the race actually corrupt anything?* This is the argument that partly succeeds and is why the severity is S3, not S2: `_mint_snapshot_id()` gives each run its own id and `_build_snapshot_local_root` its own directory, so the two dumps do not overwrite each other. The residual risk is contention (two simultaneous `pg_dump` runs against one Railway PostgreSQL service) plus the concurrent prune, which is reachable but unproven.
-The sibling implementation `AdvisoryLock.clear_stale` (`advisory_lock.py:272-296`) has the identical `is_stale()`-then-`unlink()` shape; it is documented operator-facing API (module docstring `:17-19`) with no automated caller, so it is folded in here as a second location rather than filed separately.
-
-**Fix:** Replace the stale-file dance with an OS-level lock that cannot go stale: open the lock file `O_CREAT|O_RDWR` (no `O_EXCL`) and take `fcntl.flock(fd, LOCK_EX | LOCK_NB)`, holding the descriptor for the critical section. The kernel releases the lock when the process dies, which deletes the entire stale-detection code path — `_clear_stale_backup_lock`, `_LOCK_TIMEOUT_SECONDS`, and the retry loop all go away. If the file-based scheme must be kept for portability, make the clear atomic instead: `os.open` the existing lock, `os.fstat` **that descriptor** for the mtime, and unlink only after confirming `st_ino` still matches the inode just inspected. Apply the same change to `AdvisoryLock.clear_stale`. **Effort:** Small.
-
-**Verification:** A test that seeds a stale lock file, then drives the documented interleaving with two threads synchronised on a barrier placed between the `stat` and the `unlink` (inject via a seam or `monkeypatch` on `Path.unlink`), asserting exactly one caller reaches the critical section and the other raises `BackupLockError`. With `flock`, the same test passes without any injected barrier.
-
-**Deliberate?** None found. The docstring at `:120` states the intent as "Remove an expired lock file so a new backup run can proceed" with no acknowledgement of concurrent clearing; no comment, suppression, or test addresses the race.
-
-**Age:** Long-standing — present in `_lock.py` since the DR-engine split; untouched by the delta.
-
----
-
 ### S4
 
 - **TA68 · `generated-settings-dead-client-ip`** · `…/templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` · Both files define a module-level `get_client_ip(request)`, and `production.py.j2` rebinds it with a comment claiming the rebind exists "so that production defaults … are actually in effect at request time". Neither is reachable in a generated project: Django's `Settings` copies only **uppercase** names off the settings module, so `django.conf.settings.get_client_ip` does not exist, and nothing in the generated tree imports either function — re-verified at HEAD, a grep across all templates still returns only the two definitions and the comments referring to them. The real consumer is `quickscale_modules_orgs.current_org.get_client_ip`, which reads the uppercase `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is correct. · **Fix:** delete both definitions and keep the settings plus the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation, or add a comment pointing at the orgs helper as the live implementation. The behavioural comment in `production.py.j2:119-122` is misleading as written and should go either way.
@@ -188,8 +126,8 @@ The sibling implementation `AdvisoryLock.clear_stale` (`advisory_lock.py:272-296
 | forms — operator surface | `views.py:140-520`, `throttles.py`, `models.py` settings helpers | Clean — superuser gating is consistent across queryset selection and `operator_access` wrapping |
 | billing — credit ledger | `services.py` `debit_user`, `credit_user`, balance helpers | Clean — `transaction.atomic()` + `select_for_update()` + `F()` deltas, integer credits, no float money |
 | blog — public read path | `feeds.py` | Clean (one watch item on the double `get_system_org()` resolution) |
-| DR engine — locking | `_lock.py` in full; `advisory_lock.py` acquire/release/stale | **TA71** |
-| DR engine — orchestration | destructive sites, `create_backup` lock section, admin restore staging/upload pipeline | Clean apart from TA71; the upload path streams via `chunks()` — see *Notes* |
+| DR engine — locking | `_lock.py` in full; `advisory_lock.py` acquire/release/stale | Clean after the accepted inode-bound lock correction; the fcntl cooperation limitation remains an advisory risk |
+| DR engine — orchestration | destructive sites, `create_backup` lock section, admin restore staging/upload pipeline | Clean; the upload path streams via `chunks()` — see *Notes* |
 | devtools — beta migration | `beta_migration.py` mutation sites, TOML writer, identity replacement, git guard | Clean — the clean-worktree blocker at `:1457` is the reversal path; see *Clean sweeps* |
 | Generated settings templates | `base.py.j2`, `production.py.j2` at the TA68 anchors; `start.sh.j2` launcher contract | **TA68**; the launcher contract is correctly honoured — see *Clean sweeps* |
 | Dependency & suppression hygiene | `poetry.lock` security-relevant pins; `scripts/security_suppressions.json` | Clean — all 7 remaining suppressions are accountable and unexpired, and no shared expiry cliff remains |
@@ -219,7 +157,7 @@ The sibling implementation `AdvisoryLock.clear_stale` (`advisory_lock.py:272-296
 
 *(candidate inputs for the companion `deep-architectural-audit` — not findings here)*
 
-- **Two independent stale-lock implementations, both with the same race.** `AdvisoryLock` (`advisory_lock.py`) and the DR backup lock (`dr_engine/_lock.py`) each hand-roll file locking with mtime/PID staleness detection, and TA71's defect is present in both. Neither uses `flock`. The contained fix repairs the shape twice; the structural question is why the repository owns two filesystem-lock implementations at all.
+- **Two independent filesystem-lock implementations.** `AdvisoryLock` (`advisory_lock.py`) and the DR backup lock (`dr_engine/_lock.py`) remain separate implementations after the accepted atomic, inode-bound correction. This is a non-defect consolidation watch question: revisit only if a third implementation appears, behavior or platform support diverges, or both public contracts can no longer be preserved independently.
 - **Frontend helpers are copied rather than shared.** TA67 is one function in two files; the theme has no `src/lib/http` seam, so the next call site that needs a CSRF token will produce a third copy. The contained fix does not create the seam. *(Carried from the prior pass — unchanged.)*
 - **Conformance gates assert policy presence, not policy content.** `table_has_force_rls` (`tenancy.py:1623-1677`) accepts any table where `relrowsecurity` and `relforcerowsecurity` are true and `COUNT(*) FROM pg_policies >= 1`. A table carrying a permissive `USING (true)` policy would pass every isolation check the repository runs. The registry-driven parity tests constrain *which* tables are enrolled but not *what* their policies say.
 
@@ -230,7 +168,6 @@ The sibling implementation `AdvisoryLock.clear_stale` (`advisory_lock.py:272-296
 | Gap | Would have caught | Recommendation |
 |---|---|---|
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The shared-helper fix is the real prevention |
-| No concurrency test exercises either lock's stale-clear path | **TA71** | A two-thread barrier test around the `stat`/`unlink` gap, as described in TA71's *Verification*. Moving to `flock` removes the need for the test along with the defect |
 | RLS policy assertions check existence, not predicate text | **TA72**, structural smell #3 | Extend the isolation conformance suite to assert the policy `qual`/`with_check` text from `pg_policies` matches the `_FORCE_RLS_FORWARD_SQL` template for each enrolled table — this pins the operator-read/tenant-write split as a gate rather than a comment |
 | No gate requires a changelog/ticket trail for behavioural commits | — | **Carried.** Remains maintainer-process risk rather than a source finding |
 
@@ -269,6 +206,7 @@ The sibling implementation `AdvisoryLock.clear_stale` (`advisory_lock.py:272-296
 - 2026-09-04 — **TA70** `container-status-substring-match`: **retired by SA170**. The ordered serial and concurrent release campaigns both passed with exact Core/CLI cleanup and preserved standing PostgreSQL state. Final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-02 — **Watch item closed:** the four `sqlparse` suppressions were retired by a real dependency upgrade to 0.6.0 during SA170 convergence; the vulnerability gate is green and the shared 2026-09-30 expiry no longer exists. No finding was opened or closed by this.
 - 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.
+- 2026-09-05 — **TA71** `backup-lock-stale-clear-toctou`: **retired by the retained, implemented SA171 lock correction.** Inode-bound reclamation and acquisition-bound release identity are archived in [CHANGELOG.md](../../CHANGELOG.md), but repository release acceptance remains blocked by Bandit B105; the separate-lock question is retained only as the non-defect structural watch item above.
 - 2026-08-28 — **TA72** `force-rls-apply-idempotency-claim`: **new (S4).**
 - 2026-08-28 — **No prior closure claims required verification (§2f.3)**: the prior pass carried three open findings and claimed no new closures in the delta window, so there was no closure testimony to check against code. All three prior IDs were nonetheless re-verified at their anchors, as logged above.
 - 2026-08-28 — **Fix-regression pass (§3.6)**: not applicable — the delta contains no fix for any prior finding. The two behavioural commits are test-only.
