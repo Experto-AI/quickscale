@@ -3,8 +3,8 @@
 Tests for the shared FORCE-RLS and child-parent equality helpers added
 to ``quickscale_modules_orgs.tenancy`` in Phase 2.
 
-RLS helpers are tested with mocked schema_editor (PostgreSQL vendor)
-and verified as no-ops on SQLite (the default test DB).
+RLS helpers are tested with both a mocked schema editor and a live PostgreSQL
+table, and verified as no-ops for a mocked SQLite vendor.
 Equality helpers are tested for naming conventions, SQL syntax
 coherence, and non-PostgreSQL no-op behavior.
 """
@@ -90,6 +90,13 @@ class TestForceRlsSqlTemplates:
 
     def test_forward_sql_contains_create_policy(self) -> None:
         assert "CREATE POLICY" in _FORCE_RLS_FORWARD_SQL
+
+    def test_forward_sql_is_prefixed_with_policy_drops(self) -> None:
+        assert _FORCE_RLS_FORWARD_SQL.count("DROP POLICY IF EXISTS") == 2
+        assert _FORCE_RLS_FORWARD_SQL.lstrip().startswith(
+            "DROP POLICY IF EXISTS {policy_name} ON {table};\n"
+            "DROP POLICY IF EXISTS {policy_name}_select ON {table};"
+        )
 
     def test_forward_sql_contains_guarded_org_id_predicate(self) -> None:
         """The RLS policy predicates use the NULLIF-guarded cast to
@@ -721,13 +728,8 @@ class TestAddRemoveCompositeChildFk:
 
 
 # =========================================================================
-# FormFieldValue.field delete-path proof — PostgreSQL only (AF12 Phase 2)
+# PostgreSQL-only FORCE-RLS and composite-FK proofs
 # =========================================================================
-# Proves that the DB-level composite FK ``forms_formfieldvalue_field_org_fk``
-# with ``ON DELETE SET NULL (field_id)`` correctly sets only ``field_id``
-# to NULL when the parent ``FormField`` is deleted, while ``organization_id``
-# remains NOT NULL.
-# ---------------------------------------------------------------------------
 
 try:
     from django.db import connection as _dj_connection
@@ -735,6 +737,58 @@ try:
     _IS_POSTGRES = _dj_connection.vendor == "postgresql"
 except Exception:
     _IS_POSTGRES = False
+
+
+@pytest.mark.bypass_rls
+@pytest.mark.django_db(transaction=True)
+def test_apply_force_rls_twice_preserves_policies_and_force_flag() -> None:
+    """A second real application succeeds and leaves both protections active."""
+    from django.db import connection
+
+    assert connection.vendor == "postgresql"
+
+    table = "quickscale_modules_forms_form"
+    policy_name = "forms_form_org_isolation"
+    targets = ((table, policy_name),)
+
+    with connection.schema_editor() as schema_editor:
+        apply_force_rls(schema_editor, targets)
+        apply_force_rls(schema_editor, targets)
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT c.relrowsecurity, c.relforcerowsecurity
+            FROM pg_class AS c
+            JOIN pg_namespace AS n ON n.oid = c.relnamespace
+            WHERE n.nspname = current_schema() AND c.relname = %s
+            """,
+            [table],
+        )
+        assert cursor.fetchone() == (True, True)
+
+        cursor.execute(
+            """
+            SELECT policyname
+            FROM pg_policies
+            WHERE schemaname = current_schema() AND tablename = %s
+            """,
+            [table],
+        )
+        assert {row[0] for row in cursor.fetchall()} == {
+            policy_name,
+            f"{policy_name}_select",
+        }
+
+
+# ---------------------------------------------------------------------------
+# FormFieldValue.field delete-path proof (AF12 Phase 2)
+# ---------------------------------------------------------------------------
+# Proves that the DB-level composite FK ``forms_formfieldvalue_field_org_fk``
+# with ``ON DELETE SET NULL (field_id)`` correctly sets only ``field_id``
+# to NULL when the parent ``FormField`` is deleted, while ``organization_id``
+# remains NOT NULL.
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
