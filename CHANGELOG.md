@@ -2,6 +2,62 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA174 accepted and closed — command-set and gate-input documentation (2026-09-06).** The
+  ticket's three corrections were already integrated on `v88` and nothing remained to author, so
+  acceptance was the outstanding validation and the closeout record. Measured this pass:
+  `poetry run python scripts/check_gate_parity.py` exited **0** with *All gates present in all
+  required contexts.*; `poetry run pytest scripts/test_gate_parity.py` passed **238 tests** (run
+  twice, including once with `scripts/__pycache__` bytecode for the parity script removed, to rule
+  out a stale-bytecode green); `ruff check` passed on `scripts/check_gate_parity.py`,
+  `scripts/test_gate_parity.py`, and `quickscale_modules/orgs/.../apps.py`, and `ruff format
+  --check` reported both formatted files clean. No declaration, gate behavior, registry field, or
+  emitted byte changed, and no generator run or emission rebaseline was owed.
+
+  **Simplification applied.** The ticket's remaining ceremony was a *separate* independent-review
+  round over a comments-only delta that had already been reviewed when it landed on `v88`, carries
+  no behavioral change, and is covered by the 238 green parity assertions. That second round would
+  have shortened nothing on an Optional, off-critical-path ticket, so it is discharged by the
+  landing review rather than repeated. SA174 and its context section are removed from the
+  open-only planner. No audit finding is retired by this closure: the `privileged-command-set-multi-owner`
+  demotion and the restated hand-pinned-literal and PostgreSQL-major watch items keep their live
+  status and triggers, and the fired count-oracle trigger stays owned by post-v88 SA180.
+
+  **A Python-version scare, resolved as a non-issue.** `scripts/check_gate_parity.py:1596` uses
+  PEP 758 unparenthesized `except FileNotFoundError, PermissionError, OSError:`. A system `python`
+  3.12 rejects it as a `SyntaxError`, which initially read as a broken gate script at `HEAD`
+  producing false-green tests. It is not: the project pins `requires-python = ">=3.14,<3.15"`,
+  `runtime_pins.PYTHON_VERSION = "3.14"`, and every CI workflow to 3.14, where the syntax is valid
+  and both `compile()` and module execution succeed. No defect, no ticket, no change.
+
+- **Planner rebalance re-examined and again declined, with a new constraint recorded (2026-09-06).**
+  Planning change only; no product delivery, review verdict, merge, or publication.
+
+  With SA174 closed, **track 1 holds all remaining v88 work and tracks 2 and 3 are idle for the
+  rest of the release.** No open v88 task may move to them. SA160 remains one review unit that
+  shares `quickscale_core/tests/fixtures/sa90_emission_manifests.json` with SA165's frozen
+  candidate and cannot merge before SA165 either way, so relocating it would convert an intra-track
+  ordering into a cross-track conflict for no schedule gain. There is no v88 filler work left, and
+  no parallelism left to win.
+
+  **New SA160 constraint — a second frozen-file overlap, and how to avoid it.** Direct inspection
+  found that `-TRUSTED_PROXY_COUNT` appears twice in `settings/base.py.j2`: once in the
+  settings-documentation comment block above the assignments, and once as `ips[-TRUSTED_PROXY_COUNT]`
+  inside the dead `get_client_ip` body. `test_generator.py::TestGeneratedProjectSettingsProxyMath`
+  asserts that string is present in the generated `base.py`, and `test_generator.py` is one of
+  SA165's five frozen candidate files. Deleting the comment block with the function would force an
+  edit to a frozen file and widen the SA165 → SA160 edge from one shared file to two. SA160's
+  acceptance now requires preserving the proxy-math comment while deleting the function and
+  rewording the sentence naming it, so no `test_generator.py` edit is owed. The two dead-helper
+  assertions to retarget — `test_get_client_ip_function_defined` and
+  `test_get_client_ip_proxy_resolution` — live in `test_templates.py`, which is outside the frozen
+  set. TA67 and TA68 remain open and undelivered on `v88`, re-verified at both anchors.
+
+  **Planner changes.** SA174's row, diagram lane, track-state row, ticket body, and context section
+  are removed; tracks 2 and 3 now read as *no v88 ticket*. The critical path is restated as the
+  whole of the remaining release rather than one chain among filler, SA165 is named as the only
+  truly green ticket, and the conflict-surface bullet now records a single writer on the shared
+  closeout set.
+
 - **Planner trim and merge-back reconciliation (2026-09-06).** Planning change only; no product
   delivery, review verdict, audit finding, merge, or publication is completed by this entry.
 

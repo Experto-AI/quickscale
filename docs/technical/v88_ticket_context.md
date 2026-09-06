@@ -47,30 +47,6 @@ recomputation, and verify proxy-aware resolution retains its behavior.
 These edits affect generated output. Review them together with one emission-fixture rebaseline,
 keeping per-file rationale and separate CSRF and proxy regression evidence.
 
-## SA174 — Explain the landed contract comments and audit watchlist
-
-The sanctioned privileged commands are `migrate` and `createcachetable`. Production settings
-validate the role selection, the `orgs` app supplies an independent boot guard, and the CLI
-produces the environment value. A template test transcribes the settings declaration, while
-`start.sh` contains invocation literals. The `orgs` frozenset is therefore one declaration in a
-shared contract, not its sole authority. The corrected comment names the participating
-declarations and retains the independent fail-closed guard. A third sanctioned command, or
-disagreement between declarations, is the trigger for revisiting consolidation. None of this
-changes generated output.
-
-The gate registry's `trigger_inputs` field describes a bidirectional partition of the
-`e2e.yml` path allowlist; it is not a promise about when a gate can be skipped. The docstring and
-schema description now say so while retaining the field name and behavior. Using the field to skip
-execution is the trigger for reconsidering those semantics.
-
-The architectural watchlist is restated from the actual implementation, preserving the triggers for
-the provisioning script's module-name and module-count literals, its separately pinned PostgreSQL
-major, and count-pinned gate-parity oracles. Accurate watchlist wording preserves deferred
-questions without claiming that documentation has resolved their underlying structures.
-
-What remains is evidence, not authoring: focused validation, an independent read of the landed
-delta, and the closeout record. The confirmed count-oracle trigger is a separate obligation.
-
 ## SA152 — Exercise beta migration and check compatibility within each mode
 
 The maintainer migration commands need a complete smoke exercise. Their flag and ownership

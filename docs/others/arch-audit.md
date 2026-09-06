@@ -109,8 +109,9 @@ What *is* live is the residue: two hand-pinned literals minted inside the new de
 (`((${#MODULES[@]} == 12))` and `[[ "$item" != teams ]]`, `provision_ci_postgres.sh:93,96`) and a
 second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at `:15`, against
 `runtime_pins.POSTGRES_VERSION = "18"`). Both fail loudly, so both were carried rather than
-promoted. They are stated in full with their triggers on the [watchlist](#watchlist) and owned by
-SA174, which absorbs SA178's documentation-only work without retiring these items in this edit.
+promoted. They are stated in full with their triggers on the [watchlist](#watchlist). SA174
+restated them and closed without retiring them; they remain unowned watch items behind their
+triggers.
 
 ---
 
@@ -496,6 +497,15 @@ Recorded here only so a future pass using an older interpreter does not re-raise
   SA167d, SA170, SA171, and SA176 was removed from the orientation section above; all of it is
   archived in [CHANGELOG.md](../../CHANGELOG.md) and none of it constrained an open finding.
 - 2026-08-28 — Prior red flags: none were open at the last pass and none opened this pass.
+
+- 2026-09-06 — **SA174 closed; no finding retired.** The command-set and gate-input documentation
+  corrections were already integrated on `v88`, and their validation is now green: the gate-parity
+  check reported *All gates present in all required contexts.* (exit 0), `scripts/test_gate_parity.py`
+  passed **238 tests**, and Ruff check and format were clean on `check_gate_parity.py`,
+  `test_gate_parity.py`, and `orgs/apps.py`. The `privileged-command-set-multi-owner` demotion and
+  the watchlist restatement stand as recorded; every watch item above keeps its live status and
+  trigger. The fired count-oracle trigger remains owned by SA180. Evidence is archived in
+  [CHANGELOG.md](../../CHANGELOG.md).
 
 *Lenses scanned with no qualifying finding this pass: data/state model integrity, concurrency and state
 isolation, observability, API and contract stability, performance and scalability, build/release and

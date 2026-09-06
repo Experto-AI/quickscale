@@ -29,7 +29,6 @@ Absorbing a ticket transfers its unfinished obligations and does not claim its f
 |---|---|---|---|---|---|
 | SA165 | Accept retained hardening and record its closeout | v88 | 1 | — | Required |
 | SA160 | Fix generated CSRF handling and remove dead settings helpers | v88 | 1 | SA165 | Required |
-| SA174 | Close out the landed command-set and gate-input documentation | v88 | 2 | — | Optional |
 | SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 2 | — | Deferred |
 | SA180 | Derive the gate-parity count oracles from the registry | post-v88 | 2 | — | Deferred |
 | SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | — | Deferred |
@@ -42,29 +41,30 @@ start them during release work. SA154 is an inventory, not an implementation que
 
 ```text
 Track 1: SA165 ──► SA160 ──► final release validation and closeout
-Track 2: SA174              optional; runs alongside track 1
-Track 3: SA177              deferred post-v88
+Track 2: (idle in v88)      owns post-v88 SA152, SA180
+Track 3: (idle in v88)      owns post-v88 SA177
 ```
 
-**Critical path: SA165 → SA160 → final release validation.** It is the only chain with two
-required tasks in series, and it lives entirely on track 1. SA174 is optional and shortens
-nothing. Work that does not advance SA165 or SA160 is parallel filler, however useful.
+**Critical path: SA165 → SA160 → final release validation.** Every remaining v88 task is on it,
+and all of it lives on track 1. There is no v88 filler work left and no parallelism left to win:
+tracks 2 and 3 are idle for the rest of the release.
 
-Start both open v88 track heads independently. SA165 needs review and acceptance of already-landed
-implementation; do not restart its product work. SA174 is a bounded documentation closeout.
+SA165 → SA160 is the only v88 task edge. It gates the **emission-fixture rebaseline**: SA165's
+frozen candidate binds `quickscale_core/tests/fixtures/sa90_emission_manifests.json` until its
+verdict returns and integrates. SA160's helper, its Vitest table, the dead-helper deletions, and
+their regressions may be authored before that, on track 1, and rebaselined once afterwards. SA165
+needs review and acceptance of already-landed implementation; do not restart its product work.
 
-SA165 → SA160 is the only v88 task edge, and it gates only the **emission-fixture rebaseline**:
-SA165's frozen candidate binds `quickscale_core/tests/fixtures/sa90_emission_manifests.json` until
-its verdict returns and integrates. SA160's helper, its Vitest table, the dead-helper deletions,
-and their regressions may be authored before that, on track 1, and rebaselined once afterwards.
-
-Track 3 holds no v88 work, and no v88 work can move to it: SA160 shares the emission fixture with
-SA165 and is one review unit, and SA174 shares its gate files with track 2's post-v88 SA152 and
-SA180. SA177 targets the accepted SA172 helper and may take the isolation runner only after SA165
-closes; its post-v88 horizon supplies that ordering. SA152 and SA153 have no hard dependency on
-each other — portal development can use a fresh generated project — though a real site cutover
-through the beta-migration tools would make SA152 acceptance a cutover prerequisite. SA154 follows
-the working portal, and SA180 follows SA174 in ownership of the same gate files, not in code.
+Neither idle track can take v88 work. SA160 is one review unit that shares the emission fixture
+with SA165's frozen candidate, and it must also avoid disturbing
+`quickscale_core/tests/test_generator/test_generator.py`, which is in that frozen set (see SA160's
+acceptance). Authoring it anywhere but track 1 would turn an intra-track ordering into a
+cross-track conflict on two shared files for no schedule gain, since SA160 cannot merge before
+SA165 either way. SA177 targets the accepted SA172 helper and may take the isolation runner only
+after SA165 closes; its post-v88 horizon supplies that ordering. SA152 and SA153 have no hard
+dependency on each other — portal development can use a fresh generated project — though a real
+site cutover through the beta-migration tools would make SA152 acceptance a cutover prerequisite.
+SA154 follows the working portal, and SA180 owns the gate files that SA152 also touches.
 
 ### Track states
 
@@ -75,7 +75,7 @@ are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA165 | yes | yes | yes | **yes** | **yes** |
 | 1 | SA160 | yes — authoring | no — needs SA165 | no — behind SA165 | no | **yes** |
-| 2 | SA174 | yes | yes | yes | **yes** | no — optional filler |
+| 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
 - **Can start** — no v88 track waits on a decision, authorization, or plan gate. SA160's helper,
@@ -84,19 +84,20 @@ are yes.
   emission rebaseline, which needs SA165's verdict to release the fixture. Both are track-1
   tickets, so this is an intra-track ordering, not a cross-track dependency. Docker-backed
   validation remains a scheduling queue, not a dependency.
-- **Can merge** — no *track head* is order-gated: SA165 and SA174 may each merge whenever accepted.
-  SA160 sits behind SA165 in track 1's own serialized order, which is sequencing within a track,
-  not a cross-track gate.
+- **Can merge** — the track head is not order-gated: SA165 may merge whenever accepted. SA160 sits
+  behind SA165 in track 1's own serialized order, which is sequencing within a track, not a
+  cross-track gate.
 
-Every "no" above is a **hard dependency on SA165's `EV-8` verdict**, not a decision of yours: only
-the returned review and release run can clear it. **No v88 track is held by a pending decision.**
+SA165 is the only **truly green** ticket, and it is on the critical path. Every "no" above is a
+**hard dependency on SA165's `EV-8` verdict**, not a decision of yours: only the returned review
+and release run can clear it. **No v88 track is held by a pending decision.**
 
 ### Ownership and merge coordination
 
 - Track 1 owns generator templates, the CSRF helper, and emission-fixture updates. SA165's
   retained state-schema and isolation-runner changes stay on this track through acceptance.
 - Track 2 owns gate documentation, `scripts/gate_registry.json` and module declarations, and the
-  maintainer migration tools. SA174 changed descriptions, never gate schema or emitted bytes.
+  maintainer migration tools. It holds no v88 work; SA152 and SA180 are post-v88.
 - Track 3 owns deferred predicate conformance under SA177. It may take the isolation
   runner only after SA165 has closed; its post-v88 horizon supplies that ordering without a live
   cross-track implementation overlap.
@@ -109,8 +110,8 @@ the returned review and release run can clear it. **No v88 track is held by a pe
   semantics and no generated consumer, and the serialized merge queue plus reconcile-on-the-owning-
   worktree rule above covers them: each track resolves the shared set once, at its own merge, after
   the previous merge has landed. The consistency test then checks structure, not status prose.
-  No product file is co-owned by two open v88 tickets, so no merge hazard is created by running
-  SA165 and SA174 at the same time.
+  Only track 1 has open v88 work, so no two v88 tickets run concurrently and the shared closeout
+  set has a single writer until the release closes.
 - The active task requiring Docker-backed acceptance owns that validation slot. Other tracks may
   prepare and run DB-free checks concurrently. Private PostgreSQL profiles do not claim the standing
   service; coordinate Docker-heavy runs across active tracks. See the
@@ -198,28 +199,17 @@ or delivery evidence, not here.
     `settings/production.py.j2` and the misleading production-rebind comment. Preserve uppercase
     proxy settings and `REST_FRAMEWORK["NUM_PROXIES"]` recomputation. A generated-project regression
     proves settings import and the live orgs client-IP resolver retain their expected behavior.
+  - Keep the deletion clear of SA165's frozen candidate. `base.py.j2`'s settings-documentation
+    block and the function body each contain `-TRUSTED_PROXY_COUNT`, and
+    `test_generator.py::TestGeneratedProjectSettingsProxyMath` asserts that string survives in the
+    generated `base.py`. Delete the function and reword the sentence naming it, but preserve the
+    proxy-math comment, so no edit to `test_generator.py` is owed. Retarget the two dead-helper
+    assertions in `test_templates.py` — which is outside the frozen set — at the orgs resolver.
   - Rebaseline emission parity once after both changes, review the whole candidate, and run the
     generator-change release tier once for that delivery. Retire the duplicate-cookie and dead
     settings-helper findings only with their regression evidence.
 
   **Surfaces:** React theme, generated settings, emission fixture, and technical audit.
-
-- [ ] **SA174 — Close out the landed command-set and gate-input documentation.**
-
-  **All three corrections are already on `v88`** — the `orgs/apps.py` multi-owner comment, the
-  `trigger_inputs` allowlist-partition definition in `check_gate_parity.py` and the registry, and
-  the reconciled architecture watchlist. Nothing is left to author; this is evidence and closeout
-  only. No declaration, gate behavior, registry field, or emitted byte changed.
-
-  **Acceptance:** run the focused gate-parity checks and lint appropriate to the touched
-  descriptions, obtain independent review of the landed documentation delta, and record the
-  closeout. No generator run or emission rebaseline is owed for comments alone. The confirmed
-  count-oracle trigger stays open as SA180 and is not closed here; no watch item closes merely by
-  being restated. Broader command consolidation, new gate mechanisms, and a registry field rename
-  are outside scope.
-
-  **Surfaces:** `quickscale_modules/orgs/.../apps.py`, `scripts/check_gate_parity.py`,
-  `scripts/gate_registry.json`, `scripts/README.md`, and the architecture audit.
 
 ## Post-v88 work
 
@@ -251,15 +241,16 @@ or delivery evidence, not here.
 - [ ] **SA180 — Derive the gate-parity count oracles from the registry.**
 
   The architecture audit confirmed this trigger **fired** — `d31c6b41` and `437dd0e0` each crossed
-  the written more-than-two-edit threshold on hand-pinned count literals. SA174 corrected the
-  descriptions; it does not and cannot discharge the finding, so it is promoted here with its own
-  owner rather than left as an unassigned note in the audit.
+  the written more-than-two-edit threshold on hand-pinned count literals. The closed documentation
+  pass corrected the descriptions; correcting wording does not and cannot discharge the finding, so
+  it is owned here rather than left as an unassigned note in the audit.
 
   **Acceptance:** compute the count-pinned gate-parity oracles from the registry and workflow
   sources they describe, so adding a gate or station cannot leave a stale literal behind. Keep the
   closed-universe check and the existing failure messages loud. Prove with a regression that adding
   a gate updates the derived count without a hand edit. Retire the count-pinned watch item only
-  with that evidence. Renaming `trigger_inputs` stays out of scope under SA174's settled decision.
+  with that evidence. Renaming `trigger_inputs` stays out of scope: the field is the settled name for the
+  bidirectional `e2e.yml` allowlist partition, and only a skip-based use would reopen it.
 
   **Surfaces:** `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`,
   `scripts/gate_registry.json` if a derivation source is needed, and the architecture audit.
