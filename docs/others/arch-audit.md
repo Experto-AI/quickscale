@@ -30,11 +30,12 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Eight open v88 ticket entries run on three tracks across eight open merge
-positions after the 2026-09-05 in-lane ticket splits and SA164's completed guardrail repair. SA167c's
-authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full `make ci`
-correction are green and archived. No open ticket remains on the release path. W3 holds the
-exclusive PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
+generated-project updater. The [roadmap](../technical/roadmap.md) owns the current delivery units,
+track assignments, dependencies, and release finish line. SA165's five-file product candidate review
+and final release verdict remain outstanding; this planning reconciliation supplies no acceptance
+evidence. SA167c's authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full
+`make ci` correction are green and archived. The prior pass's leading finding landed and is archived
+under SA135.
 
 **SA167c release reconciliation (2026-09-05).** SA167c's phases A-E remain accepted on retained
 product object `91fd3bb6e6b638735361b511c1515cddccce5d15`, and its sole authorized Phase-F
@@ -47,22 +48,22 @@ cleanup passed. SA167c is closed and archived; its completed verdict released SA
 integer vNN roadmap reference, or same-commit changelog testimony whenever a non-merge commit changes
 hosted workflows, the gate registry, or a provisioning station. Its hermetic suite, full parity suite,
 generated workflow check, deliberate untitled-workflow failure probe, and historical audit are green.
-SA166 and merge position #24 are archived. SA164's later guardrail repair is also archived, merge
-position #25 is retired, and SA178 now heads W2 at `deps: none`.
+SA166 and merge position #24 are archived. SA164's later guardrail repair is also archived and merge
+position #25 is retired. Current scheduling is maintained in the [roadmap](../technical/roadmap.md).
 
 **SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
 exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
 local corrections. Exact Core/CLI cleanup completed and the standing PostgreSQL identity, volume,
 catalog, ownership, and role flags remained intact. SA170 and TA70 are closed. The later SA176
 correction release-accepted the retained SA171 lock work without changing its on-disk metadata key;
-SA172 subsequently closed TA72 and emptied W3's v88 queue. The full release and retained-partial history is archived in
+SA172 remains open. The full release and retained-partial history is archived in
 [CHANGELOG.md](../../CHANGELOG.md).
 
 **SA171 release acceptance (2026-09-05).** The retained lock implementation is release-accepted
 after SA176 renamed the Python metadata-key constant while preserving the serialized
 `"_acquisition_token"` key. Bandit reports zero unsuppressed findings, the focused lock regressions
 remain green, and the full `make ci` gate passes without a B105 suppression. SA176 and merge position
-#33 are retired; SA172 later retired #29 after its PostgreSQL-backed correction. The implementation, retained-partial history,
+#33 are retired; SA172 remains open. The implementation, retained-partial history,
 and final release evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
@@ -141,7 +142,7 @@ What *is* live is the residue: two hand-pinned literals minted inside the new de
 second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at `:15`, against
 `runtime_pins.POSTGRES_VERSION = "18"`). Both fail loudly, so both were carried rather than
 promoted. They are stated in full with their triggers on the [watchlist](#watchlist) and owned by
-SA178.
+SA174, which absorbs SA178's documentation-only work without retiring these items in this edit.
 
 ---
 
@@ -334,10 +335,14 @@ supporting vintage negotiation against the `project_contract` version that alrea
 **3.** *(live)* Keep the taxonomy and conformance gate — acceptable only while the trigger is false.
 
 **Recommendation:** Hold Option 3. Take Option 1 when the trigger fires; add Option 2 only for a
-public updater needing vintage negotiation. · **First step:** characterize the existing policy — and,
-independently of the trigger, add a cheap coherence assertion for the one contract now known to
-straddle the line, so `start.sh` and `settings/production.py` cannot silently take opposite
-dispositions.
+public updater needing vintage negotiation. · **First step (open; post-v88 SA152, absorbing SA175):**
+characterize the launcher/settings contract separately for each migration mode and verify the
+resulting files together in migration smoke coverage. Membership in fresh-first and in-place
+collections alone does not prove an incompatible runtime result. Define the compatibility condition
+for each mode before asserting it; preserve accepted disposition policy unless that verification
+demonstrates a defect. The former requirement to reject the existing mixed dispositions while
+preserving them is superseded. No verification has been performed by this planning edit, and neither
+the first step nor the deferred finding is discharged.
 
 ---
 
@@ -536,7 +541,7 @@ independent of the other two and should be designed together at `teams` kickoff.
   `_migdir()` raises when a manifest module's conventional migration directory is absent, and a
   regression proves the scan cannot pass by reading nothing. The catalog/policy/data parity gate
   remains the authoritative proof. **Trigger:** another migration-bearing module, or the tuple
-  omitting one — **not fired**. SA178 owns its future restatement; the item remains open.
+  omitting one — **not fired**. SA174 owns its future restatement; the item remains open.
 - **`trigger_inputs` has drifted from its name.** `check_gate_parity.py:2652-2690` uses the field as a
   bidirectional partition of `e2e.yml`'s path allowlist, not as a trigger condition. *Doesn't qualify:* the
   check it performs is real and exact. **Trigger:** a gate ever being *skipped* on the basis of
@@ -553,7 +558,7 @@ tickets named below rather than applied to the table in this edit.
   (`privileged-command-set-multi-owner`) — **answered: yes, permanent.** The compounding therefore
   never fires and the finding **downgrades from rank 1 to a watchlist item plus a docstring
   correction**, with its trigger armed: a third sanctioned command, or any two of the four stations
-  disagreeing. **SA174 performs the demotion in this document** as its acceptance criterion 2; until
+  disagreeing. **SA174 owns the correction and resulting demotion in this document**; until
   it merges, the rank-1 row above is stale by decision rather than by evidence.
 - **Will `quickscale_devtools` ever be published, or a generated-project updater offered to users?**
   (`generated-file-ownership-unmodeled`) — **answered: no; maintainer-internal use only.** This
@@ -574,7 +579,7 @@ Recorded here only so a future pass using an older interpreter does not re-raise
 
 - 2026-08-28 — `ci-environment-hand-replicated`: **resolved** and archived; the full fix-regression
   narrative is in [CHANGELOG.md](../../CHANGELOG.md). Only its residue stays live here — the two
-  hand-pinned literals on the watchlist, owned by SA178 since the 2026-09-05 split.
+  hand-pinned literals on the watchlist, now owned by SA174 after absorbing SA178.
 - 2026-08-28 — `privileged-command-set-multi-owner`: **new**, promoted from the prior watchlist item
   "privileged-command template/runtime pair", whose trigger ("a third sanctioned command, or a mismatch")
   **fired** — not as a value mismatch but as a third and fourth *owner*. `3523f9f8` (2026-08-18, labeled
@@ -601,14 +606,19 @@ Recorded here only so a future pass using an older interpreter does not re-raise
 - 2026-09-05 — **Watchlist ownership split, no finding changed.** SA164 was carrying one executable
   repair plus two documentation obligations. The repair — making the SA92 guardrail's `_migdir()`
   fail loudly and re-anchoring its `v87` backstop — stays with **SA164**. The `trigger_inputs` naming
-  correction and the restatement of the three not-fired items move to **SA178**, which stays on the
-  same worktree so this document keeps a single lane. No item was closed, promoted, demoted, or had
+  correction and the restatement of the three not-fired items moved to **SA178** at this checkpoint;
+  the consolidation below supersedes that assignment. No item was closed, promoted, demoted, or had
   its trigger altered; the ranked findings and their deferrals are untouched.
 - 2026-09-05 — **SA164 guardrail repair completed.** The SA92 tripwire now raises on a missing
   conventional migration directory instead of skipping the module, its regression proves the scan
   cannot pass by absence, and its backstop wording points at the current regenerated migration
   baseline rather than retired `v87`. The watch item remains open with its trigger unchanged and
-  future restatement owned by SA178; no ranked finding changed.
+  future restatement now owned by SA174; no ranked finding changed.
+- 2026-09-05 — **Planning consolidation, no finding changed.** SA174 absorbs SA178's
+  documentation-only semantics correction and watchlist reconciliation. Post-v88 SA152 absorbs
+  SA175 as mode-aware migration compatibility smoke verification; the prior assertion-only
+  acceptance is superseded, not discharged. Current dependencies and tracks live only in the
+  [roadmap](../technical/roadmap.md). No product work or release verification occurred in this edit.
 - 2026-08-28 — Prior red flags: none were open at the last pass and none opened this pass.
 
 *Lenses scanned with no qualifying finding this pass: data/state model integrity, concurrency and state
