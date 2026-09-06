@@ -29,10 +29,9 @@ Absorbing a ticket transfers its unfinished obligations and does not claim its f
 |---|---|---|---|---|---|
 | SA165 | Accept retained hardening and record its closeout | v88 | 1 | — | Required |
 | SA160 | Fix generated CSRF handling and remove dead settings helpers | v88 | 1 | SA165 | Required |
-| SA172 | Accept idempotent RLS enrollment and model-derived table names | v88 | 3 | — | Required |
 | SA174 | Correct command-set and gate-input documentation and watchlists | v88 | 2 | — | Optional |
 | SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 2 | — | Deferred |
-| SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | SA172 | Deferred |
+| SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | — | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 
@@ -41,13 +40,13 @@ Track numbers map to the existing worktrees: **1 = W1 / wt-track1**, **2 = W2 / 
 start them during release work. SA154 is an inventory, not an implementation queue.
 
 ```text
-Track 1: SA165 ──► SA160 ──┐
-Track 3: SA172 ────────────┴──► final release validation and closeout
-Track 2: SA174                  optional; runs alongside both tracks
+Track 1: SA165 ──► SA160 ──► final release validation and closeout
+Track 2: SA174              optional; runs alongside track 1
+Track 3: SA177              deferred post-v88
 ```
 
-Start all three track heads independently. SA165 and SA172 need review/acceptance of existing
-implementation; do not restart their product work. SA174 is a bounded documentation change.
+Start both open v88 track heads independently. SA165 needs review/acceptance of existing
+implementation; do not restart its product work. SA174 is a bounded documentation change.
 On track 1, begin SA160's product/fixture changes only after SA165's reviewed candidate has passed
 its verdict and integrated. That is the one v88 task dependency: SA165 binds the same emission
 fixture that SA160 rebaselines. Combining the old dead-code and CSRF tickets removes a second
@@ -65,19 +64,20 @@ cutover prerequisite; it does not block building the portal. SA154 follows the w
   retained state-schema and isolation-runner changes stay on this track through acceptance.
 - Track 2 owns gate documentation, `scripts/gate_registry.json` and module declarations if later
   work needs them, and the maintainer migration tools. SA174 changes descriptions, not gate schema.
-- Track 3 owns the RLS helper and database-backed policy acceptance. SA177 may take the isolation
-  runner only after SA165 has closed; its post-v88 horizon supplies that ordering without a live
-  cross-track implementation overlap.
+- Track 3 owns deferred predicate conformance under SA177. It may take the isolation runner only
+  after SA165 has closed; its post-v88 horizon supplies that ordering without a live cross-track
+  implementation overlap.
 - Product implementation stays in worktrees, with one delivery candidate at a time per track and
   one serialized merge queue into `v88`. Independent work does not wait for another track's audit
   markdown edits. Reconcile shared documentation at merge time on the owning worktree.
 - Shared closeout files are this roadmap, the changelog, ticket context when concepts change, and
   the relevant audit. Other documents link to the schedule instead of copying counts or readiness.
   The consistency test checks structure, not exact status prose. No new tracking framework is needed.
-- Track 3 has scheduling priority for Docker-backed acceptance. Other tracks may prepare and run
-  DB-free checks concurrently. Private PostgreSQL profiles do not claim the standing service, but
-  coordinate Docker-heavy runs with track 3. See the [execution policy](validation_policy.md#candidate-review-and-integration)
-  for routing, cleanup, candidate binding, and review/merge rules.
+- The active task requiring Docker-backed acceptance owns that validation slot. Other tracks may
+  prepare and run DB-free checks concurrently. Private PostgreSQL profiles do not claim the standing
+  service; coordinate Docker-heavy runs across active tracks. See the
+  [execution policy](validation_policy.md#candidate-review-and-integration) for routing, cleanup,
+  candidate binding, and review/merge rules.
 
 Before starting or resuming a delivery, measure branch divergence and working-tree status; do not
 persist tips or clean/dirty claims as planner state. A shared filename alone is a merge concern,
@@ -152,22 +152,6 @@ prerequisite for correcting the documentation. Keep the finding open and do not 
 merely to obtain a green closeout. Reconcile old SA178 completion/dependency prose to SA174's
 current scope, then validate and obtain review. No product dependency on track 1 or 3 is added.
 
-### Next handoff — track 3
-
-Resume **SA172** in `/home/victor/code/quickscale-wt-track3` on `wt-track3`. Inspect both committed
-retained work and the uncommitted delta: `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`,
-`quickscale_modules/orgs/tests/test_tenancy.py`, `quickscale_modules/orgs/tests/test_operator_access.py`,
-and their accompanying documentation. Checkpoint and reuse the policy-drop ordering, model-derived
-table-name resolution, and regression work; do not implement the same fix again after syncing.
-
-The local draft changelog and roadmap edits claim SA172 is closed and remove it from the queue.
-Treat those as proposed closeout, not proof. Preserve the historical test report, but keep SA172
-and its finding open until independent review and required exact-candidate acceptance are obtained.
-Reconcile its old queue/context/consistency edits with the simplified planner. Then materialize the
-complete candidate patch, obtain terminal review and the PostgreSQL-backed proof, and merge the
-accepted tip before recording final closeout. Keep SA177 deferred. Track 3 retains the database
-acceptance slot and cleanup obligations; another track's unfinished product task is not a blocker.
-
 ## v88 deliveries
 
 - [ ] **SA165 — Accept retained hardening and record its closeout.**
@@ -231,23 +215,6 @@ acceptance slot and cleanup obligations; another track's unfinished product task
     settings-helper findings only with their regression evidence.
 
   **Surfaces:** React theme, generated settings, emission fixture, and technical audit.
-
-- [ ] **SA172 — Accept idempotent RLS enrollment and model-derived table names.**
-
-  The forward-template fix, table-name derivation, and regressions already exist on the owning
-  worktree and need terminal review and integration. Inspect that implementation before editing;
-  a prior review returned no verdict, which is absent evidence rather than a product failure.
-
-  **Acceptance:** prefix the forward policy template with the corresponding `DROP POLICY IF EXISTS`
-  pair and prove applying it twice against a real PostgreSQL table succeeds. Preserve the tenant
-  write policy and operator-read policy split. Derive enrolled table names through
-  `apps.get_model(...)._meta.db_table` and cover an explicitly non-conventional table name so
-  enrollment cannot silently miss it. Obtain independent patch-backed review and the required
-  database/release validation on the exact candidate, then merge and retire the idempotency finding
-  and table-name watch item. Predicate-text conformance stays in SA177 and is not claimed here.
-
-  **Surfaces:** `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`, its regressions,
-  and technical audit. Preserve existing RLS and cleanup guarantees.
 
 - [ ] **SA174 — Correct command-set and gate-input documentation and watchlists.**
 

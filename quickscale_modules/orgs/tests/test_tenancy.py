@@ -91,11 +91,12 @@ class TestForceRlsSqlTemplates:
     def test_forward_sql_contains_create_policy(self) -> None:
         assert "CREATE POLICY" in _FORCE_RLS_FORWARD_SQL
 
-    def test_forward_sql_drops_existing_policies_before_create(self) -> None:
+    def test_forward_sql_is_prefixed_with_policy_drops(self) -> None:
         assert _FORCE_RLS_FORWARD_SQL.count("DROP POLICY IF EXISTS") == 2
-        assert _FORCE_RLS_FORWARD_SQL.index(
-            "DROP POLICY IF EXISTS"
-        ) < _FORCE_RLS_FORWARD_SQL.index("CREATE POLICY")
+        assert _FORCE_RLS_FORWARD_SQL.lstrip().startswith(
+            "DROP POLICY IF EXISTS {policy_name} ON {table};\n"
+            "DROP POLICY IF EXISTS {policy_name}_select ON {table};"
+        )
 
     def test_forward_sql_contains_guarded_org_id_predicate(self) -> None:
         """The RLS policy predicates use the NULLIF-guarded cast to
@@ -740,13 +741,11 @@ except Exception:
 
 @pytest.mark.bypass_rls
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.skipif(
-    not _IS_POSTGRES,
-    reason="FORCE-RLS idempotency proof requires PostgreSQL.",
-)
 def test_apply_force_rls_twice_preserves_policies_and_force_flag() -> None:
     """A second real application succeeds and leaves both protections active."""
     from django.db import connection
+
+    assert connection.vendor == "postgresql"
 
     table = "quickscale_modules_forms_form"
     policy_name = "forms_form_org_isolation"

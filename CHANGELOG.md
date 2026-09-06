@@ -2,6 +2,27 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA172 accepted — idempotent RLS enrollment and model-derived table names (2026-09-06).**
+  `_FORCE_RLS_FORWARD_SQL` now drops both the tenant `FOR ALL` policy and operator-read-only
+  `FOR SELECT` policy before enabling and forcing RLS and recreating them, so applying the helper
+  repeatedly succeeds without widening write access. `refresh_force_rls_policies()` resolves every
+  enrolled table through `apps.get_model(app_label, model_name)._meta.db_table`; absent optional apps
+  remain ignored, while stale model metadata in an installed app fails loudly. Regressions cover the
+  SQL prefix, a non-conventional table name, the absent-app path, and the unknown-model failure.
+
+  Terminal review corrected one acceptance-proof defect: the new live apply-twice test no longer
+  carries an explicit non-PostgreSQL skip. Its authorized `bypass_rls` lane owns PostgreSQL setup,
+  and the test now asserts the live backend so a misrouted proof fails rather than going green by
+  skip. Focused Ruff diagnostics and formatting passed; the affected restricted-role files passed
+  **115 tests with 1 BYPASSRLS test deselected**. `make test-bypassrls` passed all **81** privileged
+  tests, including **7 orgs tests and zero skips**. `make test-integration` passed **2,561 tests**
+  with **86 expected skips**, **12 deselections**, and **94.55%** mean coverage. The required
+  `make check QUIET=1` and release-tier `make ci` both exited 0; `make ci` also reported the same
+  integration result, **5,090** Core/CLI coverage tests passed with **2 expected skips**, zero
+  unsuppressed dependency/static-analysis findings, and all CI checks passed. SA172 and its v88
+  Track 3 delivery are removed from the open-only roadmap. The predicate-text oracle remains deferred
+  to SA177. This records an accepted worktree candidate, not root merge, publication, or deployment.
+
 - **Roadmap delivery consolidation and dependency review (2026-09-05).** User-approved planning
   change; no product delivery, audit finding, release verdict, merge, or publication is completed
   by this entry. The v88 work is consolidated into four delivery units: **SA165 absorbs SA179**

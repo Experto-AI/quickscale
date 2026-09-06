@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-09-05 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
+> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-09-06 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
 >
 > Live structural findings only. Findings are identified by their **slug**; the ordinal numbering
 > used in earlier passes is pass-local and is not a stable identifier (see
@@ -56,15 +56,15 @@ exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118
 local corrections. Exact Core/CLI cleanup completed and the standing PostgreSQL identity, volume,
 catalog, ownership, and role flags remained intact. SA170 and TA70 are closed. The later SA176
 correction release-accepted the retained SA171 lock work without changing its on-disk metadata key;
-SA172 remains open. The full release and retained-partial history is archived in
-[CHANGELOG.md](../../CHANGELOG.md).
+the subsequent SA172 acceptance is archived in [CHANGELOG.md](../../CHANGELOG.md), together with the
+full release and retained-partial history.
 
 **SA171 release acceptance (2026-09-05).** The retained lock implementation is release-accepted
 after SA176 renamed the Python metadata-key constant while preserving the serialized
 `"_acquisition_token"` key. Bandit reports zero unsuppressed findings, the focused lock regressions
 remain green, and the full `make ci` gate passes without a B105 suppression. SA176 and merge position
-#33 are retired; SA172 remains open. The implementation, retained-partial history,
-and final release evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
+#33 are retired. The implementation, retained-partial history, and final release evidence are archived
+in [CHANGELOG.md](../../CHANGELOG.md); SA172's later acceptance is archived there as well.
 
 **SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
 and the completion ledger archived SA167d and retired merge position #18. SA165 became unblocked with
