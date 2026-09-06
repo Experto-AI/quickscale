@@ -50,21 +50,21 @@ Track 3: SA177              deferred post-v88
 required tasks in series, and it lives entirely on track 1. SA174 is optional and shortens
 nothing. Work that does not advance SA165 or SA160 is parallel filler, however useful.
 
-Start both open v88 track heads independently. SA165 needs review/acceptance of existing
+Start both open v88 track heads independently. SA165 needs review and acceptance of already-landed
 implementation; do not restart its product work. SA174 is a bounded documentation closeout.
 
 SA165 → SA160 is the only v88 task edge, and it gates only the **emission-fixture rebaseline**:
 SA165's frozen candidate binds `quickscale_core/tests/fixtures/sa90_emission_manifests.json` until
 its verdict returns and integrates. SA160's helper, its Vitest table, the dead-helper deletions,
 and their regressions may be authored before that, on track 1, and rebaselined once afterwards.
-Combining the old dead-code and CSRF tickets removes a second fixture handoff and validation cycle.
 
-SA177 targets the accepted SA172 helper so its policy oracle reflects the settled implementation.
-SA152 and SA153 have no
-hard product dependency on each other: portal development can use a fresh generated project.
-If the eventual site cutover uses the beta-migration tools, their SA152 acceptance becomes a
-cutover prerequisite; it does not block building the portal. SA154 follows the working portal.
-SA180 follows SA174's landed documentation only in ownership, not in code.
+Track 3 holds no v88 work, and no v88 work can move to it: SA160 shares the emission fixture with
+SA165 and is one review unit, and SA174 shares its gate files with track 2's post-v88 SA152 and
+SA180. SA177 targets the accepted SA172 helper and may take the isolation runner only after SA165
+closes; its post-v88 horizon supplies that ordering. SA152 and SA153 have no hard dependency on
+each other — portal development can use a fresh generated project — though a real site cutover
+through the beta-migration tools would make SA152 acceptance a cutover prerequisite. SA154 follows
+the working portal, and SA180 follows SA174 in ownership of the same gate files, not in code.
 
 ### Track states
 
@@ -74,17 +74,22 @@ are yes.
 | Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA165 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA160 | yes — authoring | no — needs SA165 | no — behind SA165 | no | **yes** |
 | 2 | SA174 | yes | yes | yes | **yes** | no — optional filler |
+| 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
-- **Can start** — no active v88 track waits on a decision, authorization, or plan gate.
-- **Can finish** — every acceptance criterion is satisfiable by its own track. Docker-backed
+- **Can start** — no v88 track waits on a decision, authorization, or plan gate. SA160's helper,
+  Vitest table, dead-helper deletions, and regressions are executable today.
+- **Can finish** — every acceptance criterion is satisfiable by its own track, except SA160's
+  emission rebaseline, which needs SA165's verdict to release the fixture. Both are track-1
+  tickets, so this is an intra-track ordering, not a cross-track dependency. Docker-backed
   validation remains a scheduling queue, not a dependency.
-- **Can merge** — nothing at a current track head is order-gated. SA160's emission-fixture
-  rebaseline and completion remain behind SA165, but its independent helper and test work may be
-  authored before then.
+- **Can merge** — no *track head* is order-gated: SA165 and SA174 may each merge whenever accepted.
+  SA160 sits behind SA165 in track 1's own serialized order, which is sequencing within a track,
+  not a cross-track gate.
 
-There is no ambiguity left between a decision blocker and a hard dependency: **no active v88
-track is currently held by either**.
+Every "no" above is a **hard dependency on SA165's `EV-8` verdict**, not a decision of yours: only
+the returned review and release run can clear it. **No v88 track is held by a pending decision.**
 
 ### Ownership and merge coordination
 
@@ -138,19 +143,19 @@ or delivery evidence, not here.
 
 - [ ] **SA165 — Accept retained hardening and record its closeout.**
 
-  Includes the former SA179 documentation closeout in the same delivery, after product acceptance.
-  Retained product object `573a57a34301e6a91971a7845095bd913bebd5e1` covers corrupt/non-mapping YAML
-  rejection without modifying the file, identity-bound isolation skips with a negative control,
-  `_HOST_DEPENDENT_PATHS` rationale, and the generated local-credential warning. Accepted A–C
-  evidence stays in the changelog; no product repair is currently owed.
+  The reviewed product bytes are already on `v88` at object
+  `573a57a34301e6a91971a7845095bd913bebd5e1`: corrupt/non-mapping YAML rejection before any write,
+  identity-bound isolation skips with a negative control, `_HOST_DEPENDENT_PATHS` rationale, and the
+  generated local-credential warning. This delivery adds the verdict and the closeout — including
+  the former SA179 documentation work — not new implementation. No product repair is owed.
 
   **Candidate:** `quickscale_core/src/quickscale_core/schema/state_schema.py`,
   `scripts/test_isolation_conformance.sh`,
   `quickscale_core/tests/test_generator/test_generator.py`,
   `quickscale_core/src/quickscale_core/generator/templates/OPERATIONS.md.j2`, and
-  `quickscale_core/tests/fixtures/sa90_emission_manifests.json` as reviewable context. The template
-  and its already-landed manifest rebaseline must travel together. The historical stale-hash
-  finding was refuted; omitting the fixture from the review patch caused it. Do not redo that repair.
+  `quickscale_core/tests/fixtures/sa90_emission_manifests.json`. The template and its already-landed
+  manifest rebaseline must travel together; a review patch omitting the fixture manufactures a
+  stale-hash finding that was already refuted.
 
   **Acceptance sequence:**
 
@@ -168,18 +173,18 @@ or delivery evidence, not here.
      Review-recording documents and their structural consistency test are outside the frozen
      product set, so recording the verdict does not invalidate it.
 
-  The reviewed product bytes are already on `v88`; this delivery adds the verdict and the closeout,
-  not new implementation. There is no mandatory root-session boundary between the steps, and
-  independent review must still return before the verdict is launched. No additional ticket is
-  needed merely to record results, recover an interrupted verification, or correct an in-scope
-  defect; changed product inputs need renewed review and validation.
+  Independent review must return before the verdict is launched. No additional ticket is needed to
+  record results, recover an interrupted verification, or correct an in-scope defect; changed
+  product inputs need renewed review and validation.
 
 - [ ] **SA160 — Fix generated CSRF handling and remove dead settings helpers.**
 
-  Includes the former SA161 dead-code removal. Deliver one combined template candidate and one
-  emission-fixture rebaseline, preserving every previous `baseline_evidence` entry and recording
-  a separate rationale for each emitted file change. Author the code and tests whenever track 1 is
-  free; land the rebaseline only after SA165's verdict releases the fixture.
+  Closes TA67 and TA68. Deliver one combined candidate — the CSRF helper and the former SA161
+  dead-code removal — and one emission-fixture rebaseline, preserving every previous
+  `baseline_evidence` entry and recording a separate rationale for each emitted file change. Author
+  the code and tests whenever track 1 is free; land the rebaseline only after SA165's verdict
+  releases the fixture. The two halves are independent in code but share the single rebaseline, so
+  splitting them buys no parallelism and costs a second fixture handoff, review, and generator run.
 
   **Acceptance:**
 
@@ -197,20 +202,14 @@ or delivery evidence, not here.
     generator-change release tier once for that delivery. Retire the duplicate-cookie and dead
     settings-helper findings only with their regression evidence.
 
-  Keep both halves in one candidate. They are independent in code but share the single emission
-  rebaseline, so splitting them buys no parallelism and costs a second fixture handoff, review,
-  and generator-tier run.
-
   **Surfaces:** React theme, generated settings, emission fixture, and technical audit.
 
 - [ ] **SA174 — Close out the landed command-set and gate-input documentation.**
 
-  Includes former SA178, using its documentation-only option instead of a field rename. **All three
-  corrections are written and already on `v88`**: `orgs/apps.py` names the four independent
-  fail-closed declarations, `check_gate_parity.py` and the registry description define
-  `trigger_inputs` as the bidirectional E2E allowlist partition, and the architecture watchlist is
-  reconciled with every trigger preserved. No declaration, gate behavior, registry field, or
-  emitted byte changed.
+  **All three corrections are already on `v88`** — the `orgs/apps.py` multi-owner comment, the
+  `trigger_inputs` allowlist-partition definition in `check_gate_parity.py` and the registry, and
+  the reconciled architecture watchlist. Nothing is left to author; this is evidence and closeout
+  only. No declaration, gate behavior, registry field, or emitted byte changed.
 
   **Acceptance:** run the focused gate-parity checks and lint appropriate to the touched
   descriptions, obtain independent review of the landed documentation delta, and record the

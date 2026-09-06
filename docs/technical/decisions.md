@@ -452,8 +452,8 @@ The remaining deviations are scheduled inside v88; none is deferred.
 |---|---|
 | Five modules (auth, backups, notifications, orgs, storage) now declare their app lists in their own manifests; core reads those projections | **SA167a** — completed v88, merge #8 |
 | All twelve shipped modules own their adapters and consume the public `quickscale_core.runtime` facade or its `runtime.manifest` subfacade; `quickscale_core/.../manifest/entry_point.py` contains only generic registry/dispatch logic | **SA167b** — completed v88, merge #17; implementation, P4 acceptance, convergence, attestation, and merge-back are complete |
-| The settled CLI product bytes no longer hold per-module wiring logic | **SA167d** — evidence belongs in [CHANGELOG.md](../../CHANGELOG.md); current closeout dependencies and review state belong in the [roadmap scheduling table](roadmap.md#scheduling-table). |
-| `django_apps:` was parsed by `manifest/loader.py` and read by no production code path; the declaration gate now enforces app projections | **SA167c** — v88, merge #21; implementation phases A-E are accepted. Phase F release status and downstream sequencing live in the roadmap; this policy table does not duplicate that transient ledger. |
+| The settled CLI product bytes no longer hold per-module wiring logic | **SA167d** — completed v88; evidence in [CHANGELOG.md](../../CHANGELOG.md). |
+| `django_apps:` was parsed by `manifest/loader.py` and read by no production code path; the declaration gate now enforces app projections | **SA167c** — completed v88, merge #21; phases A-F accepted, evidence in [CHANGELOG.md](../../CHANGELOG.md). |
 
 Type reference:
 [implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).

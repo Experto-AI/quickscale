@@ -2,6 +2,43 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Planner trim and merge-back reconciliation (2026-09-06).** Planning change only; no product
+  delivery, review verdict, audit finding, merge, or publication is completed by this entry.
+
+  **Measured merge-back state.** All three worktrees were inspected directly: `wt-track1`,
+  `wt-track2`, and `wt-track3` are each **clean and zero commits ahead of `v88`** (`wt-track2` 6
+  behind, `wt-track3` 4 behind — merged back, simply not fast-forwarded). Track 3's SA172 delivery
+  and track 2's SA174 documentation candidate are both integrated on `v88`; the stale-index
+  condition recorded at the previous checkpoint is gone. Nothing is stranded in a worktree.
+
+  **Audit reconciliation, nothing moved.** The technical audit carries exactly two open findings,
+  **TA67** (`spa-csrf-token-duplicate-cookie`) and **TA68** (`generated-settings-dead-client-ip`),
+  both owned by open SA160, plus the four live SA165 retained-product notes — every one of them
+  still action-bearing, so none was archived. Closed items (TA70, TA71, TA72, the SA170 suppression
+  ledger, the six adjudicated red-flag leads) already stand as one-line pointers into this file, and
+  the architecture audit already excludes closed-ticket release history. No audit context was
+  eligible for transfer in this pass.
+
+  **Track rebalance considered and declined.** Track 3 holds no v88 work, and no open v88 task may
+  move there. SA160 shares `sa90_emission_manifests.json` with SA165's frozen candidate and is one
+  coherent review unit whose two halves share a single emission rebaseline; splitting or relocating
+  it would create a merge hazard on the fixture and buy a second review and generator-tier run for
+  no parallelism. SA174 shares `check_gate_parity.py` and `gate_registry.json` with track 2's
+  post-v88 SA152 and SA180, so it stays on track 2. The declined moves are recorded here so the
+  question is not re-opened without new information.
+
+  **Planner changes.** Historical narrative was removed from the three v88 ticket bodies and the
+  scheduling prose — the refuted stale-hash episode, the ticket-absorption rationale, and the
+  restatement of what SA174 already landed — leaving each body's scope and acceptance. The
+  three-state track table gains an explicit **SA160** row and an explicit **track 3 = no v88
+  ticket** row, and now states that every current "no" is a hard dependency on SA165's unspent
+  `EV-8` verdict rather than a maintainer decision. SA160's body names TA67/TA68 as the findings it
+  closes.
+
+  **Cross-document consistency.** `docs/technical/decisions.md` pointed SA167c and SA167d at the
+  roadmap for "current closeout dependencies and review state"; both tickets are closed and absent
+  from the open-only planner, so those dangling pointers now resolve to this file.
+
 - **SA172 accepted — idempotent RLS enrollment and model-derived table names (2026-09-06).**
   `_FORCE_RLS_FORWARD_SQL` now drops both the tenant `FOR ALL` policy and operator-read-only
   `FOR SELECT` policy before enabling and forcing RLS and recreating them, so applying the helper
