@@ -38,6 +38,16 @@ and ``$(MAKE)`` recipe goals, so a standalone recipe-owning gate that is
 removed from ``check`` no longer satisfies the registry — global target
 effectiveness is not check aggregation.  Missing or malformed ``include``
 files fail hard with the named file (exit 2).
+
+``trigger_inputs`` contract
+---------------------------
+The legacy field name does not mean that a matching change conditionally runs
+or skips a gate.  It is each E2E-bound gate's ordered share of the
+bidirectional partition of ``e2e.yml``'s pull-request path allowlist.  The
+checker requires the flattened registry sequence and workflow sequence to be
+exactly equal.  If any execution context ever skips a gate on the basis of
+``trigger_inputs``, that is the promotion trigger for renaming or redesigning
+this contract rather than overloading the legacy name.
 """
 
 from __future__ import annotations
@@ -106,6 +116,10 @@ _CONTEXT_SOURCES: dict[str, Path] = {
 
 _REGISTRY_PATH = _REPO_ROOT / "scripts" / "gate_registry.json"
 _MAKEFILE_PATH = _REPO_ROOT / "Makefile"
+_TRIGGER_INPUTS_CONTRACT = (
+    "trigger_inputs is the ordered, bidirectional E2E allowlist partition; "
+    "it never controls whether a gate runs"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -501,7 +515,7 @@ def _validate_registry(data: dict[str, Any]) -> list[dict[str, Any]]:
             raise SchemaValidationError(
                 "registry",
                 f"gates[{i}].trigger_inputs",
-                f"gate[{i}] ({gid}).trigger_inputs must be a list",
+                f"gate[{i}] ({gid}).trigger_inputs must be a list; {_TRIGGER_INPUTS_CONTRACT}",
             )
         seen_ti: set[str] = set()
         for pidx, pp in enumerate(ti):
@@ -509,19 +523,22 @@ def _validate_registry(data: dict[str, Any]) -> list[dict[str, Any]]:
                 raise SchemaValidationError(
                     "registry",
                     f"gates[{i}].trigger_inputs[{pidx}]",
-                    f"gate[{i}] ({gid}).trigger_inputs[{pidx}] must be a non-empty string",
+                    f"gate[{i}] ({gid}).trigger_inputs[{pidx}] must be a non-empty string; "
+                    f"{_TRIGGER_INPUTS_CONTRACT}",
                 )
             if not path_safe_re.match(pp):
                 raise SchemaValidationError(
                     "registry",
                     f"gates[{i}].trigger_inputs[{pidx}]",
-                    f"gate[{i}] ({gid}).trigger_inputs[{pidx}] {pp!r} contains unsafe characters",
+                    f"gate[{i}] ({gid}).trigger_inputs[{pidx}] {pp!r} contains unsafe characters; "
+                    f"{_TRIGGER_INPUTS_CONTRACT}",
                 )
             if pp in seen_ti:
                 raise SchemaValidationError(
                     "registry",
                     f"gates[{i}].trigger_inputs[{pidx}]",
-                    f"gate[{i}] ({gid}).trigger_inputs contains duplicate path: {pp!r}",
+                    f"gate[{i}] ({gid}).trigger_inputs contains duplicate path: {pp!r}; "
+                    f"{_TRIGGER_INPUTS_CONTRACT}",
                 )
             seen_ti.add(pp)
 
@@ -2515,10 +2532,10 @@ def _extract_gates_for_context(
         return {target_to_gate[t] for t in make_targets if t in target_to_gate}
 
     if context == "e2e-trigger":
-        # For e2e-trigger, match each gate's trigger_inputs against the
-        # ordered e2e path allowlist.  A gate is "present" iff every one
-        # of its trigger_inputs appears in the e2e path list as an
-        # order-preserving subsequence.
+        # ``trigger_inputs`` is an ordered allowlist partition, never a skip
+        # control.  Gate-level presence maps each share into the workflow;
+        # the aggregate check below then proves the reverse direction and
+        # exact flattened sequence.
         e2e_paths = _extract_e2e_trigger_paths(source)
         found: set[str] = set()
         for gate in registry_gates:
@@ -2649,7 +2666,8 @@ def _compare(
     if e2e_source and has_e2e_requirement:
         e2e_source = _canonical_input_path(e2e_source, "e2e-trigger source")
         e2e_paths_actual = _extract_e2e_trigger_paths(e2e_source)
-        # Collect all trigger_inputs from all gates in registration order
+        # Flatten the ordered shares of the bidirectional E2E allowlist
+        # partition.  This legacy field never controls whether a gate runs.
         registry_paths: list[str] = []
         for gate in registry_gates:
             ti = gate.get("trigger_inputs", [])

@@ -5,8 +5,9 @@ concepts, but it must not restate bands, positions, dependencies, or readiness. 
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
 tree state.  The integration-ready SA167d closeout, green SA167c Phase F, closed SA170 status,
-the completed SA164 guardrail repair, and retained-partial SA165 closeout are checked as current
-consumer contracts below; those checks are not mutation canaries.
+the completed SA164 guardrail repair, blocked SA178 retained-partial handoff, and retained-partial
+SA165 closeout are checked as current consumer contracts below; those checks are not mutation
+canaries.
 
 Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
 agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
@@ -358,7 +359,7 @@ def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
     assert "SA167c verdict is green and archived" in dependency_graph, (
         "SA167c dependency graph must record the archived green verdict"
     )
-    assert "start SA178 (#34)" in next_actions
+    assert "hold SA178 (#34) at its decision boundary" in next_actions
 
 
 def _assert_sa174_sa175_current_displacement_rule(roadmap_text: str) -> None:
@@ -546,7 +547,6 @@ def _assert_sa164_closeout(
     assert "SA164" not in roadmap
     assert 25 not in positions
     assert "## SA164" not in context_text
-    assert roadmap["SA178"].dependencies == frozenset()
 
     latest_closeout = re.search(
         r"(?ms)^- \*\*SA164 migration-squash guardrail completed\b.*?(?=^- \*\*)",
@@ -557,6 +557,73 @@ def _assert_sa164_closeout(
     assert "FileNotFoundError" in normalized
     assert "current regenerated migration baseline" in normalized
     assert "merge position **#25**" in normalized
+
+
+def _assert_sa178_blocked_handoff(
+    roadmap_text: str,
+    context_text: str,
+    docs_index_text: str,
+    arch_audit_text: str,
+    changelog_text: str,
+) -> None:
+    """Keep the retained partial distinct from completion and bind its blocker."""
+    roadmap = _roadmap_tickets(roadmap_text)
+    positions = {
+        metadata.merge_position
+        for metadata in roadmap.values()
+        if metadata.merge_position is not None
+    }
+    assert roadmap["SA178"].dependencies == frozenset()
+    assert roadmap["SA178"].merge_position == 34
+    assert 34 in positions
+    assert "## SA178" in context_text
+    assert roadmap["SA174"].dependencies == frozenset()
+    assert roadmap["SA174"].merge_position == 31
+    assert "SA178 remains pending and heads W2 with `deps: none`" in docs_index_text
+    assert "one maintainer decision is open for SA178" in docs_index_text
+
+    normalized_audit = " ".join(arch_audit_text.split())
+    for contract in (
+        "ordered share of the bidirectional partition",
+        "never controls whether a gate runs",
+        "a thirteenth shipped module, or `teams` graduating",
+        "pg_dump`/`pg_restore` major-version contract ever depends on the two agreeing",
+        "the next gate addition paying more than two oracle edits",
+        "the counts disagreeing across two oracles",
+        "a gate ever being *skipped* on the basis of `trigger_inputs`",
+        "exactly **eight** sites",
+        "`d31c6b41` and `437dd0e0`",
+        "**Trigger fired.**",
+        "promotion plus derivation",
+        "explicit trigger-semantics revision",
+    ):
+        assert contract in normalized_audit
+    count_item = arch_audit_text.partition(
+        "- **Count-pinned oracles in `test_gate_parity.py`"
+    )[2].partition("- **SA92 migration-squash discovery tuple.**")[0]
+    assert count_item
+    assert "**Trigger fired.**" in count_item
+    assert "**Not fired**" not in count_item
+
+    latest_checkpoint = re.search(
+        r"(?ms)^- \*\*SA178 retained-partial checkpoint — closure blocked by a fired count-oracle trigger\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_checkpoint is not None
+    normalized_checkpoint = " ".join(latest_checkpoint.group(0).split())
+    assert "retains SA178 and merge position **#34**" in normalized_checkpoint
+    assert (
+        "eight open v88 ticket entries across eight open merge positions"
+        in normalized_checkpoint
+    )
+    assert (
+        "the earlier blanket **not fired** claim is withdrawn"
+        in normalized_checkpoint.lower()
+    )
+    assert (
+        "authorizes neither further implementation nor merge-back"
+        in normalized_checkpoint
+    )
 
 
 def _assert_sa167c_current_status(
@@ -576,7 +643,6 @@ def _assert_sa167c_current_status(
     assert "SA166" not in roadmap
     assert 24 not in {metadata.merge_position for metadata in roadmap.values()}
     assert "## SA166" not in context_text
-    assert roadmap["SA178"].dependencies == frozenset()
 
     latest_sa166_closeout = re.search(
         r"(?ms)^- \*\*SA166 behavioural-commit testimony gate\b.*?(?=^- \*\*)",
@@ -822,6 +888,13 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     _assert_sa164_closeout(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+    )
+    _assert_sa178_blocked_handoff(
+        roadmap,
+        CONTEXT.read_text(encoding="utf-8"),
+        docs_index,
+        (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
         (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
     )
     _assert_sa167d_status(
@@ -1311,8 +1384,8 @@ def _assert_sa165_retained_partial(
         normalized_readiness,
     )
     assert (
-        "W2 and W3 are truly green; W1 can start but cannot finish until a fresh "
-        "SA165-R1 is green and SA165's "
+        "W3 is truly green; W2 is decision-blocked at SA178, and W1 can start but "
+        "cannot finish until a fresh SA165-R1 is green and SA165's "
         "`EV-8`-authorized final-candidate verdict is green."
     ) in normalized_readiness
 
@@ -1404,7 +1477,7 @@ def test_v88_sa165_dependency_release_does_not_imply_ticket_release() -> None:
         assert "SA165 is released with `deps: none`" not in text, path
 
 
-def _assert_latest_closeout_uses_current_queue_counts(
+def _assert_latest_checkpoint_uses_current_queue_counts(
     roadmap_text: str, changelog_text: str
 ) -> None:
     roadmap = _roadmap_tickets(roadmap_text)
@@ -1422,23 +1495,23 @@ def _assert_latest_closeout_uses_current_queue_counts(
         f"{_number_word(len(v88))} open v88 ticket entries across "
         f"{_number_word(len(positions))} open merge positions"
     )
-    latest_closeout_entry = re.search(
-        r"(?ms)^- \*\*SA164 migration-squash guardrail completed\b.*?(?=^- \*\*)",
+    latest_checkpoint_entry = re.search(
+        r"(?ms)^- \*\*SA178 retained-partial checkpoint — closure blocked by a fired count-oracle trigger\b.*?(?=^- \*\*)",
         changelog_text,
     )
-    assert latest_closeout_entry is not None
-    normalized_entry = " ".join(latest_closeout_entry.group(0).split())
+    assert latest_checkpoint_entry is not None
+    normalized_entry = " ".join(latest_checkpoint_entry.group(0).split())
     assert expected in normalized_entry
 
 
-def test_v88_latest_closeout_uses_current_queue_counts() -> None:
-    _assert_latest_closeout_uses_current_queue_counts(
+def test_v88_latest_checkpoint_uses_current_queue_counts() -> None:
+    _assert_latest_checkpoint_uses_current_queue_counts(
         ROADMAP.read_text(encoding="utf-8"),
         (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
     )
 
 
-def test_v88_latest_closeout_count_drift_is_expected_red_canary() -> None:
+def test_v88_latest_checkpoint_count_drift_is_expected_red_canary() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     v88 = {
@@ -1464,7 +1537,7 @@ def test_v88_latest_closeout_count_drift_is_expected_red_canary() -> None:
 
     assert replacement_count == 1
     with pytest.raises(AssertionError):
-        _assert_latest_closeout_uses_current_queue_counts(roadmap, mutated)
+        _assert_latest_checkpoint_uses_current_queue_counts(roadmap, mutated)
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:

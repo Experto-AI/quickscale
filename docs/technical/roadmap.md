@@ -86,14 +86,16 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
   SA172                         #29
 ```
 
-**Position numbers are identifiers, not run order.** W2's remaining order is #34, then the
-#31/#32 tail. **SA174 and SA175 remain W2 tail by current lane ordering; the band-C displacement
+**Position numbers are identifiers, not run order.** W2's remaining order is #34, then #31/#32.
+**SA174 and SA175 remain W2 tail by current lane ordering; the band-C displacement
 rule imposes no present constraint because no runnable band-B leg remains.**
 
 SA167c verdict is green and archived, as are SA166's testimony gate and SA176's release-gate
-correction. W2 carries the three-position band-C queue headed by SA178, with SA174 and SA175 as its
-tail. W3 holds the exclusive slot and takes scheduling priority while its Docker-backed leg is
-active; its one position is a *queue* of one, and SA172 keeps `deps: none`. All eight positions are
+correction. SA178 remains open at #34 with useful partial work retained; its count-pinned-oracle
+trigger fired, so W2 is held at a decision between promotion/derivation and explicit
+trigger-semantics revision. SA174 and SA175 remain its lane tail. W3 holds the exclusive slot and
+takes scheduling priority while its Docker-backed leg is active; its one position is a *queue* of
+one, and SA172 keeps `deps: none`. All eight positions are
 band-C work.
 **No open ticket remains on the release critical path; `make ci` is green on the corrected tree.**
 
@@ -115,21 +117,21 @@ tickets build on rather than re-open.
 Lanes are **W1 4 · W2 3 · W3 1**, and every open ticket carries a track. **No move is proposed**:
 the remaining queues are lane-ordered band-C work, so no relocation can shorten the release path.
 
-**Three tickets were split on 2026-09-05, in lane, without relocation.** Each carried a small real
-defect bundled with documentation or evidence work whose cost dominated the reviewed unit, and in
-SA165's case whose file set made the ticket's own evidence self-invalidating. The splits are
-**SA164 → SA164 + SA178** (both W2), **SA165 → SA165 + SA179** (both W1), and **SA172 → SA172 +
-SA177** (SA177 leaves v88 for the post-v88 backlog because it is the only part needing a live
+**Three open split consequences remain from 2026-09-05, all without relocation.** Each source ticket
+carried a small real defect bundled with documentation or evidence work whose cost dominated the
+reviewed unit, and in SA165's case whose file set made the ticket's own evidence self-invalidating.
+They are **SA164 → SA164 + SA178** (both W2), **SA165 → SA165 + SA179** (both W1), and
+**SA172 → SA172 + SA177** (SA177 leaves v88 for the post-v88 backlog because it is the only part needing a live
 PostgreSQL beyond the two-line fix). No child changes lane, so no conflict surface gains a second
 worktree; splitting raises the ticket count without adding work, and lets each lane's real fix reach
 a checked box without waiting on its documentation half.
 
 **SA174 (#31) and SA175 (#32) sit on W2 by a confirmed decision (2026-09-04), not a provisional
 one.** The assignment keeps `docs/others/arch-audit.md` **single-lane and one-directional** — its
-remaining owners SA174, SA175, and SA178 are all W2, running #34 → #31 → #32 — and
+remaining owners SA178, SA174, and SA175 are all W2, running #34 → #31 → #32 — and
 leaves W1 as one coherent chain headed by #22, with #35 and the #19 ─► #20 pair behind it. The same
-single-lane requirement is what forced SA178 to stay on W2. No code file carries a second
-lane. The assignment stands on that permanent conflict-surface gain rather than on the idle-lane
+single-lane rule keeps SA178 on W2 while its decision remains open. No code file carries a second lane. The
+assignment stands on that permanent conflict-surface gain rather than on the idle-lane
 condition that produced it; the reasoning is archived in [CHANGELOG.md](../../CHANGELOG.md).
 **SA174 and SA175 remain W2 tail by current lane ordering; the band-C displacement rule imposes no
 present constraint because no runnable band-B leg remains.**
@@ -167,9 +169,11 @@ complete and the standing state was restored exactly.
 
 ### Next action per lane
 
-- **W2 — start SA178 (#34).** SA164's fail-loud SA92 guardrail repair is complete and archived;
-  SA178 now heads the lane with the watchlist restatement, while SA174 and SA175 remain the band-C
-  tail. W2 claims no standing service.
+- **W2 — hold SA178 (#34) at its decision boundary.** Preserve the compatibility-preserving
+  `trigger_inputs` clarification and the useful current-watchlist restatement, but do not implement
+  further or merge. The count-pinned-oracle trigger fired historically and its eight current sites
+  require a choice between promotion/derivation and explicit trigger-semantics revision. SA174 and
+  SA175 remain the band-C tail. W2 claims no standing service.
 - **W1 — retain SA165 (#22).** SA165-R1 independent review passed over the historical six-file
   candidate, but the checkpoint recording that result changed the roadmap blob and invalidated the
   exact-byte binding for further action. One-run authority remains granted and unspent as `EV-8`.
@@ -192,15 +196,15 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA178 (#34) | **yes** — `deps: none` and its work is W2-owned | **yes** — no upstream ticket remains | **yes** — nothing is ordered ahead of #34 | no |
+| **W2** | SA178 (#34) | **no** — retained partial work is blocked on the count-oracle semantics decision | **no** — either authorized resolution requires reviewed follow-up work | **no** — unfinished SA178 must not merge or retire #34 | no |
 | **W1** | SA165 (#22) | **yes** — `deps: none`; the focused status/test reconciliation is green, and the next action is a fresh terminal SA165-R1 before entering the reviewed remainder | **no** — the current bytes lack a fresh SA165-R1 and the `EV-8`-authorized verdict has not returned green | **yes after fresh review and a green verdict** — no cross-lane blocker remains | no |
 | **W3** | SA172 (#29) | **yes** — `deps: none` and W3 owns the required PostgreSQL slot | **yes** — its acceptance is proved against W3's own PostgreSQL slot | **yes** — nothing is ordered ahead of #29 | no |
 
-**W2 and W3 are truly green; W1 can start but cannot finish until a fresh SA165-R1 is green and
+**W3 is truly green; W2 is decision-blocked at SA178, and W1 can start but cannot finish until a fresh SA165-R1 is green and
 SA165's `EV-8`-authorized final-candidate verdict is green.** **No open ticket remains on the
-release critical path**, so W2's and W3's green heads are real, useful work that is nonetheless
-filler with respect to the release date. W1's *cannot finish* is empirical, not a decision — the
-authorized verdict either returns green or it does not.
+release critical path**, so W3's green head is real, useful work that is nonetheless filler with
+respect to the release date. W2's block is an unresolved semantics choice, while W1's *cannot
+finish* is empirical — the authorized verdict either returns green or it does not.
 
 **Behind the heads, the split changed one answer.** SA179 (#35, W1) can start —
 its documentation work is executable today — but cannot finish, because retiring the four tech-audit
@@ -209,7 +213,15 @@ upstream work, not a decision. SA177 is post-v88 and is not scheduled here at al
 
 ### Maintainer decisions
 
-**No maintainer decision is open anywhere in the v88 queue.** The last one was granted on
+**One maintainer decision is open in the v88 queue: SA178's count-pinned-oracle disposition.**
+Historical evidence shows that the written trigger fired: both `d31c6b41` and `437dd0e0` changed at
+least three logical count-oracle families and five literal sites while adding a gate. The current
+population is eight sites. Choose exactly one path before implementation resumes: **(A)** promote
+the item and derive the remaining count oracles following the `48e0a62a` precedent, or **(B)**
+explicitly revise the trigger semantics and justify why those historical edits do not qualify.
+This checkpoint chooses neither; SA178 stays open and #34 stays active.
+
+The prior maintainer decision was granted on
 2026-09-05 as **`EV-8`**: exactly one replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict
 over SA165's settled Phase D candidate, frozen at the moment `wt-track1` syncs. `EV-8`
 authorizes that one verdict and nothing else — not a second run, not redoing accepted A-C (which
@@ -340,7 +352,7 @@ Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`, 
 | Ticket | Additional shared surface | Why |
 |---|---|---|
 | SA160, SA161 | generator templates + **SA90 emission-parity fixture**, `docs/others/tech-audit.md` | emitted output changes |
-| SA178 | `scripts/gate_registry.json`, `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`, `docs/others/arch-audit.md` | **split from SA164 2026-09-05**; watchlist restatement and the `trigger_inputs` naming correction; **W2** — the registry never crosses worktrees |
+| SA178 | `scripts/gate_registry.json`, `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`, `docs/others/arch-audit.md` | **split from SA164 2026-09-05**; retained `trigger_inputs` clarification plus the blocked count-oracle disposition; **W2** — the registry never crosses worktrees |
 | SA165 | `quickscale_core/.../state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `OPERATIONS.md.j2` | retained product discharge; final-candidate release verdict pending on W1. **Documentation surfaces moved to SA179 2026-09-05**, which is what keeps the frozen candidate free of the files that record its own review |
 | SA179 | `docs/others/tech-audit.md`, `docs/index.md`, `docs/technical/v88_ticket_context.md`, `quickscale_core/tests/test_v88_ticket_context_consistency.py` | **split from SA165 2026-09-05**; audit-note retirement and status reconciliation; **W1** — no code file, and its own edits cannot invalidate a product verdict |
 | SA172 | `quickscale_modules/orgs/.../tenancy.py`, `docs/others/tech-audit.md` | **shrunk 2026-09-05** to the forward-template fix, its apply-twice proof, and the `db_table` derivation; **W3** — proved against a live PostgreSQL. The predicate-text assertion and its `scripts/test_isolation_conformance.sh` edit moved to post-v88 SA177, which is why SA172 no longer shares that file |
@@ -349,12 +361,16 @@ Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`, 
 
 Surfaces needing an explicit ordering note beyond the table:
 
-- `scripts/gate_registry.json` — SA178 is its remaining owner after the 2026-09-05 split; the
-  surface never crosses worktrees, which is why SA178 could only be split within W2.
+- `scripts/gate_registry.json` and `scripts/check_gate_parity.py` — SA178 owns its retained
+  compatibility-preserving contract clarification. Preserve the settled definition of
+  `trigger_inputs` as the ordered, bidirectional E2E allowlist partition, never a gate-skip control,
+  while the separate count-oracle decision remains open.
 - `quickscale_core/contracts/` and `quickscale_core/manifest/` — settled cross-lane surfaces shared
   by *behaviour* rather than filename; see the standing rule above and the `203fcd61` precedent.
-- `scripts/test_gate_parity.py` — SA178 owns any update required by its gate-registry adjudication.
-  The `describe --format json` provisioning binding, the regenerated 24-entry publish oracle, and
+- `scripts/test_gate_parity.py` — SA178 owns its retained non-skip regression and the unresolved
+  disposition of the eight count-pinned oracle sites. The
+  `trigger_inputs` schema-contract assertions, `describe --format json` provisioning binding, the
+  regenerated 24-entry publish oracle, and
   SA123's settled hosted-job, `needs`-edge, run-value, publish/E2E-path, and generator expectations
   are settled tree state and must be preserved by anything that touches the file.
 - `.github/workflows/ci.yml` and `scripts/provision_ci_postgres.sh` have **no open owner**, and no
@@ -371,13 +387,13 @@ Surfaces needing an explicit ordering note beyond the table:
 - `scripts/test_e2e.sh` has no open owner after SA170's accepted closeout. Preserve its settled
   exact-scope cleanup contract.
 
-`docs/others/arch-audit.md` is on three surfaces — **SA174** (demotes
+`docs/others/arch-audit.md` is on three surfaces — **SA178** (records the fired count-oracle trigger
+and its pending disposition), **SA174** (demotes
 `privileged-command-set-multi-owner` from rank 1 to the watchlist, without closing
 it), **SA175** (records rank-2's first step as discharged
-without closing the finding), and **SA178** (restates
-the watchlist and its triggers) — and **all three are W2**, so the file stays single-lane and
-one-directional under the runnable order #34 → #31 → #32. Keeping SA178 in W2 was the binding
-constraint on that split: moving it would have put this file on two worktrees. The rank-3 and rank-4
+without closing the finding) — and **all three are W2**, so the file stays single-lane and
+one-directional under the runnable order #34 → #31 → #32. SA178's partial restatement is retained;
+the count-oracle item remains open in an adjudication state. The rank-3 and rank-4
 findings (`deletion-invariants-per-boundary-reimplementation`, `org-model-universe-hand-enumerated`)
 remain untouched per the standing "neither" rule, as does the **substance** of rank-2
 (`generated-file-ownership-unmodeled`) — SA175 takes only the bounded first step the audit itself
@@ -388,7 +404,7 @@ marks as trigger-independent.
 consumer join when the closeout changes a summarized count, status, dependency, schedule, or owner;
 `docs/others/tech-audit.md` is shared by
 SA160, SA161, SA172, and SA179 — SA165's own tech-audit edits moved to SA179 in the 2026-09-05
-split — and `docs/others/arch-audit.md` by SA174, SA175, and SA178, all three on W2. That is
+split — and `docs/others/arch-audit.md` by SA178, SA174, and SA175, all on W2. That is
 by design and is discharged by the handoff checklist. No lane assignment above puts a *code* file on
 two lanes.
 
@@ -566,31 +582,38 @@ surface.
   and `docs/others/arch-audit.md` records the first step as discharged without closing it.
   **Shared conflict surface:** `quickscale_cli/tests/test_beta_migration_ownership_conformance.py`, `quickscale_devtools/src/quickscale_devtools/beta_migration.py`, `docs/others/arch-audit.md`.
 
-- [ ] **SA178 — Restate the arch-audit watchlist and correct the `trigger_inputs` name.** `Band C · Tier 3 · W2 · merge #34 · deps: none · split from SA164 2026-09-05`
-  **Split from SA164 on 2026-09-05** so the guardrail repair could land without waiting on
-  documentation. This ticket changes no behaviour: it is a naming correction and a restatement of
-  triggers. It stays on **W2** because `scripts/gate_registry.json` and `docs/others/arch-audit.md`
-  never cross worktrees; moving it would have put the audit document on two lanes.
-  **1. `trigger_inputs` has drifted from its name.** `check_gate_parity.py:2652-2690` uses the field
-  as a bidirectional partition of `e2e.yml`'s path allowlist, not as "what changes should trigger
-  this gate" — which is why `check-core-compat`'s trigger reads `quickscale_modules/backups/**`. Not
-  a defect: the check it performs is real and exact. It is a correct mechanism under a name that
-  lies, and it becomes load-bearing the moment a gate is ever *skipped* on the basis of the field.
-  **2. The three not-fired items must survive the next pass.** A watch item's whole value is its
-  written trigger; an item restated from a superseded list has lost its bet.
-  **Acceptance:** `trigger_inputs` is either renamed to describe what it does, or its docstring and
-  schema description record the actual semantics plus the skip-based promotion trigger; the arch
-  audit's **current** watchlist is restated with triggers intact rather than the superseded
-  pre-resolution list — the two hand-pinned literals minted inside the provisioning derivation
-  (`provision_ci_postgres.sh:93,96`, `!= teams` and `== 12`, trigger: a thirteenth shipped module or
-  `teams` graduating), the second copy of the PostgreSQL major (`provision_ci_postgres.sh:15` against
-  `runtime_pins.py:30`, trigger: the DR engine's `pg_dump`/`pg_restore` major-version contract coming
-  to depend on the two agreeing), and the roughly six count-pinned oracles in
-  `scripts/test_gate_parity.py` (trigger: the next gate addition paying more than two oracle edits,
-  or two oracles disagreeing) — each noted as **not fired**; no watchlist item is closed.
-  **Verification:** `poetry run pytest scripts/test_gate_parity.py -q -o addopts= --no-cov`;
-  `make check-gate-parity`; `make quality` no worse than found.
-  **Shared conflict surface:** `scripts/gate_registry.json`, `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`, `docs/others/arch-audit.md`.
+- [ ] **SA178 — Restate the arch-audit watchlist and correct the `trigger_inputs` name.** `Band C · Tier 3 · W2 · merge #34 · deps: none · split from SA164 2026-09-05 · retained partial; decision-blocked`
+  **State: useful partial implementation retained; completion and merge are not authorized.** The
+  compatibility-preserving branch clarified `trigger_inputs` at the registry, checker, diagnostics,
+  maintainer guide, and focused regression surfaces as the ordered, bidirectional E2E allowlist
+  partition, never a skip control. That work changes no gate execution behavior and is preserved.
+  The current watchlist restatement is also useful except for its prior count-oracle conclusion.
+
+  **Blocker discovered by independent review.** The count-pinned-oracle trigger is *the next gate
+  addition paying more than two oracle edits, or counts disagreeing across two oracles*. Git history
+  shows the first arm fired: both `d31c6b41` and `437dd0e0` changed at least three logical
+  count-oracle families and five literal sites while adding a gate. The current population is exactly
+  **eight sites** in `scripts/test_gate_parity.py`: three `all_ten` names, two `all_seven` names, the
+  `all_twenty` run-value oracle, the 16-job projection literal, and `exactly_six`. The former
+  `roughly six` count and blanket **not fired** conclusion are withdrawn.
+
+  **Decision required before implementation resumes.** Choose exactly one: **(A) promotion and
+  derivation** — promote the fired item and derive the remaining count oracles following the
+  `48e0a62a` planning-gate precedent; or **(B) explicit trigger-semantics revision** — rewrite the
+  trigger with a reviewed rationale that explains why those historical gate additions do not
+  qualify. This recording-only checkpoint chooses neither and must not be interpreted as approval of
+  either branch.
+
+  **Reusable remaining phases:**
+  1. Record the selected semantics and its evidence before changing implementation or audit rank.
+  2. Implement only that branch, preserving the retained non-skip `trigger_inputs` contract and all
+     unrelated watch-item triggers.
+  3. Reconcile the architecture audit, roadmap/context consumers, and focused consistency assertions;
+     run the parity suite, `make check-gate-parity`, and the ticket-context consistency suite.
+  4. Independently review the exact resulting delta. Only a reviewed, green result may archive
+     SA178 and retire #34; a red or unresolved result leaves this handoff open.
+  **Shared conflict surface:** `scripts/gate_registry.json`, `scripts/check_gate_parity.py`,
+  `scripts/test_gate_parity.py`, `docs/others/arch-audit.md`.
 
 - [ ] **SA172 — Make `apply_force_rls`'s idempotency claim true.** `Band C · Tier 3 · W3 · merge #29 · deps: none · shrunk 2026-09-05`
   Closes tech-audit **TA72** (`force-rls-apply-idempotency-claim`, S4, opened 2026-08-28).

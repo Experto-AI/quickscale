@@ -25,6 +25,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import check_gate_parity as check_gate_parity_module
 import pytest
 import sync_ci_gate_jobs as sync_ci_gate_jobs_module
 import yaml
@@ -910,6 +911,33 @@ class TestRegistrySchemaValidation:
     def test_minimal_valid_registry(self, tmp_path: Path) -> None:
         """A perfectly minimal valid registry is accepted."""
         self._check_accepted(_MINIMAL_REGISTRY, tmp_path)
+
+    def test_trigger_inputs_contract_is_explicit_at_both_schema_surfaces(self) -> None:
+        """The legacy field name cannot hide its exact non-skip semantics."""
+        registry = json.loads(
+            (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+        )
+        descriptions = (
+            check_gate_parity_module.__doc__ or "",
+            registry["description"],
+        )
+        for description in descriptions:
+            normalized = " ".join(description.split()).lower()
+            assert "ordered" in normalized
+            assert "bidirectional" in normalized
+            assert "allowlist" in normalized
+            assert "skip" in normalized
+
+    def test_trigger_inputs_validation_error_states_non_skip_contract(self) -> None:
+        """Malformed values report what the misleading legacy name actually means."""
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["trigger_inputs"] = "not-a-list"
+        data = dict(_MINIMAL_REGISTRY)
+        data["gates"] = [gate]
+        with pytest.raises(SchemaValidationError) as error:
+            _validate_registry(data)
+        assert "ordered, bidirectional E2E allowlist partition" in error.value.message
+        assert "never controls whether a gate runs" in error.value.message
 
 
 # =========================================================================
@@ -2226,6 +2254,24 @@ class TestAdditiveBoundary:
         assert result.returncode == 0, (
             f"Expected exit 0, got {result.returncode}: stderr={result.stderr}"
         )
+
+    def test_trigger_inputs_never_skips_a_non_e2e_gate(self, tmp_path: Path) -> None:
+        """An unmatched partition entry cannot become a conditional execution control."""
+        gate = {
+            "id": "check-core-compat",
+            "description": "Core compat check",
+            "required_contexts": ["local-serial"],
+            "bindings": {
+                "make_target": "check-core-compat",
+                "ci_job": None,
+                "local_ci_stage": None,
+            },
+            "depends_on": [],
+            "trigger_inputs": ["not/a/workflow/path"],
+        }
+        reg_path = _make_registry_json([gate], tmp_path)
+        result = _run_checker(["--registry", str(reg_path)])
+        assert result.returncode == 0, result.stderr
 
 
 # =========================================================================

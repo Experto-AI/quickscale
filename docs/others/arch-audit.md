@@ -15,8 +15,8 @@ remains a README-only placeholder — `quickscale_modules/teams/` still contains
 and apply/recovery tooling. Generated projects use PostgreSQL 18, Vite/React, Docker, and Railway.
 Its public contracts are the CLI, `quickscale.yml` and applied state, module manifests, generated
 trees, and upgrade semantics. It is a solo-maintainer repository (2,895 commits since 2025-03-20,
-one author) with a heavy, deliberate governance layer: a ten-gate registry, AST gates, conformance
-tests, monotonic quality baselines, and a scope allowlist.
+one author) with a heavy, deliberate governance layer: a twelve-entry gate registry (ten hosted),
+AST gates, conformance tests, monotonic quality baselines, and a scope allowlist.
 
 **Commit delta since the last pass** (`602f4be3..HEAD`, 5 commits, 2026-08-27/28). *Housekeeping:*
 `8a8f364b` and `cc80a5f2` (roadmap handoff records), `74ba3c55` (merge of the two below into
@@ -31,7 +31,7 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
 generated-project updater. Eight open v88 ticket entries run on three tracks across eight open merge
-positions after the 2026-09-05 in-lane ticket splits and SA164's completed guardrail repair. SA167c's
+positions after the 2026-09-05 in-lane ticket splits and the SA164 closeout. SA167c's
 authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full `make ci`
 correction are green and archived. No open ticket remains on the release path. W3 holds the
 exclusive PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
@@ -48,7 +48,8 @@ integer vNN roadmap reference, or same-commit changelog testimony whenever a non
 hosted workflows, the gate registry, or a provisioning station. Its hermetic suite, full parity suite,
 generated workflow check, deliberate untitled-workflow failure probe, and historical audit are green.
 SA166 and merge position #24 are archived. SA164's later guardrail repair is also archived, merge
-position #25 is retired, and SA178 now heads W2 at `deps: none`.
+position #25 is retired. SA178 remains open at merge position #34: its useful partial clarification
+is retained, but the fired count-oracle trigger blocks closure pending a semantics decision.
 
 **SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
 exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
@@ -107,7 +108,7 @@ component internals, dr_engine internals.
 | Last-owner deletion is rejected through ORM paths | Canonical predicate, locked model delete, `pre_delete` receiver | Structural; cross-domain cleanup boundary-owned | unchanged |
 | Generated emission is byte-identical to the recorded manifest | SA90 fixture hash/mode comparison, with `_HOST_DEPENDENT_PATHS` exception | Gated, one exception entry | unchanged (still 1 entry — monotonic) |
 | **CI runtime environment (PG18 client, test DBs, roles, DB users)** | `scripts/provision_ci_postgres.sh` — one profile authority, five profiles, module list derived from the discovery shim | **Structural and gated** | **strengthened** — was "convention only, 4 divergent variants" |
-| Hosted CI job set is closed (no unregistered `ci.yml` job) | `sync_ci_gate_jobs.py:365` — `UNOWNED_JOB_IDS ∪ registry-bound` must equal the job set | Structural | unchanged (8 hosted + 6 unowned = 14) |
+| Hosted CI job set is closed (no unregistered `ci.yml` job) | `sync_ci_gate_jobs.py:355-383` — `UNOWNED_JOB_IDS ∪ registry-bound` must equal the job set | Structural | unchanged (10 hosted + 6 unowned = 16) |
 | Declared gates are present in every required context | `check_gate_parity.py` registry→context membership | Gated, one-directional and registry-scoped | unchanged |
 | Gate implementations behave as specified | Retained `scripts/test_*.py` suites; registered `check-gate-suites` gate | Gated, cache/coverage-disabled | unchanged |
 | Planning-document counts agree across consumers | Counts **derived** from `roadmap.md`, asserted against `docs/index.md`, with a red-canary consistency test | **Gated and derived** | **strengthened** — literal ticket IDs, dates, positions and prose removed (`48e0a62a`) |
@@ -140,8 +141,8 @@ What *is* live is the residue: two hand-pinned literals minted inside the new de
 (`((${#MODULES[@]} == 12))` and `[[ "$item" != teams ]]`, `provision_ci_postgres.sh:93,96`) and a
 second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at `:15`, against
 `runtime_pins.POSTGRES_VERSION = "18"`). Both fail loudly, so both were carried rather than
-promoted. They are stated in full with their triggers on the [watchlist](#watchlist) and owned by
-SA178.
+promoted. They are stated in full with their triggers on the [watchlist](#watchlist); SA178's
+retained partial restatement changed neither item nor trigger.
 
 ---
 
@@ -162,7 +163,7 @@ widened once (CR-SA68-001, from `== "migrate"` to a two-element frozenset). Not 
 definitions are currently equal, and nothing on the v88 roadmap adds a command.
 
 **Confidence:** High. All four definitions read directly; the fail-closed behaviour of every
-divergence direction traced through `ready()`; the absence of a gate verified against all ten
+divergence direction traced through `ready()`; the absence of a gate verified against all twelve
 registered gates.
 
 **Context dependence:** `wrong-regardless` at four owners. It would be unremarkable at one.
@@ -198,7 +199,7 @@ template-side, both frozen at the same vintage, so they cannot drift apart. Same
 same pattern; the privileged set is the one that grew extra owners.
 
 **Counter-evidence (falsification pass):** Searched for any mechanism that would disprove this.
-Enumerated all ten entries of `scripts/gate_registry.json` — none covers command-set parity
+Enumerated all twelve entries of `scripts/gate_registry.json` — none covers command-set parity
 (`check-org-context-primitives` is an AST gate over `quickscale_modules/*/src/`, but scoped to three
 named org-context primitives; `check-security-static-analysis` is Bandit; `check-module-core-imports`
 checks import direction only). Grepped `createcachetable` across all `.py`/`.sh`/`.json`: the only
@@ -459,14 +460,16 @@ the prior pass). The environment half of the prior 14-station measurement is **g
 one call per station and the module list is derived. The registration half is intact — registry entry,
 `Makefile` recipe + `.PHONY` + `check` aggregation + help text, `HOSTED_GATE_ORDER`
 (`sync_ci_gate_jobs.py:60`), `HOSTED_JOB_CATALOG` (line 123), `NEEDS_GATE_IDS` (line 97), hand-edited
-`publish.yml`, three `case` arms in `check_ci_locally.sh` (lines 261, 313, 447), and roughly six
-count-pinned oracles in `test_gate_parity.py` (`..._all_eight_...` ×3, `..._all_seven_...` ×2,
-`..._all_sixteen_...`, `..._exactly_six_...`).
+`publish.yml`, three `case` arms in `check_ci_locally.sh` (lines 261, 313, 447), and exactly eight
+count-pinned oracle sites in `test_gate_parity.py` (three `all_ten` names, two `all_seven` names,
+the `all_twenty` run-value oracle, the 16-job projection literal, and `exactly_six`).
 
-**Verdict: watchlist, not a finding.** Every one of those stations is protected by the closed-universe
-check at `sync_ci_gate_jobs.py:365`, which raises when `UNOWNED_JOB_IDS ∪ registry-bound` ≠ the actual
-14-job set. A missed station is a **red build, not silent drift** — the decisive difference from the
-resolved environment finding, and from Probe A. The cost is flat per gate, and gates are added rarely.
+**Verdict: registration remains watchlist-scale; the count-oracle disposition is separately
+blocked.** Every station is protected by the closed-universe check at
+`sync_ci_gate_jobs.py:355-383`, which raises when `UNOWNED_JOB_IDS ∪ registry-bound` ≠ the actual
+16-job set. A missed station is a **red build, not silent drift** — the decisive difference from the
+resolved environment finding, and from Probe A. That safeguard does not undo the historical evidence
+that the written count-oracle trigger fired; its unresolved disposition is recorded below.
 
 ---
 
@@ -516,32 +519,45 @@ independent of the other two and should be designed together at `teams` kickoff.
   This is otherwise a non-defect structural question only: revisit consolidation if a third
   implementation appears, behavior or platform support diverges, or both public contracts can no
   longer be preserved independently.
-- **Hand-pinned literals inside the new provisioning derivation.** `provision_ci_postgres.sh:96`
+- **Hand-pinned literals inside the new provisioning derivation — restated by SA178, still open.**
+  `provision_ci_postgres.sh:96`
   (`== 12`) and `:93` (`!= teams`) re-introduce a module count and a module name into a script whose
   whole point is deriving them. *Doesn't qualify:* both fail loudly and immediately, and the count check
   is a deliberate drift tripwire. **Trigger:** a thirteenth shipped module, or `teams` graduating —
-  **not fired**, the universe is unchanged at twelve.
-- **Second copy of the PostgreSQL major.** `provision_ci_postgres.sh:15` `POSTGRES_MAJOR=18` against
+  **Not fired**, the universe is unchanged at twelve.
+- **Second copy of the PostgreSQL major — restated by SA178, still open.**
+  `provision_ci_postgres.sh:15` `POSTGRES_MAJOR=18` against
   `runtime_pins.py:30` `POSTGRES_VERSION = "18"`. *Doesn't qualify:* `runtime_pins` is explicitly
   documented as generated-project-owned and independent of the repo's own toolchain, so two values is
   arguably correct. **Trigger:** promote if the backups DR engine's `pg_dump`/`pg_restore` major-version
   contract ever depends on the two agreeing — at that point they are one value wearing two names.
-- **Count-pinned oracles in `test_gate_parity.py`.** Roughly six assertions spell out gate counts
-  (`all_eight`, `all_seven`, `all_sixteen`, `exactly_six`). *Doesn't qualify:* flat cost, fails loudly,
-  and Probe B shows the closed-universe check backstops it. **Trigger:** the next gate addition paying
-  more than two oracle edits, or the counts disagreeing across two oracles — at which point apply the
-  derivation principle `48e0a62a` just established for the planning gate.
+  **Not fired** — the DR contract does not require agreement today.
+- **Count-pinned oracles in `test_gate_parity.py` — trigger fired; SA178 blocked on disposition.**
+  The current population is exactly **eight** sites: three `all_ten` names, two `all_seven` names,
+  the `all_twenty` run-value oracle, the 16-job projection literal, and `exactly_six`. **Trigger:**
+  the next gate addition paying more than two oracle edits, or the counts disagreeing across two
+  oracles. **Trigger fired.** Git history shows both `d31c6b41` and `437dd0e0` changed at least three
+  logical count-oracle families and five literal sites while adding a gate, exceeding the written
+  more-than-two-edits threshold each time. The closed-universe check still makes misses loud, but it
+  does not make the historical trigger unfired. This item is retained here only while its disposition
+  is adjudicated; it is not safe to read it as an ordinary not-fired watch item. SA178 must choose
+  between promotion plus derivation following `48e0a62a`, or an explicit trigger-semantics revision
+  that explains why those historical edits do not qualify. This bookkeeping checkpoint chooses
+  neither and records no promotion, demotion, or closure.
 - **SA92 migration-squash discovery tuple.** `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`
   remains a bounded literal tripwire, now re-anchored to the current regenerated migration baseline:
   `_migdir()` raises when a manifest module's conventional migration directory is absent, and a
   regression proves the scan cannot pass by reading nothing. The catalog/policy/data parity gate
   remains the authoritative proof. **Trigger:** another migration-bearing module, or the tuple
-  omitting one — **not fired**. SA178 owns its future restatement; the item remains open.
-- **`trigger_inputs` has drifted from its name.** `check_gate_parity.py:2652-2690` uses the field as a
-  bidirectional partition of `e2e.yml`'s path allowlist, not as a trigger condition. *Doesn't qualify:* the
-  check it performs is real and exact. **Trigger:** a gate ever being *skipped* on the basis of
-  `trigger_inputs` — **not fired**; verified this pass that lines 498-524 validate it only as path strings
-  and no skip logic consumes it.
+  omitting one — **not fired**. The item remains open after SA178's current-list restatement.
+- **`trigger_inputs` is a legacy name for an exact E2E allowlist partition.** The registry schema,
+  checker docstring, validation diagnostics, and maintainer guide now say explicitly that each
+  E2E-bound gate contributes an ordered share of the bidirectional partition of `e2e.yml`'s
+  `pull_request.paths` allowlist. The field never controls whether a gate runs. *Doesn't qualify:*
+  the check is real and exact, and renaming the 93-plus data/test references would create churn
+  without changing the contract. **Trigger:** a gate ever being *skipped* on the basis of
+  `trigger_inputs` — **Not fired**; the checker validates and compares the paths, while the generator
+  only flattens them into the workflow allowlist. The item remains open.
 
 ## Questions that would change the ranking — **both answered 2026-08-31**
 
@@ -574,7 +590,7 @@ Recorded here only so a future pass using an older interpreter does not re-raise
 
 - 2026-08-28 — `ci-environment-hand-replicated`: **resolved** and archived; the full fix-regression
   narrative is in [CHANGELOG.md](../../CHANGELOG.md). Only its residue stays live here — the two
-  hand-pinned literals on the watchlist, owned by SA178 since the 2026-09-05 split.
+  hand-pinned literals on the watchlist, restated without trigger changes in SA178's retained partial.
 - 2026-08-28 — `privileged-command-set-multi-owner`: **new**, promoted from the prior watchlist item
   "privileged-command template/runtime pair", whose trigger ("a third sanctioned command, or a mismatch")
   **fired** — not as a value mismatch but as a third and fourth *owner*. `3523f9f8` (2026-08-18, labeled
@@ -607,8 +623,17 @@ Recorded here only so a future pass using an older interpreter does not re-raise
 - 2026-09-05 — **SA164 guardrail repair completed.** The SA92 tripwire now raises on a missing
   conventional migration directory instead of skipping the module, its regression proves the scan
   cannot pass by absence, and its backstop wording points at the current regenerated migration
-  baseline rather than retired `v87`. The watch item remains open with its trigger unchanged and
-  future restatement owned by SA178; no ranked finding changed.
+  baseline rather than retired `v87`. The watch item remains open with its trigger unchanged; SA178
+  owns the subsequent current-list restatement. No ranked finding changed.
+- 2026-09-05 — **SA178 retained-partial checkpoint; completion withdrawn.** The legacy
+  `trigger_inputs` field is retained for compatibility and its ordered, bidirectional E2E allowlist
+  partition semantics are now explicit at the registry, checker, diagnostic, and maintainer
+  surfaces; the separate skip-based promotion trigger remains armed and not fired. The provisioning
+  literals, PostgreSQL-major copy, SA92 tuple, and every other unaffected watch item remain open with
+  their triggers intact. The count-pinned-oracle item is different: its written trigger fired in
+  `d31c6b41` and `437dd0e0`, and the current population is eight sites. SA178 therefore remains open
+  pending a decision between promotion/derivation and explicit trigger-semantics revision. No ranked
+  finding is changed by this recording-only checkpoint.
 - 2026-08-28 — Prior red flags: none were open at the last pass and none opened this pass.
 
 *Lenses scanned with no qualifying finding this pass: data/state model integrity, concurrency and state

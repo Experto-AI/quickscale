@@ -2,6 +2,32 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA178 retained-partial checkpoint — closure blocked by a fired count-oracle trigger
+  (2026-09-05).** The useful compatibility-preserving work remains in the worktree: the 93-plus
+  existing `trigger_inputs` references keep their field name, while the registry description,
+  parity-checker contract and diagnostics, maintainer guide, and focused regressions define the
+  value as each E2E-bound gate's ordered share of the bidirectional `e2e.yml` pull-request allowlist
+  partition, never a gate-skip control. No consumer uses the field to skip execution.
+  **Independent review rejected completion.** The count-pinned-oracle trigger — *the next gate
+  addition paying more than two oracle edits, or counts disagreeing across two oracles* — fired in
+  repository history. Both `d31c6b41` and `437dd0e0` changed at least three logical count-oracle
+  families and five literal sites while adding a gate. The current
+  `scripts/test_gate_parity.py` population is exactly **eight sites**: three `all_ten` names, two
+  `all_seven` names, the `all_twenty` run-value oracle, the 16-job projection literal, and
+  `exactly_six`. The earlier blanket **not fired** claim is withdrawn.
+  **Decision required; none is taken here.** Either promote the fired item and derive the remaining
+  count oracles, following the `48e0a62a` planning-gate precedent, or explicitly revise the trigger
+  semantics and justify why the two historical gate additions do not qualify. Until one option is
+  reviewed and implemented, the item remains in an adjudication state and SA178 remains open.
+  The reusable remainder is: decide the semantics; implement only the selected branch and reconcile
+  the audit wording/tests; rerun the focused parity and consistency gates; independently review the
+  exact resulting delta; only then archive SA178 and retire **#34**. The earlier focused green runs
+  remain useful implementation evidence but do not establish completion after this contradiction.
+  The open-only roadmap therefore retains SA178 and merge position **#34**, with SA178 holding W2's
+  head at `deps: none`. The queue derives **eight open v88 ticket entries across eight open merge
+  positions**, lanes **W1 4 · W2 3 · W3 1**. This checkpoint preserves partial work; it authorizes
+  neither further implementation nor merge-back.
+
 - **Roadmap simplification pass — two either/or acceptance criteria settled (2026-09-05).** Both
   open tickets that offered a choice between fixing the defect and documenting it now name the fix.
   **SA172** commits to the two-line `DROP POLICY IF EXISTS` prefix on `_FORCE_RLS_FORWARD_SQL`

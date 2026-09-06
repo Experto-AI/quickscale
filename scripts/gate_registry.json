@@ -1,6 +1,6 @@
 {
     "schema_version": 1,
-    "description": "QuickScale gate registry \u2014 declares every gating checkpoint across all execution contexts (local serial/parallel, hosted CI, publish, e2e-trigger). Source of truth for gate-parity diagnostics.",
+    "description": "QuickScale gate registry \u2014 declares every gating checkpoint across all execution contexts (local serial/parallel, hosted CI, publish, e2e-trigger). The legacy trigger_inputs field is the ordered, bidirectional partition of e2e.yml's pull-request path allowlist; it never controls whether a gate runs. Any future skip based on trigger_inputs promotes the field for rename or redesign. Source of truth for gate-parity diagnostics.",
     "contexts": {
         "local-serial": "scripts/check_ci_locally.sh serial mode (QS_CI_PARALLEL=0)",
         "local-parallel": "scripts/check_ci_locally.sh parallel mode (default)",

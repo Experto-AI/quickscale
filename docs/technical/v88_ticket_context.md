@@ -456,42 +456,41 @@ files would re-create the entanglement it exists to remove.
 
 ### The mental model
 
-A watch item is a bet: *"this is not a problem yet, and here is the trigger that would make it
-one."* The bet is worthless if the trigger is lost, and it is worse than worthless if a later pass
-restates a **superseded** version of the list, because the audit then carries conclusions nobody
-re-derived. Restating is therefore the work; removing is not.
+A watch item is a falsifiable bet: *this is not a problem yet, and this exact observation would make
+it one*. Preserving the prose while ignoring historical evidence that satisfies the trigger is not a
+restatement. It turns the watchlist into a completion narrative rather than a reusable decision aid.
 
-### 1. `trigger_inputs` has drifted from its name
+### What the retained partial established
 
-`check_gate_parity.py:2652-2690` uses the field as a **bidirectional partition of `e2e.yml`'s path
-allowlist**, not as *"what changes should trigger this gate"*. That is why `check-core-compat`'s
-trigger reads `quickscale_modules/backups/**`.
+`trigger_inputs` is a legacy name for each E2E-bound gate's ordered share of the bidirectional
+partition of `e2e.yml`'s pull-request path allowlist. The parity checker validates and compares those
+paths; the generator flattens them into the workflow allowlist. No consumer uses the field to skip a
+gate. Keeping the field name while making that contract explicit is a compatibility-preserving
+clarification, and the existing schema, diagnostic, documentation, and regression changes remain
+useful.
 
-**Not a defect** — the check it performs is real and exact. It is a name that lies about a correct
-mechanism. It becomes load-bearing the moment a gate is ever *skipped* on the basis of
-`trigger_inputs`, because then the name's meaning and the field's meaning diverge in production.
+### Why closure was withdrawn
 
-Rename it, or record the actual semantics plus that promotion trigger in the docstring and schema
-description.
+The count-pinned-oracle item said to revisit the design when the next gate addition paid more than two
+oracle edits. Repository history shows that happened twice. `d31c6b41` and `437dd0e0` each changed at
+least three logical count-oracle families and five literal sites while adding a gate. The present
+population is exactly eight sites: three `all_ten` names, two `all_seven` names, the `all_twenty`
+run-value oracle, the 16-job projection literal, and `exactly_six`. Calling that trigger *not fired*
+is incompatible with the recorded evidence.
 
-### 2. The three that are not fired
+### The unresolved choice
 
-The **current** three, not the superseded pre-resolution list: the two hand-pinned literals minted
-inside the new provisioning derivation (`provision_ci_postgres.sh:93,96` — `!= teams` and `== 12`,
-re-introducing a module name and a module count into a script whose whole point is deriving them);
-the second copy of the PostgreSQL major (`provision_ci_postgres.sh:15` against `runtime_pins.py:30`,
-two values that are arguably correct because the repo toolchain and the generated project are
-genuinely independent); and the roughly six count-pinned oracles in `scripts/test_gate_parity.py`.
+One coherent resolution promotes the item and derives the remaining count oracles, following the
+planning-gate precedent in `48e0a62a`. The other explicitly revises the trigger semantics and records
+why the two historical additions should not count. The retained partial does not decide between
+those meanings. Until the choice is made, no rank change, completion claim, or retirement is sound.
 
-Each is not fired, each fails loudly, and each has a written trigger. Note the shape: all three were
-**created by a fix**, which is the ordinary cost of centralization and the reason the fix-regression
-question is asked every pass.
+### Reusable continuation
 
-### Why this is documentation and nothing else
-
-No gate changes behaviour here. Nothing is closed. The value is that the next audit pass inherits an
-accurate list instead of re-deriving one, and that a correct mechanism stops carrying a misleading
-name.
+First record the selected semantics and evidence. Then implement only that branch while preserving
+the non-skip `trigger_inputs` contract and every unrelated watch trigger. Reconcile the audit and
+current-status consumers, rerun the focused parity and consistency gates, and independently review
+the exact resulting delta. A green reviewed result can close the ticket; this checkpoint cannot.
 
 ---
 
