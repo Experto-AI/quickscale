@@ -351,7 +351,7 @@ class TestRefreshForceRlsPoliciesPostgres:
         # The function uses revert_force_rls then apply_force_rls internally.
         # Each bundles multiple SQL statements into a single execute call
         # per table: revert=1 call (DROP+NO FORCE+DISABLE), apply=1 call
-        # (ENABLE+FORCE+CREATE POLICY) = 2 calls per enrolled table.
+        # (DROP+ENABLE+FORCE+CREATE POLICY) = 2 calls per enrolled table.
         enrolled_count = sum(
             1
             for e in TENANT_TABLE_REGISTRY
@@ -382,14 +382,20 @@ class TestRefreshForceRlsPoliciesPostgres:
         refresh_force_rls_policies(pg_schema_editor)
         calls = pg_schema_editor.execute.call_args_list
 
-        # DROP should appear before CREATE for any given policy.
-        # Since revert runs for all tables first, then apply runs for all,
-        # any DROP should be in the first half of calls and any CREATE
-        # in the second half.
-        drop_idx = min(i for i, c in enumerate(calls) if "DROP POLICY" in c[0][0])
-        create_idx = max(i for i, c in enumerate(calls) if "CREATE POLICY" in c[0][0])
-        # The last drop should precede the first create.
-        assert drop_idx < create_idx
+        revert_indexes = [
+            index
+            for index, call_args in enumerate(calls)
+            if "DROP POLICY" in call_args[0][0]
+            and "CREATE POLICY" not in call_args[0][0]
+        ]
+        apply_indexes = [
+            index
+            for index, call_args in enumerate(calls)
+            if "CREATE POLICY" in call_args[0][0]
+        ]
+        assert revert_indexes
+        assert apply_indexes
+        assert max(revert_indexes) < min(apply_indexes)
 
     def test_uses_registered_models_non_conventional_db_table(
         self, pg_schema_editor: MagicMock
@@ -403,8 +409,6 @@ class TestRefreshForceRlsPoliciesPostgres:
         )
         model = MagicMock()
         model._meta.db_table = "tenant_forms"
-        app_config = MagicMock()
-        app_config.get_model.return_value = model
         cursor = pg_schema_editor.connection.cursor.return_value.__enter__.return_value
         cursor.fetchone.return_value = (True,)
 
@@ -413,14 +417,13 @@ class TestRefreshForceRlsPoliciesPostgres:
                 "quickscale_modules_orgs.tenancy.TENANT_TABLE_REGISTRY",
                 (entry,),
             ),
-            patch(
-                "django.apps.apps.get_app_config", return_value=app_config
-            ) as get_app_config,
+            patch("django.apps.apps.get_app_config") as get_app_config,
+            patch("django.apps.apps.get_model", return_value=model) as get_model,
         ):
             refresh_force_rls_policies(pg_schema_editor)
 
         get_app_config.assert_called_once_with("quickscale_modules_forms")
-        app_config.get_model.assert_called_once_with("Form")
+        get_model.assert_called_once_with("quickscale_modules_forms", "Form")
         assert cursor.execute.call_args.args[1] == ["tenant_forms"]
         all_sql = " ".join(c[0][0] for c in pg_schema_editor.execute.call_args_list)
         assert "tenant_forms" in all_sql
@@ -443,6 +446,33 @@ class TestRefreshForceRlsPoliciesPostgres:
                 (entry,),
             ),
             patch("django.apps.apps.get_app_config", side_effect=LookupError),
+            patch("django.apps.apps.get_model") as get_model,
+        ):
+            refresh_force_rls_policies(pg_schema_editor)
+
+        get_model.assert_not_called()
+        pg_schema_editor.connection.cursor.assert_not_called()
+        pg_schema_editor.execute.assert_not_called()
+
+    def test_fails_loudly_for_unknown_model_in_installed_app(
+        self, pg_schema_editor: MagicMock
+    ) -> None:
+        """An installed app with stale registry metadata is a configuration error."""
+        entry = TenantTableEntry(
+            app_label="quickscale_modules_forms",
+            model_name="MissingModel",
+            status=TenantTableStatus.ENROLLED,
+            policy_name="missing_model_org_isolation",
+        )
+
+        with (
+            patch(
+                "quickscale_modules_orgs.tenancy.TENANT_TABLE_REGISTRY",
+                (entry,),
+            ),
+            patch("django.apps.apps.get_app_config"),
+            patch("django.apps.apps.get_model", side_effect=LookupError("missing")),
+            pytest.raises(LookupError, match="missing"),
         ):
             refresh_force_rls_policies(pg_schema_editor)
 

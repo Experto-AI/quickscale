@@ -503,11 +503,11 @@ def tenant_org_fk(
 # ---------------------------------------------------------------------------
 
 _FORCE_RLS_FORWARD_SQL = """
-ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
-ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS {policy_name} ON {table};
 DROP POLICY IF EXISTS {policy_name}_select ON {table};
+
+ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
+ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
 
 -- Standard write-path policy: current-org only, no operator_access bypass.
 CREATE POLICY {policy_name} ON {table}
@@ -618,10 +618,10 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
         if not entry.policy_name:
             continue
         try:
-            app_config = apps.get_app_config(entry.app_label)
+            apps.get_app_config(entry.app_label)
         except LookupError:
             continue
-        table_name = app_config.get_model(entry.model_name)._meta.db_table
+        table_name = apps.get_model(entry.app_label, entry.model_name)._meta.db_table
         targets.append((table_name, entry.policy_name))
 
     if not targets:
