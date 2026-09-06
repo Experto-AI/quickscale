@@ -291,10 +291,10 @@ all-checks-passed banner, with Core and CLI E2E plus exact-scope cleanup green. 
 evidence is archived in [CHANGELOG.md](../../CHANGELOG.md); SA167c is complete and merge
 position #21 is retired. SA166's subsequent testimony gate is also complete, merge position #24 is
 retired, and SA164's fail-loud migration-guardrail repair is complete with merge position #25
-retired; SA178 now heads W2 at `deps: none`. The
+retired. The [roadmap](roadmap.md#scheduling-table) owns subsequent work and scheduling. The
 settled product bytes no longer carry CLI per-module wiring logic. **`SA167d`**
 (v88) is a conditional post-integration completion-grade Phase C candidate; exact-tip integration
-remains pending. SA165 remains open with `deps: none`.
+remains pending; current acceptance and dependencies are tracked in the roadmap.
 SA170's final ordered serial and concurrent campaigns passed against retained product object
 `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed local corrections. SA170 and TA70 are
 closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).

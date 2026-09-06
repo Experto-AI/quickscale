@@ -336,8 +336,9 @@ yourself editing either to register a module, the module's own declaration is in
 > The former CLI wiring deviation is retired: the desired-configuration-only boundary is
 > implemented and accepted through phase E at E0 tip
 > `bd2c291ba2d40494970464741ac51bfd45445a19`. **`SA167d`** completion-grade Phase C is a
-> conditional post-integration candidate; exact-tip integration remains pending. SA165 remains open
-> with `deps: none`. This is a closeout candidate, not an exact-tip integration claim.
+> conditional post-integration candidate; exact-tip integration remains pending. Current acceptance
+> and dependencies live in the [roadmap](roadmap.md#scheduling-table). This is a closeout candidate,
+> not an exact-tip integration claim.
 
 The companion declaration-gate work was completed under **`SA167c`** at merge #21. Phases A-E were
 accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; the sole
@@ -346,7 +347,7 @@ authorized Phase-F verdict under `EV-7` exited 0 on frozen base
 exact-scope cleanup green. Closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md),
 and merge position #21 is retired. SA166's subsequent testimony gate is also complete, merge
 position #24 is retired, and SA164's fail-loud migration-guardrail repair is complete with merge
-position #25 retired; SA178 now heads W2 at `deps: none`.
+position #25 retired. The [roadmap](roadmap.md#scheduling-table) owns subsequent work and scheduling.
 This does not alter the module-extension contract or authorize edits to the settled manifest implementation.
 
 SA170's final ordered serial and concurrent campaigns passed against retained product object

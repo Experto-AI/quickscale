@@ -80,6 +80,85 @@ pick the tier, run its command once.
   reaches its surface. A pre-existing failure is discovered at the tier that
   reaches it, and no baseline run precedes implementation.
 
+## Candidate review and integration
+
+Develop in the assigned track worktree, never directly on the integration branch.
+Independent tracks may implement concurrently; serialize integration and reconcile
+shared closeout documents at merge time. A shared audit or changelog file alone
+does not prohibit independent implementation. One reviewed delivery runs at a time
+per worktree; grouped tickets retain their individual acceptance criteria.
+
+1. Measure worktree divergence and working-tree status against the current
+   integration branch. Sync and resolve conflicts in the worktree before final
+   review. Confirm the relevant starting condition with focused inspection; do
+   not run a wider validation tier solely to establish a baseline.
+2. Declare the candidate's file scope, verification commands, expected exits and
+   artifacts, and rollback. Materialize the complete base-to-tip patch for the
+   reviewer, including required fixture context. Record base and tip identities
+   and a clean `git status --porcelain` at the exact reviewed tip. Missing patch
+   input or a reviewer non-return yields no grade.
+3. Obtain independent review and the validation required at the
+   [owning tier](#validation-tiers). Changed reviewed product bytes or validation
+   inputs require renewed review and validation against the new binding. Reuse
+   accepted evidence only while its candidate and input binding remains valid.
+   Review and validation may proceed in the same maintainer session; a fresh
+   root session is not a gate.
+4. Keep documents that record a verdict outside its frozen product evidence.
+   After the verdict, reconcile audit notes and status in a separate documentation
+   commit within the same delivery. Review and validate that documentation delta;
+   recording evidence does not invalidate the unchanged product candidate.
+5. Merge the exact reviewed and validated product tip, followed by its reviewed
+   documentation closeout. If integration changes that binding, obtain the
+   renewed evidence before completion. An explicitly authorized partial
+   checkpoint remains open and clears no branch-state or release gate. Git-ref
+   deliveries require a maintainer session with the necessary ref authority and
+   credentials.
+
+Do not deselect an integration-branch failure with `PYTEST_ADDOPTS`, `--deselect`,
+or Makefile/CI changes to conceal a red gate. Assign one owning ticket, repair
+within its authorized scope, and rerun. Other
+tracks may continue implementation and unexcluded validation provisionally, but
+no other ticket completes merge-back until the owning repair is green. Preserve
+quality monotonicity: no additional warning or critical regressions, no raised
+complexity ceilings, and no restored file-line ceilings. Findings outside the
+delivery's scope receive their own ticket.
+
+Long commands must produce durable logs and an actual completion exit code. Run
+`make test` and `make quality` detached with `setsid`, write their exit status to a
+file, and poll it. Never detach with `nohup`: its inherited ignored SIGHUP can
+manufacture false failures in signal tests. Size budgets for the actual command
+and parallelism. An interrupted run or missing exit status proves neither a pass
+nor a product failure. Inspect logs and owned resources and complete required
+cleanup. An unchanged candidate may be retried with its reason, logs, and attempt
+recorded. Retain prior attempts as immutable evidence and give new attempts
+distinct identifiers; a red result needs diagnosis and cannot be relabeled green.
+Measured candidate bindings and run results belong in delivery and release evidence.
+The roadmap states the required candidate and pending acceptance, without copying
+transient tips or working-tree status.
+
+The authorized roadmap simplification supersedes earlier one-run-only, no-retry,
+and fresh-authority restrictions for verification within an already authorized
+delivery. `EV-8` identifies SA165's first replacement verdict; it is not an attempt
+limit. Changed reviewed product bytes or validation inputs still require renewed
+review and validation. This change grants no additional product scope or
+deployment/publication authority.
+
+### PostgreSQL routing and scheduling
+
+Track 3 (W3) owns scheduling priority and the exclusive Docker-backed acceptance
+slot. Coordinate these acceptance windows across tracks. Helper-routed local
+`restricted`, `isolation`, and `bypassrls` profiles provision private ephemeral
+PostgreSQL 18 containers, dynamic loopback ports, scoped databases, and validated
+roles; they do not claim the standing `localhost:5432` service. In particular,
+`make test` routes its integration leg through these profiles. Preserve the
+distinction between private profile resources and deliberately shared endpoints.
+
+When a strict acceptance window requires stopping the standing `pg18-af10`
+container, Track 3 must restart it afterwards and restore the twelve
+`test_quickscale_*` databases and `quickscale_test_role` ownership. Do not remove
+the container or prune its volume. Private profiles clean up only their own
+validated resources; preserve the runners' exact-scope cleanup contracts.
+
 <a id="testing-standards"></a>
 ## Testing Standards
 

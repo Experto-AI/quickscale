@@ -2,6 +2,46 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Roadmap delivery consolidation and dependency review (2026-09-05).** User-approved planning
+  change; no product delivery, audit finding, release verdict, merge, or publication is completed
+  by this entry. The v88 work is consolidated into four delivery units: **SA165 absorbs SA179**
+  as post-verdict documentation closeout; **SA160 absorbs SA161** into one generated-output
+  candidate and emission rebaseline; **SA174 absorbs SA178** using documentation-only gate-field
+  semantics; **SA172** retains its implemented RLS fix and pending review/acceptance.
+  **SA175 is absorbed into post-v88 SA152**, replacing its contradictory mixed-disposition
+  assertion with mode-aware migration compatibility and smoke verification. Absorbed IDs are
+  retired as standalone planner entries, not closed as implemented findings.
+
+  The roadmap now has one canonical scheduling table with tracks for every open item. Its only
+  v88 task edge is SA165 → SA160: the former's reviewed emission-fixture input must remain bound
+  until its verdict and integration, after which the latter may rebaseline it. The RLS and
+  documentation deliveries can proceed independently on their existing tracks; shared audit
+  markdown is reconciled at serialized merge rather than creating product dependencies.
+  Final release validation is an explicit join after required deliveries. SA174 is optional
+  maintenance; it may defer without holding the release. Post-v88 SA177 follows the accepted RLS
+  helper, and SA154 follows the first working portal. SA153 now targets a project-owned Django
+  property portal; a public JSON API, alternate public frontend, broad translations, and generic
+  no-project-glue support move to the optional inventory. Beta-migration validation gates a site
+  cutover if that tool is used, not fresh-project portal development.
+
+  Durable review/merge rules move to validation policy. The explicitly approved process revision
+  removes mandatory separate root sessions and the one-attempt-only/fresh-authority retry rule
+  for in-scope verification. Independent review must still precede the verdict; candidate inputs,
+  complete patch context, immutable attempt logs, actual completion status, exact cleanup, and
+  required release validation remain mandatory. `EV-8` names the first replacement verdict;
+  subsequent attempts need distinct evidence and recorded reasons. Prior grants, failed or absent
+  reviews, and stale-but-green runs below remain historical evidence and are not rebound. This
+  change supplies no new product scope or publication/deployment authority.
+
+  Context and navigation no longer duplicate queue counts or readiness. Structural checks replace
+  ticket-specific narrative canaries: open-ticket/schedule/context coverage, valid tracks and
+  horizons, and acyclic dependencies are enforced without pinning current review prose. The
+  historical state assertions below describe their then-current planner, not additional live
+  acceptance constraints. Findings remain open until the owning delivery supplies its evidence.
+  Validation: the focused roadmap/context consistency suite passes **29 tests**; `make lint`,
+  `make typecheck`, and `git diff --check` pass. Product release/E2E validation remains owed by
+  the delivery and release tiers; this planning change supplies no replacement verdict.
+
 - **Refuted — the blocking SA165 review finding, and the repair-scope decision withdrawn as moot
   (2026-09-05).** A fresh terminal SA165-R1 over the narrowed four-file product candidate graded
   **blocking**, reporting that `OPERATIONS.md.j2` adds rendered warning text while the
