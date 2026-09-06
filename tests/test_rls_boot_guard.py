@@ -15,9 +15,11 @@ The guard is always active (regardless of ``QUICKSCALE_MODE`` or
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
    intentional single-tenant or development use.
 
-The sanctioned command set is defined by ``_PRIVILEGED_COMMANDS`` and
-checked via ``_is_privileged_command()`` (formerly ``_is_migrate_command()``,
-widened in CR-SA68-001).
+The module guard declares its sanctioned command set in
+``_PRIVILEGED_COMMANDS`` and checks it via ``_is_privileged_command()``
+(formerly ``_is_migrate_command()``, widened in CR-SA68-001).  The generated
+production-settings validator, CLI producer, and launcher independently
+declare the same fail-closed contract.
 
 ``manage.py runserver``, gunicorn, and WSGI startup must all still
 fail closed under BYPASSRLS or SUPERUSER.  The old ``sys.argv``-based
