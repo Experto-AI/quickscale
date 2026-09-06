@@ -2,6 +2,38 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA165 diagnosis step made concrete; planner reviewed with no rebalance available (2026-09-06).**
+  Planning and documentation only. No product code changed, no ticket closed, no audit finding
+  retired, no review verdict or merge occurred.
+
+  **The retained-evidence gap has a named, existing fix.** Direct inspection of
+  `quickscale_cli/tests/test_e2e_development_workflow.py` found that
+  `_emit_container_diagnostics` already dumps `docker ps -a`, `docker compose ps`, and container
+  logs, but it dumps **only** the backend container
+  (`docker logs --tail 20 <backend>`) and none of its seven call sites sits on the
+  `quickscale up` failure path — which is precisely where the replacement `EV-8` run died with the
+  frontend exiting 1. SA165's step 1 therefore does not need new log-preservation tooling: it needs
+  the frontend container added to that helper and one call added before the `up` assertion. The
+  file is outside SA165's five-file frozen candidate, so the instrumentation owes no re-review of
+  the accepted product bytes, and step 2 can reproduce the single failing test rather than a full
+  `ci-e2e`. This replaces an open-ended "instrument log preservation as needed" step with a bounded
+  one and removes the ceremony of a second full E2E cycle just to obtain logs.
+
+  **Rebalance re-examined and again declined.** Every open v88 task already carries a track; every
+  one of them is on the critical path `SA165 → SA160 → final release validation`; and all of it is
+  on track 1. Tracks 2 and 3 remain idle with no v88 ticket they may take: SA160 shares two files
+  with SA165's frozen set and cannot merge before it, so relocating it would trade an intra-track
+  ordering for a cross-track conflict. No task moved, so no ticket tag, gate list, dependency
+  diagram, ordering prose, or track-readiness bullet needed a reference update. The shared closeout
+  set (this changelog, the roadmap, the ticket context, the owning audit) keeps a single writer
+  until the release closes, which the serialized merge queue already covers.
+
+  **Audit reconciliation checked, nothing owed.** Both audits' reconciliation logs already archive
+  their closed items here; no finding became closed-and-context-free during this pass. No task in
+  the planner is complete, so nothing was moved out of it. **No maintainer decision is open**: every
+  remaining "no" in the track-state table is a hard dependency on resolving SA165's red replacement
+  `EV-8` verdict.
+
 - **SA165 replacement EV-8 stopped red; diagnosis evidence was not retained (2026-09-06).**
   This records where work stopped and does **not** complete SA165, accept a release verdict, retire
   an audit note, or change product code. The cycle began at `2026-09-06T18:02:22+02:00` after a

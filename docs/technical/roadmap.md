@@ -49,22 +49,22 @@ Track 3: (idle in v88)      owns post-v88 SA177
 and all of it lives on track 1. There is no v88 filler work left and no parallelism left to win:
 tracks 2 and 3 are idle for the rest of the release.
 
-SA165 → SA160 is the only v88 task edge. It gates the **emission-fixture rebaseline**: SA165's
-frozen candidate binds `quickscale_core/tests/fixtures/sa90_emission_manifests.json` until its
-verdict returns and integrates. SA160's helper, its Vitest table, the dead-helper deletions, and
-their regressions may be authored before that, on track 1, and rebaselined once afterwards. SA165
-needs review and acceptance of already-landed implementation; do not restart its product work.
+SA165 → SA160 is the only v88 task edge, and it gates one thing: the **emission-fixture
+rebaseline**. SA165's frozen candidate binds
+`quickscale_core/tests/fixtures/sa90_emission_manifests.json` until its verdict returns and
+integrates. SA160's helper, its Vitest table, the dead-helper deletions, and their regressions may
+all be authored before that, on track 1, and rebaselined once afterwards. SA165 needs review and
+acceptance of already-landed implementation; do not restart its product work.
 
-Neither idle track can take v88 work. SA160 is one review unit that shares the emission fixture
-with SA165's frozen candidate, and it must also avoid disturbing
-`quickscale_core/tests/test_generator/test_generator.py`, which is in that frozen set (see SA160's
-acceptance). Authoring it anywhere but track 1 would turn an intra-track ordering into a
-cross-track conflict on two shared files for no schedule gain, since SA160 cannot merge before
-SA165 either way. SA177 targets the accepted SA172 helper and may take the isolation runner only
-after SA165 closes; its post-v88 horizon supplies that ordering. SA152 and SA153 have no hard
-dependency on each other — portal development can use a fresh generated project — though a real
-site cutover through the beta-migration tools would make SA152 acceptance a cutover prerequisite.
-SA154 follows the working portal, and SA180 owns the gate files that SA152 also touches.
+**Neither idle track can take v88 work.** SA160 is one review unit sharing two files with SA165's
+frozen set — the emission fixture and `quickscale_core/tests/test_generator/test_generator.py`
+(see SA160's acceptance) — and it cannot merge before SA165 either way, so moving it off track 1
+would convert an intra-track ordering into a cross-track conflict for no schedule gain.
+
+Post-v88 ordering: SA177 may take the isolation runner only after SA165 closes, which its horizon
+supplies. SA152 and SA153 are independent — the portal can use a fresh generated project — though a
+real-site cutover through the beta-migration tools would make SA152 a cutover prerequisite. SA154
+follows the working portal, and SA180 owns the gate files SA152 also touches.
 
 ### Track states
 
@@ -78,9 +78,10 @@ are yes.
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
-- **Can start** — no v88 track waits on a decision, authorization, or plan gate. SA165 can begin
-  the logging-first diagnosis below, and SA160's helper, Vitest table, dead-helper deletions, and
-  regressions are executable today.
+- **Can start** — no v88 track waits on a decision, authorization, or plan gate. SA165's next
+  action is a concrete, named test-only edit (extend `_emit_container_diagnostics` to the frontend
+  container and call it on the `up` failure path), and SA160's helper, Vitest table, dead-helper
+  deletions, and regressions are executable today.
 - **Can finish** — SA165 cannot finish because its separately authorized replacement `EV-8`
   verdict is red and the detailed frontend logs needed to diagnose it were not retained. SA160's
   emission rebaseline still needs SA165's accepted verdict to release the fixture. Both are
@@ -173,9 +174,15 @@ or delivery evidence, not here.
 
   **Remaining sequence:**
 
-  1. Instrument log preservation as needed so the frontend service logs required to explain an
-     exit-1 startup survive cleanup.
+  1. Extend the existing diagnostics helper rather than building new tooling. In
+     `quickscale_cli/tests/test_e2e_development_workflow.py`, `_emit_container_diagnostics` already
+     dumps `docker ps -a`, `compose ps`, and backend logs, but it dumps **only** the backend
+     container and is not called on the `up` failure path, which is exactly where this run died.
+     Add the frontend container's logs to that helper and call it before the `up` assertion. The
+     file is outside SA165's frozen candidate, so this instrumentation owes no re-review of the
+     accepted product bytes.
   2. Reproduce `TestDevelopmentCommandsE2E.test_full_development_workflow` with those logs retained.
+     Reproduce this one test directly; a full `ci-e2e` is not needed to obtain the logs.
   3. Diagnose and fix only the evidence-backed root cause and relevant pre-existing issues exposed
      by that diagnosis; do not infer a product defect from the current transcript.
   4. Independently review the resulting exact candidate and recheck its inputs.
