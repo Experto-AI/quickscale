@@ -46,7 +46,7 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 | # | Check | Result |
 |---|---|---|
 | 1 | Re-implemented `getCsrfToken`'s exact split-and-count logic in CPython and ran it over five cookie shapes | **Confirmed TA67** — `'csrftoken=A; csrftoken=B'` and `'csrftoken=A; sessionid=x; csrftoken=B'` both return `''`; single and sibling cases return `'A'` |
-| 2 | Parsed `TENANT_TABLE_REGISTRY` and cross-checked every ENROLLED entry's convention-derived table name (`app_label + '_' + model_name.lower()`) against the explicit `db_table` declarations in all module `models.py` | **Refuted** a suspected fail-silent-skip finding in `refresh_force_rls_policies` — 45 entries (21 ENROLLED / 24 EXCLUDED_REVIEWED), 8 explicit `db_table` declarations, **zero divergence** from the convention. Carried as a watch item instead |
+| 2 | Parsed `TENANT_TABLE_REGISTRY` and cross-checked every ENROLLED entry's convention-derived table name (`app_label + '_' + model_name.lower()`) against the explicit `db_table` declarations in all module `models.py` | **Refuted** a suspected live divergence in `refresh_force_rls_policies` — 45 entries (21 ENROLLED / 24 EXCLUDED_REVIEWED), 8 explicit `db_table` declarations, **zero divergence** from the convention. The latent naming risk was later retired by SA172's metadata-derived lookup |
 
 ---
 
@@ -56,9 +56,8 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 |---|---|---|---|---|---|---|
 | `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | still-open |
 | `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | still-open |
-| `force-rls-apply-idempotency-claim` (TA72) | S4 | Documentation vs. behaviour (security-adjacent) | `apply_force_rls` documents itself as idempotent; `CREATE POLICY` has no `IF NOT EXISTS`, so a second call raises | Trivial | High | new |
 
-**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **2** · **Total 3 open.** Quick wins (⚡ Trivial-effort S3/S4): TA67.
+**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **1** · **Total 2 open.** Quick wins (⚡ Trivial-effort S3/S4): TA67.
 
 ---
 
@@ -111,8 +110,6 @@ function getCsrfToken(): string {
 
 - **TA68 · `generated-settings-dead-client-ip`** · `…/templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` · Both files define a module-level `get_client_ip(request)`, and `production.py.j2` rebinds it with a comment claiming the rebind exists "so that production defaults … are actually in effect at request time". Neither is reachable in a generated project: Django's `Settings` copies only **uppercase** names off the settings module, so `django.conf.settings.get_client_ip` does not exist, and nothing in the generated tree imports either function — re-verified at HEAD, a grep across all templates still returns only the two definitions and the comments referring to them. The real consumer is `quickscale_modules_orgs.current_org.get_client_ip`, which reads the uppercase `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is correct. · **Fix:** delete both definitions and keep the settings plus the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation, or add a comment pointing at the orgs helper as the live implementation. The behavioural comment in `production.py.j2:119-122` is misleading as written and should go either way.
 
-- **TA72 · `force-rls-apply-idempotency-claim`** · `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py:536-546` · `apply_force_rls`'s docstring states "**Idempotent** — wraps each pair in the identical ENABLE + FORCE + CREATE POLICY sequence." The body executes `_FORCE_RLS_FORWARD_SQL`, which issues bare `CREATE POLICY {policy_name}` and `CREATE POLICY {policy_name}_select` (`:510`, `:521`). PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so a second application against a table that already carries the policies aborts the migration with `42710 duplicate_object`. The claim is safe today only because the one caller that *does* re-apply — `refresh_force_rls_policies` (`:584`) — calls `revert_force_rls` first, and `_FORCE_RLS_REVERSE_SQL` correctly uses `DROP POLICY IF EXISTS`. The hazard is a future module migration that calls `apply_force_rls` on an already-enrolled table on the documented assurance that doing so is safe. · **Fix:** either correct the docstring to state that the helper is *not* idempotent and must be preceded by `revert_force_rls`, or make it true by prefixing the forward template with the same `DROP POLICY IF EXISTS` pair the reverse template already uses. The second option is two lines and makes the documented contract real. · **Confidence:** High — PostgreSQL's lack of `CREATE POLICY IF NOT EXISTS` is settled behaviour; not executed here because no PostgreSQL instance was started for this read-only pass.
-
 ---
 
 ## Per-subsystem verdicts
@@ -120,7 +117,7 @@ function getCsrfToken(): string {
 | Subsystem | What was read | Verdict |
 |---|---|---|
 | Commit delta `602f4be3..HEAD` | all 3 files, production and test hunks, in full | Clean — the assertion removals are a defensible narrowing; see *Clean sweeps* and the reconciliation log |
-| orgs — tenant registry & RLS SQL | `tenancy.py` registry, both policy templates, `apply_force_rls` / `revert_force_rls` / `refresh_force_rls_policies`, equality-trigger helpers, `is_tenant_model` → `check_tenant_model_isolation` | **TA72**; the write/read policy split is correct — see *Clean sweeps* |
+| orgs — tenant registry & RLS SQL | `tenancy.py` registry, both policy templates, `apply_force_rls` / `revert_force_rls` / `refresh_force_rls_policies`, equality-trigger helpers, `is_tenant_model` → `check_tenant_model_isolation` | Clean after SA172 made forward application idempotent and metadata-derived; the write/read policy split remains correct — see *Clean sweeps* |
 | orgs — request scoping | `managers.py`, `middleware.py`, `permissions.py`, `current_org.py` GUC layer, `public_context.py` | Clean — fail-closed at every branch examined; see *Clean sweeps* |
 | orgs — boot guards | `apps.py` `ready()`, `checks.py` | Clean — one suspected finding refuted, see *Clean sweeps* |
 | forms — operator surface | `views.py:140-520`, `throttles.py`, `models.py` settings helpers | Clean — superuser gating is consistent across queryset selection and `operator_access` wrapping |
@@ -168,7 +165,7 @@ function getCsrfToken(): string {
 | Gap | Would have caught | Recommendation |
 |---|---|---|
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The shared-helper fix is the real prevention |
-| RLS policy assertions check existence, not predicate text | **TA72**, structural smell #3 | Extend the isolation conformance suite to assert the policy `qual`/`with_check` text from `pg_policies` matches the `_FORCE_RLS_FORWARD_SQL` template for each enrolled table — this pins the operator-read/tenant-write split as a gate rather than a comment |
+| RLS policy assertions check existence, not predicate text | Structural smell #3 | Extend the isolation conformance suite to assert the policy `qual`/`with_check` text from `pg_policies` matches the `_FORCE_RLS_FORWARD_SQL` template for each enrolled table — this pins the operator-read/tenant-write split as a gate rather than a comment |
 
 ---
 
@@ -188,7 +185,6 @@ function getCsrfToken(): string {
 
 **New this pass:**
 
-- **`refresh_force_rls_policies` silently skips tables it cannot name.** `tenancy.py:596-620` derives each table name from the Django default convention (`app_label + '_' + model_name.lower()`) and then filters through `to_regclass(...) IS NOT NULL`, dropping any miss without a warning — on the repository's most security-critical migration helper. Empirical check #2 confirms the convention currently holds for **all 21** enrolled tables (8 explicit `db_table` declarations exist across the modules and every one matches the convention), so this is latent rather than live, and it is not promoted. The moment an enrolled model declares a non-conventional `db_table`, its policy refresh becomes a silent no-op. Deriving the name from `apps.get_model(...)._meta.db_table` — the same source `check_tenant_model_isolation` already uses — would close it.
 - **`blog/feeds.py` resolves the System org twice, with opposite error handling.** `__call__` (`:31-34`) swallows any exception into `org = None`, but `items()` (`:44-46`) calls `Organization.objects.get_system_org()` again *unguarded*. If the first call failed because of a corrupt System org row — `OrganizationManager._validate_system_org` raises `RuntimeError` by design — the feed enters fail-closed scope and then raises unhandled during item rendering, turning a fail-closed empty feed into a 500. Narrow trigger (a corrupt singleton), and the broad `except Exception` is itself the Fail-Hard shape worth noting.
 - **`table_has_force_rls` queries `pg_class` / `pg_policies` without schema qualification** (`tenancy.py:1650-1670`, matching on `relname` and `tablename`). Single-schema deployments are unaffected; recorded so a future schema-per-tenant option does not inherit an ambiguous check.
 
@@ -207,6 +203,12 @@ function getCsrfToken(): string {
 - 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.
 - 2026-09-05 — **TA71** `backup-lock-stale-clear-toctou`: **retired by the release-accepted SA171 lock correction.** SA176 preserved the serialized `"_acquisition_token"` key while renaming its Python constant, Bandit B105 and the full `make ci` gate are green, and release acceptance is restored without a suppression. Inode-bound reclamation and acquisition-bound release identity are archived in [CHANGELOG.md](../../CHANGELOG.md); the separate-lock question is retained only as the non-defect structural watch item above.
 - 2026-08-28 — **TA72** `force-rls-apply-idempotency-claim`: **new (S4).**
+- 2026-09-05 — **TA72** `force-rls-apply-idempotency-claim`: **retired by SA172.** The forward
+  template now drops both named policies with `IF EXISTS` before recreating them; a live PostgreSQL
+  regression applies the helper twice and verifies RLS remains enabled and forced with exactly the
+  write and operator-read policies present. The adjacent refresh watch item is also retired because
+  table names now come from each registered model's `_meta.db_table`. The separate predicate-text
+  tooling gap and structural smell remain open under post-v88 SA177.
 - 2026-08-28 — **No prior closure claims required verification (§2f.3)**: the prior pass carried three open findings and claimed no new closures in the delta window, so there was no closure testimony to check against code. All three prior IDs were nonetheless re-verified at their anchors, as logged above.
 - 2026-08-28 — **Fix-regression pass (§3.6)**: not applicable — the delta contains no fix for any prior finding. The two behavioural commits are test-only.
 - 2026-08-28 — **Test-integrity diff (§3.7)**: the delta's ~60 removed assertions were read hunk by hunk against the "did any test get weaker?" question and **cleared**. Every removed assertion pinned documentation state, not code behaviour; the removal of the assertions over `arch-audit.md` and `tech-audit.md` is mandated by `decisions.md:670`; the replacement derives its counts from the roadmap rather than pinning literals, upgrades bare `assert`s to diagnostic `AssertionError`s, and adds a red-canary test proving drift still fails. No `skip`/`xfail` was added, no tolerance widened, no mock replaced a real dependency. Full adjudication in *Clean sweeps*.

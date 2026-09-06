@@ -47,22 +47,6 @@ recomputation, and verify proxy-aware resolution retains its behavior.
 These edits affect generated output. Review them together with one emission-fixture rebaseline,
 keeping per-file rationale and separate CSRF and proxy regression evidence.
 
-## SA172 — Make RLS application repeatable and resolve actual table names
-
-`apply_force_rls` must be safe to invoke twice. PostgreSQL policy creation requires the forward
-SQL to drop the named policies with `DROP POLICY IF EXISTS` before recreating them; otherwise
-the second invocation raises `duplicate_object`. Prove repeatability by applying twice.
-
-`refresh_force_rls_policies` must obtain each enrolled model's table name through
-`apps.get_model(...)._meta.db_table`. Guessing the default Django name silently misses models
-with a custom `db_table`. Resolution failures must be explicit because an omitted policy refresh
-cannot be treated as success. Preserve the module's independent fail-closed role guard.
-
-The convention-derived name still on the integration branch happens to match every current
-enrollment, so this is a latent miss rather than an observed failure; deriving the name is what
-stops the next custom `db_table` from turning it into one. Predicate-content enforcement has a different purpose and is explained under
-SA177.
-
 ## SA174 — Explain the landed contract comments and audit watchlist
 
 The sanctioned privileged commands are `migrate` and `createcachetable`. Production settings
@@ -135,7 +119,7 @@ to a `FOR SELECT` policy so it cannot expand write or delete visibility.
 Compare the database's `qual` and `with_check` expressions with the rendered policy contract for
 every enrolled table, accounting for PostgreSQL's expression representation. Use a live database
 and a negative control that weakens a predicate and is rejected. This checks policy meaning in
-addition to the application and table-resolution behavior covered by SA172.
+addition to SA172's accepted application and table-resolution behavior.
 
 ## SA153 — Launch the property portal through a project-owned extension
 

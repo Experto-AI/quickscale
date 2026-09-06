@@ -39,9 +39,9 @@ under SA135.
 
 **Closed-ticket release history is not repeated here.** SA167c's Phase-F verdict, SA166's
 testimony gate, SA170/TA70, SA171's release acceptance under SA176, and SA167d's completion ledger
-are all closed, with their evidence, retired merge positions, and exit statuses archived in
-[CHANGELOG.md](../../CHANGELOG.md). SA172 remains open; the [roadmap](../technical/roadmap.md)
-owns current scheduling.
+and SA172's accepted RLS candidate are closed, with their evidence, retired merge positions where
+applicable, and validation outcomes archived in [CHANGELOG.md](../../CHANGELOG.md). The
+[roadmap](../technical/roadmap.md) owns current scheduling.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 **Scope decision.** With the delta this small, the pass's value is re-verification plus depth

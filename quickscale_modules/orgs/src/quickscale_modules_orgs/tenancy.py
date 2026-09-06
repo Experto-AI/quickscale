@@ -503,6 +503,9 @@ def tenant_org_fk(
 # ---------------------------------------------------------------------------
 
 _FORCE_RLS_FORWARD_SQL = """
+DROP POLICY IF EXISTS {policy_name} ON {table};
+DROP POLICY IF EXISTS {policy_name}_select ON {table};
+
 ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
 
@@ -539,8 +542,8 @@ def apply_force_rls(
 ) -> None:
     """Enable and FORCE RLS on tables with a direct ``organization_id`` column.
 
-    Idempotent — wraps each pair in the identical ENABLE + FORCE + CREATE
-    POLICY sequence.
+    Idempotent — wraps each pair in the identical ENABLE + FORCE + policy
+    replacement sequence.
 
     No-op on non-PostgreSQL databases (SQLite during tests).
 
@@ -590,12 +593,13 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
 
     The function iterates ``TENANT_TABLE_REGISTRY`` for entries whose
     ``status == ENROLLED`` and constructs the ``(table_name, policy_name)``
-    pairs from the entry's ``policy_name`` attribute and the Django default
-    db_table convention (``app_label + '_' + model_name.lower()``).
+    pairs from the entry's ``policy_name`` attribute and the registered
+    model's ``_meta.db_table`` value.
 
-    Tables that do not exist yet in the database are silently skipped
-    (handles the case where this migration runs before other modules'
-    schema migrations in a fresh test database).
+    Registry entries for optional apps that are not installed and tables
+    that do not exist yet in the database are silently skipped (handles the
+    case where this migration runs before other modules' schema migrations
+    in a fresh test database).
 
     No-op on non-PostgreSQL databases.
 
@@ -605,13 +609,19 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
     if schema_editor.connection.vendor != "postgresql":
         return
 
+    from django.apps import apps
+
     targets: list[tuple[str, str]] = []
     for entry in TENANT_TABLE_REGISTRY:
         if entry.status != TenantTableStatus.ENROLLED:
             continue
         if not entry.policy_name:
             continue
-        table_name = f"{entry.app_label}_{entry.model_name.lower()}"
+        try:
+            apps.get_app_config(entry.app_label)
+        except LookupError:
+            continue
+        table_name = apps.get_model(entry.app_label, entry.model_name)._meta.db_table
         targets.append((table_name, entry.policy_name))
 
     if not targets:
