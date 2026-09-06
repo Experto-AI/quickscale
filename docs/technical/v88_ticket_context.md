@@ -58,33 +58,34 @@ the second invocation raises `duplicate_object`. Prove repeatability by applying
 with a custom `db_table`. Resolution failures must be explicit because an omitted policy refresh
 cannot be treated as success. Preserve the module's independent fail-closed role guard.
 
-Predicate-content enforcement has a different purpose and is explained under SA177.
+The convention-derived name still on the integration branch happens to match every current
+enrollment, so this is a latent miss rather than an observed failure; deriving the name is what
+stops the next custom `db_table` from turning it into one. Predicate-content enforcement has a different purpose and is explained under
+SA177.
 
-## SA174 — Correct contract comments and audit watchlist explanations
+## SA174 — Explain the landed contract comments and audit watchlist
 
 The sanctioned privileged commands are `migrate` and `createcachetable`. Production settings
 validate the role selection, the `orgs` app supplies an independent boot guard, and the CLI
 produces the environment value. A template test transcribes the settings declaration, while
 `start.sh` contains invocation literals. The `orgs` frozenset is therefore one declaration in a
-shared contract, not its sole authority.
-
-Correct the comment to name the participating declarations and retain the independent
-fail-closed guard. Record a third sanctioned command or disagreement between declarations as
-the trigger for revisiting consolidation. This requires no generated-output change.
+shared contract, not its sole authority. The corrected comment names the participating
+declarations and retains the independent fail-closed guard. A third sanctioned command, or
+disagreement between declarations, is the trigger for revisiting consolidation. None of this
+changes generated output.
 
 The gate registry's `trigger_inputs` field describes a bidirectional partition of the
-`e2e.yml` path allowlist; it is not a promise about when a gate can be skipped. Explain that
-meaning in its docstring and schema description, retaining the field name and behavior. Using
-it to skip execution is the trigger for reconsidering those semantics.
+`e2e.yml` path allowlist; it is not a promise about when a gate can be skipped. The docstring and
+schema description now say so while retaining the field name and behavior. Using the field to skip
+execution is the trigger for reconsidering those semantics.
 
-Restate the architectural watchlist from the actual implementation, preserving the triggers for
+The architectural watchlist is restated from the actual implementation, preserving the triggers for
 the provisioning script's module-name and module-count literals, its separately pinned PostgreSQL
 major, and count-pinned gate-parity oracles. Accurate watchlist wording preserves deferred
 questions without claiming that documentation has resolved their underlying structures.
 
-Historical review confirmed that the count-oracle trigger fired in `d31c6b41` and `437dd0e0`.
-That evidence remains open as a separate gate-parity maintenance follow-up: deriving the count
-oracles is outside this documentation correction and is not required to make the descriptions true.
+What remains is evidence, not authoring: focused validation, an independent read of the landed
+delta, and the closeout record. The confirmed count-oracle trigger is a separate obligation.
 
 ## SA152 — Exercise beta migration and check compatibility within each mode
 
@@ -105,6 +106,24 @@ incompatible launcher/settings combination fails clearly. Preserve donor deploym
 where the mode promises to preserve them; do not require identical file dispositions merely
 because files participate in one contract. Ownership manifests and taxonomy redesign need
 separate evidence of need.
+
+## SA180 — Compute the gate-parity count oracles instead of pinning them
+
+Several gate-parity assertions compare against hand-written integers: how many gates exist, how
+many provisioning stations, how many hosted jobs. Each is a copy of a fact that lives somewhere
+else, so every addition needs a matching hand edit, and a forgotten edit either fails loudly for
+an unrelated reason or, worse, keeps passing against the stale number.
+
+The written trigger for acting on this was more than two such edits. Historical review found that
+two separate changes each crossed it, so the trigger has fired and the item is now owned work
+rather than an observation. Correcting the surrounding documentation, as the command-set and
+allowlist work did, does not discharge it.
+
+Derive each count from the source it describes — the registry entries, the workflow job set, the
+station list — so the assertion cannot drift from reality. Keep the closed-universe check, which
+already makes an unregistered job loud, and keep the existing failure messages specific. A
+regression that adds a gate and observes the derived count follow it is the evidence that closes
+the watch item.
 
 ## SA177 — Verify RLS policy predicates
 

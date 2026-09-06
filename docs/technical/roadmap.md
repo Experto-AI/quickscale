@@ -30,8 +30,9 @@ Absorbing a ticket transfers its unfinished obligations and does not claim its f
 | SA165 | Accept retained hardening and record its closeout | v88 | 1 | — | Required |
 | SA160 | Fix generated CSRF handling and remove dead settings helpers | v88 | 1 | SA165 | Required |
 | SA172 | Accept idempotent RLS enrollment and model-derived table names | v88 | 3 | — | Required |
-| SA174 | Correct command-set and gate-input documentation and watchlists | v88 | 2 | — | Optional |
+| SA174 | Close out the landed command-set and gate-input documentation | v88 | 2 | — | Optional |
 | SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 2 | — | Deferred |
+| SA180 | Derive the gate-parity count oracles from the registry | post-v88 | 2 | — | Deferred |
 | SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | SA172 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | — | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
@@ -41,132 +42,102 @@ Track numbers map to the existing worktrees: **1 = W1 / wt-track1**, **2 = W2 / 
 start them during release work. SA154 is an inventory, not an implementation queue.
 
 ```text
-Track 1: SA165 ──► SA160 ──┐
-Track 3: SA172 ────────────┴──► final release validation and closeout
-Track 2: SA174                  optional; runs alongside both tracks
+Track 1: SA165 ──► SA160 ──┐   critical path
+Track 3: SA172 ────────────┼──► final release validation and closeout
+Track 2: SA174 ────────────┘   optional; may defer past the release
 ```
 
-Start all three track heads independently. SA165 and SA172 need review/acceptance of existing
-implementation; do not restart their product work. SA174 is a bounded documentation change.
-On track 1, begin SA160's product/fixture changes only after SA165's reviewed candidate has passed
-its verdict and integrated. That is the one v88 task dependency: SA165 binds the same emission
-fixture that SA160 rebaselines. Combining the old dead-code and CSRF tickets removes a second
-fixture handoff and validation cycle. The longest dependency chain is SA165 → SA160; elapsed
-critical-path duration still depends on measured review and validation times on every track.
+**Critical path: SA165 → SA160 → final release validation.** It is the only chain with two
+required tasks in series, and it lives entirely on track 1. SA172 is required but is a
+single-task chain, so shortening it does not shorten the release; SA174 is optional and
+shortens nothing. Work that does not advance SA165 or SA160 is parallel filler, however useful.
+
+All three track heads are startable now. SA165, SA172, and SA174 all have their product changes
+written; each needs review, its required validation, and closeout — not new implementation.
+
+SA165 → SA160 is the only v88 task edge, and it gates only the **emission-fixture rebaseline**:
+SA165's frozen candidate binds `quickscale_core/tests/fixtures/sa90_emission_manifests.json` until
+its verdict returns and integrates. SA160's helper, its Vitest table, the dead-helper deletions,
+and their regressions may be authored before that, on track 1, and rebaselined once afterwards.
+Combining the old dead-code and CSRF tickets removes a second fixture handoff and validation cycle.
 
 SA177 follows SA172 so its policy oracle targets the accepted helper. SA152 and SA153 have no
 hard product dependency on each other: portal development can use a fresh generated project.
 If the eventual site cutover uses the beta-migration tools, their SA152 acceptance becomes a
 cutover prerequisite; it does not block building the portal. SA154 follows the working portal.
+SA180 follows SA174's landed documentation only in ownership, not in code.
+
+### Track states
+
+Each track reports three independent states. A track is **truly green** only when all three
+are yes.
+
+| Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
+|---|---|---|---|---|---|---|
+| 1 | SA165 | yes | yes | yes | **yes** | **yes** |
+| 2 | SA174 | yes | yes | yes | **yes** | no — optional filler |
+| 3 | SA172 | yes, after a local index recovery | yes | yes | **yes** | no — required, but not the longest chain |
+
+- **Can start** — no track waits on a decision, an authorization, or a plan gate. Track 3's
+  worktree carries stale unmerged index entries from an already-committed merge (`git status`
+  shows `UU` on seven documentation/test paths with no `MERGE_HEAD` and no working-tree conflict
+  markers). Clearing them is a mechanical `git reset` in that worktree, not a dependency on
+  another track's output.
+- **Can finish** — every acceptance criterion is satisfiable by its own track. SA165 and SA172
+  both need Docker-backed runs; that is a scheduling queue, not a dependency. Track 3 holds
+  the standing PostgreSQL slot, so track 1 coordinates its `make ci-e2e` window with track 3.
+- **Can merge** — nothing is order-gated. SA160 is order-gated behind SA165, but SA160 is not a
+  track head; it starts after SA165 integrates.
+
+There is no ambiguity left between a decision blocker and a hard dependency: **no track is
+currently held by either**.
 
 ### Ownership and merge coordination
 
 - Track 1 owns generator templates, the CSRF helper, and emission-fixture updates. SA165's
   retained state-schema and isolation-runner changes stay on this track through acceptance.
-- Track 2 owns gate documentation, `scripts/gate_registry.json` and module declarations if later
-  work needs them, and the maintainer migration tools. SA174 changes descriptions, not gate schema.
+- Track 2 owns gate documentation, `scripts/gate_registry.json` and module declarations, and the
+  maintainer migration tools. SA174 changed descriptions, never gate schema or emitted bytes.
 - Track 3 owns the RLS helper and database-backed policy acceptance. SA177 may take the isolation
   runner only after SA165 has closed; its post-v88 horizon supplies that ordering without a live
   cross-track implementation overlap.
 - Product implementation stays in worktrees, with one delivery candidate at a time per track and
   one serialized merge queue into `v88`. Independent work does not wait for another track's audit
   markdown edits. Reconcile shared documentation at merge time on the owning worktree.
-- Shared closeout files are this roadmap, the changelog, ticket context when concepts change, and
-  the relevant audit. Other documents link to the schedule instead of copying counts or readiness.
-  The consistency test checks structure, not exact status prose. No new tracking framework is needed.
+- **Conflict surface.** The only files all three tracks write are the shared closeout set: this
+  roadmap, [CHANGELOG.md](../../CHANGELOG.md), [ticket context](v88_ticket_context.md) when
+  concepts change, and the owning audit. Every one of them is Markdown with append-or-edit
+  semantics and no generated consumer, and the serialized merge queue plus reconcile-on-the-owning-
+  worktree rule above covers them: each track resolves the shared set once, at its own merge, after
+  the previous merge has landed. The consistency test then checks structure, not status prose.
+  No product file is co-owned by two open tickets, so no merge hazard is created by running
+  SA165, SA172, and SA174 at the same time.
 - Track 3 has scheduling priority for Docker-backed acceptance. Other tracks may prepare and run
   DB-free checks concurrently. Private PostgreSQL profiles do not claim the standing service, but
   coordinate Docker-heavy runs with track 3. See the [execution policy](validation_policy.md#candidate-review-and-integration)
   for routing, cleanup, candidate binding, and review/merge rules.
 
-Before starting or resuming a delivery, measure branch divergence and working-tree status; do not
-persist tips or clean/dirty claims as planner state. A shared filename alone is a merge concern,
-not a product dependency. A changed input to an active reviewed candidate is a real dependency.
+### Resuming a track
 
-### Recovery before the next handoff
+Measure state; do not read it from this planner. Check the assigned branch, divergence from `v88`,
+staged/unstaged changes, untracked files, and any merge in progress, then read the diffs and prior
+evidence before deciding anything is blocked. A dirty worktree is a recovery step, not a stop
+condition: cleanliness is required for the frozen review and the merge, never for inspection or
+for continuing understood, in-scope edits. A shared filename alone is a merge concern; a changed
+input to an active reviewed candidate is a real dependency.
 
-**A dirty worktree is a recovery step, not a stop-before-discovery condition.** Read this roadmap,
-inspect the assigned task and existing diffs, and evaluate dependencies before deciding what is
-blocked. Cleanliness is required for the eventual sync, frozen review, and merge; it is not required
-for read-only inspection or continuing understood, in-scope edits. The following recovery is part
-of each next-task handoff. Re-measure everything in the new session; do not infer completion from
-an old report or draft changelog entry.
+Preserve before you reconcile. Stage an explicit reviewed file list and make a clearly labeled
+WIP checkpoint for work that would otherwise be lost — a checkpoint is not acceptance and must not
+enter `v88` as a completed delivery. Never sweep unrelated work in with `git add .`, never
+auto-drop a stash, and never use destructive reset or checkout to manufacture a clean status.
+Then merge `v88` into the worktree, resolve conflicts there, run the consistency suite, and
+continue the task's own validation. Merge only the reviewed and accepted delivery, through the
+serialized queue. Stop only at a concrete unresolved ownership conflict, missing authority, or
+failed prerequisite, naming the affected files and action.
 
-1. **Inspect and preserve.** Check the assigned branch, staged/unstaged changes, untracked files,
-   and any merge already in progress. Read the diffs and prior evidence. Coordinate with any active
-   writer before snapshotting its work. Preserve recoverable copies of tracked changes and needed
-   untracked files before reconciliation; do not discard changes to manufacture a clean status.
-2. **Checkpoint unfinished work.** In the assigned worktree, stage an explicit reviewed file list
-   and make a clearly labeled WIP/retained checkpoint for the existing task. It is not acceptance
-   and must not enter the integration branch as a completed delivery. Keep unrelated work separate;
-   never sweep it into the task with `git add .`. If a named stash is necessary, record its exact
-   identity, include relevant untracked files, and retain it until restoration is verified. Do not
-   auto-drop stashes, overwrite unknown files, or use destructive reset/checkout commands.
-3. **Publish the shared planning checkpoint once.** The track 1 handoff coordinates this bootstrap
-   with the maintainer: inspect and commit the already-approved roadmap simplification and its
-   companion files currently in `/home/victor/code/quickscale` on `v88`, using an explicit file list
-   and the focused consistency check below. This preserves existing planning work; it is not
-   product implementation on the integration branch. If already committed, verify and reuse it.
-   Tracks 2 and 3 must not independently commit, stash, or clean the shared checkout. They may
-   inspect `/home/victor/code/quickscale/docs/technical/roadmap.md` and preserve their own work while
-   awaiting this checkpoint: `git merge v88` cannot transfer uncommitted planning edits.
-4. **Sync and reconcile.** Once local work is preserved and the planning checkpoint is committed,
-   merge `v88` into the assigned worktree. Inspect existing in-progress merges before issuing a
-   new merge. Resolve conflicts there, preserving useful implementation and historical evidence.
-   Use the consolidated schedule and structural consistency checks; do not restore the old ticket
-   queue, exact-prose assertions, or unsupported completion claims from a WIP checkpoint. Run the
-   roadmap/context consistency suite after reconciliation, then continue the task's own validation.
-5. **Resume, review, and integrate.** Reuse valid prior work, obtain any missing independent review
-   and candidate-bound validation, and merge only the accepted delivery through the serialized
-   queue. If `v88` becomes dirty again, coordinate with its writer and defer only the affected
-   merge; inspection and independent local work may continue. Stop only at a concrete unresolved
-   ownership conflict, missing authority, or failed prerequisite, naming the affected files and
-   action rather than reporting only “worktree not clean.”
-
-Each outgoing handoff records the task, inspected diff, preservation/checkpoint or stash identity,
-remaining changes, any conflicts, evidence obtained, and the exact next command/action. Keep this
-transient record in the handoff or delivery evidence rather than adding branch-status tables here.
-
-### Next handoff — track 1
-
-Resume **SA165** in `/home/victor/code/quickscale-wt-track1` on `wt-track1`. First coordinate the
-single shared planning checkpoint above, then sync the track. Preserve local changes if present;
-do not create a WIP commit when there is nothing to preserve. Continue the five-file product review
-and release verdict described below; exclude review-recording documentation from the frozen product
-set. After accepted integration and documentation closeout, proceed to **SA160**. No other track
-must finish its product task before this review can begin; coordinate Docker-backed validation.
-
-### Next handoff — track 2
-
-Resume **SA174** in `/home/victor/code/quickscale-wt-track2` on `wt-track2`. Inspect and checkpoint
-the retained former-SA178 changes in `scripts/check_gate_parity.py`, `scripts/gate_registry.json`,
-`scripts/test_gate_parity.py`, `scripts/README.md`, and the associated audit/planning documents.
-After syncing the planning checkpoint, reuse the compatible `trigger_inputs` documentation and
-regressions, then finish the privileged-command comment/docstring and watchlist reconciliation.
-
-The retained review reports that the count-oracle trigger already fired, citing `d31c6b41` and
-`437dd0e0`. Verify that evidence and preserve the finding; do not restore a blanket “not fired”
-claim. If confirmed, record a separately scoped follow-up with an owner, dependency assessment,
-and promotion rationale. Oracle redesign is not part of SA174, and its implementation is not a
-prerequisite for correcting the documentation. Keep the finding open and do not revise its trigger
-merely to obtain a green closeout. Reconcile old SA178 completion/dependency prose to SA174's
-current scope, then validate and obtain review. No product dependency on track 1 or 3 is added.
-
-### Next handoff — track 3
-
-Resume **SA172** in `/home/victor/code/quickscale-wt-track3` on `wt-track3`. Inspect both committed
-retained work and the uncommitted delta: `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`,
-`quickscale_modules/orgs/tests/test_tenancy.py`, `quickscale_modules/orgs/tests/test_operator_access.py`,
-and their accompanying documentation. Checkpoint and reuse the policy-drop ordering, model-derived
-table-name resolution, and regression work; do not implement the same fix again after syncing.
-
-The local draft changelog and roadmap edits claim SA172 is closed and remove it from the queue.
-Treat those as proposed closeout, not proof. Preserve the historical test report, but keep SA172
-and its finding open until independent review and required exact-candidate acceptance are obtained.
-Reconcile its old queue/context/consistency edits with the simplified planner. Then materialize the
-complete candidate patch, obtain terminal review and the PostgreSQL-backed proof, and merge the
-accepted tip before recording final closeout. Keep SA177 deferred. Track 3 retains the database
-acceptance slot and cleanup obligations; another track's unfinished product task is not a blocker.
+Each outgoing handoff records the task, inspected diff, checkpoint or stash identity, remaining
+changes, conflicts, evidence obtained, and the exact next command. Keep that record in the handoff
+or delivery evidence, not here.
 
 ## v88 deliveries
 
@@ -188,31 +159,32 @@ acceptance slot and cleanup obligations; another track's unfinished product task
 
   **Acceptance sequence:**
 
-  1. Sync the owning worktree, verify the retained product binding, and supply an independent
-     reviewer the complete materialized base-to-tip patch, clean-tip evidence, and the five-file
-     context. The three `test_generated_tree_matches_manifest` variants and
-     `test_operations_md_warns_generated_credentials_are_local_only` must be green.
+  1. Supply an independent reviewer the complete materialized base-to-tip patch, clean-tip
+     evidence, and the five-file context. The three `test_generated_tree_matches_manifest`
+     variants and `test_operations_md_warns_generated_credentials_are_local_only` must be green.
   2. After a green review, recheck candidate inputs and run
      `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`, recording actual exit status, provenance, and exact
      cleanup evidence. This remains a required release verdict; historical stale-but-green evidence
      cannot replace it. The first replacement retains the `EV-8` evidence label. Apply the
      [candidate policy](validation_policy.md#candidate-review-and-integration) to any subsequent
      attempt; a red or unreturned run is never acceptance.
-  3. Integrate the reviewed product tip, then record the verdict and retire only the four audit
-     notes it discharges. Prepare the documentation commit in the same worktree/delivery and
-     merge it through the same queue. Review-recording documents and their structural consistency
-     test are outside the frozen product set, so recording the verdict does not invalidate it.
+  3. Record the verdict and retire only the four audit notes it discharges. Prepare the
+     documentation commit in the same worktree/delivery and merge it through the same queue.
+     Review-recording documents and their structural consistency test are outside the frozen
+     product set, so recording the verdict does not invalidate it.
 
-  There is no mandatory root-session boundary between these steps. Independent review still must
-  return before the verdict is launched. No additional ticket is needed merely to record results,
-  recover an interrupted verification, or correct an in-scope defect; changed product inputs need
-  renewed review and validation. New product scope remains separately planned.
+  The reviewed product bytes are already on `v88`; this delivery adds the verdict and the closeout,
+  not new implementation. There is no mandatory root-session boundary between the steps, and
+  independent review must still return before the verdict is launched. No additional ticket is
+  needed merely to record results, recover an interrupted verification, or correct an in-scope
+  defect; changed product inputs need renewed review and validation.
 
 - [ ] **SA160 — Fix generated CSRF handling and remove dead settings helpers.**
 
   Includes the former SA161 dead-code removal. Deliver one combined template candidate and one
   emission-fixture rebaseline, preserving every previous `baseline_evidence` entry and recording
-  a separate rationale for each emitted file change.
+  a separate rationale for each emitted file change. Author the code and tests whenever track 1 is
+  free; land the rebaseline only after SA165's verdict releases the fixture.
 
   **Acceptance:**
 
@@ -230,47 +202,49 @@ acceptance slot and cleanup obligations; another track's unfinished product task
     generator-change release tier once for that delivery. Retire the duplicate-cookie and dead
     settings-helper findings only with their regression evidence.
 
+  Keep both halves in one candidate. They are independent in code but share the single emission
+  rebaseline, so splitting them buys no parallelism and costs a second fixture handoff, review,
+  and generator-tier run.
+
   **Surfaces:** React theme, generated settings, emission fixture, and technical audit.
 
 - [ ] **SA172 — Accept idempotent RLS enrollment and model-derived table names.**
 
-  The forward-template fix, table-name derivation, and regressions already exist on the owning
-  worktree and need terminal review and integration. Inspect that implementation before editing;
-  a prior review returned no verdict, which is absent evidence rather than a product failure.
+  The forward-template fix, table-name derivation, and regressions exist on `wt-track3`, committed
+  at `89d262bc` with an uncommitted ordering refinement on top. Inspect that implementation before
+  editing; a prior review returned no verdict, which is absent evidence rather than a product
+  failure. Do not implement the same fix again.
 
   **Acceptance:** prefix the forward policy template with the corresponding `DROP POLICY IF EXISTS`
   pair and prove applying it twice against a real PostgreSQL table succeeds. Preserve the tenant
   write policy and operator-read policy split. Derive enrolled table names through
-  `apps.get_model(...)._meta.db_table` and cover an explicitly non-conventional table name so
-  enrollment cannot silently miss it. Obtain independent patch-backed review and the required
-  database/release validation on the exact candidate, then merge and retire the idempotency finding
-  and table-name watch item. Predicate-text conformance stays in SA177 and is not claimed here.
+  `_meta.db_table` instead of the `app_label + '_' + model_name.lower()` convention still on `v88`,
+  and cover an explicitly non-conventional table name so enrollment cannot silently miss it.
+  Obtain independent patch-backed review and the required database/release validation on the exact
+  candidate, then merge and retire the idempotency finding and table-name watch item.
+  Predicate-text conformance stays in SA177 and is not claimed here.
 
   **Surfaces:** `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`, its regressions,
   and technical audit. Preserve existing RLS and cleanup guarantees.
 
-- [ ] **SA174 — Correct command-set and gate-input documentation and watchlists.**
+- [ ] **SA174 — Close out the landed command-set and gate-input documentation.**
 
-  Includes former SA178, using its documentation-only option instead of a field rename.
+  Includes former SA178, using its documentation-only option instead of a field rename. **All three
+  corrections are written and already on `v88`**: `orgs/apps.py` names the four independent
+  fail-closed declarations, `check_gate_parity.py` and the registry description define
+  `trigger_inputs` as the bidirectional E2E allowlist partition, and the architecture watchlist is
+  reconciled with every trigger preserved. No declaration, gate behavior, registry field, or
+  emitted byte changed.
 
-  **Acceptance:**
+  **Acceptance:** run the focused gate-parity checks and lint appropriate to the touched
+  descriptions, obtain independent review of the landed documentation delta, and record the
+  closeout. No generator run or emission rebaseline is owed for comments alone. The confirmed
+  count-oracle trigger stays open as SA180 and is not closed here; no watch item closes merely by
+  being restated. Broader command consolidation, new gate mechanisms, and a registry field rename
+  are outside scope.
 
-  - Correct the comment and docstring in `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py`:
-    the privileged-command set is one of four independent fail-closed declarations, not a single
-    source of truth. Name the module guard, production settings validator, CLI producer, and
-    `start.sh` launcher. No declaration or emitted byte changes.
-  - Document `trigger_inputs` as the bidirectional partition of the E2E workflow path allowlist
-    in the parity checker and its schema description. Keep the field name and behavior. Record
-    the trigger for reassessment if it starts deciding whether a gate runs.
-  - Reconcile the architecture watchlist once. Demote the privileged-command finding under the
-    settled two-command decision, retaining its trigger (a third command or disagreement). Preserve
-    the provisioning module-count/`teams` trigger, PostgreSQL-major agreement trigger, count-pinned
-    oracle triggers, and SA92 watch trigger. No watch item is closed merely by restating it.
-
-  **Validation:** focused gate-parity checks and lint appropriate to the touched descriptions;
-  required pre-merge checks follow validation policy. No generator run or emission rebaseline is
-  owed for comments alone. Update the audit in the same delivery. Broader command consolidation,
-  new gate mechanisms, and a registry field rename are outside scope.
+  **Surfaces:** `quickscale_modules/orgs/.../apps.py`, `scripts/check_gate_parity.py`,
+  `scripts/gate_registry.json`, `scripts/README.md`, and the architecture audit.
 
 ## Post-v88 work
 
@@ -298,6 +272,22 @@ acceptance slot and cleanup obligations; another track's unfinished product task
   **Surfaces:** `quickscale_devtools/.../beta_migration.py`, CLI ownership/migration tests, existing
   gate registry and parity wiring, Make/CI entrypoints as needed, and migration playbook. No public
   updater, typed ownership framework, or changed file precedence is included.
+
+- [ ] **SA180 — Derive the gate-parity count oracles from the registry.**
+
+  The architecture audit confirmed this trigger **fired** — `d31c6b41` and `437dd0e0` each crossed
+  the written more-than-two-edit threshold on hand-pinned count literals. SA174 corrected the
+  descriptions; it does not and cannot discharge the finding, so it is promoted here with its own
+  owner rather than left as an unassigned note in the audit.
+
+  **Acceptance:** compute the count-pinned gate-parity oracles from the registry and workflow
+  sources they describe, so adding a gate or station cannot leave a stale literal behind. Keep the
+  closed-universe check and the existing failure messages loud. Prove with a regression that adding
+  a gate updates the derived count without a hand edit. Retire the count-pinned watch item only
+  with that evidence. Renaming `trigger_inputs` stays out of scope under SA174's settled decision.
+
+  **Surfaces:** `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`,
+  `scripts/gate_registry.json` if a derivation source is needed, and the architecture audit.
 
 - [ ] **SA177 — Verify the predicates of enrolled RLS policies.**
 

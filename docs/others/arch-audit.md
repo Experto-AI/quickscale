@@ -37,42 +37,11 @@ evidence. SA167c's authorized Phase-F verdict under `EV-7`, SA166's testimony ga
 `make ci` correction are green and archived. The prior pass's leading finding landed and is archived
 under SA135.
 
-**SA167c release reconciliation (2026-09-05).** SA167c's phases A-E remain accepted on retained
-product object `91fd3bb6e6b638735361b511c1515cddccce5d15`, and its sole authorized Phase-F
-`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict exited 0 on frozen base
-`21a33fbf22b033cab07ba63b592e21b999667fb2`. All twelve stages, Core/CLI E2E, and exact-scope
-cleanup passed. SA167c is closed and archived; its completed verdict released SA166. Evidence is archived in
-[CHANGELOG.md](../../CHANGELOG.md).
-
-**SA166 testimony-gate closeout (2026-09-05).** The registered gate now requires an SA ticket,
-integer vNN roadmap reference, or same-commit changelog testimony whenever a non-merge commit changes
-hosted workflows, the gate registry, or a provisioning station. Its hermetic suite, full parity suite,
-generated workflow check, deliberate untitled-workflow failure probe, and historical audit are green.
-SA166 and merge position #24 are archived. SA164's later guardrail repair is also archived and merge
-position #25 is retired. Current scheduling is maintained in the [roadmap](../technical/roadmap.md).
-
-**SA170 final acceptance (2026-09-04).** The ordered serial and concurrent release campaigns both
-exited 0 against retained product object `dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed
-local corrections. Exact Core/CLI cleanup completed and the standing PostgreSQL identity, volume,
-catalog, ownership, and role flags remained intact. SA170 and TA70 are closed. The later SA176
-correction release-accepted the retained SA171 lock work without changing its on-disk metadata key;
-SA172 remains open. The full release and retained-partial history is archived in
-[CHANGELOG.md](../../CHANGELOG.md).
-
-**SA171 release acceptance (2026-09-05).** The retained lock implementation is release-accepted
-after SA176 renamed the Python metadata-key constant while preserving the serialized
-`"_acquisition_token"` key. Bandit reports zero unsuppressed findings, the focused lock regressions
-remain green, and the full `make ci` gate passes without a B105 suppression. SA176 and merge position
-#33 are retired; SA172 remains open. The implementation, retained-partial history,
-and final release evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
-
-**SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
-and the completion ledger archived SA167d and retired merge position #18. SA165 became unblocked with
-`deps: none`; at that checkpoint the queue was nine open v88 ticket entries across nine open merge positions.
-The ledger is a **conditional post-integration** candidate with **exact-tip** integration and terminal
-attestation still pending in the root closeout path. The first
-foreground `make check` invocation terminated with exit 143 after Make reported no child processes
-and supplied no verdict; the exact command rerun returned exit 0.
+**Closed-ticket release history is not repeated here.** SA167c's Phase-F verdict, SA166's
+testimony gate, SA170/TA70, SA171's release acceptance under SA176, and SA167d's completion ledger
+are all closed, with their evidence, retired merge positions, and exit statuses archived in
+[CHANGELOG.md](../../CHANGELOG.md). SA172 remains open; the [roadmap](../technical/roadmap.md)
+owns current scheduling.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 **Scope decision.** With the delta this small, the pass's value is re-verification plus depth
@@ -422,7 +391,7 @@ independent of the generated-file ownership finding and should be designed toget
   logical count-oracle families and five literal sites while adding a gate, exceeding the written
   more-than-two-edits threshold each time. The closed-universe check still makes misses loud, but it
   does not make the historical trigger unfired. This item remains open and must not be read as an
-  ordinary not-fired watch item. **Follow-up owner:** gate-parity maintenance, separately from
+  ordinary not-fired watch item. **Follow-up owner:** SA180 (gate-parity oracle derivation), separately from
   SA174. **Dependency assessment:** none — deriving the oracles does not block correcting their
   documentation. **Promotion rationale:** both historical additions exceeded the written
   more-than-two-edit threshold, so a later implementation should derive the remaining count oracles
@@ -519,6 +488,13 @@ Recorded here only so a future pass using an older interpreter does not re-raise
   describe the exact bidirectional E2E allowlist partition without changing behavior. The historical
   count-oracle trigger is confirmed fired and promoted to a separately owned gate-parity follow-up;
   deriving those oracles is independent of this documentation correction. No watch item is closed.
+- 2026-09-06 — **The fired count-oracle follow-up is ticketed as SA180.** The promotion was carried
+  as an unassigned note with an owner role but no planner entry; it now has a post-v88 ticket, an
+  acceptance condition (derive each count from the source it describes and prove it with a
+  gate-addition regression), and a track. The watch item, its trigger, and its severity are
+  unchanged, and no other finding is touched. Closed-ticket release narrative for SA166, SA167c,
+  SA167d, SA170, SA171, and SA176 was removed from the orientation section above; all of it is
+  archived in [CHANGELOG.md](../../CHANGELOG.md) and none of it constrained an open finding.
 - 2026-08-28 — Prior red flags: none were open at the last pass and none opened this pass.
 
 *Lenses scanned with no qualifying finding this pass: data/state model integrity, concurrency and state

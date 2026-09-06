@@ -2,6 +2,50 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Planner cleanup and measured track reconciliation (2026-09-06).** Planning change only; no
+  product delivery, review verdict, audit finding, merge, or publication is completed by this entry.
+  Every claim below was re-measured against the working tree rather than read from the planner.
+
+  **Measured state.** SA174's three corrections are **already integrated on `v88`**: `orgs/apps.py`
+  names the four independent fail-closed declarations, `check_gate_parity.py` and the registry
+  description define `trigger_inputs` as the bidirectional `e2e.yml` allowlist partition, and the
+  architecture watchlist is reconciled. `wt-track2` is level with `v88` (0 ahead, 0 behind), so the
+  ticket's remaining scope is validation, review, and closeout — not authoring. SA165's reviewed
+  product bytes are likewise on `v88` and `wt-track1` carries nothing unmerged. SA172's fix is
+  committed on `wt-track3` at `89d262bc` (forward-SQL `DROP POLICY IF EXISTS` prefix, `_meta.db_table`
+  derivation, and regressions in `test_tenancy.py` / `test_operator_access.py`) with an uncommitted
+  ordering refinement on top; `v88` still carries the `app_label + '_' + model_name.lower()`
+  convention, so that half of the ticket is genuinely undelivered there.
+
+  **Track 3 recovery, not a dependency.** `wt-track3` shows seven `UU` documentation/test paths with
+  **no `MERGE_HEAD`, no conflict markers, and working-tree content identical to `HEAD`** — stale
+  index entries left behind by an already-committed merge (`5944a63f`). A plain `git reset` in that
+  worktree clears them without touching content. This was the only thing standing between track 3
+  and *can start*, and it is mechanical, not a wait on another track.
+
+  **Planner changes.** The three stale per-track handoff sections and the five-step recovery
+  bootstrap are removed: their shared planning checkpoint is committed, and their remaining content
+  was generic procedure duplicating [validation policy](docs/technical/validation_policy.md). A
+  compact resume-a-track paragraph replaces them, preserving the preserve-before-reconcile,
+  no-`git add .`, no-destructive-reset, and named-stop-condition rules. A three-state track table
+  (can start / can finish / can merge) is added, the critical path is named explicitly as
+  SA165 → SA160 → final release validation, and the shared closeout files are named as the single
+  conflict surface with the serialized merge queue identified as their coverage. SA174 is restated
+  as a closeout, and SA160 records that its two halves stay in one candidate because they share one
+  emission rebaseline. The SA165 → SA160 edge is narrowed to what it actually gates — the fixture
+  rebaseline — so SA160's helper and tests may be authored in parallel.
+
+  **New ticket.** The fired count-oracle trigger was sitting in the architecture audit as a promoted
+  finding with an owner role and no planner entry. It becomes **SA180 — derive the gate-parity count
+  oracles**, post-v88, deferred, with a gate-addition regression as its closing evidence. Its watch
+  item, trigger, and severity are unchanged. Closed-ticket release narrative for SA166, SA167c,
+  SA167d, SA170, SA171, and SA176 was removed from the architecture audit's orientation section;
+  it is archived in this file and constrained no open finding.
+
+  Validation: the focused roadmap/context consistency suite passes **29 tests**. No product
+  validation is claimed or discharged; SA165's release verdict and SA172's PostgreSQL proof remain
+  owed by their deliveries.
+
 - **SA174 documentation candidate prepared (2026-09-06).** The `orgs` boot-guard comment and
   docstring now identify the module guard, production-settings validator, CLI producer, and
   generated `start.sh` launcher as four independent fail-closed declarations; the module set no
