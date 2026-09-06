@@ -73,24 +73,25 @@ are yes.
 
 | Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA165 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA165 | yes — diagnosis | no — replacement EV-8 red | no — acceptance blocked | no | **yes** |
 | 1 | SA160 | yes — authoring | no — needs SA165 | no — behind SA165 | no | **yes** |
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
-- **Can start** — no v88 track waits on a decision, authorization, or plan gate. SA160's helper,
-  Vitest table, dead-helper deletions, and regressions are executable today.
-- **Can finish** — every acceptance criterion is satisfiable by its own track, except SA160's
-  emission rebaseline, which needs SA165's verdict to release the fixture. Both are track-1
-  tickets, so this is an intra-track ordering, not a cross-track dependency. Docker-backed
-  validation remains a scheduling queue, not a dependency.
-- **Can merge** — the track head is not order-gated: SA165 may merge whenever accepted. SA160 sits
-  behind SA165 in track 1's own serialized order, which is sequencing within a track, not a
-  cross-track gate.
+- **Can start** — no v88 track waits on a decision, authorization, or plan gate. SA165 can begin
+  the logging-first diagnosis below, and SA160's helper, Vitest table, dead-helper deletions, and
+  regressions are executable today.
+- **Can finish** — SA165 cannot finish because its separately authorized replacement `EV-8`
+  verdict is red and the detailed frontend logs needed to diagnose it were not retained. SA160's
+  emission rebaseline still needs SA165's accepted verdict to release the fixture. Both are
+  track-1 tickets, so this is an intra-track ordering, not a cross-track dependency.
+- **Can merge** — SA165 cannot merge as accepted until an evidence-backed correction is reviewed
+  and one new, distinctly identified `EV-8` retry returns green. SA160 sits behind SA165 in track 1's
+  own serialized order, which is sequencing within a track, not a cross-track gate.
 
-SA165 is the only **truly green** ticket, and it is on the critical path. Every "no" above is a
-**hard dependency on SA165's `EV-8` verdict**, not a decision of yours: only the returned review
-and release run can clear it. **No v88 track is held by a pending decision.**
+No v88 ticket is currently **truly green**. Every "no" above is a **hard dependency on resolving
+SA165's red replacement `EV-8` verdict**, not a pending maintainer decision. **No v88 track is held
+by a pending decision.**
 
 ### Ownership and merge coordination
 
@@ -148,7 +149,9 @@ or delivery evidence, not here.
   `573a57a34301e6a91971a7845095bd913bebd5e1`: corrupt/non-mapping YAML rejection before any write,
   identity-bound isolation skips with a negative control, `_HOST_DEPENDENT_PATHS` rationale, and the
   generated local-credential warning. This delivery adds the verdict and the closeout — including
-  the former SA179 documentation work — not new implementation. No product repair is owed.
+  the former SA179 documentation work — not a restart of the accepted implementation. No product
+  repair had been established before release verification; the current red must be diagnosed from
+  retained evidence before any correction scope is claimed.
 
   **Candidate:** `quickscale_core/src/quickscale_core/schema/state_schema.py`,
   `scripts/test_isolation_conformance.sh`,
@@ -158,21 +161,30 @@ or delivery evidence, not here.
   manifest rebaseline must travel together; a review patch omitting the fixture manufactures a
   stale-hash finding that was already refuted.
 
-  **Acceptance sequence:**
+  **Current blocked state:** Two `EV-8` attempts are red. The retained checkpoint does not include a
+  test/count oracle detailed enough to restate the earlier attempt more specifically. A separately
+  authorized replacement
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` at script revision `bdec8ac3` passed the pre-E2E checks
+  and Core E2E 38/38. CLI E2E then reported 53 passed / 1 failed at
+  `TestDevelopmentCommandsE2E.test_full_development_workflow`: `quickscale up` failed because the
+  frontend exited 1. Cleanup succeeded, but detailed frontend service logs were not retained. The
+  replacement verdict is red, its root cause is unknown, and this checkpoint does not complete
+  SA165.
 
-  1. Supply an independent reviewer the complete materialized base-to-tip patch, clean-tip
-     evidence, and the five-file context. The three `test_generated_tree_matches_manifest`
-     variants and `test_operations_md_warns_generated_credentials_are_local_only` must be green.
-  2. After a green review, recheck candidate inputs and run
-     `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`, recording actual exit status, provenance, and exact
-     cleanup evidence. This remains a required release verdict; historical stale-but-green evidence
-     cannot replace it. The first replacement retains the `EV-8` evidence label. Apply the
-     [candidate policy](validation_policy.md#candidate-review-and-integration) to any subsequent
-     attempt; a red or unreturned run is never acceptance.
-  3. Record the verdict and retire only the four audit notes it discharges. Prepare the
-     documentation commit in the same worktree/delivery and merge it through the same queue.
-     Review-recording documents and their structural consistency test are outside the frozen
-     product set, so recording the verdict does not invalidate it.
+  **Remaining sequence:**
+
+  1. Instrument log preservation as needed so the frontend service logs required to explain an
+     exit-1 startup survive cleanup.
+  2. Reproduce `TestDevelopmentCommandsE2E.test_full_development_workflow` with those logs retained.
+  3. Diagnose and fix only the evidence-backed root cause and relevant pre-existing issues exposed
+     by that diagnosis; do not infer a product defect from the current transcript.
+  4. Independently review the resulting exact candidate and recheck its inputs.
+  5. Only after green review and an input recheck, run one new, distinctly identified `EV-8` retry
+     under the [candidate policy](validation_policy.md#candidate-review-and-integration):
+     `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`, with actual exit status, provenance, retained failure
+     logs when applicable, and exact cleanup evidence.
+  6. Close SA165 and retire only the four audit notes it discharges if that fresh verdict is green;
+     otherwise retain the red evidence and keep the ticket open.
 
   Independent review must return before the verdict is launched. No additional ticket is needed to
   record results, recover an interrupted verification, or correct an in-scope defect; changed

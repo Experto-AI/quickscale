@@ -2,6 +2,29 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA165 replacement EV-8 stopped red; diagnosis evidence was not retained (2026-09-06).**
+  This records where work stopped and does **not** complete SA165, accept a release verdict, retire
+  an audit note, or change product code. The cycle began at `2026-09-06T18:02:22+02:00` after a
+  clean status check and an already-up-to-date merge from `v88`. Two `EV-8` attempts are red; the
+  retained checkpoint does not include a test/count oracle detailed enough to restate the earlier
+  attempt more specifically.
+
+  A separately authorized replacement `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` at script revision
+  `bdec8ac3` passed all pre-E2E checks and Core E2E **38/38**. CLI E2E reported **53 passed / 1
+  failed** at
+  `TestDevelopmentCommandsE2E.test_full_development_workflow`: `quickscale up` failed because the
+  frontend exited 1. Cleanup succeeded, but detailed frontend service logs were not retained, so
+  the failure cannot be diagnosed from the surviving transcript and no root cause or repair is
+  claimed.
+
+  **Remaining plan:** instrument log preservation as needed so frontend service logs survive
+  cleanup; reproduce the failing workflow; diagnose and fix the evidence-backed root cause and
+  relevant pre-existing issues; independently review the exact corrected candidate and recheck its
+  inputs; then launch one new, distinctly identified `EV-8` retry under the candidate policy. Close
+  only if that fresh `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict is green with provenance,
+  logs, and cleanup evidence recorded. SA165 remains open and unchecked, SA160 remains ordered
+  behind it, and no maintainer decision is currently open.
+
 - **SA174 accepted and closed — command-set and gate-input documentation (2026-09-06).** The
   ticket's three corrections were already integrated on `v88` and nothing remained to author, so
   acceptance was the outstanding validation and the closeout record. Measured this pass:
