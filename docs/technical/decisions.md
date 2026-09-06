@@ -452,7 +452,7 @@ The remaining deviations are scheduled inside v88; none is deferred.
 |---|---|
 | Five modules (auth, backups, notifications, orgs, storage) now declare their app lists in their own manifests; core reads those projections | **SA167a** — completed v88, merge #8 |
 | All twelve shipped modules own their adapters and consume the public `quickscale_core.runtime` facade or its `runtime.manifest` subfacade; `quickscale_core/.../manifest/entry_point.py` contains only generic registry/dispatch logic | **SA167b** — completed v88, merge #17; implementation, P4 acceptance, convergence, attestation, and merge-back are complete |
-| The settled CLI product bytes no longer hold per-module wiring logic; the completion-grade closeout candidate is archived at the current ledger state | **SA167d** — v88, completion-grade Phase C is a conditional post-integration candidate; exact-tip integration remains pending; SA165 is released with `deps: none`. |
+| The settled CLI product bytes no longer hold per-module wiring logic | **SA167d** — evidence belongs in [CHANGELOG.md](../../CHANGELOG.md); current closeout dependencies and review state belong in the [roadmap scheduling table](roadmap.md#scheduling-table). |
 | `django_apps:` was parsed by `manifest/loader.py` and read by no production code path; the declaration gate now enforces app projections | **SA167c** — v88, merge #21; implementation phases A-E are accepted. Phase F release status and downstream sequencing live in the roadmap; this policy table does not duplicate that transient ledger. |
 
 Type reference:
@@ -652,7 +652,7 @@ implicit env-var/stdout-JSON coupling.
 
 - **decisions.md**: Repo-wide policy, tie-breakers, prohibitions, and document ownership map (authoritative)
 - **implementation_contract.md**: Current shipped implementation contract, CLI surface, and architecture-boundary reference
-- **validation_policy.md**: Validation entrypoints, validation tiers, testing standards, coverage expectations, and E2E guidance
+- **validation_policy.md**: Validation entrypoints, validation tiers, candidate review and integration, testing standards, coverage expectations, and E2E guidance
 - **generated_project_structure.md**: Generated-project layout, artifact placement, and generation guardrails
 - **repository_layout.md**: Maintainer-repository layout and naming/import matrix
 - **scaffolding.md**: Concise structure hub plus compatibility anchors and backlinks into the structure companions
@@ -665,15 +665,41 @@ implicit env-var/stdout-JSON coupling.
 - **CHANGELOG.md**: Canonical all-version release history index
 - **docs/releases/**: Single public release notes, whether they are clearly labeled prepared artifacts awaiting publish or notes already linked from GitHub tags and release PRs
 - **docs/technical/release_summary_template.md**: Template for public release notes and release-prepared artifacts
-- **roadmap.md**: Timeline, phases, tasks, and active or unreleased release closeout status
+- **roadmap.md**: Open work and active or unreleased release closeout status; its scheduling table is the canonical source for task tracks, dependencies, release requirements, and next actions. Completed work is removed and archived in CHANGELOG.md
 - **docs/others/arch-audit.md**: Live structural findings only — the current open set, each with its promotion trigger. Not a ledger: closed findings, prior-pass narratives, and reconciliation history belong in CHANGELOG.md. Finding numbers are pass-local and MUST NOT be cited as stable identifiers from any other document, test, or source comment
 - **docs/others/tech-audit.md**: Live defect posture only, and the SSOT for found-not-yet-fixed fail-hard violations. Same rule as above: remediated findings are dropped, not archived in place, and no other artifact may pin its finding counts or IDs
-- **v88_ticket_context.md**: Per-ticket conceptual explanation for the current release only — why a problem exists, what mental model to hold, where the code lives. Carries no schedulable metadata (the roadmap owns bands, positions, dependencies, and readiness). Release-scoped by name and disposable at release close: durable rules graduate into decisions.md or the narrow owner doc, spent context is dropped rather than carried into the next release's page
+- **v88_ticket_context.md**: Conceptual explanation for open roadmap tasks — why a problem exists and where the code lives, including deferred work. Carries no schedulable metadata (the roadmap owns horizons, tracks, dependencies, and release requirements). Release-scoped by name and disposable at release close: durable rules graduate into decisions.md or the narrow owner doc, and only still-open task context moves to the next release's companion
 - **README.md**: Project overview, user guide, repo-level navigation
 - **package README.md files**: Package-local installation and responsibility summaries (informational only)
 - **commercial.md**: Commercial distribution background and constraints
 
 **Rule:** Update the narrow owner first when changing its slice. Update decisions.md in the same change when the repository-wide ownership map, policy, or tie-breakers change.
+
+Other documents link to the roadmap scheduling table instead of repeating queue
+counts, lane readiness, or dependency prose. Consistency tests validate structural
+contracts such as task coverage, legal tracks, and valid dependencies; they must
+not hardcode current-status narrative wording. Keep durable execution rules in
+[validation_policy.md](validation_policy.md#candidate-review-and-integration),
+and historical reviews and scheduling decisions in CHANGELOG.md.
+
+### Release scope safeguards
+
+The v88 cleanup does not authorize teams, another theme, or a third
+generated-project updater. `quickscale_devtools` remains maintainer-internal and
+must not enter the public publish package list. Architecture watchlist findings
+retain their growth triggers; only an explicitly scoped, trigger-independent
+step may proceed before its trigger fires. Such a step does not authorize typed
+disposition metadata, ownership-manifest generation, taxonomy derivation, or
+changes to existing file dispositions.
+
+Preserve the settled module-presence contract and manifest dispatch, local
+wheelhouse version checks, migration baseline, and provisioning behavior. The
+current cleanup grants no edits to `quickscale_core/contracts/` or
+`quickscale_core/manifest/`; any newly authorized behavioral change there must
+be announced in the merge queue because every track consumes those contracts.
+The gate registry and module manifests retain one assigned owning track; do
+not spread their implementation across worktrees. New scope requires its own
+ticket rather than expansion of a cleanup delivery.
 
 ## Unit/Integration Gate Split
 
@@ -876,7 +902,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
 - **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
-  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate`, `createcachetable`) — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The sanctioned command set is defined by `_PRIVILEGED_COMMANDS` in `apps.py`; every new sanctioned command is added there.
+  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate`, `createcachetable`) — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `apps.py` module guard, generated production-settings validator, CLI producer, and generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — environment-variable escape hatch for intentional single-tenant or development use.
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; `runserver`/`gunicorn` must still use the restricted runtime role
 

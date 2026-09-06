@@ -2,31 +2,90 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
-- **SA178 retained-partial checkpoint — closure blocked by a fired count-oracle trigger
-  (2026-09-05).** The useful compatibility-preserving work remains in the worktree: the 93-plus
-  existing `trigger_inputs` references keep their field name, while the registry description,
-  parity-checker contract and diagnostics, maintainer guide, and focused regressions define the
-  value as each E2E-bound gate's ordered share of the bidirectional `e2e.yml` pull-request allowlist
-  partition, never a gate-skip control. No consumer uses the field to skip execution.
-  **Independent review rejected completion.** The count-pinned-oracle trigger — *the next gate
-  addition paying more than two oracle edits, or counts disagreeing across two oracles* — fired in
-  repository history. Both `d31c6b41` and `437dd0e0` changed at least three logical count-oracle
-  families and five literal sites while adding a gate. The current
-  `scripts/test_gate_parity.py` population is exactly **eight sites**: three `all_ten` names, two
-  `all_seven` names, the `all_twenty` run-value oracle, the 16-job projection literal, and
-  `exactly_six`. The earlier blanket **not fired** claim is withdrawn.
-  **Decision required; none is taken here.** Either promote the fired item and derive the remaining
-  count oracles, following the `48e0a62a` planning-gate precedent, or explicitly revise the trigger
-  semantics and justify why the two historical gate additions do not qualify. Until one option is
-  reviewed and implemented, the item remains in an adjudication state and SA178 remains open.
-  The reusable remainder is: decide the semantics; implement only the selected branch and reconcile
-  the audit wording/tests; rerun the focused parity and consistency gates; independently review the
-  exact resulting delta; only then archive SA178 and retire **#34**. The earlier focused green runs
-  remain useful implementation evidence but do not establish completion after this contradiction.
-  The open-only roadmap therefore retains SA178 and merge position **#34**, with SA178 holding W2's
-  head at `deps: none`. The queue derives **eight open v88 ticket entries across eight open merge
-  positions**, lanes **W1 4 · W2 3 · W3 1**. This checkpoint preserves partial work; it authorizes
-  neither further implementation nor merge-back.
+- **SA174 documentation candidate prepared (2026-09-06).** The `orgs` boot-guard comment and
+  docstring now identify the module guard, production-settings validator, CLI producer, and
+  generated `start.sh` launcher as four independent fail-closed declarations; the module set no
+  longer claims to be the privileged-command single source of truth. Retained former-SA178 work
+  keeps the `trigger_inputs` field and behavior while defining it as each E2E-bound gate's ordered
+  share of the bidirectional `e2e.yml` pull-request path-allowlist partition, never a gate-skip
+  control. The architecture audit demotes `privileged-command-set-multi-owner` under the settled
+  permanent two-command decision and preserves every watch trigger. Historical evidence from
+  `d31c6b41` and `437dd0e0` confirms that the count-oracle trigger fired; a separate gate-parity
+  maintenance follow-up owns derivation, has no dependency on this documentation correction, and
+  is promoted because both additions crossed the written more-than-two-edit threshold. No oracle,
+  gate behavior, registry field, declaration, or emitted byte changes in this candidate. SA174
+  remains open pending review and accepted integration.
+
+- **Roadmap delivery consolidation and dependency review (2026-09-05).** User-approved planning
+  change; no product delivery, audit finding, release verdict, merge, or publication is completed
+  by this entry. The v88 work is consolidated into four delivery units: **SA165 absorbs SA179**
+  as post-verdict documentation closeout; **SA160 absorbs SA161** into one generated-output
+  candidate and emission rebaseline; **SA174 absorbs SA178** using documentation-only gate-field
+  semantics; **SA172** retains its implemented RLS fix and pending review/acceptance.
+  **SA175 is absorbed into post-v88 SA152**, replacing its contradictory mixed-disposition
+  assertion with mode-aware migration compatibility and smoke verification. Absorbed IDs are
+  retired as standalone planner entries, not closed as implemented findings.
+
+  The roadmap now has one canonical scheduling table with tracks for every open item. Its only
+  v88 task edge is SA165 → SA160: the former's reviewed emission-fixture input must remain bound
+  until its verdict and integration, after which the latter may rebaseline it. The RLS and
+  documentation deliveries can proceed independently on their existing tracks; shared audit
+  markdown is reconciled at serialized merge rather than creating product dependencies.
+  Final release validation is an explicit join after required deliveries. SA174 is optional
+  maintenance; it may defer without holding the release. Post-v88 SA177 follows the accepted RLS
+  helper, and SA154 follows the first working portal. SA153 now targets a project-owned Django
+  property portal; a public JSON API, alternate public frontend, broad translations, and generic
+  no-project-glue support move to the optional inventory. Beta-migration validation gates a site
+  cutover if that tool is used, not fresh-project portal development.
+
+  Durable review/merge rules move to validation policy. The explicitly approved process revision
+  removes mandatory separate root sessions and the one-attempt-only/fresh-authority retry rule
+  for in-scope verification. Independent review must still precede the verdict; candidate inputs,
+  complete patch context, immutable attempt logs, actual completion status, exact cleanup, and
+  required release validation remain mandatory. `EV-8` names the first replacement verdict;
+  subsequent attempts need distinct evidence and recorded reasons. Prior grants, failed or absent
+  reviews, and stale-but-green runs below remain historical evidence and are not rebound. This
+  change supplies no new product scope or publication/deployment authority.
+
+  Context and navigation no longer duplicate queue counts or readiness. Structural checks replace
+  ticket-specific narrative canaries: open-ticket/schedule/context coverage, valid tracks and
+  horizons, and acyclic dependencies are enforced without pinning current review prose. The
+  historical state assertions below describe their then-current planner, not additional live
+  acceptance constraints. Findings remain open until the owning delivery supplies its evidence.
+  Validation: the focused roadmap/context consistency suite passes **29 tests**; `make lint`,
+  `make typecheck`, and `git diff --check` pass. Product release/E2E validation remains owed by
+  the delivery and release tiers; this planning change supplies no replacement verdict.
+
+- **Refuted — the blocking SA165 review finding, and the repair-scope decision withdrawn as moot
+  (2026-09-05).** A fresh terminal SA165-R1 over the narrowed four-file product candidate graded
+  **blocking**, reporting that `OPERATIONS.md.j2` adds rendered warning text while the
+  `react_default`, `react_empty`, and `react_selected` records in `sa90_emission_manifests.json`
+  retain the pre-change `OPERATIONS.md` hash. That is not what the tree contains. Commit `a14ea029`
+  — the SA165 product commit itself — changed the template **and** rebaselined all three hashes from
+  `c8e6c725…` to `94165c64…` in one change, inside the reviewed range `5a7ee965..69f39e2b`.
+  Re-measured on `v88`: the three `test_generated_tree_matches_manifest` variants pass, and a
+  freshly generated `react_default` tree renders `OPERATIONS.md` to exactly
+  `94165c648f7b631bdcf53182fe06bceaf2037c9ebc2646dfeca556ece9ce0a40` with the warning text present.
+  No repair is owed, so the maintainer decision opened to authorize one — option **A** (widen SA165
+  to the three hashes plus provenance) versus option **B** (a separate preceding W1 repair ticket) —
+  is **withdrawn as moot**, neither option chosen, because both described work already in the tree.
+  **The defect was in the candidate, not the code.** `OPERATIONS.md.j2` and its three fixture hashes
+  are one logical change. The four-file candidate cut the fixture out of the patch, so a reviewer
+  holding only that patch saw a template edit with no accompanying rebaseline and correctly inferred
+  staleness from incomplete evidence. The candidate therefore widens to **five files**, binding
+  `quickscale_core/tests/fixtures/sa90_emission_manifests.json` as read-only review context; SA165
+  writes no byte to it and SA161 → SA160 remain its only open editors. This is the mirror of the
+  2026-09-05 narrowing: exclude the documents that *record* a review, include the files the reviewed
+  bytes depend on. Both corrections are now stated together in the ticket's frozen-set paragraph.
+  **Consequences for the planner.** W1's *can start* returns to **yes**, its next action being a
+  fresh five-file terminal SA165-R1; *can finish* stays **no** until that review and the unspent
+  `EV-8` verdict are green. SA165's pending plan drops from six ordered steps to three, the two
+  removed steps having existed only to perform and re-review the phantom repair. The v88 queue again
+  carries **no open maintainer decision**. No band, lane, merge position, dependency edge, ticket
+  count, or audit finding changed; the roadmap, `docs/index.md`,
+  `docs/technical/v88_ticket_context.md`, and the executable consistency contract are reconciled in
+  the same change, with the SA165 assertion group repinned to the corrected state and a canary that
+  now goes red if the refuted finding is re-asserted as live. The suite passes **48 tests**.
 
 - **Roadmap simplification pass — two either/or acceptance criteria settled (2026-09-05).** Both
   open tickets that offered a choice between fixing the defect and documenting it now name the fix.

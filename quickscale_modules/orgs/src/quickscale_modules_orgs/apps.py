@@ -30,9 +30,9 @@ from django.db import connection
 from django.db.backends.signals import connection_created
 
 
-# Sanctioned privileged DB commands that require the superuser DATABASE_URL.
-# Add new commands here when the generated launcher starts setting
-# QUICKSCALE_PRIVILEGED_COMMAND to additional values.
+# Module-guard declaration of the sanctioned privileged DB commands.
+# Keep it aligned with the independent fail-closed declarations in the production
+# settings validator, CLI producer, and generated start.sh launcher; none is a SSOT.
 _PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})
 
 
@@ -49,10 +49,12 @@ def _is_privileged_command() -> bool:
     closed — running with BYPASSRLS or SUPERUSER on a runtime server is
     catastrophic for RLS enforcement.
 
-    ``_PRIVILEGED_COMMANDS`` is the single source of truth for which
-    values are sanctioned.  If the env var is set to an unrecognised
-    value the guard still fails closed (return ``False``) — it is not a
-    catch-all escape hatch.
+    ``_PRIVILEGED_COMMANDS`` is the module guard's declaration, one of four
+    independent fail-closed declarations in this contract.  The other three
+    are the generated production-settings validator, the CLI producer, and
+    the generated ``start.sh`` launcher.  If the env var is set to an
+    unrecognised value the guard still fails closed (return ``False``) — it
+    is not a catch-all escape hatch.
 
     SA68 Phase 1 replaces the old ``sys.argv`` inspection with the
     explicit env-var contract set by the generated ``start.sh`` and
@@ -106,8 +108,10 @@ def _check_rls_role() -> None:
     2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
        intentional single-tenant or development use.
 
-    The sanctioned command set is defined by ``_PRIVILEGED_COMMANDS``
-    and checked via ``_is_privileged_command()``.
+    This module guard declares its sanctioned command set in
+    ``_PRIVILEGED_COMMANDS`` and checks it via ``_is_privileged_command()``;
+    the production-settings validator, CLI producer, and generated launcher
+    carry independent fail-closed declarations of the same contract.
 
     No-op on SQLite (non-PostgreSQL).
     """
