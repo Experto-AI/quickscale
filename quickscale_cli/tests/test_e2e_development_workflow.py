@@ -20,7 +20,7 @@ import re
 import socket
 import subprocess
 import time
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 from click.testing import CliRunner
@@ -263,6 +263,205 @@ def test_wait_for_container_running_timeout_reports_last_structured_state(
     assert "last observed state: created" in capsys.readouterr().out
 
 
+def test_emit_container_diagnostics_includes_frontend_logs(monkeypatch, tmp_path):
+    """Diagnostics request bounded logs for both generated services."""
+    workflow = TestDevelopmentCommandsE2E()
+    run = Mock()
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(workflow, "_container_prefix", lambda: "diagnostics-scope")
+    monkeypatch.setattr(
+        __name__ + ".get_docker_compose_command", lambda: ["docker", "compose"]
+    )
+
+    workflow._emit_container_diagnostics(str(tmp_path), 43123)
+
+    assert run.call_args_list == [
+        call(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                "name=diagnostics-scope",
+                "--format",
+                "table {{.Names}}\t{{.Status}}\t{{.Ports}}",
+            ],
+            check=False,
+            timeout=5,
+        ),
+        call(
+            ["docker", "compose", "ps"],
+            cwd=str(tmp_path),
+            check=False,
+            timeout=5,
+        ),
+        call(
+            ["docker", "logs", "--tail", "20", "diagnostics-scope_backend"],
+            check=False,
+            timeout=5,
+        ),
+        call(
+            ["docker", "logs", "--tail", "20", "diagnostics-scope_frontend"],
+            check=False,
+            timeout=5,
+        ),
+    ]
+
+
+def test_emit_container_diagnostics_continues_after_probe_timeout(
+    monkeypatch, tmp_path, capsys
+):
+    """One unavailable probe must not suppress the remaining diagnostics."""
+    workflow = TestDevelopmentCommandsE2E()
+    run = Mock(
+        side_effect=[
+            subprocess.TimeoutExpired(["docker", "ps"], 5),
+            None,
+            None,
+            None,
+        ]
+    )
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(workflow, "_container_prefix", lambda: "diagnostics-scope")
+    monkeypatch.setattr(
+        __name__ + ".get_docker_compose_command", lambda: ["docker", "compose"]
+    )
+
+    workflow._emit_container_diagnostics(str(tmp_path), 43123)
+
+    assert run.call_count == 4
+    assert run.call_args_list[-1] == call(
+        ["docker", "logs", "--tail", "20", "diagnostics-scope_frontend"],
+        check=False,
+        timeout=5,
+    )
+    assert "diagnostic command failed" in capsys.readouterr().out
+
+
+def test_emit_container_diagnostics_continues_when_compose_unavailable(
+    monkeypatch, tmp_path, capsys
+):
+    """Unavailable Compose diagnostics must not mask the failed-up assertion."""
+
+    class FakeRunner:
+        def invoke(self, _command, _args, env):
+            return Mock(exit_code=1, output="up failed")
+
+    workflow = TestDevelopmentCommandsE2E()
+    run = Mock()
+    get_compose_command = Mock(
+        side_effect=DockerComposePluginRequiredError("compose unavailable")
+    )
+    monkeypatch.setattr(__name__ + ".CliRunner", FakeRunner)
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(workflow, "_container_prefix", lambda: "diagnostics-scope")
+    monkeypatch.setattr(__name__ + ".get_docker_compose_command", get_compose_command)
+
+    with pytest.raises(AssertionError, match="up failed"):
+        workflow.test_full_development_workflow(
+            tmp_path,
+            object(),
+            {"PORT": "43123"},
+        )
+
+    get_compose_command.assert_called_once_with()
+    assert run.call_args_list == [
+        call(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                "name=diagnostics-scope",
+                "--format",
+                "table {{.Names}}\t{{.Status}}\t{{.Ports}}",
+            ],
+            check=False,
+            timeout=5,
+        ),
+        call(
+            ["docker", "logs", "--tail", "20", "diagnostics-scope_backend"],
+            check=False,
+            timeout=5,
+        ),
+        call(
+            ["docker", "logs", "--tail", "20", "diagnostics-scope_frontend"],
+            check=False,
+            timeout=5,
+        ),
+    ]
+    assert (
+        "<compose diagnostics unavailable: compose unavailable>"
+        in capsys.readouterr().out
+    )
+
+
+def test_full_development_workflow_emits_diagnostics_before_up_assertion(
+    monkeypatch, tmp_path
+):
+    """A failed ``up`` records diagnostics before the failure assertion runs."""
+    events: list[tuple[str, object]] = []
+
+    class FakeRunner:
+        def invoke(self, _command, args, env):
+            events.append(("invoke", args))
+            return Mock(exit_code=1, output="up failed")
+
+    workflow = TestDevelopmentCommandsE2E()
+    monkeypatch.setattr(__name__ + ".CliRunner", FakeRunner)
+    monkeypatch.setattr(
+        workflow,
+        "_emit_container_diagnostics",
+        lambda project_path, port: events.append(("diagnostics", (project_path, port))),
+    )
+
+    with pytest.raises(AssertionError, match="up failed"):
+        workflow.test_full_development_workflow(
+            tmp_path,
+            object(),
+            {"PORT": "43123"},
+        )
+
+    assert events == [
+        ("invoke", ["up"]),
+        ("diagnostics", (str(tmp_path), 43123)),
+    ]
+
+
+def test_full_development_workflow_skips_diagnostics_after_successful_up(
+    monkeypatch, tmp_path
+):
+    """A successful ``up`` advances without failure-only diagnostics."""
+    events: list[tuple[str, object]] = []
+
+    class StopAfterUp(RuntimeError):
+        pass
+
+    class FakeRunner:
+        def invoke(self, _command, args, env):
+            events.append(("invoke", args))
+            return Mock(exit_code=0, output="Services started successfully!")
+
+    workflow = TestDevelopmentCommandsE2E()
+    diagnostics = Mock()
+    wait_for_running = Mock(side_effect=StopAfterUp)
+    monkeypatch.setattr(__name__ + ".CliRunner", FakeRunner)
+    monkeypatch.setattr(workflow, "_container_prefix", lambda: "diagnostics-scope")
+    monkeypatch.setattr(workflow, "_emit_container_diagnostics", diagnostics)
+    monkeypatch.setattr(workflow, "_wait_for_container_running", wait_for_running)
+
+    with pytest.raises(StopAfterUp):
+        workflow.test_full_development_workflow(
+            tmp_path,
+            object(),
+            {"PORT": "43123"},
+        )
+
+    assert events == [("invoke", ["up"])]
+    diagnostics.assert_not_called()
+    wait_for_running.assert_called_once_with("diagnostics-scope_backend", timeout=40.0)
+
+
 @pytest.mark.e2e
 def test_retention_mode_still_precleans_prior_test_resources(
     monkeypatch: pytest.MonkeyPatch,
@@ -334,15 +533,30 @@ class TestDevelopmentCommandsE2E:
         """Return the generated backend container name for this E2E lane."""
         return f"{self._container_prefix()}_backend"
 
+    def _frontend_container_name(self) -> str:
+        """Return the generated frontend container name for this E2E lane."""
+        return f"{self._container_prefix()}_frontend"
+
+    @staticmethod
+    def _run_diagnostic_command(command: list[str], *, cwd: str | None = None) -> None:
+        """Run one bounded best-effort diagnostic without masking test failure."""
+        try:
+            if cwd is None:
+                subprocess.run(command, check=False, timeout=5)
+            else:
+                subprocess.run(command, cwd=cwd, check=False, timeout=5)
+        except (OSError, subprocess.SubprocessError) as error:
+            print(f"<diagnostic command failed: {error}>", flush=True)
+
     def _emit_container_diagnostics(
         self, project_path: str, port: int | None = None
     ) -> None:
-        """Emit container/compose status and backend logs for debugging."""
+        """Emit container/compose status and service logs for debugging."""
         container_prefix = self._container_prefix()
 
         print(f"\n--- Container diagnostics (PORT={port}) ---", flush=True)
         # Show all containers for this project
-        subprocess.run(
+        self._run_diagnostic_command(
             [
                 "docker",
                 "ps",
@@ -356,15 +570,19 @@ class TestDevelopmentCommandsE2E:
         # Show docker compose ps if project path is given
         if os.path.isdir(project_path):
             try:
-                subprocess.run(
+                self._run_diagnostic_command(
                     [*get_docker_compose_command(), "ps"],
                     cwd=project_path,
                 )
-            except Exception:
-                pass
+            except DockerComposePluginRequiredError as error:
+                print(f"<compose diagnostics unavailable: {error}>", flush=True)
         # Show backend logs (last 20 lines)
-        subprocess.run(
+        self._run_diagnostic_command(
             ["docker", "logs", "--tail", "20", self._backend_container_name()],
+        )
+        # Show frontend logs (last 20 lines)
+        self._run_diagnostic_command(
+            ["docker", "logs", "--tail", "20", self._frontend_container_name()],
         )
         print("--- End diagnostics ---\n", flush=True)
 
@@ -477,6 +695,10 @@ class TestDevelopmentCommandsE2E:
         try:
             # Step 1: Start services
             result = runner.invoke(cli, ["up"], env=docker_env)
+            if result.exit_code != 0:
+                self._emit_container_diagnostics(
+                    str(project_path), int(docker_env["PORT"])
+                )
             assert result.exit_code == 0, f"up failed: {result.output}"
             assert "Services started successfully!" in result.output
 
