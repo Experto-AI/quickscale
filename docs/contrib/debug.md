@@ -21,8 +21,17 @@ For focused failure analysis, these commands are usually the best starting
 points:
 
 ```bash
+# Re-run only the tests that failed in the last run
+make retry
+make retry-show          # show what retry would run, without running it
+
 # Stop immediately at first failure
+make test-unit ARGS='-x'
 poetry run pytest quickscale_core/tests --exitfirst --tb=short -m "not e2e"
+
+# Narrow to one test by name (coverage gate off for the scoped run)
+make test-unit K=test_<name>
+make test-integration MODULE=<name> K=test_<name>
 
 # Run one package section
 make test -- --core
@@ -31,7 +40,15 @@ make test -- --modules
 
 # Run a specific file directly
 poetry run pytest quickscale_core/tests/test_integration.py --tb=short
+
+# Re-run a single stage of the local CI pipeline while iterating
+make ci ONLY=integration
 ```
+
+`make retry` reads `.quickscale/last-failures.json`, which a failing test target
+or CI stage writes. Scoped and partial runs both print a warning that they are
+not a substitute for the full tier command — see
+[Scoping and Rerun Variables](../technical/validation_policy.md#scoping-and-rerun-variables).
 
 See [testing.md](testing.md) for the full repo-specific testing map.
 
@@ -41,7 +58,7 @@ When using an AI assistant or LLM to analyze failures:
 
 - capture the smallest useful failing command output first
 - include recent changes, expected behavior, and the test context
-- prefer one failing test or `--exitfirst` output before pasting broader suite logs
+- prefer one failing test or `-x`/`--exitfirst` output before pasting broader suite logs
 - treat suggestions as hypotheses until they are verified against the code and reruns
 
 ## Scope Guardrails While Debugging

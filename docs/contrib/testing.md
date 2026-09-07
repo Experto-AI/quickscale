@@ -40,6 +40,9 @@ a wider command to establish a baseline.
 
 ```bash
 # change tier: focused run over the changed behavior
+make test-unit K=<test-name-or-expression>
+make test-unit SECTIONS=core K=<expr>        # narrow to one package too
+# equivalent direct form:
 poetry run pytest quickscale_core/tests/test_<area>.py --tb=short -m "not e2e" -o addopts= --no-cov
 
 # task tier: the owning section suite
@@ -60,12 +63,42 @@ make test -- --core      # quickscale_core only
 make test -- --cli       # quickscale_cli only
 make test -- --modules   # quickscale_modules only
 
-# Stop on first failure (direct pytest)
+# Stop on first failure
+make test-unit ARGS='-x'
 poetry run pytest quickscale_core/tests --exitfirst --tb=short -m "not e2e"
 
 # E2E tests only (requires Docker)
 make test-e2e
 ```
+
+## Re-running After a Failure
+
+A failing run is the start of a fix cycle, and repeating the whole lane to
+re-check one test is the slow way through it. Narrow the rerun instead:
+
+```bash
+# Re-run only what failed last time (recorded to .quickscale/last-failures.json)
+make retry
+make retry-show                     # print those commands without running them
+
+# Narrow by hand
+make test-unit K=test_render_theme
+make test-integration MODULE=blog K=test_rls
+make test-e2e K=test_wheel_lifecycle
+make test-unit ARGS='-x --lf'       # raw pytest flags
+
+# Re-run one stage of the local CI pipeline
+make ci ONLY=integration
+make ci FROM=coverage               # resume from a stage onward
+make ci SKIP_INSTALL=1              # skip the dependency install
+```
+
+`K=`/`ARGS=` disable the coverage gate for the scoped run, because a narrowed
+selection measures almost no code and would otherwise fail `--cov-fail-under=90`
+on tests that passed. `ONLY=`/`FROM=`/`SKIP_INSTALL=` mark the run
+`PARTIAL CI — NOT a full pass`. Both print a warning saying so: neither is a
+substitute for the tier command that owns the change. See
+[Scoping and Rerun Variables](../technical/validation_policy.md#scoping-and-rerun-variables).
 
 ## Database-Backed Test Setup
 

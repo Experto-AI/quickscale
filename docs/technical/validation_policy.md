@@ -22,6 +22,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make test-integration` - Shared integration-test entrypoint for module suites through the owned PostgreSQL 18 lifecycle and its NOBYPASSRLS role.
 - `make test-cov` - Combined coverage path (core + CLI + optional backups module) with dual-threshold enforcement.
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
+- `make retry` - Re-run only the tests recorded as failing by the last run; `make retry-show` prints those commands without running them.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
 - `make check-commit-testimony` - Require each behavioural control commit to carry an SA ticket, integer vNN roadmap reference, or same-commit changelog testimony.
@@ -36,6 +37,8 @@ This companion owns repository validation entrypoints, testing standards, covera
 - Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly.
 - Use `make lint` and `make format` for repo-wide lint and format guidance.
 - Select the test command from the validation tier below rather than defaulting to the widest one. `make test` is a `task`/`release`-tier command and is never the per-change check.
+- Scope a run with the target's own variables rather than hand-rolling a pytest invocation: `K=<expr>` narrows by keyword, `ARGS=<flags>` forwards raw pytest flags, and both compose with `SECTIONS=`/`MODULE=`. See [Scoping and Rerun Variables](#scoping-and-rerun-variables).
+- `make ci ONLY=`/`FROM=`/`SKIP_INSTALL=` re-runs part of the local CI pipeline while iterating on a failure. **A partial run never satisfies the `release` tier** — it announces itself as `PARTIAL CI — NOT a full pass` and the tier still owes a complete `make ci`.
 - Use `make ci-e2e` for release-gate validation when the full hardening and release path needs E2E coverage.
 - Use `make version-check` when verifying repository package-version parity.
 - Use `make check-commit-testimony` to validate hosted-workflow, gate-registry, and provisioning-station commit testimony over the selected Git range.
@@ -51,7 +54,7 @@ run the tier the current work owns and stop there.
 
 | Tier | Applies to | Command |
 |------|-----------|---------|
-| `change` | one implementation phase, one correction, one edit session | `make lint`, `make typecheck`, then a focused `poetry run pytest <path-or-node> --tb=short -m "not e2e" -o addopts= --no-cov` over the changed behavior |
+| `change` | one implementation phase, one correction, one edit session | `make lint`, `make typecheck`, then a focused `make test-unit K=<expr>` (or `SECTIONS=<section> K=<expr>`) over the changed behavior; equivalently `poetry run pytest <path-or-node> --tb=short -m "not e2e" -o addopts= --no-cov` |
 | `task` | a completed plan, a convergence pass, or a delta crossing a package or module boundary | the owning section suite — `make test-unit -- --core` or `-- --cli`, or `make test-integration MODULE=<name>` — or `make check QUIET=1` when repository gates sit in the delta's surface |
 | `release` | plan closeout, version bump, generator-template change, pre-merge | `make ci`, or `make ci-e2e` when an [E2E trigger](#e2e-testing-policy) applies, followed by the closeout lanes in [Clean-Initial Migration Acceptance](#clean-initial-migration-acceptance-sa151) |
 
@@ -75,7 +78,9 @@ pick the tier, run its command once.
   `task`/`release`-tier obligations. A `change`-tier run passes
   `-o addopts= --no-cov` so the package-level coverage addopts do not fail a
   scoped run — that is a scoping flag, never a way to avoid the threshold at the
-  tier that owns it.
+  tier that owns it. `K=`/`ARGS=` apply those two flags for you and print
+  `coverage gate disabled` so a scoped green is never read as a coverage pass;
+  `make test-cov` deliberately accepts neither variable.
 - **A wider tier is never run to establish a baseline.** It runs when the delta
   reaches its surface. A pre-existing failure is discovered at the tier that
   reaches it, and no baseline run precedes implementation.
@@ -322,6 +327,40 @@ Key expectations:
 - keep stable backend image identity independent from per-run resource identity, and bind cleanup to inspected labels rather than names or global prune commands
 
 <a id="runner-tuning-knobs"></a>
+<a id="scoping-and-rerun-variables"></a>
+### Scoping and Rerun Variables
+
+Make variables (not environment variables) that narrow a run or replay the last
+failure. They exist so a fix can be re-verified in seconds instead of by
+repeating the full lane; none of them changes what an unscoped run means.
+
+| Variable | Targets | Effect |
+| --- | --- | --- |
+| `K=<expr>` | `test-unit`, `test`, `test-integration`, `test-e2e` | Passes `-k <expr>` to pytest. Composes with `SECTIONS=` and `MODULE=`. |
+| `ARGS=<flags>` | same | Raw pytest flags, word-split by the recipe (`ARGS='-x --lf -vv'`). |
+| `ONLY=<stage>` | `ci`, `ci-e2e` | Run only the named stages: `install`, `static`, `coverage`, `integration`, `e2e` (comma-separated). |
+| `FROM=<stage>` | `ci`, `ci-e2e` | Run that stage and every stage after it. |
+| `SKIP_INSTALL=1` | `ci`, `ci-e2e` | Skip the dependency-install stage. |
+
+**Both families announce themselves, because both weaken a signal.** `K=`/`ARGS=`
+disable the coverage gate (a narrowed selection measures almost no code, so the
+90% threshold would fail on tests that passed) and print
+`coverage gate disabled`. `ONLY=`/`FROM=`/`SKIP_INSTALL=` mark the run
+`PARTIAL CI — NOT a full pass` and list what was skipped. **Neither satisfies the
+tier its unscoped form belongs to** — a skipped stage may be exactly the one that
+covers the change.
+
+Scoped runs also default to serial pytest, since a 16-worker fan-out costs more
+to start than a narrowed selection costs to run and `-x` cannot stop cleanly
+under xdist; an explicit `PYTEST_XDIST_WORKERS=` still wins.
+
+**Replaying a failure.** A failing test target or CI stage records the failing
+node ids to `.quickscale/last-failures.json`; `make retry` re-runs exactly those
+and `make retry-show` prints the commands without running them. Stages that run
+pytest with `-p no:cacheprovider` (`check-gate-suites`,
+`test-postgres-provisioning`) write no cache, so those record a stage-level
+command instead of individual tests.
+
 ### Runner Tuning Knobs
 
 Environment variables that control concurrency and progress reporting for the

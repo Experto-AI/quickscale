@@ -252,6 +252,13 @@ When iterating on a focused change, use the narrowest validation target first an
 
 **Iterate** — during active development:
 ```bash
+# Re-run only the tests that failed last time
+make retry
+
+# Narrow to one test by name (drops the coverage gate for the scoped run)
+make test-unit K=test_render_theme
+make test-unit ARGS='-x --lf'
+
 # Lint only the core package
 make lint -- --core
 
@@ -278,6 +285,18 @@ make typecheck
 # Bounded integration concurrency — limit to N concurrent module workers:
 QS_INTEGRATION_JOBS=2 make test-integration
 ```
+
+**Re-verifying one CI stage** — while fixing what a full `make ci` surfaced:
+```bash
+make ci ONLY=integration     # run just that stage
+make ci FROM=coverage        # resume from a stage onward
+make ci SKIP_INSTALL=1       # skip the dependency install stage
+```
+
+These print `PARTIAL CI — NOT a full pass` and list what they skipped. They
+shorten the fix cycle; they never replace the full run the tier owes. Both these
+and the `K=`/`ARGS=` scoping variables are documented in
+[validation_policy.md § Scoping and Rerun Variables](./validation_policy.md#scoping-and-rerun-variables).
 
 **E2E-last** — before merging to a release branch:
 ```bash

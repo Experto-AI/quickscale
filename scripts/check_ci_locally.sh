@@ -16,8 +16,19 @@ show_help() {
     echo "Usage: ./scripts/check_ci_locally.sh [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --e2e     Include E2E tests (slow, requires Docker)"
-    echo "  --help    Show this help message"
+    echo "  --e2e             Include E2E tests (slow, requires Docker)"
+    echo "  --skip-install    Skip the dependency install stage"
+    echo "  --from NAME       Run NAME and every stage after it"
+    echo "  --only NAME[,...] Run only the named stages"
+    echo "  --help            Show this help message"
+    echo ""
+    echo "Stage names for --from/--only: $STAGE_ORDER"
+    echo "  (\"static\" is the whole registry-driven gate fan-out; individual"
+    echo "   gates remain addressable directly, e.g. make check-core-compat)"
+    echo ""
+    echo "Any of --skip-install/--from/--only makes the run PARTIAL: it reports"
+    echo "what it skipped and never claims a full pass. Re-running a later stage"
+    echo "after editing code an earlier stage covers can show a false green."
     echo ""
     echo "Environment:"
     echo "  QS_CI_PARALLEL=0  Run static stages serially (default: concurrent fan-out)"
@@ -41,18 +52,179 @@ show_help() {
 
 # Parse help before registry or interpreter bootstrap so documentation remains
 # available even when contributor tooling is not installed yet.
+#
+# Stages are addressed by name rather than by the "[N/M]" display number so a
+# future reordering cannot silently change what "--from coverage" means.
+# "static" covers the whole registry-driven fan-out as one unit: selection is
+# applied at the call sites below and never inside run_static_gates_serial /
+# run_static_gates_parallel, because check_gate_parity.py observes both of
+# those functions and requires every registered gate to appear in each.
+STAGE_ORDER="install static coverage integration e2e"
 RUN_E2E=false
-for arg in "$@"; do
-    case $arg in
+PARTIAL_RUN=false
+SKIP_INSTALL=false
+FROM_STAGE=""
+ONLY_STAGES=""
+
+stage_is_known() {
+    case " $STAGE_ORDER " in
+        *" $1 "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+require_known_stage() {
+    if [ -z "$1" ] || ! stage_is_known "$1"; then
+        echo "ERROR: unknown stage name: ${1:-<empty>}" >&2
+        echo "Valid stages: $STAGE_ORDER" >&2
+        exit 2
+    fi
+}
+
+# Parsed from a copy of the argument list rather than by shifting "$@".
+# check_gate_parity.py's Bash observation harness invokes this declaration
+# prefix with the script path in $1 and the gate function to run in $2, and
+# reads $2 back after the prefix executes; consuming the positional parameters
+# here would leave it with no function to call.
+declare -a QS_CLI_ARGS=("$@")
+qs_arg_index=0
+while [ "$qs_arg_index" -lt "${#QS_CLI_ARGS[@]}" ]; do
+    qs_arg="${QS_CLI_ARGS[$qs_arg_index]}"
+    qs_arg_next="${QS_CLI_ARGS[$((qs_arg_index + 1))]:-}"
+    case $qs_arg in
         --e2e)
             RUN_E2E=true
-            shift
+            qs_arg_index=$((qs_arg_index + 1))
+            ;;
+        --skip-install)
+            SKIP_INSTALL=true
+            PARTIAL_RUN=true
+            qs_arg_index=$((qs_arg_index + 1))
+            ;;
+        --from)
+            if [ -z "$qs_arg_next" ]; then
+                echo "ERROR: --from requires a stage name" >&2
+                exit 2
+            fi
+            require_known_stage "$qs_arg_next"
+            FROM_STAGE="$qs_arg_next"
+            PARTIAL_RUN=true
+            qs_arg_index=$((qs_arg_index + 2))
+            ;;
+        --only)
+            if [ -z "$qs_arg_next" ]; then
+                echo "ERROR: --only requires a stage name" >&2
+                exit 2
+            fi
+            ONLY_STAGES="${qs_arg_next//,/ }"
+            if [ -z "${ONLY_STAGES// /}" ]; then
+                echo "ERROR: --only requires a stage name" >&2
+                exit 2
+            fi
+            for requested_stage in $ONLY_STAGES; do
+                require_known_stage "$requested_stage"
+            done
+            PARTIAL_RUN=true
+            qs_arg_index=$((qs_arg_index + 2))
             ;;
         --help|-h)
             show_help
             ;;
+        -*)
+            echo "ERROR: unknown option: $qs_arg" >&2
+            echo "Run './scripts/check_ci_locally.sh --help' for usage." >&2
+            exit 2
+            ;;
+        *)
+            qs_arg_index=$((qs_arg_index + 1))
+            ;;
     esac
 done
+
+# Resolve the selection once, so every stage guard is a pure lookup.
+SELECTED_STAGES=""
+for candidate_stage in $STAGE_ORDER; do
+    if [ -n "$ONLY_STAGES" ]; then
+        case " $ONLY_STAGES " in
+            *" $candidate_stage "*) ;;
+            *) continue ;;
+        esac
+        if [ "$candidate_stage" = install ] && [ "$SKIP_INSTALL" = true ]; then
+            continue
+        fi
+    else
+        # e2e stays opt-in via --e2e, exactly as before.
+        if [ "$candidate_stage" = e2e ] && [ "$RUN_E2E" != true ]; then
+            continue
+        fi
+        if [ "$candidate_stage" = install ] && [ "$SKIP_INSTALL" = true ]; then
+            continue
+        fi
+        if [ -n "$FROM_STAGE" ]; then
+            case " $SELECTED_STAGES $candidate_stage " in
+                *" $FROM_STAGE "*) ;;
+                *) continue ;;
+            esac
+        fi
+    fi
+    SELECTED_STAGES="$SELECTED_STAGES $candidate_stage"
+done
+SELECTED_STAGES="${SELECTED_STAGES# }"
+
+# --only e2e must still run the E2E stage even without --e2e.
+case " $SELECTED_STAGES " in
+    *" e2e "*) RUN_E2E=true ;;
+esac
+
+SKIPPED_STAGES=""
+for candidate_stage in $STAGE_ORDER; do
+    if [ "$candidate_stage" = e2e ] && [ "$RUN_E2E" != true ]; then
+        continue
+    fi
+    case " $SELECTED_STAGES " in
+        *" $candidate_stage "*) ;;
+        *) SKIPPED_STAGES="$SKIPPED_STAGES $candidate_stage" ;;
+    esac
+done
+SKIPPED_STAGES="${SKIPPED_STAGES# }"
+
+stage_enabled() {
+    case " $SELECTED_STAGES " in
+        *" $1 "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Marks where a stage began, so the failure recorder can ignore pytest caches
+# that this run never touched (they would otherwise replay older failures).
+#
+# The caches are also cleared here.  pytest only rewrites lastfailed for the
+# tests a run actually collected, so entries for deselected tests (every e2e
+# test during a unit run, for instance) survive indefinitely; without the clear,
+# a recorded stage would hand `make retry` a pile of failures from unrelated
+# sessions.  Only ever called from the command tail, never from the declaration
+# prefix that check_gate_parity.py executes under a restricted PATH.
+STAGE_STARTED_AT=""
+mark_stage_start() {
+    STAGE_STARTED_AT="$(date +%s)"
+    rm -f \
+        "$ROOT"/quickscale_core/.pytest_cache/v/cache/lastfailed \
+        "$ROOT"/quickscale_cli/.pytest_cache/v/cache/lastfailed \
+        "$ROOT"/quickscale_modules/*/.pytest_cache/v/cache/lastfailed \
+        2>/dev/null || true
+}
+
+# Snapshot the failing tests for `make retry`. Recording is a convenience and
+# must never change the outcome, so every failure here is swallowed.
+record_stage_failure() {
+    if [ -n "${STAGE_STARTED_AT:-}" ]; then
+        "${REGISTRY_PYTHON[@]}" "$ROOT/scripts/record_failures.py" record \
+            --stage "$1" --since "$STAGE_STARTED_AT" || true
+    else
+        "${REGISTRY_PYTHON[@]}" "$ROOT/scripts/record_failures.py" record \
+            --stage "$1" || true
+    fi
+}
 
 # The registry is an input to local-CI execution. Keep this derivation in the
 # declaration prefix so the parity observer executes the same inventory that
@@ -244,6 +416,12 @@ echo ""
 TOTAL_STAGES=11
 if [ "$RUN_E2E" = true ]; then
     TOTAL_STAGES=12
+fi
+
+if [ "$PARTIAL_RUN" = true ]; then
+    echo "⚠ PARTIAL run — stages: ${SELECTED_STAGES:-none} (skipped: ${SKIPPED_STAGES:-none})"
+    echo "  A skipped stage may cover the code you changed. Not a substitute for a full run."
+    echo ""
 fi
 
 run_frontend_lint() {
@@ -615,7 +793,11 @@ run_static_gates_parallel() {
 }
 
 echo "[1/${TOTAL_STAGES}] Installing dependencies..."
-poetry install --with dev
+if stage_enabled install; then
+    poetry install --with dev
+else
+    echo "  (skipped)"
+fi
 
 # Static stages are deliberately database-free. Keep the lifecycle lease in
 # this parent for the coverage/integration tail, but do not leak it into the
@@ -628,10 +810,15 @@ SAVED_PGPORT="${PGPORT-}"
 unset QUICKSCALE_POSTGRES_LEASE QUICKSCALE_POSTGRES_LEASE_TOKEN \
     QUICKSCALE_POSTGRES_LEASE_VALIDATED PGHOST PGPORT
 
-if [ "${QS_CI_PARALLEL:-1}" = "0" ]; then
-    run_static_gates_serial
+if stage_enabled static; then
+    if [ "${QS_CI_PARALLEL:-1}" = "0" ]; then
+        run_static_gates_serial
+    else
+        run_static_gates_parallel || exit 1
+    fi
 else
-    run_static_gates_parallel || exit 1
+    echo ""
+    echo "Skipping static gate stages (lint, typecheck, and the registered gates)."
 fi
 
 if [ -n "$SAVED_LEASE" ]; then export QUICKSCALE_POSTGRES_LEASE="$SAVED_LEASE"; else unset QUICKSCALE_POSTGRES_LEASE; fi
@@ -643,38 +830,48 @@ if [ -n "$SAVED_PGPORT" ]; then export PGPORT="$SAVED_PGPORT"; else unset PGPORT
 # Track overall status for the serial stages that follow the static fan-out.
 FAILED=false
 
-echo ""
-echo "[10/${TOTAL_STAGES}] Running coverage checks (core + CLI + backups)..."
-make test-cov REQUIRE_BACKUPS_COVERAGE=1 || FAILED=true
-
-if [ "$FAILED" = true ]; then
+if stage_enabled coverage; then
     echo ""
-    echo "╔════════════════════════════════════════╗"
-    echo "║   ✗ Coverage Checks Failed             ║"
-    echo "╚════════════════════════════════════════╝"
-    exit 1
-fi
-echo "✓ Combined coverage checks passed (90% equal-weight package mean, 80% per-file)"
+    echo "[10/${TOTAL_STAGES}] Running coverage checks (core + CLI + backups)..."
+    mark_stage_start
+    make test-cov REQUIRE_BACKUPS_COVERAGE=1 || FAILED=true
 
-echo ""
-echo "[11/${TOTAL_STAGES}] Running integration tests..."
-./scripts/test_integration.sh || FAILED=true
-if [ "$FAILED" = true ]; then
-    echo ""
-    echo "╔════════════════════════════════════════╗"
-    echo "║   ✗ Integration Tests Failed           ║"
-    echo "╚════════════════════════════════════════╝"
-    exit 1
+    if [ "$FAILED" = true ]; then
+        record_stage_failure coverage
+        echo ""
+        echo "╔════════════════════════════════════════╗"
+        echo "║   ✗ Coverage Checks Failed             ║"
+        echo "╚════════════════════════════════════════╝"
+        exit 1
+    fi
+    echo "✓ Combined coverage checks passed (90% equal-weight package mean, 80% per-file)"
 fi
-echo "✓ Integration tests passed"
+
+if stage_enabled integration; then
+    echo ""
+    echo "[11/${TOTAL_STAGES}] Running integration tests..."
+    mark_stage_start
+    ./scripts/test_integration.sh || FAILED=true
+    if [ "$FAILED" = true ]; then
+        record_stage_failure integration
+        echo ""
+        echo "╔════════════════════════════════════════╗"
+        echo "║   ✗ Integration Tests Failed           ║"
+        echo "╚════════════════════════════════════════╝"
+        exit 1
+    fi
+    echo "✓ Integration tests passed"
+fi
 
 # Optional E2E tests
-if [ "$RUN_E2E" = true ]; then
+if stage_enabled e2e; then
     echo ""
     echo "[12/${TOTAL_STAGES}] Running E2E tests (this may take several minutes)..."
+    mark_stage_start
     ./scripts/test_e2e.sh || FAILED=true
 
     if [ "$FAILED" = true ]; then
+        record_stage_failure e2e
         echo ""
         echo "╔════════════════════════════════════════╗"
         echo "║   ✗ E2E Tests Failed                   ║"
@@ -688,8 +885,21 @@ else
 fi
 
 echo ""
-echo "╔════════════════════════════════════════╗"
-echo "║   ✓ All CI Checks Passed!              ║"
-echo "╚════════════════════════════════════════╝"
-echo ""
-echo "Ready to push to GitHub."
+if [ "$PARTIAL_RUN" = true ]; then
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ⚠ PARTIAL CI — NOT a full pass       ║"
+    echo "╚════════════════════════════════════════╝"
+    echo ""
+    echo "Stages run:     $SELECTED_STAGES"
+    echo "Stages skipped: ${SKIPPED_STAGES:-none}"
+    echo ""
+    echo "A skipped stage may cover the code you just changed, so this result"
+    echo "does not authorise a push. Run './scripts/check_ci_locally.sh' in full"
+    echo "before pushing to GitHub."
+else
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ✓ All CI Checks Passed!              ║"
+    echo "╚════════════════════════════════════════╝"
+    echo ""
+    echo "Ready to push to GitHub."
+fi

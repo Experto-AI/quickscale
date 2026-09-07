@@ -42,7 +42,8 @@ Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs 
   [validation_policy.md §Validation Tiers](./validation_policy.md#validation-tiers),
   which is authoritative:
   - `change` (default, one phase or one correction): `make lint`, `make typecheck`,
-    and a focused `pytest` run over the changed behavior.
+    and a focused run over the changed behavior — `make test-unit K=<expr>`, or a
+    direct `pytest` invocation.
   - `task` (completed plan, convergence pass, cross-package delta): the owning
     section suite, or `make check QUIET=1`.
   - `release` (closeout, version bump, generator-template change): `make ci`, or
@@ -50,6 +51,11 @@ Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs 
 - Each tier's command subsumes the narrower ones; run one command per tier. Never
   run a wider tier to establish a baseline — a pre-existing failure is discovered
   at the tier that reaches it.
+- Scoped and partial runs shorten a fix cycle; they satisfy no tier. `K=`/`ARGS=`
+  disable the coverage gate, and `make ci ONLY=`/`FROM=`/`SKIP_INSTALL=` report
+  `PARTIAL CI — NOT a full pass`. Both say so on every run — do not report one as
+  the tier's obligation met. See
+  [validation_policy.md §Scoping and Rerun Variables](./validation_policy.md#scoping-and-rerun-variables).
 - Shared entrypoints:
   - `make lint`
   - `make format`
@@ -57,6 +63,7 @@ Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs 
   - `make test-unit`
   - `make test-e2e`
   - `make ci-e2e`
+  - `make retry` (re-run only the last recorded failures)
   - `make version-check`
 
 ## Generated-Project Ownership

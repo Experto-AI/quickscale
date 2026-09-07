@@ -2,6 +2,49 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Local-CI stage selection, test scoping variables, and failure replay (2026-09-07).**
+  Developer tooling only. No product code changed, no gate was removed or weakened, no hosted
+  workflow was touched, no ticket closed, and no release verdict changed. Every command that
+  worked before behaves identically: `make ci`, `make test-unit`, and `make test-integration`
+  produce byte-identical recipes when invoked without the new variables, and the only change to
+  `check_ci_locally.sh --help` is the added option documentation.
+
+  **The motivating defect was that narrowing a run could not succeed.** `quickscale_core` and
+  `quickscale_cli` carry `--cov-fail-under=90` in their pytest `addopts`, so a scoped selection
+  collapsed measured coverage and failed on the threshold even when every selected test passed —
+  confirmed against the pre-change recipe as `12 passed` followed by
+  `FAIL Required test coverage of 90% not reached. Total coverage: 25.55%`. That failure is
+  meaningless at `change` tier and it pushed contributors back to full-suite runs, so
+  `validation_policy.md` had already codified `-o addopts= --no-cov` as the hand-rolled workaround.
+  `K=<expr>` and `ARGS=<flags>` now apply those flags for the caller on `test`, `test-unit`,
+  `test-integration`, and `test-e2e`, and print `coverage gate disabled` so a scoped green is never
+  read as a coverage pass. `make test-cov` deliberately accepts neither variable.
+
+  **`make ci` gained stage selection so a fix can be re-verified without repeating eleven stages.**
+  `ONLY=<stage>`, `FROM=<stage>`, and `SKIP_INSTALL=1` address the stages by name
+  (`install static coverage integration e2e`) rather than by their `[N/M]` display number, so a
+  future reordering cannot silently change what `FROM=coverage` means. Selection is applied at the
+  stage call sites and never inside `run_static_gates_serial` / `run_static_gates_parallel`, which
+  `check_gate_parity.py` observes and requires to contain every registered gate; the stage-1
+  heading is likewise preserved byte-for-byte because that checker slices the script at it and
+  executes the declaration prefix above it. Any selection marks the run
+  `PARTIAL CI — NOT a full pass`, names the skipped stages, and states that it does not authorise a
+  push. **A partial run satisfies no validation tier.**
+
+  **`make retry` replays the last failure.** A failing test target or recorded CI stage snapshots
+  the pytest `lastfailed` caches to `.quickscale/last-failures.json`; `make retry` re-runs exactly
+  those and `make retry-show` prints the commands. Two correctness constraints are load-bearing and
+  covered by tests: pytest rewrites `lastfailed` only for the tests a run actually collected, so the
+  caches are cleared before a recorded run (an early build recorded 66 stale tests for a single
+  failure); and the recording trap re-exits with the original status, because a shell that leaves an
+  `EXIT` trap on a failing command adopts that command's status and could otherwise rewrite a
+  failing run's exit code.
+
+  Verification: `make check`, `make test-ci-local-parallel` (42 tests, 14 new),
+  `make check-gate-suites` (1422), `check_gate_parity.py` and `sync_ci_gate_jobs.py --check` both
+  exit 0, and a full `make ci` passes in about 3m55s with its unchanged banner. For comparison,
+  `make ci ONLY=integration` takes about 1m36s and `make test-unit K=<expr>` about 2s.
+
 - **SA165 diagnosis step made concrete; planner reviewed with no rebalance available (2026-09-06).**
   Planning and documentation only. No product code changed, no ticket closed, no audit finding
   retired, no review verdict or merge occurred.

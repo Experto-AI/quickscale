@@ -21,7 +21,7 @@ Preferred maintainer-facing command map:
 | `./scripts/quickscale_legacy_symlink.sh mount` | `make legacy-mount` |
 | `./scripts/quickscale_legacy_symlink.sh unmount` | `make legacy-unmount` |
 | `./scripts/quickscale_legacy_symlink.sh status` | `make legacy-status` |
-| `./scripts/check_ci_locally.sh` | `make ci` or `make ci-e2e` |
+| `./scripts/check_ci_locally.sh` | `make ci` or `make ci-e2e` (stage selection: `make ci ONLY=<stage>`, `FROM=<stage>`, `SKIP_INSTALL=1`) |
 | `./scripts/check_quality.sh` | `make quality` |
 | `./scripts/lint.sh` | `make lint-fix` and/or `make typecheck` |
 | `./scripts/lint_agentic_flow.sh` | `make lint-agent` |
@@ -29,6 +29,7 @@ Preferred maintainer-facing command map:
 | `./scripts/compile_docs.sh` | `make docs` |
 | `./scripts/test_unit.sh` | `make test` or `make test-unit` |
 | `./scripts/test_e2e.sh` | `make test-e2e` |
+| `poetry run python scripts/record_failures.py replay` | `make retry-show` (`make retry` also runs the printed commands) |
 | `./scripts/publish.sh build` | `make publish-build` |
 | `./scripts/publish.sh test` | `make publish-test` |
 | `./scripts/publish.sh prod` | `make publish-prod` |
@@ -75,7 +76,7 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 
 ### Quality, validation, and docs maintenance
 
-- [check_ci_locally.sh](./check_ci_locally.sh) — runs a local CI-style validation flow (prefer `make ci` or `make ci-e2e`)
+- [check_ci_locally.sh](./check_ci_locally.sh) — runs a local CI-style validation flow (prefer `make ci` or `make ci-e2e`). Accepts `--skip-install`, `--from NAME`, and `--only NAME[,...]` over the stage names `install static coverage integration e2e`, for re-running one stage while fixing what a full run surfaced. Any of those marks the run `PARTIAL CI — NOT a full pass` and lists the skipped stages; stage selection is applied at the stage call sites and never inside `run_static_gates_serial` / `run_static_gates_parallel`, which `check_gate_parity.py` observes for gate inventory.
 - [check_quality.sh](./check_quality.sh) — runs broader code-quality analysis (prefer `make quality`)
 - [lint.sh](./lint.sh) — runs standardized Ruff auto-fixes plus MyPy checks for Python packages (prefer `make lint-fix` / `make typecheck`)
 - [lint_agentic_flow.sh](./lint_agentic_flow.sh) — runs focused linting for agentic-flow work (`make lint-agent`)
@@ -86,6 +87,9 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 
 - [test_unit.sh](./test_unit.sh) — runs unit tests only (prefer `make test` or `make test-unit`)
 - [test_e2e.sh](./test_e2e.sh) — runs local end-to-end tests and supporting setup (`make test-e2e`)
+- [record_failures.py](./record_failures.py) — snapshots the pytest `lastfailed` caches of every rootdir into `.quickscale/last-failures.json` after a failing run (`record`), and turns that file back into the exact rerun commands (`replay`). Prefer `make retry` / `make retry-show`. Uses only the standard library, so it runs under the bare `python3` the local CI script resolves. Recording is a convenience and never changes a target's exit status. Stages that run pytest with `-p no:cacheprovider` write no cache and record a stage-level command instead of individual node ids.
+- [test_record_failures.py](./test_record_failures.py) — hermetic tests for the failure recorder: rootdir discovery, node-id-to-keyword reduction, per-rootdir repro shaping (a core failure maps to `test-unit` even when the integration stage surfaced it), the freshness bound that excludes caches a run never touched, refusal to replay without a record, and round-trip `record` → `replay`.
+- [test_focused_test_targets.py](./test_focused_test_targets.py) — pins the scoping contract of the Makefile test targets through `make -n`: that `K=`/`ARGS=` drop the coverage gate (and that an unscoped run keeps it), that clearing `addopts` does not widen the marker selection, that scoped runs default to serial, that the recording trap restores the original exit status, and that `ci` forwards `ONLY`/`FROM`/`SKIP_INSTALL` only when asked.
 
 ### Release and distribution
 

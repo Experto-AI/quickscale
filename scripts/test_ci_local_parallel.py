@@ -231,6 +231,7 @@ def _run_ci(
     missing_tools: tuple[str, ...] = (),
     registry: Path | None = None,
     poetry_forwards_python: bool = False,
+    args: tuple[str, ...] = (),
 ) -> subprocess.CompletedProcess[str]:
     _, environment = _fake_environment(
         tmp_path,
@@ -251,7 +252,7 @@ def _run_ci(
     if registry is not None:
         environment["GATE_REGISTRY"] = str(registry)
     return subprocess.run(
-        [str(SCRIPT)],
+        [str(SCRIPT), *args],
         cwd=SCRIPT.parents[1],
         env=environment,
         capture_output=True,
@@ -849,3 +850,115 @@ def test_signals_after_static_fanout_use_foreground_semantics(
     events = _events(tmp_path)
     _assert_pids_dead(events)
     _assert_pids_dead(events, target="test-cov")
+
+
+# --- Partial-run stage selection (--only / --from / --skip-install) ---------
+#
+# These exercise the fast-iteration entry points. The fake environment replaces
+# make and poetry, so no database, Docker, or real gate ever runs here.
+
+
+def test_only_integration_skips_install_and_static_stages(tmp_path: Path) -> None:
+    """`--only integration` runs neither the install nor the static fan-out."""
+    result = _run_ci(tmp_path, args=("--only", "integration"))
+    assert "[1/11] Installing dependencies..." in result.stdout
+    assert "(skipped)" in result.stdout
+    assert "[2/11] Running linters" not in result.stdout
+    assert "[10/11] Running coverage checks" not in result.stdout
+    assert "[11/11] Running integration tests" in result.stdout
+
+
+def test_from_coverage_skips_the_static_fan_out(tmp_path: Path) -> None:
+    """`--from NAME` starts at NAME and keeps every later stage."""
+    result = _run_ci(tmp_path, args=("--from", "coverage"))
+    assert "[2/11] Running linters" not in result.stdout
+    assert "Skipping static gate stages" in result.stdout
+    assert "[10/11] Running coverage checks" in result.stdout
+    assert "[11/11] Running integration tests" in result.stdout
+
+
+def test_skip_install_keeps_the_stage_heading_but_not_the_install(tmp_path: Path) -> None:
+    """The stage-1 heading is a parity marker, so it survives --skip-install."""
+    result = _run_ci(tmp_path, args=("--skip-install",))
+    assert "[1/11] Installing dependencies..." in result.stdout
+    assert "(skipped)" in result.stdout
+    assert "[2/11] Running linters" in result.stdout
+
+
+def test_partial_run_never_claims_a_full_pass(tmp_path: Path) -> None:
+    """A narrowed run must not read as a green CI gate."""
+    result = _run_ci(tmp_path, args=("--only", "static"))
+    assert "⚠ PARTIAL run" in result.stdout
+    assert "All CI Checks Passed" not in result.stdout
+    assert "Ready to push to GitHub." not in result.stdout
+    assert "PARTIAL CI" in result.stdout
+    assert "does not authorise a push" in result.stdout
+
+
+def test_default_run_is_unchanged_by_the_stage_selection_support(tmp_path: Path) -> None:
+    """With no selection flags the run is a full one and says so."""
+    result = _run_ci(tmp_path, parallel="0")
+    assert "PARTIAL" not in result.stdout
+    assert "(skipped)" not in result.stdout
+    assert "[2/11] Running linters" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (("--only", "nope"), "unknown stage name: nope"),
+        (("--from", "nope"), "unknown stage name: nope"),
+        (("--from",), "--from requires a stage name"),
+        (("--only",), "--only requires a stage name"),
+        (("--only", ",,"), "--only requires a stage name"),
+        (("--bogus",), "unknown option: --bogus"),
+    ],
+)
+def test_invalid_stage_selection_fails_closed(
+    tmp_path: Path, args: tuple[str, ...], expected: str
+) -> None:
+    """Bad selections exit 2 before any stage runs, rather than running everything."""
+    result = _run_ci(tmp_path, args=args)
+    assert result.returncode == 2
+    assert expected in result.stderr
+    assert "Installing dependencies" not in result.stdout
+
+
+def test_help_documents_stage_selection_without_new_numbered_headings() -> None:
+    r"""
+    Keep option docs out of the numbered stage list.
+
+    test_help_stage_numbers_match_runtime_stage_order pairs help headings
+    matched by ``^\s*(\d+)\.\s+`` against runtime ``[N/M]`` prefixes, so
+    option documentation must never be written as a numbered list.
+    """
+    help_text = subprocess.run(
+        [str(SCRIPT), "--help"],
+        cwd=SCRIPT.parents[1],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout
+    for flag in ("--skip-install", "--from NAME", "--only NAME[,...]"):
+        assert flag in help_text
+    numbered = re.findall(r"^\s*(\d+)\.\s+", help_text, re.MULTILINE)
+    assert numbered == [str(number) for number in range(1, 13)]
+
+
+def test_failing_recorded_stage_snapshots_failures_for_retry(tmp_path: Path) -> None:
+    """A failing coverage stage hands `make retry` something to replay."""
+    result = _run_ci(tmp_path, failures="test-cov")
+    assert result.returncode != 0
+    assert "Coverage Checks Failed" in result.stdout
+    python_log = tmp_path / "python.log"
+    assert python_log.is_file()
+    invocations = python_log.read_text(encoding="utf-8")
+    assert "record_failures.py" in invocations
+    assert "--stage coverage" in invocations
+
+
+def test_recording_never_masks_the_stage_failure(tmp_path: Path) -> None:
+    """Recording is a convenience; it must not turn a failing stage green."""
+    result = _run_ci(tmp_path, failures="test-cov")
+    assert result.returncode == 1
+    assert "All CI Checks Passed" not in result.stdout

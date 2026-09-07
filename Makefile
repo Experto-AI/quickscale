@@ -20,6 +20,15 @@
 #   make check SECTIONS="core modules" - Run checks for multiple sections without `--`
 #   make test-cov             - Run tests with coverage (aggregates DR-engine coverage from backups module when PostgreSQL is available)
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)
+#
+#   Fast iteration after a failure (see `make help`):
+#   make test-unit K=test_name       - Run only matching tests (coverage gate off)
+#   make test-unit ARGS='-x --lf'    - Pass raw pytest flags through
+#   make test-integration MODULE=blog K=test_name - Narrow a module suite
+#   make ci ONLY=integration         - Run one CI stage (partial run, not a pass)
+#   make ci FROM=coverage            - Resume CI from a stage onward
+#   make ci SKIP_INSTALL=1           - Skip the dependency install stage
+#   make retry                       - Re-run only the last recorded failures
 #   make test-ci-local-parallel - Run TP1 local-CI parallelism regression tests
 #   make lint                 - Run linting
 #   make lint-fix             - Fix linting issues
@@ -53,7 +62,7 @@
 .PHONY: setup bootstrap smoke-install install \
         test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-postgres-provisioning \
         lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
-        quality fix check ci ci-e2e \
+        quality fix check ci ci-e2e retry retry-show \
         docs \
         build clean \
 		beta-migrate-fresh beta-migrate-in-place \
@@ -77,7 +86,7 @@ MAKEFILE_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 # Do not export caller-controlled Make syntax into subprocesses.  In
 # particular, GNU Make may expand command-line variable values while preparing
 # the environment even when the recipe uses ``value`` to preserve the text.
-unexport MODULE EXPECTED_REMOTE_SHA
+unexport MODULE EXPECTED_REMOTE_SHA K ARGS ONLY FROM
 # Keep command-line data in one shell argument.  ``value`` prevents recursive
 # Make expansion of hostile input such as ``$(shell ...)`` before the shell
 # quoting is applied.
@@ -129,6 +138,77 @@ PYTEST_XDIST_ARGS := $(if $(filter 0 off serial none,$(PYTEST_XDIST_WORKERS)),,-
 # Set to 0/empty to disable. E2E/integration lanes are intentionally exempt.
 PYTEST_TIMEOUT ?= 120
 PYTEST_TIMEOUT_ARGS := $(if $(filter 0 off none,$(PYTEST_TIMEOUT)),,--timeout=$(PYTEST_TIMEOUT) --timeout-method=thread)
+
+# Focused-run passthrough for the test targets.  ``K`` is a single -k keyword
+# expression (``make test-unit K=test_render_theme``); ``ARGS`` is raw pytest
+# flags that the recipe shell deliberately word-splits (``ARGS='-x --lf -vv'``).
+#
+# Both are caller-owned transport data.  ``transport_value`` reads command-line
+# and environment values literally so GNU Make cannot expand hostile syntax
+# such as ``$(shell ...)`` while preparing the recipe, mirroring the treatment
+# already applied to the sa117 inputs.  ``K`` is additionally shell-quoted; the
+# ``ARGS`` words are intentionally left unquoted because splitting them into
+# separate pytest flags is the entire point, so ARGS is trusted developer input.
+transport_value = $(if $(filter command line environment environment override,$(origin $(1))),$(value $(1)),$($(1)))
+FOCUS_K := $(call transport_value,K)
+FOCUS_ARGS := $(call transport_value,ARGS)
+PYTEST_FOCUS_ARGS := $(strip $(if $(FOCUS_K),-k $(call shell_quote,$(FOCUS_K)),) $(FOCUS_ARGS))
+PYTEST_FOCUSED := $(strip $(FOCUS_K)$(FOCUS_ARGS))
+
+# Partial-CI selection.  ONLY/FROM name stages ("install static coverage
+# integration e2e"); SKIP_INSTALL=1 drops the dependency install.  The script
+# validates the names and marks any such run PARTIAL, so an unknown stage fails
+# there rather than silently running everything.
+CI_ONLY := $(call transport_value,ONLY)
+CI_FROM := $(call transport_value,FROM)
+CI_STAGE_ARGS := $(strip \
+	$(if $(SKIP_INSTALL),--skip-install,) \
+	$(if $(CI_FROM),--from $(call shell_quote,$(CI_FROM)),) \
+	$(if $(CI_ONLY),--only $(call shell_quote,$(CI_ONLY)),))
+
+# A narrowed run measures almost no code, so the 90% coverage gate would fail
+# even when every selected test passes.  That failure is meaningless and it is
+# what pushes contributors back to full-suite runs, so focused mode drops the
+# gate instead.  ``-o addopts=`` is required because the per-package
+# pyproject.toml addopts re-impose --cov-fail-under=90 (and a -m default) no
+# matter what the recipe passes; every recipe already supplies its own -m
+# explicitly, so clearing addopts does not widen the marker selection.
+PYTEST_FOCUS_COV_ARGS := $(if $(PYTEST_FOCUSED),-o addopts= --no-cov,)
+
+# A narrowed selection does not benefit from a 16-worker fan-out: the workers
+# cost more to start than the tests cost to run, and -x/--exitfirst cannot stop
+# the run cleanly under xdist.  Focused mode therefore defaults to serial, but
+# only when the worker count was left at its file default -- an explicit
+# PYTEST_XDIST_WORKERS= on the command line or in the environment still wins.
+ifneq ($(strip $(PYTEST_FOCUSED)),)
+ifeq ($(origin PYTEST_XDIST_WORKERS),file)
+PYTEST_XDIST_ARGS :=
+endif
+endif
+CORE_UNIT_COV_ARGS := $(if $(PYTEST_FOCUSED),,--cov=quickscale_core --cov-report=xml:quickscale_core/coverage.xml)
+CLI_UNIT_COV_ARGS := $(if $(PYTEST_FOCUSED),,--cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-report=xml:quickscale_cli/coverage.xml --cov-fail-under=90)
+CLI_TEST_COV_ARGS := $(if $(PYTEST_FOCUSED),,--cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90)
+
+# pytest rewrites lastfailed only for the tests a run actually collected, so
+# entries for deselected tests survive indefinitely.  Left alone, a snapshot
+# after a narrowed run would list dozens of failures from unrelated sessions.
+# Clearing the caches first makes the post-run file exactly this run's failures.
+# This is a plain rm (no interpreter startup on the fast path), and it is skipped
+# when the caller asked for --lf/--ff, since those need the cache preserved.
+QS_LASTFAILED_CACHES := quickscale_core/.pytest_cache/v/cache/lastfailed quickscale_cli/.pytest_cache/v/cache/lastfailed
+QS_WANTS_CACHE := $(strip $(findstring --lf,$(FOCUS_ARGS))$(findstring --last-failed,$(FOCUS_ARGS))$(findstring --ff,$(FOCUS_ARGS))$(findstring --failed-first,$(FOCUS_ARGS))$(findstring --stepwise,$(FOCUS_ARGS)))
+RESET_FAILURE_CACHES = $(if $(QS_WANTS_CACHE),:,rm -f $(QS_LASTFAILED_CACHES) quickscale_modules/*/.pytest_cache/v/cache/lastfailed 2>/dev/null || true)
+
+# `make retry` needs to know what just failed, so the test targets snapshot the
+# pytest failure caches on a non-zero exit.  ``--since`` bounds the snapshot to
+# caches this run actually touched: pytest keeps lastfailed until a run clears
+# it, so an unbounded snapshot would resurrect failures from an older session.
+# Recording is a convenience and must never change a target's outcome, hence the
+# trailing ``|| true`` and the discarded output.
+RECORD_FAILURES_ON_FAIL = trap 'qs_status=$$?; if [ "$$qs_status" -ne 0 ]; then $(PYTHON) scripts/record_failures.py record --stage $(1) --since "$$qs_started" >/dev/null 2>&1 || true; fi; exit "$$qs_status"' EXIT; qs_started=$$(date +%s)
+
+# Printed by every focused run so a narrowed green is never mistaken for a gate.
+FOCUS_BANNER_CMD = $(if $(PYTEST_FOCUSED),echo "⚠ focused run ($(strip $(if $(FOCUS_K),K=$(call shell_quote,$(FOCUS_K)),) $(if $(FOCUS_ARGS),ARGS=$(call shell_quote,$(FOCUS_ARGS)),))) — coverage gate disabled; not a substitute for a full run.",:)
 
 # Section flags must be passed after `--` so GNU make does not treat them as its
 # own options, e.g. `make lint -- --modules` or `make typecheck -- --core`.
@@ -183,6 +263,20 @@ help:
 	@echo "  make check QUIET=1        - Same as check, quiet on success (LLM/agent mode)"
 	@echo "  make ci                   - Full local-CI parity (adds integration when PostgreSQL available)"
 	@echo "  make ci-e2e               - Full local CI including E2E (slow — Docker + Playwright)"
+	@echo ""
+	@echo "Iterating on a failure (fast reruns):"
+	@echo "  make retry                - Re-run only the tests that failed last time"
+	@echo "  make retry-show           - Show what retry would run, without running it"
+	@echo "  make test-unit K=<expr>   - Run only tests matching <expr> (-k), coverage gate off"
+	@echo "  make test-unit ARGS='-x --lf' - Raw pytest flags (--lf replays per package)"
+	@echo "  make test-integration MODULE=blog K=<expr> - Narrow one module suite"
+	@echo "  make test-e2e K=<expr>    - Narrow the E2E lanes"
+	@echo "  make ci ONLY=<stage>      - Run one CI stage only; stages:"
+	@echo "                              install static coverage integration e2e"
+	@echo "  make ci FROM=<stage>      - Resume CI from <stage> onward"
+	@echo "  make ci SKIP_INSTALL=1    - Skip the dependency install stage"
+	@echo "  NOTE: K=/ARGS= disable the coverage gate and ONLY/FROM/SKIP_INSTALL"
+	@echo "        mark the run PARTIAL — neither is a substitute for make ci."
 	@echo ""
 	@echo "Deep / occasional:"
 	@echo "  make test                 - Run all tests (unit + integration)"
@@ -337,6 +431,9 @@ beta-migrate-in-place:
 # Run all tests
 test:
 	@set -e; \
+	$(RESET_FAILURE_CACHES); \
+	$(call RECORD_FAILURES_ON_FAIL,unit); \
+	$(FOCUS_BANNER_CMD); \
 	if [ "$(strip $(ACTIVE_SECTIONS))" = "$(strip $(DEFAULT_SECTIONS))" ] && [ -z "$(MODULE)" ]; then \
 		$(MAKE) test-unit && $(MAKE) test-integration; \
 		exit 0; \
@@ -346,11 +443,13 @@ test:
 	fi; \
 	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Testing quickscale_core..."; \
-		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not e2e"; \
+		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not e2e" \
+			$(PYTEST_FOCUS_COV_ARGS) $(PYTEST_FOCUS_ARGS); \
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Testing quickscale_cli..."; \
-		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
+		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not e2e" \
+			$(CLI_TEST_COV_ARGS) $(PYTEST_FOCUS_COV_ARGS) $(PYTEST_FOCUS_ARGS); \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
@@ -375,7 +474,7 @@ test:
 				if [ -n "$$PYTHONPATH" ]; then \
 					module_pythonpath="$$module_pythonpath:$$PYTHONPATH"; \
 				fi; \
-				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -q --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings; \
+				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -q --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings $(PYTEST_FOCUS_ARGS); \
 			fi; \
 		done; \
 		if [ "$$mod_found" -eq 0 ]; then \
@@ -386,6 +485,9 @@ test:
 # Run DB-free unit tests only (core + CLI, no modules — use test-integration for modules)
 test-unit:
 	@set -e; \
+	$(RESET_FAILURE_CACHES); \
+	$(call RECORD_FAILURES_ON_FAIL,unit); \
+	$(FOCUS_BANNER_CMD); \
 	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
 		echo "ℹ️ quickscale has no test suite to run."; \
 	fi; \
@@ -393,14 +495,13 @@ test-unit:
 		echo "📦 Unit testing quickscale_core..."; \
 		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not integration and not e2e" \
 			$(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) \
-			--cov=quickscale_core --cov-report=xml:quickscale_core/coverage.xml; \
+			$(CORE_UNIT_COV_ARGS) $(PYTEST_FOCUS_COV_ARGS) $(PYTEST_FOCUS_ARGS); \
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_cli..."; \
 		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not integration and not e2e" \
 			$(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) \
-			--cov=quickscale_cli --cov-report=term-missing --cov-report=html \
-			--cov-report=xml:quickscale_cli/coverage.xml --cov-fail-under=90; \
+			$(CLI_UNIT_COV_ARGS) $(PYTEST_FOCUS_COV_ARGS) $(PYTEST_FOCUS_ARGS); \
 	fi; \
 	if [ -n "$(filter modules,$(SECTION_VARS) $(SELECTED_SECTIONS))" ]; then \
 		echo ""; \
@@ -419,11 +520,17 @@ test-unit:
 # LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER role).  Sets QUICKSCALE_ALLOW_BYPASSRLS=0
 # by default so the SA58 boot guard stays active against the restricted role.
 # Override explicitly per-suite (SA14.4 hatch) for tests that need BYPASSRLS.
+# A focused run also sets QS_SKIP_COVERAGE_GATE=1: the per-module mean-coverage
+# check is as meaningless on a narrowed selection as the unit lane's gate is.
 test-integration:
-	@if [ "$${GITHUB_ACTIONS:-}" = "true" ]; then \
-		scripts/test_integration.sh; \
+	@$(FOCUS_BANNER_CMD)
+	@set -e; \
+	$(RESET_FAILURE_CACHES); \
+	$(call RECORD_FAILURES_ON_FAIL,integration); \
+	if [ "$${GITHUB_ACTIONS:-}" = "true" ]; then \
+		$(if $(PYTEST_FOCUSED),QS_SKIP_COVERAGE_GATE=1 ,)scripts/test_integration.sh $(if $(PYTEST_FOCUSED),-- $(PYTEST_FOCUS_ARGS),); \
 	else \
-		scripts/provision_ci_postgres.sh run --profile restricted -- scripts/test_integration.sh; \
+		$(if $(PYTEST_FOCUSED),QS_SKIP_COVERAGE_GATE=1 ,)scripts/provision_ci_postgres.sh run --profile restricted -- scripts/test_integration.sh $(if $(PYTEST_FOCUSED),-- $(PYTEST_FOCUS_ARGS),); \
 	fi
 
 # Run ONLY the BYPASSRLS-privileged tests (the `-m bypass_rls` migration/DDL
@@ -449,7 +556,11 @@ test-bypassrls:
 
 # Run E2E tests (starts PostgreSQL container, installs Playwright browsers)
 test-e2e:
-	@scripts/test_e2e.sh
+	@$(FOCUS_BANNER_CMD)
+	@set -e; \
+	$(RESET_FAILURE_CACHES); \
+	$(call RECORD_FAILURES_ON_FAIL,e2e); \
+	scripts/test_e2e.sh $(PYTEST_FOCUS_ARGS)
 
 # Run tests with coverage (90% equal-weight package mean, 80% per-file threshold)
 #
@@ -1279,7 +1390,9 @@ check:
 		fi; \
 		q_test_dirs="$$(echo $$q_test_dirs)"; \
 		if [ -n "$$q_test_dirs" ]; then \
-			$(PYTHON) -m pytest $$q_test_dirs -q --tb=short -m "not integration and not e2e" $(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
+			$(RESET_FAILURE_CACHES); \
+			qs_started=$$(date +%s); \
+			$(PYTHON) -m pytest $$q_test_dirs -q --tb=short -m "not integration and not e2e" $(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; $(PYTHON) scripts/record_failures.py record --stage unit --since "$$qs_started" >/dev/null 2>&1 || true; exit 1; }; \
 			rm -f pytest_log.txt; \
 		fi; \
 	else \
@@ -1323,11 +1436,30 @@ quality:
 
 # Run primary local development checks with an owned PostgreSQL lifecycle.
 ci: test-ci-local-parallel
-	@scripts/provision_ci_postgres.sh run --profile restricted -- scripts/check_ci_locally.sh
+	@scripts/provision_ci_postgres.sh run --profile restricted -- scripts/check_ci_locally.sh $(CI_STAGE_ARGS)
 
 # Run full CI including E2E tests with the same owned PostgreSQL lifecycle.
 ci-e2e:
-	@scripts/provision_ci_postgres.sh run --profile restricted -- scripts/check_ci_locally.sh --e2e
+	@scripts/provision_ci_postgres.sh run --profile restricted -- scripts/check_ci_locally.sh --e2e $(CI_STAGE_ARGS)
+
+# Re-run only the tests that failed in the last recorded run.
+# `record_failures.py replay --quiet` prints one make command per rootdir that
+# had failures; with nothing recorded it prints nothing and this is a no-op.
+retry:
+	@commands="$$($(PYTHON) scripts/record_failures.py replay --quiet)"; \
+	if [ -z "$$commands" ]; then \
+		$(PYTHON) scripts/record_failures.py replay; \
+		exit 0; \
+	fi; \
+	printf '%s\n' "$$commands" | while IFS= read -r command; do \
+		[ -n "$$command" ] || continue; \
+		echo "▶ $$command"; \
+		sh -c "$$command" || exit 1; \
+	done
+
+# Show what `make retry` would run, without running it.
+retry-show:
+	@$(PYTHON) scripts/record_failures.py replay
 
 # --- Docs ---
 
