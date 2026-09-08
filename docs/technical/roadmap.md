@@ -205,57 +205,67 @@ or delivery evidence, not here.
   unattributed and independently blocks calling the captured lifecycle green. Candidate bytes,
   all five authorized closeout documents, `HEAD`, and `v88` remained unchanged after the run.
 
-  **Pending:** ***corrected after checkpoint attestation — not independently graded*** — Diagnose
-  the retained Core and CLI failures before any retry; separately reconcile the Docker image
-  ownership/lifecycle discrepancy; then choose the policy-authorized path: retain the bound candidate
-  for a reasoned, distinctly identified retry, or apply evidence-backed corrections and renew review
-  and validation. Only after a green release verdict, complete the changelog, ticket-context,
-  technical-audit, architecture-audit, and open-work-only roadmap closeout. SA160's fixture
-  rebaseline remains blocked until SA165 is accepted. This checkpoint records the halt and does not
-  mark SA165 complete.
+  **Pending:** The retained 148-artifact package and all five frozen candidate blobs were reverified.
+  A retention-safe focused Core probe then passed and captured PostgreSQL 18.4 initializing through
+  `ALTER DATABASE`; the focused CLI development workflow also passed. That CLI test runs its own
+  `quickscale down`, however, so its database disappeared before the reviewed procedure's required
+  outer inspect/log capture. The diagnostic phase therefore halted before the installed-wheel probe
+  and controlled Alpine/non-Alpine pair and made no causal diagnosis. The maintainer selected a
+  retention-safe CLI wrapper; obtain revised reviewed authority for that procedure, complete the
+  remaining diagnosis and separate image accounting, then choose the policy path: a distinctly
+  identified unchanged-candidate retry, or an evidence-backed correction with renewed review and
+  validation. Only a green release verdict permits the five-document closeout; SA160's fixture
+  rebaseline remains blocked.
 
-  **Blocking:** ***corrected after checkpoint attestation — not independently graded*** — The
-  release-tier result is immutable and red, so it cannot support acceptance. The retained Core/CLI
-  failures must be diagnosed and any necessary correction independently reviewed, while Docker
-  ownership accounting must demonstrate a stable foreign baseline and zero unexplained run-owned
-  residue or image drift. What closes this block is either a policy-compliant, distinctly identified
-  retry of the unchanged bound candidate or a fresh verdict over renewed candidate/validation
-  inputs, returning the complete success oracles, status 0, unchanged candidate/foreign resources,
-  and exact run-scope cleanup.
+  **Blocking:** The release-tier result remains immutable and red, so it cannot support acceptance.
+  The new focused runs did not reproduce its database failure, but the current reviewed diagnostic
+  procedure cannot retain the CLI database after that test's own teardown and therefore cannot close
+  the causal gap. What closes this block is a revised reviewed capture procedure, completion of the
+  remaining focused and controlled-image diagnostics, stable foreign/run-owned image accounting,
+  and then either a policy-compliant unchanged-candidate retry or a fresh verdict over renewed
+  candidate/validation inputs returning the complete success oracles, status 0, unchanged candidate
+  and foreign resources, and exact run-scope cleanup.
 
-  **Decisions needed:** ***corrected after checkpoint attestation — not independently graded*** — No
-  additional maintainer grant is required for a reasoned, distinctly recorded retry of unchanged
-  bytes within the already authorized delivery. If diagnosis requires product, test, runner, or
-  validation-input changes, authorize their exact scope and renew review and validation. If Docker
-  evidence assigns the image discrepancy to a foreign worktree, choose an exclusive shared-Docker
-  window or another evidence-preserving coordination mechanism before the next verdict.
+  **Decisions needed:** None before diagnosis resumes. The maintainer chose a retention-safe CLI
+  wrapper that leaves the generated database available for exact inspect/log capture; continuing
+  without those logs is not authorized. The next run must define the wrapper's exact scope and obtain
+  revised reviewed authority before execution. No additional grant is required for a reasoned retry
+  of unchanged bytes after diagnosis; any product, test, runner, or validation-input change still
+  needs exact scope plus renewed review and validation.
 
-  **Remaining plan and resume object:** ***corrected after checkpoint attestation — not independently
-  graded*** — Plan authority `EV-5` covered `B-repro`, `C-bind`, and `D-ev8-close`. `B-repro` and
-  `C-bind` were accepted. `D-ev8-close` was dispatched once and returned partial, so no phase remains
-  undispatched under that authority. Resume on `wt-track1` from the retained implementation baseline
-  `fe5854cf2ed7789b14528b713628f11193664ae2` by inspecting the evidence directory above. Do not
-  redispatch the closed `D-ev8-close` phase: route a reasoned unchanged-candidate retry under current
-  validation policy, or obtain renewed reviewed authority when candidate or validation inputs change.
+  **Remaining plan and resume object:** Plan authority `EV-6` covered `A-bind`, `B-diagnose`,
+  `C-correct-bind`, and `D-verdict-close`. `A-bind` was accepted. `B-diagnose` returned partial after
+  the retention gap, so its hard dependents `C-correct-bind` and `D-verdict-close` were not
+  dispatched. Resume on `wt-track1` from clean object
+  `85e67fc133f399c0f0db8921a970ff875d10fe91` and evidence under
+  `/tmp/sa165-track1-20260908T145729/B-diagnose`. Do not redispatch `B-diagnose` under `EV-6`; first
+  obtain revised reviewed authority for the retention-safe procedure selected above.
 
   **Remaining sequence:**
 
-  1. Preserve and inspect the retained logs, event stream, inventories, and manifest; reproduce only
-     the minimum failing Core/CLI surfaces needed to establish a cause. Do not run the release gate.
-  2. Investigate the foreign/unclassified image discrepancy separately from repository failures;
-     preserve resources outside the active worktree and never use broad or name-only cleanup.
-  3. Define and authorize the correction scope from evidence. Fix relevant pre-existing issues only
-     when the same evidence and ownership boundary includes them; do not infer a product defect.
-  4. Run focused owning checks, freeze the resulting candidate, obtain independent whole-candidate
-     review, and repeat exact pre-launch Git/content and Docker-baseline binding.
-  5. ***corrected after checkpoint attestation — not independently graded*** — Apply the current
-     validation policy: if candidate and validation inputs remain unchanged, record the reason and
-     run a distinctly identified retry with immutable prior evidence; if either changed, renew review
-     and validation before a fresh verdict. Capture complete process, output, Docker-event,
-     inventory, cleanup, and provenance evidence in either branch.
-  6. If and only if it is green, update the five closeout documents, run their consistency check,
-     converge and attest the exact delta, commit it, and fast-forward `v88`. If it is red, preserve
-     the evidence and keep SA165 open with another truthful checkpoint.
+  1. Preserve the accepted binding and both focused campaigns. Replace the halted procedure with
+     reviewed authority for a wrapper that reproduces the CLI plan/apply/up path but defers
+     `quickscale down` until evidence capture finishes; do not change product behavior to gain
+     retention.
+  2. Before the wrapper allocates anything, bind the daemon, complete pre-inventory, unique scope,
+     event observer, and exact cleanup algorithm. After `up`, capture the database's immutable ID,
+     labels, inspect, timestamped logs, mounted `init.sql`, environment, image, and health result;
+     then run the normal teardown and prove the exact scope empty.
+  3. Run the still-missing installed-wheel probe and the controlled `postgres:18-alpine` versus
+     `postgres:18` pair with identical captured inputs. Do not run the release gate during diagnosis.
+  4. Reconcile the five owner-only build images and the vanished pre-existing image separately from
+     repository failures. Preserve foreign resources and never use broad or name-only cleanup.
+  5. Select the evidence branch: record an unchanged-candidate retry rationale, or define the
+     smallest correction scope. Fix a pre-existing issue only when the same evidence and ownership
+     boundary includes it; any changed candidate or validation input receives focused checks and
+     renewed independent review.
+  6. Freeze the resulting candidate and validation inputs, repeat exact Git/content and Docker
+     baseline binding, then run one distinctly identified
+     `setsid --wait env QS_E2E_PARALLEL=0 QS_E2E_INTEGRATION_REF=v88 make ci-e2e` verdict with full
+     process, output, event, inventory, cleanup, and provenance evidence.
+  7. If and only if that verdict is green and resource-stable, update the five closeout documents,
+     run their consistency check, converge and attest the exact delta, commit it, and fast-forward
+     `v88`. If it is red, preserve the evidence and keep SA165 open with another truthful checkpoint.
 
   ***corrected after checkpoint attestation — not independently graded*** — Independent review must
   return before a verdict when candidate or validation inputs changed; an unchanged-candidate retry
