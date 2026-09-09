@@ -67,7 +67,7 @@ are yes.
 
 | Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA160 | yes — no prerequisite | yes — fixture released | yes — through the serialized queue | no — not yet delivered | **yes** |
+| 1 | SA160 | yes — no prerequisite | yes — fixture released | no — release tier not run | no — release tier not run | **yes** |
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
@@ -129,12 +129,22 @@ or delivery evidence, not here.
 
 - [ ] **SA160 — Fix generated CSRF handling and remove dead settings helpers.**
 
-  Closes TA67 and TA68. Deliver one combined candidate — the CSRF helper and the former SA161
-  dead-code removal — and one emission-fixture rebaseline, preserving every previous
-  `baseline_evidence` entry and recording a separate rationale for each emitted file change. Author
-  the code and tests whenever track 1 is free; the fixture is released and the rebaseline may land
-  with them. The two halves are independent in code but share the single rebaseline, so
-  splitting them buys no parallelism and costs a second fixture handoff, review, and generator run.
+  **State (measured 2026-09-09): advanced partial committed on `wt-track1` at
+  `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7` and not merged into `v88`.** Phases A, B, and D are
+  accepted: both React callers use one exact-name, decoded, deterministic CSRF helper; the dead
+  generated-settings helpers are removed while the live proxy contract remains; and all three
+  emission variants are rebaselined with prior evidence preserved. Phase C remains formally
+  unaccepted because its implementation return stopped on a stale MyPy suppression; convergence
+  removed that suppression and the combined frontend, Ruff, MyPy, and 39-test focused chain is
+  green, but the phase ledger is not retroactively rewritten.
+
+  **Pending:** Phase E under reviewed plan authority `EV-6` remains undispatched, including
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`, audit retirement, and release closeout. **Blocking:** no
+  known product defect; merge and release acceptance are withheld until that exact release-tier
+  command returns green on a freshly reviewed exact tip. **Decisions needed:** none. **Remaining
+  plan:** resume at Phase E from the retained commit; do not repeat accepted phases A, B, or D, and
+  retain Phase C's formal partial status while recording whether the release campaign closes its
+  validation gap.
 
   **Acceptance:**
 

@@ -2,6 +2,28 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA160 advanced partial retained; release validation and merge remain pending (2026-09-09).**
+  Product commit `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7` on `wt-track1` consolidates the
+  generated React CSRF cookie handling into one helper with exact-name matching, decoding,
+  deterministic first-match selection, and a safe malformed-value fallback; both write callers use
+  it. It also removes the unreachable generated-settings `get_client_ip` definitions while
+  preserving uppercase proxy settings, DRF `NUM_PROXIES`, and the live orgs resolver, and performs
+  the single three-variant emission-manifest rebaseline. The commit is **not merged into `v88`**.
+
+  Scoped evidence is green: frontend lint and the rendered Vitest suite passed 20 assertions; the
+  generated-settings and resolver campaign passed 20 tests; exact emission parity passed 7 tests;
+  and convergence's combined frontend, Ruff, MyPy, and focused pytest chain
+  passed 39 tests. Convergence removed one stale `unused-ignore` suppression and found no remaining
+  blocking product defect. Terminal review likewise found no blocking defect in the settled product
+  bytes; its sole advisory is that malformed percent-encoding fallback lacks a dedicated test.
+
+  **This is not SA160 or release acceptance.** Phase C's implementation handback remains formally
+  partial even though its sole blocker was subsequently removed, and Phase E was not dispatched.
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` has not run on this candidate, so the duplicate-cookie and
+  dead-settings-helper audit findings remain open, the roadmap ticket stays unchecked, and merge-back
+  is withheld. Resume from the retained commit at reviewed plan Phase E; do not repeat accepted
+  phases A, B, or D, and do not infer a release verdict from the scoped green checks.
+
 - **SA165 accepted and closed on maintainer decision; E2E teardown made retention-aware (2026-09-09).**
   Closes SA165 and releases `quickscale_core/tests/fixtures/sa90_emission_manifests.json` to SA160.
   No product, template, fixture, or provisioner byte changed. The accepted candidate is the
