@@ -156,36 +156,50 @@ or delivery evidence, not here.
   **Retained checkpoint (terminally reviewed 2026-09-09):**
 
   - **Completed:** ***corrected after checkpoint attestation — not independently graded*** Phases A,
-    B, and D are accepted: their CSRF, generated-settings, and emission changes remain retained on
-    `wt-track1`. Phase C's live client-IP resolver comment and tests are also retained and terminally
-    reviewed as sound, but its implementation handback remains formally partial. That distinction
-    does not imply SA160, release, merge, or TA67/TA68 closure. The two emitted CSRF paths are now
-    classified explicitly as user-owned U7 files in both the executable beta-migration taxonomy and
-    its ownership inventory. Focused taxonomy and status-consistency checks are green, and the exact
-    release attempt's install, static, coverage, and integration stages completed before the
-    no-verdict E2E timeout.
-  - **Pending:** add direct generated Vitest proof for an empty `document.cookie`, rebaseline the
-    resulting `csrf.test.tsx` hash in the `react_default`, `react_empty`, and `react_selected`
-    emission manifests, run the rendered Vitest and emission-parity checks, independently review the
-    newly bound candidate, and obtain a completed release-tier verdict under fresh authority.
-  - **Blocking:** the current Vitest table proves a missing `csrftoken` only with a non-empty
-    `sessionid` cookie; it does not exercise the acceptance requirement where `document.cookie` is
-    the empty string. This closes only when an explicit empty-cookie case asserts that
-    `getCsrfToken()` returns `''` and the three manifest variants plus rendered/parity checks agree.
-    Separately, the sole authorized release aggregate has no verdict because E2E did not complete;
-    release acceptance and merge close only after a fresh, independently bound run completes green
-    with successful scoped cleanup. Until both blockers close, SA160, TA67, and TA68 stay open and
-    the candidate must not merge into `v88`.
-  - **Decisions needed:** authorize the coupled `csrf.test.tsx` and three-variant emission-manifest
-    correction, then authorize one separately reviewed release attempt with an execution budget
-    sufficient to let the E2E lanes return a verdict.
-  - **Remaining plan:** start from the retained `wt-track1` state reviewed at
-    `38a538af912804cf9f61ff241ca3b3b57961f0cd`; implement only the explicit empty-cookie test and
-    coupled manifest hashes; run rendered Vitest and emission consistency; bind and independently
-    review the new exact tip; then run one newly authorized release aggregate. On green, reconcile
-    and close SA160/TA67/TA68 and merge through the serialized queue. On red or no-verdict, retain a
-    new truthful checkpoint. Do not redo accepted implementation or taxonomy work, and do not absorb
-    the unrelated `validateQuickScaleSeam.test.ts` inventory drift.
+    B, and D remain accepted. Phase C's live client-IP resolver comment and tests remain retained and
+    terminally reviewed as sound while its implementation handback remains formally partial. The U7
+    taxonomy correction remains committed. Continuation phases `EC_TEST` and `EC_MANIFEST` are
+    accepted and leave exactly these unstaged files, derived from committed baseline
+    `8891f5a507823f27dd9c87ee8ecb01e924b7f391`, beneath this status-only checkpoint:
+    `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/test/csrf.test.tsx`
+    and `quickscale_core/tests/fixtures/sa90_emission_manifests.json`. The test adds one standalone
+    generated Vitest that calls `setCookie('')` and asserts `getCsrfToken()` returns `''`; the
+    `react_default`, `react_empty`, and `react_selected` manifest leaves carry its source-derived SHA-256
+    `feb682b42f20eafca504930f108f0febe79adb1d19316ea55380682716db170f`. Convergence and terminal
+    review found no defect in those bytes. `make lint-frontend`, the correctly targeted rendered
+    Vitest, and exact-manifest parity are green with 22 Vitest tests and 7 parity tests, all unskipped.
+  - **Pending:** `EC_VALIDATE_BIND` is outstanding because its reviewed command used
+    `pnpm test -- --run src/test/csrf.test.tsx`, which expanded into an unintended broad Vitest run
+    and failed on 18 unrelated `no_social` hook tests. Candidate binding was therefore withheld.
+    `EC_REVIEW` and `EC_RELEASE_CLOSEOUT` were not dispatched because they hard-depend on accepted
+    validation/binding. No new release attempt started, so the separately authorized 3,600,000 ms
+    release authority remains unspent.
+  - **Blocking:** the two-file proof is correct but uncommitted, and the reviewed plan's validation
+    oracle cannot be rewritten after that phase has run. This closes only under fresh reviewed-plan
+    authority that validates with the correctly targeted
+    `pnpm exec vitest run src/test/csrf.test.tsx`, preserves the green three-variant parity result,
+    and authorizes the root to bind the exact two-file candidate commit. Release acceptance and merge
+    then still require fresh independent review of that commit plus the one authorized
+    `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` invocation returning green within its 3,600,000 ms
+    carrier and completing scoped cleanup. Until then, SA160, TA67, and TA68 remain open and the
+    candidate must not merge into `v88`.
+  - **Decisions needed:** none. The two-file correction and one fresh 3,600,000 ms release attempt
+    are already authorized; the next run must obtain corrected reviewed-plan authority before using
+    either the candidate-binding or release steps.
+  - **Remaining plan:** ***corrected after checkpoint attestation — not independently graded*** the
+    prior five-phase plan authority `EV-32` is not reusable because its `EC_VALIDATE_BIND` command is
+    the blocker. Start from `wt-track1` with the two exact unstaged paths above, recheck committed
+    baseline `8891f5a507823f27dd9c87ee8ecb01e924b7f391` and pre-release/pre-merge `v88`
+    `5716dabfc9d2d90eda69fe62a934c36567e9ec16`, and preserve the terminally reviewed bytes. Obtain a
+    fresh plan that replaces only the invalid validation command; run the correctly targeted rendered
+    Vitest and exact-manifest parity; commit and bind the two-file candidate; independently review that
+    exact tip; then run the still-unspent authorized release aggregate. After a green release and
+    successful scoped cleanup, reconcile the truthful status documents, run their consistency check,
+    perform convergence over the complete resulting delta, and terminally attest the exact settled
+    tip; only then may SA160/TA67/TA68 close and the attested tip merge through the serialized queue.
+    On red, no-verdict, or cleanup failure, keep all three open and retain a new truthful unmerged
+    checkpoint. Do not redo accepted implementation or taxonomy work, and do not absorb the unrelated
+    `validateQuickScaleSeam.test.ts` inventory drift.
 
   **Advisory, not blocking:** malformed percent encoding currently fails closed to an empty token,
   but a dedicated generated Vitest remains optional future hardening and is not part of SA160's
