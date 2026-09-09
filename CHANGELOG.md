@@ -2,6 +2,32 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA160 Phase E retained partial after red release-gate checkpoint (2026-09-09).**
+  The freshly reviewed candidate remained bound to `HEAD`
+  `266f0941a3248ab7979ab920ae8497ee418a7ef9`, with `v88` at
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16` and product commit
+  `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7`. The exact command
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` ran once. Its durable payload log is
+  `.adaptive/evidence/sa160-phase-e/2026-09-09-13-26-28-ci-e2e.log` and its status file records
+  `exit_code=2` at `.adaptive/evidence/sa160-phase-e/2026-09-09-13-26-28-ci-e2e.status`.
+
+  The release gate's Phase 1 unit campaign found one failure:
+  `quickscale_cli/tests/test_beta_migration_ownership_conformance.py::test_taxonomy_classifies_every_emitted_template`
+  reports that the two newly emitted paths `frontend/src/lib/csrf.ts` and
+  `frontend/src/test/csrf.test.tsx` are not classified by a beta-migration taxonomy tuple. The
+  campaign recorded 5,090 passed and 2 skipped tests; the following backup campaign recorded
+  332 passed and 1 skipped, and coverage thresholds were met at an equal-weight mean of 93.12%.
+  The gate therefore did not reach the integration or E2E lanes. The gate result is red; no
+  post-gate terminal attestation, release acceptance, merge, publication, or deployment exists.
+  Post-run inspection found no new
+  run-scoped containers, networks, or volumes; the standing `qscaletest-postgres-1` and
+  `pg18-af10` resources were preserved.
+
+  This is a retained red checkpoint, not SA160 or release acceptance. SA160 remains unchecked
+  and TA67/TA68 remain open. A scope-authorized beta-migration taxonomy correction followed by
+  fresh candidate review/binding and a new release-tier verdict is required; the reviewed EV-6
+  Phase E plan does not authorize a second release run.
+
 - **SA160 advanced partial retained; release validation and merge remain pending (2026-09-09).**
   Product commit `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7` on `wt-track1` consolidates the
   generated React CSRF cookie handling into one helper with exact-name matching, decoding,
@@ -18,11 +44,11 @@
   bytes; its sole advisory is that malformed percent-encoding fallback lacks a dedicated test.
 
   **This is not SA160 or release acceptance.** Phase C's implementation handback remains formally
-  partial even though its sole blocker was subsequently removed, and Phase E was not dispatched.
-  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` has not run on this candidate, so the duplicate-cookie and
-  dead-settings-helper audit findings remain open, the roadmap ticket stays unchecked, and merge-back
-  is withheld. Resume from the retained commit at reviewed plan Phase E; do not repeat accepted
-  phases A, B, or D, and do not infer a release verdict from the scoped green checks.
+  partial even though its sole blocker was subsequently removed. At this retained-partial
+  checkpoint Phase E had not yet been dispatched; the later red Phase E checkpoint above records
+  the only release-gate attempt. The duplicate-cookie and dead-settings-helper audit findings
+  remain open, the roadmap ticket stays unchecked, and merge-back is withheld. Do not repeat
+  accepted phases A, B, or D, and do not infer a release verdict from the scoped green checks.
 
 - **SA165 accepted and closed on maintainer decision; E2E teardown made retention-aware (2026-09-09).**
   Closes SA165 and releases `quickscale_core/tests/fixtures/sa90_emission_manifests.json` to SA160.

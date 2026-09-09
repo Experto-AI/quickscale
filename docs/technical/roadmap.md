@@ -67,7 +67,7 @@ are yes.
 
 | Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA160 | yes — no prerequisite | yes — fixture released | no — release tier not run | no — release tier not run | **yes** |
+| 1 | SA160 | yes — no prerequisite | yes — fixture released | no — release tier red: taxonomy coverage failure | no — release tier red: taxonomy coverage failure | **yes** |
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
@@ -78,7 +78,10 @@ are yes.
 - **Can merge** — through the serialized queue, once the combined candidate is reviewed and its
   generator-change release tier has run.
 
-SA160 is not yet **truly green** only because it has not been delivered. Nothing blocks it.
+SA160 is not yet **truly green** because its one reviewed Phase E release-gate attempt was red on
+beta-migration taxonomy coverage. The candidate is retained, but merge and release acceptance
+remain blocked until a scope-authorized correction receives fresh review and a new release-tier
+verdict; no second run is authorized by the reviewed Phase E plan.
 
 ### Ownership and merge coordination
 
@@ -129,8 +132,9 @@ or delivery evidence, not here.
 
 - [ ] **SA160 — Fix generated CSRF handling and remove dead settings helpers.**
 
-  **State (measured 2026-09-09): advanced partial committed on `wt-track1` at
-  `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7` and not merged into `v88`.** Phases A, B, and D are
+  **State (measured 2026-09-09): advanced partial retained on `wt-track1` at
+  `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7` and not merged into `v88`; the retained exact tip is
+  `266f0941a3248ab7979ab920ae8497ee418a7ef9`.** Phases A, B, and D are
   accepted: both React callers use one exact-name, decoded, deterministic CSRF helper; the dead
   generated-settings helpers are removed while the live proxy contract remains; and all three
   emission variants are rebaselined with prior evidence preserved. Phase C remains formally
@@ -138,13 +142,17 @@ or delivery evidence, not here.
   removed that suppression and the combined frontend, Ruff, MyPy, and 39-test focused chain is
   green, but the phase ledger is not retroactively rewritten.
 
-  **Pending:** Phase E under reviewed plan authority `EV-6` remains undispatched, including
-  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`, audit retirement, and release closeout. **Blocking:** no
-  known product defect; merge and release acceptance are withheld until that exact release-tier
-  command returns green on a freshly reviewed exact tip. **Decisions needed:** none. **Remaining
-  plan:** resume at Phase E from the retained commit; do not repeat accepted phases A, B, or D, and
-  retain Phase C's formal partial status while recording whether the release campaign closes its
-  validation gap.
+  **Pending:** Phase E under reviewed plan authority `EV-6` was dispatched once. The exact
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` payload returned `exit_code=2` because
+  `quickscale_cli/tests/test_beta_migration_ownership_conformance.py::test_taxonomy_classifies_every_emitted_template`
+  found the two new emitted CSRF paths absent from the beta-migration taxonomy. The durable
+  evidence is recorded in the current SA160 Phase E changelog entry. **Blocking:** this taxonomy coverage gap is
+  outside Phase E's owned four-document closeout scope; merge and release acceptance remain
+  withheld, and no post-gate terminal attestation or E2E lane result exists. **Decisions needed:** authorize a
+  separate scope correction and fresh candidate review/binding, or retain the ticket until its
+  owner supplies that correction. **Remaining plan:** preserve the retained candidate and the
+  open SA160/TA67/TA68 state; do not repeat accepted phases A, B, or D, and do not run a second
+  release gate under `EV-6`.
 
   **Acceptance:**
 
