@@ -7,25 +7,6 @@ The [roadmap](roadmap.md) owns task scope, tracks, dependencies, scheduling, and
 This companion explains implementation rationale. Read the corresponding roadmap task first;
 completed work and historical evidence belong in [CHANGELOG.md](../../CHANGELOG.md).
 
-## SA165 — Validate the audit corrections and record their closeout
-
-The product concerns are corrupt or non-mapping YAML reaching state writes, overly broad
-empty-parameter isolation skips, unexplained host-dependent emission exceptions, and generated
-operations guidance that permits predictable credentials in shared environments. State loading
-must fail before writing, skip authorization must name the intended test identities, exceptions
-must state their rationale and growth trigger, and credential guidance must distinguish local
-development from shared deployments.
-
-A release verdict describes exact product bytes. The five-file product candidate must include
-the emission fixture with the operations template it pins: reviewing the template alone hides
-the evidence that its generated output was rebaselined. Independent review and release validation
-must cover the same settled product candidate under the [validation policy](validation_policy.md).
-
-Recording that verdict is the final step of this task. Audit notes, status documents, and the
-changelog record the result after it exists; they are outside the frozen product set so recording
-a review cannot invalidate that review. Retire the four action-bearing notes only after the
-required evidence is green. Documentation closeout does not reopen accepted product behavior.
-
 ## SA160 — Repair generated CSRF handling and remove dead settings helpers
 
 The React theme repeats a cookie parser in `useApi.ts` and `FormRenderer.tsx`. Splitting on

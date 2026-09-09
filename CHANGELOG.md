@@ -2,6 +2,50 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA165 accepted and closed on maintainer decision; E2E teardown made retention-aware (2026-09-09).**
+  Closes SA165 and releases `quickscale_core/tests/fixtures/sa90_emission_manifests.json` to SA160.
+  No product, template, fixture, or provisioner byte changed. The accepted candidate is the
+  unchanged five-file set bound at `fe5854cf2ed7789b14528b713628f11193664ae2`.
+
+  **This closeout does not rest on a fresh release-tier verdict, and must not be read as one.** The
+  last full `make ci-e2e` (2026-09-08) exited 2 with ten failures — two in Core
+  (`test_sa142_backend_image_reuse_and_warm_build`, `test_sa142_no_cleanup_diagnostic_probe`) and
+  eight in the CLI lane. No cause was ever found. Four focused campaigns and one lane-scope run
+  failed to reproduce any of the ten. The maintainer accepted the delivery on that evidence and
+  recorded the unexplained failure as residual risk, to be revisited if it recurs.
+
+  **The lane run.** `make ci-e2e ONLY=e2e SKIP_INSTALL=1` ran both lanes concurrently from
+  2026-09-09 08:08:43 through 08:25:11 (+02:00): Core 37 passed / 1 skipped in 704.94s, CLI 54
+  passed in 978.55s, aggregate status 0. All ten previously failing tests were among those that
+  passed, and the CLI lane's 54 are the same 54 the red verdict ran. The run self-labelled
+  `PARTIAL CI — NOT a full pass`; it skipped install, static, coverage, and integration, and it
+  differed from the red verdict in running lanes concurrently rather than under
+  `QS_E2E_PARALLEL=0`. It is a reproduction attempt, not a verdict.
+
+  **The recorded image anomaly was characterised, not fixed.** The red run's signature — five new
+  owner-only backend images and one vanished pre-existing image — reproduced exactly on the green
+  lane run: five `quickscale-backend` images carrying `com.quickscale.owner` and
+  `com.quickscale.image-contract=sa142` but empty `lifecycle` and `scope` labels, and one image
+  gone, while containers, volumes, and networks returned identical to baseline. The signature
+  therefore accompanies a passing run and is not evidence of failure. Whether SA142 build images
+  should carry lifecycle/scope labels remains an open product question, not a release blocker.
+
+  **The one behavioural change is in test teardown.** `--no-cleanup` preserving diagnostic state was
+  already specified in `validation_policy.md`, `docker_workflows.md`, and
+  `implementation_contract.md`, but five teardown paths ignored it: four in-test cleanup `down`
+  calls in `quickscale_cli/tests/test_e2e_development_workflow.py` and the `finally` reset in
+  `test_e2e_full_workflow.py::test_sa142_backend_image_reuse_and_warm_build`. Each now defers to the
+  retention predicate already present in its own module. The `down` calls that are themselves under
+  test are deliberately left unguarded, as are the per-iteration resets in the warm-build test,
+  which are measurement steps. Verified by running `test_logs_with_options` and
+  `test_sa142_backend_image_reuse_and_warm_build` under `QS_E2E_NO_CLEANUP=1`: both passed and both
+  retained their databases through teardown, and exact-scope cleanup afterwards returned containers
+  and volumes identical to baseline.
+
+  Verification: `make typecheck`, `ruff check` and `ruff format --check`, the ticket-context
+  consistency suite, the non-E2E tests in both changed modules, three E2E tests standalone, and the
+  partial lane run above. No full `make ci` has run against this tree; one is owed before tagging.
+
 - **Local-CI stage selection, test scoping variables, and failure replay (2026-09-07).**
   Developer tooling only. No product code changed, no gate was removed or weakened, no hosted
   workflow was touched, no ticket closed, and no release verdict changed. Every command that

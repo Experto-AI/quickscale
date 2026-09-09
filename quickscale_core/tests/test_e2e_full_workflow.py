@@ -2303,7 +2303,10 @@ class TestDockerIntegration:
                 assert warm_one < cold and warm_two < cold
                 assert cold - max(warm_one, warm_two) > warm_variability
         finally:
-            reset()
+            # Retained for diagnosis in no-cleanup mode; the per-iteration
+            # resets above are measurement steps and always run.
+            if os.environ.get("QS_E2E_NO_CLEANUP") != "1":
+                reset()
 
     @pytest.mark.e2e
     def test_sa142_no_cleanup_diagnostic_probe(self, tmp_path, docker_available):

@@ -831,9 +831,10 @@ class TestDevelopmentCommandsE2E:
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container (2nd up) did not become running"
 
-            # Final cleanup
-            result = runner.invoke(cli, ["down"], env=docker_env)
-            assert result.exit_code == 0
+            # Final cleanup (retained in no-cleanup mode)
+            if not _retain_e2e_resources():
+                result = runner.invoke(cli, ["down"], env=docker_env)
+                assert result.exit_code == 0
 
         finally:
             os.chdir(original_cwd)
@@ -859,8 +860,9 @@ class TestDevelopmentCommandsE2E:
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container did not become running within 40s"
 
-            # Cleanup
-            runner.invoke(cli, ["down"], env=docker_env)
+            # Cleanup (retained in no-cleanup mode)
+            if not _retain_e2e_resources():
+                runner.invoke(cli, ["down"], env=docker_env)
 
         finally:
             os.chdir(original_cwd)
@@ -923,8 +925,9 @@ class TestDevelopmentCommandsE2E:
             result = runner.invoke(cli, ["logs", "backend"], env=docker_env)
             assert result.exit_code == 0
 
-            # Cleanup
-            runner.invoke(cli, ["down"], env=docker_env)
+            # Cleanup (retained in no-cleanup mode)
+            if not _retain_e2e_resources():
+                runner.invoke(cli, ["down"], env=docker_env)
 
         finally:
             os.chdir(original_cwd)
@@ -1014,8 +1017,9 @@ class TestDevelopmentCommandsE2E:
                 or "ran 0 tests" in result.output.lower()
             ), f"Test command didn't run properly: {result.output}"
 
-            # Cleanup
-            runner.invoke(cli, ["down"], env=docker_env)
+            # Cleanup (retained in no-cleanup mode)
+            if not _retain_e2e_resources():
+                runner.invoke(cli, ["down"], env=docker_env)
 
         finally:
             os.chdir(original_cwd)
