@@ -74,7 +74,7 @@ class TestPublicSystemOrgReadMixinDispatch:
     def test_tenant_scoped_query_in_mixin_view(self) -> None:
         """A view using the mixin can run tenant-scoped queries in its
         handler and see rows for the resolved org."""
-        from quickscale_modules_blog.models import Category  # type: ignore[import-untyped]  # noqa: F401 — blog stubs not shipped
+        from quickscale_modules_blog.models import Category  # noqa: F401 — blog stubs not shipped
 
         org = Organization.objects.create(name="CBV-Query", slug="cbv-query")
         set_current_org_id(org.pk)
@@ -368,6 +368,26 @@ class TestGetClientIp:
             # With TRUSTED_PROXY_COUNT=2, client IP = ips[-2] = 192.168.1.10
             assert get_client_ip(request) == "192.168.1.10"
 
+    def test_rejects_attacker_controlled_leftmost_xff_entry(self) -> None:
+        """A trusted proxy count selects the rightmost vouched hop."""
+        from unittest.mock import MagicMock
+
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        remote_addr = "10.0.0.1"
+        attacker_ip = "203.0.113.50"
+        proxy_vouched_ip = "192.168.1.10"
+        request = MagicMock()
+        request.META = {
+            "REMOTE_ADDR": remote_addr,
+            "HTTP_X_FORWARDED_FOR": f"{attacker_ip}, {proxy_vouched_ip}",
+        }
+        with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT=1):
+            assert get_client_ip(request) == proxy_vouched_ip
+            assert get_client_ip(request) != attacker_ip
+
     def test_falls_back_to_remote_addr_when_xff_empty(self) -> None:
         """When X-Forwarded-For header is absent, falls back to REMOTE_ADDR."""
         from unittest.mock import MagicMock
@@ -399,6 +419,24 @@ class TestGetClientIp:
         with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT=2):
             # Chain has 1 entry but proxy_count expects 2 — fail-closed
             assert get_client_ip(request) == "10.0.0.1"
+
+    def test_falls_back_when_empty_xff_hops_inflate_chain(self) -> None:
+        """Empty XFF hops do not satisfy the trusted proxy count."""
+        from unittest.mock import MagicMock
+
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        remote_addr = "10.0.0.1"
+        request = MagicMock()
+        request.META = {
+            "REMOTE_ADDR": remote_addr,
+            "HTTP_X_FORWARDED_FOR": "203.0.113.50, , 192.168.1.10,   ",
+        }
+        with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT=3):
+            # Two non-empty hops remain, but proxy_count expects three.
+            assert get_client_ip(request) == remote_addr
 
     def test_returns_empty_string_when_remote_addr_unset(self) -> None:
         """When neither REMOTE_ADDR nor XFF is present, returns empty string."""
