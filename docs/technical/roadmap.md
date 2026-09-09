@@ -76,7 +76,7 @@ are yes.
 - **Can finish** — the emission fixture is released, so the single rebaseline can land with the rest
   of the delivery rather than waiting on another ticket.
 - **Can merge** — through the serialized queue, once the combined candidate is reviewed and its
-  generator-change release tier has run.
+  generator-change release tier has completed with an accepted verdict.
 
 SA160 is not yet **truly green** because its one fresh, scope-authorized Phase E release-gate
 attempt returned no verdict: the install, static, coverage, and integration stages passed, but the
@@ -147,8 +147,8 @@ or delivery evidence, not here.
   **Pending:** Phase E under the reviewed closeout authority independently reviewed the exact
   correction and invoked `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` once. Install, static, coverage,
   and integration passed; the E2E lanes were still running when the execution budget sent SIGTERM,
-  so the wrapper returned no process exit and no release verdict. Exact-scope cleanup succeeded and
-  preserved the standing PostgreSQL resources. **Blocking:** release acceptance, merge, and the
+  so the wrapper did not return a process exit or a release verdict. Exact-scope cleanup succeeded
+  and preserved the standing PostgreSQL resources. **Blocking:** release acceptance, merge, and the
   SA160/TA67/TA68 closeout remain open because no completed release verdict exists. The exact-once
   authority is spent; do not repeat accepted phases A, B, or D or invoke another release aggregate
   without fresh authority. The retained candidate and all prior evidence remain unchanged.
