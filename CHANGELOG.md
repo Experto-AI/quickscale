@@ -2,6 +2,27 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA160 Phase E no-verdict after the exact-once release attempt (2026-09-09).**
+  Fresh independent review bound the correction commit
+  `31a9376858535fdab2a4f5bb73ca447f50770490` to parent
+  `3b2caedf359ce88f58e2976e13e5eb09f855bc9c`, with `v88` at
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. The correction contained exactly the two
+  authorized taxonomy files and left all twelve retained product files byte-identical.
+
+  The exact command `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` ran once. Install, static,
+  coverage, and integration stages passed; the command reached the E2E stage and ran the Core and
+  CLI lanes for 16 minutes. The execution budget then sent SIGTERM, and the durable log ended with
+  `make: *** [Makefile:1443: ci-e2e] Error 143`. The wrapper did not return a process exit or write
+  its completion status before the budget expired, so this is a **no-verdict**, not a release red or
+  green result. No second aggregate was invoked because the exact-once authority was spent.
+
+  The interrupted run's exact labeled Core/CLI resources were removed with scoped
+  `docker compose down --volumes --remove-orphans`, both cleanup commands exited 0, and the
+  standing `qscaletest-postgres-1` and `pg18-af10` resources were preserved. Durable evidence is
+  retained under `.adaptive/evidence/sa160-phase-e/` in the release-closeout log, status, and cleanup
+  files. SA160 remains unchecked; TA67 and TA68 remain open; release acceptance, merge, publication,
+  and deployment remain withheld pending fresh authority for any future verdict.
+
 - **SA160 Phase E retained partial after red release-gate checkpoint (2026-09-09).**
   The freshly reviewed candidate remained bound to `HEAD`
   `266f0941a3248ab7979ab920ae8497ee418a7ef9`, with `v88` at

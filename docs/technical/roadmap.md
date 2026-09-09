@@ -67,7 +67,7 @@ are yes.
 
 | Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA160 | yes — no prerequisite | yes — fixture released | no — release tier red: taxonomy coverage failure | no — release tier red: taxonomy coverage failure | **yes** |
+| 1 | SA160 | yes — no prerequisite | yes — fixture released | no — release tier no-verdict: execution budget timeout | no — release tier no-verdict: execution budget timeout | **yes** |
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
@@ -78,10 +78,12 @@ are yes.
 - **Can merge** — through the serialized queue, once the combined candidate is reviewed and its
   generator-change release tier has run.
 
-SA160 is not yet **truly green** because its one reviewed Phase E release-gate attempt was red on
-beta-migration taxonomy coverage. The candidate is retained, but merge and release acceptance
-remain blocked until a scope-authorized correction receives fresh review and a new release-tier
-verdict; no second run is authorized by the reviewed Phase E plan.
+SA160 is not yet **truly green** because its one fresh, scope-authorized Phase E release-gate
+attempt returned no verdict: the install, static, coverage, and integration stages passed, but the
+execution budget terminated the E2E lanes before completion and before the wrapper returned a
+durable status. The correction was independently reviewed and the candidate is retained, but merge
+and release acceptance remain blocked. The exact-once authority is spent; no second aggregate is
+authorized by this phase.
 
 ### Ownership and merge coordination
 
@@ -132,9 +134,9 @@ or delivery evidence, not here.
 
 - [ ] **SA160 — Fix generated CSRF handling and remove dead settings helpers.**
 
-  **State (measured 2026-09-09): advanced partial retained on `wt-track1` at
-  `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7` and not merged into `v88`; the retained exact tip is
-  `266f0941a3248ab7979ab920ae8497ee418a7ef9`.** Phases A, B, and D are
+  **State (measured 2026-09-09): advanced partial retained on `wt-track1` at product commit
+  `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7`, with the exact correction tip
+  `31a9376858535fdab2a4f5bb73ca447f50770490`; neither is merged into `v88`.** Phases A, B, and D are
   accepted: both React callers use one exact-name, decoded, deterministic CSRF helper; the dead
   generated-settings helpers are removed while the live proxy contract remains; and all three
   emission variants are rebaselined with prior evidence preserved. Phase C remains formally
@@ -142,21 +144,14 @@ or delivery evidence, not here.
   removed that suppression and the combined frontend, Ruff, MyPy, and 39-test focused chain is
   green, but the phase ledger is not retroactively rewritten.
 
-  **Pending:** Phase E under reviewed plan authority `EV-6` was dispatched once. The exact
-  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` payload returned `exit_code=2` because
-  `quickscale_cli/tests/test_beta_migration_ownership_conformance.py::test_taxonomy_classifies_every_emitted_template`
-  found the two new emitted CSRF paths absent from the beta-migration taxonomy. The durable
-  evidence is recorded in the current SA160 Phase E changelog entry. **Blocking:** this taxonomy
-  coverage gap is outside Phase E's owned four-document closeout scope; merge and release acceptance
-  remain withheld, and no E2E lane result exists. Convergence corrected the retained checkpoint's
-  wording and ended blocked on that gap. Patch-backed terminal attestation reviewed the complete
-  twelve-file candidate at checkpoint commit `1fe695b3d643423327bd51b77dd63dbc22315a60`, raised no new
-  finding, independently confirmed the blocking taxonomy omission and the advisory malformed-percent
-  regression-test gap, and graded the candidate non-mergeable and non-releasable. **Decisions
-  needed:** authorize a separate scope correction and fresh candidate review/binding, or retain the
-  ticket until its owner supplies that correction. **Remaining plan:** preserve the retained
-  candidate and the open SA160/TA67/TA68 state; do not repeat accepted phases A, B, or D, and do not
-  run a second release gate under `EV-6`.
+  **Pending:** Phase E under the reviewed closeout authority independently reviewed the exact
+  correction and invoked `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` once. Install, static, coverage,
+  and integration passed; the E2E lanes were still running when the execution budget sent SIGTERM,
+  so the wrapper returned no process exit and no release verdict. Exact-scope cleanup succeeded and
+  preserved the standing PostgreSQL resources. **Blocking:** release acceptance, merge, and the
+  SA160/TA67/TA68 closeout remain open because no completed release verdict exists. The exact-once
+  authority is spent; do not repeat accepted phases A, B, or D or invoke another release aggregate
+  without fresh authority. The retained candidate and all prior evidence remain unchanged.
 
   **Acceptance:**
 
