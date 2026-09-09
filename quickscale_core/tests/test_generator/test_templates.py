@@ -1341,9 +1341,9 @@ class TestDrfPermissionBaseline:
 
 
 class TestClientIpAndSharedCache:
-    """Verify SA21.1 client-IP resolution and shared cache backend in generated settings."""
+    """Verify SA21.1 proxy settings and shared cache backend in generated settings."""
 
-    # ── Client-IP resolution (base.py) ─────────────────────────────────
+    # ── Trusted-proxy settings (base.py) ───────────────────────────────
 
     def test_use_x_forwarded_for_setting_present(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1387,15 +1387,20 @@ class TestClientIpAndSharedCache:
             in output
         )
 
-    def test_get_client_ip_function_defined(
+    def test_generated_settings_have_no_local_client_ip_helper(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Base settings must define get_client_ip()."""
-        output = _render_template(
+        """Generated settings must leave client-IP resolution to its live consumer."""
+        base_output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
-        assert "def get_client_ip(request" in output
-        assert "return request.META.get" in output
+        production_output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+
+        assert "def get_client_ip" not in base_output
+        assert "def get_client_ip" not in production_output
+        assert "Rebind client-IP resolution" not in production_output
 
     def test_num_proxies_in_rest_framework(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1422,211 +1427,6 @@ class TestClientIpAndSharedCache:
             "USE_X_FORWARDED_FOR must be defined before REST_FRAMEWORK"
         )
 
-    # ── Client-IP runtime behaviour ───────────────────────────────────
-
-    def test_get_client_ip_proxy_resolution(
-        self,
-        jinja_env: Environment,
-        test_context: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """get_client_ip should resolve the correct IP behind a trusted proxy."""
-        base_output = _render_template(
-            jinja_env, "project_name/settings/base.py.j2", test_context
-        )
-
-        package_name = test_context["package_name"]
-        settings_package_name = f"{package_name}.settings"
-        modules_name = f"{settings_package_name}.modules"
-
-        package_module = types.ModuleType(package_name)
-        package_module.__dict__["__path__"] = []
-        settings_package_module = types.ModuleType(settings_package_name)
-        settings_package_module.__dict__["__path__"] = []
-        modules_module = types.ModuleType(modules_name)
-        setattr(modules_module, "MODULE_INSTALLED_APPS", [])
-        setattr(modules_module, "MODULE_MIDDLEWARE", [])
-        setattr(modules_module, "MODULE_SETTINGS", {})
-
-        decouple_module = types.ModuleType("decouple")
-
-        def fake_config(
-            key: str,
-            default: object = "",
-            cast: Callable[[object], object] | None = None,
-        ) -> object:
-            values = {
-                "USE_X_FORWARDED_FOR": True,
-                "TRUSTED_PROXY_COUNT": 1,
-            }
-            value = values.get(key, default)
-            if cast is None:
-                return value
-            return cast(value)
-
-        setattr(decouple_module, "config", fake_config)
-
-        monkeypatch.setitem(sys.modules, package_name, package_module)
-        monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
-        monkeypatch.setitem(sys.modules, modules_name, modules_module)
-        monkeypatch.setitem(sys.modules, "decouple", decouple_module)
-
-        namespace: dict[str, object] = {
-            "__file__": f"/tmp/{package_name}/settings/base.py",
-            "__name__": f"{settings_package_name}.base",
-            "__package__": settings_package_name,
-        }
-        exec(base_output, namespace)
-
-        get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
-
-        # Honest single-hop behind one trusted proxy:
-        # the proxy adds the client's IP to X-Forwarded-For, producing
-        # a 1-entry chain.  The client IP is ips[-1].
-        class FakeRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1",
-            }
-
-        result = get_client_ip(FakeRequest())
-        assert result == "198.51.100.1", (
-            f"Expected client IP from X-Forwarded-For, got {result!r}"
-        )
-
-    def test_get_client_ip_falls_back_to_remote_addr_when_xff_unset(
-        self,
-        jinja_env: Environment,
-        test_context: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """get_client_ip should return REMOTE_ADDR when X-Forwarded-For is absent."""
-        base_output = _render_template(
-            jinja_env, "project_name/settings/base.py.j2", test_context
-        )
-
-        package_name = test_context["package_name"]
-        settings_package_name = f"{package_name}.settings"
-        modules_name = f"{settings_package_name}.modules"
-
-        package_module = types.ModuleType(package_name)
-        package_module.__dict__["__path__"] = []
-        settings_package_module = types.ModuleType(settings_package_name)
-        settings_package_module.__dict__["__path__"] = []
-        modules_module = types.ModuleType(modules_name)
-        setattr(modules_module, "MODULE_INSTALLED_APPS", [])
-        setattr(modules_module, "MODULE_MIDDLEWARE", [])
-        setattr(modules_module, "MODULE_SETTINGS", {})
-
-        decouple_module = types.ModuleType("decouple")
-
-        def fake_config(
-            key: str,
-            default: object = "",
-            cast: Callable[[object], object] | None = None,
-        ) -> object:
-            values = {
-                "USE_X_FORWARDED_FOR": True,
-                "TRUSTED_PROXY_COUNT": 1,
-            }
-            value = values.get(key, default)
-            if cast is None:
-                return value
-            return cast(value)
-
-        setattr(decouple_module, "config", fake_config)
-
-        monkeypatch.setitem(sys.modules, package_name, package_module)
-        monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
-        monkeypatch.setitem(sys.modules, modules_name, modules_module)
-        monkeypatch.setitem(sys.modules, "decouple", decouple_module)
-
-        namespace: dict[str, object] = {
-            "__file__": f"/tmp/{package_name}/settings/base.py",
-            "__name__": f"{settings_package_name}.base",
-            "__package__": settings_package_name,
-        }
-        exec(base_output, namespace)
-
-        get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
-
-        class FakeRequestNoXff:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-            }
-
-        result = get_client_ip(FakeRequestNoXff())
-        assert result == "10.0.0.1", f"Expected REMOTE_ADDR fallback, got {result!r}"
-
-    def test_get_client_ip_defaults_to_remote_addr_when_proxy_disabled(
-        self,
-        jinja_env: Environment,
-        test_context: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """With default settings (USE_X_FORWARDED_FOR=False), must return REMOTE_ADDR."""
-        base_output = _render_template(
-            jinja_env, "project_name/settings/base.py.j2", test_context
-        )
-
-        package_name = test_context["package_name"]
-        settings_package_name = f"{package_name}.settings"
-        modules_name = f"{settings_package_name}.modules"
-
-        package_module = types.ModuleType(package_name)
-        package_module.__dict__["__path__"] = []
-        settings_package_module = types.ModuleType(settings_package_name)
-        settings_package_module.__dict__["__path__"] = []
-        modules_module = types.ModuleType(modules_name)
-        setattr(modules_module, "MODULE_INSTALLED_APPS", [])
-        setattr(modules_module, "MODULE_MIDDLEWARE", [])
-        setattr(modules_module, "MODULE_SETTINGS", {})
-
-        decouple_module = types.ModuleType("decouple")
-
-        def fake_config(
-            key: str,
-            default: object = "",
-            cast: Callable[[object], object] | None = None,
-        ) -> object:
-            # Defaults — USE_X_FORWARDED_FOR=False, TRUSTED_PROXY_COUNT=0
-            values = {
-                "USE_X_FORWARDED_FOR": False,
-                "TRUSTED_PROXY_COUNT": 0,
-            }
-            value = values.get(key, default)
-            if cast is None:
-                return value
-            return cast(value)
-
-        setattr(decouple_module, "config", fake_config)
-
-        monkeypatch.setitem(sys.modules, package_name, package_module)
-        monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
-        monkeypatch.setitem(sys.modules, modules_name, modules_module)
-        monkeypatch.setitem(sys.modules, "decouple", decouple_module)
-
-        namespace: dict[str, object] = {
-            "__file__": f"/tmp/{package_name}/settings/base.py",
-            "__name__": f"{settings_package_name}.base",
-            "__package__": settings_package_name,
-        }
-        exec(base_output, namespace)
-
-        get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
-
-        class FakeRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1, 10.0.0.1",
-            }
-
-        # With proxy disabled, must return REMOTE_ADDR despite XFF being present
-        result = get_client_ip(FakeRequest())
-        assert result == "10.0.0.1", (
-            f"Expected REMOTE_ADDR when proxy disabled, got {result!r}"
-        )
-
     # ── Production proxy overrides ────────────────────────────────────
 
     def test_production_enables_proxy_settings(
@@ -1645,95 +1445,46 @@ class TestClientIpAndSharedCache:
             in output
         )
 
-    # ── Production defaults actually affect the runtime seam (CR-SA21.1) ──
-
-    def test_production_defaults_affect_proxy_seam(
+    def test_base_proxy_settings_import_with_defaults(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Production defaults for proxy settings must propagate to
-        ``get_client_ip()`` and ``NUM_PROXIES`` at runtime.
-
-        Regression for CR-SA21.1-001: the base defaults (disabled) must
-        be overridden by the production defaults (enabled, count=1) so
-        that a generated production deployment resolves the real client
-        IP without requiring explicit environment variables.
-        """
+        """Base settings should import with safe proxy defaults and no local resolver."""
         base_output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
-        production_output = _render_template(
-            jinja_env, "project_name/settings/production.py.j2", test_context
-        )
-
-        # Use the privileged-command path to bypass the RUNTIME_DATABASE_URL
-        # check — the proxy settings are resolved before that check.
-        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
 
         namespace = _execute_rendered_settings(
             monkeypatch=monkeypatch,
             package_name=test_context["package_name"],
             base_output=base_output,
-            target_output=production_output,
-            target_module_name="production",
-            config_values={
-                "SECRET_KEY": "a-valid-production-secret-key",
-                "DATABASE_URL": (
-                    "postgresql://postgres:postgres@localhost:5432/testproject"
-                ),
-                "RUNTIME_DATABASE_URL": "",  # explicitly blank for privileged command
-            },
+            target_output=base_output,
+            target_module_name="base",
+            config_values={},
         )
 
-        # Production defaults (no env overrides)
-        assert namespace["USE_X_FORWARDED_FOR"] is True
-        assert namespace["TRUSTED_PROXY_COUNT"] == 1
-
-        # NUM_PROXIES must reflect the production values, not base defaults
+        assert namespace["USE_X_FORWARDED_FOR"] is False
+        assert namespace["TRUSTED_PROXY_COUNT"] == 0
+        assert "get_client_ip" not in namespace
         rest_framework = namespace["REST_FRAMEWORK"]
         assert isinstance(rest_framework, dict)
-        assert rest_framework["NUM_PROXIES"] == 1, (
-            "NUM_PROXIES should be 1 with production defaults"
-        )
+        assert rest_framework["NUM_PROXIES"] is None
 
-        # get_client_ip must use production's globals at call time
-        get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
-
-        # Behind one proxy (honest single-hop) — should resolve to the
-        # client IP from the 1-entry XFF, not REMOTE_ADDR.
-        class _FakeRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1",
-            }
-
-        result = get_client_ip(_FakeRequest())
-        assert result == "198.51.100.1", (
-            f"Expected client IP from X-Forwarded-For with production "
-            f"defaults, got {result!r}"
-        )
-
-    def test_production_get_client_ip_rejects_malformed_xff_empty_hops(
+    def test_production_proxy_settings_import_with_defaults(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Production rebind of ``get_client_ip`` must also reject
-        malformed X-Forwarded-For chains with empty hops.
-
-        Regression for CR-SA21.1-002: the production seam must apply the
-        same empty-hop normalization as the base helper.
-        """
+        """Production settings should import with proxy defaults and recompute DRF."""
         base_output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
         production_output = _render_template(
             jinja_env, "project_name/settings/production.py.j2", test_context
         )
-
         monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
 
         namespace = _execute_rendered_settings(
@@ -1747,237 +1498,72 @@ class TestClientIpAndSharedCache:
                 "DATABASE_URL": (
                     "postgresql://postgres:postgres@localhost:5432/testproject"
                 ),
-                "RUNTIME_DATABASE_URL": "",  # explicitly blank for privileged command
+                "RUNTIME_DATABASE_URL": "",
             },
         )
 
-        get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
+        assert namespace["USE_X_FORWARDED_FOR"] is True
+        assert namespace["TRUSTED_PROXY_COUNT"] == 1
+        assert "get_client_ip" not in namespace
+        rest_framework = namespace["REST_FRAMEWORK"]
+        assert isinstance(rest_framework, dict)
+        assert rest_framework["NUM_PROXIES"] == 1
 
-        # Case 1: Trailing comma produces empty hop (the reported vector).
-        # Empty hops are correctly stripped, leaving one non-empty entry
-        # which satisfies the >= guard with TRUSTED_PROXY_COUNT=1.
-        class _FakeProdTrailingCommaRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "203.0.113.99, ",
-            }
-
-        result = get_client_ip(_FakeProdTrailingCommaRequest())
-        assert result == "203.0.113.99", (
-            f"Expected client IP from malformed XFF in production "
-            f"rebind (empty hops stripped), got {result!r}"
-        )
-
-        # Case 2: Trailing comma on an honest single-hop must not break
-        # resolution in the production rebind.
-        class _FakeProdValidTrailingCommaRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1, ",
-            }
-
-        result = get_client_ip(_FakeProdValidTrailingCommaRequest())
-        assert result == "198.51.100.1", (
-            f"Expected client IP from valid XFF with trailing comma "
-            f"in production rebind, got {result!r}"
-        )
-
-    def test_get_client_ip_attacker_xff_not_returned(
+    def test_proxy_settings_honor_config_overrides(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When an attacker injects a spoofed ``X-Forwarded-For`` entry,
-        the function must not return the attacker-controlled value.
-
-        SA36 regression: the original off-by-one guard (``>``) and index
-        (``-(N+1)``) let an attacker who sent a single spoofed XFF entry
-        impersonate any IP.  With the corrected ``>=`` guard and
-        ``-N`` index, the rightmost entry (vouched for by the trusted
-        proxy) is returned instead of the leftmost (attacker-controlled).
-        """
+        """Rendered settings should preserve explicit proxy overrides in DRF."""
         base_output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
+        production_output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
 
-        package_name = test_context["package_name"]
-        settings_package_name = f"{package_name}.settings"
-        modules_name = f"{settings_package_name}.modules"
-
-        package_module = types.ModuleType(package_name)
-        package_module.__dict__["__path__"] = []
-        settings_package_module = types.ModuleType(settings_package_name)
-        settings_package_module.__dict__["__path__"] = []
-        modules_module = types.ModuleType(modules_name)
-        setattr(modules_module, "MODULE_INSTALLED_APPS", [])
-        setattr(modules_module, "MODULE_MIDDLEWARE", [])
-        setattr(modules_module, "MODULE_SETTINGS", {})
-
-        decouple_module = types.ModuleType("decouple")
-
-        def fake_config(
-            key: str,
-            default: object = "",
-            cast: Callable[[object], object] | None = None,
-        ) -> object:
-            values = {
+        base_namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=base_output,
+            target_module_name="base",
+            config_values={
                 "USE_X_FORWARDED_FOR": True,
-                "TRUSTED_PROXY_COUNT": 1,
-            }
-            value = values.get(key, default)
-            if cast is None:
-                return value
-            return cast(value)
-
-        setattr(decouple_module, "config", fake_config)
-
-        monkeypatch.setitem(sys.modules, package_name, package_module)
-        monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
-        monkeypatch.setitem(sys.modules, modules_name, modules_module)
-        monkeypatch.setitem(sys.modules, "decouple", decouple_module)
-
-        namespace: dict[str, object] = {
-            "__file__": f"/tmp/{package_name}/settings/base.py",
-            "__name__": f"{settings_package_name}.base",
-            "__package__": settings_package_name,
-        }
-        exec(base_output, namespace)
-
-        get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
-
-        # Attacker sends a spoofed XFF.  The trusted proxy appends the
-        # attacker's real IP, producing a 2-entry chain.  With
-        # TRUSTED_PROXY_COUNT=1, the rightmost entry (proxy-vouched)
-        # must be returned — not the attacker-controlled leftmost.
-        class _FakeAttackerXffRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "203.0.113.99, 198.51.100.1",
-            }
-
-        result = get_client_ip(_FakeAttackerXffRequest())
-        assert result == "198.51.100.1", (
-            f"Expected proxy-vouched IP (rightmost), not attacker-controlled "
-            f"leftmost, got {result!r}"
+                "TRUSTED_PROXY_COUNT": 3,
+            },
         )
+        assert base_namespace["USE_X_FORWARDED_FOR"] is True
+        assert base_namespace["TRUSTED_PROXY_COUNT"] == 3
+        base_rest_framework = base_namespace["REST_FRAMEWORK"]
+        assert isinstance(base_rest_framework, dict)
+        assert base_rest_framework["NUM_PROXIES"] == 3
+        assert "get_client_ip" not in base_namespace
 
-    def test_get_client_ip_rejects_malformed_xff_empty_hops(
-        self,
-        jinja_env: Environment,
-        test_context: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Trailing commas or empty hops in X-Forwarded-For must not
-        inflate the hop count and bypass the fail-closed guard.
-
-        Regression for CR-SA21.1-002: empty hops from malformed chains
-        like ``"203.0.113.99, "`` would previously produce a two-element
-        split so the length check passed and the spoofed leftmost value
-        was returned.
-        """
-        base_output = _render_template(
-            jinja_env, "project_name/settings/base.py.j2", test_context
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
+        production_namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values={
+                "SECRET_KEY": "a-valid-production-secret-key",
+                "DATABASE_URL": (
+                    "postgresql://postgres:postgres@localhost:5432/testproject"
+                ),
+                "RUNTIME_DATABASE_URL": "",
+                "USE_X_FORWARDED_FOR": False,
+                "TRUSTED_PROXY_COUNT": 0,
+            },
         )
-
-        package_name = test_context["package_name"]
-        settings_package_name = f"{package_name}.settings"
-        modules_name = f"{settings_package_name}.modules"
-
-        package_module = types.ModuleType(package_name)
-        package_module.__dict__["__path__"] = []
-        settings_package_module = types.ModuleType(settings_package_name)
-        settings_package_module.__dict__["__path__"] = []
-        modules_module = types.ModuleType(modules_name)
-        setattr(modules_module, "MODULE_INSTALLED_APPS", [])
-        setattr(modules_module, "MODULE_MIDDLEWARE", [])
-        setattr(modules_module, "MODULE_SETTINGS", {})
-
-        decouple_module = types.ModuleType("decouple")
-
-        def fake_config(
-            key: str,
-            default: object = "",
-            cast: Callable[[object], object] | None = None,
-        ) -> object:
-            values = {
-                "USE_X_FORWARDED_FOR": True,
-                "TRUSTED_PROXY_COUNT": 1,
-            }
-            value = values.get(key, default)
-            if cast is None:
-                return value
-            return cast(value)
-
-        setattr(decouple_module, "config", fake_config)
-
-        monkeypatch.setitem(sys.modules, package_name, package_module)
-        monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
-        monkeypatch.setitem(sys.modules, modules_name, modules_module)
-        monkeypatch.setitem(sys.modules, "decouple", decouple_module)
-
-        namespace: dict[str, object] = {
-            "__file__": f"/tmp/{package_name}/settings/base.py",
-            "__name__": f"{settings_package_name}.base",
-            "__package__": settings_package_name,
-        }
-        exec(base_output, namespace)
-
-        get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
-
-        # Case 1: Trailing comma produces empty hop (the reported vector).
-        # Empty hops are correctly stripped, leaving one non-empty entry
-        # which satisfies the >= guard with TRUSTED_PROXY_COUNT=1.
-        class _FakeTrailingCommaRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "203.0.113.99, ",
-            }
-
-        result = get_client_ip(_FakeTrailingCommaRequest())
-        assert result == "203.0.113.99", (
-            f"Expected client IP from malformed XFF (empty hops stripped), "
-            f"got {result!r}"
-        )
-
-        # Case 2: Double trailing comma — multiple empty trailing hops.
-        # All empty hops are stripped, leaving one non-empty entry.
-        class _FakeDoubleTrailingCommaRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "203.0.113.99, , ",
-            }
-
-        result = get_client_ip(_FakeDoubleTrailingCommaRequest())
-        assert result == "203.0.113.99", (
-            f"Expected client IP from malformed XFF (empty hops stripped), "
-            f"got {result!r}"
-        )
-
-        # Case 3: Trailing comma on an honest single-hop must not break
-        # resolution — the non-empty hops are still correctly counted.
-        class _FakeValidWithTrailingCommaRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1, ",
-            }
-
-        result = get_client_ip(_FakeValidWithTrailingCommaRequest())
-        assert result == "198.51.100.1", (
-            f"Expected client IP from valid XFF with trailing comma, got {result!r}"
-        )
-
-        # Case 4: Only whitespace between commas — all hops empty
-        class _FakeAllEmptyHopsRequest:
-            META: dict[str, str] = {
-                "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": ", , ",
-            }
-
-        result = get_client_ip(_FakeAllEmptyHopsRequest())
-        assert result == "10.0.0.1", (
-            f"Expected REMOTE_ADDR for all-empty XFF, got {result!r}"
-        )
+        assert production_namespace["USE_X_FORWARDED_FOR"] is False
+        assert production_namespace["TRUSTED_PROXY_COUNT"] == 0
+        production_rest_framework = production_namespace["REST_FRAMEWORK"]
+        assert isinstance(production_rest_framework, dict)
+        assert production_rest_framework["NUM_PROXIES"] is None
+        assert "get_client_ip" not in production_namespace
 
     # ── Shared cache (production.py) ──────────────────────────────────
 
@@ -2031,7 +1617,7 @@ class TestClientIpAndSharedCache:
     def test_client_ip_valid_python(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Base settings including get_client_ip must produce valid Python."""
+        """Base settings without a local client-IP helper must produce valid Python."""
         output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )

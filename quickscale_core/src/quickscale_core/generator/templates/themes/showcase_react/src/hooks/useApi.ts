@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { getCsrfToken } from '@/lib/csrf'
 
 export class ApiError extends Error {
   status: number
@@ -15,16 +16,6 @@ export class ApiError extends Error {
 interface UseApiQueryOptions {
   enabled?: boolean
   retry?: boolean
-}
-
-function getCsrfToken(): string {
-  const name = 'csrftoken'
-  const value = `; ${document.cookie}`
-  const parts = value.split(`; ${name}=`)
-  if (parts.length === 2) {
-    return parts.pop()?.split(';').shift() ?? ''
-  }
-  return ''
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

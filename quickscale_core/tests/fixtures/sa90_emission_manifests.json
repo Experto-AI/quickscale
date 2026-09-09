@@ -32,7 +32,8 @@
       "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 — added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants).",
       "sa112d": "Regenerated 2026-08-18 — Dockerfile collectstatic now sets one-shot QUICKSCALE_ALLOW_BYPASSRLS=1 alongside QUICKSCALE_NON_DB_COMMAND so the orgs startup guard does not probe the deliberately absent build-time database. 1 fixture hash updated: Dockerfile (all 3 variants).",
       "sa142": "Regenerated 2026-08-25 — Dockerfile: added fixed QuickScale owner/SA142 contract/bound-digest final-image labels and their digest/contract build args; docker-compose.yml: added stable backend image/direct-Compose fallback, validated resource-prefix interpolation, and fixed owner/lifecycle/scope labels for every generated service, named volume, and default network. Only these two generated files changed; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa170-c-correct": "Regenerated 2026-09-04 — db/init.sql now records the quickscale.init_complete database sentinel after every required initialization statement succeeds; docker-compose.yml now probes that sentinel instead of accepting PostgreSQL connection readiness alone. Only these two generated files changed in all three variants; all unrelated paths, hashes, and modes remain authoritative."
+      "sa170-c-correct": "Regenerated 2026-09-04 — db/init.sql now records the quickscale.init_complete database sentinel after every required initialization statement succeeds; docker-compose.yml now probes that sentinel instead of accepting PostgreSQL connection readiness alone. Only these two generated files changed in all three variants; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa160": "Regenerated 2026-09-09 — frontend/src/lib/csrf.ts: added the shared exact-name CSRF cookie parser with decoding and deterministic first-match behavior; frontend/src/test/csrf.test.tsx: added the rendered cookie and caller-parity regression coverage; frontend/src/hooks/useApi.ts: replaced its local parser with the shared helper for mutating request headers; frontend/src/components/forms/FormRenderer.tsx: replaced its duplicate parser with the shared helper for form submissions; testproject/settings/base.py: removed the unreachable generated get_client_ip helper while preserving uppercase proxy settings and the proxy-math contract; testproject/settings/production.py: removed the unreachable generated get_client_ip helper and rebind prose while preserving production proxy settings. These six authorized paths were freshly regenerated, hashed, and mode-normalized in react_default, react_empty, and react_selected; all other entries remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -150,7 +151,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "c18159a28e046109a297f47c4b13ef1f4bd4f69c3526c47fd24f52446fbc0b09"
+      "sha256": "0a2768f033c014ca1ee9591b9e9a40ee3c6356df0ff9962a8b63abe5c50eaea6"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -230,7 +231,7 @@
     },
     "frontend/src/hooks/useApi.ts": {
       "mode": "664",
-      "sha256": "3b5018173bc867a012134ed8131f46ad5cc030cfe325330ab0522948104e5677"
+      "sha256": "778484bf9dd44c058b8dca5a8dfe38da40be1cf966b40b1528bd8a7480802b1e"
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
@@ -259,6 +260,10 @@
     "frontend/src/lib/analytics.ts": {
       "mode": "664",
       "sha256": "72e6495f33f96104895a3401539d4a66ad8560924c5f479bd00d606db5bdaec9"
+    },
+    "frontend/src/lib/csrf.ts": {
+      "mode": "664",
+      "sha256": "5f5606a8b8f3557a9cd8082b93db764344a276e743311c4852e8e95d854fa9d9"
     },
     "frontend/src/lib/utils.ts": {
       "mode": "664",
@@ -360,6 +365,10 @@
       "mode": "664",
       "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
     },
+    "frontend/src/test/csrf.test.tsx": {
+      "mode": "664",
+      "sha256": "c7d3910e8baf5854ee5bb09d0d69621d40f7d2608bf9089665511f6a88fa5aa2"
+    },
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
@@ -458,7 +467,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "2d46e2d9f579d4ac55c2b5b9e93a6189c567edbe3b688d27d31dd37f3a294056"
+      "sha256": "4e7284cb96456e1f6e5409baef08953e9581d042ab01fcd216b98f29a7143606"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -470,7 +479,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "95acecb20f06e51f83503581788ff225b81986847861b6ef442e34822becd839"
+      "sha256": "d635981ec9d5a0bbd8c795d14dced21a8decf9d96dbdf639712f80026e31bbd1"
     },
     "testproject/urls.py": {
       "mode": "664",
@@ -608,7 +617,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "c18159a28e046109a297f47c4b13ef1f4bd4f69c3526c47fd24f52446fbc0b09"
+      "sha256": "0a2768f033c014ca1ee9591b9e9a40ee3c6356df0ff9962a8b63abe5c50eaea6"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -688,7 +697,7 @@
     },
     "frontend/src/hooks/useApi.ts": {
       "mode": "664",
-      "sha256": "3b5018173bc867a012134ed8131f46ad5cc030cfe325330ab0522948104e5677"
+      "sha256": "778484bf9dd44c058b8dca5a8dfe38da40be1cf966b40b1528bd8a7480802b1e"
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
@@ -717,6 +726,10 @@
     "frontend/src/lib/analytics.ts": {
       "mode": "664",
       "sha256": "72e6495f33f96104895a3401539d4a66ad8560924c5f479bd00d606db5bdaec9"
+    },
+    "frontend/src/lib/csrf.ts": {
+      "mode": "664",
+      "sha256": "5f5606a8b8f3557a9cd8082b93db764344a276e743311c4852e8e95d854fa9d9"
     },
     "frontend/src/lib/utils.ts": {
       "mode": "664",
@@ -818,6 +831,10 @@
       "mode": "664",
       "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
     },
+    "frontend/src/test/csrf.test.tsx": {
+      "mode": "664",
+      "sha256": "c7d3910e8baf5854ee5bb09d0d69621d40f7d2608bf9089665511f6a88fa5aa2"
+    },
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
@@ -916,7 +933,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "2d46e2d9f579d4ac55c2b5b9e93a6189c567edbe3b688d27d31dd37f3a294056"
+      "sha256": "4e7284cb96456e1f6e5409baef08953e9581d042ab01fcd216b98f29a7143606"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -928,7 +945,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "95acecb20f06e51f83503581788ff225b81986847861b6ef442e34822becd839"
+      "sha256": "d635981ec9d5a0bbd8c795d14dced21a8decf9d96dbdf639712f80026e31bbd1"
     },
     "testproject/urls.py": {
       "mode": "664",
@@ -1066,7 +1083,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "c18159a28e046109a297f47c4b13ef1f4bd4f69c3526c47fd24f52446fbc0b09"
+      "sha256": "0a2768f033c014ca1ee9591b9e9a40ee3c6356df0ff9962a8b63abe5c50eaea6"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -1146,7 +1163,7 @@
     },
     "frontend/src/hooks/useApi.ts": {
       "mode": "664",
-      "sha256": "3b5018173bc867a012134ed8131f46ad5cc030cfe325330ab0522948104e5677"
+      "sha256": "778484bf9dd44c058b8dca5a8dfe38da40be1cf966b40b1528bd8a7480802b1e"
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
@@ -1175,6 +1192,10 @@
     "frontend/src/lib/analytics.ts": {
       "mode": "664",
       "sha256": "72e6495f33f96104895a3401539d4a66ad8560924c5f479bd00d606db5bdaec9"
+    },
+    "frontend/src/lib/csrf.ts": {
+      "mode": "664",
+      "sha256": "5f5606a8b8f3557a9cd8082b93db764344a276e743311c4852e8e95d854fa9d9"
     },
     "frontend/src/lib/utils.ts": {
       "mode": "664",
@@ -1276,6 +1297,10 @@
       "mode": "664",
       "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
     },
+    "frontend/src/test/csrf.test.tsx": {
+      "mode": "664",
+      "sha256": "c7d3910e8baf5854ee5bb09d0d69621d40f7d2608bf9089665511f6a88fa5aa2"
+    },
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
@@ -1374,7 +1399,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "2d46e2d9f579d4ac55c2b5b9e93a6189c567edbe3b688d27d31dd37f3a294056"
+      "sha256": "4e7284cb96456e1f6e5409baef08953e9581d042ab01fcd216b98f29a7143606"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -1386,7 +1411,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "95acecb20f06e51f83503581788ff225b81986847861b6ef442e34822becd839"
+      "sha256": "d635981ec9d5a0bbd8c795d14dced21a8decf9d96dbdf639712f80026e31bbd1"
     },
     "testproject/urls.py": {
       "mode": "664",

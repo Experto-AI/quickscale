@@ -11,6 +11,7 @@ import { FormFieldRenderer } from '@/components/forms/FormFieldRenderer'
 import { FormSuccess } from '@/components/forms/FormSuccess'
 import { useFormSchema } from '@/hooks/useFormSchema'
 import type { FormFieldSchema } from '@/hooks/useFormSchema'
+import { getCsrfToken } from '@/lib/csrf'
 
 interface FormRendererProps {
   slug: string
@@ -201,12 +202,4 @@ export function FormRenderer({ slug, apiBasePath }: FormRendererProps) {
       </Form>
     </div>
   )
-}
-
-function getCsrfToken(): string {
-  const name = 'csrftoken'
-  const value = `; ${document.cookie}`
-  const parts = value.split(`; ${name}=`)
-  if (parts.length === 2) return parts.pop()?.split(';').shift() ?? ''
-  return ''
 }

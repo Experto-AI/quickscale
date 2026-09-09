@@ -595,11 +595,13 @@ def install_priming_wrapper(connection: Any) -> bool:
 # ---------------------------------------------------------------------------
 # SA21.2 — shared canonical client-IP resolver for module/runtime code
 # ---------------------------------------------------------------------------
-# Provides an importable ``get_client_ip(request)`` that mirrors the
-# generated settings helper from SA21.1/SA36.  Both forms and blog use it
-# (they already depend on orgs) instead of reading ``REMOTE_ADDR`` directly.
+# Provides the importable live runtime resolver ``get_client_ip(request)`` for
+# forms, blog, and other module callers.  Generated settings supply
+# ``USE_X_FORWARDED_FOR``/``TRUSTED_PROXY_COUNT`` for this resolver and DRF
+# ``NUM_PROXIES`` for matching framework behavior; it consumes the uppercase
+# proxy settings dynamically.
 #
-# Semantics (identical to the generated template):
+# Semantics:
 # * When ``USE_X_FORWARDED_FOR`` is truthy and ``TRUSTED_PROXY_COUNT > 0``,
 #   resolve the real client IP from the ``X-Forwarded-For`` chain (counting
 #   ``-TRUSTED_PROXY_COUNT`` from the right, matching DRF NUM_PROXIES).
