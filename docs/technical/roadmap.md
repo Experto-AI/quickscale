@@ -153,6 +153,44 @@ or delivery evidence, not here.
   authority is spent; do not repeat accepted phases A, B, or D or invoke another release aggregate
   without fresh authority. The retained candidate and all prior evidence remain unchanged.
 
+  **Retained checkpoint (terminally reviewed 2026-09-09):**
+
+  - **Completed:** ***corrected after checkpoint attestation — not independently graded*** Phases A,
+    B, and D are accepted: their CSRF, generated-settings, and emission changes remain retained on
+    `wt-track1`. Phase C's live client-IP resolver comment and tests are also retained and terminally
+    reviewed as sound, but its implementation handback remains formally partial. That distinction
+    does not imply SA160, release, merge, or TA67/TA68 closure. The two emitted CSRF paths are now
+    classified explicitly as user-owned U7 files in both the executable beta-migration taxonomy and
+    its ownership inventory. Focused taxonomy and status-consistency checks are green, and the exact
+    release attempt's install, static, coverage, and integration stages completed before the
+    no-verdict E2E timeout.
+  - **Pending:** add direct generated Vitest proof for an empty `document.cookie`, rebaseline the
+    resulting `csrf.test.tsx` hash in the `react_default`, `react_empty`, and `react_selected`
+    emission manifests, run the rendered Vitest and emission-parity checks, independently review the
+    newly bound candidate, and obtain a completed release-tier verdict under fresh authority.
+  - **Blocking:** the current Vitest table proves a missing `csrftoken` only with a non-empty
+    `sessionid` cookie; it does not exercise the acceptance requirement where `document.cookie` is
+    the empty string. This closes only when an explicit empty-cookie case asserts that
+    `getCsrfToken()` returns `''` and the three manifest variants plus rendered/parity checks agree.
+    Separately, the sole authorized release aggregate has no verdict because E2E did not complete;
+    release acceptance and merge close only after a fresh, independently bound run completes green
+    with successful scoped cleanup. Until both blockers close, SA160, TA67, and TA68 stay open and
+    the candidate must not merge into `v88`.
+  - **Decisions needed:** authorize the coupled `csrf.test.tsx` and three-variant emission-manifest
+    correction, then authorize one separately reviewed release attempt with an execution budget
+    sufficient to let the E2E lanes return a verdict.
+  - **Remaining plan:** start from the retained `wt-track1` state reviewed at
+    `38a538af912804cf9f61ff241ca3b3b57961f0cd`; implement only the explicit empty-cookie test and
+    coupled manifest hashes; run rendered Vitest and emission consistency; bind and independently
+    review the new exact tip; then run one newly authorized release aggregate. On green, reconcile
+    and close SA160/TA67/TA68 and merge through the serialized queue. On red or no-verdict, retain a
+    new truthful checkpoint. Do not redo accepted implementation or taxonomy work, and do not absorb
+    the unrelated `validateQuickScaleSeam.test.ts` inventory drift.
+
+  **Advisory, not blocking:** malformed percent encoding currently fails closed to an empty token,
+  but a dedicated generated Vitest remains optional future hardening and is not part of SA160's
+  remaining merge gate.
+
   **Acceptance:**
 
   - Replace the duplicate cookie parsers in `themes/showcase_react/src/hooks/useApi.ts` and
