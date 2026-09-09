@@ -146,13 +146,17 @@ or delivery evidence, not here.
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` payload returned `exit_code=2` because
   `quickscale_cli/tests/test_beta_migration_ownership_conformance.py::test_taxonomy_classifies_every_emitted_template`
   found the two new emitted CSRF paths absent from the beta-migration taxonomy. The durable
-  evidence is recorded in the current SA160 Phase E changelog entry. **Blocking:** this taxonomy coverage gap is
-  outside Phase E's owned four-document closeout scope; merge and release acceptance remain
-  withheld, and no post-gate terminal attestation or E2E lane result exists. **Decisions needed:** authorize a
-  separate scope correction and fresh candidate review/binding, or retain the ticket until its
-  owner supplies that correction. **Remaining plan:** preserve the retained candidate and the
-  open SA160/TA67/TA68 state; do not repeat accepted phases A, B, or D, and do not run a second
-  release gate under `EV-6`.
+  evidence is recorded in the current SA160 Phase E changelog entry. **Blocking:** this taxonomy
+  coverage gap is outside Phase E's owned four-document closeout scope; merge and release acceptance
+  remain withheld, and no E2E lane result exists. Convergence corrected the retained checkpoint's
+  wording and ended blocked on that gap. Patch-backed terminal attestation reviewed the complete
+  twelve-file candidate at checkpoint commit `1fe695b3d643423327bd51b77dd63dbc22315a60`, raised no new
+  finding, independently confirmed the blocking taxonomy omission and the advisory malformed-percent
+  regression-test gap, and graded the candidate non-mergeable and non-releasable. **Decisions
+  needed:** authorize a separate scope correction and fresh candidate review/binding, or retain the
+  ticket until its owner supplies that correction. **Remaining plan:** preserve the retained
+  candidate and the open SA160/TA67/TA68 state; do not repeat accepted phases A, B, or D, and do not
+  run a second release gate under `EV-6`.
 
   **Acceptance:**
 

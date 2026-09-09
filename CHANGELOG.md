@@ -17,9 +17,13 @@
   `frontend/src/test/csrf.test.tsx` are not classified by a beta-migration taxonomy tuple. The
   campaign recorded 5,090 passed and 2 skipped tests; the following backup campaign recorded
   332 passed and 1 skipped, and coverage thresholds were met at an equal-weight mean of 93.12%.
-  The gate therefore did not reach the integration or E2E lanes. The gate result is red; no
-  post-gate terminal attestation, release acceptance, merge, publication, or deployment exists.
-  Post-run inspection found no new
+  The gate therefore did not reach the integration or E2E lanes. The gate result is red, so release
+  acceptance, merge, publication, and deployment remain withheld. Subsequent convergence and
+  patch-backed terminal attestation reviewed the complete twelve-file candidate at checkpoint commit
+  `1fe695b3d643423327bd51b77dd63dbc22315a60`. The attestation found no new defect, confirmed the
+  retained product behavior is sound, independently confirmed the blocking taxonomy omission and the
+  advisory malformed-percent regression-test gap, and graded the candidate non-mergeable and
+  non-releasable. Post-run inspection found no new
   run-scoped containers, networks, or volumes; the standing `qscaletest-postgres-1` and
   `pg18-af10` resources were preserved.
 
