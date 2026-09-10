@@ -24,6 +24,7 @@ import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, cast
+from urllib.parse import urljoin
 
 import pytest
 
@@ -1540,7 +1541,7 @@ class TestGeneratedProjectRuntimeSmoke:
     def test_production_shell_csrf_token_accepts_authenticated_org_mutation(
         self, tmp_path: Path, postgres_url: str
     ) -> None:
-        """The production React bootstrap token must pass enforced Django CSRF."""
+        """The generated production UI must pass enforced Django CSRF."""
         from quickscale_cli.commands.module_config import (
             get_default_auth_config,
             get_default_orgs_config,
@@ -1595,87 +1596,395 @@ class TestGeneratedProjectRuntimeSmoke:
                 "DATABASE_URL": postgres_url,
                 "RUNTIME_DATABASE_URL": "",
                 "QUICKSCALE_ALLOW_BYPASSRLS": "1",
-                "ALLOWED_HOSTS": "testserver,localhost,127.0.0.1",
+                "ALLOWED_HOSTS": "localhost,127.0.0.1",
             }
         )
+        production_environment.pop("REDIS_URL", None)
+        production_environment.pop("QUICKSCALE_PRIVILEGED_COMMAND", None)
+        production_environment.pop("QUICKSCALE_NON_DB_COMMAND", None)
+
+        migration_environment = {
+            **production_environment,
+            "QUICKSCALE_PRIVILEGED_COMMAND": "migrate",
+        }
+        migration_environment.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
+        assert migration_environment["RUNTIME_DATABASE_URL"] == ""
         migrate_result = subprocess.run(
             ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
             cwd=project_path,
             capture_output=True,
             text=True,
             timeout=180,
-            env={**production_environment, "QUICKSCALE_PRIVILEGED_COMMAND": "migrate"},
+            env=migration_environment,
         )
         assert migrate_result.returncode == 0, (
             f"production migration failed:\n{migrate_result.stdout}\n"
             f"{migrate_result.stderr}"
         )
 
-        probe = textwrap.dedent(
+        cache_environment = {
+            **production_environment,
+            "QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable",
+        }
+        cache_environment.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
+        assert cache_environment["RUNTIME_DATABASE_URL"] == ""
+        cache_result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "createcachetable"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env=cache_environment,
+        )
+        assert cache_result.returncode == 0, (
+            f"production createcachetable failed:\n{cache_result.stdout}\n"
+            f"{cache_result.stderr}"
+        )
+
+        frontend_path = project_path / "frontend"
+        assert shutil.which("pnpm") is not None, "pnpm is required for production E2E"
+        frontend_install_result = subprocess.run(
+            ["pnpm", "install"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert frontend_install_result.returncode == 0, (
+            f"generated frontend install failed:\n{frontend_install_result.stdout}\n"
+            f"{frontend_install_result.stderr}"
+        )
+        frontend_typecheck_result = subprocess.run(
+            ["pnpm", "run", "type-check"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+        assert frontend_typecheck_result.returncode == 0, (
+            f"generated frontend type-check failed:\n"
+            f"{frontend_typecheck_result.stdout}\n{frontend_typecheck_result.stderr}"
+        )
+        frontend_build_result = subprocess.run(
+            ["pnpm", "run", "build"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+        assert frontend_build_result.returncode == 0, (
+            f"generated frontend build failed:\n{frontend_build_result.stdout}\n"
+            f"{frontend_build_result.stderr}"
+        )
+
+        collectstatic_environment = {
+            **production_environment,
+            "QUICKSCALE_NON_DB_COMMAND": "collectstatic",
+        }
+        assert "QUICKSCALE_PRIVILEGED_COMMAND" not in collectstatic_environment
+        collectstatic_result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "collectstatic", "--noinput"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env=collectstatic_environment,
+        )
+        assert collectstatic_result.returncode == 0, (
+            f"production collectstatic failed:\n{collectstatic_result.stdout}\n"
+            f"{collectstatic_result.stderr}"
+        )
+
+        credential_probe = textwrap.dedent(
             """
-            import json
-            from html.parser import HTMLParser
-
             import django
-            from django.contrib.auth import get_user_model
-            from django.test import Client, override_settings
-
-            class CsrfMetaParser(HTMLParser):
-                def __init__(self):
-                    super().__init__()
-                    self.token = None
-
-                def handle_starttag(self, tag, attrs):
-                    attributes = dict(attrs)
-                    if tag == "meta" and attributes.get("name") == "csrf-token":
-                        self.token = attributes.get("content")
 
             django.setup()
-            user = get_user_model().objects.create_user(
-                username="sa160-csrf-user",
-                password="unused-test-password",
-            )
-            client = Client(enforce_csrf_checks=True)
-            client.force_login(user)
-            staticfiles_storage = {
-                "default": {
-                    "BACKEND": "django.core.files.storage.FileSystemStorage",
-                },
-                "staticfiles": {
-                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-                },
-            }
-            with override_settings(STORAGES=staticfiles_storage):
-                shell_response = client.get("/orgs/", secure=True)
-            assert shell_response.status_code == 200, shell_response.status_code
-            parser = CsrfMetaParser()
-            parser.feed(shell_response.content.decode())
-            assert parser.token
-            mutation_response = client.post(
-                "/api/orgs/",
-                data=json.dumps({"name": "SA160 CSRF Organization"}),
-                content_type="application/json",
-                HTTP_X_CSRFTOKEN=parser.token,
-                secure=True,
-            )
-            assert mutation_response.status_code == 201, (
-                mutation_response.status_code,
-                mutation_response.content,
+            from django.contrib.auth import get_user_model
+
+            get_user_model().objects.create_user(
+                username="sa160_browser_user",
+                email="sa160_browser_user@example.test",
+                password="sa160-browser-password",
             )
             """
         )
-        probe_result = subprocess.run(
-            ["poetry", "run", "python", "-c", probe],
+        credential_result = subprocess.run(
+            ["poetry", "run", "python", "-c", credential_probe],
             cwd=project_path,
             capture_output=True,
             text=True,
             timeout=120,
             env=production_environment,
         )
-        assert probe_result.returncode == 0, (
-            f"production CSRF probe failed:\n{probe_result.stdout}\n"
-            f"{probe_result.stderr}"
+        assert credential_result.returncode == 0, (
+            f"generated credential creation failed:\n{credential_result.stdout}\n"
+            f"{credential_result.stderr}"
         )
+
+        server_port = _find_free_port()
+        assert "QUICKSCALE_PRIVILEGED_COMMAND" not in production_environment
+        assert "QUICKSCALE_NON_DB_COMMAND" not in production_environment
+        server_process = subprocess.Popen(
+            [
+                "poetry",
+                "run",
+                "python",
+                "manage.py",
+                "runserver",
+                str(server_port),
+                "--noreload",
+            ],
+            cwd=project_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=production_environment,
+        )
+
+        try:
+            _wait_for_server(
+                f"http://localhost:{server_port}",
+                timeout=30,
+                server_process=server_process,
+            )
+
+            from playwright.sync_api import sync_playwright
+
+            base_url = f"http://localhost:{server_port}"
+            api_url = f"{base_url}/api/orgs/"
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox"],
+                )
+                try:
+                    browser_version = browser.version
+                    control_context = browser.new_context(
+                        viewport={"width": 1920, "height": 1080},
+                        ignore_https_errors=True,
+                    )
+                    positive_context = browser.new_context(
+                        viewport={"width": 1920, "height": 1080},
+                        ignore_https_errors=True,
+                        extra_http_headers={"X-Forwarded-Proto": "https"},
+                    )
+                    try:
+                        control_response = control_context.request.get(
+                            f"{base_url}/orgs/",
+                            max_redirects=0,
+                        )
+                        assert control_response.status in {301, 302, 307, 308}, (
+                            "Unproxied production control must redirect to HTTPS: "
+                            f"status={control_response.status}"
+                        )
+                        redirect_location = control_response.headers.get("location")
+                        assert (
+                            redirect_location
+                            == f"https://localhost:{server_port}/orgs/"
+                        ), (
+                            "Unproxied production redirect Location was not bound: "
+                            f"{redirect_location!r}"
+                        )
+
+                        positive_page = positive_context.new_page()
+                        login_response = positive_page.goto(
+                            f"{base_url}/accounts/login/"
+                        )
+                        assert login_response is not None
+                        assert login_response.status == 200, (
+                            "Proxy-marked login navigation failed: "
+                            f"status={login_response.status}"
+                        )
+                        login_input = positive_page.locator('input[name="login"]')
+                        if login_input.count() == 0:
+                            login_input = positive_page.locator(
+                                'input[name="username"]'
+                            )
+                        assert login_input.count() == 1, (
+                            "Authenticated calibration login field was not rendered"
+                        )
+                        login_input.fill("sa160_browser_user@example.test")
+                        positive_page.locator('input[name="password"]').fill(
+                            "sa160-browser-password"
+                        )
+                        with positive_page.expect_response(
+                            lambda response: (
+                                response.url == f"{base_url}/accounts/login/"
+                                and response.request.method == "POST"
+                            ),
+                            timeout=30_000,
+                        ) as login_post_info:
+                            positive_page.get_by_role(
+                                "button", name="Sign In", exact=True
+                            ).click()
+                        login_post_response = login_post_info.value
+
+                        login_state = positive_page.locator("body").inner_text()
+                        cookies = {
+                            cookie["name"]: cookie
+                            for cookie in positive_context.cookies()
+                        }
+                        assert cookies.get("sessionid", {}).get("secure") is True, (
+                            "Chromium calibration did not retain a Secure sessionid: "
+                            f"browser={browser_version}, login_status={login_post_response.status}, "
+                            f"url={positive_page.url!r}, "
+                            f"body={login_state!r}, cookies={cookies!r}"
+                        )
+                        assert cookies.get("sessionid", {}).get("httpOnly") is True, (
+                            "Chromium calibration did not retain an HttpOnly sessionid: "
+                            f"browser={browser_version}, cookies={cookies!r}"
+                        )
+                        assert cookies.get("csrftoken", {}).get("secure") is True, (
+                            "Chromium calibration did not retain a Secure csrftoken: "
+                            f"browser={browser_version}, cookies={cookies!r}"
+                        )
+                        assert cookies.get("csrftoken", {}).get("httpOnly") is True, (
+                            "Chromium calibration did not retain an HttpOnly csrftoken: "
+                            f"browser={browser_version}, cookies={cookies!r}"
+                        )
+
+                        shell_response = positive_page.goto(f"{base_url}/orgs/new/")
+                        assert shell_response is not None
+                        assert shell_response.status == 200, (
+                            "Authenticated proxy-marked shell navigation failed: "
+                            f"status={shell_response.status}, url={positive_page.url}"
+                        )
+                        document_cookie = positive_page.evaluate("document.cookie")
+                        assert not any(
+                            entry.strip().startswith("csrftoken=")
+                            for entry in document_cookie.split(";")
+                        ), (
+                            "HttpOnly csrftoken leaked into document.cookie: "
+                            f"browser={browser_version}, document.cookie={document_cookie!r}"
+                        )
+                        csrf_token = positive_page.locator(
+                            'meta[name="csrf-token"]'
+                        ).get_attribute("content")
+                        assert csrf_token, (
+                            "Authenticated shell did not render a non-empty CSRF meta token: "
+                            f"browser={browser_version}"
+                        )
+
+                        omitted_header_name = "SA160 omitted-header control"
+                        omitted_header_result = positive_page.evaluate(
+                            """
+                            async (name) => {
+                              const response = await fetch('/api/orgs/', {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                  Accept: 'application/json',
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({name}),
+                              })
+                              return {status: response.status, body: await response.text()}
+                            }
+                            """,
+                            omitted_header_name,
+                        )
+                        assert omitted_header_result["status"] == 403, (
+                            "Same-origin omitted-header control must be rejected: "
+                            f"{omitted_header_result!r}"
+                        )
+
+                        positive_page.get_by_role(
+                            "heading", name="Create organization", exact=True
+                        ).wait_for(state="visible")
+                        organization_name = "SA160 browser-created organization"
+                        with positive_page.expect_request(
+                            lambda request: (
+                                request.url == api_url and request.method == "POST"
+                            ),
+                            timeout=30_000,
+                        ) as request_info:
+                            with positive_page.expect_response(
+                                lambda response: (
+                                    response.url == api_url
+                                    and response.request.method == "POST"
+                                ),
+                                timeout=30_000,
+                            ) as response_info:
+                                positive_page.get_by_label(
+                                    "Organization name", exact=True
+                                ).fill(organization_name)
+                                positive_page.get_by_role(
+                                    "button",
+                                    name="Create organization",
+                                    exact=True,
+                                ).click()
+
+                        create_request = request_info.value
+                        create_response = response_info.value
+                        assert create_request.url == api_url
+                        observed_csrf_header = next(
+                            (
+                                value
+                                for name, value in create_request.headers.items()
+                                if name.lower() == "x-csrftoken"
+                            ),
+                            None,
+                        )
+                        assert observed_csrf_header == csrf_token, (
+                            "Generated apiRequest did not send the rendered CSRF token: "
+                            f"observed={observed_csrf_header!r}, rendered={csrf_token!r}"
+                        )
+                        assert create_response.status == 201, (
+                            "Generated apiRequest organization mutation did not return 201: "
+                            f"status={create_response.status}, body={create_response.text()!r}"
+                        )
+                        create_payload = create_response.json()
+                        assert (
+                            create_payload["organization"]["name"] == organization_name
+                        )
+                        next_url = create_payload["next_url"]
+                        assert isinstance(next_url, str) and next_url.startswith("/")
+                        expected_redirect_url = urljoin(base_url, next_url)
+                        positive_page.wait_for_url(
+                            expected_redirect_url,
+                            wait_until="domcontentloaded",
+                            timeout=30_000,
+                        )
+                        assert positive_page.url == expected_redirect_url, (
+                            "OrgCreatePage did not perform the returned full-document redirect: "
+                            f"expected={expected_redirect_url!r}, actual={positive_page.url!r}"
+                        )
+
+                        persisted_result = positive_page.evaluate(
+                            """
+                            async () => {
+                              const response = await fetch('/api/orgs/', {
+                                credentials: 'same-origin',
+                                headers: {Accept: 'application/json'},
+                              })
+                              return {status: response.status, payload: await response.json()}
+                            }
+                            """
+                        )
+                        assert persisted_result["status"] == 200
+                        persisted_names = [
+                            organization["name"]
+                            for organization in persisted_result["payload"][
+                                "organizations"
+                            ]
+                        ]
+                        assert persisted_names.count(organization_name) == 1, (
+                            "Positive organization was not persisted in the authenticated API list: "
+                            f"{persisted_names!r}"
+                        )
+                        assert omitted_header_name not in persisted_names, (
+                            "Omitted-header control created an organization: "
+                            f"{persisted_names!r}"
+                        )
+                    finally:
+                        positive_context.close()
+                        control_context.close()
+                finally:
+                    browser.close()
+        finally:
+            _stop_server(server_process)
 
     @staticmethod
     def _write_quickscale_yml_with_auth(
