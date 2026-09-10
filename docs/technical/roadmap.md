@@ -10,17 +10,21 @@ hardening. Then deliver the first useful property portal in a
 project-owned extension, generalizing capabilities only after that project proves their value.
 
 The v88 hardening release had a root-finalized green candidate and release aggregate before terminal
-attestation exposed two CSRF integration defects. Terminal remediation corrected the generated
-product, tests, and exact emission manifests, so the prior green aggregate is historical evidence
-for the prior bytes and does not bind the corrected exact candidate. Fresh release-tier evidence is
-required before the corrected candidate is release-tested or merge-ready. Merge, release-note/version
-checks, tagging, publishing, and deployment remain separate maintainer actions.
+attestation exposed CSRF integration defects. A retained terminal-remediation commit corrected the
+token bootstrap and duplicate-cookie implementation, tests, generated hashes, and status, but its
+independent remediation review found an unexercised frontend-to-server path, one stale test consumer,
+and validation below the owning task tier. The prior green aggregate is historical evidence for the
+prior bytes and does not bind the retained remediation. Fresh release-tier evidence is required
+before the corrected candidate is release-tested or merge-ready. Merge, release-note/version checks,
+tagging, publishing, and deployment remain separate maintainer actions.
 Optional maintenance may move past the release without delaying it.
 
-This planner holds open work only. A single scheduling table owns horizon, track, dependencies,
-and release requirement. Ticket bodies own scope and acceptance; [context](v88_ticket_context.md)
-explains implementation concepts; [CHANGELOG.md](../../CHANGELOG.md) preserves history and evidence.
-Absorbing a ticket transfers its unfinished obligations and does not claim its finding is fixed.
+The scheduling table holds currently authorized work and owns horizon, track, dependencies, and
+release requirement. A blocked continuation checkpoint may remain under v88 deliveries until its
+next action is authorized; it is not an open schedule entry by itself. Ticket bodies own scope and
+acceptance; [context](v88_ticket_context.md) explains implementation concepts;
+[CHANGELOG.md](../../CHANGELOG.md) preserves history and evidence. Absorbing a ticket transfers its
+unfinished obligations and does not claim its finding is fixed.
 
 ## Schedule and parallel execution
 
@@ -39,15 +43,14 @@ Track numbers map to the existing worktrees: **1 = W1 / wt-track1**, **2 = W2 / 
 start them during release work. SA154 is an inventory, not an implementation queue.
 
 ```text
-Track 1: (no open v88 ticket)
+Track 1: (no currently authorized v88 ticket)
 Track 2: (idle in v88)      owns post-v88 SA152, SA180
 Track 3: (idle in v88)      owns post-v88 SA177
 ```
 
-**Delivery critical path: none for v88.** No implementation ticket remains on a track, but terminal
-CSRF remediation changed the candidate after the one green release run. Fresh release-tier evidence
-for the corrected exact candidate remains a release obligation outside the track queue. Tracks 1,
-2, and 3 stay idle; their post-v88 assignments are future ownership, not release work.
+**Release recovery path: SA160 correction gaps → owning task tier → fresh release validation.** The
+retained checkpoint records this path but grants no new implementation or release authority. All
+tracks stay idle for v88; their post-v88 assignments are future ownership, not release work.
 
 Post-v88 ordering: SA177 may take the isolation runner freely now that SA165 has closed.
 SA152 and SA153 are independent — the portal can use a fresh generated project — though a
@@ -61,18 +64,18 @@ are yes.
 
 | Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
+| 1 | — | n/a — no authorized v88 ticket | n/a | n/a | n/a | no |
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
-All scheduled v88 implementation work reached acceptance before terminal attestation. The single
-green release aggregate, successful exact-scope cleanup, and standing-resource preservation remain
-historical evidence for the pre-remediation bytes only. The corrected exact candidate is not yet
-release-tested or merge-ready; release-tier rebinding is required before either status is restored.
+All originally scheduled implementation phases reached acceptance before terminal attestation. The
+single green release aggregate, successful exact-scope cleanup, and standing-resource preservation
+remain historical evidence for the pre-remediation bytes only. The retained remediation is neither
+task-tier accepted nor release-tested; it is not merge-ready.
 
 ### Ownership and merge coordination
 
-- Track 1 has no open v88 delivery; its post-v88 ownership is SA153 and SA154.
+- Track 1 has no currently authorized v88 ticket; its post-v88 ownership remains SA153 and SA154.
 - Track 2 owns gate documentation, `scripts/gate_registry.json` and module declarations, and the
   maintainer migration tools. It holds no v88 work; SA152 and SA180 are post-v88.
 - Track 3 owns deferred predicate conformance under SA177, including the isolation runner.
@@ -85,9 +88,9 @@ release-tested or merge-ready; release-tier rebinding is required before either 
   semantics and no generated consumer, and the serialized merge queue plus reconcile-on-the-owning-
   worktree rule above covers them: each track resolves the shared set once, at its own merge, after
   the previous merge has landed. The consistency test then checks structure, not status prose.
-   No track has open v88 work, so no two v88 tickets run concurrently and the shared closeout set
-   has no active ticket writer after the release closes.
-- No active v88 task requires Docker-backed acceptance. Future Docker-heavy work follows the
+  No track currently has authorized v88 work, so the shared closeout set has no active v88 writer.
+- The retained SA160 checkpoint needs one fresh Docker-backed release attempt after its task-tier
+  gaps close and new authority is granted. Future Docker-heavy work follows the
   [execution policy](validation_policy.md#candidate-review-and-integration) for routing, cleanup,
   candidate binding, and review/merge rules.
 
@@ -115,9 +118,56 @@ or delivery evidence, not here.
 
 ## v88 deliveries
 
-No scheduled v88 implementation delivery remains open. Historical release evidence and the terminal
-CSRF remediation are archived in [CHANGELOG.md](../../CHANGELOG.md); fresh release-tier rebinding of
-the corrected exact candidate remains outstanding while this roadmap retains only post-v88 tickets.
+### SA160 continuation checkpoint — close terminal CSRF integration gaps and rebind release evidence
+
+  **State (checkpointed 2026-09-10): retained and unmerged on `wt-track1` at commit
+  `778f64d63990af9b5df105f235d8aef00010135f`; integration ref `v88` remains
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`.** The earlier release aggregate passed for the
+  pre-remediation candidate only and is not evidence for this commit.
+
+  **Completed:** the retained remediation preserves the production HttpOnly CSRF cookie, injects a
+  Django masked token into the authenticated React shell, makes the shared helper prefer that token,
+  aligns duplicate-cookie fallback with Django's last-value parser, extends both React caller tests,
+  adds a generated-production enforced-CSRF regression, and rebinds all three emission variants.
+  The focused chain passed main and nested frontend lint/types, 2 rendered Vitest files with 28
+  passing tests, and 265 focused Python tests. The 11-file correction delta was independently graded:
+  ***applied after terminal attestation — graded at remediation attestation***.
+
+  **Pending:** update the existing React-theme integration assertion to the new `get_token`-backed
+  render contract; replace or extend the generated-production regression so an authenticated org
+  mutation is issued through the actual generated `apiRequest` path rather than by manually setting
+  `HTTP_X_CSRFTOKEN`; run the owning Core task tier; bind and independently review the resulting
+  exact candidate; obtain one fresh authorized `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` result on
+  those bytes; then reconcile CHANGELOG, ticket context, and the technical audit to the final grade.
+
+  **Blocking:** the present generated-production regression proves that Django accepts the emitted
+  masked token but does not prove the browser caller transports it; an unchanged integration test
+  still requires the superseded two-argument render call and will deterministically fail when
+  collected; the focused green chain did not satisfy the repository's owning task tier; and no
+  release result binds the retained remediation. Merge, release acceptance, and closure of SA160's
+  CSRF token-transport/duplicate-precedence audit obligation remain prohibited until all four
+  conditions close. The dead generated `clientIp` helper audit item remains retired because its
+  correction was not changed by remediation. ***corrected after checkpoint attestation — not independently graded***
+
+  **Decisions needed:** authorize a fresh release attempt after the corrected candidate's focused and
+  owning task-tier checks are green and its immutable review is accepted. This checkpoint grants no
+  release authority; after authorization, retry handling follows the repository's current candidate
+  policy. ***corrected after checkpoint attestation — not independently graded***
+
+  **Remaining plan:** start from `wt-track1` commit
+  `778f64d63990af9b5df105f235d8aef00010135f`; do not repeat the accepted token-bootstrap,
+  duplicate-parser, or manifest work. First reconcile the stale integration assertion and make the
+  protected generated-project regression exercise the real frontend caller. Run the focused frontend,
+  manifest, and status checks plus `make test-unit -- --core`; commit and bind only the resulting
+  correction; independently review that exact tip. With fresh human authority, run the exact release
+  command under the repository's scoped cleanup and candidate/retry rules. Only a complete green result
+  on that tip may close SA160's CSRF token-transport/duplicate-precedence audit obligation, update the
+  owning status documents, pass convergence and terminal attestation, and enter the serialized
+  exact-chain merge. Every red result stays unmerged and is checkpointed with exact failure evidence.
+  A no-verdict, killed-clock, or cleanup-only result stays unmerged and follows the current candidate
+  policy: an unchanged candidate may be retried with a recorded reason and evidence after authorization;
+  changed bytes or validation inputs require renewed binding, review, validation, and release authority.
+  None of those outcomes counts as acceptance. ***corrected after checkpoint attestation — not independently graded***
 
 ## Post-v88 work
 
