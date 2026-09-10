@@ -2,6 +2,26 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA160 corrected candidate exact release attempt red; no retry authorized (2026-09-10).** EV-10
+  independently reviewed the exact 20-path candidate at `HEAD` / `PRODUCT_TIP`
+  `cb21f791826c9ebcfdba5f8b034d7eddef8e02df`, with `v88` / `V88_BASE` at
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. The required consistency command
+  `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`
+  passed **29 tests**. After review, the exact command
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` ran once under
+  `sa160-2026-09-10-20-21-26-release-attempt-1`; stages 1–11 passed, including **5,093 Core/CLI
+  coverage tests with 2 skips**, **332 backups tests with 1 skip**, and the full module integration
+  stage. Stage 12 returned exit **2**: Core reported **38 passed / 1 failed** in
+  `quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::test_production_shell_csrf_token_accepts_authenticated_org_mutation`,
+  failing at the HTTPS proxy navigation with `net::ERR_TOO_MANY_RETRIES` and a proxy-side
+  `BrokenPipeError`; CLI reported **54 passed**. Durable evidence is retained under
+  `.adaptive/evidence/sa160-2026-09-10-20-21-26/phase-b-release/` in `ci-e2e.log`,
+  `exit-status.txt`, `attempt_started`, and `standing-docker-before.txt`. Labelled run resources
+  were cleaned up and the standing `pg18-af10` / `postgres:18` resource was preserved. This is red
+  release evidence, not SA160 acceptance; no second aggregate invocation, merge, publication, tagging,
+  or deployment is claimed. A new reviewed test-harness correction and fresh release authority are
+  required; TA67 and SA160 remain open while TA68 remains retired.
+
 - **SA160 terminal remediation applied; corrected candidate needs fresh release evidence (2026-09-10).** The
   independently accepted candidate `0f69d6f0f770a620d604a9379d234ea5d8dfaaa0` was reviewed under
   `EV-8` and validated against `v88` at `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. Its one exact

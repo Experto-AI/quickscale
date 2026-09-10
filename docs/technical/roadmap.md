@@ -11,11 +11,13 @@ project-owned extension, generalizing capabilities only after that project prove
 
 The v88 hardening release had a root-finalized green candidate and release aggregate before terminal
 attestation exposed CSRF integration defects. A retained terminal-remediation commit corrected the
-token bootstrap and duplicate-cookie implementation, tests, generated hashes, and status. The next
-continuation corrected the stale shell assertion and built the real generated-browser harness, but
-the harness stopped at a production CSRF origin mismatch before login and the actual `apiRequest`
-mutation. The prior green aggregate is historical evidence for prior bytes; the retained work remains
-below task and release tiers and is not merge-ready. Merge, release-note/version checks, tagging,
+token bootstrap and duplicate-cookie implementation, tests, generated hashes, and status. The
+corrected candidate at `cb21f791826c9ebcfdba5f8b034d7eddef8e02df` was independently reviewed and its
+single authorized `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` attempt reached the final E2E stage but
+returned exit 2: Core reported 38 passed and 1 failed in the generated production browser proof,
+while CLI reported 54 passed. The prior green aggregate is historical evidence for prior bytes; this
+red result leaves the corrected work below release acceptance and non-mergeable. No retry is
+authorized by the spent exact-once authority. Merge, release-note/version checks, tagging,
 publishing, and deployment remain separate maintainer actions.
 Optional maintenance may move past the release without delaying it.
 
@@ -49,9 +51,11 @@ Track 3: (idle in v88)      owns post-v88 SA177
 ```
 
 **Release recovery path: genuine browser HTTPS origin → real `apiRequest` proof → owning task tier →
-fresh release validation.** The retained checkpoint records this path but grants no new implementation
-authority. Its conditional release authority remains unspent. All tracks stay idle for v88; their
-post-v88 assignments are future ownership, not release work.
+fresh release validation.** The retained checkpoint records this path, and the fresh attempt consumed
+its conditional exact-once release authority but ended red in the browser harness before the positive
+mutation assertion. A reviewed test-only correction and fresh authority are required; no retry is
+authorized under the spent attempt. All tracks stay idle for v88; their post-v88 assignments are
+future ownership, not release work.
 
 Post-v88 ordering: SA177 may take the isolation runner freely now that SA165 has closed.
 SA152 and SA153 are independent — the portal can use a fresh generated project — though a
@@ -71,8 +75,9 @@ are yes.
 
 All originally scheduled implementation phases reached acceptance before terminal attestation. The
 single green release aggregate, successful exact-scope cleanup, and standing-resource preservation
-remain historical evidence for the pre-remediation bytes only. The retained remediation is neither
-task-tier accepted nor release-tested; it is not merge-ready.
+remain historical evidence for the pre-remediation bytes only. The retained remediation's one fresh
+release attempt returned red in Core E2E; it is not task-tier accepted or release-accepted and is not
+merge-ready.
 
 ### Ownership and merge coordination
 
@@ -90,8 +95,9 @@ task-tier accepted nor release-tested; it is not merge-ready.
   worktree rule above covers them: each track resolves the shared set once, at its own merge, after
   the previous merge has landed. The consistency test then checks structure, not status prose.
   No track currently has authorized v88 work, so the shared closeout set has no active v88 writer.
-- The retained SA160 checkpoint has unspent conditional authority for a fresh Docker-backed release
-  attempt after its focused and task-tier gaps close and its exact candidate is independently reviewed.
+- The retained SA160 checkpoint's conditional Docker-backed release authority was consumed by the
+  `sa160-2026-09-10-20-21-26-release-attempt-1` red result. A future attempt requires a newly reviewed
+  candidate and distinct authority after the browser-harness failure is corrected.
   Future Docker-heavy work follows the
   [execution policy](validation_policy.md#candidate-review-and-integration) for routing, cleanup,
   candidate binding, and review/merge rules.
@@ -120,53 +126,50 @@ or delivery evidence, not here.
 
 ## v88 deliveries
 
-### SA160 continuation checkpoint — align the browser origin before resuming release proof
+### SA160 release attempt — Core E2E red in the generated browser proof
 
-  **State (checkpointed 2026-09-10): retained and unmerged on `wt-track1` at WIP commit
-  `9d3a6bcae3f3700cf5a2bdf08e12aa0197f7bb88`; integration ref `v88` remains
-  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`.** This is a test-harness checkpoint, not an accepted
-  product candidate. No Core task gate, release attempt, merge, publication, tag, or deployment ran.
+  **State (measured 2026-09-10):** corrected candidate `cb21f791826c9ebcfdba5f8b034d7eddef8e02df`
+  is retained and unmerged on `wt-track1`; integration ref `v88` remains
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. EV-10 independently reviewed the exact 20-path
+  candidate, then consumed the one authorized attempt
+  `sa160-2026-09-10-20-21-26-release-attempt-1`. This is red release evidence, not an accepted
+  product candidate or release. No retry, merge, publication, tag, or deployment occurred.
 
   **Completed:** the earlier retained remediation still preserves the production HttpOnly CSRF cookie,
   masked shell token, Django-last duplicate-cookie behavior, both generated callers, and three rebound
-  emission variants. This continuation corrected the stale React-theme assertion to the existing
-  `get_token` render contract; its exact node passed with one test and no skips. It also replaced the
-  manual-header server probe with a generated production browser harness covering strict install,
-  migrate, cache-table creation, frontend type-check/build, collectstatic, credential creation,
-  production server startup, an unproxied HTTPS-redirect control, secure-cookie calibration, omitted-
-  header rejection, and the intended `OrgCreatePage` → `useCreateOrg` → `apiRequest` mutation. The
-  bootstrap, build, server, and redirect stages passed; the positive browser path did not.
+  emission variants. The corrected candidate also aligns the stale shell assertion and provides a
+  generated production browser harness covering strict install, migrate, cache-table creation,
+  frontend type-check/build, collectstatic, credential creation, production server startup, an
+  unproxied HTTPS-redirect control, secure-cookie calibration, omitted-header rejection, and the
+  intended `OrgCreatePage` → `useCreateOrg` → `apiRequest` mutation. Stages 1–11 passed, including
+  5,093 Core/CLI coverage tests with 2 skips, 332 backups tests with 1 skip, and the full module
+  integration stage. Stage 12's CLI lane passed 54 tests; Core reported 38 passed and 1 failed in
+  `test_production_shell_csrf_token_accepts_authenticated_org_mutation` at
+  `quickscale_core/tests/test_generated_project_runtime.py:2209`, where Chromium returned
+  `net::ERR_TOO_MANY_RETRIES` for the HTTPS proxy navigation and the proxy logged `BrokenPipeError`.
 
-  **Pending:** choose and authorize a test-only browser-visible HTTPS or equivalent origin-alignment
-  mechanism that preserves shipped redirect, Secure, HttpOnly, proxy, and CSRF semantics. Complete the
-  existing positive browser assertions without injected session cookies or positive CSRF headers, then
-  pass the exact focused node with no skip. After that, resume the never-dispatched same-fact phase,
-  owning Core task tier, exact candidate binding/review, conditional release, and green-only status
-  reconciliation. Conditional authority for `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` remains unspent
-  and applies only after focused and `make test-unit -- --core` evidence plus immutable review are green.
+  **Pending:** diagnose and correct the test-only HTTPS proxy/navigation failure without weakening
+  shipped redirect, Secure, HttpOnly, proxy, or CSRF semantics. The positive browser assertions must
+  complete without injected session cookies or positive CSRF headers, and the focused node must pass
+  with no skip. That correction requires a fresh reviewed candidate and fresh release authority;
+  the current exact-once authority is spent and cannot be retried.
 
-  **Blocking:** Chromium browses `http://localhost` while `X-Forwarded-Proto: https` makes Django treat
-  the request as secure. Django therefore rejects the login POST because its HTTPS good origin does not
-  match the browser's HTTP Origin; no Secure authenticated `sessionid` is established, and shell-token,
-  omitted-header, real `apiRequest`, 201, redirect, and persistence assertions remain unreachable. The
-  focused browser node is red, the owning Core task tier is unrun, and release/merge acceptance remains
-  prohibited until those conditions close.
+  **Blocking:** the generated production browser proof reached the authenticated shell setup but
+  Chromium could not complete navigation to `https://localhost:<proxy>/orgs/new/`, returning
+  `net::ERR_TOO_MANY_RETRIES`; the test proxy recorded a `BrokenPipeError` while writing the upstream
+  response. The Core lane therefore returned 38 passed / 1 failed, the aggregate returned exit 2, and
+  release/merge acceptance remains prohibited. This failure is not covered by an accepted-failure
+  oracle and no second aggregate is authorized.
 
-  **Decisions needed:** the previous run explicitly chose to stop and checkpoint instead of authorizing
-  the proposed test-only localhost TLS terminator. A future run must approve that bounded mechanism or
-  another genuine browser/Django scheme-alignment design; trusted-origin overrides, injected cookies or
-  CSRF headers, and weakened production security settings are not acceptable substitutes.
+  **Decisions needed:** authorize a new reviewed correction and release attempt after the proxy failure
+  is diagnosed. Trusted-origin overrides, injected cookies or CSRF headers, and weakened production
+  security settings remain unacceptable substitutes.
 
-  **Remaining plan:** start from WIP commit `9d3a6bcae3f3700cf5a2bdf08e12aa0197f7bb88` and retain the
-  accepted stale-assertion correction and existing browser harness. The reviewed five-phase authority
-  was stored as `EV-6`: phase A is accepted; phase B halted on the origin mismatch; phases C, D, and E
-  were never dispatched because they hard-depend on that proof. Adding an HTTPS/origin mechanism changes
-  phase B's reviewed scope, so obtain a fresh reviewed plan rather than redispatching it. Once the repaired
-  browser phase is accepted, C is the first resumable undispatched phase: run same-fact frontend/manifest/
-  taxonomy/status checks, then D's `make test-unit -- --core`, root-bind and independently review one
-  exact candidate, and only then run E's authorized release carrier. A complete green release may update
-  all owning status documents, proceed through convergence and terminal attestation, and enter the
-  serialized exact-chain merge. Red or no-verdict evidence stays unmerged under the current retry policy.
+  **Remaining plan:** retain the exact red evidence under
+  `.adaptive/evidence/sa160-2026-09-10-20-21-26/phase-b-release/`, correct the test-only proxy failure
+  in a separately reviewed candidate, re-run the focused and owning task-tier checks, independently
+  review the new exact tip, and obtain fresh release authority. The current candidate remains unmerged;
+  red evidence stays unmerged and no aggregate retry is permitted.
 
 ## Post-v88 work
 
