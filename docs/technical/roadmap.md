@@ -75,9 +75,9 @@ are yes.
 
 All originally scheduled implementation phases reached acceptance before terminal attestation. The
 single green release aggregate, successful exact-scope cleanup, and standing-resource preservation
-remain historical evidence for the pre-remediation bytes only. The retained remediation's one fresh
-release attempt returned red in Core E2E; it is not task-tier accepted or release-accepted and is not
-merge-ready.
+remain historical evidence for the pre-remediation bytes only. The retained remediation's owning
+`make test-unit -- --core` task tier passed before its one fresh release attempt returned red in Core
+E2E. The corrected candidate is not release-accepted or merge-ready.
 
 ### Ownership and merge coordination
 
