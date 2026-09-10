@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{%endraw%}{{ project_name }}{%raw%}</title>
     <meta name="description" content="{%endraw%}{{ project_name }}{%raw%} - Built with QuickScale and React" />
+    <meta name="csrf-token" content="{{ csrf_token }}" />
     <link rel="stylesheet" href="{% static 'frontend/assets/index.css' %}" />
   </head>
   <body>

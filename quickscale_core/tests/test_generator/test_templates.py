@@ -590,6 +590,37 @@ class TestRuntimePinDriftDetection:
         assert any(">=3.12,<3.15" in m for m in poetry_msgs)
 
 
+def test_react_shell_exposes_server_csrf_token(
+    jinja_env: Environment, test_context: dict[str, str]
+) -> None:
+    """The generated authenticated shell carries Django's masked CSRF token."""
+    views = _render_template(
+        jinja_env,
+        "project_name/views.py.j2",
+        test_context,
+    )
+    index = _render_template(
+        jinja_env,
+        "themes/showcase_react/templates/index.html.j2",
+        test_context,
+    )
+
+    assert "from django.middleware.csrf import get_token" in views
+    assert '{"csrf_token": get_token(request)}' in views
+    assert 'name="csrf-token" content="{{ csrf_token }}"' in index
+
+
+def test_django_duplicate_csrf_cookie_uses_last_value() -> None:
+    """Pin the server parser semantics mirrored by the generated TypeScript helper."""
+    from django.http import parse_cookie
+
+    first_token = "a" * 32
+    second_token = "b" * 32
+    cookies = parse_cookie(f"csrftoken={first_token}; csrftoken={second_token}")
+
+    assert cookies["csrftoken"] == second_token
+
+
 class TestTemplateLoading:
     """Verify all project templates can be loaded by Jinja2."""
 

@@ -33,7 +33,7 @@
       "sa112d": "Regenerated 2026-08-18 — Dockerfile collectstatic now sets one-shot QUICKSCALE_ALLOW_BYPASSRLS=1 alongside QUICKSCALE_NON_DB_COMMAND so the orgs startup guard does not probe the deliberately absent build-time database. 1 fixture hash updated: Dockerfile (all 3 variants).",
       "sa142": "Regenerated 2026-08-25 — Dockerfile: added fixed QuickScale owner/SA142 contract/bound-digest final-image labels and their digest/contract build args; docker-compose.yml: added stable backend image/direct-Compose fallback, validated resource-prefix interpolation, and fixed owner/lifecycle/scope labels for every generated service, named volume, and default network. Only these two generated files changed; all unrelated paths, hashes, and modes remain authoritative.",
       "sa170-c-correct": "Regenerated 2026-09-04 — db/init.sql now records the quickscale.init_complete database sentinel after every required initialization statement succeeds; docker-compose.yml now probes that sentinel instead of accepting PostgreSQL connection readiness alone. Only these two generated files changed in all three variants; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa160": "Regenerated 2026-09-09 — frontend/src/lib/csrf.ts: added the shared exact-name CSRF cookie parser with decoding and deterministic first-match behavior; frontend/src/test/csrf.test.tsx: added the rendered cookie and caller-parity regression coverage; frontend/src/hooks/useApi.ts: replaced its local parser with the shared helper for mutating request headers; frontend/src/components/forms/FormRenderer.tsx: replaced its duplicate parser with the shared helper for form submissions; testproject/settings/base.py: removed the unreachable generated get_client_ip helper while preserving uppercase proxy settings and the proxy-math contract; testproject/settings/production.py: removed the unreachable generated get_client_ip helper and rebind prose while preserving production proxy settings. These six authorized paths were freshly regenerated, hashed, and mode-normalized in react_default, react_empty, and react_selected; all other entries remain authoritative."
+      "sa160": "Regenerated 2026-09-10 — terminal remediation preserves the HttpOnly production CSRF cookie, injects Django's masked token through testproject/views.py and templates/index.html, makes frontend/src/lib/csrf.ts prefer that server token and otherwise match Django's last duplicate-cookie value, and extends frontend/src/test/csrf.test.tsx across the helper, apiRequest, and FormRenderer callers. These four changed generated paths supersede the 2026-09-09 first-match hashes in react_default, react_empty, and react_selected; the prior useApi.ts, FormRenderer.tsx, base.py, and production.py corrections remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -263,7 +263,7 @@
     },
     "frontend/src/lib/csrf.ts": {
       "mode": "664",
-      "sha256": "5f5606a8b8f3557a9cd8082b93db764344a276e743311c4852e8e95d854fa9d9"
+      "sha256": "0b38e88346e5f1f19ccbbe354549cbb72d267f3262d8697adbd6f5b0d8b8581b"
     },
     "frontend/src/lib/utils.ts": {
       "mode": "664",
@@ -367,7 +367,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "feb682b42f20eafca504930f108f0febe79adb1d19316ea55380682716db170f"
+      "sha256": "45f8ac114c395252c15ca8510b7a51add9b497843e91fcf583619728be0d3335"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -439,7 +439,7 @@
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "e91243714430985e50064ae7b942d188a9feff4ba6a67ccd6765b5bb22eab532"
+      "sha256": "d5d12efe0a3936e34e28d6894de68d376bc5a7faf3f34f6a78fb10b1285c677f"
     },
     "templates/social/embeds.html": {
       "mode": "664",
@@ -491,7 +491,7 @@
     },
     "testproject/views.py": {
       "mode": "664",
-      "sha256": "86be9c09d6d1aa2b50f05a3f08cfbd592d4a851705ce409aac77835d6f8c33c3"
+      "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
     },
     "testproject/wsgi.py": {
       "mode": "664",
@@ -729,7 +729,7 @@
     },
     "frontend/src/lib/csrf.ts": {
       "mode": "664",
-      "sha256": "5f5606a8b8f3557a9cd8082b93db764344a276e743311c4852e8e95d854fa9d9"
+      "sha256": "0b38e88346e5f1f19ccbbe354549cbb72d267f3262d8697adbd6f5b0d8b8581b"
     },
     "frontend/src/lib/utils.ts": {
       "mode": "664",
@@ -833,7 +833,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "feb682b42f20eafca504930f108f0febe79adb1d19316ea55380682716db170f"
+      "sha256": "45f8ac114c395252c15ca8510b7a51add9b497843e91fcf583619728be0d3335"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -905,7 +905,7 @@
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "e91243714430985e50064ae7b942d188a9feff4ba6a67ccd6765b5bb22eab532"
+      "sha256": "d5d12efe0a3936e34e28d6894de68d376bc5a7faf3f34f6a78fb10b1285c677f"
     },
     "templates/social/embeds.html": {
       "mode": "664",
@@ -957,7 +957,7 @@
     },
     "testproject/views.py": {
       "mode": "664",
-      "sha256": "86be9c09d6d1aa2b50f05a3f08cfbd592d4a851705ce409aac77835d6f8c33c3"
+      "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
     },
     "testproject/wsgi.py": {
       "mode": "664",
@@ -1195,7 +1195,7 @@
     },
     "frontend/src/lib/csrf.ts": {
       "mode": "664",
-      "sha256": "5f5606a8b8f3557a9cd8082b93db764344a276e743311c4852e8e95d854fa9d9"
+      "sha256": "0b38e88346e5f1f19ccbbe354549cbb72d267f3262d8697adbd6f5b0d8b8581b"
     },
     "frontend/src/lib/utils.ts": {
       "mode": "664",
@@ -1299,7 +1299,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "feb682b42f20eafca504930f108f0febe79adb1d19316ea55380682716db170f"
+      "sha256": "45f8ac114c395252c15ca8510b7a51add9b497843e91fcf583619728be0d3335"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -1371,7 +1371,7 @@
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "e91243714430985e50064ae7b942d188a9feff4ba6a67ccd6765b5bb22eab532"
+      "sha256": "d5d12efe0a3936e34e28d6894de68d376bc5a7faf3f34f6a78fb10b1285c677f"
     },
     "templates/social/embeds.html": {
       "mode": "664",
@@ -1423,7 +1423,7 @@
     },
     "testproject/views.py": {
       "mode": "664",
-      "sha256": "86be9c09d6d1aa2b50f05a3f08cfbd592d4a851705ce409aac77835d6f8c33c3"
+      "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
     },
     "testproject/wsgi.py": {
       "mode": "664",

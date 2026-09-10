@@ -9,10 +9,12 @@ Ship the v88 hardening release with working generated-project writes and accepte
 hardening. Then deliver the first useful property portal in a
 project-owned extension, generalizing capabilities only after that project proves their value.
 
-The v88 hardening release has a root-finalized green candidate and release aggregate: every required
-v88 delivery is accepted, and the generator-change release tier passed with complete E2E evidence.
-Merge, release-note/version checks, tagging, publishing, and deployment remain separate maintainer
-actions; the green aggregate does not claim any of them.
+The v88 hardening release had a root-finalized green candidate and release aggregate before terminal
+attestation exposed two CSRF integration defects. Terminal remediation corrected the generated
+product, tests, and exact emission manifests, so the prior green aggregate is historical evidence
+for the prior bytes and does not bind the corrected exact candidate. Fresh release-tier evidence is
+required before the corrected candidate is release-tested or merge-ready. Merge, release-note/version
+checks, tagging, publishing, and deployment remain separate maintainer actions.
 Optional maintenance may move past the release without delaying it.
 
 This planner holds open work only. A single scheduling table owns horizon, track, dependencies,
@@ -42,9 +44,10 @@ Track 2: (idle in v88)      owns post-v88 SA152, SA180
 Track 3: (idle in v88)      owns post-v88 SA177
 ```
 
-**Critical path: none for v88.** The root-finalized candidate and single release aggregate are
-green, so no required v88 delivery remains open. Tracks 1, 2, and 3 are idle for the rest of the
-release; their post-v88 assignments are future ownership, not release work.
+**Delivery critical path: none for v88.** No implementation ticket remains on a track, but terminal
+CSRF remediation changed the candidate after the one green release run. Fresh release-tier evidence
+for the corrected exact candidate remains a release obligation outside the track queue. Tracks 1,
+2, and 3 stay idle; their post-v88 assignments are future ownership, not release work.
 
 Post-v88 ordering: SA177 may take the isolation runner freely now that SA165 has closed.
 SA152 and SA153 are independent — the portal can use a fresh generated project — though a
@@ -62,10 +65,10 @@ are yes.
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
-All required v88 work is accepted on the root-finalized candidate, and the single release aggregate
-is green with successful exact-scope cleanup and standing-resource preservation. The candidate is
-release-green evidence only: merge, tagging, publishing, and deployment remain outside this status
-reconciliation.
+All scheduled v88 implementation work reached acceptance before terminal attestation. The single
+green release aggregate, successful exact-scope cleanup, and standing-resource preservation remain
+historical evidence for the pre-remediation bytes only. The corrected exact candidate is not yet
+release-tested or merge-ready; release-tier rebinding is required before either status is restored.
 
 ### Ownership and merge coordination
 
@@ -112,8 +115,9 @@ or delivery evidence, not here.
 
 ## v88 deliveries
 
-No required v88 delivery remains open. The root-finalized candidate and release evidence are
-archived in [CHANGELOG.md](../../CHANGELOG.md); this roadmap retains only post-v88 work below.
+No scheduled v88 implementation delivery remains open. Historical release evidence and the terminal
+CSRF remediation are archived in [CHANGELOG.md](../../CHANGELOG.md); fresh release-tier rebinding of
+the corrected exact candidate remains outstanding while this roadmap retains only post-v88 tickets.
 
 ## Post-v88 work
 

@@ -2,21 +2,26 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
-- **SA160 / TA67 / TA68 closed — root-finalized green release evidence (2026-09-10).** The
+- **SA160 terminal remediation applied; corrected candidate needs fresh release evidence (2026-09-10).** The
   independently accepted candidate `0f69d6f0f770a620d604a9379d234ea5d8dfaaa0` was reviewed under
-  `EV-8` and validated against `v88` at `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. The exact
-  command `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` ran once, started once, and exited **0** after
-  **1,035,837 ms**. The root-finalized release evidence reports all twelve stages complete, static
-  green, **5,091 passed / 2 skipped** with a **93.12% equal-weight mean** for Core/CLI coverage,
-  all module integration suites green at a **94.55% overall mean**, Core E2E **38 passed / 0
-  skipped**, CLI E2E **54 passed / 0 skipped**, and no out-of-date warning.
+  `EV-8` and validated against `v88` at `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. Its one exact
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` run exited **0** after **1,035,837 ms** with all twelve
+  stages complete, **5,091 passed / 2 skipped**, Core/CLI coverage at **93.12%**, module integration
+  coverage at **94.55%**, Core E2E **38 passed / 0 skipped**, and CLI E2E **54 passed / 0 skipped**.
+  Cleanup preserved the standing resources and intentionally retained the five tagged SA142 cache
+  images. That run remains immutable historical evidence for those bytes; it does not bind the
+  corrected candidate described below.
 
-  Exact-scope cleanup passed with no recovery cleanup. The standing `qscaletest-postgres-1` and
-  `pg18-af10` resources retained unchanged identity, start, mount, and network state. Five new
-  tagged SA142 stable-cache images were intentionally retained; they carry the owner tag but no
-  lifecycle or scope labels, and repository cleanup forbids deleting tagged stable images. This
-  entry records a green release aggregate and closes SA160, TA67, and TA68 in their owning status
-  documents. It does **not** claim merge, publication, tagging, or deployment.
+  Terminal attestation subsequently found that production kept the CSRF cookie HttpOnly while the
+  React helper read only `document.cookie`, and that the helper selected the first duplicate while
+  Django exposes the last. This remediation preserves HttpOnly protection, injects Django's masked
+  token into the authenticated React shell, aligns cookie fallback with Django's last-value
+  precedence, covers the helper plus both write callers, adds an enforced-CSRF generated-production
+  org mutation regression, and rebinds all three exact emission manifests. These corrections were
+  applied after terminal attestation and are **not independently graded**. SA160 and TA67 are not
+  closed on the corrected exact candidate until fresh release-tier evidence passes; TA68 remains
+  retired because its unchanged dead-helper correction was covered by the historical release. This
+  entry does **not** claim merge, publication, tagging, or deployment.
 
 - **SA160 Phase E no-verdict after the exact-once release attempt (2026-09-09).**
   Fresh independent review bound the correction commit
@@ -72,8 +77,9 @@
 - **SA160 advanced partial retained; release validation and merge remain pending (2026-09-09).**
   Product commit `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7` on `wt-track1` consolidates the
   generated React CSRF cookie handling into one helper with exact-name matching, decoding,
-  deterministic first-match selection, and a safe malformed-value fallback; both write callers use
-  it. It also removes the unreachable generated-settings `get_client_ip` definitions while
+  then-deterministic first-match selection (superseded by the 2026-09-10 terminal remediation), and
+  a safe malformed-value fallback; both write callers use it. It also removes the unreachable
+  generated-settings `get_client_ip` definitions while
   preserving uppercase proxy settings, DRF `NUM_PROXIES`, and the live orgs resolver, and performs
   the single three-variant emission-manifest rebaseline. The commit is **not merged into `v88`**.
 

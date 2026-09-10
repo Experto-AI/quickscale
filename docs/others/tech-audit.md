@@ -41,8 +41,9 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 **Audit tools run (read-only):** `git log` / `git diff` / `git rev-parse` over the delta; CPython 3.14 for the two empirical checks below. No scanner was re-run this pass — the Trivy/Bandit gate is CI-owned and its ledger was read rather than re-executed.
 
-**Empirical checks run (§1e):** none in this status-only reconciliation. The root-finalized release
-evidence and closure rationale are archived in [CHANGELOG.md](../../CHANGELOG.md).
+**Empirical checks run (§1e):** the terminal-remediation task-tier checks are recorded in the owning
+handoff. The prior root-finalized release run remains historical evidence for the pre-remediation
+bytes; no release-tier command was rerun for the corrected exact candidate.
 
 ---
 
@@ -50,15 +51,23 @@ evidence and closure rationale are archived in [CHANGELOG.md](../../CHANGELOG.md
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
+| TA67 | S3 | correctness | SPA CSRF duplicate-cookie parity | S | High | Product/test remediation applied after terminal attestation — not independently graded; fresh release-tier evidence pending |
 
-**Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **0** · S4 **0** ·
-**Total 0 open.** No numbered live finding remains.
+**Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **1** · S4 **0** ·
+**Total 1 open.** TA67 remains open pending fresh release-tier evidence for the corrected exact candidate.
 
 ---
 
 ## Findings
 
-No live findings remain after the closure reconciliation.
+### TA67 — SPA CSRF duplicate-cookie parity
+
+The generated React helper previously selected the first exact `csrftoken` cookie even though
+Django's `parse_cookie()` exposes the last duplicate. Terminal remediation now aligns the helper,
+both write callers, tests, and generated hashes with the server and also restores production token
+transport through a masked token in the authenticated shell. Those bytes were applied after terminal
+attestation and are **not independently graded**. TA67 remains live until fresh release-tier evidence
+binds and passes on the corrected exact candidate.
 
 ---
 
@@ -143,7 +152,11 @@ No live findings remain after the closure reconciliation.
 - 2026-08-21 — Prior watch items *integration-branch CI* and *generator lock generation*: **still-open, accepted / owned**. Carried forward unchanged.
 - 2026-08-27 — **Closed-item closure narratives are archived.** TA63, TA65, TA69, the SA150 local-wheelhouse watch item, the dependency-vulnerability and security-static-analysis tooling gaps, and the six adjudicated arch-audit red-flag leads are all closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-08-27 — **Quality-baseline watch item retired.** Both recorded warning regressions are gone; monotonicity passes.
-- 2026-09-10 — **TA67 and TA68 retired by the root-finalized green SA160 release evidence.** Closure detail and immutable release provenance are retained in [CHANGELOG.md](../../CHANGELOG.md); no live finding remains.
+- 2026-09-10 — **TA67 reopened by terminal attestation; TA68 remains retired.** The green SA160
+  release run is immutable historical evidence for the prior bytes, but it did not prove Django
+  duplicate-cookie parity or production React CSRF token transport. Terminal remediation corrected
+  those seams after attestation; fresh release-tier evidence must bind the corrected exact candidate
+  before TA67 is retired again. TA68's dead-helper correction is unchanged.
 - 2026-09-04 — **TA70** `container-status-substring-match`: **retired by SA170**. The ordered serial and concurrent release campaigns both passed with exact Core/CLI cleanup and preserved standing PostgreSQL state. Final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-02 — **Watch item closed:** the four `sqlparse` suppressions were retired by a real dependency upgrade to 0.6.0 during SA170 convergence; the vulnerability gate is green and the shared 2026-09-30 expiry no longer exists. No finding was opened or closed by this.
 - 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.

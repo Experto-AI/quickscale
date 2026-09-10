@@ -1,6 +1,13 @@
 const CSRF_COOKIE_NAME = 'csrftoken'
+const CSRF_META_SELECTOR = 'meta[name="csrf-token"]'
 
 export function getCsrfToken(): string {
+  const injectedToken = document.querySelector<HTMLMetaElement>(CSRF_META_SELECTOR)?.content
+  if (injectedToken) {
+    return injectedToken
+  }
+
+  let csrfToken = ''
   for (const cookieEntry of document.cookie.split(';')) {
     const entry = cookieEntry.trim()
     const separatorIndex = entry.indexOf('=')
@@ -9,11 +16,11 @@ export function getCsrfToken(): string {
     }
 
     try {
-      return decodeURIComponent(entry.slice(separatorIndex + 1))
+      csrfToken = decodeURIComponent(entry.slice(separatorIndex + 1))
     } catch {
-      return ''
+      csrfToken = ''
     }
   }
 
-  return ''
+  return csrfToken
 }

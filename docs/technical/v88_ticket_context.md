@@ -1,5 +1,11 @@
 # Ticket Context — Concepts and Implementation Notes
 
+> **Terminal remediation status (2026-09-10):** SA160's generated CSRF transport and TA67's
+> duplicate-cookie parity were corrected after the previously green release aggregate. That run is
+> historical evidence for the prior bytes only. Fresh release-tier evidence must bind the corrected
+> exact candidate before SA160 or TA67 is closed again; the corrections are not merge-ready on the
+> historical verdict.
+
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Ticket Context**
 > **Related docs**: [Roadmap](roadmap.md) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Module Extension Contract](module-extension.md)
 

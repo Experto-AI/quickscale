@@ -17,6 +17,7 @@ import secrets
 import shutil
 import socket
 import subprocess
+import textwrap
 import time
 import urllib.error
 import urllib.request
@@ -1533,6 +1534,147 @@ class TestGeneratedProjectRuntimeSmoke:
         )
         assert "static files" in result.stdout.lower() or not result.stderr, (
             "collectstatic should report static files copied"
+        )
+
+    @pytest.mark.e2e
+    def test_production_shell_csrf_token_accepts_authenticated_org_mutation(
+        self, tmp_path: Path, postgres_url: str
+    ) -> None:
+        """The production React bootstrap token must pass enforced Django CSRF."""
+        from quickscale_cli.commands.module_config import (
+            get_default_auth_config,
+            get_default_orgs_config,
+        )
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_module_dependencies,
+        )
+        from quickscale_cli.utils.module_wiring_manager import (
+            regenerate_managed_wiring,
+        )
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "runtime_sa160_csrf"
+        project_path = tmp_path / project_name
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+
+        for mod_name in ("auth", "orgs"):
+            embedded_path = project_path / "modules" / mod_name
+            _copytree_for_generated_project_smoke(
+                REPO_ROOT / "quickscale_modules" / mod_name,
+                embedded_path,
+            )
+
+        auth_options = get_default_auth_config()
+        orgs_options = get_default_orgs_config()
+        orgs_options["mode"] = "saas"
+        modules = {"auth": auth_options, "orgs": orgs_options}
+        self._write_quickscale_yml_with_modules(
+            project_path,
+            project_name,
+            "showcase_react",
+            modules,
+        )
+
+        sync_result = sync_project_module_dependencies(project_path, modules)
+        assert any(
+            "quickscale-module-orgs" in dependency
+            for dependency in sync_result.added_path_dependencies
+        )
+        assert any(
+            "quickscale-module-auth" in dependency
+            for dependency in sync_result.added_path_dependencies
+        )
+        success, message = regenerate_managed_wiring(project_path)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+        _install_project_dependencies(project_path, strict=True)
+
+        production_environment = _standalone_generated_env(
+            {
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+                "SECRET_KEY": "qs-sa160-production-csrf-test-secret-not-for-real-use",
+                "DATABASE_URL": postgres_url,
+                "RUNTIME_DATABASE_URL": "",
+                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                "ALLOWED_HOSTS": "testserver,localhost,127.0.0.1",
+            }
+        )
+        migrate_result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env={**production_environment, "QUICKSCALE_PRIVILEGED_COMMAND": "migrate"},
+        )
+        assert migrate_result.returncode == 0, (
+            f"production migration failed:\n{migrate_result.stdout}\n"
+            f"{migrate_result.stderr}"
+        )
+
+        probe = textwrap.dedent(
+            """
+            import json
+            from html.parser import HTMLParser
+
+            import django
+            from django.contrib.auth import get_user_model
+            from django.test import Client, override_settings
+
+            class CsrfMetaParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.token = None
+
+                def handle_starttag(self, tag, attrs):
+                    attributes = dict(attrs)
+                    if tag == "meta" and attributes.get("name") == "csrf-token":
+                        self.token = attributes.get("content")
+
+            django.setup()
+            user = get_user_model().objects.create_user(
+                username="sa160-csrf-user",
+                password="unused-test-password",
+            )
+            client = Client(enforce_csrf_checks=True)
+            client.force_login(user)
+            staticfiles_storage = {
+                "default": {
+                    "BACKEND": "django.core.files.storage.FileSystemStorage",
+                },
+                "staticfiles": {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+                },
+            }
+            with override_settings(STORAGES=staticfiles_storage):
+                shell_response = client.get("/orgs/", secure=True)
+            assert shell_response.status_code == 200, shell_response.status_code
+            parser = CsrfMetaParser()
+            parser.feed(shell_response.content.decode())
+            assert parser.token
+            mutation_response = client.post(
+                "/api/orgs/",
+                data=json.dumps({"name": "SA160 CSRF Organization"}),
+                content_type="application/json",
+                HTTP_X_CSRFTOKEN=parser.token,
+                secure=True,
+            )
+            assert mutation_response.status_code == 201, (
+                mutation_response.status_code,
+                mutation_response.content,
+            )
+            """
+        )
+        probe_result = subprocess.run(
+            ["poetry", "run", "python", "-c", probe],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=production_environment,
+        )
+        assert probe_result.returncode == 0, (
+            f"production CSRF probe failed:\n{probe_result.stdout}\n"
+            f"{probe_result.stderr}"
         )
 
     @staticmethod

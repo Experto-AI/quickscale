@@ -13,6 +13,9 @@ vi.mock('@/hooks/useFormSchema', () => ({
 }))
 
 const fetchMock = vi.fn()
+const firstCsrfToken = 'a'.repeat(32)
+const secondCsrfToken = 'b'.repeat(32)
+const maskedCsrfToken = 'm'.repeat(64)
 
 vi.stubGlobal('fetch', fetchMock)
 vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
@@ -27,9 +30,14 @@ const { createRoot } = await import(/* @vite-ignore */ new URL(localDependencyPa
 
 const cookieCases = [
   {
-    name: 'uses the first exact duplicate',
-    cookie: 'csrftoken=first-token; csrftoken=second-token',
-    expected: 'first-token',
+    name: 'uses the last exact duplicate like Django request.COOKIES',
+    cookie: `csrftoken=${firstCsrfToken}; csrftoken=${secondCsrfToken}`,
+    expected: secondCsrfToken,
+  },
+  {
+    name: 'uses the last exact duplicate in the reverse ordering',
+    cookie: `csrftoken=${secondCsrfToken}; csrftoken=${firstCsrfToken}`,
+    expected: firstCsrfToken,
   },
   {
     name: 'finds the token after a session cookie',
@@ -55,6 +63,13 @@ const cookieCases = [
 
 function setCookie(cookie: string) {
   vi.spyOn(document, 'cookie', 'get').mockReturnValue(cookie)
+}
+
+function setInjectedToken(token: string) {
+  const meta = document.createElement('meta')
+  meta.name = 'csrf-token'
+  meta.content = token
+  document.head.append(meta)
 }
 
 function buildFormSchema(): FormSchema {
@@ -84,6 +99,7 @@ function requestHeaders(callIndex = 0): Headers {
 }
 
 afterEach(() => {
+  document.querySelector('meta[name="csrf-token"]')?.remove()
   vi.restoreAllMocks()
   fetchMock.mockReset()
   useFormSchemaMock.mockReset()
@@ -101,21 +117,40 @@ describe('getCsrfToken', () => {
 
     expect(getCsrfToken()).toBe('')
   })
+
+  it('prefers the server-injected masked token when the cookie is HttpOnly', () => {
+    setCookie(`csrftoken=${firstCsrfToken}`)
+    setInjectedToken(maskedCsrfToken)
+
+    expect(getCsrfToken()).toBe(maskedCsrfToken)
+  })
 })
 
 describe('CSRF request callers', () => {
-  it('uses the selected token for a mutating apiRequest', async () => {
-    setCookie('sessionid=session-value; csrftoken=api%20token')
-    const expectedToken = getCsrfToken()
+  it('uses the server-injected token for a mutating apiRequest', async () => {
+    setInjectedToken(maskedCsrfToken)
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Headers(),
     })
 
-    await apiRequest('/api/example/', { method: 'POST', body: '{}' })
+    await apiRequest('/api/orgs/', { method: 'POST', body: '{}' })
 
-    expect(requestHeaders().get('X-CSRFToken')).toBe(expectedToken)
+    expect(requestHeaders().get('X-CSRFToken')).toBe(maskedCsrfToken)
+  })
+
+  it('uses Django last-cookie parity for a mutating apiRequest', async () => {
+    setCookie(`csrftoken=${firstCsrfToken}; csrftoken=${secondCsrfToken}`)
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+    })
+
+    await apiRequest('/api/orgs/', { method: 'POST', body: '{}' })
+
+    expect(requestHeaders().get('X-CSRFToken')).toBe(secondCsrfToken)
   })
 
   it('preserves a caller-supplied apiRequest CSRF header', async () => {
@@ -147,9 +182,8 @@ describe('CSRF request callers', () => {
     expect(requestHeaders().has('X-CSRFToken')).toBe(false)
   })
 
-  it('uses the same selected token for the FormRenderer POST', async () => {
-    setCookie('sessionid=session-value; csrftoken=form%20token')
-    const expectedToken = getCsrfToken()
+  it('uses Django last-cookie parity for the FormRenderer POST', async () => {
+    setCookie(`csrftoken=${firstCsrfToken}; csrftoken=${secondCsrfToken}`)
     useFormSchemaMock.mockReturnValue({
       data: buildFormSchema(),
       isLoading: false,
@@ -183,7 +217,7 @@ describe('CSRF request callers', () => {
         '/api/forms/contact/submit/',
         expect.objectContaining({ method: 'POST' }),
       )
-      expect(requestHeaders().get('X-CSRFToken')).toBe(expectedToken)
+      expect(requestHeaders().get('X-CSRFToken')).toBe(secondCsrfToken)
       expect(fetchMock.mock.calls[0]?.[1]).toEqual(
         expect.objectContaining({ body: JSON.stringify({ message: '' }) }),
       )
