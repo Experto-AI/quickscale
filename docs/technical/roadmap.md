@@ -204,6 +204,23 @@ or delivery evidence, not here.
   release authority. A browser-only correction or rerun is insufficient for merge. The current
   candidate remains unmerged; red evidence stays unmerged and no aggregate retry is permitted.
 
+  **Recorded handoff:** this unfinished delivery is retained on `wt-track1` over exact reviewed
+  checkpoint `341481687096cd17b9b3e7f376a82562509968a3`; it is not merged into `v88`. The genuine-
+  HTTPS harness phase and its focused, same-fact, frontend, and Core task checks are complete. The
+  release/status phase ran but remains outstanding because its only authorized aggregate ended red.
+  The roadmap records both independent merge blockers; the audit and changelog record the red
+  release attempt and continued open status. ***corrected after checkpoint attestation — not
+  independently graded*** Fresh bounded product-correction scope must be authorized before work
+  resumes. That authority must cover both the every-consumer client-identity contract and the
+  browser-proxy failure; after both corrections, independently review the exact new candidate and
+  only then obtain distinct fresh exact-once release authority. The spent command is not the next
+  action. Several recovery sentences still use the imprecise shorthand
+  `blog/forms persistence`; this low-severity documentation debt should later distinguish blog
+  throttling from forms persistence while preserving the separately named forms throttle override
+  and ordinary DRF consumers. A separate low-severity test debt also remains open: the safe malformed
+  percent-encoding cookie fallback lacks dedicated single-value and duplicate-order regression tests;
+  this checkpoint neither fixes nor release-accepts that behavior.
+
 ## Post-v88 work
 
 - [ ] **SA152 — Verify maintainer migration modes and their runtime compatibility.**
