@@ -95,6 +95,12 @@ describe('getCsrfToken', () => {
 
     expect(getCsrfToken()).toBe(expected)
   })
+
+  it('returns an empty string when document.cookie is empty', () => {
+    setCookie('')
+
+    expect(getCsrfToken()).toBe('')
+  })
 })
 
 describe('CSRF request callers', () => {
