@@ -42,8 +42,14 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 **Audit tools run (read-only):** `git log` / `git diff` / `git rev-parse` over the delta; CPython 3.14 for the two empirical checks below. No scanner was re-run this pass — the Trivy/Bandit gate is CI-owned and its ledger was read rather than re-executed.
 
 **Empirical checks run (§1e):** the terminal-remediation task-tier checks are recorded in the owning
-handoff. The prior root-finalized release run remains historical evidence for the pre-remediation
-bytes; no release-tier command was rerun for the corrected exact candidate.
+handoff. The corrected exact candidate at `cb21f791826c9ebcfdba5f8b034d7eddef8e02df`
+then received its single authorized `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` release-tier attempt.
+Stages 1–11 passed, but the attempt completed with exit **2**: Core reported **38 passed / 1 failed**
+in `quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::`
+`test_production_shell_csrf_token_accepts_authenticated_org_mutation` when Chromium returned
+`net::ERR_TOO_MANY_RETRIES` at the HTTPS proxy navigation and the proxy logged `BrokenPipeError`;
+CLI reported **54 passed**. This red attempt spent the exact-once authority. It is not release
+acceptance, does not authorize merge, and cannot be retried under that authority.
 
 ---
 
@@ -51,10 +57,11 @@ bytes; no release-tier command was rerun for the corrected exact candidate.
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| TA67 | S3 | correctness | SPA CSRF duplicate-cookie parity | S | High | Product/test remediation applied after terminal attestation — not independently graded; fresh release-tier evidence pending |
+| TA67 | S3 | correctness | SPA CSRF duplicate-cookie parity | S | High | Corrected exact candidate independently reviewed; release attempt red at HTTPS proxy navigation (exit 2); authority spent; open and non-mergeable |
 
 **Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **1** · S4 **0** ·
-**Total 1 open.** TA67 remains open pending fresh release-tier evidence for the corrected exact candidate.
+**Total 1 open.** TA67 remains open because the corrected exact candidate's authorized release
+attempt is red (exit 2), the exact-once authority is spent, and neither retry nor merge is authorized.
 
 ---
 
@@ -63,11 +70,18 @@ bytes; no release-tier command was rerun for the corrected exact candidate.
 ### TA67 — SPA CSRF duplicate-cookie parity
 
 The generated React helper previously selected the first exact `csrftoken` cookie even though
-Django's `parse_cookie()` exposes the last duplicate. Terminal remediation now aligns the helper,
-both write callers, tests, and generated hashes with the server and also restores production token
-transport through a masked token in the authenticated shell. Those bytes were applied after terminal
-attestation and are **not independently graded**. TA67 remains live until fresh release-tier evidence
-binds and passes on the corrected exact candidate.
+Django's `parse_cookie()` exposes the last duplicate. The corrected exact candidate aligns the
+helper, both write callers, tests, and generated hashes with the server and restores production token
+transport through a masked token in the authenticated shell. That candidate was independently
+reviewed, then its single authorized release-tier attempt completed with exit **2** after stages 1–11
+passed. Core reported **38 passed / 1 failed** in
+`quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::`
+`test_production_shell_csrf_token_accepts_authenticated_org_mutation`: Chromium returned
+`net::ERR_TOO_MANY_RETRIES` at the HTTPS proxy navigation and the proxy logged `BrokenPipeError`;
+CLI reported **54 passed**. The failure occurred before the positive mutation assertion, so this is
+red evidence, not release acceptance. TA67 remains live and the corrected candidate remains
+non-mergeable. The exact-once authority is spent; a reviewed browser-harness correction and fresh
+authority are required before any new release attempt.
 
 ---
 
@@ -155,8 +169,16 @@ binds and passes on the corrected exact candidate.
 - 2026-09-10 — **TA67 reopened by terminal attestation; TA68 remains retired.** The green SA160
   release run is immutable historical evidence for the prior bytes, but it did not prove Django
   duplicate-cookie parity or production React CSRF token transport. Terminal remediation corrected
-  those seams after attestation; fresh release-tier evidence must bind the corrected exact candidate
-  before TA67 is retired again. TA68's dead-helper correction is unchanged.
+  those seams, and the corrected exact candidate at
+  `cb21f791826c9ebcfdba5f8b034d7eddef8e02df` was independently reviewed before its single
+  authorized `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` attempt. That attempt completed with exit
+  **2**: Core reported **38 passed / 1 failed** in
+  `quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::`
+  `test_production_shell_csrf_token_accepts_authenticated_org_mutation` at the HTTPS proxy
+  navigation (`net::ERR_TOO_MANY_RETRIES` with proxy-side `BrokenPipeError`), while CLI reported
+  **54 passed**. The result is red, supplies no release or merge acceptance, and spent the exact-once
+  authority; no retry is authorized. TA67 remains open and the candidate remains unmerged and
+  non-mergeable. TA68's dead-helper correction is unchanged.
 - 2026-09-04 — **TA70** `container-status-substring-match`: **retired by SA170**. The ordered serial and concurrent release campaigns both passed with exact Core/CLI cleanup and preserved standing PostgreSQL state. Final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-02 — **Watch item closed:** the four `sqlparse` suppressions were retired by a real dependency upgrade to 0.6.0 during SA170 convergence; the vulnerability gate is green and the shared 2026-09-30 expiry no longer exists. No finding was opened or closed by this.
 - 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.

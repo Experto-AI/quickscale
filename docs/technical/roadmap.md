@@ -19,6 +19,16 @@ while CLI reported 54 passed. The prior green aggregate is historical evidence f
 red result leaves the corrected work below release acceptance and non-mergeable. No retry is
 authorized by the spent exact-once authority. Merge, release-note/version checks, tagging,
 publishing, and deployment remain separate maintainer actions.
+
+The same candidate also retains a high-severity client-identity divergence. The shared
+`quickscale_modules_orgs.current_org.get_client_ip` resolver falls back to `REMOTE_ADDR` when the
+normalized `X-Forwarded-For` chain is shorter than `TRUSTED_PROXY_COUNT`, while ordinary DRF
+throttles configured through `NUM_PROXIES` select an `X-Forwarded-For` entry from that same short
+chain. Every consumer must share one fail-closed contract: shorter chains use `REMOTE_ADDR`, equal
+and longer chains select the same right-indexed client hop, empty hops cannot satisfy the trusted
+proxy count, and missing or invalid proxy settings fail loudly. Both this security boundary and the
+red browser proof must close before merge. Correcting or rerunning only the browser failure cannot
+authorize merge.
 Optional maintenance may move past the release without delaying it.
 
 The scheduling table holds currently authorized work and owns horizon, track, dependencies, and
@@ -50,12 +60,18 @@ Track 2: (idle in v88)      owns post-v88 SA152, SA180
 Track 3: (idle in v88)      owns post-v88 SA177
 ```
 
-**Release recovery path: genuine browser HTTPS origin → real `apiRequest` proof → owning task tier →
-fresh release validation.** The retained checkpoint records this path, and the fresh attempt consumed
-its conditional exact-once release authority but ended red in the browser harness before the positive
-mutation assertion. A reviewed test-only correction and fresh authority are required; no retry is
-authorized under the spent attempt. All tracks stay idle for v88; their post-v88 assignments are
-future ownership, not release work.
+**Release recovery requires two independent closures: client-identity parity and a green genuine-
+HTTPS production-browser proof.** Reconcile the shared `get_client_ip` resolver, the forms throttle
+override, blog/forms persistence, and every ordinary DRF throttle using `NUM_PROXIES` to one tested
+contract: a shorter normalized forwarding chain must fail closed to `REMOTE_ADDR` for every
+consumer; equal and longer chains must resolve the same right-indexed client hop; empty hops must not
+inflate the chain; and missing or invalid proxy counts must fail loudly. Separately diagnose and
+correct the test-only HTTPS proxy/navigation failure, complete the real `apiRequest` mutation proof,
+and pass the owning task tier. The retained release attempt ended red before the positive mutation
+assertion and consumed its exact-once authority, so a newly reviewed candidate and fresh release
+authority are required. A browser-only correction, task pass, or green release rerun cannot authorize
+merge while client-identity parity remains open. All tracks stay idle for v88; their post-v88
+assignments are future ownership, not release work.
 
 Post-v88 ordering: SA177 may take the isolation runner freely now that SA165 has closed.
 SA152 and SA153 are independent — the portal can use a fresh generated project — though a
@@ -96,8 +112,8 @@ E2E. The corrected candidate is not release-accepted or merge-ready.
   the previous merge has landed. The consistency test then checks structure, not status prose.
   No track currently has authorized v88 work, so the shared closeout set has no active v88 writer.
 - The retained SA160 checkpoint's conditional Docker-backed release authority was consumed by the
-  `sa160-2026-09-10-20-21-26-release-attempt-1` red result. A future attempt requires a newly reviewed
-  candidate and distinct authority after the browser-harness failure is corrected.
+  recorded red result. A future attempt requires a newly reviewed candidate and distinct authority
+  after both the client-identity divergence and browser-harness failure are corrected.
   Future Docker-heavy work follows the
   [execution policy](validation_policy.md#candidate-review-and-integration) for routing, cleanup,
   candidate binding, and review/merge rules.
@@ -130,10 +146,15 @@ or delivery evidence, not here.
 
   **State (measured 2026-09-10):** corrected candidate `cb21f791826c9ebcfdba5f8b034d7eddef8e02df`
   is retained and unmerged on `wt-track1`; integration ref `v88` remains
-  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. EV-10 independently reviewed the exact 20-path
-  candidate, then consumed the one authorized attempt
-  `sa160-2026-09-10-20-21-26-release-attempt-1`. This is red release evidence, not an accepted
-  product candidate or release. No retry, merge, publication, tag, or deployment occurred.
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. An independent review covered the exact 20-path
+  candidate before the single authorized release attempt. This is red release evidence, not an
+  accepted product candidate or release. No retry, merge, publication, tag, or deployment occurred.
+
+  The candidate also retains a client-identity security-boundary mismatch. The shared
+  `get_client_ip` resolver used by the forms throttle override and blog/forms persistence returns
+  `REMOTE_ADDR` for a normalized forwarding chain shorter than `TRUSTED_PROXY_COUNT`; ordinary DRF
+  throttles configured through `NUM_PROXIES` can instead trust an entry from that short chain. The
+  candidate therefore remains non-mergeable independently of the browser failure.
 
   **Completed:** the earlier retained remediation still preserves the production HttpOnly CSRF cookie,
   masked shell token, Django-last duplicate-cookie behavior, both generated callers, and three rebound
@@ -148,28 +169,40 @@ or delivery evidence, not here.
   `quickscale_core/tests/test_generated_project_runtime.py:2209`, where Chromium returned
   `net::ERR_TOO_MANY_RETRIES` for the HTTPS proxy navigation and the proxy logged `BrokenPipeError`.
 
-  **Pending:** diagnose and correct the test-only HTTPS proxy/navigation failure without weakening
-  shipped redirect, Secure, HttpOnly, proxy, or CSRF semantics. The positive browser assertions must
-  complete without injected session cookies or positive CSRF headers, and the focused node must pass
-  with no skip. That correction requires a fresh reviewed candidate and fresh release authority;
-  the current exact-once authority is spent and cannot be retried.
+  **Pending:** reconcile the shared resolver, the forms throttle override, blog/forms persistence,
+  and every ordinary DRF throttle using `NUM_PROXIES` to one fail-closed identity contract. Pin
+  shorter, equal, and longer normalized forwarding chains across every consumer: shorter chains use
+  `REMOTE_ADDR`; equal and longer chains select the same right-indexed client hop; empty hops cannot
+  inflate the chain; and missing or invalid proxy settings fail loudly. Also diagnose and correct the
+  test-only HTTPS proxy/navigation failure without weakening shipped redirect, Secure, HttpOnly,
+  proxy, or CSRF semantics. The positive browser assertions must complete without injected session
+  cookies or positive CSRF headers, and the focused node must pass with no skip. Both corrections
+  require a fresh reviewed candidate and fresh release authority; the current exact-once authority
+  is spent and cannot be retried.
 
-  **Blocking:** the generated production browser proof reached the authenticated shell setup but
-  Chromium could not complete navigation to `https://localhost:<proxy>/orgs/new/`, returning
+  **Blocking:** two independent blockers prohibit release and merge acceptance. At the client-
+  identity seam, a one-entry normalized `X-Forwarded-For` chain with
+  `TRUSTED_PROXY_COUNT=2` resolves to `REMOTE_ADDR` through the shared resolver but to the forwarded
+  entry through ordinary DRF throttling; request throttling, persistence, and audit identity can
+  therefore diverge on caller-controlled input. In the generated production browser proof, Chromium
+  could not complete navigation to `https://localhost:<proxy>/orgs/new/`, returning
   `net::ERR_TOO_MANY_RETRIES`; the test proxy recorded a `BrokenPipeError` while writing the upstream
-  response. The Core lane therefore returned 38 passed / 1 failed, the aggregate returned exit 2, and
-  release/merge acceptance remains prohibited. This failure is not covered by an accepted-failure
-  oracle and no second aggregate is authorized.
+  response. The Core lane returned 38 passed / 1 failed and the aggregate returned exit 2. The browser
+  failure is not covered by an accepted-failure oracle, and no second aggregate is authorized.
 
-  **Decisions needed:** authorize a new reviewed correction and release attempt after the proxy failure
-  is diagnosed. Trusted-origin overrides, injected cookies or CSRF headers, and weakened production
-  security settings remain unacceptable substitutes.
+  **Decisions needed:** authorize a new reviewed candidate that closes both the every-consumer
+  client-identity contract and the diagnosed browser proxy failure, followed by a fresh release
+  attempt. Correcting or rerunning only the browser failure cannot authorize merge. Trusted-origin
+  overrides, injected cookies or CSRF headers, and weakened production security settings remain
+  unacceptable substitutes.
 
-  **Remaining plan:** retain the exact red evidence under
-  `.adaptive/evidence/sa160-2026-09-10-20-21-26/phase-b-release/`, correct the test-only proxy failure
-  in a separately reviewed candidate, re-run the focused and owning task-tier checks, independently
-  review the new exact tip, and obtain fresh release authority. The current candidate remains unmerged;
-  red evidence stays unmerged and no aggregate retry is permitted.
+  **Remaining plan:** retain the exact red evidence referenced by the changelog; make the shared
+  resolver, forms override, blog/forms persistence, and ordinary DRF throttles agree on fail-closed
+  shorter-chain and matching equal/longer-chain identity, with empty-hop and invalid-setting negative
+  controls; correct the test-only proxy failure without weakening product security; re-run the
+  focused and owning task-tier checks; independently review the new exact tip; and obtain fresh
+  release authority. A browser-only correction or rerun is insufficient for merge. The current
+  candidate remains unmerged; red evidence stays unmerged and no aggregate retry is permitted.
 
 ## Post-v88 work
 
