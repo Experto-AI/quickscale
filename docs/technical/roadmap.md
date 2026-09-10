@@ -9,10 +9,10 @@ Ship the v88 hardening release with working generated-project writes and accepte
 hardening. Then deliver the first useful property portal in a
 project-owned extension, generalizing capabilities only after that project proves their value.
 
-The release is ready when every **required** v88 delivery below is accepted, the final integrated
-candidate passes the release tier in [validation policy](validation_policy.md#validation-tiers),
-including E2E for generator changes, and release notes and version/package checks are complete.
-A previous green `make ci` does not validate later product changes. Tagging, publishing, and deployment remain separate maintainer actions.
+The v88 hardening release has a root-finalized green candidate and release aggregate: every required
+v88 delivery is accepted, and the generator-change release tier passed with complete E2E evidence.
+Merge, release-note/version checks, tagging, publishing, and deployment remain separate maintainer
+actions; the green aggregate does not claim any of them.
 Optional maintenance may move past the release without delaying it.
 
 This planner holds open work only. A single scheduling table owns horizon, track, dependencies,
@@ -26,7 +26,6 @@ Absorbing a ticket transfers its unfinished obligations and does not claim its f
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA160 | Fix generated CSRF handling and remove dead settings helpers | v88 | 1 | — | Required |
 | SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 2 | — | Deferred |
 | SA180 | Derive the gate-parity count oracles from the registry | post-v88 | 2 | — | Deferred |
 | SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | — | Deferred |
@@ -38,22 +37,14 @@ Track numbers map to the existing worktrees: **1 = W1 / wt-track1**, **2 = W2 / 
 start them during release work. SA154 is an inventory, not an implementation queue.
 
 ```text
-Track 1: SA160 ──► final release validation and closeout
+Track 1: (no open v88 ticket)
 Track 2: (idle in v88)      owns post-v88 SA152, SA180
 Track 3: (idle in v88)      owns post-v88 SA177
 ```
 
-**Critical path: SA160 → final release validation.** Every remaining v88 task is on it,
-and all of it lives on track 1. There is no v88 filler work left and no parallelism left to win:
-tracks 2 and 3 are idle for the rest of the release.
-
-SA160 has no v88 prerequisite. `quickscale_core/tests/fixtures/sa90_emission_manifests.json` is
-released, so its helper, Vitest table, dead-helper deletions, regressions, and the single emission
-rebaseline can all proceed now on track 1.
-
-**Neither idle track can take v88 work.** SA160 is one review unit and the only open v88 delivery,
-so moving it off track 1 would buy no parallelism and would split ownership of the generator and
-emission surfaces for no schedule gain.
+**Critical path: none for v88.** The root-finalized candidate and single release aggregate are
+green, so no required v88 delivery remains open. Tracks 1, 2, and 3 are idle for the rest of the
+release; their post-v88 assignments are future ownership, not release work.
 
 Post-v88 ordering: SA177 may take the isolation runner freely now that SA165 has closed.
 SA152 and SA153 are independent — the portal can use a fresh generated project — though a
@@ -67,27 +58,18 @@ are yes.
 
 | Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA160 | yes — no prerequisite | yes — fixture released | no — release tier no-verdict: execution budget timeout | no — release tier no-verdict: execution budget timeout | **yes** |
+| 1 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
-- **Can start** — SA160's helper, Vitest table, dead-helper deletions, and regressions are all
-  authorable now, with no v88 prerequisite.
-- **Can finish** — the emission fixture is released, so the single rebaseline can land with the rest
-  of the delivery rather than waiting on another ticket.
-- **Can merge** — through the serialized queue, once the combined candidate is reviewed and its
-  generator-change release tier has completed with an accepted verdict.
-
-SA160 is not yet **truly green** because its one fresh, scope-authorized Phase E release-gate
-attempt returned no verdict: the install, static, coverage, and integration stages passed, but the
-execution budget terminated the E2E lanes before completion and before the wrapper returned a
-durable status. The correction was independently reviewed and the candidate is retained, but merge
-and release acceptance remain blocked. The exact-once authority is spent; no second aggregate is
-authorized by this phase.
+All required v88 work is accepted on the root-finalized candidate, and the single release aggregate
+is green with successful exact-scope cleanup and standing-resource preservation. The candidate is
+release-green evidence only: merge, tagging, publishing, and deployment remain outside this status
+reconciliation.
 
 ### Ownership and merge coordination
 
-- Track 1 owns generator templates, the CSRF helper, and emission-fixture updates.
+- Track 1 has no open v88 delivery; its post-v88 ownership is SA153 and SA154.
 - Track 2 owns gate documentation, `scripts/gate_registry.json` and module declarations, and the
   maintainer migration tools. It holds no v88 work; SA152 and SA180 are post-v88.
 - Track 3 owns deferred predicate conformance under SA177, including the isolation runner.
@@ -100,11 +82,9 @@ authorized by this phase.
   semantics and no generated consumer, and the serialized merge queue plus reconcile-on-the-owning-
   worktree rule above covers them: each track resolves the shared set once, at its own merge, after
   the previous merge has landed. The consistency test then checks structure, not status prose.
-  Only track 1 has open v88 work, so no two v88 tickets run concurrently and the shared closeout
-  set has a single writer until the release closes.
-- The active task requiring Docker-backed acceptance owns that validation slot. Other tracks may
-  prepare and run DB-free checks concurrently. Private PostgreSQL profiles do not claim the standing
-  service; coordinate Docker-heavy runs across active tracks. See the
+   No track has open v88 work, so no two v88 tickets run concurrently and the shared closeout set
+   has no active ticket writer after the release closes.
+- No active v88 task requires Docker-backed acceptance. Future Docker-heavy work follows the
   [execution policy](validation_policy.md#candidate-review-and-integration) for routing, cleanup,
   candidate binding, and review/merge rules.
 
@@ -132,107 +112,8 @@ or delivery evidence, not here.
 
 ## v88 deliveries
 
-- [ ] **SA160 — Fix generated CSRF handling and remove dead settings helpers.**
-
-  **State (measured 2026-09-09): advanced partial retained on `wt-track1` at product commit
-  `a5077bcf9d0ff47f843c6fa25bb432c3ddf211a7`, with the exact correction tip
-  `31a9376858535fdab2a4f5bb73ca447f50770490`; neither is merged into `v88`.** Phases A, B, and D are
-  accepted: both React callers use one exact-name, decoded, deterministic CSRF helper; the dead
-  generated-settings helpers are removed while the live proxy contract remains; and all three
-  emission variants are rebaselined with prior evidence preserved. Phase C remains formally
-  unaccepted because its implementation return stopped on a stale MyPy suppression; convergence
-  removed that suppression and the combined frontend, Ruff, MyPy, and 39-test focused chain is
-  green, but the phase ledger is not retroactively rewritten.
-
-  **Pending:** Phase E under the reviewed closeout authority independently reviewed the exact
-  correction and invoked `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` once. Install, static, coverage,
-  and integration passed; the E2E lanes were still running when the execution budget sent SIGTERM,
-  so the wrapper did not return a process exit or a release verdict. Exact-scope cleanup succeeded
-  and preserved the standing PostgreSQL resources. **Blocking:** release acceptance, merge, and the
-  SA160/TA67/TA68 closeout remain open because no completed release verdict exists. The exact-once
-  authority is spent; do not repeat accepted phases A, B, or D or invoke another release aggregate
-  without fresh authority. The retained candidate and all prior evidence remain unchanged.
-
-  **Retained checkpoint (terminally reviewed 2026-09-10):**
-
-  - **Completed:** Phases A, B, and D remain accepted. Phase C's live client-IP resolver comment and
-    tests remain retained and terminally reviewed as sound while its implementation handback remains
-    formally partial. The U7 taxonomy correction remains committed. The exact empty-cookie proof is
-    still the two unstaged paths
-    `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/test/csrf.test.tsx`
-    and `quickscale_core/tests/fixtures/sa90_emission_manifests.json`, preserved above committed
-    checkpoint parent `dd8e31b3b4c174c7ff1f702c52a3219379f9903a`. Their patch SHA-256 is
-    `d78fe4d231cbfa9f01e192b69e32043017887f6834be4b7c81f13eba67e299ef`; the source digest remains
-    `feb682b42f20eafca504930f108f0febe79adb1d19316ea55380682716db170f` in exactly
-    `react_default`, `react_empty`, and `react_selected`. The exact focused chain is green: frontend
-    lint/type checks pass, `pnpm exec vitest run src/test/csrf.test.tsx` legitimately selects the main
-    and nested `no_social` rendered copies and passes 22 tests with no skip, and exact-manifest parity
-    passes 7 tests with no skip. The repository-owned core task gate is also green with 2,916 passed,
-    1 reported skip, and 90.32% coverage. Product convergence and terminal review found no byte defect;
-    the terminal task-tier evidence gap was closed by a separate evidence-only pass with no tracked
-    correction and no release claim.
-  - **Pending:** all four phases under reviewed authority `EV-4` remain outstanding. `CANDIDATE_BIND`
-    returned partial and is unaccepted because its frozen acceptance text required one selected file
-    while the exact authorized command selects both rendered copies; its return also omitted the
-    mandatory adjudication block. `EXACT_TIP_REVIEW`, `RELEASE_EXECUTE`, and `STATUS_RECONCILE` were
-    not dispatched because they hard-depend on accepted candidate binding. No candidate commit exists,
-    no release process started, and the separately authorized 3,600,000 ms release attempt remains
-    unspent.
-  - **Blocking:** the reviewed product bytes are correct but uncommitted, and neither later review nor
-    release may consume an unaccepted phase. This closes only under fresh reviewed-plan authority that
-    keeps the exact `pnpm exec vitest run src/test/csrf.test.tsx` command while accepting its observed
-    two-rendered-file topology (or binds counts only from runner output), retains the green core/parity
-    evidence, and authorizes the root to commit exactly the two named files. Release acceptance and
-    merge then still require fresh independent review of that immutable commit and the one authorized
-    `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` process returning green within its 3,600,000 ms carrier,
-    with exact scoped cleanup. Until then, SA160, TA67, and TA68 remain open and nothing merges into
-    `v88`.
-  - **Decisions needed:** none. The two-file correction and one fresh 3,600,000 ms release attempt are
-    already authorized; only corrected workflow authority and its evidence are missing.
-  - **Remaining plan:** ***corrected after checkpoint attestation — not independently graded*** reviewed
-    authority `EV-4` governed `CANDIDATE_BIND`, `EXACT_TIP_REVIEW`, `RELEASE_EXECUTE`, and
-    `STATUS_RECONCILE`, but is not reusable because its first phase's one-file result criterion
-    contradicts the command's stable two-copy render topology. Start from `wt-track1` with the exact
-    two unstaged paths above; recheck checkpoint parent
-    `dd8e31b3b4c174c7ff1f702c52a3219379f9903a` and pre-release/pre-merge `v88`
-    `5716dabfc9d2d90eda69fe62a934c36567e9ec16`; preserve the reviewed bytes; and obtain a fresh reviewed
-    plan whose first resume object is corrected `CANDIDATE_BIND`. After accepted validation, commit and
-    bind only those two files, independently review that exact tip, then run the still-unspent release
-    attempt once. On green plus successful cleanup, `STATUS_RECONCILE` must close SA160/TA67/TA68 in
-    their owning status documents and run the consistency check; then converge the complete
-    candidate-and-status delta and terminally attest that exact settled tip. After attestation, the
-    root may only merge that exact chain through the serialized queue, with no further status mutation.
-    On red, no-verdict, killed-clock, or cleanup failure, keep all three open and retain a truthful
-    unmerged checkpoint. Do not redo accepted implementation or taxonomy work, and do not absorb
-    malformed-percent, unrelated `no_social`, or `validateQuickScaleSeam.test.ts` work.
-
-  **Advisory, not blocking:** malformed percent encoding currently fails closed to an empty token,
-  but a dedicated generated Vitest remains optional future hardening and is not part of SA160's
-  remaining merge gate.
-
-  **Acceptance:**
-
-  - Replace the duplicate cookie parsers in `themes/showcase_react/src/hooks/useApi.ts` and
-    `src/components/forms/FormRenderer.tsx` with one `src/lib/` helper. Match cookie names exactly,
-    decode values, and select a token deterministically when duplicate names occur. Both callers
-    use it; no third implementation remains. A Vitest table covers duplicate cookies, a preceding
-    session cookie, a single cookie, and no cookie. Verify the selected token and write-request
-    header behavior, not only that a string is non-empty.
-  - Delete unreachable `get_client_ip` definitions in `settings/base.py.j2` and
-    `settings/production.py.j2` and the misleading production-rebind comment. Preserve uppercase
-    proxy settings and `REST_FRAMEWORK["NUM_PROXIES"]` recomputation. A generated-project regression
-    proves settings import and the live orgs client-IP resolver retain their expected behavior.
-  - Keep the deletion clear of the generator regressions. `base.py.j2`'s settings-documentation
-    block and the function body each contain `-TRUSTED_PROXY_COUNT`, and
-    `test_generator.py::TestGeneratedProjectSettingsProxyMath` asserts that string survives in the
-    generated `base.py`. Delete the function and reword the sentence naming it, but preserve the
-    proxy-math comment, so no edit to `test_generator.py` is owed. Retarget the two dead-helper
-    assertions in `test_templates.py` — which is outside the frozen set — at the orgs resolver.
-  - Rebaseline emission parity once after both changes, review the whole candidate, and run the
-    generator-change release tier once for that delivery. Retire the duplicate-cookie and dead
-    settings-helper findings only with their regression evidence.
-
-  **Surfaces:** React theme, generated settings, emission fixture, and technical audit.
+No required v88 delivery remains open. The root-finalized candidate and release evidence are
+archived in [CHANGELOG.md](../../CHANGELOG.md); this roadmap retains only post-v88 work below.
 
 ## Post-v88 work
 

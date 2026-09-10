@@ -35,18 +35,14 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 **Read in full:** the entire `602f4be3..HEAD` diff including every test hunk; `quickscale_modules/orgs/.../tenancy.py` (registry, `_FORCE_RLS_FORWARD_SQL`/`_REVERSE_SQL`, `apply_force_rls`, `refresh_force_rls_policies`, the equality-trigger helpers, and the conformance helpers `is_tenant_model` → `check_tenant_model_isolation`); `managers.py`; `middleware.py`; `permissions.py`; `checks.py`; `apps.py`; `public_context.py`; the `current_org.py` GUC layer (`_tenant_context`, `org_scope`, `_make_priming_execute_wrapper`, `install_priming_wrapper`, `operator_access`); `quickscale_modules/forms/.../views.py:140-520` and `throttles.py`; `quickscale_modules/billing/.../services.py` credit-ledger paths; `quickscale_modules/blog/.../feeds.py`; `quickscale_core/.../dr_engine/_lock.py` (entire file); the `dr_engine/orchestration.py` destructive sites, `create_backup` lock section, and admin restore staging pipeline; `advisory_lock.py` acquire/release/stale; `quickscale_devtools/beta_migration.py` mutation and guard sites; `scripts/security_suppressions.json`; the `start.sh.j2` privileged-command contract.
 
-**Sampled:** the 53-site `getattr(settings, …, <default>)` census across all modules; subprocess-timeout and `rmtree`/`unlink` censuses across all first-party source; `poetry.lock` pins for the security-relevant packages; CLI destructive paths; generated settings templates at the TA68 anchors.
+**Sampled:** the 53-site `getattr(settings, …, <default>)` census across all modules; subprocess-timeout and `rmtree`/`unlink` censuses across all first-party source; `poetry.lock` pins for the security-relevant packages; CLI destructive paths.
 
 **Skipped:** the React theme component bodies and `scripts/` gate internals (both read at depth by the prior passes this cycle); generated-project migrations; pylint/radon/vulture internals.
 
 **Audit tools run (read-only):** `git log` / `git diff` / `git rev-parse` over the delta; CPython 3.14 for the two empirical checks below. No scanner was re-run this pass — the Trivy/Bandit gate is CI-owned and its ledger was read rather than re-executed.
 
-**Empirical checks run (§1e) — 2, both side-effect-free:**
-
-| # | Check | Result |
-|---|---|---|
-| 1 | Re-implemented `getCsrfToken`'s exact split-and-count logic in CPython and ran it over five cookie shapes | **Confirmed TA67** — `'csrftoken=A; csrftoken=B'` and `'csrftoken=A; sessionid=x; csrftoken=B'` both return `''`; single and sibling cases return `'A'` |
-| 2 | Parsed `TENANT_TABLE_REGISTRY` and cross-checked every ENROLLED entry's convention-derived table name (`app_label + '_' + model_name.lower()`) against the explicit `db_table` declarations in all module `models.py` | **Refuted** a suspected live divergence in `refresh_force_rls_policies` — 45 entries (21 ENROLLED / 24 EXCLUDED_REVIEWED), 8 explicit `db_table` declarations, **zero divergence** from the convention. The latent naming risk was later retired by SA172's metadata-derived lookup |
+**Empirical checks run (§1e):** none in this status-only reconciliation. The root-finalized release
+evidence and closure rationale are archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
@@ -54,61 +50,15 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | still-open |
-| `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | still-open |
 
-**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **1** · **Total 2 open.** Quick wins (⚡ Trivial-effort S3/S4): TA67.
+**Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **0** · S4 **0** ·
+**Total 0 open.** No numbered live finding remains.
 
 ---
 
 ## Findings
 
-### TA67 — SPA CSRF token lookup returns empty whenever two `csrftoken` cookies exist
-
-**ID:** `spa-csrf-token-duplicate-cookie`
-
-**Severity:** **S3.** A latent bug that needs one precondition — a duplicate `csrftoken` cookie — after which **every** state-changing request from the React SPA fails with 403 and the app is read-only. Deployment reality #3 (the generated project, internet-facing). Fails closed, so it is availability, not a security hole. Reachability drops one notch for the single unverified precondition.
-
-**Category:** §4.I Correctness (§4.X frontend). **Confidence:** High — logic verified by reading and re-confirmed empirically this pass (check #1).
-
-**Location:** `…/themes/showcase_react/src/hooks/useApi.ts:20-28` and `…/src/components/forms/FormRenderer.tsx:206-211` — the same eleven lines, duplicated. Both re-verified at HEAD.
-
-**Defect:** The parser splits the cookie string on the delimiter `"; csrftoken="` and accepts the result **only when it yields exactly two parts**, returning `''` otherwise. Two `csrftoken` cookies yield three parts.
-
-**Failure scenario:** The project is served at `app.example.com` while a `csrftoken` cookie also exists for `.example.com` — the ordinary outcome of setting or later changing `CSRF_COOKIE_DOMAIN`, of running a sibling Django app on another subdomain, or of a stale apex-scoped cookie surviving a domain-scope change. The browser sends both, `document.cookie` becomes `…csrftoken=A; csrftoken=B…`, `parts.length === 3`, `getCsrfToken()` returns `''`, `buildRequestHeaders` (`:89-94`) skips `X-CSRFToken` because the token is falsy, and Django rejects every POST/PUT/PATCH/DELETE with 403. Forms submission, org creation, settings changes, and CRM writes all fail; GETs keep working, so the app looks alive and merely refuses to save. No error names the cause.
-
-**Evidence:**
-
-```ts
-// useApi.ts:20-28
-function getCsrfToken(): string {
-  const name = 'csrftoken'
-  const value = `; ${document.cookie}`
-  const parts = value.split(`; ${name}=`)
-  if (parts.length === 2) {
-    return parts.pop()?.split(';').shift() ?? ''
-  }
-  return ''
-}
-```
-
-`FormRenderer.tsx:206-211` is the same function with the body on one line. There are exactly two copies in the theme.
-
-**Refutation:** Searched for a layer-up guard and found none — there is no shared CSRF helper, no axios/fetch interceptor, and no template-injected token: `buildRequestHeaders` is the only place `X-CSRFToken` is set, and `FormRenderer` sets its own. Considered whether Django's `CsrfViewMiddleware` accepts the token from the POST body as a fallback — it does, via the `csrfmiddlewaretoken` field, but the SPA sends JSON bodies and never that field. Considered whether the `?? ''` branch is the real bug rather than the length check — it is not; with two parts the parse is correct, and the length check is what discards the three-part case. Considered `window.__QUICKSCALE__` as a token source — `validateQuickScaleSeam.ts` carries no CSRF key.
-
-**Fix:** Replace both copies with one shared helper that iterates cookies rather than counting split segments — split `document.cookie` on `'; '`, find the first entry whose name is exactly `csrftoken`, and `decodeURIComponent` its value (Django's own documented `getCookie`). Export it from `src/lib/` and import it in both call sites, so the next consumer does not copy a third variant. **Effort:** Trivial.
-
-**Verification:** Unit-test the helper against `'csrftoken=A; csrftoken=B'`, `'sessionid=x; csrftoken=A'`, `'csrftoken=A'`, and `''`; the first three must return a non-empty token. `vitest` already runs in this theme (`vitest.config.ts`, `src/test/`).
-
-**Deliberate?** None found. The `parts.length === 2` idiom is a widely copied snippet; nothing in either file acknowledges the multi-cookie case.
-
-**Age:** Long-standing; carried unchanged from the 2026-08-22 pass and unmodified in the delta.
-
----
-
-### S4
-
-- **TA68 · `generated-settings-dead-client-ip`** · `…/templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` · Both files define a module-level `get_client_ip(request)`, and `production.py.j2` rebinds it with a comment claiming the rebind exists "so that production defaults … are actually in effect at request time". Neither is reachable in a generated project: Django's `Settings` copies only **uppercase** names off the settings module, so `django.conf.settings.get_client_ip` does not exist, and nothing in the generated tree imports either function — re-verified at HEAD, a grep across all templates still returns only the two definitions and the comments referring to them. The real consumer is `quickscale_modules_orgs.current_org.get_client_ip`, which reads the uppercase `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is correct. · **Fix:** delete both definitions and keep the settings plus the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation, or add a comment pointing at the orgs helper as the live implementation. The behavioural comment in `production.py.j2:119-122` is misleading as written and should go either way.
+No live findings remain after the closure reconciliation.
 
 ---
 
@@ -126,7 +76,6 @@ function getCsrfToken(): string {
 | DR engine — locking | `_lock.py` in full; `advisory_lock.py` acquire/release/stale | Clean after the accepted inode-bound lock correction; the fcntl cooperation limitation remains an advisory risk |
 | DR engine — orchestration | destructive sites, `create_backup` lock section, admin restore staging/upload pipeline | Clean; the upload path streams via `chunks()` — see *Notes* |
 | devtools — beta migration | `beta_migration.py` mutation sites, TOML writer, identity replacement, git guard | Clean — the clean-worktree blocker at `:1457` is the reversal path; see *Clean sweeps* |
-| Generated settings templates | `base.py.j2`, `production.py.j2` at the TA68 anchors; `start.sh.j2` launcher contract | **TA68**; the launcher contract is correctly honoured — see *Clean sweeps* |
 | Dependency & suppression hygiene | `poetry.lock` security-relevant pins; `scripts/security_suppressions.json` | Clean — all 7 remaining suppressions are accountable and unexpired, and no shared expiry cliff remains |
 
 ---
@@ -155,7 +104,6 @@ function getCsrfToken(): string {
 *(candidate inputs for the companion `deep-architectural-audit` — not findings here)*
 
 - **Two independent filesystem-lock implementations.** `AdvisoryLock` (`advisory_lock.py`) and the DR backup lock (`dr_engine/_lock.py`) remain separate implementations after the release-accepted atomic, inode-bound correction. This is a non-defect consolidation watch question: revisit only if a third implementation appears, behavior or platform support diverges, or both public contracts can no longer be preserved independently.
-- **Frontend helpers are copied rather than shared.** TA67 is one function in two files; the theme has no `src/lib/http` seam, so the next call site that needs a CSRF token will produce a third copy. The contained fix does not create the seam. *(Carried from the prior pass — unchanged.)*
 - **Conformance gates assert policy presence, not policy content.** `table_has_force_rls` (`tenancy.py:1623-1677`) accepts any table where `relrowsecurity` and `relforcerowsecurity` are true and `COUNT(*) FROM pg_policies >= 1`. A table carrying a permissive `USING (true)` policy would pass every isolation check the repository runs. The registry-driven parity tests constrain *which* tables are enrolled but not *what* their policies say.
 
 ---
@@ -164,7 +112,6 @@ function getCsrfToken(): string {
 
 | Gap | Would have caught | Recommendation |
 |---|---|---|
-| Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The shared-helper fix is the real prevention |
 | RLS policy assertions check existence, not predicate text | Structural smell #3 | Extend the isolation conformance suite to assert the policy `qual`/`with_check` text from `pg_policies` matches the `_FORCE_RLS_FORWARD_SQL` template for each enrolled table — this pins the operator-read/tenant-write split as a gate rather than a comment |
 
 ---
@@ -196,8 +143,7 @@ function getCsrfToken(): string {
 - 2026-08-21 — Prior watch items *integration-branch CI* and *generator lock generation*: **still-open, accepted / owned**. Carried forward unchanged.
 - 2026-08-27 — **Closed-item closure narratives are archived.** TA63, TA65, TA69, the SA150 local-wheelhouse watch item, the dependency-vulnerability and security-static-analysis tooling gaps, and the six adjudicated arch-audit red-flag leads are all closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-08-27 — **Quality-baseline watch item retired.** Both recorded warning regressions are gone; monotonicity passes.
-- 2026-08-28 — **TA67** `spa-csrf-token-duplicate-cookie`: **still-open**. Re-verified in code at both anchors (`useApi.ts:20-28`, `FormRenderer.tsx:206-211`) — byte-identical to the prior pass — and the mechanism re-confirmed empirically (check #1). Severity, fix, and effort unchanged.
-- 2026-08-28 — **TA68** `generated-settings-dead-client-ip`: **still-open**. Re-verified: both definitions present, and a fresh grep across all generator templates still finds no importer.
+- 2026-09-10 — **TA67 and TA68 retired by the root-finalized green SA160 release evidence.** Closure detail and immutable release provenance are retained in [CHANGELOG.md](../../CHANGELOG.md); no live finding remains.
 - 2026-09-04 — **TA70** `container-status-substring-match`: **retired by SA170**. The ordered serial and concurrent release campaigns both passed with exact Core/CLI cleanup and preserved standing PostgreSQL state. Final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-02 — **Watch item closed:** the four `sqlparse` suppressions were retired by a real dependency upgrade to 0.6.0 during SA170 convergence; the vulnerability gate is green and the shared 2026-09-30 expiry no longer exists. No finding was opened or closed by this.
 - 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.
@@ -212,7 +158,6 @@ function getCsrfToken(): string {
 - 2026-08-28 — **No prior closure claims required verification (§2f.3)**: the prior pass carried three open findings and claimed no new closures in the delta window, so there was no closure testimony to check against code. All three prior IDs were nonetheless re-verified at their anchors, as logged above.
 - 2026-08-28 — **Fix-regression pass (§3.6)**: not applicable — the delta contains no fix for any prior finding. The two behavioural commits are test-only.
 - 2026-08-28 — **Test-integrity diff (§3.7)**: the delta's ~60 removed assertions were read hunk by hunk against the "did any test get weaker?" question and **cleared**. Every removed assertion pinned documentation state, not code behaviour; the removal of the assertions over `arch-audit.md` and `tech-audit.md` is mandated by `decisions.md:670`; the replacement derives its counts from the roadmap rather than pinning literals, upgrades bare `assert`s to diagnostic `AssertionError`s, and adds a red-canary test proving drift still fails. No `skip`/`xfail` was added, no tolerance widened, no mock replaced a real dependency. Full adjudication in *Clean sweeps*.
-- 2026-08-28 — **Chain pass (§3.9) ran** and produced **no chain**. Each of the five open findings was paired with the others, with the ten carried watch items, and with the crown jewels (tenant data, credentials, backups, money). TA67 and TA70 both fail closed and neither widens the other; TA71's window needs a pre-existing stale lock that no other finding creates; TA72 is latent and reachable only through a migration that does not yet exist. The nearest miss is TA71 × the *cross-tenant `all_objects` fallback* watch item — two concurrent backup runs do not change manager scoping, so it does not compose.
 - 2026-09-05 — **Ticket splits, no finding changed.** TA72's owner was carrying a two-line forward-template
   repair bundled with a predicate-text conformance assertion over every enrolled table. The repair stays with
   **SA172**; the assertion moves to post-v88 **SA177**, so the *"RLS policy assertions check existence, not
@@ -221,6 +166,5 @@ function getCsrfToken(): string {
   retirement step was assigned to **SA179** at this checkpoint; the consolidation below supersedes that assignment.
   No finding was opened, closed, promoted, or demoted.
 - 2026-09-05 — **SA165 retained-partial reconciliation:** the retained A-C product addresses `flush_empty_consolidated_sections`, the identity-blind isolation skip, `_HOST_DEPENDENT_PATHS`, and generated local credentials. Review of the five-file product candidate and the final release verdict remain outstanding, so the four notes remain live and SA165 remains open. SA165 now absorbs SA179's subsequent documentation closeout; the documents recording the review remain outside the frozen product evidence. Historical verdicts and continuation evidence are retained in [CHANGELOG.md](../../CHANGELOG.md); current scheduling is maintained in the [roadmap](../technical/roadmap.md).
-- 2026-09-05 — **Planning consolidation, no finding changed.** SA160 absorbs SA161's generated-settings dead-code removal, keeping TA67 and TA68 open pending implementation and validation. SA165 absorbs SA179's documentation closeout, superseding the split ownership recorded above. No product work or release verification occurred in this edit, and none of the four retained-product notes has been retired.
 
 *Categories swept with no qualifying finding this pass: injection sinks of every kind, authentication and authorization, secrets handling, cryptographic use, multi-tenant isolation, data handling and serialization, resources and I/O, performance, dependency and build hygiene, CLI destructive-path safety, and the frontend, library/SDK, code-generator, and infrastructure-as-code archetype lenses.*

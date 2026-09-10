@@ -7,27 +7,6 @@ The [roadmap](roadmap.md) owns task scope, tracks, dependencies, scheduling, and
 This companion explains implementation rationale. Read the corresponding roadmap task first;
 completed work and historical evidence belong in [CHANGELOG.md](../../CHANGELOG.md).
 
-## SA160 — Repair generated CSRF handling and remove dead settings helpers
-
-The React theme repeats a cookie parser in `useApi.ts` and `FormRenderer.tsx`. Splitting on
-`"; csrftoken="` and accepting exactly two parts returns an empty token when the browser has
-multiple cookies of that name at different domain scopes. Reads still work, while Django rejects
-mutating requests without `X-CSRFToken`.
-
-Use one shared helper under `src/lib/`: iterate cookie entries, match the name exactly, and decode
-the selected value. Both request paths should import it. Cover duplicate token cookies, unrelated
-cookies, one token, and an empty cookie string; verify both consumers use the helper.
-
-The generated base and production settings also define unused lowercase `get_client_ip` helpers.
-Django exposes uppercase settings, and the live implementation is
-`quickscale_modules_orgs.current_org.get_client_ip`, which reads `USE_X_FORWARDED_FOR` and
-`TRUSTED_PROXY_COUNT`. Remove the dead definitions and the misleading comment about production
-rebinding. Preserve the uppercase configuration and `REST_FRAMEWORK["NUM_PROXIES"]`
-recomputation, and verify proxy-aware resolution retains its behavior.
-
-These edits affect generated output. Review them together with one emission-fixture rebaseline,
-keeping per-file rationale and separate CSRF and proxy regression evidence.
-
 ## SA152 — Exercise beta migration and check compatibility within each mode
 
 The maintainer migration commands need a complete smoke exercise. Their flag and ownership
