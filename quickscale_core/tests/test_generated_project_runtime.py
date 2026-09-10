@@ -11,20 +11,24 @@ This test is marked ``@pytest.mark.e2e`` so it is excluded from
 Phase 14.3 of the roadmap (Finding 14 — generator-runtime test coverage).
 """
 
+import http.client
 import json
 import os
 import secrets
 import shutil
 import socket
+import ssl
 import subprocess
 import textwrap
+import threading
 import time
 import urllib.error
 import urllib.request
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator, cast
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import pytest
 
@@ -94,6 +98,354 @@ def _find_free_port() -> int:
         s.listen(1)
         port = int(s.getsockname()[1])
     return port
+
+
+_PROXY_HOP_BY_HOP_HEADERS = frozenset(
+    {
+        "connection",
+        "expect",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "proxy-connection",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
+)
+_PROXY_MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024
+
+
+def _generate_localhost_tls_certificate(tmp_path: Path) -> tuple[Path, Path]:
+    """Generate an ephemeral localhost certificate with the reviewed OpenSSL argv."""
+    openssl = shutil.which("openssl")
+    assert openssl is not None, "OpenSSL is required for the genuine HTTPS proof"
+
+    help_result = subprocess.run(
+        [openssl, "req", "-help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    help_output = f"{help_result.stdout}\n{help_result.stderr}"
+    required_capabilities = (
+        "req",
+        "-x509",
+        "-newkey",
+        "-nodes",
+        "-keyout",
+        "-out",
+        "-days",
+        "-subj",
+        "-addext",
+    )
+    missing_capabilities = [
+        capability
+        for capability in required_capabilities
+        if capability not in help_output
+    ]
+    assert help_result.returncode == 0, (
+        f"OpenSSL req capability preflight failed: {help_output}"
+    )
+    assert not missing_capabilities, (
+        "OpenSSL req capability preflight is missing: "
+        f"{missing_capabilities!r}\n{help_output}"
+    )
+
+    key_path = tmp_path / "localhost.key"
+    certificate_path = tmp_path / "localhost.crt"
+    result = subprocess.run(
+        [
+            openssl,
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            str(key_path),
+            "-out",
+            str(certificate_path),
+            "-days",
+            "1",
+            "-subj",
+            "/CN=localhost",
+            "-addext",
+            "subjectAltName=DNS:localhost,IP:127.0.0.1",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, (
+        "OpenSSL localhost certificate generation failed:\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert key_path.is_file(), "OpenSSL did not create the ephemeral private key"
+    assert certificate_path.is_file(), (
+        "OpenSSL did not create the ephemeral certificate"
+    )
+    return key_path, certificate_path
+
+
+def _make_https_proxy_handler(
+    upstream_host: str,
+    upstream_port: int,
+    observed_requests: list[dict[str, Any]],
+    observed_requests_lock: threading.Lock,
+) -> type[BaseHTTPRequestHandler]:
+    """Build a handler with a frozen loopback destination for the test proxy."""
+
+    class HTTPSProxyHandler(BaseHTTPRequestHandler):
+        """Forward browser-origin requests to the already-running HTTP server."""
+
+        protocol_version = "HTTP/1.1"
+        server_version = "QuickScaleSA160Proxy/1.0"
+        sys_version = ""
+
+        def do_GET(self) -> None:
+            self._proxy_request()
+
+        def do_POST(self) -> None:
+            self._proxy_request()
+
+        def do_HEAD(self) -> None:
+            self._reject_request(405, "HEAD is not supported by the test proxy")
+
+        def do_OPTIONS(self) -> None:
+            self._reject_request(405, "OPTIONS is not supported by the test proxy")
+
+        def do_PUT(self) -> None:
+            self._reject_request(405, "PUT is not supported by the test proxy")
+
+        def do_PATCH(self) -> None:
+            self._reject_request(405, "PATCH is not supported by the test proxy")
+
+        def do_DELETE(self) -> None:
+            self._reject_request(405, "DELETE is not supported by the test proxy")
+
+        def do_TRACE(self) -> None:
+            self._reject_request(405, "TRACE is not supported by the test proxy")
+
+        def do_CONNECT(self) -> None:
+            self._reject_request(405, "CONNECT is not supported by the test proxy")
+
+        def _reject_request(self, status: int, message: str) -> None:
+            body = f"{message}\n".encode("utf-8")
+            self.close_connection = True
+            self.send_response(status)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+
+        @staticmethod
+        def _connection_tokens(headers: Any) -> set[str]:
+            return {
+                token.strip().lower()
+                for value in headers.get_all("Connection", [])
+                for token in value.split(",")
+                if token.strip()
+            }
+
+        def _read_request_body(self) -> bytes | None:
+            transfer_encoding = self.headers.get_all("Transfer-Encoding", [])
+            if transfer_encoding:
+                self._reject_request(
+                    400,
+                    "Transfer-Encoding is not supported by the test proxy",
+                )
+                return None
+
+            content_lengths = self.headers.get_all("Content-Length", [])
+            if len(content_lengths) > 1 or (
+                content_lengths
+                and len({value.strip() for value in content_lengths}) != 1
+            ):
+                self._reject_request(400, "Conflicting Content-Length headers")
+                return None
+            if not content_lengths:
+                return b""
+
+            try:
+                content_length = int(content_lengths[0])
+            except ValueError:
+                self._reject_request(400, "Invalid Content-Length header")
+                return None
+            if not 0 <= content_length <= _PROXY_MAX_REQUEST_BODY_BYTES:
+                self._reject_request(413, "Request body exceeds the proxy limit")
+                return None
+            body = self.rfile.read(content_length)
+            if len(body) != content_length:
+                self._reject_request(400, "Request body was truncated")
+                return None
+            return body
+
+        def _proxy_request(self) -> None:
+            request_target = self.path
+            parsed_target = urlsplit(request_target)
+            if (
+                not request_target.startswith("/")
+                or request_target.startswith("//")
+                or parsed_target.scheme
+                or parsed_target.netloc
+            ):
+                self._reject_request(
+                    400, "Only origin-form request targets are supported"
+                )
+                return
+
+            body = self._read_request_body()
+            if body is None:
+                return
+
+            incoming_headers = {
+                name.lower(): value for name, value in self.headers.items()
+            }
+            with observed_requests_lock:
+                observed_requests.append(
+                    {
+                        "body": body,
+                        "headers": incoming_headers,
+                        "method": self.command,
+                        "target": request_target,
+                    }
+                )
+
+            connection_tokens = self._connection_tokens(self.headers)
+            forwarded_headers: dict[str, str] = {}
+            for name, value in self.headers.items():
+                lowered_name = name.lower()
+                if (
+                    lowered_name in _PROXY_HOP_BY_HOP_HEADERS
+                    or lowered_name in connection_tokens
+                    or lowered_name == "forwarded"
+                    or lowered_name.startswith("x-forwarded-")
+                ):
+                    continue
+                forwarded_headers[name] = value
+            forwarded_headers["X-Forwarded-Proto"] = "https"
+
+            upstream_connection = http.client.HTTPConnection(
+                upstream_host,
+                upstream_port,
+                timeout=30,
+            )
+            try:
+                upstream_connection.request(
+                    self.command,
+                    request_target,
+                    body=body if body or self.headers.get("Content-Length") else None,
+                    headers=forwarded_headers,
+                )
+                upstream_response = upstream_connection.getresponse()
+                response_body = upstream_response.read()
+                response_headers = upstream_response.getheaders()
+            except (http.client.HTTPException, OSError) as exc:
+                self._reject_request(
+                    502, f"Upstream request failed: {type(exc).__name__}"
+                )
+                return
+            finally:
+                upstream_connection.close()
+
+            response_connection_tokens = {
+                token.strip().lower()
+                for name, value in response_headers
+                if name.lower() == "connection"
+                for token in value.split(",")
+                if token.strip()
+            }
+            self.send_response(upstream_response.status, upstream_response.reason)
+            for name, value in response_headers:
+                lowered_name = name.lower()
+                if (
+                    lowered_name in _PROXY_HOP_BY_HOP_HEADERS
+                    or lowered_name in response_connection_tokens
+                    or lowered_name == "content-length"
+                ):
+                    continue
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(response_body)))
+            self.end_headers()
+            self.wfile.write(response_body)
+
+        def log_message(self, _format: str, *_args: Any) -> None:
+            return
+
+    return HTTPSProxyHandler
+
+
+@contextmanager
+def _https_reverse_proxy(
+    tmp_path: Path,
+    upstream_url: str,
+    observed_requests: list[dict[str, Any]],
+) -> Iterator[str]:
+    """Serve a bounded genuine-HTTPS origin in front of a fixed loopback server."""
+    parsed_upstream = urlsplit(upstream_url)
+    assert parsed_upstream.scheme == "http"
+    assert parsed_upstream.hostname == "127.0.0.1"
+    assert parsed_upstream.port is not None
+    assert not parsed_upstream.username and not parsed_upstream.password
+    assert not parsed_upstream.path and not parsed_upstream.query
+
+    key_path = tmp_path / "localhost.key"
+    certificate_path = tmp_path / "localhost.crt"
+    observed_requests_lock = threading.Lock()
+    server: ThreadingHTTPServer | None = None
+    server_thread: threading.Thread | None = None
+    server_thread_started = False
+    try:
+        generated_key_path, generated_certificate_path = (
+            _generate_localhost_tls_certificate(tmp_path)
+        )
+        assert generated_key_path == key_path
+        assert generated_certificate_path == certificate_path
+        handler = _make_https_proxy_handler(
+            parsed_upstream.hostname,
+            parsed_upstream.port,
+            observed_requests,
+            observed_requests_lock,
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        server.daemon_threads = True
+        try:
+            tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            tls_context.load_cert_chain(certificate_path, key_path)
+            server.socket = tls_context.wrap_socket(server.socket, server_side=True)
+            server_address = cast(tuple[str, int], server.server_address)
+            proxy_port = server_address[1]
+            server_thread = threading.Thread(
+                target=server.serve_forever,
+                name="quickscale-sa160-https-proxy",
+                daemon=True,
+            )
+            try:
+                server_thread.start()
+                server_thread_started = True
+                yield f"https://localhost:{proxy_port}"
+            finally:
+                try:
+                    if server_thread_started:
+                        server.shutdown()
+                finally:
+                    try:
+                        server.server_close()
+                    finally:
+                        if server_thread_started and server_thread is not None:
+                            server_thread.join(timeout=5)
+                            assert not server_thread.is_alive(), (
+                                "HTTPS test proxy thread did not terminate"
+                            )
+        finally:
+            if server is not None and not server_thread_started:
+                server.server_close()
+    finally:
+        key_path.unlink(missing_ok=True)
+        certificate_path.unlink(missing_ok=True)
 
 
 def _standalone_generated_env(
@@ -1743,16 +2095,26 @@ class TestGeneratedProjectRuntimeSmoke:
             env=production_environment,
         )
 
+        proxy_stack: ExitStack | None = None
         try:
+            django_base_url = f"http://localhost:{server_port}"
             _wait_for_server(
-                f"http://localhost:{server_port}",
+                django_base_url,
                 timeout=30,
                 server_process=server_process,
             )
 
             from playwright.sync_api import sync_playwright
 
-            base_url = f"http://localhost:{server_port}"
+            observed_proxy_requests: list[dict[str, Any]] = []
+            proxy_stack = ExitStack()
+            base_url = proxy_stack.enter_context(
+                _https_reverse_proxy(
+                    tmp_path,
+                    f"http://127.0.0.1:{server_port}",
+                    observed_proxy_requests,
+                )
+            )
             api_url = f"{base_url}/api/orgs/"
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(
@@ -1768,11 +2130,10 @@ class TestGeneratedProjectRuntimeSmoke:
                     positive_context = browser.new_context(
                         viewport={"width": 1920, "height": 1080},
                         ignore_https_errors=True,
-                        extra_http_headers={"X-Forwarded-Proto": "https"},
                     )
                     try:
                         control_response = control_context.request.get(
-                            f"{base_url}/orgs/",
+                            f"{django_base_url}/orgs/",
                             max_redirects=0,
                         )
                         assert control_response.status in {301, 302, 307, 308}, (
@@ -1978,12 +2339,49 @@ class TestGeneratedProjectRuntimeSmoke:
                             "Omitted-header control created an organization: "
                             f"{persisted_names!r}"
                         )
+
+                        login_requests = [
+                            request
+                            for request in observed_proxy_requests
+                            if request["method"] == "POST"
+                            and request["target"] == "/accounts/login/"
+                        ]
+                        assert len(login_requests) == 1, (
+                            "Expected exactly one proxied browser login POST: "
+                            f"{login_requests!r}"
+                        )
+                        create_requests = [
+                            request
+                            for request in observed_proxy_requests
+                            if request["method"] == "POST"
+                            and request["target"] == "/api/orgs/"
+                            and organization_name.encode() in request["body"]
+                        ]
+                        assert len(create_requests) == 1, (
+                            "Expected exactly one proxied organization create POST: "
+                            f"{create_requests!r}"
+                        )
+                        for browser_request in (*login_requests, *create_requests):
+                            assert (
+                                browser_request["headers"].get("origin") == base_url
+                            ), (
+                                "Browser-generated Origin did not use the frozen HTTPS "
+                                f"proxy origin: {browser_request!r}"
+                            )
+                            assert (
+                                "x-forwarded-proto" not in browser_request["headers"]
+                            ), (
+                                "Browser request unexpectedly supplied proxy forwarding "
+                                f"state: {browser_request!r}"
+                            )
                     finally:
                         positive_context.close()
                         control_context.close()
                 finally:
                     browser.close()
         finally:
+            if proxy_stack is not None:
+                proxy_stack.close()
             _stop_server(server_process)
 
     @staticmethod
