@@ -6,19 +6,24 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from PIL import Image
 
 from quickscale_modules_blog.models import BlogMediaAsset, Category, Post, Tag
 from quickscale_modules_blog.views import (
     _build_media_response_url,
+    _enforce_blog_api_rate_limit,
     _get_authorization_token,
+    _get_blog_api_rate_limit_cache_key,
+    _get_blog_api_rate_limit_ident,
     _get_blog_api_tokens,
     authenticate_blog_api_request,
 )
+from quickscale_modules_orgs.current_org import get_client_ip
 from quickscale_modules_storage.helpers import (
     validate_file_upload as storage_validate_file_upload,
 )
@@ -40,6 +45,35 @@ DECOMPRESSION_BOMB_PATHS = (
         "quickscale_modules_blog.views.Image.open",
         id="helper-absent",
     ),
+)
+
+
+_MISSING = object()
+
+BLOG_CLIENT_IP_CASES = (
+    pytest.param(False, 2, "198.51.100.1, 10.0.0.1", id="disabled"),
+    pytest.param(True, 0, "198.51.100.1, 10.0.0.1", id="zero"),
+    pytest.param(True, 1, None, id="absent"),
+    pytest.param(True, 1, "", id="empty"),
+    pytest.param(True, 3, "198.51.100.1, , 10.0.0.1", id="empty-hop"),
+    pytest.param(True, 2, "198.51.100.1", id="short"),
+    pytest.param(True, 2, "198.51.100.1, 10.0.0.1", id="equal"),
+    pytest.param(
+        True,
+        2,
+        "198.51.100.1, 198.51.100.2, 10.0.0.1, 10.0.0.2",
+        id="long",
+    ),
+)
+
+BLOG_INVALID_PROXY_SETTINGS = (
+    pytest.param("USE_X_FORWARDED_FOR", _MISSING, id="missing-use-xff"),
+    pytest.param("USE_X_FORWARDED_FOR", None, id="invalid-use-xff"),
+    pytest.param("USE_X_FORWARDED_FOR", "yes", id="invalid-use-xff-string"),
+    pytest.param("TRUSTED_PROXY_COUNT", _MISSING, id="missing-proxy-count"),
+    pytest.param("TRUSTED_PROXY_COUNT", "1", id="invalid-proxy-count"),
+    pytest.param("TRUSTED_PROXY_COUNT", -1, id="invalid-proxy-count-negative"),
+    pytest.param("TRUSTED_PROXY_COUNT", True, id="invalid-proxy-count-bool"),
 )
 
 
@@ -352,6 +386,131 @@ class TestPublishPostApi:
             )
 
         assert third_response.status_code == 429
+
+    @pytest.mark.parametrize("use_xff,proxy_count,xff", BLOG_CLIENT_IP_CASES)
+    def test_blog_rate_limiter_chain_matches_direct_resolver(
+        self,
+        rf,
+        use_xff: bool,
+        proxy_count: int,
+        xff: str | None,
+    ) -> None:
+        """Identifier, cache key, and enforcement share resolver value parity."""
+        request_kwargs: dict[str, str] = {"REMOTE_ADDR": "10.0.0.1"}
+        if xff is not None:
+            request_kwargs["HTTP_X_FORWARDED_FOR"] = xff
+        request = rf.post("/blog/api/publish/", **request_kwargs)
+
+        with override_settings(
+            USE_X_FORWARDED_FOR=use_xff,
+            TRUSTED_PROXY_COUNT=proxy_count,
+        ):
+            expected_ip = get_client_ip(request)
+            expected_ident = expected_ip.strip() or "unknown"
+            assert _get_blog_api_rate_limit_ident(request) == expected_ident
+            expected_key = _get_blog_api_rate_limit_cache_key(request, 1)
+
+            with (
+                patch("quickscale_modules_blog.views.time", return_value=3600),
+                patch(
+                    "quickscale_modules_blog.views.cache.add",
+                    return_value=True,
+                ) as cache_add,
+            ):
+                assert _enforce_blog_api_rate_limit(request) is None
+
+        cache_add.assert_called_once_with(expected_key, 1, timeout=3600)
+
+    def test_blog_rate_limiter_empty_identity_uses_unknown_bucket(self, rf):
+        """An empty resolved value keeps the limiter's existing safe fallback."""
+        request = rf.post("/blog/api/publish/", REMOTE_ADDR="")
+
+        with override_settings(USE_X_FORWARDED_FOR=False, TRUSTED_PROXY_COUNT=0):
+            expected_ip = get_client_ip(request)
+            assert expected_ip == ""
+            assert _get_blog_api_rate_limit_ident(request) == "unknown"
+            expected_key = _get_blog_api_rate_limit_cache_key(request, 1)
+
+            with (
+                patch("quickscale_modules_blog.views.time", return_value=3600),
+                patch(
+                    "quickscale_modules_blog.views.cache.add",
+                    return_value=True,
+                ) as cache_add,
+            ):
+                assert _enforce_blog_api_rate_limit(request) is None
+
+        cache_add.assert_called_once_with(expected_key, 1, timeout=3600)
+
+    @pytest.mark.parametrize("setting_name,setting_value", BLOG_INVALID_PROXY_SETTINGS)
+    def test_publish_post_api_invalid_proxy_settings_fail_loud_without_mutation(
+        self,
+        rf,
+        settings,
+        staff_user,
+        staff_org,
+        blog_org_scope,
+        setting_name: str,
+        setting_value: object,
+    ) -> None:
+        """The published-post limiter raises before cache or post mutation."""
+        settings.BLOG_API_RATE_LIMIT = "1/hour"
+        settings.BLOG_API_TOKENS = [
+            {"token": "invalid-proxy-token", "username": staff_user.username}
+        ]
+        request_kwargs = {
+            "REMOTE_ADDR": "10.0.0.1",
+            "HTTP_X_FORWARDED_FOR": "198.51.100.1",
+        }
+        url = reverse("quickscale_blog:api_publish_post")
+        direct_request = rf.post(url, **request_kwargs)
+        settings_values: dict[str, object] = {
+            "USE_X_FORWARDED_FOR": False,
+            "TRUSTED_PROXY_COUNT": 1,
+        }
+        missing_setting: str | None = None
+        if setting_value is _MISSING:
+            missing_setting = setting_name
+        else:
+            settings_values[setting_name] = setting_value
+
+        with blog_org_scope(staff_org):
+            initial_count = Post.all_objects.filter(slug="invalid-proxy-post").count()
+
+        with override_settings(**settings_values):
+            if missing_setting is not None:
+                delattr(settings, missing_setting)
+            with pytest.raises(ImproperlyConfigured) as direct_error:
+                get_client_ip(direct_request)
+
+            client = Client(enforce_csrf_checks=True)
+            with (
+                patch.object(cache, "add") as cache_add,
+                patch.object(cache, "incr") as cache_incr,
+                patch.object(cache, "set") as cache_set,
+            ):
+                with pytest.raises(ImproperlyConfigured) as endpoint_error:
+                    client.post(
+                        url,
+                        data=json.dumps(
+                            {"title": "Invalid Proxy Post", "content": "Body"}
+                        ),
+                        content_type="application/json",
+                        HTTP_AUTHORIZATION="Bearer invalid-proxy-token",
+                        **request_kwargs,
+                    )
+
+            assert type(endpoint_error.value) is type(direct_error.value)
+            assert str(endpoint_error.value) == str(direct_error.value)
+            assert setting_name in str(endpoint_error.value)
+            cache_add.assert_not_called()
+            cache_incr.assert_not_called()
+            cache_set.assert_not_called()
+
+        with blog_org_scope(staff_org):
+            assert Post.all_objects.filter(slug="invalid-proxy-post").count() == (
+                initial_count
+            )
 
     def test_publish_post_api_missing_csrf_still_returns_403_when_rate_limited(
         self,
