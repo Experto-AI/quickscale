@@ -16,6 +16,7 @@ const fetchMock = vi.fn()
 const firstCsrfToken = 'a'.repeat(32)
 const secondCsrfToken = 'b'.repeat(32)
 const maskedCsrfToken = 'm'.repeat(64)
+const malformedCsrfToken = '%E0%A4%A'
 
 vi.stubGlobal('fetch', fetchMock)
 vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
@@ -48,6 +49,26 @@ const cookieCases = [
     name: 'decodes an encoded single token',
     cookie: 'csrftoken=encoded%20token%3Dvalue',
     expected: 'encoded token=value',
+  },
+  {
+    name: 'returns an empty string for a malformed single token',
+    cookie: `csrftoken=${malformedCsrfToken}`,
+    expected: '',
+  },
+  {
+    name: 'returns an empty string when a malformed token is the final duplicate',
+    cookie: `csrftoken=${firstCsrfToken}; csrftoken=${malformedCsrfToken}`,
+    expected: '',
+  },
+  {
+    name: 'uses a valid token when it is the final duplicate after a malformed token',
+    cookie: `csrftoken=${malformedCsrfToken}; csrftoken=${secondCsrfToken}`,
+    expected: secondCsrfToken,
+  },
+  {
+    name: 'returns an empty string when all duplicate tokens are malformed',
+    cookie: `csrftoken=${malformedCsrfToken}; csrftoken=%ZZ`,
+    expected: '',
   },
   {
     name: 'returns an empty string without a token',

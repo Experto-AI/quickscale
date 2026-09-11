@@ -367,7 +367,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "45f8ac114c395252c15ca8510b7a51add9b497843e91fcf583619728be0d3335"
+      "sha256": "40d2eb62ea216fd0152c00fd097833fc0045526142805b8cc91505e730d72dc3"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -833,7 +833,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "45f8ac114c395252c15ca8510b7a51add9b497843e91fcf583619728be0d3335"
+      "sha256": "40d2eb62ea216fd0152c00fd097833fc0045526142805b8cc91505e730d72dc3"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -1299,7 +1299,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "45f8ac114c395252c15ca8510b7a51add9b497843e91fcf583619728be0d3335"
+      "sha256": "40d2eb62ea216fd0152c00fd097833fc0045526142805b8cc91505e730d72dc3"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",

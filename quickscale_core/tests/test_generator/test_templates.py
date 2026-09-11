@@ -621,6 +621,27 @@ def test_django_duplicate_csrf_cookie_uses_last_value() -> None:
     assert cookies["csrftoken"] == second_token
 
 
+def test_django_malformed_csrf_cookie_preserves_percent_literal() -> None:
+    """Pin Django's preservation of malformed percent-encoded cookie values."""
+    from django.http import parse_cookie
+
+    malformed_token = "%E0%A4%A"
+    cookies = parse_cookie(f"csrftoken={malformed_token}")
+
+    assert cookies["csrftoken"] == malformed_token
+
+
+def test_django_duplicate_csrf_cookie_uses_last_malformed_value() -> None:
+    """Pin final duplicate selection before the client attempts decoding."""
+    from django.http import parse_cookie
+
+    valid_token = "b" * 32
+    malformed_token = "%E0%A4%A"
+    cookies = parse_cookie(f"csrftoken={valid_token}; csrftoken={malformed_token}")
+
+    assert cookies["csrftoken"] == malformed_token
+
+
 class TestTemplateLoading:
     """Verify all project templates can be loaded by Jinja2."""
 
