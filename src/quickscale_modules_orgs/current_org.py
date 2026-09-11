@@ -670,6 +670,19 @@ def get_client_ip(request: object) -> str:
     return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
 
 
+class ClientIPThrottleMixin:
+    """Provide the canonical client identity hook for request throttles.
+
+    The mixin intentionally has no framework dependency.  A framework-specific
+    throttle can combine it with its own throttle base class while keeping
+    client-IP selection and fail-loud proxy-setting validation in this module.
+    """
+
+    def get_ident(self, request: object) -> str:
+        """Return the client identity selected by :func:`get_client_ip`."""
+        return get_client_ip(request)
+
+
 # ---------------------------------------------------------------------------
 # SA14.5 — operator_access context manager
 # ---------------------------------------------------------------------------
