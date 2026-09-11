@@ -31,7 +31,7 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
 generated-project updater. The [roadmap](../technical/roadmap.md) owns the current delivery units,
-track assignments, dependencies, and release finish line. SA165 closed on maintainer decision
+track assignments, dependencies, and finish line; `v88` is release-accepted. SA165 closed on maintainer decision
 (2026-09-09; see the changelog). SA167c's authorized Phase-F verdict under `EV-7`, SA166's testimony gate, and SA176's full
 `make ci` correction are green and archived. The prior pass's leading finding landed and is archived
 under SA135.

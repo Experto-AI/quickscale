@@ -2,6 +2,13 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Roadmap cleanup after v88 acceptance (2026-09-11).** The checked SA160 heading and the empty
+  v88 section left the planner; SA153 (property portal) is now the critical path on Track 1, with
+  SA180 → SA152 on Track 2 and SA177 on Track 3 as off-path work. No track moved: SA153 is one
+  review unit and SA180/SA152 share gate files. Ticket acceptance text was condensed without
+  changing scope. The tech audit's TA67 reopening and remediation log entries were collapsed into
+  the retirement line; their detail is in the SA160 entries below.
+
 - **SA160 and TA67 closed — integrated v88 release aggregate accepted (2026-09-11).** From the
   clean exact `v88` tip `87e8c96ae89a9768a1a29fdadc7bb605f856a319`, the command
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` completed from 22:45:27 to 23:35:03 CEST
