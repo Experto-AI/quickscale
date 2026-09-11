@@ -1,25 +1,21 @@
 # Ticket Context — Concepts and Implementation Notes
 
-> **SA160 retained-partial integration checkpoint (2026-09-11):** the 28-path settled product tip
-> `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3` covers generated CSRF transport and malformed
-> duplicate-cookie order; canonical identity across Forms throttling, both Forms persistence branches,
-> and Blog's custom limiter/persistence; the genuine-HTTPS browser mutation; generated caller-header
-> composition; and first-position fail-closed normalization for ordinary DRF consumers. The final
-> Core unit, restricted integration, and frontend task gates are green, and the eight-file terminal
-> identity correction was independently attested. No release aggregate ran on these bytes: pass 2
-> changed product content, ending the run's conditional release cap unspent. Earlier green and red
-> aggregates remain historical evidence for their own bytes only. Explicit maintainer authority
-> directs retaining and fast-forwarding the independently reviewed task-green partial into `v88`;
-> that integration is not release acceptance. Fresh exact-candidate review and distinct release
-> authority are required before SA160 or TA67 can close; the retained work is not release-accepted,
-> published, or deployed.
-
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Ticket Context**
 > **Related docs**: [Roadmap](roadmap.md) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Module Extension Contract](module-extension.md)
 
 The [roadmap](roadmap.md) owns task scope, tracks, dependencies, scheduling, and acceptance.
 This companion explains implementation rationale. Read the corresponding roadmap task first;
 completed work and historical evidence belong in [CHANGELOG.md](../../CHANGELOG.md).
+
+## SA160 — Release-tier acceptance of the integrated hardening work
+
+The SA160 work makes the generated React app send the same CSRF token Django reads when duplicate
+cookies are present. It also gives every throttle and persistence path one agreed client-IP
+identity, normalized by a first-position middleware. That work is implemented, integrated, and
+passes task-tier gates. A task gate proves each part in isolation. The release aggregate
+(`make ci-e2e`) proves the whole generated project end to end, including the genuine-HTTPS
+production browser path that failed on an older candidate. That one aggregate is the remaining
+proof. Earlier green and red aggregates cover older bytes and cannot be rebound to the current tip.
 
 ## SA152 — Exercise beta migration and check compatibility within each mode
 

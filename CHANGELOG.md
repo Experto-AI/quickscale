@@ -2,6 +2,18 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Roadmap cleanup; SA165 watch notes retired (2026-09-11).** SA160 is back in the schedule as the
+  only Required v88 ticket (Track 1, on the critical path). Its remaining scope is one
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` over the integrated tip under the current validation
+  policy, which needs no fresh review or authority while product bytes stay unchanged. SA180 is now
+  ordered before SA152 on Track 2, and post-v88 merges wait for the SA160 verdict. Checkpoint
+  narrative moved out of the roadmap and ticket context. The tech audit retired four watch notes held
+  only for SA165's closeout, which the maintainer closed on 2026-09-09:
+  `_HOST_DEPENDENT_PATHS` rationale and escalation rule; the isolation skip bound to two
+  `PENDING_REMEDIATION` identities with a negative control; the generated `OPERATIONS.md` warning
+  about local credentials; and `flush_empty_consolidated_sections` raising `StateError` on corrupt
+  roots. TA67 stays open.
+
 - **SA160 task-green partial approved for `v88` integration; conditional release authority ended unspent
   (2026-09-11).** The current settled tip is
   `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`, a 28-path delta over the pre-integration `v88` tip
