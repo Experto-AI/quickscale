@@ -1,6 +1,6 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit snapshot:** 2026-08-28 · **Prior pass:** 2026-08-22 (reconciled 2026-08-27 at `602f4be3`) · **Branch:** `v88` · **HEAD:** `48e0a62a`
+> **Audit snapshot:** 2026-08-28 · **Prior pass:** 2026-08-22 (reconciled 2026-08-27 at `602f4be3`) · **Branch:** `v88` · **Findings reconciled at:** `87e8c96a`
 
 ## Orientation summary
 
@@ -41,19 +41,15 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 **Audit tools run (read-only):** `git log` / `git diff` / `git rev-parse` over the delta; CPython 3.14 for the two empirical checks below. No scanner was re-run this pass — the Trivy/Bandit gate is CI-owned and its ledger was read rather than re-executed.
 
-**Empirical checks run (§1e):** the 2026-09-10 corrected candidate at
-`cb21f791826c9ebcfdba5f8b034d7eddef8e02df` received one release-tier attempt that returned exit 2
-at the genuine-HTTPS browser navigation. That result remains immutable evidence for those older
-bytes. The current 28-path settled tip at `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3` repairs that
-test-only proxy lifecycle, covers malformed duplicate-cookie order, unifies Forms throttling plus
-Forms/Blog persistence on the canonical identity, preserves generated caller headers, and gives
-ordinary DRF consumers the same fail-closed forwarding result through a first-position generated
-middleware. Its final `make test-unit -- --core`, restricted `make test-integration`, and `make
-frontend-proof` task gates returned exit 0; the identity correction received independent delta-only
-attestation. No release aggregate ran against the current tip because pass 2 changed product bytes
-and ended this run's conditional release cap unspent. Explicit maintainer authority nevertheless
-directs retaining and integrating the independently reviewed task-green partial into `v88`; that
-integration is not release acceptance and does not close TA67.
+**Empirical checks run (§1e):** on 2026-09-11 the clean integrated `v88` tip at
+`87e8c96ae89a9768a1a29fdadc7bb605f856a319` ran
+`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` to completion with exit 0. All twelve stages passed:
+Core/CLI coverage reported 5,099 passed and 2 skipped at a 93.12% equal-weight mean, backups
+reported 332 passed and 1 skipped, module integration reported a 94.55% mean, and concurrent E2E
+reported Core 38 passed with 1 environment skip plus CLI 54 passed. Both exact E2E lane scopes
+reported cleanup complete, no QuickScale run-labelled resources remained, and `pg18-af10` remained
+running. This exact-tip verdict release-accepts the retained correction and retires TA67. Detailed
+evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
@@ -61,36 +57,15 @@ integration is not release acceptance and does not close TA67.
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| TA67 | S3 | correctness | SPA CSRF duplicate-cookie parity | S | High | Behavior corrected, task-tested, independently reviewed, and approved for explicit retained-partial integration; no current release invocation; open pending release acceptance |
 
-**Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **1** · S4 **0** ·
-**Total 1 open.** TA67 remains open because no release aggregate covers the current corrected bytes.
-The 2026-09-11 conditional cap ended unspent after pass 2 changed product bytes; explicit partial-
-integration authority permits retention in `v88` but supplies no release acceptance.
+**Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **0** · S4 **0** ·
+**Total 0 open.**
 
 ---
 
 ## Findings
 
-### TA67 — SPA CSRF duplicate-cookie parity
-
-The generated React helper previously selected the first exact `csrftoken` cookie even though
-Django's `parse_cookie()` exposes the last duplicate. The current retained bytes align the helper,
-both write callers, tests, and generated hashes with the server, preserve the HttpOnly production
-cookie through a masked shell token, and add malformed single/duplicate-order regressions. The
-genuine-HTTPS production proof now completes the real organization mutation without injected success
-state. Forms' DRF throttle, both Forms persistence branches, and Blog's custom limiter/persistence
-path use the canonical request identity; generated projects normalize forwarding state first so
-ordinary DRF and canonical consumers also agree on disabled, absent, empty, short, equal, and long
-chains and fail loudly on invalid settings.
-
-Those current bytes are task-green and independently reviewed, including the final generated-identity
-correction. They are not release-accepted: no release aggregate ran against
-`926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`. The current run's conditional cap ended unspent after
-convergence pass 2 changed product bytes, and the older exit-2 attempt belongs only to its superseded
-candidate. TA67 remains live across the explicitly authorized retained-partial integration. A fresh
-exact-candidate review, distinct release authority, and a green returned release verdict must cover
-the retained bytes before TA67 can close or release work can proceed.
+No live findings.
 
 ---
 
@@ -196,6 +171,9 @@ the retained bytes before TA67 can close or release work can proceed.
   independently reviewed task-green partial into `v88`; this does not supply release acceptance.
   TA67 stays open pending fresh review, distinct release authority, and a green release verdict. TA68
   remains retired.
+- 2026-09-11 — **TA67 retired by SA160.** The clean exact `v88` tip at `87e8c96a` returned a green
+  twelve-stage release aggregate with exact-scope cleanup and preserved `pg18-af10`; detailed
+  evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-04 — **TA70** `container-status-substring-match`: **retired by SA170**. The ordered serial and concurrent release campaigns both passed with exact Core/CLI cleanup and preserved standing PostgreSQL state. Final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-02 — **Watch item closed:** the four `sqlparse` suppressions were retired by a real dependency upgrade to 0.6.0 during SA170 convergence; the vulnerability gate is green and the shared 2026-09-30 expiry no longer exists. No finding was opened or closed by this.
 - 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.

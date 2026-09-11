@@ -2,6 +2,26 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA160 and TA67 closed — integrated v88 release aggregate accepted (2026-09-11).** From the
+  clean exact `v88` tip `87e8c96ae89a9768a1a29fdadc7bb605f856a319`, the command
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` completed from 22:45:27 to 23:35:03 CEST
+  (49m35.79s) with exit **0** and all twelve stages green. Registered scripts reported **1,424
+  passed**; Core/CLI coverage reported **5,099 passed / 2 skipped** at **93.12%** equal-weight mean;
+  backups reported **332 passed / 1 skipped**; module integration reached **94.55%** mean coverage;
+  and concurrent E2E reported Core **38 passed / 1 environment skip** plus CLI **54 passed**.
+  Both lane scopes (`qs_e2e_tmp_ijm6vf7eoj_core_3046318` and
+  `qs_e2e_tmp_ijm6vf7eoj_cli_3046319`) reported exact-label cleanup complete; post-run Docker
+  inventories contained no QuickScale run-labelled container, volume, or network, while
+  `pg18-af10` was verified running afterward on image
+  `06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941`. An earlier foreground-wrapper launch of the
+  same command was externally terminated at stage 10 with error 143 and no completion-status
+  artifact, so it supplied no verdict; the distinct `setsid` run above is the accepted evidence.
+  This closes SA160, retires tech-audit TA67, leaves zero ranked technical-audit findings, and opens
+  the serialized queue to post-v88 merges. The roadmap retains the requested checked heading but
+  deletes its ticket body; detailed context moved out of the live planner and ticket-context page.
+  This is repository release acceptance only, not version/release-note work, tagging, publication,
+  or deployment.
+
 - **Roadmap cleanup; SA165 watch notes retired (2026-09-11).** SA160 is back in the schedule as the
   only Required v88 ticket (Track 1, on the critical path). Its remaining scope is one
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` over the integrated tip under the current validation

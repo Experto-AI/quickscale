@@ -10,6 +10,7 @@ import pytest
 
 ROOT = Path(__file__).parents[2]
 TICKET = r"SA\d+[a-z]?"
+RETAINED_CLOSED_TICKETS = {"SA160"}
 COLUMNS = [
     "Ticket",
     "Delivery",
@@ -44,14 +45,18 @@ def _roadmap_tickets(text: str) -> set[str]:
     entries = re.findall(
         rf"^[ \t]*- \[([^\]]*)\] \*\*({TICKET})\b([^\n]*)$", text, re.MULTILINE
     )
-    assert entries, "no open ticket entries"
-    assert all(state == " " for state, _, _ in entries), (
-        "checked or unsupported ticket entry"
+    assert entries, "no ticket entries"
+    assert all(state in {" ", "x"} for state, _, _ in entries), (
+        "unsupported ticket state"
     )
     assert all(re.fullmatch(r" — .+\*\*", title) for _, _, title in entries), (
         "invalid ticket header"
     )
-    tickets = _unique([ticket for _, ticket, _ in entries], "open ticket")
+    _unique([ticket for _, ticket, _ in entries], "roadmap ticket")
+    checked = {ticket for state, ticket, _ in entries if state == "x"}
+    assert checked <= RETAINED_CLOSED_TICKETS, f"unsupported checked tickets: {checked}"
+    tickets = {ticket for state, ticket, _ in entries if state == " "}
+    assert tickets, "no open ticket entries"
     tables = [table for table in _tables(text) if table[0] == COLUMNS]
     assert len(tables) == 1, "expected one canonical schedule"
     table = tables[0]
@@ -191,9 +196,9 @@ def test_synthetic_valid_documents(roadmap: str, context: str) -> None:
 @pytest.mark.parametrize(
     ("old", "new", "error"),
     [
-        ("[ ] **SA900", "[x] **SA900", "checked"),
-        ("- [ ] **SA900", "  - [X] **SA900", "checked"),
-        ("[ ] **SA901", "[ ] **SA900", "duplicate open"),
+        ("[ ] **SA900", "[y] **SA900", "unsupported ticket state"),
+        ("- [ ] **SA900", "  - [X] **SA900", "unsupported ticket state"),
+        ("[ ] **SA901", "[ ] **SA900", "duplicate roadmap"),
         ("| SA901 |", "| SA900 |", "duplicate scheduled"),
         ("| SA902 |", "| SA903 |", "schedule coverage"),
         ("| 1 |", "| 4 |", "invalid track"),
@@ -229,6 +234,18 @@ def test_rejects_duplicate_schedule(roadmap: str) -> None:
     table = roadmap[roadmap.index("| Ticket") : roadmap.index("- [ ]")]
     with pytest.raises(AssertionError, match="one canonical schedule"):
         _roadmap_tickets(roadmap + table)
+
+
+def test_accepts_checked_ticket_outside_open_schedule_and_context(
+    roadmap: str, context: str
+) -> None:
+    closed_roadmap = (
+        roadmap.replace("SA902", "SA160")
+        .replace("| SA160 | Later delivery | post-v88 | 3 | SA901 | Deferred |\n", "")
+        .replace("- [ ] **SA160", "- [x] **SA160")
+    )
+    closed_context = context.replace("\n## SA902\nLater notes.\n", "\n")
+    _check_coverage(closed_roadmap, closed_context)
 
 
 @pytest.mark.parametrize(

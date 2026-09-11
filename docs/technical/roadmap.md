@@ -5,14 +5,10 @@
 
 ## Goal and release finish line
 
-Ship the v88 hardening release: one green release aggregate over the integrated `v88` tip, then
-SA160 and TA67 closeout. After that, deliver the first useful property portal in a project-owned
-extension, generalizing capabilities only after that project proves their value.
-
-The retained SA160 work is already integrated in `v88`, task-green, and independently attested
-(history in [CHANGELOG.md](../../CHANGELOG.md)). Only release-tier acceptance is missing.
-Version/release-note work, tagging, publication, and deployment are separate maintainer decisions
-after a green verdict.
+The integrated `v88` tip at `87e8c96a` passed its release aggregate, closing SA160 and TA67.
+Version/release-note work, tagging, publication, and deployment remain separate maintainer
+decisions. The next goal is the first useful property portal in a project-owned extension,
+generalizing capabilities only after that project proves their value.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 scope and acceptance; [context](v88_ticket_context.md) explains implementation concepts;
@@ -24,7 +20,6 @@ scope and acceptance; [context](v88_ticket_context.md) explains implementation c
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA160 | Obtain release acceptance for the integrated v88 tip | v88 | 1 | — | Required |
 | SA180 | Derive the gate-parity count oracles from the registry | post-v88 | 2 | — | Deferred |
 | SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 2 | — | Deferred |
 | SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | — | Deferred |
@@ -35,14 +30,13 @@ Track numbers map to the existing worktrees: **1 = W1 / wt-track1**, **2 = W2 / 
 **3 = W3 / wt-track3**. SA154 is an inventory, not an implementation queue.
 
 ```text
-Track 1: SA160 (v88, critical path) ──► SA153 ──► SA154 (inventory)
+Track 1: SA153 ──► SA154 (inventory)
 Track 2: SA180 ──► SA152            (post-v88; shared gate files, ordered)
 Track 3: SA177                      (post-v88)
-v88 finish: SA160 green aggregate ──► SA160/TA67 closeout ──► post-v88 merges open
+v88 finish: accepted at 87e8c96a; post-v88 merges open
 ```
 
-**Critical path.** The v88 finish line is a single-link chain: SA160's release aggregate. Nothing
-else feeds it, so no move can shorten it; all post-v88 work is off the critical path.
+**Critical path.** The v88 finish line is met. No post-v88 ticket is a v88 release requirement.
 
 **Ordering.** SA180 precedes SA152 on Track 2 because SA152 registers a new gate, and doing it after
 SA180 makes that addition the first real use of the derived counts instead of another hand edit.
@@ -52,8 +46,7 @@ SA177 is free to use the isolation runner. SA154 follows the working portal.
 
 **Rebalance review (2026-09-11): no move.** SA152 and SA180 share `scripts/gate_registry.json` and
 the parity oracles, so splitting them creates a merge hazard. Moving SA177 or SA153 would only swap
-idle tracks, and none of them is on the critical path. SA160's remaining work is validation on the
-`v88` ref, not a worktree edit, so Track 1 can prepare SA153 in parallel.
+tracks. With v88 accepted, all three post-v88 track heads can enter the serialized merge queue.
 
 ### Track states
 
@@ -61,24 +54,21 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA160 | yes — policy already covers the rerun (see its ticket) | yes — its acceptance needs no other track's work | yes — already integrated; it only records a verdict | **yes** | **yes** |
-| 1 (next) | SA153 | yes, in a worktree | yes | no — held behind the SA160 verdict | no | no |
-| 2 | SA180 | yes, in a worktree | yes | no — held behind the SA160 verdict | no | no |
-| 3 | SA177 | yes, in a worktree | yes | no — held behind the SA160 verdict | no | no |
+| 1 | SA153 | yes, in a worktree | yes | yes — v88 acceptance lifted the hold | **yes** | no |
+| 2 | SA180 | yes, in a worktree | yes | yes — v88 acceptance lifted the hold | **yes** | no |
+| 3 | SA177 | yes, in a worktree | yes | yes — v88 acceptance lifted the hold | **yes** | no |
 
-The post-v88 "can merge = no" is a hard ordering rule, not a missing decision: a post-v88 merge into
-`v88` before the verdict would change the release candidate and void the aggregate. Integrate those
-tracks after SA160 closes. A maintainer decision to cut a separate post-v88 integration branch would
-lift it earlier.
+The green v88 verdict lifted the post-v88 merge hold. The serialized queue still prevents the
+shared closeout set from being reconciled concurrently.
 
 ### Ownership and merge coordination
 
-- Track 1 owns SA160 closeout, then SA153 and SA154.
+- Track 1 owns SA153 and SA154.
 - Track 2 owns gate documentation, `scripts/gate_registry.json` and module declarations, and the
   maintainer migration tools (SA180, then SA152).
 - Track 3 owns predicate conformance under SA177, including the isolation runner.
 - Product implementation stays in worktrees, with one delivery candidate at a time per track and
-  one serialized merge queue into `v88`. Post-v88 merges wait for the SA160 verdict.
+  one serialized merge queue into `v88`.
 - **Conflict surface.** The cross-track shared closeout set is this roadmap,
   [CHANGELOG.md](../../CHANGELOG.md), [ticket context](v88_ticket_context.md) when concepts change,
   and the owning audit. All are Markdown with no generated consumer. The serialized merge queue
@@ -102,37 +92,7 @@ Merge only the reviewed and accepted delivery, through the serialized queue.
 
 ## v88 work
 
-- [ ] **SA160 — Obtain release acceptance for the integrated v88 tip.**
-
-  All implementation is done and integrated; the product bytes (settled at `926811bc`) are
-  task-green and independently attested. Everything after them is status-only documentation, so
-  under the [validation policy](validation_policy.md#candidate-review-and-integration) no fresh
-  review or separate run authority is needed. That policy supersedes the older one-run/no-retry
-  rules for verification inside an authorized delivery.
-
-  **Acceptance:** from a clean `v88` tip, run `QS_E2E_INTEGRATION_REF=v88 make ci-e2e`. Preserve
-  `pg18-af10`, clean only run-scoped resources, and record the command, exit, commit, and cleanup in
-  the changelog. If it is green, close SA160 and TA67 (tech audit) and move this entry to the
-  changelog. If it is red, keep the logs, diagnose, and fix in a worktree. A fix that changes product
-  bytes needs a review of that delta before you rerun. Do not redo the accepted cookie, identity,
-  HTTPS-proxy, header, or middleware work unless new evidence points to a regression.
-
-  **Execution (Adaptive-mini):** run this ticket as one Adaptive-mini cycle. Its read-only
-  `adaptive-mini-review` pass is the required review of any fix delta, so nothing is removed.
-  - The full gate is exactly the release command above, not the hydrated default (`make ci`). Run it
-    in the background, because it takes longer than the 10-minute foreground limit.
-  - The fast gate is the narrowest failing test plus
-    `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`.
-  - Green run: no implementation or review round is needed. Do only the closeout bookkeeping
-    (changelog, tech audit, remove this entry and its ticket-context section), then commit.
-  - Red run: fix in `wt-track1`, review the correction delta, merge into `v88`, and rerun from the
-    merged tip.
-  - Mini keeps no ledger, so the changelog entry is the only durable record. If the review loop
-    stops with a finding still open (three rounds or no progress), keep SA160 open, record the
-    continuation prompt in the changelog, and escalate to full Adaptive.
-
-  **Out of scope:** version/release-note work, tagging, publication, and deployment, which each need
-  their own maintainer decision after a green verdict.
+- [x] **SA160 — Obtain release acceptance for the integrated v88 tip.**
 
 ## Post-v88 work
 

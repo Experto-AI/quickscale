@@ -7,16 +7,6 @@ The [roadmap](roadmap.md) owns task scope, tracks, dependencies, scheduling, and
 This companion explains implementation rationale. Read the corresponding roadmap task first;
 completed work and historical evidence belong in [CHANGELOG.md](../../CHANGELOG.md).
 
-## SA160 — Release-tier acceptance of the integrated hardening work
-
-The SA160 work makes the generated React app send the same CSRF token Django reads when duplicate
-cookies are present. It also gives every throttle and persistence path one agreed client-IP
-identity, normalized by a first-position middleware. That work is implemented, integrated, and
-passes task-tier gates. A task gate proves each part in isolation. The release aggregate
-(`make ci-e2e`) proves the whole generated project end to end, including the genuine-HTTPS
-production browser path that failed on an older candidate. That one aggregate is the remaining
-proof. Earlier green and red aggregates cover older bytes and cannot be rebound to the current tip.
-
 ## SA152 — Exercise beta migration and check compatibility within each mode
 
 The maintainer migration commands need a complete smoke exercise. Their flag and ownership
