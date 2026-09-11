@@ -117,6 +117,20 @@ Merge only the reviewed and accepted delivery, through the serialized queue.
   bytes needs a review of that delta before you rerun. Do not redo the accepted cookie, identity,
   HTTPS-proxy, header, or middleware work unless new evidence points to a regression.
 
+  **Execution (Adaptive-mini):** run this ticket as one Adaptive-mini cycle. Its read-only
+  `adaptive-mini-review` pass is the required review of any fix delta, so nothing is removed.
+  - The full gate is exactly the release command above, not the hydrated default (`make ci`). Run it
+    in the background, because it takes longer than the 10-minute foreground limit.
+  - The fast gate is the narrowest failing test plus
+    `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`.
+  - Green run: no implementation or review round is needed. Do only the closeout bookkeeping
+    (changelog, tech audit, remove this entry and its ticket-context section), then commit.
+  - Red run: fix in `wt-track1`, review the correction delta, merge into `v88`, and rerun from the
+    merged tip.
+  - Mini keeps no ledger, so the changelog entry is the only durable record. If the review loop
+    stops with a finding still open (three rounds or no progress), keep SA160 open, record the
+    continuation prompt in the changelog, and escalate to full Adaptive.
+
   **Out of scope:** version/release-note work, tagging, publication, and deployment, which each need
   their own maintainer decision after a green verdict.
 
