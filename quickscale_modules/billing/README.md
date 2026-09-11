@@ -120,16 +120,23 @@ type CreditTransaction = {
 };
 
 async function billingFetch<T>(input: string, init: RequestInit = {}): Promise<T> {
+	const headers = new Headers(init.headers ?? {});
+	if (!headers.has("Content-Type")) {
+		headers.set("Content-Type", "application/json");
+	}
+
+	const method = init.method?.toUpperCase() ?? "GET";
+	if (method !== "GET" && method !== "HEAD" && !headers.has("X-CSRFToken")) {
+		const csrfToken = getCsrfToken();
+		if (csrfToken) {
+			headers.set("X-CSRFToken", csrfToken);
+		}
+	}
+
 	const response = await fetch(input, {
 		credentials: "include",
-		headers: {
-			"Content-Type": "application/json",
-			...(init.method && init.method !== "GET"
-				? { "X-CSRFToken": getCsrfToken() }
-				: {}),
-			...(init.headers ?? {}),
-		},
 		...init,
+		headers,
 	});
 
 	if (response.status === 204) {
