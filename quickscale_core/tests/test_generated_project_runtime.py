@@ -12,12 +12,14 @@ Phase 14.3 of the roadmap (Finding 14 — generator-runtime test coverage).
 """
 
 import http.client
+import hashlib
 import json
 import os
 import secrets
 import shutil
 import socket
 import ssl
+import struct
 import subprocess
 import textwrap
 import threading
@@ -115,6 +117,36 @@ _PROXY_HOP_BY_HOP_HEADERS = frozenset(
     }
 )
 _PROXY_MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024
+_PROXY_SOCKET_TIMEOUT_SECONDS = 10
+_PROXY_UPSTREAM_TIMEOUT_SECONDS = 10
+_PROXY_SHUTDOWN_TIMEOUT_SECONDS = 15
+
+
+class _TrackedThreadingHTTPServer(ThreadingHTTPServer):
+    """Threaded server whose handler threads can be joined deterministically."""
+
+    daemon_threads = True
+    block_on_close = False
+    request_queue_size = 64
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.handler_threads: set[threading.Thread] = set()
+        self.handler_threads_lock = threading.Lock()
+
+    def process_request_thread(
+        self,
+        request: socket.socket,
+        client_address: tuple[str, int],
+    ) -> None:
+        current_thread = threading.current_thread()
+        with self.handler_threads_lock:
+            self.handler_threads.add(current_thread)
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            with self.handler_threads_lock:
+                self.handler_threads.discard(current_thread)
 
 
 def _generate_localhost_tls_certificate(tmp_path: Path) -> tuple[Path, Path]:
@@ -189,26 +221,63 @@ def _generate_localhost_tls_certificate(tmp_path: Path) -> tuple[Path, Path]:
     return key_path, certificate_path
 
 
+def _certificate_fingerprint(certificate_path: Path) -> str:
+    """Return the stable SHA-256 fingerprint for one generated certificate."""
+    certificate_der = ssl.PEM_cert_to_DER_cert(certificate_path.read_text())
+    return hashlib.sha256(certificate_der).hexdigest()
+
+
 def _make_https_proxy_handler(
     upstream_host: str,
     upstream_port: int,
     observed_requests: list[dict[str, Any]],
     observed_requests_lock: threading.Lock,
+    diagnostics: dict[str, Any] | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     """Build a handler with a frozen loopback destination for the test proxy."""
+    proxy_diagnostics = diagnostics if diagnostics is not None else {}
+    proxy_diagnostics.setdefault("expected_peer_departures", 0)
+    proxy_diagnostics.setdefault("peer_departure_types", [])
+    proxy_diagnostics.setdefault("handler_timeouts", 0)
+    proxy_diagnostics.setdefault("unexpected_handler_errors", [])
+    proxy_diagnostics.setdefault("upstream_errors", [])
+    proxy_diagnostics.setdefault("responses", [])
 
     class HTTPSProxyHandler(BaseHTTPRequestHandler):
         """Forward browser-origin requests to the already-running HTTP server."""
 
-        protocol_version = "HTTP/1.1"
+        # Every downstream response is self-delimiting and closes the connection.
+        # Keeping this at HTTP/1.0 avoids an HTTP/1.1 keep-alive/retry race when a
+        # browser receives a response after the upstream connection is closed.
+        protocol_version = "HTTP/1.0"
         server_version = "QuickScaleSA160Proxy/1.0"
         sys_version = ""
 
+        def setup(self) -> None:
+            super().setup()
+            self.connection.settimeout(_PROXY_SOCKET_TIMEOUT_SECONDS)
+
+        def handle(self) -> None:
+            try:
+                super().handle()
+            except (BrokenPipeError, ConnectionResetError) as exc:
+                self._record_peer_departure(exc)
+            except TimeoutError:
+                with observed_requests_lock:
+                    proxy_diagnostics["handler_timeouts"] += 1
+                self.close_connection = True
+            except Exception as exc:  # pragma: no cover - defensive server boundary
+                with observed_requests_lock:
+                    proxy_diagnostics["unexpected_handler_errors"].append(
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                self.close_connection = True
+
         def do_GET(self) -> None:
-            self._proxy_request()
+            self._run_proxy_request()
 
         def do_POST(self) -> None:
-            self._proxy_request()
+            self._run_proxy_request()
 
         def do_HEAD(self) -> None:
             self._reject_request(405, "HEAD is not supported by the test proxy")
@@ -231,15 +300,40 @@ def _make_https_proxy_handler(
         def do_CONNECT(self) -> None:
             self._reject_request(405, "CONNECT is not supported by the test proxy")
 
+        def _run_proxy_request(self) -> None:
+            try:
+                self._proxy_request()
+            except (BrokenPipeError, ConnectionResetError) as exc:
+                self._record_peer_departure(exc)
+            except TimeoutError:
+                with observed_requests_lock:
+                    proxy_diagnostics["handler_timeouts"] += 1
+                self.close_connection = True
+
+        def _record_peer_departure(self, exc: BaseException) -> None:
+            if getattr(self, "_peer_departure_recorded", False):
+                return
+            self._peer_departure_recorded = True
+            with observed_requests_lock:
+                proxy_diagnostics["expected_peer_departures"] += 1
+                cast(list[str], proxy_diagnostics["peer_departure_types"]).append(
+                    type(exc).__name__
+                )
+            self.close_connection = True
+
         def _reject_request(self, status: int, message: str) -> None:
             body = f"{message}\n".encode("utf-8")
             self.close_connection = True
-            self.send_response(status)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Connection", "close")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError) as exc:
+                self._record_peer_departure(exc)
 
         @staticmethod
         def _connection_tokens(headers: Any) -> set[str]:
@@ -284,6 +378,7 @@ def _make_https_proxy_handler(
             return body
 
         def _proxy_request(self) -> None:
+            self.close_connection = True
             request_target = self.path
             parsed_target = urlsplit(request_target)
             if (
@@ -331,7 +426,7 @@ def _make_https_proxy_handler(
             upstream_connection = http.client.HTTPConnection(
                 upstream_host,
                 upstream_port,
-                timeout=30,
+                timeout=_PROXY_UPSTREAM_TIMEOUT_SECONDS,
             )
             try:
                 upstream_connection.request(
@@ -344,6 +439,10 @@ def _make_https_proxy_handler(
                 response_body = upstream_response.read()
                 response_headers = upstream_response.getheaders()
             except (http.client.HTTPException, OSError) as exc:
+                with observed_requests_lock:
+                    cast(list[str], proxy_diagnostics["upstream_errors"]).append(
+                        f"{request_target}: {type(exc).__name__}: {exc}"
+                    )
                 self._reject_request(
                     502, f"Upstream request failed: {type(exc).__name__}"
                 )
@@ -351,6 +450,17 @@ def _make_https_proxy_handler(
             finally:
                 upstream_connection.close()
 
+            with observed_requests_lock:
+                cast(list[dict[str, Any]], proxy_diagnostics["responses"]).append(
+                    {
+                        "body_length": len(response_body),
+                        "header_names": [
+                            name.lower() for name, _value in response_headers
+                        ],
+                        "status": upstream_response.status,
+                        "target": request_target,
+                    }
+                )
             response_connection_tokens = {
                 token.strip().lower()
                 for name, value in response_headers
@@ -369,8 +479,13 @@ def _make_https_proxy_handler(
                     continue
                 self.send_header(name, value)
             self.send_header("Content-Length", str(len(response_body)))
+            self.send_header("Connection", "close")
             self.end_headers()
-            self.wfile.write(response_body)
+            try:
+                self.wfile.write(response_body)
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError) as exc:
+                self._record_peer_departure(exc)
 
         def log_message(self, _format: str, *_args: Any) -> None:
             return
@@ -383,8 +498,9 @@ def _https_reverse_proxy(
     tmp_path: Path,
     upstream_url: str,
     observed_requests: list[dict[str, Any]],
+    diagnostics: dict[str, Any] | None = None,
 ) -> Iterator[str]:
-    """Serve a bounded genuine-HTTPS origin in front of a fixed loopback server."""
+    """Serve one bounded genuine-HTTPS session in front of a fixed loopback server."""
     parsed_upstream = urlsplit(upstream_url)
     assert parsed_upstream.scheme == "http"
     assert parsed_upstream.hostname == "127.0.0.1"
@@ -395,7 +511,8 @@ def _https_reverse_proxy(
     key_path = tmp_path / "localhost.key"
     certificate_path = tmp_path / "localhost.crt"
     observed_requests_lock = threading.Lock()
-    server: ThreadingHTTPServer | None = None
+    proxy_diagnostics = diagnostics if diagnostics is not None else {}
+    server: _TrackedThreadingHTTPServer | None = None
     server_thread: threading.Thread | None = None
     server_thread_started = False
     try:
@@ -409,12 +526,19 @@ def _https_reverse_proxy(
             parsed_upstream.port,
             observed_requests,
             observed_requests_lock,
+            proxy_diagnostics,
         )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        server.daemon_threads = True
+        server = _TrackedThreadingHTTPServer(("127.0.0.1", 0), handler)
         try:
+            # The certificate and context are created once for this proxy session,
+            # then reused by every accepted TLS connection.
             tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             tls_context.load_cert_chain(certificate_path, key_path)
+            proxy_diagnostics["certificate_fingerprint_sha256"] = (
+                _certificate_fingerprint(certificate_path)
+            )
+            proxy_diagnostics["certificate_generation_count"] = 1
+            proxy_diagnostics["tls_context"] = tls_context
             server.socket = tls_context.wrap_socket(server.socket, server_side=True)
             server_address = cast(tuple[str, int], server.server_address)
             proxy_port = server_address[1]
@@ -426,26 +550,290 @@ def _https_reverse_proxy(
             try:
                 server_thread.start()
                 server_thread_started = True
+                proxy_diagnostics["server_thread"] = server_thread
                 yield f"https://localhost:{proxy_port}"
             finally:
                 try:
                     if server_thread_started:
+                        # Stop accepting first; then close the listening TLS socket,
+                        # join the accept loop, and finally join active handlers.
                         server.shutdown()
                 finally:
                     try:
                         server.server_close()
                     finally:
                         if server_thread_started and server_thread is not None:
-                            server_thread.join(timeout=5)
+                            server_thread.join(timeout=_PROXY_SHUTDOWN_TIMEOUT_SECONDS)
                             assert not server_thread.is_alive(), (
-                                "HTTPS test proxy thread did not terminate"
+                                "HTTPS test proxy accept thread did not terminate"
                             )
+                        if server is not None:
+                            deadline = (
+                                time.monotonic() + _PROXY_SHUTDOWN_TIMEOUT_SECONDS
+                            )
+                            while True:
+                                with server.handler_threads_lock:
+                                    active_handlers = tuple(server.handler_threads)
+                                if not active_handlers:
+                                    break
+                                remaining = deadline - time.monotonic()
+                                if remaining <= 0:
+                                    break
+                                for handler_thread in active_handlers:
+                                    handler_thread.join(timeout=remaining)
+                            with server.handler_threads_lock:
+                                assert not server.handler_threads, (
+                                    "HTTPS test proxy handler threads did not terminate"
+                                )
         finally:
             if server is not None and not server_thread_started:
                 server.server_close()
     finally:
         key_path.unlink(missing_ok=True)
         certificate_path.unlink(missing_ok=True)
+
+
+@contextmanager
+def _loopback_http_server(
+    handler: type[BaseHTTPRequestHandler],
+) -> Iterator[str]:
+    """Serve a deterministic local upstream and join all of its handlers."""
+    server = _TrackedThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(
+        target=server.serve_forever,
+        name="quickscale-sa160-http-upstream",
+        daemon=True,
+    )
+    thread.start()
+    try:
+        address = cast(tuple[str, int], server.server_address)
+        yield f"http://127.0.0.1:{address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=_PROXY_SHUTDOWN_TIMEOUT_SECONDS)
+        assert not thread.is_alive(), "Loopback upstream thread did not terminate"
+        deadline = time.monotonic() + _PROXY_SHUTDOWN_TIMEOUT_SECONDS
+        while True:
+            with server.handler_threads_lock:
+                active_handlers = tuple(server.handler_threads)
+            if not active_handlers:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            for handler_thread in active_handlers:
+                handler_thread.join(timeout=remaining)
+        with server.handler_threads_lock:
+            assert not server.handler_threads, (
+                "Loopback upstream handler threads did not terminate"
+            )
+
+
+def test_https_reverse_proxy_uses_bounded_close_framing_and_strips_hop_headers(
+    tmp_path: Path,
+) -> None:
+    """The real TLS proxy emits one close-delimited HTTP/1.0 response."""
+    request_data: dict[str, Any] = {}
+    response_body = b"framed upstream response"
+
+    class UpstreamHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+
+        def _respond(self) -> None:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            request_data["headers"] = {
+                name.lower(): value for name, value in self.headers.items()
+            }
+            request_data["body"] = self.rfile.read(content_length)
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(response_body)))
+            self.send_header("Connection", "close, X-Upstream-Nominated")
+            self.send_header("X-Upstream-Nominated", "must-not-cross")
+            self.send_header("Keep-Alive", "timeout=30")
+            self.end_headers()
+            self.wfile.write(response_body)
+
+        def do_GET(self) -> None:
+            self._respond()
+
+        def do_POST(self) -> None:
+            self._respond()
+
+        def log_message(self, _format: str, *_args: Any) -> None:
+            return
+
+    observed_requests: list[dict[str, Any]] = []
+    diagnostics: dict[str, Any] = {}
+    with _loopback_http_server(UpstreamHandler) as upstream_url:
+        with _https_reverse_proxy(
+            tmp_path,
+            upstream_url,
+            observed_requests,
+            diagnostics,
+        ) as proxy_url:
+            parsed_proxy = urlsplit(proxy_url)
+            assert parsed_proxy.port is not None
+            client_context = ssl._create_unverified_context()
+            connection = http.client.HTTPSConnection(
+                parsed_proxy.hostname,
+                parsed_proxy.port,
+                context=client_context,
+                timeout=_PROXY_SOCKET_TIMEOUT_SECONDS,
+            )
+            try:
+                connection.request(
+                    "POST",
+                    "/framing",
+                    body=b"request body",
+                    headers={
+                        "Connection": "keep-alive, X-Request-Nominated",
+                        "X-Request-Nominated": "must-not-cross",
+                        "Keep-Alive": "timeout=30",
+                        "TE": "trailers",
+                    },
+                )
+                response = connection.getresponse()
+                assert response.version == 10
+                response_headers = response.getheaders()
+                lowered_response_names = [
+                    name.lower() for name, _value in response_headers
+                ]
+                assert lowered_response_names.count("content-length") == 1
+                assert response.getheader("Content-Length") == str(len(response_body))
+                assert response.getheader("Connection") == "close"
+                assert response.getheader("X-Upstream-Nominated") is None
+                assert response.getheader("Keep-Alive") is None
+                assert response.getheader("Transfer-Encoding") is None
+                assert response.read() == response_body
+                assert response.will_close
+            finally:
+                connection.close()
+
+            assert request_data["body"] == b"request body"
+            upstream_headers = request_data["headers"]
+            assert "connection" not in upstream_headers
+            assert "x-request-nominated" not in upstream_headers
+            assert "keep-alive" not in upstream_headers
+            assert "te" not in upstream_headers
+            assert upstream_headers["x-forwarded-proto"] == "https"
+            assert len(observed_requests) == 1
+            assert diagnostics["certificate_generation_count"] == 1
+            assert len(diagnostics["certificate_fingerprint_sha256"]) == 64
+
+            # A second real TLS connection reuses the same certificate/context and
+            # proves the downstream close is observable as EOF, not a retry.
+            raw_socket = socket.create_connection(
+                (parsed_proxy.hostname, parsed_proxy.port),
+                timeout=_PROXY_SOCKET_TIMEOUT_SECONDS,
+            )
+            tls_socket = client_context.wrap_socket(
+                raw_socket,
+                server_hostname=parsed_proxy.hostname,
+            )
+            try:
+                tls_socket.sendall(b"GET /eof HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                raw_response = bytearray()
+                while b"\r\n\r\n" not in raw_response:
+                    raw_response.extend(tls_socket.recv(4096))
+                assert b"HTTP/1.0 200" in raw_response
+                while len(raw_response) < len(
+                    response_body
+                ) or not raw_response.endswith(response_body):
+                    chunk = tls_socket.recv(4096)
+                    if not chunk:
+                        break
+                    raw_response.extend(chunk)
+                assert raw_response.endswith(response_body)
+                assert tls_socket.recv(1) == b""
+            finally:
+                tls_socket.close()
+
+        assert not (tmp_path / "localhost.key").exists()
+        assert not (tmp_path / "localhost.crt").exists()
+        assert not diagnostics["server_thread"].is_alive()
+        assert diagnostics["unexpected_handler_errors"] == []
+
+
+def test_https_reverse_proxy_handles_expected_peer_disconnect_deterministically(
+    tmp_path: Path,
+) -> None:
+    """A client departure after upstream receipt is expected proxy cleanup."""
+    request_received = threading.Event()
+    release_response = threading.Event()
+    upstream_finished = threading.Event()
+
+    class BlockingUpstreamHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+
+        def do_GET(self) -> None:
+            request_received.set()
+            try:
+                assert release_response.wait(_PROXY_SOCKET_TIMEOUT_SECONDS)
+                body = b"response after peer departure"
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            finally:
+                upstream_finished.set()
+
+        def log_message(self, _format: str, *_args: Any) -> None:
+            return
+
+    observed_requests: list[dict[str, Any]] = []
+    diagnostics: dict[str, Any] = {}
+    try:
+        with _loopback_http_server(BlockingUpstreamHandler) as upstream_url:
+            started = time.monotonic()
+            with _https_reverse_proxy(
+                tmp_path,
+                upstream_url,
+                observed_requests,
+                diagnostics,
+            ) as proxy_url:
+                parsed_proxy = urlsplit(proxy_url)
+                assert parsed_proxy.port is not None
+                client_context = ssl._create_unverified_context()
+                raw_socket = socket.create_connection(
+                    (parsed_proxy.hostname, parsed_proxy.port),
+                    timeout=_PROXY_SOCKET_TIMEOUT_SECONDS,
+                )
+                tls_socket = client_context.wrap_socket(
+                    raw_socket,
+                    server_hostname=parsed_proxy.hostname,
+                )
+                tls_socket.sendall(
+                    b"GET /disconnect HTTP/1.1\r\nHost: localhost\r\n\r\n"
+                )
+                assert request_received.wait(_PROXY_SOCKET_TIMEOUT_SECONDS)
+                # RST makes the peer departure deterministic while the upstream
+                # response is still blocked behind the explicit synchronization
+                # barrier above.
+                tls_socket.setsockopt(
+                    socket.SOL_SOCKET,
+                    socket.SO_LINGER,
+                    struct.pack("ii", 1, 0),
+                )
+                tls_socket.close()
+                release_response.set()
+                assert upstream_finished.wait(_PROXY_SOCKET_TIMEOUT_SECONDS)
+
+            elapsed = time.monotonic() - started
+            assert elapsed < _PROXY_SHUTDOWN_TIMEOUT_SECONDS
+            assert len(observed_requests) == 1
+            assert diagnostics["expected_peer_departures"] >= 1
+            assert set(diagnostics["peer_departure_types"]) <= {
+                "BrokenPipeError",
+                "ConnectionResetError",
+            }
+            assert diagnostics["unexpected_handler_errors"] == []
+            assert not diagnostics["server_thread"].is_alive()
+    finally:
+        release_response.set()
+
+    assert not (tmp_path / "localhost.key").exists()
+    assert not (tmp_path / "localhost.crt").exists()
 
 
 def _standalone_generated_env(
@@ -2096,6 +2484,7 @@ class TestGeneratedProjectRuntimeSmoke:
         )
 
         proxy_stack: ExitStack | None = None
+        session_fingerprint: str | None = None
         try:
             django_base_url = f"http://localhost:{server_port}"
             _wait_for_server(
@@ -2107,14 +2496,19 @@ class TestGeneratedProjectRuntimeSmoke:
             from playwright.sync_api import sync_playwright
 
             observed_proxy_requests: list[dict[str, Any]] = []
+            proxy_diagnostics: dict[str, Any] = {}
             proxy_stack = ExitStack()
             base_url = proxy_stack.enter_context(
                 _https_reverse_proxy(
                     tmp_path,
                     f"http://127.0.0.1:{server_port}",
                     observed_proxy_requests,
+                    proxy_diagnostics,
                 )
             )
+            session_fingerprint = proxy_diagnostics["certificate_fingerprint_sha256"]
+            assert proxy_diagnostics["certificate_generation_count"] == 1
+            assert len(session_fingerprint) == 64
             api_url = f"{base_url}/api/orgs/"
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(
@@ -2206,7 +2600,33 @@ class TestGeneratedProjectRuntimeSmoke:
                             f"browser={browser_version}, cookies={cookies!r}"
                         )
 
-                        shell_response = positive_page.goto(f"{base_url}/orgs/new/")
+                        try:
+                            shell_response = positive_page.goto(
+                                f"{base_url}/orgs/new/",
+                                wait_until="domcontentloaded",
+                            )
+                        except Exception as exc:
+                            observed_targets = [
+                                (request["method"], request["target"])
+                                for request in observed_proxy_requests
+                            ]
+                            response_summary = [
+                                (
+                                    response["target"],
+                                    response["status"],
+                                    response["body_length"],
+                                    "content-encoding" in response["header_names"],
+                                )
+                                for response in proxy_diagnostics["responses"]
+                            ]
+                            raise AssertionError(
+                                "Authenticated shell navigation failed with proxy "
+                                f"diagnostics: error={exc!r}, targets={observed_targets!r}, "
+                                f"responses={response_summary!r}, "
+                                f"upstream_errors={proxy_diagnostics['upstream_errors']!r}, "
+                                f"unexpected={proxy_diagnostics['unexpected_handler_errors']!r}, "
+                                f"timeouts={proxy_diagnostics['handler_timeouts']}"
+                            ) from exc
                         assert shell_response is not None
                         assert shell_response.status == 200, (
                             "Authenticated proxy-marked shell navigation failed: "
@@ -2382,7 +2802,16 @@ class TestGeneratedProjectRuntimeSmoke:
         finally:
             if proxy_stack is not None:
                 proxy_stack.close()
+                if session_fingerprint is not None:
+                    assert (
+                        proxy_diagnostics["certificate_fingerprint_sha256"]
+                        == session_fingerprint
+                    )
+                    assert proxy_diagnostics["unexpected_handler_errors"] == []
+                    assert not proxy_diagnostics["server_thread"].is_alive()
             _stop_server(server_process)
+            assert not (tmp_path / "localhost.key").exists()
+            assert not (tmp_path / "localhost.crt").exists()
 
     @staticmethod
     def _write_quickscale_yml_with_auth(
