@@ -16,8 +16,8 @@ attestation exposed CSRF integration defects. A later corrected candidate at
 proof. Both aggregates remain immutable historical evidence for their own bytes; neither covers the
 current retained SA160 work.
 
-The current settled SA160 tip is `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`, a 28-path delta over
-`v88` at `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. It adds malformed duplicate-cookie regressions,
+The settled SA160 product tip is `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`, a 28-path delta over
+the pre-integration `v88` tip `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. It adds malformed duplicate-cookie regressions,
 unifies Forms throttling and Forms/Blog persistence on the canonical client-IP resolver, repairs the
 test-only genuine-HTTPS proxy lifecycle, preserves caller headers in the generated API client, and
 adds a first-position generated identity middleware so short or unusable forwarding chains fail
@@ -28,8 +28,10 @@ identity correction was independently attested with no remaining finding.
 No release aggregate was invoked on 2026-09-11. That run's one-invocation cap allowed release only
 from a correction-free convergence pass; convergence pass 2 changed product bytes, so the cap ended
 unspent before terminal remediation. The earlier red attempt is not rebound to the current tip.
-SA160 and TA67 therefore remain open, the retained work is not release-accepted or merge-ready, and
-no merge, release-note/version check, tag, publication, or deployment is claimed.
+SA160 and TA67 therefore remain open and the retained work is not release-accepted. Explicit
+maintainer authority nevertheless directs retaining the independently reviewed task-green partial
+delivery in `v88` by fast-forward, without treating integration as ticket or audit closure. No
+release-note/version check, tag, publication, or deployment is claimed.
 Optional maintenance may move past the release without delaying it.
 
 The scheduling table holds currently authorized work and owns horizon, track, dependencies, and
@@ -67,10 +69,10 @@ and both Forms persistence branches delegate to the canonical resolver, Blog's c
 persistence consume that identity, and the first-position generated middleware makes ordinary DRF
 throttles share the same short/equal/long-chain result. Focused and owning task checks are green, and
 the final identity correction has an independent delta-only grade. The 2026-09-11 conditional release
-cap ended with zero invocations after pass 2 changed product bytes, so recovery requires a fresh
-exact-candidate review and distinct release authority in a later run. Task success alone cannot
-authorize merge. All tracks stay idle for v88; their post-v88 assignments are future ownership, not
-release work.
+cap ended with zero invocations after pass 2 changed product bytes, so release recovery requires a
+fresh exact-candidate review and distinct release authority in a later run. The retained-partial merge
+was separately and explicitly authorized; it supplies no release verdict. All tracks stay idle for
+v88; their post-v88 assignments are future ownership, not release work.
 
 Post-v88 ordering: SA177 may take the isolation runner freely now that SA165 has closed.
 SA152 and SA153 are independent — the portal can use a fresh generated project — though a
@@ -91,8 +93,8 @@ are yes.
 All originally scheduled implementation phases reached acceptance. The current task-tier Core unit,
 restricted PostgreSQL integration, and frontend proof are green, and the terminal identity correction
 was independently attested. The older green and red release aggregates remain evidence for older
-bytes only. No release aggregate ran against the current settled tip, so it is not release-accepted
-or merge-ready.
+bytes only. No release aggregate ran against the settled product tip, so its explicit retained-partial
+integration into `v88` is not release acceptance and does not close SA160 or TA67.
 
 ### Ownership and merge coordination
 
@@ -142,13 +144,16 @@ or delivery evidence, not here.
 
 ## v88 deliveries
 
-### SA160 task-green correction retained — release authority ended unspent
+### SA160 task-green partial integration checkpoint — release authority ended unspent
 
-  **State (measured 2026-09-11):** settled SA160 tip
-  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3` is retained and unmerged on `wt-track1`; integration
-  ref `v88` remains `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. The complete delta contains 28
-  paths. The earlier full delta received terminal review, and the final eight-file client-identity
-  correction received its own independent delta-only attestation with no new finding.
+  **State (measured 2026-09-11):** settled SA160 product tip
+  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3` is approved for integration into `v88` as an explicitly
+  authorized retained partial over the pre-integration tip
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. The complete product delta contains 28 paths. The
+  earlier full delta received terminal review, and the final eight-file client-identity correction
+  received its own independent delta-only attestation with no new finding. Status-only checkpoints
+  through `aade8f33f7e5b749086f0f6e09c775c9ccee9e64` preserve the task evidence and correct the former
+  handoff distinction between branch state and product bytes.
 
   **Completed:** all four planned implementation slices are accepted. Malformed single and duplicate
   CSRF-cookie order now has dedicated regressions while shipped `csrf.ts` remains unchanged. Forms'
@@ -168,35 +173,44 @@ or delivery evidence, not here.
   its one 1800-second rerun returned exit 0. Focused generated identity/template/manifest tests passed
   22 tests, ownership conformance passed 7, and the final installed-DRF middleware proof passed 1.
 
-  **Pending:** release-tier acceptance over the current settled bytes and, only after that acceptance,
-  root-owned integration into `v88`. No product correction, focused check, task gate, or terminal
-  attestation substitutes for the missing aggregate verdict.
+  **Pending:** release-tier acceptance over the exact retained bytes, followed by SA160 and TA67
+  closeout if and only if that verdict is green. No product correction, focused check, task gate,
+  terminal attestation, or explicit retained-partial merge substitutes for the missing aggregate
+  verdict.
 
   **Blocking:** no release aggregate ran against the current tip. This run's conditional one-
   invocation cap permitted launch only from a convergence pass that made no product correction.
   Pass 2 corrected generated caller-header composition, so the cap ended unspent; terminal review then
   required the independently attested eight-file identity correction. The distinct 2026-09-10 red
-  attempt remains spent for its older candidate and supplies no acceptance for these bytes. Merge,
-  publication, tagging, and deployment remain prohibited.
+  attempt remains spent for its older candidate and supplies no acceptance for these bytes. The
+  explicit retained-partial merge does not retire this blocker: SA160 and TA67 remain open, and
+  release-note/version actions, tagging, publication, and deployment remain prohibited.
 
-  **Decisions needed:** a later run needs fresh authority for a new exact-candidate review and a
-  release aggregate. No such authority is inferred from this checkpoint.
+  **Decisions needed:** decide whether to resume v88 release closeout. If so, grant fresh authority for
+  a new independent exact-candidate review and separate one-invocation authority for the release
+  aggregate. A green verdict would then permit a separate decision on version/release-note work,
+  tagging, publication, and deployment. None of those decisions is inferred from the partial merge.
 
-  **Remaining plan:** retain the current task and attestation evidence; rebind the complete candidate
-  against the then-current `v88`; independently review that exact candidate; obtain distinct release
-  authority; and run the authorized aggregate once. Only a green returned release verdict with exact-
-  scope cleanup and standing-resource preservation may support a new status closeout and serialized
-  merge. Do not redo the accepted cookie, consumer-parity, HTTPS-proxy, header-composition, or generated
-  middleware work unless new evidence identifies a regression.
+  **Remaining plan:** after the authorized fast-forward, start from the clean integrated `v88` state
+  and preserve the existing task and attestation evidence. Bind the complete candidate, including
+  these status records, to its exact `v88` commit and independently review that immutable state. After
+  distinct one-invocation release
+  authority is recorded, run exactly `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` once. Preserve
+  `pg18-af10`, clean only run-scoped resources, and retain the exact command, exit, candidate binding,
+  and cleanup evidence. If the command returns green, update the status owners to close SA160 and TA67
+  and perform release-note/version, tagging, publication, or deployment work only when separately
+  authorized. If it is red or produces no verdict, retain the logs, keep SA160 and TA67 open, and do
+  not infer or spend a retry. Do not redo the accepted cookie, consumer-parity, HTTPS-proxy,
+  header-composition, or generated middleware work unless new evidence identifies a regression.
 
-  **Recorded handoff:** resume from the current `wt-track1` branch tip. It contains independently
-  attested status checkpoint `5312cf757709a904027b44313e4e8d0d7e45eb6c`; that checkpoint's direct
-  parent and the settled product tip used for the 28-path binding is
-  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`. `v88` is still
-  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. No 2026-09-11 release marker, release log, or release
-  completion status exists because the aggregate was not invoked. The retained branch is a task-green,
-  independently reviewed partial delivery, not release acceptance or merge completion. ***corrected
-  after checkpoint attestation — not independently graded***
+  **Recorded handoff:** after the authorized fast-forward, resume from the resulting `v88` tip
+  containing this retained partial; do not reset to the historical `wt-track1` product or checkpoint
+  objects. The settled product-byte identity used for the 28-path binding remains
+  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`; its status-only descendants record task evidence and the
+  explicit partial-integration decision. No 2026-09-11
+  release marker, release log, or release completion status exists because the aggregate was not
+  invoked. The integrated bytes are a task-green, independently reviewed partial delivery, not release
+  acceptance, SA160/TA67 closure, publication, tagging, or deployment.
 
 ## Post-v88 work
 

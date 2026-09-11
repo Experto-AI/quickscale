@@ -51,8 +51,9 @@ ordinary DRF consumers the same fail-closed forwarding result through a first-po
 middleware. Its final `make test-unit -- --core`, restricted `make test-integration`, and `make
 frontend-proof` task gates returned exit 0; the identity correction received independent delta-only
 attestation. No release aggregate ran against the current tip because pass 2 changed product bytes
-and ended this run's conditional release cap unspent. The current bytes are therefore not release-
-accepted and do not authorize merge.
+and ended this run's conditional release cap unspent. Explicit maintainer authority nevertheless
+directs retaining and integrating the independently reviewed task-green partial into `v88`; that
+integration is not release acceptance and does not close TA67.
 
 ---
 
@@ -60,12 +61,12 @@ accepted and do not authorize merge.
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| TA67 | S3 | correctness | SPA CSRF duplicate-cookie parity | S | High | Behavior corrected, task-tested, and independently reviewed at current tip; no current release invocation; open and non-mergeable |
+| TA67 | S3 | correctness | SPA CSRF duplicate-cookie parity | S | High | Behavior corrected, task-tested, independently reviewed, and approved for explicit retained-partial integration; no current release invocation; open pending release acceptance |
 
 **Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **1** · S4 **0** ·
 **Total 1 open.** TA67 remains open because no release aggregate covers the current corrected bytes.
-The 2026-09-11 conditional cap ended unspent after pass 2 changed product bytes; release acceptance
-and merge remain unavailable in this run.
+The 2026-09-11 conditional cap ended unspent after pass 2 changed product bytes; explicit partial-
+integration authority permits retention in `v88` but supplies no release acceptance.
 
 ---
 
@@ -87,8 +88,9 @@ Those current bytes are task-green and independently reviewed, including the fin
 correction. They are not release-accepted: no release aggregate ran against
 `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`. The current run's conditional cap ended unspent after
 convergence pass 2 changed product bytes, and the older exit-2 attempt belongs only to its superseded
-candidate. TA67 remains live and the retained tip remains non-mergeable until a fresh exact-candidate
-review, distinct release authority, and a green returned release verdict cover the current bytes.
+candidate. TA67 remains live across the explicitly authorized retained-partial integration. A fresh
+exact-candidate review, distinct release authority, and a green returned release verdict must cover
+the retained bytes before TA67 can close or release work can proceed.
 
 ---
 
@@ -194,8 +196,10 @@ review, distinct release authority, and a green returned release verdict cover t
   restricted integration, and frontend task gates returned exit 0, and the eight-file terminal
   correction received independent delta-only attestation with no new finding. No release aggregate
   ran on these bytes: convergence pass 2 changed product content, ending the run's conditional cap
-  unspent. TA67 stays open and the tip stays unmerged and non-mergeable pending fresh review,
-  distinct release authority, and a green release verdict. TA68 remains retired.
+  unspent. Explicit maintainer authority subsequently directed retaining and integrating the
+  independently reviewed task-green partial into `v88`; this does not supply release acceptance.
+  TA67 stays open pending fresh review, distinct release authority, and a green release verdict. TA68
+  remains retired.
 - 2026-09-04 — **TA70** `container-status-substring-match`: **retired by SA170**. The ordered serial and concurrent release campaigns both passed with exact Core/CLI cleanup and preserved standing PostgreSQL state. Final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-02 — **Watch item closed:** the four `sqlparse` suppressions were retired by a real dependency upgrade to 0.6.0 during SA170 convergence; the vulnerability gate is green and the shared 2026-09-30 expiry no longer exists. No finding was opened or closed by this.
 - 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.

@@ -2,9 +2,9 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
-- **SA160 task-green correction retained; conditional release authority ended unspent; no merge
+- **SA160 task-green partial approved for `v88` integration; conditional release authority ended unspent
   (2026-09-11).** The current settled tip is
-  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`, a 28-path delta over `v88` at
+  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`, a 28-path delta over the pre-integration `v88` tip
   `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. All four planned implementation slices are accepted:
   malformed single/duplicate CSRF-cookie order has dedicated coverage without changing shipped
   `csrf.ts`; Forms' DRF throttle, both Forms persistence branches, and Blog's custom limiter and
@@ -26,9 +26,11 @@
   No release aggregate was invoked in this run. Its conditional one-invocation cap allowed launch only
   from a correction-free convergence pass; pass 2 changed product bytes, so the cap ended unspent and
   terminal remediation proceeded without release authority. The distinct 2026-09-10 red attempt below
-  remains evidence only for its older candidate and is not rebound. SA160 and TA67 remain open; release
-  acceptance, merge into `v88`, release-note/version actions, tagging, publication, and deployment are
-  not claimed.
+  remains evidence only for its older candidate and is not rebound. Explicit maintainer authority
+  directs retaining and fast-forwarding this independently reviewed task-green partial into `v88`
+  despite the absent release verdict. That integration is preservation, not acceptance: SA160 and
+  TA67 remain open, and release acceptance, release-note/version actions, tagging, publication, and
+  deployment are not claimed.
 
 - **SA160 corrected candidate exact release attempt red; no retry authorized (2026-09-10).** EV-10
   independently reviewed the exact 20-path candidate at `HEAD` / `PRODUCT_TIP`
