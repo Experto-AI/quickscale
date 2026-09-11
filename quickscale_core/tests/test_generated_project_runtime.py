@@ -54,13 +54,6 @@ REPO_LOCAL_ARTIFACT_NAMES = frozenset(
     }
 )
 REPO_LOCAL_ARTIFACT_SUFFIXES = (".egg-info", ".pyc", ".pyo")
-_C_PROXY_RECOVERY_EVIDENCE_DIR = (
-    REPO_ROOT
-    / ".adaptive"
-    / "evidence"
-    / "sa160-2026-09-11-09-08-39"
-    / "c-proxy-recovery"
-)
 
 
 def _is_repo_local_artifact(entry_name: str) -> bool:
@@ -1504,7 +1497,7 @@ def _wait_for_server(
         try:
             with socket.create_connection((host, port), timeout=2):
                 return
-        except OSError, ConnectionRefusedError:
+        except OSError:
             time.sleep(0.5)
 
     error_msg = f"Server did not start within {timeout} seconds."
@@ -2518,16 +2511,7 @@ class TestGeneratedProjectRuntimeSmoke:
             assert len(session_fingerprint) == 64
             api_url = f"{base_url}/api/orgs/"
             with sync_playwright() as playwright:
-                _C_PROXY_RECOVERY_EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-                netlog_path = (
-                    _C_PROXY_RECOVERY_EVIDENCE_DIR
-                    / "chromium-netlog-first-recovery.json"
-                )
-                if netlog_path.exists():
-                    netlog_path = (
-                        _C_PROXY_RECOVERY_EVIDENCE_DIR
-                        / "chromium-netlog-validation.json"
-                    )
+                netlog_path = tmp_path / "chromium-netlog.json"
                 proxy_diagnostics["chromium_netlog_path"] = str(netlog_path)
                 browser_args = [
                     "--no-sandbox",
