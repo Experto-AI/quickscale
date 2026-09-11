@@ -41,15 +41,18 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 **Audit tools run (read-only):** `git log` / `git diff` / `git rev-parse` over the delta; CPython 3.14 for the two empirical checks below. No scanner was re-run this pass — the Trivy/Bandit gate is CI-owned and its ledger was read rather than re-executed.
 
-**Empirical checks run (§1e):** the terminal-remediation task-tier checks are recorded in the owning
-handoff. The corrected exact candidate at `cb21f791826c9ebcfdba5f8b034d7eddef8e02df`
-then received its single authorized `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` release-tier attempt.
-Stages 1–11 passed, but the attempt completed with exit **2**: Core reported **38 passed / 1 failed**
-in `quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::`
-`test_production_shell_csrf_token_accepts_authenticated_org_mutation` when Chromium returned
-`net::ERR_TOO_MANY_RETRIES` at the HTTPS proxy navigation and the proxy logged `BrokenPipeError`;
-CLI reported **54 passed**. This red attempt spent the exact-once authority. It is not release
-acceptance, does not authorize merge, and cannot be retried under that authority.
+**Empirical checks run (§1e):** the 2026-09-10 corrected candidate at
+`cb21f791826c9ebcfdba5f8b034d7eddef8e02df` received one release-tier attempt that returned exit 2
+at the genuine-HTTPS browser navigation. That result remains immutable evidence for those older
+bytes. The current 28-path settled tip at `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3` repairs that
+test-only proxy lifecycle, covers malformed duplicate-cookie order, unifies Forms throttling plus
+Forms/Blog persistence on the canonical identity, preserves generated caller headers, and gives
+ordinary DRF consumers the same fail-closed forwarding result through a first-position generated
+middleware. Its final `make test-unit -- --core`, restricted `make test-integration`, and `make
+frontend-proof` task gates returned exit 0; the identity correction received independent delta-only
+attestation. No release aggregate ran against the current tip because pass 2 changed product bytes
+and ended this run's conditional release cap unspent. The current bytes are therefore not release-
+accepted and do not authorize merge.
 
 ---
 
@@ -57,11 +60,12 @@ acceptance, does not authorize merge, and cannot be retried under that authority
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| TA67 | S3 | correctness | SPA CSRF duplicate-cookie parity | S | High | Corrected exact candidate independently reviewed; release attempt red at HTTPS proxy navigation (exit 2); authority spent; open and non-mergeable |
+| TA67 | S3 | correctness | SPA CSRF duplicate-cookie parity | S | High | Behavior corrected, task-tested, and independently reviewed at current tip; no current release invocation; open and non-mergeable |
 
 **Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **1** · S4 **0** ·
-**Total 1 open.** TA67 remains open because the corrected exact candidate's authorized release
-attempt is red (exit 2), the exact-once authority is spent, and neither retry nor merge is authorized.
+**Total 1 open.** TA67 remains open because no release aggregate covers the current corrected bytes.
+The 2026-09-11 conditional cap ended unspent after pass 2 changed product bytes; release acceptance
+and merge remain unavailable in this run.
 
 ---
 
@@ -70,18 +74,21 @@ attempt is red (exit 2), the exact-once authority is spent, and neither retry no
 ### TA67 — SPA CSRF duplicate-cookie parity
 
 The generated React helper previously selected the first exact `csrftoken` cookie even though
-Django's `parse_cookie()` exposes the last duplicate. The corrected exact candidate aligns the
-helper, both write callers, tests, and generated hashes with the server and restores production token
-transport through a masked token in the authenticated shell. That candidate was independently
-reviewed, then its single authorized release-tier attempt completed with exit **2** after stages 1–11
-passed. Core reported **38 passed / 1 failed** in
-`quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::`
-`test_production_shell_csrf_token_accepts_authenticated_org_mutation`: Chromium returned
-`net::ERR_TOO_MANY_RETRIES` at the HTTPS proxy navigation and the proxy logged `BrokenPipeError`;
-CLI reported **54 passed**. The failure occurred before the positive mutation assertion, so this is
-red evidence, not release acceptance. TA67 remains live and the corrected candidate remains
-non-mergeable. The exact-once authority is spent; a reviewed browser-harness correction and fresh
-authority are required before any new release attempt.
+Django's `parse_cookie()` exposes the last duplicate. The current retained bytes align the helper,
+both write callers, tests, and generated hashes with the server, preserve the HttpOnly production
+cookie through a masked shell token, and add malformed single/duplicate-order regressions. The
+genuine-HTTPS production proof now completes the real organization mutation without injected success
+state. Forms' DRF throttle, both Forms persistence branches, and Blog's custom limiter/persistence
+path use the canonical request identity; generated projects normalize forwarding state first so
+ordinary DRF and canonical consumers also agree on disabled, absent, empty, short, equal, and long
+chains and fail loudly on invalid settings.
+
+Those current bytes are task-green and independently reviewed, including the final generated-identity
+correction. They are not release-accepted: no release aggregate ran against
+`926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`. The current run's conditional cap ended unspent after
+convergence pass 2 changed product bytes, and the older exit-2 attempt belongs only to its superseded
+candidate. TA67 remains live and the retained tip remains non-mergeable until a fresh exact-candidate
+review, distinct release authority, and a green returned release verdict cover the current bytes.
 
 ---
 
@@ -179,6 +186,16 @@ authority are required before any new release attempt.
   **54 passed**. The result is red, supplies no release or merge acceptance, and spent the exact-once
   authority; no retry is authorized. TA67 remains open and the candidate remains unmerged and
   non-mergeable. TA68's dead-helper correction is unchanged.
+- 2026-09-11 — **TA67 behavior corrected and independently reviewed; release acceptance remains
+  open.** The current retained tip `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3` covers malformed
+  cookie order, Forms DRF throttling, both Forms persistence branches, Blog's custom limiter and
+  persistence, the genuine-HTTPS browser mutation, generated caller-header composition, and a first-
+  position generated middleware that aligns canonical and ordinary DRF identity. Final Core unit,
+  restricted integration, and frontend task gates returned exit 0, and the eight-file terminal
+  correction received independent delta-only attestation with no new finding. No release aggregate
+  ran on these bytes: convergence pass 2 changed product content, ending the run's conditional cap
+  unspent. TA67 stays open and the tip stays unmerged and non-mergeable pending fresh review,
+  distinct release authority, and a green release verdict. TA68 remains retired.
 - 2026-09-04 — **TA70** `container-status-substring-match`: **retired by SA170**. The ordered serial and concurrent release campaigns both passed with exact Core/CLI cleanup and preserved standing PostgreSQL state. Final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-02 — **Watch item closed:** the four `sqlparse` suppressions were retired by a real dependency upgrade to 0.6.0 during SA170 convergence; the vulnerability gate is green and the shared 2026-09-30 expiry no longer exists. No finding was opened or closed by this.
 - 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.

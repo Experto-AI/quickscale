@@ -10,25 +10,26 @@ hardening. Then deliver the first useful property portal in a
 project-owned extension, generalizing capabilities only after that project proves their value.
 
 The v88 hardening release had a root-finalized green candidate and release aggregate before terminal
-attestation exposed CSRF integration defects. A retained terminal-remediation commit corrected the
-token bootstrap and duplicate-cookie implementation, tests, generated hashes, and status. The
-corrected candidate at `cb21f791826c9ebcfdba5f8b034d7eddef8e02df` was independently reviewed and its
-single authorized `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` attempt reached the final E2E stage but
-returned exit 2: Core reported 38 passed and 1 failed in the generated production browser proof,
-while CLI reported 54 passed. The prior green aggregate is historical evidence for prior bytes; this
-red result leaves the corrected work below release acceptance and non-mergeable. No retry is
-authorized by the spent exact-once authority. Merge, release-note/version checks, tagging,
-publishing, and deployment remain separate maintainer actions.
+attestation exposed CSRF integration defects. A later corrected candidate at
+`cb21f791826c9ebcfdba5f8b034d7eddef8e02df` was independently reviewed, but its single authorized
+`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` attempt returned exit 2 in the generated production browser
+proof. Both aggregates remain immutable historical evidence for their own bytes; neither covers the
+current retained SA160 work.
 
-The same candidate also retains a high-severity client-identity divergence. The shared
-`quickscale_modules_orgs.current_org.get_client_ip` resolver falls back to `REMOTE_ADDR` when the
-normalized `X-Forwarded-For` chain is shorter than `TRUSTED_PROXY_COUNT`, while ordinary DRF
-throttles configured through `NUM_PROXIES` select an `X-Forwarded-For` entry from that same short
-chain. Every consumer must share one fail-closed contract: shorter chains use `REMOTE_ADDR`, equal
-and longer chains select the same right-indexed client hop, empty hops cannot satisfy the trusted
-proxy count, and missing or invalid proxy settings fail loudly. Both this security boundary and the
-red browser proof must close before merge. Correcting or rerunning only the browser failure cannot
-authorize merge.
+The current settled SA160 tip is `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`, a 28-path delta over
+`v88` at `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. It adds malformed duplicate-cookie regressions,
+unifies Forms throttling and Forms/Blog persistence on the canonical client-IP resolver, repairs the
+test-only genuine-HTTPS proxy lifecycle, preserves caller headers in the generated API client, and
+adds a first-position generated identity middleware so short or unusable forwarding chains fail
+closed consistently for canonical and ordinary DRF consumers. The final Core unit, restricted
+PostgreSQL integration, and rendered frontend task gates returned exit 0. The eight-file terminal
+identity correction was independently attested with no remaining finding.
+
+No release aggregate was invoked on 2026-09-11. That run's one-invocation cap allowed release only
+from a correction-free convergence pass; convergence pass 2 changed product bytes, so the cap ended
+unspent before terminal remediation. The earlier red attempt is not rebound to the current tip.
+SA160 and TA67 therefore remain open, the retained work is not release-accepted or merge-ready, and
+no merge, release-note/version check, tag, publication, or deployment is claimed.
 Optional maintenance may move past the release without delaying it.
 
 The scheduling table holds currently authorized work and owns horizon, track, dependencies, and
@@ -60,18 +61,16 @@ Track 2: (idle in v88)      owns post-v88 SA152, SA180
 Track 3: (idle in v88)      owns post-v88 SA177
 ```
 
-**Release recovery requires two independent closures: client-identity parity and a green genuine-
-HTTPS production-browser proof.** Reconcile the shared `get_client_ip` resolver, the forms throttle
-override, blog/forms persistence, and every ordinary DRF throttle using `NUM_PROXIES` to one tested
-contract: a shorter normalized forwarding chain must fail closed to `REMOTE_ADDR` for every
-consumer; equal and longer chains must resolve the same right-indexed client hop; empty hops must not
-inflate the chain; and missing or invalid proxy counts must fail loudly. Separately diagnose and
-correct the test-only HTTPS proxy/navigation failure, complete the real `apiRequest` mutation proof,
-and pass the owning task tier. The retained release attempt ended red before the positive mutation
-assertion and consumed its exact-once authority, so a newly reviewed candidate and fresh release
-authority are required. A browser-only correction, task pass, or green release rerun cannot authorize
-merge while client-identity parity remains open. All tracks stay idle for v88; their post-v88
-assignments are future ownership, not release work.
+**The known SA160 product and harness corrections are complete at task tier; release acceptance is
+not.** The generated genuine-HTTPS proof now reaches the real `apiRequest` mutation, Forms throttling
+and both Forms persistence branches delegate to the canonical resolver, Blog's custom limiter and
+persistence consume that identity, and the first-position generated middleware makes ordinary DRF
+throttles share the same short/equal/long-chain result. Focused and owning task checks are green, and
+the final identity correction has an independent delta-only grade. The 2026-09-11 conditional release
+cap ended with zero invocations after pass 2 changed product bytes, so recovery requires a fresh
+exact-candidate review and distinct release authority in a later run. Task success alone cannot
+authorize merge. All tracks stay idle for v88; their post-v88 assignments are future ownership, not
+release work.
 
 Post-v88 ordering: SA177 may take the isolation runner freely now that SA165 has closed.
 SA152 and SA153 are independent — the portal can use a fresh generated project — though a
@@ -89,11 +88,11 @@ are yes.
 | 2 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 | 3 | — | n/a — no v88 ticket | n/a | n/a | n/a | no |
 
-All originally scheduled implementation phases reached acceptance before terminal attestation. The
-single green release aggregate, successful exact-scope cleanup, and standing-resource preservation
-remain historical evidence for the pre-remediation bytes only. The retained remediation's owning
-`make test-unit -- --core` task tier passed before its one fresh release attempt returned red in Core
-E2E. The corrected candidate is not release-accepted or merge-ready.
+All originally scheduled implementation phases reached acceptance. The current task-tier Core unit,
+restricted PostgreSQL integration, and frontend proof are green, and the terminal identity correction
+was independently attested. The older green and red release aggregates remain evidence for older
+bytes only. No release aggregate ran against the current settled tip, so it is not release-accepted
+or merge-ready.
 
 ### Ownership and merge coordination
 
@@ -111,9 +110,10 @@ E2E. The corrected candidate is not release-accepted or merge-ready.
   worktree rule above covers them: each track resolves the shared set once, at its own merge, after
   the previous merge has landed. The consistency test then checks structure, not status prose.
   No track currently has authorized v88 work, so the shared closeout set has no active v88 writer.
-- The retained SA160 checkpoint's conditional Docker-backed release authority was consumed by the
-  recorded red result. A future attempt requires a newly reviewed candidate and distinct authority
-  after both the client-identity divergence and browser-harness failure are corrected.
+- The current SA160 checkpoint's conditional Docker-backed release cap ended unspent after its second
+  convergence pass changed product bytes. The separate 2026-09-10 red attempt remains spent for its
+  older candidate. A future attempt against the current corrected behavior requires a fresh exact-
+  candidate review and distinct authority.
   Future Docker-heavy work follows the
   [execution policy](validation_policy.md#candidate-review-and-integration) for routing, cleanup,
   candidate binding, and review/merge rules.
@@ -142,84 +142,58 @@ or delivery evidence, not here.
 
 ## v88 deliveries
 
-### SA160 release attempt — Core E2E red in the generated browser proof
+### SA160 task-green correction retained — release authority ended unspent
 
-  **State (measured 2026-09-10):** corrected candidate `cb21f791826c9ebcfdba5f8b034d7eddef8e02df`
-  is retained and unmerged on `wt-track1`; integration ref `v88` remains
-  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. An independent review covered the exact 20-path
-  candidate before the single authorized release attempt. This is red release evidence, not an
-  accepted product candidate or release. No retry, merge, publication, tag, or deployment occurred.
+  **State (measured 2026-09-11):** settled SA160 tip
+  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3` is retained and unmerged on `wt-track1`; integration
+  ref `v88` remains `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. The complete delta contains 28
+  paths. The earlier full delta received terminal review, and the final eight-file client-identity
+  correction received its own independent delta-only attestation with no new finding.
 
-  The candidate also retains a client-identity security-boundary mismatch. The shared
-  `get_client_ip` resolver used by the forms throttle override and blog/forms persistence returns
-  `REMOTE_ADDR` for a normalized forwarding chain shorter than `TRUSTED_PROXY_COUNT`; ordinary DRF
-  throttles configured through `NUM_PROXIES` can instead trust an entry from that short chain. The
-  candidate therefore remains non-mergeable independently of the browser failure.
+  **Completed:** all four planned implementation slices are accepted. Malformed single and duplicate
+  CSRF-cookie order now has dedicated regressions while shipped `csrf.ts` remains unchanged. Forms'
+  DRF throttle delegates to the canonical resolver; both Forms submission persistence branches and
+  Blog's custom limiter/persistence path are covered against the same request identity. The test-only
+  HTTPS proxy now uses stable TLS material, correct close/framing behavior, bounded peer-departure
+  handling, and deterministic cleanup; the genuine production-browser proof reaches one successful
+  `OrgCreatePage` → `useCreateOrg` → `apiRequest` mutation without injected auth, cookie, or CSRF
+  success state. Generated API callers preserve caller headers without allowing them to replace
+  generated sibling headers. Finally, generated projects place `ClientIdentityMiddleware` first:
+  disabled, absent, empty, malformed, or short forwarding chains reach every consumer as
+  `REMOTE_ADDR`; equal and longer chains select the same right-indexed nonempty hop; invalid proxy
+  settings fail before mutation or downstream execution.
 
-  **Completed:** the earlier retained remediation still preserves the production HttpOnly CSRF cookie,
-  masked shell token, Django-last duplicate-cookie behavior, both generated callers, and three rebound
-  emission variants. The corrected candidate also aligns the stale shell assertion and provides a
-  generated production browser harness covering strict install, migrate, cache-table creation,
-  frontend type-check/build, collectstatic, credential creation, production server startup, an
-  unproxied HTTPS-redirect control, secure-cookie calibration, omitted-header rejection, and the
-  intended `OrgCreatePage` → `useCreateOrg` → `apiRequest` mutation. Stages 1–11 passed, including
-  5,093 Core/CLI coverage tests with 2 skips, 332 backups tests with 1 skip, and the full module
-  integration stage. Stage 12's CLI lane passed 54 tests; Core reported 38 passed and 1 failed in
-  `test_production_shell_csrf_token_accepts_authenticated_org_mutation` at
-  `quickscale_core/tests/test_generated_project_runtime.py:2209`, where Chromium returned
-  `net::ERR_TOO_MANY_RETRIES` for the HTTPS proxy navigation and the proxy logged `BrokenPipeError`.
+  The final task checkpoint returned exit 0 for `make test-unit -- --core`, `make test-integration`,
+  and `make frontend-proof`. The integration command's first 900-second execution produced no verdict;
+  its one 1800-second rerun returned exit 0. Focused generated identity/template/manifest tests passed
+  22 tests, ownership conformance passed 7, and the final installed-DRF middleware proof passed 1.
 
-  **Pending:** reconcile the shared resolver, the forms throttle override, blog/forms persistence,
-  and every ordinary DRF throttle using `NUM_PROXIES` to one fail-closed identity contract. Pin
-  shorter, equal, and longer normalized forwarding chains across every consumer: shorter chains use
-  `REMOTE_ADDR`; equal and longer chains select the same right-indexed client hop; empty hops cannot
-  inflate the chain; and missing or invalid proxy settings fail loudly. Also diagnose and correct the
-  test-only HTTPS proxy/navigation failure without weakening shipped redirect, Secure, HttpOnly,
-  proxy, or CSRF semantics. The positive browser assertions must complete without injected session
-  cookies or positive CSRF headers, and the focused node must pass with no skip. Both corrections
-  require a fresh reviewed candidate and fresh release authority; the current exact-once authority
-  is spent and cannot be retried.
+  **Pending:** release-tier acceptance over the current settled bytes and, only after that acceptance,
+  root-owned integration into `v88`. No product correction, focused check, task gate, or terminal
+  attestation substitutes for the missing aggregate verdict.
 
-  **Blocking:** two independent blockers prohibit release and merge acceptance. At the client-
-  identity seam, a one-entry normalized `X-Forwarded-For` chain with
-  `TRUSTED_PROXY_COUNT=2` resolves to `REMOTE_ADDR` through the shared resolver but to the forwarded
-  entry through ordinary DRF throttling; request throttling, persistence, and audit identity can
-  therefore diverge on caller-controlled input. In the generated production browser proof, Chromium
-  could not complete navigation to `https://localhost:<proxy>/orgs/new/`, returning
-  `net::ERR_TOO_MANY_RETRIES`; the test proxy recorded a `BrokenPipeError` while writing the upstream
-  response. The Core lane returned 38 passed / 1 failed and the aggregate returned exit 2. The browser
-  failure is not covered by an accepted-failure oracle, and no second aggregate is authorized.
+  **Blocking:** no release aggregate ran against the current tip. This run's conditional one-
+  invocation cap permitted launch only from a convergence pass that made no product correction.
+  Pass 2 corrected generated caller-header composition, so the cap ended unspent; terminal review then
+  required the independently attested eight-file identity correction. The distinct 2026-09-10 red
+  attempt remains spent for its older candidate and supplies no acceptance for these bytes. Merge,
+  publication, tagging, and deployment remain prohibited.
 
-  **Decisions needed:** authorize a new reviewed candidate that closes both the every-consumer
-  client-identity contract and the diagnosed browser proxy failure, followed by a fresh release
-  attempt. Correcting or rerunning only the browser failure cannot authorize merge. Trusted-origin
-  overrides, injected cookies or CSRF headers, and weakened production security settings remain
-  unacceptable substitutes.
+  **Decisions needed:** a later run needs fresh authority for a new exact-candidate review and a
+  release aggregate. No such authority is inferred from this checkpoint.
 
-  **Remaining plan:** retain the exact red evidence referenced by the changelog; make the shared
-  resolver, forms override, blog/forms persistence, and ordinary DRF throttles agree on fail-closed
-  shorter-chain and matching equal/longer-chain identity, with empty-hop and invalid-setting negative
-  controls; correct the test-only proxy failure without weakening product security; re-run the
-  focused and owning task-tier checks; independently review the new exact tip; and obtain fresh
-  release authority. A browser-only correction or rerun is insufficient for merge. The current
-  candidate remains unmerged; red evidence stays unmerged and no aggregate retry is permitted.
+  **Remaining plan:** retain the current task and attestation evidence; rebind the complete candidate
+  against the then-current `v88`; independently review that exact candidate; obtain distinct release
+  authority; and run the authorized aggregate once. Only a green returned release verdict with exact-
+  scope cleanup and standing-resource preservation may support a new status closeout and serialized
+  merge. Do not redo the accepted cookie, consumer-parity, HTTPS-proxy, header-composition, or generated
+  middleware work unless new evidence identifies a regression.
 
-  **Recorded handoff:** this unfinished delivery is retained on `wt-track1` over exact reviewed
-  checkpoint `341481687096cd17b9b3e7f376a82562509968a3`; it is not merged into `v88`. The genuine-
-  HTTPS harness phase and its focused, same-fact, frontend, and Core task checks are complete. The
-  release/status phase ran but remains outstanding because its only authorized aggregate ended red.
-  The roadmap records both independent merge blockers; the audit and changelog record the red
-  release attempt and continued open status. ***corrected after checkpoint attestation — not
-  independently graded*** Fresh bounded product-correction scope must be authorized before work
-  resumes. That authority must cover both the every-consumer client-identity contract and the
-  browser-proxy failure; after both corrections, independently review the exact new candidate and
-  only then obtain distinct fresh exact-once release authority. The spent command is not the next
-  action. Several recovery sentences still use the imprecise shorthand
-  `blog/forms persistence`; this low-severity documentation debt should later distinguish blog
-  throttling from forms persistence while preserving the separately named forms throttle override
-  and ordinary DRF consumers. A separate low-severity test debt also remains open: the safe malformed
-  percent-encoding cookie fallback lacks dedicated single-value and duplicate-order regression tests;
-  this checkpoint neither fixes nor release-accepts that behavior.
+  **Recorded handoff:** start from `wt-track1` at
+  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`; `v88` is still
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. No 2026-09-11 release marker, release log, or release
+  completion status exists because the aggregate was not invoked. The retained branch is a task-green,
+  independently reviewed partial delivery, not release acceptance or merge completion.
 
 ## Post-v88 work
 

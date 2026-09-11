@@ -1,10 +1,16 @@
 # Ticket Context — Concepts and Implementation Notes
 
-> **Terminal remediation status (2026-09-10):** SA160's generated CSRF transport and TA67's
-> duplicate-cookie parity were corrected after the previously green release aggregate. That run is
-> historical evidence for the prior bytes only. Fresh release-tier evidence must bind the corrected
-> exact candidate before SA160 or TA67 is closed again; the corrections are not merge-ready on the
-> historical verdict.
+> **Retained SA160 status (2026-09-11):** the 28-path settled tip
+> `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3` covers generated CSRF transport and malformed
+> duplicate-cookie order; canonical identity across Forms throttling, both Forms persistence branches,
+> and Blog's custom limiter/persistence; the genuine-HTTPS browser mutation; generated caller-header
+> composition; and first-position fail-closed normalization for ordinary DRF consumers. The final
+> Core unit, restricted integration, and frontend task gates are green, and the eight-file terminal
+> identity correction was independently attested. No release aggregate ran on these bytes: pass 2
+> changed product content, ending the run's conditional release cap unspent. Earlier green and red
+> aggregates remain historical evidence for their own bytes only. Fresh exact-candidate review and
+> distinct release authority are required before SA160 or TA67 can close; the retained work is not
+> release-accepted, merge-ready, published, or deployed.
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Ticket Context**
 > **Related docs**: [Roadmap](roadmap.md) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Module Extension Contract](module-extension.md)

@@ -2,6 +2,34 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **SA160 task-green correction retained; conditional release authority ended unspent; no merge
+  (2026-09-11).** The current settled tip is
+  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`, a 28-path delta over `v88` at
+  `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. All four planned implementation slices are accepted:
+  malformed single/duplicate CSRF-cookie order has dedicated coverage without changing shipped
+  `csrf.ts`; Forms' DRF throttle, both Forms persistence branches, and Blog's custom limiter and
+  persistence use the canonical request identity; the test-only genuine-HTTPS proxy has stable TLS,
+  correct close/framing behavior, bounded disconnect handling, and deterministic cleanup; and
+  generated API callers preserve caller headers without replacing generated sibling headers.
+
+  Terminal review found one remaining generated-project seam: stock DRF could trust a short forwarded
+  chain that the canonical resolver rejected. The eight-file correction adds a first-position
+  `ClientIdentityMiddleware`, validates proxy configuration before mutation, removes unusable
+  forwarding state, normalizes sufficient nonempty hops, recomputes production `NUM_PROXIES`, updates
+  generated manifests and contracts, and pins the behavior against installed DRF 3.17.2. Independent
+  delta-only attestation closed that criterion and raised no new finding.
+
+  The final task evidence returned exit 0 for `make test-unit -- --core`, `make test-integration`, and
+  `make frontend-proof`; the integration gate first produced no verdict at 900 seconds, then its one
+  1800-second rerun returned exit 0. Focused correction evidence passed 22 generated
+  identity/template/manifest tests, 7 ownership-conformance tests, and the final installed-DRF node.
+  No release aggregate was invoked in this run. Its conditional one-invocation cap allowed launch only
+  from a correction-free convergence pass; pass 2 changed product bytes, so the cap ended unspent and
+  terminal remediation proceeded without release authority. The distinct 2026-09-10 red attempt below
+  remains evidence only for its older candidate and is not rebound. SA160 and TA67 remain open; release
+  acceptance, merge into `v88`, release-note/version actions, tagging, publication, and deployment are
+  not claimed.
+
 - **SA160 corrected candidate exact release attempt red; no retry authorized (2026-09-10).** EV-10
   independently reviewed the exact 20-path candidate at `HEAD` / `PRODUCT_TIP`
   `cb21f791826c9ebcfdba5f8b034d7eddef8e02df`, with `v88` / `V88_BASE` at
