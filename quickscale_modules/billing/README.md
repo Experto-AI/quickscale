@@ -83,6 +83,7 @@ Start with one typed fetch wrapper, one CSRF helper, and one runtime Stripe boot
 
 ```ts
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import { getCsrfToken } from "@/lib/csrf";
 
 type BillingConfig = { publishable_key: string };
 type BillingBalance = { balance: number; updated_at: string | null };
@@ -117,13 +118,6 @@ type CreditTransaction = {
 	balance_after: number;
 	created_at: string;
 };
-
-function getCsrfToken(): string {
-	const cookie = document.cookie
-		.split("; ")
-		.find((entry) => entry.startsWith("csrftoken="));
-	return cookie ? decodeURIComponent(cookie.split("=")[1] ?? "") : "";
-}
 
 async function billingFetch<T>(input: string, init: RequestInit = {}): Promise<T> {
 	const response = await fetch(input, {
