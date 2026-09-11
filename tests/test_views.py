@@ -3,13 +3,14 @@
 import csv
 import io
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
+from django.conf import settings
 from django.core.cache import cache
 from django.core import mail
 from django.db import connection
-from django.test import override_settings
+from django.test import RequestFactory, override_settings
 from django.urls import reverse
 
 from quickscale_modules_forms.models import (
@@ -1270,6 +1271,163 @@ class TestFormSubmissionCanonicalIp:
         assert submission.ip_address == "203.0.113.50", (
             f"Expected canonical IP 203.0.113.50, got {submission.ip_address!r}"
         )
+
+
+_MISSING = object()
+
+FORM_CLIENT_IP_CASES = (
+    pytest.param(False, 2, "198.51.100.1, 10.0.0.1", id="disabled"),
+    pytest.param(True, 0, "198.51.100.1, 10.0.0.1", id="zero"),
+    pytest.param(True, 1, None, id="absent"),
+    pytest.param(True, 1, "", id="empty"),
+    pytest.param(True, 3, "198.51.100.1, , 10.0.0.1", id="empty-hop"),
+    pytest.param(True, 2, "198.51.100.1", id="short"),
+    pytest.param(True, 2, "198.51.100.1, 10.0.0.1", id="equal"),
+    pytest.param(
+        True,
+        2,
+        "198.51.100.1, 198.51.100.2, 10.0.0.1, 10.0.0.2",
+        id="long",
+    ),
+)
+
+FORM_INVALID_PROXY_SETTINGS = (
+    pytest.param("USE_X_FORWARDED_FOR", _MISSING, id="missing-use-xff"),
+    pytest.param("USE_X_FORWARDED_FOR", None, id="invalid-use-xff"),
+    pytest.param("USE_X_FORWARDED_FOR", "yes", id="invalid-use-xff-string"),
+    pytest.param("TRUSTED_PROXY_COUNT", _MISSING, id="missing-proxy-count"),
+    pytest.param("TRUSTED_PROXY_COUNT", "1", id="invalid-proxy-count"),
+    pytest.param("TRUSTED_PROXY_COUNT", -1, id="invalid-proxy-count-negative"),
+    pytest.param("TRUSTED_PROXY_COUNT", True, id="invalid-proxy-count-bool"),
+)
+
+
+@pytest.mark.django_db
+class TestFormSubmissionClientIpParity:
+    """Same-request identity and fail-loud proofs for both write branches."""
+
+    @pytest.mark.parametrize("use_xff,proxy_count,xff", FORM_CLIENT_IP_CASES)
+    @pytest.mark.parametrize(
+        "honeypot",
+        [pytest.param(False, id="accepted"), pytest.param(True, id="spam")],
+    )
+    def test_both_persistence_branches_match_direct_resolver(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        use_xff: bool,
+        proxy_count: int,
+        xff: str | None,
+        honeypot: bool,
+    ) -> None:
+        """Stored IPs remain equal to direct resolution for every tuple."""
+        from quickscale_modules_forms.models import FormSubmission
+        from quickscale_modules_orgs.current_org import get_client_ip, org_scope
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        request_kwargs: dict[str, str] = {"REMOTE_ADDR": "10.0.0.1"}
+        if xff is not None:
+            request_kwargs["HTTP_X_FORWARDED_FOR"] = xff
+        direct_request = RequestFactory().post(url, **request_kwargs)
+        payload = {"full_name": "Parity", "email": "parity@example.com"}
+        if honeypot:
+            payload["_hp_name"] = "automated submission"
+
+        with override_settings(
+            USE_X_FORWARDED_FOR=use_xff,
+            TRUSTED_PROXY_COUNT=proxy_count,
+        ):
+            expected_ip = get_client_ip(direct_request)
+            response = api_client.post(
+                url,
+                data=payload,
+                format="json",
+                **request_kwargs,
+            )
+
+        assert response.status_code == 201
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
+        assert submission.ip_address == expected_ip
+        assert submission.is_spam is honeypot
+
+    @pytest.mark.parametrize("setting_name,setting_value", FORM_INVALID_PROXY_SETTINGS)
+    @pytest.mark.parametrize(
+        "honeypot",
+        [pytest.param(False, id="accepted"), pytest.param(True, id="spam")],
+    )
+    def test_invalid_proxy_settings_fail_loud_without_cache_or_persistence(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        setting_name: str,
+        setting_value: object,
+        honeypot: bool,
+    ) -> None:
+        """The throttle rejects invalid identity settings before either branch writes."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        from quickscale_modules_forms.models import FormSubmission
+        from quickscale_modules_forms.throttles import FormSubmitThrottle
+        from quickscale_modules_orgs.current_org import get_client_ip, org_scope
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        request_kwargs = {
+            "REMOTE_ADDR": "10.0.0.1",
+            "HTTP_X_FORWARDED_FOR": "198.51.100.1",
+        }
+        payload = {"full_name": "Invalid", "email": "invalid@example.com"}
+        if honeypot:
+            payload["_hp_name"] = "automated submission"
+        settings_values: dict[str, object] = {
+            "USE_X_FORWARDED_FOR": False,
+            "TRUSTED_PROXY_COUNT": 1,
+        }
+        missing_setting: str | None = None
+        if setting_value is _MISSING:
+            missing_setting = setting_name
+        else:
+            settings_values[setting_name] = setting_value
+
+        with org_scope(form.organization):
+            initial_count = FormSubmission.all_objects.filter(form=form).count()
+
+        with override_settings(**settings_values):
+            if missing_setting is not None:
+                delattr(settings, missing_setting)
+            direct_request = RequestFactory().post(url, **request_kwargs)
+            with pytest.raises(ImproperlyConfigured) as direct_error:
+                get_client_ip(direct_request)
+
+            throttle_cache = FormSubmitThrottle().cache
+            with (
+                patch.object(throttle_cache, "add") as cache_add,
+                patch.object(throttle_cache, "incr") as cache_incr,
+                patch.object(throttle_cache, "set") as cache_set,
+            ):
+                with pytest.raises(ImproperlyConfigured) as endpoint_error:
+                    api_client.post(
+                        url,
+                        data=payload,
+                        format="json",
+                        **request_kwargs,
+                    )
+
+            assert type(endpoint_error.value) is type(direct_error.value)
+            assert str(endpoint_error.value) == str(direct_error.value)
+            assert setting_name in str(endpoint_error.value)
+            cache_add.assert_not_called()
+            cache_incr.assert_not_called()
+            cache_set.assert_not_called()
+
+        with org_scope(form.organization):
+            assert FormSubmission.all_objects.filter(form=form).count() == initial_count
 
 
 @pytest.mark.django_db

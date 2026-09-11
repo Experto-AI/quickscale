@@ -7,10 +7,61 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory, override_settings
 
 from quickscale_modules_forms.throttles import FormSubmitThrottle
+from quickscale_modules_orgs.current_org import get_client_ip
+
+
+_MISSING = object()
+
+CLIENT_IP_CASES = (
+    pytest.param(
+        False,
+        2,
+        "198.51.100.1, 10.0.0.1",
+        id="disabled",
+    ),
+    pytest.param(
+        True,
+        0,
+        "198.51.100.1, 10.0.0.1",
+        id="zero",
+    ),
+    pytest.param(True, 1, None, id="absent"),
+    pytest.param(True, 1, "", id="empty"),
+    pytest.param(
+        True,
+        3,
+        "198.51.100.1, , 10.0.0.1",
+        id="empty-hop",
+    ),
+    pytest.param(True, 2, "198.51.100.1", id="short"),
+    pytest.param(
+        True,
+        2,
+        "198.51.100.1, 10.0.0.1",
+        id="equal",
+    ),
+    pytest.param(
+        True,
+        2,
+        "198.51.100.1, 198.51.100.2, 10.0.0.1, 10.0.0.2",
+        id="long",
+    ),
+)
+
+INVALID_PROXY_SETTINGS = (
+    pytest.param("USE_X_FORWARDED_FOR", _MISSING, id="missing-use-xff"),
+    pytest.param("USE_X_FORWARDED_FOR", None, id="invalid-use-xff-none"),
+    pytest.param("USE_X_FORWARDED_FOR", "yes", id="invalid-use-xff-string"),
+    pytest.param("TRUSTED_PROXY_COUNT", _MISSING, id="missing-proxy-count"),
+    pytest.param("TRUSTED_PROXY_COUNT", "1", id="invalid-proxy-count-string"),
+    pytest.param("TRUSTED_PROXY_COUNT", -1, id="invalid-proxy-count-negative"),
+    pytest.param("TRUSTED_PROXY_COUNT", True, id="invalid-proxy-count-bool"),
+)
 
 
 def test_form_submit_throttle_uses_configured_rate() -> None:
@@ -143,3 +194,67 @@ def test_form_submit_throttle_use_xff_false_ignores_xff() -> None:
         f"Expected REMOTE_ADDR-based key when USE_X_FORWARDED_FOR=False, "
         f"got {cache_key!r}"
     )
+
+
+@pytest.mark.parametrize("use_xff,proxy_count,xff", CLIENT_IP_CASES)
+def test_form_submit_throttle_identity_matches_direct_resolver(
+    use_xff: bool,
+    proxy_count: int,
+    xff: str | None,
+) -> None:
+    """Every value-bearing proxy tuple keeps throttle identity parity."""
+    throttle = FormSubmitThrottle()
+    request = _make_request(remote_addr="10.0.0.1", xff=xff)
+    view = SimpleNamespace(throttle_scope="form_submit")
+
+    with override_settings(
+        USE_X_FORWARDED_FOR=use_xff,
+        TRUSTED_PROXY_COUNT=proxy_count,
+    ):
+        expected = get_client_ip(request)
+        assert throttle.get_ident(request) == expected
+        assert throttle.get_cache_key(request, view) == (
+            f"throttle_form_submit_{expected}"
+        )
+
+
+@pytest.mark.parametrize("setting_name,setting_value", INVALID_PROXY_SETTINGS)
+def test_form_submit_throttle_fail_loud_matches_resolver_without_cache_write(
+    setting_name: str,
+    setting_value: object,
+) -> None:
+    """Invalid resolver settings fail before DRF can mutate throttle cache."""
+    throttle = FormSubmitThrottle()
+    request = _make_request(remote_addr="10.0.0.1", xff="198.51.100.1")
+    view = SimpleNamespace(throttle_scope="form_submit")
+    values: dict[str, object] = {
+        "USE_X_FORWARDED_FOR": False,
+        "TRUSTED_PROXY_COUNT": 1,
+    }
+    if setting_value is _MISSING:
+        missing_setting = setting_name
+    else:
+        values[setting_name] = setting_value
+        missing_setting = None
+
+    with override_settings(**values):
+        if missing_setting is not None:
+            delattr(settings, missing_setting)
+
+        with pytest.raises(ImproperlyConfigured) as direct_error:
+            get_client_ip(request)
+
+        with (
+            patch.object(throttle.cache, "add") as cache_add,
+            patch.object(throttle.cache, "incr") as cache_incr,
+            patch.object(throttle.cache, "set") as cache_set,
+        ):
+            with pytest.raises(ImproperlyConfigured) as throttle_error:
+                throttle.allow_request(request, view)
+
+        assert type(throttle_error.value) is type(direct_error.value)
+        assert str(throttle_error.value) == str(direct_error.value)
+        assert setting_name in str(throttle_error.value)
+        cache_add.assert_not_called()
+        cache_incr.assert_not_called()
+        cache_set.assert_not_called()
