@@ -54,6 +54,13 @@ REPO_LOCAL_ARTIFACT_NAMES = frozenset(
     }
 )
 REPO_LOCAL_ARTIFACT_SUFFIXES = (".egg-info", ".pyc", ".pyo")
+_C_PROXY_RECOVERY_EVIDENCE_DIR = (
+    REPO_ROOT
+    / ".adaptive"
+    / "evidence"
+    / "sa160-2026-09-11-09-08-39"
+    / "c-proxy-recovery"
+)
 
 
 def _is_repo_local_artifact(entry_name: str) -> bool:
@@ -2511,9 +2518,31 @@ class TestGeneratedProjectRuntimeSmoke:
             assert len(session_fingerprint) == 64
             api_url = f"{base_url}/api/orgs/"
             with sync_playwright() as playwright:
+                _C_PROXY_RECOVERY_EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+                netlog_path = (
+                    _C_PROXY_RECOVERY_EVIDENCE_DIR
+                    / "chromium-netlog-first-recovery.json"
+                )
+                if netlog_path.exists():
+                    netlog_path = (
+                        _C_PROXY_RECOVERY_EVIDENCE_DIR
+                        / "chromium-netlog-validation.json"
+                    )
+                proxy_diagnostics["chromium_netlog_path"] = str(netlog_path)
+                browser_args = [
+                    "--no-sandbox",
+                    # These are test-process trust controls only.  The generated
+                    # production settings and the real loopback certificate remain
+                    # unchanged so Chromium can exercise the HTTPS application path.
+                    "--ignore-certificate-errors",
+                    "--allow-insecure-localhost",
+                    f"--log-net-log={netlog_path}",
+                    "--net-log-capture-mode=IncludeSensitive",
+                ]
+                proxy_diagnostics["browser_args"] = browser_args
                 browser = playwright.chromium.launch(
                     headless=True,
-                    args=["--no-sandbox"],
+                    args=browser_args,
                 )
                 try:
                     browser_version = browser.version
@@ -2625,7 +2654,8 @@ class TestGeneratedProjectRuntimeSmoke:
                                 f"responses={response_summary!r}, "
                                 f"upstream_errors={proxy_diagnostics['upstream_errors']!r}, "
                                 f"unexpected={proxy_diagnostics['unexpected_handler_errors']!r}, "
-                                f"timeouts={proxy_diagnostics['handler_timeouts']}"
+                                f"timeouts={proxy_diagnostics['handler_timeouts']}, "
+                                f"netlog={netlog_path}"
                             ) from exc
                         assert shell_response is not None
                         assert shell_response.status == 200, (
