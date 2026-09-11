@@ -189,11 +189,14 @@ or delivery evidence, not here.
   merge. Do not redo the accepted cookie, consumer-parity, HTTPS-proxy, header-composition, or generated
   middleware work unless new evidence identifies a regression.
 
-  **Recorded handoff:** start from `wt-track1` at
-  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`; `v88` is still
+  **Recorded handoff:** resume from the current `wt-track1` branch tip. It contains independently
+  attested status checkpoint `5312cf757709a904027b44313e4e8d0d7e45eb6c`; that checkpoint's direct
+  parent and the settled product tip used for the 28-path binding is
+  `926811bcf2f1a785d3c6f23932e1ad7c9213a3c3`. `v88` is still
   `5716dabfc9d2d90eda69fe62a934c36567e9ec16`. No 2026-09-11 release marker, release log, or release
   completion status exists because the aggregate was not invoked. The retained branch is a task-green,
-  independently reviewed partial delivery, not release acceptance or merge completion.
+  independently reviewed partial delivery, not release acceptance or merge completion. ***corrected
+  after checkpoint attestation — not independently graded***
 
 ## Post-v88 work
 
