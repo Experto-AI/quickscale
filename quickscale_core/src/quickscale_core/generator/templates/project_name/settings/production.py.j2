@@ -106,9 +106,9 @@ X_FRAME_OPTIONS = "DENY"
 #
 # Production deployments typically sit behind a reverse proxy (e.g.
 # Railway edge, Cloudflare).  Enable X-Forwarded-For resolution and
-# declare the number of trusted proxies so that the live
-# ``quickscale_modules_orgs.current_org.get_client_ip`` resolver and DRF
-# throttles resolve the real client IP rather than the proxy's internal address.
+# declare the number of trusted proxies. The project-owned identity middleware
+# validates these values and normalizes forwarding state before the shared
+# resolver, module persistence, custom limiters, or ordinary DRF throttles run.
 #
 # Single-host (no-proxy) deployments can disable both settings in their
 # environment to keep ``REMOTE_ADDR`` behaviour.
@@ -116,9 +116,9 @@ USE_X_FORWARDED_FOR = config("USE_X_FORWARDED_FOR", default=True, cast=bool)
 TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=1, cast=int)
 
 
-# Recompute DRF proxy setting after the override so that
-# ``NUM_PROXIES`` matches the production values of
-# ``USE_X_FORWARDED_FOR`` and ``TRUSTED_PROXY_COUNT``.
+# Recompute DRF's right-indexed selection count after production overrides.
+# The earlier request middleware supplies the short-chain fail-closed behavior
+# that stock DRF 3.17.2 does not implement on its own.
 REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else None  # noqa: F405
 
 

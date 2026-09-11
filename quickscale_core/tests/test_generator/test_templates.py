@@ -1454,6 +1454,26 @@ class TestClientIpAndSharedCache:
         assert "def get_client_ip" not in production_output
         assert "Rebind client-IP resolution" not in production_output
 
+    def test_client_identity_middleware_is_first(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The request-boundary normalizer must precede every consumer."""
+        output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+
+        assert "class ClientIdentityMiddleware" in output
+        middleware_start = output.index("MIDDLEWARE = [")
+        identity_index = output.index(
+            '"testproject.settings.base.ClientIdentityMiddleware"', middleware_start
+        )
+        correlation_index = output.index(
+            '"testproject.settings.base.CorrelationIdMiddleware"', middleware_start
+        )
+        module_middleware_index = output.index("MIDDLEWARE += MODULE_MIDDLEWARE")
+        assert middleware_start < identity_index < correlation_index
+        assert identity_index < module_middleware_index
+
     def test_num_proxies_in_rest_framework(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:

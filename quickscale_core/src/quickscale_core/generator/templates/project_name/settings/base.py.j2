@@ -14,6 +14,8 @@ import uuid
 from pathlib import Path
 
 from decouple import config
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 from .modules import MODULE_INSTALLED_APPS, MODULE_MIDDLEWARE, MODULE_SETTINGS
 
@@ -50,12 +52,70 @@ ALLOWED_HOSTS = config(
 #   extracted at position ``-TRUSTED_PROXY_COUNT`` (the Nth entry from
 #   the right) in the ``X-Forwarded-For`` chain.
 #
-# The live ``quickscale_modules_orgs.current_org.get_client_ip`` resolver
-# consumes these settings, while DRF uses ``NUM_PROXIES`` so its throttles
-# also resolve the correct client identity behind a proxy.
+# ``ClientIdentityMiddleware`` validates these settings and normalizes
+# X-Forwarded-For before every request consumer. The
+# live ``quickscale_modules_orgs.current_org.get_client_ip`` resolver and DRF's
+# ``NUM_PROXIES`` path therefore observe the same fail-closed forwarding state.
 
 USE_X_FORWARDED_FOR = config("USE_X_FORWARDED_FOR", default=False, cast=bool)
 TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=0, cast=int)
+
+
+_FORWARDED_FOR_META_KEY = "HTTP_X_FORWARDED_FOR"
+
+
+def _validated_proxy_settings() -> tuple[bool, int]:
+    """Return the fail-loud trusted-proxy configuration."""
+    try:
+        use_xff = settings.USE_X_FORWARDED_FOR
+    except AttributeError as exc:
+        raise ImproperlyConfigured("USE_X_FORWARDED_FOR setting is required.") from exc
+    if not isinstance(use_xff, bool):
+        raise ImproperlyConfigured(f"USE_X_FORWARDED_FOR must be a bool, got {use_xff!r}")
+
+    try:
+        proxy_count = settings.TRUSTED_PROXY_COUNT
+    except AttributeError as exc:
+        raise ImproperlyConfigured("TRUSTED_PROXY_COUNT setting is required.") from exc
+    if isinstance(proxy_count, bool) or not isinstance(proxy_count, int):
+        raise ImproperlyConfigured(
+            f"TRUSTED_PROXY_COUNT must be a non-negative integer, got {proxy_count!r}"
+        )
+    if proxy_count < 0:
+        raise ImproperlyConfigured(
+            f"TRUSTED_PROXY_COUNT must be a non-negative integer, got {proxy_count}"
+        )
+
+    return use_xff, proxy_count
+
+
+def _normalize_client_ip_headers(request: object) -> None:
+    """Normalize XFF once so canonical and ordinary DRF consumers agree."""
+    use_xff, proxy_count = _validated_proxy_settings()
+    request_meta = getattr(request, "META", {})
+    forwarded_for = request_meta.get(_FORWARDED_FOR_META_KEY)
+
+    if not use_xff or proxy_count == 0 or not isinstance(forwarded_for, str):
+        request_meta.pop(_FORWARDED_FOR_META_KEY, None)
+        return
+
+    forwarded_hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
+    if len(forwarded_hops) < proxy_count:
+        request_meta.pop(_FORWARDED_FOR_META_KEY, None)
+        return
+
+    request_meta[_FORWARDED_FOR_META_KEY] = ", ".join(forwarded_hops)
+
+
+class ClientIdentityMiddleware:
+    """Establish the generated project's shared fail-closed identity seam."""
+
+    def __init__(self, get_response: object) -> None:
+        self.get_response = get_response
+
+    def __call__(self, request: object) -> object:
+        _normalize_client_ip_headers(request)
+        return self.get_response(request)  # type: ignore[operator]
 
 
 # ── Structured logging and correlation ID support ────────────────────
@@ -142,6 +202,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "{{ package_name }}.settings.base.ClientIdentityMiddleware",
     "{{ package_name }}.settings.base.CorrelationIdMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",  # Serve static files efficiently

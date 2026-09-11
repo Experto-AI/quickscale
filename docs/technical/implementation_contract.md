@@ -21,6 +21,7 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - `quickscale_cli`: plan/apply plus development, deployment, and module-management workflows
 - Generated project: standalone Django application that the user owns completely
 - Settings: standalone settings by default (no automatic inheritance from core)
+- Client identity: generated request middleware validates trusted-proxy settings and normalizes forwarding state before any module or DRF consumer runs
 - First-party modules and starter themes that are implemented in-repo and documented per release
 
 **Historical note:** Older docs may still use legacy release-era shorthand from earlier planning. Treat those labels as historical context only; active documentation should describe the implemented surface directly.
@@ -33,6 +34,7 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - Modules are reusable Django apps that users embed into generated projects and update over project lifetime.
 - Themes are one-time scaffolding copied into user-owned project files during generation; they are not live runtime packages.
 - Generated projects stay standalone by default. Automatic settings inheritance from `quickscale_core` is not part of the default generated-project contract.
+- Fresh projects place `ClientIdentityMiddleware` first in `MIDDLEWARE`. It removes `X-Forwarded-For` when forwarding is disabled, the trusted count is zero, or the non-empty chain is absent or too short; otherwise it rewrites the header to the non-empty normalized chain. The canonical `get_client_ip` resolver, Forms/Blog consumers, and ordinary DRF throttles therefore select `REMOTE_ADDR` for unusable chains and the same right-indexed hop for sufficient chains. Missing or invalid `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` values raise before downstream request handling.
 - `quickscale.yml` remains the desired-state input, while `.quickscale/state.yml` is the sole authoritative applied-state store. Legacy `.quickscale/config.yml` is a compatibility input only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present).
 
 ### Docker image and resource identity

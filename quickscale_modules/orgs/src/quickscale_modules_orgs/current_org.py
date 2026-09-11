@@ -598,8 +598,9 @@ def install_priming_wrapper(connection: Any) -> bool:
 # Provides the importable live runtime resolver ``get_client_ip(request)`` for
 # forms, blog, and other module callers.  Generated settings supply
 # ``USE_X_FORWARDED_FOR``/``TRUSTED_PROXY_COUNT`` for this resolver and DRF
-# ``NUM_PROXIES`` for matching framework behavior; it consumes the uppercase
-# proxy settings dynamically.
+# ``NUM_PROXIES``. Fresh projects normalize XFF in project middleware before
+# both paths; this resolver consumes the uppercase proxy settings dynamically
+# and still fails closed when called without that boundary.
 #
 # Semantics:
 # * When ``USE_X_FORWARDED_FOR`` is truthy and ``TRUSTED_PROXY_COUNT > 0``,

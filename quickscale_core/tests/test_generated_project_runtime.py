@@ -1,12 +1,13 @@
 """Generated-project runtime smoke test.
 
-Validates that a generated project with an embedded auth module can boot,
-migrate, and serve an HTTP route with a successful outcome (2xx/3xx) —
-proving generator fidelity without requiring Docker or browser automation.
-Requires a running PostgreSQL instance (see AF13 roadmap note).
+Contains lightweight generated-runtime contract probes plus smoke coverage that
+a generated project with embedded modules can boot, migrate, and serve working
+routes. Long-running database smoke tests require PostgreSQL (see AF13 roadmap
+note); focused contract probes do not.
 
-This test is marked ``@pytest.mark.e2e`` so it is excluded from
-``pytest quickscale_core/tests/ -m "not e2e"`` and ``make test-unit``.
+Long-running generated-project smoke tests are marked ``@pytest.mark.e2e`` and
+excluded from ``make test-unit``. Lightweight generated-runtime contract probes
+in this module remain part of the unit suite.
 
 Phase 14.3 of the roadmap (Finding 14 — generator-runtime test coverage).
 """
@@ -21,6 +22,7 @@ import socket
 import ssl
 import struct
 import subprocess
+import sys
 import textwrap
 import threading
 import time
@@ -1562,6 +1564,191 @@ def _stop_server(server_process: subprocess.Popen[str]) -> None:
     except subprocess.TimeoutExpired:
         server_process.kill()
         server_process.wait(timeout=2)
+
+
+def test_generated_client_identity_middleware_aligns_installed_drf(
+    tmp_path: Path,
+) -> None:
+    """Generated middleware makes stock DRF and the canonical resolver agree."""
+    from quickscale_core.generator import ProjectGenerator
+
+    project_name = "client_identity_project"
+    project_path = tmp_path / project_name
+    ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+
+    base_settings = (project_path / project_name / "settings" / "base.py").read_text()
+    middleware_entry = f'"{project_name}.settings.base.ClientIdentityMiddleware"'
+    assert middleware_entry in base_settings
+    assert base_settings.index(middleware_entry) < base_settings.index(
+        '"django.middleware.security.SecurityMiddleware"'
+    )
+
+    probe = textwrap.dedent(
+        """
+        from types import SimpleNamespace
+
+        import django
+
+        django.setup()
+
+        import rest_framework
+        from django.conf import settings
+        from django.core.exceptions import ImproperlyConfigured
+        from django.test import override_settings
+        from rest_framework.throttling import SimpleRateThrottle
+
+        from client_identity_project.settings import base as generated_base
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+
+        class OrdinaryDRFThrottle(SimpleRateThrottle):
+            rate = "1/min"
+
+            def get_cache_key(self, request, view):
+                del view
+                return self.get_ident(request)
+
+
+        assert rest_framework.VERSION == "3.17.2"
+        remote_addr = "10.0.0.9"
+        identity_cases = (
+            ("disabled", False, 2, "attacker", remote_addr, None),
+            ("zero", True, 0, "attacker", remote_addr, None),
+            ("absent", True, 1, None, remote_addr, None),
+            ("empty", True, 1, " ,  , ", remote_addr, None),
+            ("short", True, 2, "attacker", remote_addr, None),
+            ("equal", True, 2, "client, proxy", "client", "client, proxy"),
+            (
+                "long",
+                True,
+                2,
+                "attacker, client, proxy",
+                "client",
+                "attacker, client, proxy",
+            ),
+            (
+                "empty-hops-short",
+                True,
+                3,
+                "attacker, , proxy, ",
+                remote_addr,
+                None,
+            ),
+            (
+                "empty-hops-long",
+                True,
+                2,
+                "attacker, , client, proxy, ",
+                "client",
+                "attacker, client, proxy",
+            ),
+        )
+
+        for case_name, use_xff, proxy_count, xff, expected, normalized_xff in identity_cases:
+            request_meta = {"REMOTE_ADDR": remote_addr}
+            if xff is not None:
+                request_meta["HTTP_X_FORWARDED_FOR"] = xff
+            request = SimpleNamespace(META=request_meta)
+            observed = []
+            response = object()
+
+            def consume(normalized_request):
+                observed.append(
+                    (
+                        OrdinaryDRFThrottle().get_ident(normalized_request),
+                        get_client_ip(normalized_request),
+                    )
+                )
+                return response
+
+            num_proxies = proxy_count if use_xff else None
+            with override_settings(
+                USE_X_FORWARDED_FOR=use_xff,
+                TRUSTED_PROXY_COUNT=proxy_count,
+                REST_FRAMEWORK={"NUM_PROXIES": num_proxies},
+            ):
+                middleware = generated_base.ClientIdentityMiddleware(consume)
+                assert middleware(request) is response, case_name
+                assert middleware(request) is response, case_name
+
+            assert observed == [(expected, expected), (expected, expected)], case_name
+            assert request.META.get("HTTP_X_FORWARDED_FOR") == normalized_xff, case_name
+
+        missing = object()
+        invalid_cases = (
+            ("USE_X_FORWARDED_FOR", missing),
+            ("USE_X_FORWARDED_FOR", None),
+            ("USE_X_FORWARDED_FOR", "yes"),
+            ("TRUSTED_PROXY_COUNT", missing),
+            ("TRUSTED_PROXY_COUNT", "1"),
+            ("TRUSTED_PROXY_COUNT", -1),
+            ("TRUSTED_PROXY_COUNT", True),
+        )
+        for setting_name, invalid_value in invalid_cases:
+            request = SimpleNamespace(
+                META={
+                    "REMOTE_ADDR": remote_addr,
+                    "HTTP_X_FORWARDED_FOR": "attacker, proxy",
+                }
+            )
+            original_meta = dict(request.META)
+            downstream_calls = []
+
+            def downstream_should_not_run(normalized_request):
+                downstream_calls.append(normalized_request)
+                return normalized_request
+
+            with override_settings(
+                USE_X_FORWARDED_FOR=True,
+                TRUSTED_PROXY_COUNT=1,
+                REST_FRAMEWORK={"NUM_PROXIES": 1},
+            ):
+                if invalid_value is missing:
+                    delattr(settings, setting_name)
+                else:
+                    setattr(settings, setting_name, invalid_value)
+
+                consumers = (
+                    (
+                        generated_base.ClientIdentityMiddleware(
+                            downstream_should_not_run
+                        ),
+                        request,
+                    ),
+                    (get_client_ip, SimpleNamespace(META=dict(original_meta))),
+                )
+                for consumer, consumer_request in consumers:
+                    try:
+                        consumer(consumer_request)
+                    except ImproperlyConfigured as exc:
+                        assert setting_name in str(exc)
+                    else:
+                        raise AssertionError(f"{setting_name} did not fail closed")
+
+            assert request.META == original_meta
+            assert not downstream_calls
+        """
+    )
+    subprocess_env = os.environ.copy()
+    subprocess_env["DJANGO_SETTINGS_MODULE"] = f"{project_name}.settings.base"
+    python_paths = [
+        str(project_path),
+        str(REPO_ROOT / "quickscale_modules" / "orgs" / "src"),
+    ]
+    if subprocess_env.get("PYTHONPATH"):
+        python_paths.append(subprocess_env["PYTHONPATH"])
+    subprocess_env["PYTHONPATH"] = os.pathsep.join(python_paths)
+    (project_path / "logs").mkdir()
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=project_path,
+        env=subprocess_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 class TestGeneratedProjectRuntimeSmoke:
