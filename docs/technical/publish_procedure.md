@@ -81,7 +81,7 @@ The generated-project proof is non-skippable: acceptance is **one pass, zero ski
       never in a second release document, which only drifts against this one.
 - [ ] `CHANGELOG.md` carries a version-ordered `- vX.Y.Z` entry. **The publish workflow greps
       `^- v?X.Y.Z\b` and uses that single line as the GitHub Release body**, so it must read as a
-      published release before the tag is pushed (see [Phase 5](#phase-5--publish)).
+      published release before the tag is pushed (see [Phase 6](#phase-6--publish)).
 
 ### 1.4 What CI re-checks at publish time
 
@@ -95,7 +95,14 @@ declaring an exclusion.
 ## Part 2 — Release procedure
 
 Phases are ordered. Phases 1–2 are local and reversible. Phase 3 writes to the remote but is
-re-enterable. Phase 5 is irreversible.
+re-enterable. Phase 5 writes immutable remote tags, correctable only by deleting them deliberately.
+Phase 6 is irreversible.
+
+**Automation boundary.** Phases 1–4 are executable by a coding assistant: every step is a `make`
+target with a red/green verdict, split branches are mutable, and no tag leaves the machine. Phases
+5–7 are operator-only — sealing, publication, and close-out each require a judgement that is
+expensive or impossible to unwind. An assistant running this procedure stops after Phase 4b and
+reports.
 
 ### Phase 1 — Stamp the version
 
@@ -168,7 +175,7 @@ valid `EXPECTED_REMOTE_SHA`.
 **There is no bulk publish, by design.** The batch path is disabled because it used a bare `--force`, which
 violates the force-with-lease contract that `EXPECTED_REMOTE_SHA` exists to enforce. Publish one module at a
 time, each against its own freshly observed SHA; re-running `make publish-module-status` between publishes
-reprints the remaining lines. Note the asymmetry with [Phase 4c](#phase-4c--seal-the-split-tags): sealing
+reprints the remaining lines. Note the asymmetry with [Phase 5](#phase-5--seal-the-split-tags): sealing
 *is* a single bulk command, because a seal takes no lease input and fails closed on its own.
 
 **Then verify before sealing.** Phases 4a and 4b below are the verification loop; a failure there means fixing
@@ -237,7 +244,7 @@ loads and the same routes behave. First deploy takes 5–10 minutes.
 
 #### Re-entry loop for Phase 4a/4b defects
 
-Any defect found in Phase 4a or 4b is fixed before sealing and is **never carried past Phase 4c**. Fix the
+Any defect found in Phase 4a or 4b is fixed before sealing and is **never carried past Phase 5**. Fix the
 cause where it lives, then replay forward. This loop is written to be executed literally, by a person or by a
 coding assistant.
 
@@ -245,7 +252,7 @@ coding assistant.
 
 1. Run [Phase 4a](#phase-4a--verify-by-generated-project). If it passes, run
    [Phase 4b](#phase-4b--verify-by-deployment). If both pass with no defect, **exit the loop** and go to
-   [Phase 4c](#phase-4c--seal-the-split-tags). Otherwise take the first defect and route it: if its cause is
+   [Phase 5](#phase-5--seal-the-split-tags). Otherwise take the first defect and route it: if its cause is
    a tracked file in this repository, go to step 2; if it is Phase 4b environment state, go to step 4.
 
 2. **Repository defect** — the cause is a tracked file, whether under `quickscale_modules/<module>/` or in
@@ -274,14 +281,14 @@ coding assistant.
    step 1. No commit, no tag, and no republish are involved.
 
 Nothing is consumed by iterating: split branches are mutable, no tag is pushed, and the version is not spent
-until [Phase 5](#phase-5--publish). If the same defect survives two passes, stop and escalate rather than
+until [Phase 6](#phase-6--publish). If the same defect survives two passes, stop and escalate rather than
 looping again — a repeating failure usually means the cause was located in the wrong layer at step 2.
 
 This loop runs **before** any tag is sealed. The superficially similar loop for a mistake discovered *after*
-sealing is narrower and is described in [Phase 4c](#phase-4c--seal-the-split-tags) and the
+sealing is narrower and is described in [Phase 5](#phase-5--seal-the-split-tags) and the
 [re-entrancy summary](#re-entrancy-summary); it additionally requires deleting the affected split tags.
 
-### Phase 4c — Seal the split tags
+### Phase 5 — Seal the split tags
 
 ```bash
 make seal-modules VERSION=X.Y.Z
@@ -299,11 +306,11 @@ quickscale apply        # no --split-ref, no --split-refs-from-branches, no othe
 ```
 
 **Sealing is still correctable.** A tag is permanent at PyPI publication, not at push. Until
-Phase 5, fix a sealed mistake by deleting the affected remote and local tags, returning to Phase 3,
+Phase 6, fix a sealed mistake by deleting the affected remote and local tags, returning to Phase 3,
 and resealing ([decisions.md Rule 4](decisions.md#module-version-lockstep)). The tooling refuses to
 move a tag on its own; the deletion is the explicit, deliberate override.
 
-### Phase 5 — Publish
+### Phase 6 — Publish
 
 Last chance to reword the `- vX.Y.Z` CHANGELOG line and drop the "prepared" labelling from the
 release note — the workflow reads that line for the GitHub Release body at publish time.
@@ -324,7 +331,7 @@ push.
 After this point the version is spent: a published release can be yanked, never recalled, and a
 defect costs a new version.
 
-### Phase 6 — Close out
+### Phase 7 — Close out
 
 - [ ] Open the release PR from the integration branch into `main`.
 - [ ] Confirm PyPI has all three distributions and the GitHub Release links the public note.
