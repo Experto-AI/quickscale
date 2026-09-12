@@ -330,6 +330,87 @@ def test_get_module_non_core_deps_handles_empty_toml(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_expected_core_spec_derives_floor_and_ceiling() -> None:
+    """The lockstep specifier is floor = VERSION, ceiling = next minor."""
+    assert compat._expected_core_spec("0.88.0") == ">=0.88.0,<0.89.0"
+    assert compat._expected_core_spec("0.9.0") == ">=0.9.0,<0.10.0"
+    assert compat._expected_core_spec("1.0.0") == ">=1.0.0,<1.1.0"
+
+
+def test_declared_core_spec_strips_distribution_name() -> None:
+    """Both spaced and unspaced dependency entries yield the bare specifier."""
+    assert (
+        compat._declared_core_spec("quickscale-core>=0.88.0,<0.89.0")
+        == ">=0.88.0,<0.89.0"
+    )
+    assert compat._declared_core_spec("quickscale-core >= 0.88.0") == ">= 0.88.0"
+
+
+def _write_pin_fixture(tmp_path: Path, version: str, pin: str) -> None:
+    """Build a minimal repo whose single module declares *pin*."""
+    core_src = tmp_path / "quickscale_core" / "src" / "quickscale_core"
+    core_src.mkdir(parents=True)
+    (core_src / "__init__.py").write_text("# core package\n", encoding="utf-8")
+    (tmp_path / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+
+    mod_dir = tmp_path / "quickscale_modules" / "test_mod"
+    mod_dir.mkdir(parents=True)
+    (mod_dir / "module.yml").write_text(
+        f"dependencies:\n  - {pin}\n",
+        encoding="utf-8",
+    )
+    (mod_dir / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "quickscale-module-test-mod"\n', encoding="utf-8"
+    )
+
+
+def test_main_fails_on_stale_lockstep_pin(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A pin left at the previous release fails the gate.
+
+    Regression guard: the floor-only comparison accepted a stale pin
+    because ``VERSION >= floor`` still held, so a forgotten release-time
+    edit reached publish undetected.
+    """
+    _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.87.0,<0.88.0")
+
+    exit_code = compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code != 0, "Expected non-zero exit for a stale lockstep pin"
+    assert "FAIL: lockstep pin is >=0.87.0,<0.88.0" in captured.out
+    assert "expected >=0.88.0,<0.89.0" in captured.out
+
+
+def test_main_fails_on_missing_ceiling(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A floor-only pin is rejected — the ceiling is part of the rule."""
+    _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.88.0")
+
+    exit_code = compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code != 0, "Expected non-zero exit for a pin with no ceiling"
+    assert "FAIL: lockstep pin is >=0.88.0;" in captured.out
+
+
+def test_main_accepts_derived_lockstep_pin(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The exact pin version_tool.sh stamps passes the lockstep assertion."""
+    _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.88.0,<0.89.0")
+
+    compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert "FAIL: lockstep pin" not in captured.out
+
+
 def test_main_reports_malformed_pyproject(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

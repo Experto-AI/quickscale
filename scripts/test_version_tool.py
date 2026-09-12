@@ -58,6 +58,13 @@ _YAML_VERSION_RE: Final[re.Pattern[str]] = re.compile(YAML_VERSION_PATTERN)
 INIT_VERSION_PATTERN: Final[str] = r'__version__\s*=\s*"([^"]+)"'
 _INIT_VERSION_RE: Final[re.Pattern[str]] = re.compile(INIT_VERSION_PATTERN)
 
+
+def _next_minor(version: str) -> str:
+    """``'0.86.0'`` → ``'0.87.0'`` — the lockstep pin's ceiling."""
+    major, minor, *_ = version.split(".")
+    return f"{major}.{int(minor) + 1}.0"
+
+
 # Expected exit codes
 EXIT_OK: Final[int] = 0
 EXIT_MISMATCH: Final[int] = 1
@@ -517,9 +524,13 @@ class TestUpdateWithTempRepo:
             mod_dir = root / "quickscale_modules" / mod_name
             mod_dir.mkdir(parents=True)
 
-            # module.yml
+            # module.yml — carries the quickscale-core lockstep pin, which
+            # update must restamp from VERSION alongside the version field.
             mod_dir.joinpath("module.yml").write_text(
                 f'name: {mod_name}\nversion: "{self.VERSION_BEFORE}"\ndescription: "test"\n'
+                f"dependencies:\n"
+                f"  - quickscale-core>={self.VERSION_BEFORE},"
+                f"<{_next_minor(self.VERSION_BEFORE)}\n"
             )
 
             # pyproject.toml
@@ -691,6 +702,16 @@ class TestUpdateWithTempRepo:
             content = full.read_text()
             assert expected in content, (
                 f"Version {expected} not found in {rel_path}\nContent: {content[:200]}"
+            )
+
+        # The quickscale-core lockstep pin is derived, not hand-maintained:
+        # update must restamp both floor and ceiling from VERSION.
+        expected_pin = f"quickscale-core>={expected},<{_next_minor(expected)}"
+        for mod_name in EXPECTED_MODULE_NAMES:
+            rel_path = f"quickscale_modules/{mod_name}/module.yml"
+            content = (repo / rel_path).read_text()
+            assert expected_pin in content, (
+                f"Core pin {expected_pin} not found in {rel_path}\nContent: {content[:200]}"
             )
 
         # Verify Markdown files do NOT contain the new version

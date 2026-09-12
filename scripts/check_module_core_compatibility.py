@@ -13,8 +13,11 @@ For each module in ``quickscale_modules/*/`` that declares a
 3. Resolves each imported symbol against the on-disk core source to
    confirm the referenced module path exists and, when a named symbol
    is imported, that the symbol is actually defined in the target file.
-4. Verifies the repository's current core version (from ``VERSION``) is
-   >= the module's claimed minimum core version.
+4. Asserts the module's ``quickscale-core`` specifier is exactly the
+   lockstep pin derived from ``VERSION`` — floor = the release being
+   published, ceiling = the next minor. The pin is stamped by
+   ``scripts/version_tool.sh``; this is the gate that keeps a stale or
+   hand-edited one from reaching publish.
 
 **Phase 2 — Install / import probe (runtime check):**
 
@@ -137,6 +140,25 @@ def _extract_min_core_version(dep_spec: str) -> str | None:
     if match:
         return match.group("min_ver")
     return None
+
+
+def _expected_core_spec(version_str: str) -> str:
+    """
+    Return the lockstep specifier a module must declare for *version_str*.
+
+    The rule (decisions.md §Module Version Lockstep) is mechanical: the
+    floor is the release being published, the ceiling is the next minor.
+
+        >>> _expected_core_spec("0.88.0")
+        '>=0.88.0,<0.89.0'
+    """
+    major, minor, *_ = version_str.split(".")
+    return f">={version_str},<{major}.{int(minor) + 1}.0"
+
+
+def _declared_core_spec(dep_spec: str) -> str:
+    """Strip the distribution name off a dependency entry, leaving the specifier."""
+    return dep_spec[len(CORE_DEP_NAME) :].strip()
 
 
 # ---------------------------------------------------------------------------
@@ -1055,8 +1077,6 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    current_version = _parse_version_tuple(current_version_str)
-
     print(f"Repository core version: {current_version_str}")
     print()
 
@@ -1093,34 +1113,28 @@ def main(argv: list[str] | None = None) -> int:
         modules_with_core_dep += 1
         print(f"[{mod_name}] quickscale-core dependency: {dep_spec}")
 
-        # Parse minimum version
+        # The lockstep pin is derived from VERSION by version_tool.sh; assert
+        # the exact shape so a stale or hand-edited pin fails the gate rather
+        # than passing on a floor comparison alone.
+        declared_spec = _declared_core_spec(dep_spec).replace(" ", "")
+        expected_spec = _expected_core_spec(current_version_str)
+        if declared_spec != expected_spec:
+            print(
+                f"  FAIL: lockstep pin is {declared_spec or '(empty)'}; expected "
+                f"{expected_spec} for core {current_version_str}. "
+                f"Run `make version-update` to restamp it."
+            )
+            overall_exit = 1
+
+        # Parse the floor for the Phase 2 install probe. Comparing it against
+        # VERSION would only restate the lockstep assertion above, which has
+        # already rejected every floor that is not the current release.
         min_ver_str = _extract_min_core_version(dep_spec)
         if min_ver_str is None:
             print(
                 f"  WARNING: Could not extract minimum version from spec "
                 f"({dep_spec}). Cannot verify version baseline."
             )
-        else:
-            min_ver = _parse_version_tuple(min_ver_str)
-            if min_ver > current_version:
-                print(
-                    f"  FAIL: Minimum claimed version {min_ver_str} is "
-                    f"NEWER than repository core version {current_version_str}."
-                )
-                overall_exit = 1
-            elif min_ver < current_version:
-                print(
-                    f"  NOTE: Minimum claimed version {min_ver_str} is "
-                    f"OLDER than repository core version {current_version_str}. "
-                    f"Compatibility check covers the current core only; "
-                    f"backward compatibility with {min_ver_str} is assumed "
-                    f"but not proven by static analysis."
-                )
-            else:
-                print(
-                    f"  OK: Minimum claimed version {min_ver_str} matches "
-                    f"repository core version {current_version_str}."
-                )
 
         # Collect quickscale_core imports from module source
         src_dir = mod_dir / "src"

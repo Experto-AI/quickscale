@@ -131,6 +131,45 @@ update_module_yml() {
   fi
 }
 
+# Next minor for a X.Y.Z version: 0.88.0 -> 0.89.0
+next_minor_version() {
+  local version="$1"
+  local major minor
+  major="${version%%.*}"
+  minor="${version#*.}"
+  minor="${minor%%.*}"
+  echo "${major}.$((minor + 1)).0"
+}
+
+# Rewrite a module.yml's quickscale-core lockstep pin from VERSION.
+#
+# The lockstep rule (decisions.md §Module Version Lockstep) is mechanical:
+# the floor is the release being published and the ceiling is the next
+# minor. Deriving it here keeps it out of the hand-maintained set; the
+# exact shape is re-asserted by scripts/check_module_core_compatibility.py.
+update_module_yml_core_pin() {
+  local path="$1"; local version="$2"
+  if [[ ! -f "$path" ]]; then
+    return 1
+  fi
+  local ceiling; ceiling=$(next_minor_version "$version")
+  local before; before=$(cat "$path")
+  # Bare form:   - quickscale-core>=X.Y.Z,<X.Y+1.0
+  sed -E -i \
+    "s|^([[:space:]]*-[[:space:]]*quickscale-core)[[:space:]]*>=[0-9]+\.[0-9]+\.[0-9]+,<[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$|\1>=${version},<${ceiling}|" \
+    "$path"
+  # Quoted form: - "quickscale-core>=X.Y.Z,<X.Y+1.0"
+  sed -E -i \
+    "s|^([[:space:]]*-[[:space:]]*)\"quickscale-core[[:space:]]*>=[0-9]+\.[0-9]+\.[0-9]+,<[0-9]+\.[0-9]+\.[0-9]+\"[[:space:]]*$|\1\"quickscale-core>=${version},<${ceiling}\"|" \
+    "$path"
+  local after; after=$(cat "$path")
+  if [[ "$before" != "$after" ]]; then
+    echo "  UPDATED CORE PIN: $path"
+    return 0
+  fi
+  return 2
+}
+
 update_module_init() {
   local path="$1"; local version="$2"
   if [[ ! -f "$path" ]]; then
@@ -305,6 +344,7 @@ cmd_update_modules() {
 
     echo "  [$m]"
     update_module_yml "$yml" "$version" || true
+    update_module_yml_core_pin "$yml" "$version" || true
     update_pyproject "$pyproject" "$version" || true
     update_module_init "$init" "$version" || true
     _sync_module_snapshot "$m" || true

@@ -441,7 +441,13 @@ class TestGeneratedProjectDependencyInstallSmoke:
         # builds resolve their own staged wheels instead (see
         # scripts/install_global.sh and quickscale_cli.utils
         # .module_dependency_sync._resolve_wheelhouse_dir).
-        synced_core_constraint = 'quickscale-core = ">=0.88.0,<0.89.0"'
+        # Derived from VERSION rather than spelled out: the lockstep pin is
+        # floor = the release being published, ceiling = the next minor, and
+        # scripts/version_tool.sh stamps exactly that into every module.yml.
+        core_version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        core_major, core_minor, *_ = core_version.split(".")
+        core_ceiling = f"{core_major}.{int(core_minor) + 1}.0"
+        synced_core_constraint = f'quickscale-core = ">={core_version},<{core_ceiling}"'
         core_path_value = str(REPO_ROOT / "quickscale_core").replace("\\", "\\\\")
         core_path_dependency = (
             f'quickscale-core = {{path = "{core_path_value}", develop = true}}'

@@ -35,6 +35,8 @@ Or, equivalently, edit `VERSION` and propagate by hand:
 - embedded `_version.py` files for core and CLI
 - each `quickscale_modules/*/module.yml` version, its package version and `__init__.py`, and the
   matching core manifest snapshot
+- each module's `quickscale-core>=X.Y.Z,<X.Y+1.0` lockstep pin in `module.yml`, and therefore its
+  core snapshot too — `make check-core-compat` re-asserts the exact specifier against `VERSION`
 - `version:` fields in standalone documentation `.yml`/`.yaml` files
 
 ## What the tool does not derive
@@ -42,7 +44,6 @@ Or, equivalently, edit `VERSION` and propagate by hand:
 These are hand-maintained and drift silently if forgotten at release time. The publish quality check
 covers them: [publish_procedure.md §1.1](publish_procedure.md#11-version-and-manifest-integrity).
 
-- each module's `quickscale-core>=X.Y.Z,<X.Y+1.0` requirement in `module.yml`, plus its core snapshot
 - version literals inside test fixtures and assertions
 - `contract_vintage.minimum`, which is an adoption boundary rather than a lockstep field
 

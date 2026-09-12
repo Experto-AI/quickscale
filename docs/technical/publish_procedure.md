@@ -32,17 +32,19 @@ verdict earned before the bump does not carry over.
 ```bash
 make version-check          # VERSION parity across all packages and module manifests
 make check-manifest-sync    # module.yml sources equal their core snapshots
+make check-core-compat      # quickscale-core lockstep pins equal the derived specifier
 ```
 
-Two pins are **not** derived by the version tool and must be checked by hand at every release:
+The `quickscale-core` lockstep pin is **derived**, not hand-maintained. Any module declaring a
+`quickscale-core` requirement in its `module.yml` pins the release being published as the floor and
+the next minor as the ceiling — for `0.88.0`, `quickscale-core>=0.88.0,<0.89.0`. `make bump-version`
+stamps that into every module's `module.yml` and its core snapshot, and `make check-core-compat`
+asserts the exact specifier against `VERSION`, so a stale pin is a red gate rather than something to
+catch by eye. The e2e constraint literal derives from `VERSION` for the same reason.
 
-- every module that declares a `quickscale-core` requirement in its `module.yml` — currently only
-  `backups` — pins the release being published as the floor and the next minor as the ceiling. For
-  `0.88.0` that is `quickscale-core>=0.88.0,<0.89.0`. Update the same line in that module's snapshot
-  under `quickscale_core/src/quickscale_core/data/manifests/<module>/module.yml`, or re-run
-  `poetry run python scripts/sync_module_manifests.py --sync`
-- the synced-constraint literal in `quickscale_core/tests/test_e2e_full_workflow.py`, which asserts
-  the constraint a generated project receives and therefore tracks the requirement above
+Note that `scripts/sync_module_manifests.py --sync` only copies a module-owned `module.yml` to its
+core snapshot. It never derives a pin: syncing a stale pin leaves `make check-manifest-sync` green.
+Restamp with `make version-update`, not with `--sync`.
 
 `contract_vintage.minimum` is **not** a lockstep field. It is the adoption boundary for projects
 whose generation contract predates a module's vintage; leave it alone unless that module genuinely
@@ -101,8 +103,9 @@ re-enterable. Phase 5 is irreversible.
 make bump-version X.Y.Z
 ```
 
-This writes `VERSION` and propagates it to every package, module manifest, and core snapshot. Fix
-the two hand-maintained pins from [§1.1](#11-version-and-manifest-integrity), then commit the
+This writes `VERSION` and propagates it to every package, module manifest, core snapshot, and
+`quickscale-core` lockstep pin ([§1.1](#11-version-and-manifest-integrity)). Review
+`contract_vintage.minimum` if a module genuinely gained manual adoption steps, then commit the
 release state with the conventional subject:
 
 ```bash

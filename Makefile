@@ -324,7 +324,7 @@ help:
 	@echo "  make legacy-status        - Show legacy symlink status"
 	@echo ""
 	@echo "Repository gates (auto-run by \`make check\` — run solo only to debug drift):"
-	@echo "  make check-core-compat            - Module quickscale_core imports resolve against current core API"
+	@echo "  make check-core-compat            - Module core imports resolve, and the lockstep pin matches VERSION"
 	@echo "  make check-module-core-imports    - Module code imports only from quickscale_core.runtime"
 	@echo "  make check-manifest-sync          - Module-owned module.yml files match their core snapshots"
 	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
@@ -973,8 +973,8 @@ format:
 
 # Check each module's quickscale_core imports against the current core API.
 # This verifies that every import from quickscale_core in a module's source
-# resolves to an existing symbol, and that the module's claimed minimum core
-# version is <= the repository's current core version.
+# resolves to an existing symbol, and that the module's quickscale-core
+# specifier is exactly the lockstep pin derived from VERSION.
 check-core-compat:
 	@$(PYTHON) scripts/check_module_core_compatibility.py
 

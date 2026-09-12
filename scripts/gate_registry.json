@@ -11,7 +11,7 @@
     "gates": [
         {
             "id": "check-core-compat",
-            "description": "Module quickscale_core imports resolve against current core API",
+            "description": "Module quickscale_core imports resolve against current core API, and the quickscale-core lockstep pin matches VERSION",
             "required_contexts": [
                 "local-serial",
                 "local-parallel",
