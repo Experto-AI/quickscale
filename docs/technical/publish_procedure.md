@@ -72,7 +72,10 @@ The generated-project proof is non-skippable: acceptance is **one pass, zero ski
 ### 1.3 Release artifacts
 
 - [ ] `docs/releases/release-vX.Y.Z.md` exists, follows [the template](release_summary_template.md),
-      and is labelled a prepared artifact while the tag does not yet exist.
+      and is labelled a prepared artifact while the tag does not yet exist. It is the **only** file
+      created in `docs/releases/` for this version, and it is the note linked from the GitHub tag
+      and the release PR. Keep maintainer-only review detail in the release PR or the roadmap —
+      never in a second release document, which only drifts against this one.
 - [ ] `CHANGELOG.md` carries a version-ordered `- vX.Y.Z` entry. **The publish workflow greps
       `^- v?X.Y.Z\b` and uses that single line as the GitHub Release body**, so it must read as a
       published release before the tag is pushed (see [Phase 5](#phase-5--publish)).

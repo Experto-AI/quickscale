@@ -2,16 +2,24 @@
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Planning** → Email Sender Comparison
 > **Related docs**: [Roadmap](../technical/roadmap.md) | [Decisions](../technical/decisions.md) | [Competitive Analysis](../overview/competitive_analysis.md)
+>
+> **Status:** Decision record. The comparison below was made before v0.78.0; the notifications
+> module shipped from it on the Anymail + Resend path and lives at
+> `quickscale_modules/notifications`. Kept for the provider rationale and the rejected
+> alternatives, not as a statement of current scope.
+> **Current rule:** [decisions.md](../technical/decisions.md) is authoritative for policy,
+> [roadmap.md](../technical/roadmap.md) for open work, and [CHANGELOG.md](../../CHANGELOG.md) for
+> what actually shipped.
 
 ## Goal
 
-Compare the main transactional-email sender options for QuickScale's planned notifications module and define a concrete implementation path for the next release.
+Compare the main transactional-email sender options for QuickScale's notifications module and define a concrete implementation path for the release that introduced it.
 
 ## Context
 
-The roadmap now pulls notifications forward to **v0.78.0**. That changes the decision from a vague future integration into an immediate release-planning choice: QuickScale needs one opinionated primary sender path, clear tradeoffs, and an implementation plan that matches the Django-first product shape.
+This decision was made when the roadmap pulled notifications forward to **v0.78.0**. That changed it from a vague future integration into an immediate release-planning choice: QuickScale needed one opinionated primary sender path, clear tradeoffs, and an implementation plan that matched the Django-first product shape.
 
-`decisions.md` remains authoritative and now aligns with the Anymail + Resend direction for notifications: Resend is the first-class email provider, while Django Anymail is the approved delivery layer inside the standard Django email path. This file expands that SSOT-aligned direction into implementation tradeoffs for v0.78.0.
+`decisions.md` remains authoritative and aligns with the Anymail + Resend direction for notifications: Resend is the first-class email provider, while Django Anymail is the approved delivery layer inside the standard Django email path. This file expands that SSOT-aligned direction into implementation tradeoffs for v0.78.0.
 
 This planning pass now separates two different decisions that are often conflated:
 - **Provider choice**: who sends the email

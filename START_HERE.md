@@ -12,7 +12,6 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree, and starter themes are generated once into user-owned project code
 
-**Current Status**: The current published release is v0.87.0; see its [official release note](./docs/releases/release-v0.87.0.md). v0.88.0 is release-prepared and not yet published; see its [prepared release note](./docs/releases/release-v0.88.0.md) and [roadmap.md](./docs/technical/roadmap.md).
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -205,8 +204,7 @@ Detailed contributor references to use as needed:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-The current generator, React starter, first-party module line, and public disaster-recovery CLI surface are active and maintained through tagged releases. The current published release is v0.87.0; v0.88.0 is release-prepared and not yet published. See [Release v0.87.0](./docs/releases/release-v0.87.0.md) and [roadmap.md](./docs/technical/roadmap.md).
-See: [roadmap.md](./docs/technical/roadmap.md)
+The current generator, React starter, first-party module line, and public disaster-recovery CLI surface are active and maintained through tagged releases.
 
 ### "Can I use it for my client projects?"
 **Yes!** That's the primary current use case. QuickScale generates standalone Django projects you own completely - no vendor lock-in.
@@ -224,7 +222,6 @@ See: [deployment/railway.md](./docs/deployment/railway.md)
 ### "Where are the release notes?"
 Public release notes live in [docs/releases/](./docs/releases/). Each version there has a single public note, and a note may appear as a clearly labeled release-prepared artifact before official publication.
 [CHANGELOG.md](./CHANGELOG.md) remains the canonical all-version history index.
-The current published release is v0.87.0. [roadmap.md](./docs/technical/roadmap.md) keeps the release-prepared v0.88.0 closeout detail that does not belong in a published release note.
 
 ### "What modules are available?"
 Current published first-party modules include **analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage**. The monorepo still contains the **teams** directory as placeholder inventory with no committed timeline.
@@ -321,10 +318,3 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 3. **Update Tier 1 first** - Then propagate to other docs
 4. **No broken links** - Validate before committing
 5. **Concise is better** - Link to deep dives instead of duplicating
-
----
-
-**Last Updated**: 2026-09-12
-**Published QuickScale Version**: v0.87.0
-**Unreleased Integration Line**: v0.88.0 (release-prepared, not published)
-**Feedback**: Open an issue if this guide needs improvement!

@@ -38,8 +38,8 @@
 
 - **Planning**
   - [Beta Site Migration Playbook](planning/beta-site-migration.md) - Step-by-step guide for keeping experto-ai-web and bap-web current with new QuickScale releases
-  - [Analytics Provider Comparison](planning/analytics-provider-comparison.md) - Provider evaluation for analytics implementation planning
-  - [Email Sender Comparison](planning/email-sender-comparison.md) - Provider evaluation for notification delivery planning
+  - [Analytics Provider Comparison](planning/analytics-provider-comparison.md) - Decision record for the provider and implementation contract behind the shipped analytics module
+  - [Email Sender Comparison](planning/email-sender-comparison.md) - Decision record for the Anymail + Resend path behind the shipped notifications module
   - [Frontend E2E Coverage](planning/frontend-e2e-coverage.md) - Status, gap analysis, and options for React-theme browser and journey testing
 
 - **Others** (working notes; not authoritative)

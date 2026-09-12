@@ -47,14 +47,6 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **Implemented first-party modules in the current release line**: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage
 - **Creator-led evolution**: New capabilities land because they solve real project needs first, then get generalized into the shared stack
 
-The current published release is v0.87.0, a hardening line that consolidated tenant isolation, fail-closed configuration, and resumable apply on top of v0.86.0 organizations and v0.85.0 billing. v0.88.0 is release-prepared but not published; its remaining validation and publication work is tracked in the roadmap.
-
-QuickScale evolves through tagged releases and real owner usage rather than a separate phase model. For the current implementation surface, use [decisions.md](./docs/technical/decisions.md), [roadmap.md](./docs/technical/roadmap.md), and [CHANGELOG.md](./CHANGELOG.md).
-
-In the current release line, backups remains the admin/ops-first safety module: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, CLI restore keeps its existing syntax, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
-
-When a Railway promotion or recovery route includes media, treat media sync as a separate operator surface and back it with the `storage` module plus external object storage; Railway container disk is not part of the durable media contract.
-
 ## Documentation Guide
 
 **Start here for your needs:**

@@ -2,14 +2,21 @@
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Planning** → Analytics Provider Comparison
 > **Related docs**: [Changelog v0.80.0](../../CHANGELOG.md) | [Decisions](../technical/decisions.md) | [Competitive Analysis](../overview/competitive_analysis.md)
+>
+> **Status:** Decision record. The evaluation below was made before v0.80.0; the analytics module
+> shipped from it and lives at `quickscale_modules/analytics`. Kept for the provider rationale and
+> the reviewed implementation contract, not as a statement of current scope.
+> **Current rule:** [decisions.md](../technical/decisions.md) is authoritative for policy,
+> [roadmap.md](../technical/roadmap.md) for open work, and [CHANGELOG.md](../../CHANGELOG.md) for
+> what actually shipped.
 
 ## Goal
 
-Compare analytics provider options for QuickScale's planned analytics module (`quickscale_modules.analytics`, v0.80.0) and record the reviewed implementation contract for the first release.
+Compare analytics provider options for QuickScale's analytics module (`quickscale_modules.analytics`, v0.80.0) and record the reviewed implementation contract for the first release.
 
 ## Context
 
-v0.80.0 remains intentionally narrow: PostHog-only website analytics, anonymous-default posture, and a backend-first integration contract that avoids unsupported seams in existing generated projects.
+v0.80.0 was intentionally narrow: PostHog-only website analytics, anonymous-default posture, and a backend-first integration contract that avoids unsupported seams in existing generated projects.
 
 This planning pass separates two concerns that were previously conflated:
 - **Provider choice**: who collects and stores analytics data
