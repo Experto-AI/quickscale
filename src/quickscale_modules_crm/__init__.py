@@ -1,5 +1,5 @@
 """QuickScale CRM module with contacts, companies, deals, and pipeline management"""
 
-__version__ = "0.87.0"
+__version__ = "0.88.0"
 
 default_app_config = "quickscale_modules_crm.apps.QuickscaleCrmConfig"
