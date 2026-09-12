@@ -441,7 +441,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
         # builds resolve their own staged wheels instead (see
         # scripts/install_global.sh and quickscale_cli.utils
         # .module_dependency_sync._resolve_wheelhouse_dir).
-        synced_core_constraint = 'quickscale-core = ">=0.87.0,<0.88.0"'
+        synced_core_constraint = 'quickscale-core = ">=0.88.0,<0.89.0"'
         core_path_value = str(REPO_ROOT / "quickscale_core").replace("\\", "\\\\")
         core_path_dependency = (
             f'quickscale-core = {{path = "{core_path_value}", develop = true}}'

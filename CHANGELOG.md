@@ -2,6 +2,23 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **v0.88.0 release packaged locally; publication not started (2026-09-12).** Step 1 of the
+  [lockstep release sequence](docs/technical/decisions.md#module-version-lockstep) is complete:
+  `make bump-version 0.88.0` stamped `VERSION`, the four top-level and twelve module
+  `pyproject.toml` files, both `_version.py` files, the twelve module manifests and their core
+  snapshots, and the `quickscale` meta-package's internal `^0.88.0` constraints. Two pins the
+  version tool does not derive were corrected by hand: the `backups` manifest's
+  `quickscale-core>=0.88.0,<0.89.0` requirement (source and core snapshot) and the E2E workflow
+  test's synced-constraint literal. Both `contract_vintage.minimum` values stay at `0.87.0` — that
+  field is an adoption boundary for projects whose generation contract predates a module's vintage,
+  not a lockstep field. The prepared public note is
+  [release-v0.88.0.md](docs/releases/release-v0.88.0.md), labelled release-prepared, and
+  `START_HERE.md` was corrected: it still advertised v0.86.0 as current and v0.87.0 as unreleased,
+  though `0.87.0` and all twelve split seals are pushed. Steps 2–6 — the local core tag, the split
+  branch republication loop, `make seal-modules`, installed-apply verification, and the irreversible
+  `git push origin 0.88.0` — are **not** started and await maintainer authorization. Release-tier
+  validation is owed on the bumped bytes.
+
 - **Roadmap cleanup after v88 acceptance (2026-09-11).** The checked SA160 heading and the empty
   v88 section left the planner; SA153 (property portal) is now the critical path on Track 1, with
   SA180 → SA152 on Track 2 and SA177 on Track 3 as off-path work. No track moved: SA153 is one
@@ -3149,6 +3166,8 @@
 - **SA151 S1-S3 convergence checkpoint retained — ticket remains open (2026-08-24).** S1 hardened the source-only topology guard against AppConfig class-alias (including destructuring), subscript, and nested-attribute identity writes and added service-style no-execution canaries; the post-review focused topology command passed **36 tests**, including the four new no-execution cases. S2 made the generated-project proof compare every runtime AppConfig `name` and `label` with an independent `quickscale_modules_<module>` oracle and derive expected migration labels from that oracle rather than the observed runtime values; the PostgreSQL node passed **1 test, 0 skipped**, with database and role cleanup proven. S3 synchronized the current **15-suite/4-wired/11-unwired** census, SA151/SA92 audit wording, open-queue counts, and the documentation hub's truthful pre-close **20-entry/19-position** state. Prior S4 evidence remains attributable to the settled delta: restricted-role integration passed **2,471** with **86 skipped**, **12 deselected**, and **94.41%** mean coverage; serial E2E passed Core **36** and CLI **36** with cleanup; typecheck passed; `make check` passed with **2,788 core** and **2,104 CLI** unit tests; and `make quality` matched the accepted exit-2 oracle of exactly two warning regressions, zero critical regressions, and monotonicity pass. **S4 did not close:** `make test-bypassrls` produced **48 passed, 32 errors, 2,488 deselected, 0 skipped** because `quickscale_bypassrls_test_role` lacks required table privileges across the module-test database set, observed on `test_quickscale_forms.public.django_migrations` owned by `quickscale_test_role`. This is a prerequisite failure, not an accepted failure or product defect. A maintainer must re-provision or re-grant the BYPASSRLS role across every module test database, rerun the complete BYPASSRLS lane to green with zero setup errors/skips, confirm the retained broad evidence still applies, then perform quantified status synchronization, convergence, and terminal attestation. Until that sequence succeeds, SA151 remains unchecked and SA142, SA164, and SA152 remain blocked.
 
 - **SA151 S1 convergence correction (2026-08-24).** Independent convergence found that the source-only AppConfig guard still accepted a locally spoofed or rebound `AppConfig` base even though the identity-write cases were closed. The guard now requires one direct, undecorated `django.apps.AppConfig` base imported canonically before the candidate class and rejects rebound, decorated, and multiple-base forms without executing source. Four new base-provenance canaries bring the focused topology suite to **41 passed**. This supersedes the preceding checkpoint entry's 36-test/four-case count; SA151 remains open and the S4 BYPASSRLS prerequisite is unchanged.
+
+- v0.88.0 — **release-prepared 2026-09-12, not published** — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). The `0.88.0` tag, its GitHub release, and the PyPI distributions do not exist yet; the split branches are not republished and the twelve `0.88.0` split tags are not sealed. Repository version state is stamped at `0.88.0` across `VERSION`, every top-level and module `pyproject.toml`, both `_version.py` files, the twelve module manifests, and their core snapshots. Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects. Release-tier validation is owed on these bytes before publication.
 
 - v0.87.0 — released 2026-08-20 — [Hardening Release](docs/releases/release-v0.87.0.md). Consolidates a large hardening pass across tenant isolation, module configuration, the generator, split publication and lockstep, and disaster recovery.
   - **Tenant isolation unified.** Every tenant-scoped model inherits one shared isolation base instead of hand-copied boilerplate; a project-wide check requires each model to be explicitly tenant-scoped or excluded and is wired into generated projects' own CI.

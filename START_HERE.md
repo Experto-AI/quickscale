@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree, and starter themes are generated once into user-owned project code
 
-**Current Status**: The current published release is v0.86.0; see its [official release note](./docs/releases/release-v0.86.0.md). v0.87.0 remains unreleased; see [roadmap.md](./docs/technical/roadmap.md) for active closeout status.
+**Current Status**: The current published release is v0.87.0; see its [official release note](./docs/releases/release-v0.87.0.md). v0.88.0 is release-prepared and not yet published; see its [prepared release note](./docs/releases/release-v0.88.0.md) and [roadmap.md](./docs/technical/roadmap.md).
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -205,7 +205,7 @@ Detailed contributor references to use as needed:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-The current generator, React starter, first-party module line, and public disaster-recovery CLI surface are active and maintained through tagged releases. The current published release is v0.86.0; v0.87.0 remains in release closeout. See [Release v0.86.0](./docs/releases/release-v0.86.0.md) and [roadmap.md](./docs/technical/roadmap.md).
+The current generator, React starter, first-party module line, and public disaster-recovery CLI surface are active and maintained through tagged releases. The current published release is v0.87.0; v0.88.0 is release-prepared and not yet published. See [Release v0.87.0](./docs/releases/release-v0.87.0.md) and [roadmap.md](./docs/technical/roadmap.md).
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
