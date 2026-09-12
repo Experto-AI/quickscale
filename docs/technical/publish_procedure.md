@@ -64,10 +64,14 @@ Then the closeout lanes from
 [validation_policy.md §Clean-Initial Migration Acceptance](validation_policy.md#clean-initial-migration-acceptance-sa151):
 
 ```bash
-poetry run pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short -o addopts= --no-cov
-poetry run pytest quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::test_all_module_initial_migrations_apply_from_embedded_sources -q --tb=short -o addopts= --no-cov
-make test-integration && make test-bypassrls && make typecheck && make test-e2e && make quality
+make release-gate
 ```
+
+That single target runs the migration-topology guard, the non-skippable
+generated-project proof, and then `test-integration`, `test-bypassrls`, `typecheck`,
+`test-e2e`, and `quality`, aborting at the first failing lane. The command literals
+live in the `Makefile` rather than in this document, so there is no second copy to
+drift.
 
 The generated-project proof is non-skippable: acceptance is **one pass, zero skips**.
 
@@ -81,7 +85,6 @@ The generated-project proof is non-skippable: acceptance is **one pass, zero ski
 - [ ] `CHANGELOG.md` carries a version-ordered `- vX.Y.Z` entry. **The publish workflow greps
       `^- v?X.Y.Z\b` and uses that single line as the GitHub Release body**, so it must read as a
       published release before the tag is pushed (see [Phase 5](#phase-5--publish)).
-- [ ] `START_HERE.md` names the correct current published release.
 
 ### 1.4 What CI re-checks at publish time
 
@@ -149,6 +152,13 @@ make publish-module MODULE=<module> EXPECTED_REMOTE_SHA=<40-hex>
 `EXPECTED_REMOTE_SHA` is required for every mutable update and must be freshly observed. An absent
 remote branch is not authorization, and `ABSENT` is not a valid input.
 
+`make publish-module-status` observes each remote split branch live and, for every module that is
+not up to date, prints a ready-to-paste `make publish-module …` line with the full 40-hex SHA
+already filled in — so the `git ls-remote` above is a way to confirm the value by hand, not a step
+you must perform to obtain it. The SHA is observed when status runs, not when you paste it: if
+anything else pushes in between, the lease fails and you re-observe. That is the interlock working,
+not a tooling defect.
+
 **Then verify before sealing.** Phases 4a and 4b below are the verification loop; any failure sends
 you back to this phase to fix and republish. Nothing is consumed by iterating.
 
@@ -168,11 +178,14 @@ the location with an absolute directory.
 ```bash
 quickscale plan myapp        # interactive: theme, modules, Docker options
 cd myapp
-quickscale apply --split-ref <module>=splits/<module>-module ...   # repeat per module
+quickscale apply \
+  --split-ref <module-a>=splits/<module-a>-module \
+  --split-ref <module-b>=splits/<module-b>-module   # one apply, one flag per module
 quickscale manage createsuperuser
 ```
 
-Until the immutable tags exist, embedding needs `--split-ref`, because the default embed path
+`--split-ref` is repeatable and is consumed by a **single** `apply` — it is not one apply per
+module. Until the immutable tags exist, embedding needs `--split-ref`, because the default embed path
 resolves `splits/<module>-module/X.Y.Z` and fails closed when that tag is absent
 ([decisions.md Rule 5](decisions.md#module-version-lockstep)). Overrides must cover **exactly** the
 modules being added, they resolve refs on `origin` rather than your working tree, and a local-only
@@ -255,8 +268,7 @@ defect costs a new version.
 
 - [ ] Open the release PR from the integration branch into `main`.
 - [ ] Confirm PyPI has all three distributions and the GitHub Release links the public note.
-- [ ] Update `START_HERE.md` and the `CHANGELOG.md` entry to published wording if anything still
-      reads as prepared.
+- [ ] Update the `CHANGELOG.md` entry to published wording if anything still reads as prepared.
 - [ ] The sealed split tags and the published release now correspond exactly. **Leave them alone** —
       they are the released identity and are never re-pointed.
 
