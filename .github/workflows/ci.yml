@@ -325,7 +325,7 @@ jobs:
       run: |
         poetry install --with dev
 
-    - name: Verify behavioural commits carry an SA reference or changelog entry
+    - name: Verify behavioural commits carry a vNN roadmap reference
       run: |
         make check-commit-testimony
 

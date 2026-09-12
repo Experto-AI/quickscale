@@ -150,7 +150,7 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     ),
     "check-commit-testimony": HostedJobSpec(
         "Behavioural Commit Testimony Gate (SA166)",
-        "Verify behavioural commits carry an SA reference or changelog entry",
+        "Verify behavioural commits carry a vNN roadmap reference",
         full_history=True,
     ),
     "check-gate-suites": HostedJobSpec(

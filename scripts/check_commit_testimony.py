@@ -3,9 +3,9 @@
 Require testimony for commits that change behavioural repository controls.
 
 Every non-merge commit in the selected range that changes a GitHub workflow,
-the gate registry, or an existing PostgreSQL provisioning station must carry
-either an ``SA...`` ticket or integer ``vNN`` roadmap reference in its message,
-or a same-commit ``CHANGELOG.md`` change.
+the gate registry, or an existing PostgreSQL provisioning station must carry a
+``vNN`` roadmap reference in its message, either bare (``v88``) or dotted
+(``v0.88.0``). No other form of testimony is accepted.
 
 The range base is selected, in order, from ``--base-ref``,
 ``TESTIMONY_BASE_REF``, the GitHub event payload, ``GITHUB_BASE_REF``, or
@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROADMAP_REFERENCE_RE = re.compile(
-    r"(?<![A-Za-z0-9.])(?:SA\d+[a-z]?|v\d+)(?![A-Za-z0-9.])",
+    r"(?<![A-Za-z0-9.])v\d+(?:\.\d+)*(?![A-Za-z0-9.])",
     re.IGNORECASE,
 )
 DIRECTLY_PROTECTED = (".github/workflows/", "scripts/gate_registry.json")
@@ -233,7 +233,7 @@ def _violations(base: str, head: str) -> tuple[Violation, ...]:
         if not protected:
             continue
         message = _git("show", "-s", "--format=%B", commit)
-        if ROADMAP_REFERENCE_RE.search(message) or "CHANGELOG.md" in paths:
+        if ROADMAP_REFERENCE_RE.search(message):
             continue
         subject = message.splitlines()[0] if message.splitlines() else "<empty commit message>"
         violations.append(Violation(commit, subject, protected))
@@ -257,8 +257,8 @@ def main(argv: list[str] | None = None) -> int:
         violations = _violations(comparison_base, head)
         if violations:
             print(
-                "ERROR: [COMMIT_TESTIMONY] behavioural commits require an SA ticket or "
-                "integer vNN roadmap reference, or a same-commit CHANGELOG.md entry:",
+                "ERROR: [COMMIT_TESTIMONY] behavioural commits require a vNN "
+                "roadmap reference in the commit message:",
                 file=sys.stderr,
             )
             for violation in violations:

@@ -88,7 +88,12 @@ def test_untitled_workflow_commit_fails(repository: tuple[Path, str]) -> None:
 
 @pytest.mark.parametrize(
     "message",
-    ["feat(sa166): add gate", "SA166: add gate", "feat(v88): checkpoint lifecycle work"],
+    [
+        "feat(v88): checkpoint lifecycle work",
+        "v88: add gate",
+        "v12 rework",
+        "v0.88.0: QuickScale 0.88.0",
+    ],
 )
 def test_roadmap_reference_satisfies_workflow_commit(
     repository: tuple[Path, str], message: str
@@ -102,13 +107,13 @@ def test_roadmap_reference_satisfies_workflow_commit(
     assert "Commit testimony passed" in result.stdout
 
 
-def test_same_commit_changelog_entry_satisfies_release_commit(
+def test_same_commit_changelog_entry_is_not_testimony(
     repository: tuple[Path, str],
 ) -> None:
     repo, base = repository
     _commit(
         repo,
-        "v0.88.0: QuickScale 0.88.0",
+        "release prep",
         {
             ".github/workflows/publish.yml": "name: Publish\n",
             "CHANGELOG.md": "Release testimony\n",
@@ -117,10 +122,11 @@ def test_same_commit_changelog_entry_satisfies_release_commit(
 
     result = _run(repo, "--base-ref", base)
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 1
+    assert "roadmap reference" in result.stderr
 
 
-def test_release_shaped_message_without_testimony_is_not_an_exemption(
+def test_dotted_release_version_is_testimony(
     repository: tuple[Path, str],
 ) -> None:
     repo, base = repository
@@ -132,8 +138,23 @@ def test_release_shaped_message_without_testimony_is_not_an_exemption(
 
     result = _run(repo, "--base-ref", base)
 
+    assert result.returncode == 0, result.stderr
+
+
+def test_versionless_release_shaped_message_is_not_an_exemption(
+    repository: tuple[Path, str],
+) -> None:
+    repo, base = repository
+    _commit(
+        repo,
+        "release: QuickScale publish workflow",
+        {".github/workflows/publish.yml": "name: Publish\n"},
+    )
+
+    result = _run(repo, "--base-ref", base)
+
     assert result.returncode == 1
-    assert "v0.87.0: QuickScale 0.87.0" in result.stderr
+    assert "release: QuickScale publish workflow" in result.stderr
 
 
 def test_provisioning_station_change_requires_testimony(
@@ -276,7 +297,7 @@ def test_every_non_merge_commit_in_range_is_checked(
         "untitled topology change",
         {"scripts/gate_registry.json": "{}\n"},
     )
-    _commit(repo, "docs(sa166): follow-up", {"notes.md": "follow-up\n"})
+    _commit(repo, "docs(v88): follow-up", {"notes.md": "follow-up\n"})
 
     result = _run(repo, "--base-ref", base)
 

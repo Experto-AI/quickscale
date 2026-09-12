@@ -332,7 +332,7 @@ help:
 	@echo "  make check-module-app-declaration - Evidence-bearing modules declare Django apps wiring"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
-	@echo "  make check-commit-testimony       - Behavioural commits carry an SA reference or same-commit changelog entry"
+	@echo "  make check-commit-testimony       - Behavioural commits carry a vNN or vN.NN.N roadmap reference"
 	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability scan"
 	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts"
@@ -1026,7 +1026,8 @@ check-csrf-exempt:
 
 # Inspect every non-merge commit in the selected base-to-head range. Changes
 # to workflows, the gate registry, or PostgreSQL provisioning stations require
-# either an SA roadmap-ticket reference or a same-commit changelog entry.
+# a vNN roadmap reference in the commit message, bare (v88) or dotted
+# (v0.88.0). No ticket form or changelog entry substitutes for it.
 check-commit-testimony:
 	@$(PYTHON) scripts/check_commit_testimony.py
 

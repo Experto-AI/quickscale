@@ -246,6 +246,8 @@ poetry run pre-commit run --all-files
 - `refactor:` - Code refactoring
 - `chore:` - Maintenance tasks
 
+**Behavioural control commits additionally require a `vNN` roadmap reference** — bare (`v88`) or dotted (`v0.88.0`) — anywhere in the message. This applies to commits touching a GitHub workflow, `scripts/gate_registry.json`, or a PostgreSQL provisioning station; `make check-commit-testimony` enforces it and a ticket id alone does not satisfy it. See [validation policy](validation_policy.md).
+
 ### Fast feedback loop for AI-assisted / incremental development
 
 When iterating on a focused change, use the narrowest validation target first and widen only when the narrower check passes. This keeps the cycle time short and avoids waiting on unrelated work.
