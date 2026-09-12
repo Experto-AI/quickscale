@@ -138,13 +138,21 @@ git config --local user.email '<email>'
 
 Keep credentials in the helper or an SSH agent — never in a remote URL or command argument.
 
-For each of the twelve modules, observe the current remote SHA and publish against it:
+Publish each module that is not already up to date, observing its current remote SHA and publishing against
+it. On a first pass through this phase that is all twelve; on a re-entry from
+[Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) it is usually a subset, and status tells you which:
 
 ```bash
-make publish-module-status                                  # per-module state and next actions
-git ls-remote --heads origin splits/<module>-module         # observe the exact 40-hex SHA
-make publish-module MODULE=<module> EXPECTED_REMOTE_SHA=<40-hex>
+make publish-module-status                                  # per-module state, and a ready-to-paste line per module
+make publish-module MODULE=<module> EXPECTED_REMOTE_SHA=<40-hex>   # paste from status
+git ls-remote --heads origin splits/<module>-module         # optional: confirm the SHA by hand
 ```
+
+`<module>` is the bare directory slug under `quickscale_modules/` — `[a-zA-Z0-9][a-zA-Z0-9_-]*`, expanded
+internally to `quickscale_modules/<module>` and `splits/<module>-module`. The twelve authoritative values are
+`analytics`, `auth`, `backups`, `billing`, `blog`, `crm`, `forms`, `listings`, `notifications`, `orgs`,
+`social`, `storage`. The set comes from the authoritative shipped-module inventory, not from a directory
+listing, so an unapproved name fails closed before any push.
 
 `EXPECTED_REMOTE_SHA` is required for every mutable update and must be freshly observed. An absent
 remote branch is not authorization, and `ABSENT` is not a valid input.
@@ -154,10 +162,18 @@ not up to date, prints a ready-to-paste `make publish-module …` line with the 
 already filled in — so the `git ls-remote` above is a way to confirm the value by hand, not a step
 you must perform to obtain it. The SHA is observed when status runs, not when you paste it: if
 anything else pushes in between, the lease fails and you re-observe. That is the interlock working,
-not a tooling defect.
+not a tooling defect. A module whose remote branch is absent gets no paste line, because `ABSENT` is not a
+valid `EXPECTED_REMOTE_SHA`.
 
-**Then verify before sealing.** Phases 4a and 4b below are the verification loop; any failure sends
-you back to this phase to fix and republish. Nothing is consumed by iterating.
+**There is no bulk publish, by design.** The batch path is disabled because it used a bare `--force`, which
+violates the force-with-lease contract that `EXPECTED_REMOTE_SHA` exists to enforce. Publish one module at a
+time, each against its own freshly observed SHA; re-running `make publish-module-status` between publishes
+reprints the remaining lines. Note the asymmetry with [Phase 4c](#phase-4c--seal-the-split-tags): sealing
+*is* a single bulk command, because a seal takes no lease input and fails closed on its own.
+
+**Then verify before sealing.** Phases 4a and 4b below are the verification loop; a failure there means fixing
+the cause, re-running the quality gate, and republishing whatever status then reports as outdated, per the
+[re-entry loop](#re-entry-loop-for-phase-4a4b-defects). Nothing is consumed by iterating.
 
 ### Phase 4a — Verify by generated project
 
@@ -219,7 +235,51 @@ Create a superuser with the `DJANGO_SUPERUSER_*` Railway variables or
 `railway run --service myapp python manage.py createsuperuser`, then confirm the deployed site
 loads and the same routes behave. First deploy takes 5–10 minutes.
 
-Any defect found in Phase 4a or 4b returns to [Phase 3](#phase-3--publish-the-split-branches-re-enterable).
+#### Re-entry loop for Phase 4a/4b defects
+
+Any defect found in Phase 4a or 4b is fixed before sealing and is **never carried past Phase 4c**. Fix the
+cause where it lives, then replay forward. This loop is written to be executed literally, by a person or by a
+coding assistant.
+
+**Loop until Phase 4a and 4b both pass with zero defects:**
+
+1. Run [Phase 4a](#phase-4a--verify-by-generated-project). If it passes, run
+   [Phase 4b](#phase-4b--verify-by-deployment). If both pass with no defect, **exit the loop** and go to
+   [Phase 4c](#phase-4c--seal-the-split-tags). Otherwise take the first defect and route it: if its cause is
+   a tracked file in this repository, go to step 2; if it is Phase 4b environment state, go to step 4.
+
+2. **Repository defect** — the cause is a tracked file, whether under `quickscale_modules/<module>/` or in
+   `quickscale_core/`, `quickscale_cli/`, or `quickscale/`. This also covers a failing `make test`, a bad
+   `quickscale apply`, and wrong wheel contents. Fix and commit. Because publication requires a tag at `HEAD`
+   matching `VERSION`, keep the same `X.Y.Z` and recreate the local tag after the commit:
+
+   ```bash
+   git tag -d X.Y.Z && git tag X.Y.Z    # local only — still never pushed
+   ```
+
+   Re-run [Part 1](#part-1--publish-quality-check) in full: a verdict earned before the fix does not carry
+   over to the new bytes. Then go to step 3.
+
+3. **Republish exactly what changed.** Run `make publish-module-status` and republish every module it reports
+   as `outdated` or `unpublished`, per [Phase 3](#phase-3--publish-the-split-branches-re-enterable). Status is
+   the arbiter here — do not decide by hand which modules were affected.
+
+   A split branch carries only its own `quickscale_modules/<module>/` subtree, so a fix confined to core, the
+   CLI, or the generator leaves all twelve branches byte-identical and status reports every module up to date.
+   That is the expected result, not a missed step: there is nothing to republish, and you return to step 1
+   with the rebuilt install from Phase 4a.
+
+4. **Deployment-environment defect** (Phase 4b only) — the cause is outside the repository: a missing runtime
+   role, a wrong Railway variable, a bad `RUNTIME_DATABASE_URL`. Fix the environment, re-deploy, and go to
+   step 1. No commit, no tag, and no republish are involved.
+
+Nothing is consumed by iterating: split branches are mutable, no tag is pushed, and the version is not spent
+until [Phase 5](#phase-5--publish). If the same defect survives two passes, stop and escalate rather than
+looping again — a repeating failure usually means the cause was located in the wrong layer at step 2.
+
+This loop runs **before** any tag is sealed. The superficially similar loop for a mistake discovered *after*
+sealing is narrower and is described in [Phase 4c](#phase-4c--seal-the-split-tags) and the
+[re-entrancy summary](#re-entrancy-summary); it additionally requires deleting the affected split tags.
 
 ### Phase 4c — Seal the split tags
 
