@@ -1094,6 +1094,27 @@ def _show_provenance_diagnostics(runner: GitRunner) -> bool:
     return False
 
 
+def _observe_remote_branch_sha(module_name: str, runner: GitRunner) -> str:
+    """
+    Freshly observe the remote split-branch SHA for *module_name*, read-only.
+
+    This is deliberately a live ``ls-remote`` rather than the published SHA that
+    ``_get_module_publish_state`` reports: that value prefers the *local* branch
+    and then the remote-tracking ref, either of which can be stale.  Feeding a
+    stale SHA to ``EXPECTED_REMOTE_SHA`` would satisfy the lease while clobbering
+    a remote commit nobody in this process ever saw, which is precisely what the
+    lease exists to prevent.
+
+    The empty string means "could not observe" (no origin, no network, or an
+    absent branch).  Status is a diagnostic and never fails closed, so every
+    resolution failure degrades to that instead of raising.
+    """
+    try:
+        return resolve_remote_ref("origin", resolve_split_branch(module_name), runner=runner)
+    except GitError, SealError, ModuleNotFoundError:
+        return ""
+
+
 def _show_status(
     runner: GitRunner,
     *,
@@ -1116,9 +1137,11 @@ def _show_status(
     unpublished: list[str] = []
 
     all_sealed = True
+    remote_shas: dict[str, str] = {}
     for module_name in frozen_modules:
         state, local_sha, pub_sha, pub_source = _get_module_publish_state(module_name, runner)
         seal_state = _get_module_seal_state(module_name, version, pub_sha, runner)
+        remote_shas[module_name] = _observe_remote_branch_sha(module_name, runner)
         if state == "up-to-date":
             print(f"  {module_name:<16} {seal_state} up to date ({pub_source}, {local_sha[:12]})")
         elif state == "outdated":
@@ -1133,6 +1156,9 @@ def _show_status(
                 f"(local {local_sha[:12]}, no split branch)"
             )
             unpublished.append(module_name)
+        if state != "up-to-date":
+            observed = remote_shas[module_name]
+            print(f"  {'':<16} remote branch now: {observed or 'could not observe'}")
         if seal_state != f"sealed@{version}":
             all_sealed = False
 
@@ -1165,6 +1191,14 @@ def _show_status(
     else:
         _print_info("  Publish each outdated module individually:")
         _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>")
+        ready = [name for name in outdated + unpublished if remote_shas.get(name)]
+        if ready:
+            print()
+            _print_info("  Observed just now -- re-observe if anything else may have pushed since:")
+            for name in ready:
+                _print_info(
+                    f"    make publish-module MODULE={name} EXPECTED_REMOTE_SHA={remote_shas[name]}"
+                )
     return all_sealed
 
 

@@ -142,6 +142,7 @@ from quickscale_core.utils.git_utils import (
     GitError,
     is_working_directory_clean,
     resolve_remote_ref,
+    resolve_split_branch,
     validate_module_name,
     validate_tag_name,
 )
@@ -514,6 +515,30 @@ def _parse_split_ref_overrides(split_refs: tuple[str, ...]) -> dict[str, str]:
         seen_modules.add(module_name)
         parsed[module_name] = split_ref
     return parsed
+
+
+def _expand_split_refs_from_branches(ctx: ApplyContext) -> dict[str, str]:
+    """
+    Map every module being embedded to its canonical ``splits/<name>-module`` branch.
+
+    This is the bulk form of ``--split-ref``.  Every override in the pre-seal
+    verification flow is mechanically the module's own split branch, so deriving
+    them removes a dozen hand-typed arguments -- and with them the chance of
+    typing one wrong or omitting one, which the exact-coverage rule would reject
+    only after the operator had already retyped the whole line.
+
+    The result covers exactly the embed set by construction, so
+    :func:`_validate_split_ref_override_coverage` cannot fail on it.  It is
+    recomputed against the refreshed context after the advisory lock is taken,
+    because the embed set itself can change there.
+    """
+    try:
+        return {
+            module_name: resolve_split_branch(module_name)
+            for module_name in sorted(_module_names_to_embed(ctx))
+        }
+    except GitError as error:
+        raise click.UsageError(f"--split-refs-from-branches: {error}") from error
 
 
 def _module_names_to_embed(ctx: ApplyContext) -> set[str]:
@@ -3370,6 +3395,8 @@ def _execute_apply_steps(
     no_modules: bool,
     verbose_docker: bool = False,
     split_ref_overrides: Mapping[str, str] | None = None,
+    *,
+    split_refs_from_branches: bool = False,
 ) -> None:
     """Execute the apply steps after confirmation."""
     click.echo("\n" + "=" * 50)
@@ -3409,6 +3436,11 @@ def _execute_apply_steps(
         # the lock so that planning uses fresh state, not a stale snapshot
         # taken before the lock was held.
         _refresh_context_after_lock(ctx)
+        # The embed set can change under the lock, so a set derived before it
+        # would no longer cover exactly the modules being embedded.  Re-derive
+        # rather than re-validating a stale map.
+        if split_refs_from_branches:
+            split_ref_overrides = _expand_split_refs_from_branches(ctx)
         _validate_split_ref_override_coverage(
             ctx,
             split_ref_overrides,
@@ -3974,6 +4006,14 @@ def _resolve_apply_preflight(config_path: Path) -> Path:
     help="Use an explicit split ref for each module being embedded (repeatable).",
 )
 @click.option(
+    "--split-refs-from-branches",
+    is_flag=True,
+    help=(
+        "Embed every module from its own splits/<module>-module branch. "
+        "Bulk form of --split-ref for pre-seal release verification."
+    ),
+)
+@click.option(
     "--verbose-docker",
     is_flag=True,
     help="Show Docker build output (useful for debugging build issues)",
@@ -3984,6 +4024,7 @@ def apply(
     no_docker: bool,
     no_modules: bool,
     split_refs: tuple[str, ...],
+    split_refs_from_branches: bool,
     verbose_docker: bool,
 ) -> None:
     """
@@ -4026,12 +4067,18 @@ def apply(
       15. Finalize authoritative state
       16. Display next steps
     """
+    if split_refs and split_refs_from_branches:
+        raise click.UsageError(
+            "--split-refs-from-branches cannot be combined with --split-ref"
+        )
     split_ref_overrides = _parse_split_ref_overrides(split_refs)
     config_path = Path(config)
     _resolve_apply_preflight(config_path)
 
     # Prepare context
     ctx = _prepare_apply_context(config_path)
+    if split_refs_from_branches:
+        split_ref_overrides = _expand_split_refs_from_branches(ctx)
     _validate_split_ref_override_coverage(
         ctx,
         split_ref_overrides,
@@ -4071,4 +4118,5 @@ def apply(
         no_modules,
         show_docker_output,
         split_ref_overrides,
+        split_refs_from_branches=split_refs_from_branches,
     )

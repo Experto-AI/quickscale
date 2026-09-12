@@ -67,11 +67,8 @@ Then the closeout lanes from
 make release-gate
 ```
 
-That single target runs the migration-topology guard, the non-skippable
-generated-project proof, and then `test-integration`, `test-bypassrls`, `typecheck`,
-`test-e2e`, and `quality`, aborting at the first failing lane. The command literals
-live in the `Makefile` rather than in this document, so there is no second copy to
-drift.
+The target owns the lane list and the exact pytest invocations, so this document does not
+restate them and there is no second copy to drift. It aborts at the first failing lane.
 
 The generated-project proof is non-skippable: acceptance is **one pass, zero skips**.
 
@@ -178,14 +175,17 @@ the location with an absolute directory.
 ```bash
 quickscale plan myapp        # interactive: theme, modules, Docker options
 cd myapp
-quickscale apply \
-  --split-ref <module-a>=splits/<module-a>-module \
-  --split-ref <module-b>=splits/<module-b>-module   # one apply, one flag per module
+quickscale apply --split-refs-from-branches
 quickscale manage createsuperuser
 ```
 
-`--split-ref` is repeatable and is consumed by a **single** `apply` — it is not one apply per
-module. Until the immutable tags exist, embedding needs `--split-ref`, because the default embed path
+`--split-refs-from-branches` embeds every module from its own `splits/<module>-module` branch. It
+derives the same mapping you would otherwise type as a dozen repeated `--split-ref MODULE=REF`
+arguments, and covers the embed set exactly by construction, so it can neither miss a module nor
+name one that is not being embedded. Use repeated `--split-ref` only when some module needs a ref
+that is *not* its own split branch.
+
+Until the immutable tags exist, embedding needs one of those two flags, because the default embed path
 resolves `splits/<module>-module/X.Y.Z` and fails closed when that tag is absent
 ([decisions.md Rule 5](decisions.md#module-version-lockstep)). Overrides must cover **exactly** the
 modules being added, they resolve refs on `origin` rather than your working tree, and a local-only
@@ -235,7 +235,7 @@ Then verify twelve-of-twelve seals and a clean installed all-module apply with *
 
 ```bash
 make seal-status VERSION=X.Y.Z
-quickscale apply        # no --split-ref, no other override
+quickscale apply        # no --split-ref, no --split-refs-from-branches, no other override
 ```
 
 **Sealing is still correctable.** A tag is permanent at PyPI publication, not at push. Until

@@ -1171,6 +1171,64 @@ class TestSealCliAndStatus:
         assert f"sealed@{VERSION}" in output
         assert all(name in output for name in names)
 
+    def test_status_offers_paste_ready_publish_command_with_observed_sha(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """
+        An outdated module gets a live-observed 40-hex SHA, not the stale published one.
+
+        The published SHA reported by ``_get_module_publish_state`` prefers the
+        local branch and can be stale; pasting it would satisfy the lease while
+        clobbering an unseen remote commit.  The offered command must therefore
+        carry the ``ls-remote`` value.
+        """
+        stale_sha = "b" * 40
+        monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
+        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(publish_module, "_show_provenance_diagnostics", lambda runner: True)
+        monkeypatch.setattr(
+            publish_module,
+            "_get_module_publish_state",
+            lambda module, runner: ("outdated", HEAD_SHA, stale_sha, "local-branch"),
+        )
+        monkeypatch.setattr(publish_module, "resolve_split_branch", lambda module: "splits/auth")
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_remote_ref",
+            lambda remote, ref, *, runner: HEAD_SHA,
+        )
+
+        publish_module._show_status(object(), version=VERSION)
+        output = capsys.readouterr().out
+
+        assert f"make publish-module MODULE=auth EXPECTED_REMOTE_SHA={HEAD_SHA}" in output
+        assert f"EXPECTED_REMOTE_SHA={stale_sha}" not in output
+
+    def test_status_degrades_when_remote_branch_cannot_be_observed(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """No origin or no network reports 'could not observe' instead of failing closed."""
+        monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
+        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(publish_module, "_show_provenance_diagnostics", lambda runner: True)
+        monkeypatch.setattr(
+            publish_module,
+            "_get_module_publish_state",
+            lambda module, runner: ("unpublished", HEAD_SHA, "", "none"),
+        )
+        monkeypatch.setattr(publish_module, "resolve_split_branch", lambda module: "splits/auth")
+
+        def _absent(remote: str, ref: str, *, runner: object) -> str:
+            raise publish_module.GitError(f"Remote branch {ref!r} is absent")
+
+        monkeypatch.setattr(publish_module, "resolve_remote_ref", _absent)
+
+        publish_module._show_status(object(), version=VERSION)
+        output = capsys.readouterr().out
+
+        assert "could not observe" in output
+        assert "EXPECTED_REMOTE_SHA=" in output  # the generic placeholder line survives
+
     def test_status_accepts_lightweight_direct_target_fallback(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

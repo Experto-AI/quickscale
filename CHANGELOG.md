@@ -40,6 +40,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **E2E lifecycle.** Content-addressed backend image identity with measured cold-versus-warm reuse, run-scoped resource labels, retention-aware teardown, and exact-label cleanup that leaves no stray containers, volumes, or networks.
   - **Quality and gate hygiene.** A merge-base monotonicity gate for the quality baseline, parallelised gate suites, and a closed-universe check that makes an unregistered CI job a red build.
   - **Python floor raised to 3.14** (`>=3.14,<3.15`) for the repository and generated projects. Django stays at `>=6.0.7,<6.1.0`, PostgreSQL at 18. Pre-1.0 upgrades remain a clean break: regenerate and apply against a fresh database.
+  - **Bulk split-ref embedding.** `quickscale apply --split-refs-from-branches` embeds every selected module from its own `splits/<module>-module` branch, replacing one repeated `--split-ref` argument per module.
+  - **One release closeout command.** `make release-gate` runs the migration-topology guard, the generated-project migration proof, and the integration, BYPASSRLS, typecheck, E2E, and quality lanes, stopping at the first failing lane.
+  - **Publish status offers the expected SHA.** `make publish-module-status` observes each remote split branch and prints a ready-to-paste publish command carrying that 40-hex SHA for every module that is not up to date.
   - Release-tier validation is owed on the bumped bytes: the `0.88.0` tag, GitHub release, and PyPI distributions do not exist yet, the split branches are not republished, and the twelve `0.88.0` split tags are not sealed.
 
 - v0.87.0 — released 2026-08-20 — [Hardening Release](docs/releases/release-v0.87.0.md). Consolidates a large hardening pass across tenant isolation, module configuration, the generator, split publication and lockstep, and disaster recovery.

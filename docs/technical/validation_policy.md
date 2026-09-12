@@ -56,7 +56,7 @@ run the tier the current work owns and stop there.
 |------|-----------|---------|
 | `change` | one implementation phase, one correction, one edit session | `make lint`, `make typecheck`, then a focused `make test-unit K=<expr>` (or `SECTIONS=<section> K=<expr>`) over the changed behavior; equivalently `poetry run pytest <path-or-node> --tb=short -m "not e2e" -o addopts= --no-cov` |
 | `task` | a completed plan, a convergence pass, or a delta crossing a package or module boundary | the owning section suite — `make test-unit -- --core` or `-- --cli`, or `make test-integration MODULE=<name>` — or `make check QUIET=1` when repository gates sit in the delta's surface |
-| `release` | plan closeout, version bump, generator-template change, pre-merge | `make ci`, or `make ci-e2e` when an [E2E trigger](#e2e-testing-policy) applies, followed by the closeout lanes in [Clean-Initial Migration Acceptance](#clean-initial-migration-acceptance-sa151) |
+| `release` | plan closeout, version bump, generator-template change, pre-merge | `make ci`, or `make ci-e2e` when an [E2E trigger](#e2e-testing-policy) applies, followed by `make release-gate` — the closeout lanes in [Clean-Initial Migration Acceptance](#clean-initial-migration-acceptance-sa151) |
 
 **Each tier's command already subsumes the narrower ones.** `make check` covers
 lint, typecheck, the unit gate, and the repository gates; `make ci` covers those
@@ -303,6 +303,11 @@ and recorder parity, and proves database/role cleanup. Release closeout also
 runs `make test-integration`, `make test-bypassrls`, `make typecheck`, and the
 serial `make test-e2e` lanes. These lanes are the canonical `release` tier for a
 plan closeout; see [Validation Tiers](#validation-tiers).
+
+**Running them:** `make release-gate` runs both commands above followed by those
+closeout lanes, aborting at the first failure. Prefer it to retyping the literals —
+the `-o addopts= --no-cov` suffix is easy to drop by hand, and dropping it silently
+re-enables the full-core coverage addopts this guard exists to bypass.
 
 <a id="e2e-test-infrastructure"></a>
 <a id="13-e2e-test-infrastructure"></a>

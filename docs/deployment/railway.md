@@ -234,7 +234,23 @@ The ``quickscale deploy railway`` command does **not** create the restricted run
    ALTER DEFAULT PRIVILEGES IN SCHEMA public
      GRANT USAGE ON SEQUENCES TO quickscale_runtime;
    ```
-2. Set ``RUNTIME_DATABASE_URL`` as a Railway variable:
+2. Set ``RUNTIME_DATABASE_URL`` as a Railway variable.
+
+   Where each substitution comes from:
+
+   - ``<password>`` — the password you chose in the ``CREATE ROLE`` above. It is not
+     issued by Railway and is not recoverable later; record it when you create the role.
+   - ``<host>``, ``<port>``, ``<db>`` — read them from the PostgreSQL **service**, not the
+     app service:
+     ```bash
+     railway variables --service Postgres
+     ```
+     Reuse the host, port, and database name exactly as they appear in that service's own
+     ``DATABASE_URL``. Only the role and password change; you are pointing at the same
+     database through a restricted login. Keep the host form Railway already uses for the
+     app's ``DATABASE_URL`` reference — substituting a public host for an internal one (or
+     the reverse) produces a URL that resolves in one context and fails in the other.
+
    ```bash
    railway variables --set RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:<password>@<host>:<port>/<db> --service myapp
    ```

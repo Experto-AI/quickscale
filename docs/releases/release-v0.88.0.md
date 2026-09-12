@@ -60,7 +60,7 @@ For adopters, the consequential change is the Python floor moving to 3.14 and th
 
 ```bash
 QS_E2E_INTEGRATION_REF=v88 make ci-e2e
-poetry run pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short -o addopts= --no-cov
+make release-gate
 ```
 
 ## Deferred Follow-up

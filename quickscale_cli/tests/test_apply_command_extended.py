@@ -82,6 +82,7 @@ from quickscale_cli.commands.apply_command import (
     _sync_analytics_env_example,
     _sync_notifications_env_example,
     _update_module_config_in_state,
+    _expand_split_refs_from_branches,
     _module_names_to_embed,
     _parse_split_ref_overrides,
     _validate_split_ref_override_coverage,
@@ -182,6 +183,97 @@ class TestSA136cSplitRefApplyContract:
             "auth": "feature/auth",
             "blog": "feature/blog",
         }
+
+    def test_bulk_expansion_covers_exactly_the_fresh_embed_set(self) -> None:
+        fresh = Mock(existing_state=None)
+        fresh.qs_config.modules = {"auth": Mock(), "blog": Mock()}
+        assert _expand_split_refs_from_branches(fresh) == {
+            "auth": "splits/auth-module",
+            "blog": "splits/blog-module",
+        }
+
+    def test_bulk_expansion_follows_the_delta_for_an_existing_project(self) -> None:
+        """Only modules being added are covered, matching the exact-coverage rule."""
+        existing = Mock()
+        existing.delta.modules_to_add = ["blog"]
+        assert _expand_split_refs_from_branches(existing) == {
+            "blog": "splits/blog-module"
+        }
+
+    def test_bulk_expansion_satisfies_the_coverage_validator(self) -> None:
+        """The derived map is accepted by the same rule that rejects hand-typed gaps."""
+        fresh = Mock(existing_state=None)
+        fresh.qs_config.modules = {"auth": Mock(), "blog": Mock()}
+        _validate_split_ref_override_coverage(
+            fresh,
+            _expand_split_refs_from_branches(fresh),
+            no_modules=False,
+        )
+
+    def test_click_rejects_bulk_flag_combined_with_explicit_split_ref(
+        self, tmp_path
+    ) -> None:
+        from click.testing import CliRunner
+
+        config_path = tmp_path / "quickscale.yml"
+        config_path.write_text("placeholder\n")
+
+        result = CliRunner().invoke(
+            apply,
+            [
+                str(config_path),
+                "--split-refs-from-branches",
+                "--split-ref",
+                "auth=feature/auth",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "cannot be combined with --split-ref" in result.output
+
+    def test_click_binds_bulk_flag_to_derived_branch_map(self, tmp_path) -> None:
+        from click.testing import CliRunner
+
+        config_path = tmp_path / "quickscale.yml"
+        config_path.write_text("placeholder\n")
+        ctx = Mock(existing_state=None)
+        ctx.qs_config.modules = {"auth": Mock(), "blog": Mock()}
+
+        with (
+            patch("quickscale_cli.commands.apply_command._resolve_apply_preflight"),
+            patch(
+                "quickscale_cli.commands.apply_command._prepare_apply_context",
+                return_value=ctx,
+            ),
+            patch("quickscale_cli.commands.apply_command._display_config_summary"),
+            patch(
+                "quickscale_cli.commands.apply_command._provenance_repair_might_be_needed",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._handle_delta_and_existing_state"
+            ),
+            patch("quickscale_cli.commands.apply_command._check_output_directory"),
+            patch(
+                "quickscale_cli.commands.apply_command._confirm_apply",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._execute_apply_steps"
+            ) as mock_execute,
+        ):
+            result = CliRunner().invoke(
+                apply,
+                [str(config_path), "--split-refs-from-branches"],
+            )
+
+        assert result.exit_code == 0, result.output
+        # split_ref_overrides must stay the last POSITIONAL argument.
+        assert mock_execute.call_args.args[-1] == {
+            "auth": "splits/auth-module",
+            "blog": "splits/blog-module",
+        }
+        assert mock_execute.call_args.kwargs["split_refs_from_branches"] is True
 
     def test_target_coverage_uses_fresh_and_existing_apply_sets(self) -> None:
         fresh = Mock(existing_state=None)

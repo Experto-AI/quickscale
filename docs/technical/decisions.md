@@ -1386,8 +1386,9 @@ pushed and PyPI has the packages, the version is spent and a defect costs a new 
 **Rule 5 — Embed by identity-derived immutable ref.** An embed resolves
 `splits/<module>-module/X.Y.Z` directly from the running core version. No version-to-ref
 mapping table exists because the identity-derived ref makes one unnecessary. A missing
-immutable split tag is a hard error. `--split-ref` is an explicit maintainer override for
-controlled verification and does not change the default identity-derived resolution.
+immutable split tag is a hard error. `--split-ref`, and its bulk form
+`--split-refs-from-branches`, are explicit maintainer overrides for controlled verification and
+do not change the default identity-derived resolution.
 
 **Rule 6 — Tags follow content identity.** When a re-split produces an unchanged tree, the
 same commit carries both release-version split tags. Tag reuse follows content identity,
