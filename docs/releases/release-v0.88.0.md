@@ -26,7 +26,7 @@ For adopters, the consequential change is the Python floor moving to 3.14 and th
 - **`ClientIdentityMiddleware` in generated projects**: a first-position middleware aligns ordinary DRF request identity with the canonical resolver, so a short forwarded chain cannot be trusted by one consumer and rejected by another. Proxy configuration is validated before any mutation and the production proxy count is derived rather than guessed.
 - **Manifest-owned app declarations**: `module.yml` now carries each module's Django app declaration, checked by a dedicated gate. Module adapters were relocated into their own packages alongside the manifests that describe them.
 - **Three-state module presence in `quickscale status`**: a module is reported as present, absent, or placeholder rather than collapsed into a true/false guess.
-- **Commit-testimony gate**: any commit touching a workflow, the gate registry, or a provisioning station must carry a ticket reference or a same-commit changelog entry.
+- **Commit-testimony gate**: any non-merge commit touching a workflow, the gate registry, or a provisioning station must carry a `vNN` roadmap reference, bare (`v88`) or dotted (`v0.88.0`); a ticket id or changelog entry does not satisfy it. A `commit-msg` hook rejects it while rewording is still free, and CI re-checks the range.
 - **Security and interpreter gates**: a consolidated security static-analysis gate with recorded, expiring suppressions, and a guard that keeps repository tooling on the project interpreter.
 - **Local CI stage selection and failure replay**: run part of the pipeline with `ONLY=`/`FROM=`/`SKIP_INSTALL=`, and replay just what failed. Partial runs announce themselves and never count as a full pass.
 

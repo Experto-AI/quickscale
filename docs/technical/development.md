@@ -216,7 +216,7 @@ poetry run mypy quickscale_core/ quickscale_cli/  # Type checking only
 
 **Pre-commit hooks:**
 ```bash
-# Install hooks (one-time)
+# Install hooks (one-time; installs both the pre-commit and commit-msg hooks)
 poetry run pre-commit install
 
 # Run manually on all files
@@ -246,7 +246,9 @@ poetry run pre-commit run --all-files
 - `refactor:` - Code refactoring
 - `chore:` - Maintenance tasks
 
-**Behavioural control commits additionally require a `vNN` roadmap reference** — bare (`v88`) or dotted (`v0.88.0`) — anywhere in the message. This applies to commits touching a GitHub workflow, `scripts/gate_registry.json`, or a PostgreSQL provisioning station; `make check-commit-testimony` enforces it and a ticket id alone does not satisfy it. See [validation policy](validation_policy.md).
+**Behavioural control commits additionally require a `vNN` roadmap reference** — bare (`v88`) or dotted (`v0.88.0`) — anywhere in the message. This applies to commits touching a GitHub workflow, `scripts/gate_registry.json`, or a PostgreSQL provisioning station; a ticket id alone does not satisfy it. Merge commits are exempt: a merge carries someone else's protected change, not the merger's testimony.
+
+Enforcement is at authorship: the `commit-msg` hook installed by `poetry run pre-commit install` rejects the commit against the staged surfaces, while rewording is still free. Hosted CI re-checks the whole range with `make check-commit-testimony`, which also runs on demand over any `--base-ref`/`--head-ref` range. See [validation policy](validation_policy.md).
 
 ### Fast feedback loop for AI-assisted / incremental development
 

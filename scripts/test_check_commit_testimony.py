@@ -46,6 +46,20 @@ def repository(tmp_path: Path) -> tuple[Path, str]:
     return repo, base
 
 
+def _stage(repo: Path, files: dict[str, str]) -> None:
+    for relative, content in files.items():
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    _git(repo, "add", "-A")
+
+
+def _message_file(repo: Path, message: str) -> Path:
+    path = repo / ".git" / "COMMIT_EDITMSG_TEST"
+    path.write_text(message, encoding="utf-8")
+    return path
+
+
 def _run(
     repo: Path, *args: str, environment: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
@@ -353,3 +367,73 @@ def test_unresolvable_base_fails_closed_without_traceback(
     assert "ERROR: [COMMIT_TESTIMONY]" in result.stderr
     assert "missing-ref" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def test_staged_workflow_change_without_testimony_is_rejected(
+    repository: tuple[Path, str],
+) -> None:
+    repo, _ = repository
+    _stage(repo, {".github/workflows/ci.yml": "name: ci\n"})
+    result = _run(repo, "--message-file", str(_message_file(repo, "docs: tidy wording\n")))
+    assert result.returncode == 1
+    assert ".github/workflows/ci.yml" in result.stderr
+
+
+def test_staged_workflow_change_with_testimony_passes(
+    repository: tuple[Path, str],
+) -> None:
+    repo, _ = repository
+    _stage(repo, {".github/workflows/ci.yml": "name: ci\n"})
+    result = _run(repo, "--message-file", str(_message_file(repo, "ci(v88): retune gate\n")))
+    assert result.returncode == 0, result.stderr
+
+
+def test_staged_unrelated_change_is_quiet(repository: tuple[Path, str]) -> None:
+    repo, _ = repository
+    _stage(repo, {"docs/notes.md": "notes\n"})
+    result = _run(repo, "--message-file", str(_message_file(repo, "docs: add notes\n")))
+    assert result.returncode == 0, result.stderr
+
+
+def test_staged_provisioning_station_change_requires_testimony(
+    repository: tuple[Path, str],
+) -> None:
+    repo, _ = repository
+    _commit(repo, "v1: add station", {"Makefile": "ci:\n\tscripts/provision_ci_postgres.sh run\n"})
+    _stage(repo, {"Makefile": "ci:\n\tscripts/provision_ci_postgres.sh run --profile restricted\n"})
+    result = _run(repo, "--message-file", str(_message_file(repo, "chore: tweak\n")))
+    assert result.returncode == 1
+    assert "provisioning station" in result.stderr
+
+
+def test_staged_mode_fails_closed_on_unreadable_message_file(
+    repository: tuple[Path, str],
+) -> None:
+    repo, _ = repository
+    _stage(repo, {".github/workflows/ci.yml": "name: ci\n"})
+    result = _run(repo, "--message-file", str(repo / "absent" / "MSG"))
+    assert result.returncode == 2
+    assert "cannot read commit message file" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_staged_merge_commit_is_exempt(repository: tuple[Path, str]) -> None:
+    """Merges carry someone else's protected change; the range check skips them too."""
+    repo, base = repository
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit(repo, "v88: side workflow", {".github/workflows/ci.yml": "name: side\n"})
+    _git(repo, "checkout", "-q", "-")
+    _commit(repo, "main change", {"README.md": "changed\n"})
+    merge = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", "side"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert (repo / ".git" / "MERGE_HEAD").exists(), merge.stderr
+
+    result = _run(repo, "--message-file", str(_message_file(repo, "Merge branch 'side'\n")))
+
+    assert result.returncode == 0, result.stderr

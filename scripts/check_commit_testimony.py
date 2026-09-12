@@ -220,6 +220,90 @@ def _protected_surfaces(commit: str, paths: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(protected)
 
 
+def _staged_paths() -> tuple[str, ...]:
+    output = _git("diff", "--cached", "--name-only")
+    return tuple(line for line in output.splitlines() if line)
+
+
+def _file_in_index(path: str) -> str:
+    if path not in _git("ls-files", "--", path).splitlines():
+        return ""
+    return _git("show", f":{path}")
+
+
+def _file_at_head(path: str) -> str:
+    try:
+        head = _resolve_commit("HEAD")
+    except TestimonyError:
+        return ""
+    return _file_at_commit(head, path)
+
+
+def _staged_touches_provisioning_station(path: str) -> bool:
+    patch = _git("diff", "--cached", "--no-ext-diff", "--unified=0", "--", path)
+    if any(
+        line.startswith(("+", "-"))
+        and not line.startswith(("+++", "---"))
+        and PROVISIONING_MARKER in line
+        for line in patch.splitlines()
+    ):
+        return True
+
+    before = _file_at_head(path)
+    after = _file_in_index(path)
+    return _provisioning_station_blocks(before) != _provisioning_station_blocks(after)
+
+
+def _staged_protected_surfaces(paths: tuple[str, ...]) -> tuple[str, ...]:
+    protected: list[str] = []
+    for path in paths:
+        if path.startswith(DIRECTLY_PROTECTED[0]) or path == DIRECTLY_PROTECTED[1]:
+            protected.append(path)
+        elif path in PROVISIONING_STATION_PATHS and _staged_touches_provisioning_station(path):
+            protected.append(f"{path} (provisioning station)")
+    return tuple(protected)
+
+
+def _check_staged(message_file: str) -> int:
+    """
+    Authorship-time check: staged surfaces against the pending commit message.
+
+    This is the same rule the range check applies, evaluated against the index
+    so a missing reference is rejected while rewording is still free.
+    """
+    merge_head = subprocess.run(
+        ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if merge_head.returncode == 0:
+        # The range check skips merges (``rev-list --no-merges``); a merge that
+        # carries someone else's protected change is not this author's testimony
+        # to give. Staying consistent keeps ``git merge v88`` unblocked.
+        return 0
+
+    try:
+        message = Path(message_file).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise TestimonyError(f"cannot read commit message file {message_file}: {exc}") from None
+
+    protected = _staged_protected_surfaces(_staged_paths())
+    if not protected or ROADMAP_REFERENCE_RE.search(message):
+        return 0
+
+    print(
+        "ERROR: [COMMIT_TESTIMONY] this commit changes behavioural repository "
+        "controls and needs a vNN roadmap reference in its message:",
+        file=sys.stderr,
+    )
+    for surface in protected:
+        print(f"  {surface}", file=sys.stderr)
+    print("\nAdd a bare (v88) or dotted (v0.88.0) reference and commit again.", file=sys.stderr)
+    return 1
+
+
 def _violations(base: str, head: str) -> tuple[Violation, ...]:
     commits = tuple(
         line
@@ -244,12 +328,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-ref", default=None)
     parser.add_argument("--head-ref", default="HEAD")
+    parser.add_argument(
+        "--message-file",
+        default=None,
+        help="check staged changes against this pending commit message (commit-msg hook mode)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
+        if args.message_file is not None:
+            return _check_staged(args.message_file)
+
         base_ref = _select_base_ref(args.base_ref)
         base = _resolve_commit(base_ref)
         head = _resolve_commit(args.head_ref)

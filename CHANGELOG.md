@@ -33,7 +33,7 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **One authoritative CI database environment.** PostgreSQL provisioning is a single contract with five profiles consumed by every station, replacing four divergent hand-rolled variants.
   - **Three-state module presence in `quickscale status`.** A module reports as present, absent, or placeholder rather than collapsing into a true/false guess.
   - **Frontend CSRF transport hardened.** Token handling in the React starter handles malformed and duplicate cookies, matching Django's last-value precedence.
-  - **Commit-testimony gate.** Any commit touching a workflow, the gate registry, or a provisioning station must carry a ticket reference or a same-commit changelog entry.
+  - **Commit-testimony gate.** Any non-merge commit touching a workflow, the gate registry, or a provisioning station must carry a `vNN` roadmap reference, bare (`v88`) or dotted (`v0.88.0`); a ticket id or changelog entry does not satisfy it. A `commit-msg` hook rejects it while rewording is still free, and CI re-checks the range.
   - **Security and interpreter gates.** A consolidated security static-analysis gate with recorded, expiring suppressions, plus a guard that keeps repository tooling on the project interpreter.
   - **Local CI stage selection and failure replay.** `ONLY=`/`FROM=`/`SKIP_INSTALL=` run part of the pipeline and replay just what failed; partial runs announce themselves and never count as a full pass.
   - **Installed-wheel proof.** A source-free, all-module `plan → apply → up` lifecycle runs from an external working directory against current artifacts.

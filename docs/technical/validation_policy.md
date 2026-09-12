@@ -25,7 +25,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make retry` - Re-run only the tests recorded as failing by the last run; `make retry-show` prints those commands without running them.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
-- `make check-commit-testimony` - Require each behavioural control commit to carry a vNN roadmap reference, bare (`v88`) or dotted (`v0.88.0`).
+- `make check-commit-testimony` - Require each behavioural control commit to carry a vNN roadmap reference, bare (`v88`) or dotted (`v0.88.0`). Merge commits are exempt. Authorship-time enforcement is the `commit-msg` hook from `poetry run pre-commit install`; this target re-checks a range and is a hosted gate, not part of the local static fan-out.
 - `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
 - `make check-dependency-vulnerabilities` - Run the blocking Trivy v0.74.0 scan of both committed Poetry lockfiles.
 - `make check-security-static-analysis` - Run the blocking focused Bandit 1.9.4 source scan.

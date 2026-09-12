@@ -145,14 +145,12 @@
             "id": "check-commit-testimony",
             "description": "Behavioural commits carry a vNN roadmap reference",
             "required_contexts": [
-                "local-serial",
-                "local-parallel",
                 "hosted"
             ],
             "bindings": {
                 "make_target": "check-commit-testimony",
                 "ci_job": "commit-testimony-gate",
-                "local_ci_stage": 7
+                "local_ci_stage": null
             },
             "depends_on": [],
             "trigger_inputs": []

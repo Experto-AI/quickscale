@@ -40,7 +40,7 @@ show_help() {
     echo "  4. Module-core import linter (check_module_core_imports)"
     echo "  5. Manifest sync gate (sync_module_manifests)"
     echo "  6. Module app declaration and org-context primitives gates"
-    echo "  7. CSRF-exempt, commit-testimony, registered script suites, dependency vulnerability, and security static-analysis gates"
+    echo "  7. CSRF-exempt, registered script suites, dependency vulnerability, and security static-analysis gates"
     echo "  8. Type check (mypy)"
     echo "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint"
     echo "     (frontend lint runs when Node.js and pnpm are available)"
