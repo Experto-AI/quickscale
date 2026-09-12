@@ -36,9 +36,13 @@ make check-manifest-sync    # module.yml sources equal their core snapshots
 
 Two pins are **not** derived by the version tool and must be checked by hand at every release:
 
-- each `quickscale_modules/*/module.yml` `quickscale-core>=X.Y.Z,<X.Y+1.0` requirement, and its
-  copy under `quickscale_core/src/quickscale_core/data/manifests/<module>/module.yml`
-- the synced-constraint literal in `quickscale_core/tests/test_e2e_full_workflow.py`
+- every module that declares a `quickscale-core` requirement in its `module.yml` — currently only
+  `backups` — pins the release being published as the floor and the next minor as the ceiling. For
+  `0.88.0` that is `quickscale-core>=0.88.0,<0.89.0`. Update the same line in that module's snapshot
+  under `quickscale_core/src/quickscale_core/data/manifests/<module>/module.yml`, or re-run
+  `poetry run python scripts/sync_module_manifests.py --sync`
+- the synced-constraint literal in `quickscale_core/tests/test_e2e_full_workflow.py`, which asserts
+  the constraint a generated project receives and therefore tracks the requirement above
 
 `contract_vintage.minimum` is **not** a lockstep field. It is the adoption boundary for projects
 whose generation contract predates a module's vintage; leave it alone unless that module genuinely

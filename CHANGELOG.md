@@ -2,6 +2,27 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Release-state documentation reconciled after review (2026-09-12).** A depth review of the three
+  preceding commits found the version-status edits incomplete and one ownership rule violated.
+  `START_HERE.md` contradicted itself: two lines said v0.87.0 was published and v0.88.0 prepared
+  while three others still said v0.86.0 was published and v0.87.0 unreleased; all are now
+  consistent, including the footer stamp. `README.md` and `docs/overview/competitive_analysis.md`
+  still described v0.87.0 as unreleased even though its tag and all twelve split seals are pushed.
+  The roadmap now carries the unreleased v0.88.0 closeout status that
+  [decisions.md](docs/technical/decisions.md) assigns to it and that this changelog's preamble
+  directs readers to; the previous wording pushed release state out of the planner entirely.
+  [publish_procedure.md](docs/technical/publish_procedure.md) §1.1 was corrected: only `backups`
+  declares a `quickscale-core` requirement rather than every module, the malformed `<X.Y+1.0`
+  notation is replaced by a concrete floor/ceiling example, and the manifest re-sync command is
+  named. `GLOSSARY.md`'s split-branch entry now points at the publish SSOT, and its pre-existing
+  broken anchor into `scaffolding.md` is fixed — it targeted section 2, which is "How to Use This
+  Document", while the layout reference is section 4. Deliberately unchanged: the
+  `version: 0.87.0` values in `plan-apply-system.md` fenced examples, which illustrate schema shape
+  and are manual-update-only by the rule in [versioning.md](docs/technical/versioning.md).
+  Verified: every Makefile target and script the procedure cites exists, version parity and manifest
+  sync are green at 0.88.0, the consistency suite passes, and all relative links and cross-document
+  anchors in the touched files resolve.
+
 - **Publish procedure consolidated into one authoritative document (2026-09-12).** The release
   sequence was spread across four documents and one of them contradicted the others:
   `versioning.md` instructed `git tag "v$(cat VERSION)"` (wrong tag shape — release tags are bare

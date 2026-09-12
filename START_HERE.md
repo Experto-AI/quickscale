@@ -224,7 +224,7 @@ See: [deployment/railway.md](./docs/deployment/railway.md)
 ### "Where are the release notes?"
 Public release notes live in [docs/releases/](./docs/releases/). Each version there has a single public note, and a note may appear as a clearly labeled release-prepared artifact before official publication.
 [CHANGELOG.md](./CHANGELOG.md) remains the canonical all-version history index.
-The current published release is v0.86.0. [roadmap.md](./docs/technical/roadmap.md) keeps the unreleased v0.87.0 closeout detail that does not belong in a published release note.
+The current published release is v0.87.0. [roadmap.md](./docs/technical/roadmap.md) keeps the release-prepared v0.88.0 closeout detail that does not belong in a published release note.
 
 ### "What modules are available?"
 Current published first-party modules include **analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage**. The monorepo still contains the **teams** directory as placeholder inventory with no committed timeline.
@@ -324,7 +324,7 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2026-08-18
-**Published QuickScale Version**: v0.86.0
-**Unreleased Integration Line**: v0.87.0
+**Last Updated**: 2026-09-12
+**Published QuickScale Version**: v0.87.0
+**Unreleased Integration Line**: v0.88.0 (release-prepared, not published)
 **Feedback**: Open an issue if this guide needs improvement!

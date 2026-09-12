@@ -47,7 +47,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **Implemented first-party modules in the current release line**: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage
 - **Creator-led evolution**: New capabilities land because they solve real project needs first, then get generalized into the shared stack
 
-The current published release is v0.86.0, which adds organization-based multi-tenancy to the v0.85.0 billing line. v0.87.0 hardening remains unreleased; its active acceptance, quality-gate, and publication work is tracked in the roadmap.
+The current published release is v0.87.0, a hardening line that consolidated tenant isolation, fail-closed configuration, and resumable apply on top of v0.86.0 organizations and v0.85.0 billing. v0.88.0 is release-prepared but not published; its remaining validation and publication work is tracked in the roadmap.
 
 QuickScale evolves through tagged releases and real owner usage rather than a separate phase model. For the current implementation surface, use [decisions.md](./docs/technical/decisions.md), [roadmap.md](./docs/technical/roadmap.md), and [CHANGELOG.md](./CHANGELOG.md).
 

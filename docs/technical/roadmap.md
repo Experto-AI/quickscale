@@ -7,8 +7,13 @@
 
 `v88` is release-accepted (see [CHANGELOG.md](../../CHANGELOG.md)). The next goal is the first
 useful property portal (SA153) in a project-owned extension, generalizing capabilities only after
-that project proves their value. Version/release-note work, tagging, publication, and deployment
-are maintainer decisions outside this planner.
+that project proves their value.
+
+**Release status — v0.88.0 packaged, not published.** The repository is stamped at `0.88.0` with a
+release-prepared public note. No core tag, split-branch republication, seal, or PyPI upload has
+happened. Outstanding before publication: release-tier validation on the bumped bytes, the ordered
+phases in [publish_procedure.md](publish_procedure.md), and the release PR into `main`. Publication
+itself stays a maintainer decision; this planner tracks only that it is owed.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 scope and acceptance; [context](v88_ticket_context.md) explains implementation concepts;

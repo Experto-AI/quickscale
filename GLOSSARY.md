@@ -86,7 +86,7 @@ quickscale/
 
 **Benefits**: Atomic commits across packages, shared tooling, simplified testing
 
-**See**: [scaffolding.md - Monorepo Layout](./docs/technical/scaffolding.md#2-monorepo-target-layout)
+**See**: [scaffolding.md - Maintainer and Package Layout](./docs/technical/scaffolding.md#post-mvp-structure)
 
 ---
 
@@ -194,7 +194,7 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 3. Release tooling seals `splits/auth-module/<version>` as the immutable consumer identity
 4. Users embed or update through QuickScale, which resolves the matching immutable tag and uses git subtree
 
-**See**: [decisions.md - Split Branch Distribution](./docs/technical/decisions.md#module-theme-architecture)
+**See**: [publish_procedure.md](./docs/technical/publish_procedure.md) for the ordered publication and sealing phases, and [decisions.md - Module Version Lockstep](./docs/technical/decisions.md#module-version-lockstep) for the rules they execute.
 
 ---
 
