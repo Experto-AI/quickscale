@@ -2,6 +2,27 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
+- **Publish procedure consolidated into one authoritative document (2026-09-12).** The release
+  sequence was spread across four documents and one of them contradicted the others:
+  `versioning.md` instructed `git tag "v$(cat VERSION)"` (wrong tag shape — release tags are bare
+  `X.Y.Z`), `git push --tags` (the command the Makefile explicitly calls unsafe because it can push
+  the core tag and trigger publication), `git add -A`, and `./scripts/publish.sh full`, while
+  omitting the mandatory split-branch publication and sealing order entirely. Following it would
+  publish core before the splits carried matching manifests, breaking `quickscale apply` for every
+  user selecting a module. New [publish_procedure.md](docs/technical/publish_procedure.md) is now the
+  SSOT for the pre-publish quality gate and the ordered phases: version stamping, local core tag,
+  the re-enterable split-branch loop, verification by generated project and by Railway deployment,
+  sealing, the irreversible tag push, and closeout. `decisions.md` keeps the lockstep rules but its
+  six executable steps and Rule 4's correction steps are replaced by pointers, with two internal
+  inconsistencies fixed: dangling "step 4"/"step 5" references and a claim that `make publish-prod`
+  makes a version permanent, when the tag push is the actual trigger. `versioning.md` is reduced to
+  `VERSION` declaration and propagation, plus what the tool does **not** derive. `user_manual.md`,
+  `module-extension.md`, and `validation_policy.md` now point at the SSOT instead of implying a
+  module can be published on its own, and both documents are registered in the ownership map and
+  `docs/index.md`. Recorded for the next release: the publish workflow greps `^- vX.Y.Z` from this
+  changelog and uses that one line as the GitHub Release body, so a "prepared, not published" entry
+  must be reworded before the tag is pushed.
+
 - **v0.88.0 release packaged locally; publication not started (2026-09-12).** Step 1 of the
   [lockstep release sequence](docs/technical/decisions.md#module-version-lockstep) is complete:
   `make bump-version 0.88.0` stamped `VERSION`, the four top-level and twelve module

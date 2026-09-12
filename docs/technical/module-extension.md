@@ -366,6 +366,8 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 **7. Split Branch Publishing:**
 - [ ] Run `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` after implementation. Supply the exact 40-hex SHA expected on the remote split branch; an absent remote branch is not authorization.
 - [ ] Verify split branch exists: `splits/<name>-module`
+- [ ] At release time this branch is published and sealed as part of the ordered release sequence in
+      [publish_procedure.md](publish_procedure.md); do not seal or publish a module on its own.
 
 ## References
 

@@ -668,6 +668,10 @@ Use these from the repository root:
 - `make publish-modules-outdated` — **[DISABLED SA117 Phase 4]** publish only modules whose split branches are missing or outdated; use per-module publish with `EXPECTED_REMOTE_SHA` instead
 - `make version-check` — verify `VERSION` alignment across packages
 
+> Publishing a release is an ordered procedure, not a single command. Follow
+> [publish_procedure.md](publish_procedure.md) — running these targets out of order ships a
+> `quickscale apply` that fails for every user selecting a module.
+
 Lower-level helpers still live in `scripts/` if you need to inspect the underlying implementation.
 
 ## 6) Troubleshooting common issues

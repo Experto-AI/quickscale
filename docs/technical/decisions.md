@@ -89,9 +89,9 @@ one-time scaffolding.
   core release for that version is published, `splits/<module>-module/<version>`
   has no external consumer, so a wrong tag is corrected by deleting it and
   resealing rather than by burning a version number. Seal → test → fix → delete
-  the affected tags → reseal, until the release converges. After `make
-  publish-prod` the version is permanent and a defect is corrected by a new
-  version. See §[Module Version Lockstep](#module-version-lockstep) Rule 4 for
+  the affected tags → reseal, until the release converges. Once the core tag is
+  pushed and PyPI has the packages the version is permanent, and a defect is
+  corrected by a new version. See §[Module Version Lockstep](#module-version-lockstep) Rule 4 for
   the correction procedure; the pre-publication loop is the intended way to
   converge, not a failure path.
 - ✅ Modules are runtime dependencies (in `INSTALLED_APPS`), theme-agnostic, and
@@ -665,6 +665,8 @@ implicit env-var/stdout-JSON coupling.
 - **CHANGELOG.md**: Canonical all-version release history index
 - **docs/releases/**: Single public release notes, whether they are clearly labeled prepared artifacts awaiting publish or notes already linked from GitHub tags and release PRs
 - **docs/technical/release_summary_template.md**: Template for public release notes and release-prepared artifacts
+- **publish_procedure.md**: Authoritative pre-publish quality gate and the ordered release phases — version stamping, split-branch publication, verification by generated project and deployment, sealing, and the irreversible publication step. Other documents link to it instead of restating release commands; this file keeps the lockstep *rules* it executes
+- **versioning.md**: `VERSION` single-source declaration and propagation semantics, including what the version tool does not derive. Carries no release or publication sequence
 - **roadmap.md**: Open work and active or unreleased release closeout status; its scheduling table is the canonical source for task tracks, dependencies, release requirements, and next actions. Completed work is removed and archived in CHANGELOG.md
 - **docs/others/arch-audit.md**: Live structural findings only — the current open set, each with its promotion trigger. Not a ledger: closed findings, prior-pass narratives, and reconciliation history belong in CHANGELOG.md. Finding numbers are pass-local and MUST NOT be cited as stable identifiers from any other document, test, or source comment
 - **docs/others/tech-audit.md**: Live defect posture only, and the SSOT for found-not-yet-fixed fail-hard violations. Same rule as above: remediated findings are dropped, not archived in place, and no other artifact may pin its finding counts or IDs
@@ -1351,35 +1353,15 @@ assertion Rule 2 exists to close.
 **Rule 3 — Release ordering is mandatory.** The producer publishes mutable
 `splits/<module>-module` branches, then seals the release as immutable
 `splits/<module>-module/X.Y.Z` tags. The default embed path consumes those
-identity-derived tags, not the branches or the working tree. For core release
-`X.Y.Z`, execute this exact six-step sequence:
+identity-derived tags, not the branches or the working tree. The ordering is fixed: stamp
+the version, create the core tag locally, publish the mutable branches, verify by generated project
+and deployment, seal the immutable tags, and only then push the core tag — which is the irreversible
+publication trigger. The seal step accepts no `EXPECTED_REMOTE_SHA` or `ABSENT` authorization input;
+it samples each branch tip, rereads it, requires the tag to be absent or already at the intended
+commit, and verifies after pushing.
 
-1. Bump the repository version, stamp every module manifest, and commit the release state.
-2. Create the core tag `X.Y.Z` locally only; do not push it yet.
-3. Repeatedly run `make publish-module` for the twelve modules with the
-   required per-branch remote expectation, testing installed all-module
-   `apply` with `--split-ref` between iterations; repeat until verification is
-   satisfactory. This is the reversible branch-publication loop. Before any
-   mutating publication command, configure the repository-local credential
-   helper and commit identity; publication disables system/global Git config
-   and fails once with these commands when any value is absent or blank:
-   `git config --local credential.helper '<credential-helper>'`,
-   `git config --local user.name '<name>'`, and
-   `git config --local user.email '<email>'`. Keep credentials in the helper or
-   SSH agent — never place tokens in a remote URL or command argument.
-4. Run `make seal-modules VERSION=X.Y.Z` to create and push the twelve
-   immutable split tags. The seal command has no `EXPECTED_REMOTE_SHA` or
-   `ABSENT` authorization input: it samples each branch tip, immediately
-   rereads that branch, checks the tag for absence or an identical target, and
-   then performs its explicit tag push and post-push checks.
-5. Verify twelve-of-twelve split seals and a clean installed all-module
-   `apply` without `--split-ref` or any other override. A failure here returns
-   to step 3 under Rule 4's correction procedure; it does not consume the
-   version.
-6. Run `git push origin X.Y.Z`. Pushing the core tag is the irreversible
-   release trigger: the tag-matching publication workflow may publish the
-   packages to PyPI. It is distinct from both the repeatable branch loop and
-   the already-created immutable split-tag boundary.
+The executable phases, their exact commands, and the pre-publish quality gate are owned by
+[publish_procedure.md](publish_procedure.md).
 
 Publishing core before the splits carry matching manifests ships a `quickscale apply` that
 fails for every user selecting any module. This ordering is not advisory.
@@ -1389,14 +1371,12 @@ artifacts and may be republished safely as many times as verification requires. 
 the publish-before-verification circular dependency: published state must exist before an
 installed `apply` can verify it, so publication cannot be modelled as a one-shot mutation.
 
-The same reasoning extends past the seal. Step 5 verifies *after* step 4 has pushed tags, so
+The same reasoning extends past the seal. Seal verification happens *after* the tags are pushed, so
 a failure there must be correctable or the sequence would have an unrecoverable step. Until
 the core tag is pushed and the packages published, a split tag has no external consumer and
-is correctable:
-
-1. Delete the affected remote tag(s) and their local counterparts.
-2. Fix the cause and rerun the step-3 branch loop for the affected modules.
-3. Rerun `make seal-modules VERSION=X.Y.Z` and step 5.
+is correctable: delete the affected remote and local tags, fix the cause, republish the affected
+branches, then reseal and re-verify. The executable loop is owned by
+[publish_procedure.md](publish_procedure.md#re-entrancy-summary).
 
 `_seal_module` deliberately refuses to move a tag that exists at a different commit — that
 guardrail catches *accidental* moves, and the deletion above is the explicit, intentional

@@ -31,7 +31,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make check-security-static-analysis` - Run the blocking focused Bandit 1.9.4 source scan.
 - `make security-negative-probes` - Prove scanner, checksum, archive-safety, and stale-database failures remain fail-closed.
 - `make isolation-conformance` - Run the PostgreSQL isolation-conformance suites through the repository-owned runner.
-- `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input.
+- `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input. The ordered release sequence that invokes it, and the pre-publish quality gate, live in [publish_procedure.md](publish_procedure.md).
 
 **Assistant guidance:**
 - Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly.
