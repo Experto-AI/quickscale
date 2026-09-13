@@ -153,9 +153,7 @@ database_url = config("DATABASE_URL", default=None)
 _privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")
 _non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")
 
-_KNOWN_PRIVILEGED_COMMANDS = frozenset(
-    {"migrate", "createcachetable", "migrate_billing_to_orgs"}
-)
+_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable", "migrate_billing_to_orgs"})
 _KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})
 
 # Mutual exclusivity: cannot set both command-mode vars simultaneously.
