@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid as uuid_lib
+from collections.abc import Iterator
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -51,13 +52,46 @@ def _create_plan(*, slug: str, price_id: str) -> Plan:
     )
 
 
-@pytest.mark.django_db
+@pytest.fixture
+def nullable_billing_organization_ownership(
+    transactional_db: None,
+) -> Iterator[None]:
+    """Temporarily reproduce the pre-backfill nullable ownership schema."""
+    del transactional_db
+    from django.db import connection
+
+    assert connection.vendor == "postgresql"
+    models = (Subscription, CreditBalance, CreditTransaction)
+    quoted_column = connection.ops.quote_name("organization_id")
+    altered_tables: list[str] = []
+
+    try:
+        with connection.cursor() as cursor:
+            for model in models:
+                quoted_table = connection.ops.quote_name(model._meta.db_table)
+                cursor.execute(
+                    f"ALTER TABLE {quoted_table} "
+                    f"ALTER COLUMN {quoted_column} DROP NOT NULL"
+                )
+                altered_tables.append(quoted_table)
+        yield
+    finally:
+        reset_current_org_id()
+        with connection.cursor() as cursor:
+            for quoted_table in altered_tables:
+                cursor.execute(
+                    f"DELETE FROM {quoted_table} WHERE {quoted_column} IS NULL"
+                )
+                cursor.execute(
+                    f"ALTER TABLE {quoted_table} "
+                    f"ALTER COLUMN {quoted_column} SET NOT NULL"
+                )
+
+
+@pytest.mark.bypass_rls
+@pytest.mark.usefixtures("nullable_billing_organization_ownership")
+@pytest.mark.django_db(transaction=True)
 def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> None:
-    if not Subscription._meta.get_field("organization").null:
-        pytest.skip(
-            "Pre-migration scenario (billing rows without org) cannot exist — "
-            "organization_id is NOT NULL via tenant_org_fk after RLS migration."
-        )
     user = get_user_model().objects.create_user(
         username="builder",
         email="builder@example.com",
@@ -66,15 +100,15 @@ def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> Non
     plan = _create_plan(
         slug="growth-migrate-personal", price_id="price_growth_migrate_personal"
     )
-    subscription = Subscription.objects.create(
+    subscription = Subscription.all_objects.create(
         user=user,
         plan=plan,
         stripe_subscription_id="sub_builder",
         stripe_customer_id="cus_builder",
         status=Subscription.Status.ACTIVE,
     )
-    balance = CreditBalance.objects.create(user=user, balance=75)
-    transaction_row = CreditTransaction.objects.create(
+    balance = CreditBalance.all_objects.create(user=user, balance=75)
+    transaction_row = CreditTransaction.all_objects.create(
         user=user,
         amount=25,
         transaction_type=CreditTransaction.TransactionType.PURCHASE,
@@ -129,13 +163,10 @@ def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> Non
     assert "transactions_updated=0" in second_stdout.getvalue()
 
 
-@pytest.mark.django_db
+@pytest.mark.bypass_rls
+@pytest.mark.usefixtures("nullable_billing_organization_ownership")
+@pytest.mark.django_db(transaction=True)
 def test_migrate_billing_to_orgs_reuses_sole_existing_membership() -> None:
-    if not Subscription._meta.get_field("organization").null:
-        pytest.skip(
-            "Pre-migration scenario (billing rows without org) cannot exist — "
-            "organization_id is NOT NULL via tenant_org_fk after RLS migration."
-        )
     user = get_user_model().objects.create_user(
         username="member-bridge",
         email="member-bridge@example.com",
@@ -150,14 +181,14 @@ def test_migrate_billing_to_orgs_reuses_sole_existing_membership() -> None:
         organization=organization,
         role=OrgRole.ADMIN,
     )
-    subscription = Subscription.objects.create(
+    subscription = Subscription.all_objects.create(
         user=user,
         plan=plan,
         stripe_subscription_id="sub_member_bridge",
         stripe_customer_id="cus_member_bridge",
         status=Subscription.Status.ACTIVE,
     )
-    balance = CreditBalance.objects.create(user=user, balance=90)
+    balance = CreditBalance.all_objects.create(user=user, balance=90)
 
     stdout = StringIO()
     call_command(
@@ -181,15 +212,12 @@ def test_migrate_billing_to_orgs_reuses_sole_existing_membership() -> None:
     assert "created_personal_org=no" in stdout.getvalue()
 
 
-@pytest.mark.django_db
+@pytest.mark.bypass_rls
+@pytest.mark.usefixtures("nullable_billing_organization_ownership")
+@pytest.mark.django_db(transaction=True)
 def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates() -> (
     None
 ):
-    if not Subscription._meta.get_field("organization").null:
-        pytest.skip(
-            "Pre-migration scenario (billing rows without org) cannot exist — "
-            "organization_id is NOT NULL via tenant_org_fk after RLS migration."
-        )
     user = get_user_model().objects.create_user(
         username="ambiguous-billing-user",
         email="ambiguous-billing-user@example.com",
@@ -210,7 +238,7 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
         organization=second_org,
         role=OrgRole.MEMBER,
     )
-    subscription = Subscription.objects.create(
+    subscription = Subscription.all_objects.create(
         user=user,
         plan=plan,
         stripe_subscription_id="sub_ambiguous_billing_user",
@@ -227,7 +255,7 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
         )
 
     subscription.refresh_from_db()
-    assert subscription.organization is None
+    assert subscription.organization_id is None
     assert (
         Organization.objects.filter(is_personal=True, memberships__user=user).count()
         == 0
@@ -237,8 +265,8 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
 # ---------------------------------------------------------------------------
 # Current-schema migrate_billing_to_orgs tests
 #
-# The existing pre-migration tests (above) skip when organization_id is NOT
-# NULL (the RLS-migrated schema).  These tests exercise the helper functions
+# The pre-migration tests above temporarily reproduce nullable ownership in the
+# explicitly authorized BYPASSRLS lane. These tests exercise the helper functions
 # and Command.handle() paths that work with the current NOT NULL schema.
 # ---------------------------------------------------------------------------
 

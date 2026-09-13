@@ -8,8 +8,9 @@ are checked for each category.
 
 Negative detection tests verify that the gate catches missing
 ``organization_id`` columns, missing ``TenantManager`` declarations,
-missing equality-footprint metadata on pending-remediation entries,
-and unaccounted or double-accounted models.
+and unaccounted or double-accounted models. Static completed-remediation
+cases retain the AF12 parent seams while the registry requires zero pending
+entries.
 
 PostgreSQL-only RLS assertions are gated behind
 ``@pytest.mark.skipif`` and disabled on SQLite (the default test DB).
@@ -40,6 +41,40 @@ from quickscale_modules_orgs.tenancy import (
 # ---------------------------------------------------------------------------
 
 QS_APP_PREFIX = "quickscale_modules_"
+
+#: (child_table, constraint_name, parent_table) for every AF12 composite FK.
+_AF12_COMPOSITE_FK_PAIRS: tuple[tuple[str, str, str], ...] = (
+    (
+        "quickscale_modules_crm_contactnote",
+        "crm_contactnote_contact_org_fk",
+        "quickscale_modules_crm_contact",
+    ),
+    (
+        "quickscale_modules_crm_dealnote",
+        "crm_dealnote_deal_org_fk",
+        "quickscale_modules_crm_deal",
+    ),
+    (
+        "quickscale_modules_forms_formfield",
+        "forms_formfield_form_org_fk",
+        "quickscale_modules_forms_form",
+    ),
+    (
+        "quickscale_modules_forms_formsubmission",
+        "forms_formsubmission_form_org_fk",
+        "quickscale_modules_forms_form",
+    ),
+    (
+        "quickscale_modules_forms_formfieldvalue",
+        "forms_formfieldvalue_submission_org_fk",
+        "quickscale_modules_forms_formsubmission",
+    ),
+    (
+        "quickscale_modules_forms_formfieldvalue",
+        "forms_formfieldvalue_field_org_fk",
+        "quickscale_modules_forms_formfield",
+    ),
+)
 
 
 def _is_qs_model(model: type[models.Model]) -> bool:
@@ -75,6 +110,18 @@ def _concrete_qs_models() -> list[type[models.Model]]:
         for m in apps.get_models(include_auto_created=True)
         if _is_qs_model(m) and _is_concrete(m)
     ]
+
+
+def _model_for_db_table(db_table: str) -> type[models.Model]:
+    """Resolve exactly one installed QuickScale model by database table."""
+    matches = [
+        model for model in _concrete_qs_models() if model._meta.db_table == db_table
+    ]
+    assert len(matches) == 1, (
+        f"Expected one installed model for {db_table}, got "
+        f"{[(model._meta.app_label, model.__name__) for model in matches]}"
+    )
+    return matches[0]
 
 
 # ---------------------------------------------------------------------------
@@ -387,89 +434,45 @@ def test_excluded_model_lacks_tenant_manager(entry: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PENDING_REMEDIATION — equality-footprint metadata assertions
+# COMPLETED REMEDIATION — enrolled child ownership assertions
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "entry",
-    [
-        e
-        for e in TENANT_TABLE_REGISTRY
-        if e.status == TenantTableStatus.PENDING_REMEDIATION
-    ],
-    ids=lambda e: f"{e.app_label}.{e.model_name}",
+    "child_table",
+    tuple(dict.fromkeys(pair[0] for pair in _AF12_COMPOSITE_FK_PAIRS)),
 )
-def test_pending_remediation_has_equality_footprint(entry: Any) -> None:
-    """Every PENDING_REMEDIATION entry must carry equality-contract metadata.
-
-    This metadata names the parent seam for the child/detail table so
-    that when the schema migration lands (AF1 Phase 2+), the constraint
-    ``child.organization_id = parent.organization_id`` can be verified.
-    """
-    model = apps.get_model(entry.app_label, entry.model_name)
-    assert model is not None, f"Model {entry.app_label}.{entry.model_name} not found"
-
-    # The entry must name a parent seam.
-    assert entry.parent_app_label is not None, (
-        f"PENDING_REMEDIATION entry {entry.app_label}.{entry.model_name} "
-        f"is missing parent_app_label. Every child/detail table must "
-        f"name its direct parent for equality-contract verification."
-    )
-    assert entry.parent_model_name is not None, (
-        f"PENDING_REMEDIATION entry {entry.app_label}.{entry.model_name} "
-        f"is missing parent_model_name. Every child/detail table must "
-        f"name its direct parent for equality-contract verification."
-    )
-
-    # The parent model must exist in the installed apps.
-    parent_model = apps.get_model(entry.parent_app_label, entry.parent_model_name)
-    assert parent_model is not None, (
-        f"PENDING_REMEDIATION entry {entry.app_label}.{entry.model_name} "
-        f"references parent {entry.parent_app_label}.{entry.parent_model_name} "
-        f"which was not found in installed apps."
-    )
-
-    # The child model should NOT currently have organization_id (proving
-    # the remediation is accurate). Once the remediation is applied,
-    # this entry should be moved to ENROLLED.
-    field = _get_field(model, "organization_id")
-    if field is not None:
-        # The child already has organization_id — the remediation
-        # should have been applied and this entry promoted to ENROLLED.
-        pytest.fail(
-            f"PENDING_REMEDIATION entry {entry.app_label}.{entry.model_name} "
-            f"already has an 'organization_id' field. It should be promoted "
-            f"to ENROLLED in TENANT_TABLE_REGISTRY."
-        )
+def test_completed_remediation_child_is_enrolled(child_table: str) -> None:
+    """Every remediated AF12 child is enrolled with direct organization ownership."""
+    model = _model_for_db_table(child_table)
+    registry_entries = [
+        entry
+        for entry in TENANT_TABLE_REGISTRY
+        if entry.app_label == model._meta.app_label
+        and entry.model_name == model.__name__
+    ]
+    assert len(registry_entries) == 1
+    assert registry_entries[0].status == TenantTableStatus.ENROLLED
+    assert _get_field(model, "organization_id") is not None
 
 
 # ---------------------------------------------------------------------------
-# PENDING_REMEDIATION — parent FK must point to the named parent
+# COMPLETED REMEDIATION — parent FK must retain the AF12 seam
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "entry",
-    [
-        e
-        for e in TENANT_TABLE_REGISTRY
-        if e.status == TenantTableStatus.PENDING_REMEDIATION
-    ],
-    ids=lambda e: f"{e.app_label}.{e.model_name}",
+    "fk_pair",
+    _AF12_COMPOSITE_FK_PAIRS,
+    ids=lambda pair: pair[1],
 )
-def test_pending_remediation_parent_fk_matches_seam(entry: Any) -> None:
-    """Verify the pending-remediation child model has a FK to its named parent.
-
-    This ensures the equality-footprint seam is correct: the parent FK
-    on the child table is the field that must be kept in sync when
-    ``organization_id`` is later added.
-    """
-    model = apps.get_model(entry.app_label, entry.model_name)
-    assert model is not None
-
-    parent_model = apps.get_model(entry.parent_app_label, entry.parent_model_name)
-    assert parent_model is not None
+def test_completed_remediation_parent_fk_matches_seam(
+    fk_pair: tuple[str, str, str],
+) -> None:
+    """Every remediated child retains a Django FK to its AF12 parent."""
+    child_table, constraint_name, parent_table = fk_pair
+    model = _model_for_db_table(child_table)
+    parent_model = _model_for_db_table(parent_table)
 
     # Find the many-to-one FK field(s) pointing to the parent model's PK.
     parent_fk_fields = [
@@ -478,11 +481,8 @@ def test_pending_remediation_parent_fk_matches_seam(entry: Any) -> None:
         if isinstance(f, models.ForeignKey) and f.remote_field.model == parent_model
     ]
     assert parent_fk_fields, (
-        f"PENDING_REMEDIATION model {entry.app_label}.{entry.model_name} "
-        f"has no ForeignKey to its declared parent "
-        f"{entry.parent_app_label}.{entry.parent_model_name}. "
-        f"Update parent_app_label/parent_model_name in the registry, or "
-        f"add the expected FK."
+        f"Remediated child table {child_table} has no ForeignKey to "
+        f"AF12 parent {parent_table} for {constraint_name}."
     )
 
 
@@ -647,40 +647,6 @@ def test_enrolled_model_has_force_rls_policy(entry: Any) -> None:
 # ``(id, organization_id)`` unique pair, replacing the old trigger-based
 # equality approach (AF1 Phase 2).
 # ---------------------------------------------------------------------------
-
-#: (child_table, constraint_name, parent_table) for every AF12 composite FK.
-_AF12_COMPOSITE_FK_PAIRS: tuple[tuple[str, str, str], ...] = (
-    (
-        "quickscale_modules_crm_contactnote",
-        "crm_contactnote_contact_org_fk",
-        "quickscale_modules_crm_contact",
-    ),
-    (
-        "quickscale_modules_crm_dealnote",
-        "crm_dealnote_deal_org_fk",
-        "quickscale_modules_crm_deal",
-    ),
-    (
-        "quickscale_modules_forms_formfield",
-        "forms_formfield_form_org_fk",
-        "quickscale_modules_forms_form",
-    ),
-    (
-        "quickscale_modules_forms_formsubmission",
-        "forms_formsubmission_form_org_fk",
-        "quickscale_modules_forms_form",
-    ),
-    (
-        "quickscale_modules_forms_formfieldvalue",
-        "forms_formfieldvalue_submission_org_fk",
-        "quickscale_modules_forms_formsubmission",
-    ),
-    (
-        "quickscale_modules_forms_formfieldvalue",
-        "forms_formfieldvalue_field_org_fk",
-        "quickscale_modules_forms_formfield",
-    ),
-)
 
 
 @pytest.mark.django_db
