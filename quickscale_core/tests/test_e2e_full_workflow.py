@@ -247,14 +247,11 @@ def docker_available() -> None:
 
 
 @pytest.fixture(scope="session")
-def playwright_browser_available() -> None:
+def playwright_browser_available(playwright) -> None:
     """Skip browser E2E tests if Playwright Chromium cannot launch."""
     try:
-        from playwright.sync_api import sync_playwright
-
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
-            browser.close()
+        browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
+        browser.close()
     except Exception as exc:
         pytest.skip(f"Playwright browser is unavailable: {exc}")
 

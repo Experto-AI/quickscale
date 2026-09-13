@@ -72,15 +72,15 @@ def _billing_user_ids() -> list[int]:
     CreditBalance = _billing_model("CreditBalance")
     CreditTransaction = _billing_model("CreditTransaction")
     user_ids = {
-        *Subscription.objects.exclude(user_id__isnull=True).values_list(
+        *Subscription.all_objects.exclude(user_id__isnull=True).values_list(
             "user_id",
             flat=True,
         ),
-        *CreditBalance.objects.exclude(user_id__isnull=True).values_list(
+        *CreditBalance.all_objects.exclude(user_id__isnull=True).values_list(
             "user_id",
             flat=True,
         ),
-        *CreditTransaction.objects.exclude(user_id__isnull=True).values_list(
+        *CreditTransaction.all_objects.exclude(user_id__isnull=True).values_list(
             "user_id",
             flat=True,
         ),
@@ -92,7 +92,7 @@ def _candidate_customer_ids_for_user(*, user_id: int) -> set[str]:
     Subscription = _billing_model("Subscription")
     historical_customer_ids: set[str] = set()
     current_customer_ids: set[str] = set()
-    for status, stripe_customer_id in Subscription.objects.filter(
+    for status, stripe_customer_id in Subscription.all_objects.filter(
         user_id=user_id
     ).values_list(
         "status",
@@ -113,7 +113,7 @@ def _collect_unmigratable_row_messages() -> list[str]:
     CreditTransaction = _billing_model("CreditTransaction")
     messages: list[str] = []
     unresolved_subscription_ids = list(
-        Subscription.objects.filter(
+        Subscription.all_objects.filter(
             user_id__isnull=True, organization_id__isnull=True
         ).values_list("pk", flat=True)[:5]
     )
@@ -124,7 +124,7 @@ def _collect_unmigratable_row_messages() -> list[str]:
         )
 
     unresolved_balance_ids = list(
-        CreditBalance.objects.filter(
+        CreditBalance.all_objects.filter(
             user_id__isnull=True, organization_id__isnull=True
         ).values_list("pk", flat=True)[:5]
     )
@@ -135,7 +135,7 @@ def _collect_unmigratable_row_messages() -> list[str]:
         )
 
     unresolved_transaction_ids = list(
-        CreditTransaction.objects.filter(
+        CreditTransaction.all_objects.filter(
             user_id__isnull=True,
             organization_id__isnull=True,
         ).values_list("pk", flat=True)[:5]
@@ -155,6 +155,7 @@ class Command(BaseCommand):
         "authoritative organization for each billing user without guessing through ambiguity."
     )
 
+    @transaction.atomic
     def handle(self, *args: object, **options: object) -> None:
         del args, options
         Subscription = _billing_model("Subscription")
@@ -184,15 +185,15 @@ class Command(BaseCommand):
                 continue
 
             existing_org_ids = {
-                *Subscription.objects.filter(
+                *Subscription.all_objects.filter(
                     user_id=user_id,
                     organization_id__isnull=False,
                 ).values_list("organization_id", flat=True),
-                *CreditBalance.objects.filter(
+                *CreditBalance.all_objects.filter(
                     user_id=user_id,
                     organization_id__isnull=False,
                 ).values_list("organization_id", flat=True),
-                *CreditTransaction.objects.filter(
+                *CreditTransaction.all_objects.filter(
                     user_id=user_id,
                     organization_id__isnull=False,
                 ).values_list("organization_id", flat=True),
@@ -214,7 +215,7 @@ class Command(BaseCommand):
                 continue
 
             current_subscription_ids_by_org[organization.pk].extend(
-                Subscription.objects.filter(
+                Subscription.all_objects.filter(
                     user_id=user_id,
                     status__in=Subscription.current_statuses(),
                 )
@@ -224,7 +225,7 @@ class Command(BaseCommand):
                 .values_list("pk", flat=True)
             )
             credit_balance_ids_by_org[organization.pk].extend(
-                CreditBalance.objects.filter(user_id=user_id)
+                CreditBalance.all_objects.filter(user_id=user_id)
                 .filter(
                     Q(organization_id__isnull=True) | Q(organization_id=organization.pk)
                 )
@@ -298,15 +299,15 @@ class Command(BaseCommand):
                 organization = plan_entry["organization"]
                 assert isinstance(organization, Organization)
 
-                subscriptions_updated = Subscription.objects.filter(
+                subscriptions_updated = Subscription.all_objects.filter(
                     user_id=user.pk,
                     organization_id__isnull=True,
                 ).update(organization_id=organization.pk)
-                balances_updated = CreditBalance.objects.filter(
+                balances_updated = CreditBalance.all_objects.filter(
                     user_id=user.pk,
                     organization_id__isnull=True,
                 ).update(organization_id=organization.pk)
-                transactions_updated = CreditTransaction.objects.filter(
+                transactions_updated = CreditTransaction.all_objects.filter(
                     user_id=user.pk,
                     organization_id__isnull=True,
                 ).update(organization_id=organization.pk)

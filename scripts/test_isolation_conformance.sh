@@ -154,41 +154,17 @@ SKIPPED_FOUND=0
 for xml_file in "${ISOLATION_XML_DIR}"/*.xml; do
   [ -f "$xml_file" ] || continue
 
-  # An empty pytest parametrize set reports as a skip, but it is not an
-  # environment skip: the isolation registry parametrizes over
-  # PENDING_REMEDIATION entries, and zero of them is the healthy state that
-  # test_exactly_zero_pending_remediation_entries independently asserts.
-  # Failing on it would make the gate red precisely when the registry is
-  # clean. Only the two pending-remediation assertions are allowed to report
-  # an empty parameter set; every other skip reason still fails the gate.
   skip_report=$(python3 -c "
 import xml.etree.ElementTree as ET
 
-AUTHORIZED_EMPTY_PARAMETER_TESTS = {
-    'test_pending_remediation_has_equality_footprint',
-    'test_pending_remediation_parent_fk_matches_seam',
-}
-
-def pytest_base_identity(testcase_name):
-    identity = testcase_name.strip()
-    if '::' in identity:
-        identity = identity.rsplit('::', 1)[1]
-    return identity.split('[', 1)[0].strip()
-
 tree = ET.parse('${xml_file}')
-genuine = []
+skipped_tests = []
 for case in tree.getroot().findall('.//testcase'):
     for skipped in case.findall('skipped'):
         message = skipped.get('message', '')
-        identity = pytest_base_identity(case.get('name', ''))
-        if (
-            message.startswith('got empty parameter set')
-            and identity in AUTHORIZED_EMPTY_PARAMETER_TESTS
-        ):
-            continue
-        genuine.append(f\"{case.get('name')}: {message}\")
-print(len(genuine))
-for line in genuine:
+        skipped_tests.append(f\"{case.get('name')}: {message}\")
+print(len(skipped_tests))
+for line in skipped_tests:
     print(line)
 ")
   skip_count=$(printf '%s\n' "$skip_report" | head -1)

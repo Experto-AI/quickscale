@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -13,8 +14,13 @@ from quickscale_core.generator.runtime_pins import POSTGRES_VERSION
 class TestProjectGenerationIntegration:
     """End-to-end integration tests"""
 
-    def test_generate_and_validate_project(self, tmp_path):
+    def test_generate_and_validate_project(
+        self,
+        tmp_path: Path,
+        hermetic_poetry_lock: tuple[str, Path],
+    ) -> None:
         """Generate project and verify it's a valid Django project"""
+        lock_content, invocation_log = hermetic_poetry_lock
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "integration_test"
         output_path = tmp_path / project_name
@@ -26,8 +32,8 @@ class TestProjectGenerationIntegration:
         assert (output_path / "manage.py").exists()
         assert (output_path / project_name).is_dir()
         assert (output_path / "pyproject.toml").exists()
-        if not (output_path / "poetry.lock").exists():
-            pytest.skip("poetry.lock generation skipped (network unavailable)")
+        assert (output_path / "poetry.lock").read_text() == lock_content
+        assert invocation_log.read_text() == '["poetry", "lock"]\n'
 
         # Verify manage.py can be executed
         manage_py = output_path / "manage.py"

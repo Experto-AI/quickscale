@@ -1,8 +1,9 @@
 name: Nightly BYPASSRLS Tests
 
 # Runs the `-m bypass_rls` migration/FORCE-RLS proof tests that the main CI
-# integration job deliberately skips (it pins QUICKSCALE_ALLOW_BYPASSRLS=0 to
-# keep the SA58 boot guard active against a NOBYPASSRLS role). Those tests need
+# integration job deliberately deselects (authorization is absent unless the
+# value is exactly "1", keeping the boot guard active against a NOBYPASSRLS
+# role). Those tests need
 # a role WITH the BYPASSRLS attribute to exercise privileged migration DDL, so
 # they run here on a separate schedule against a dedicated BYPASSRLS role.
 #
@@ -15,6 +16,7 @@ on:
     # 03:17 UTC daily (off-peak, avoids top-of-hour contention).
     - cron: "17 3 * * *"
   workflow_dispatch: {}
+  workflow_call: {}
 
 jobs:
   bypassrls:
@@ -80,5 +82,7 @@ jobs:
       run: scripts/provision_ci_postgres.sh hosted-setup --profile bypassrls
 
     - name: Run BYPASSRLS-privileged tests (make test-bypassrls)
+      env:
+        QUICKSCALE_ALLOW_BYPASSRLS: "1"
       run: |
         make test-bypassrls

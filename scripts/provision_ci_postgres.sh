@@ -434,6 +434,12 @@ append_github_env() {
     key="${line%%=*}"; value="${line#*=}"
     [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || die "unsafe GITHUB_ENV key"
     [[ "$value" != *$'\n'* && "$value" != *$'\r'* && "$value" != *'<<'* ]] || die "unsafe GITHUB_ENV value"
+    # The BYPASSRLS profile prepares a privileged role, but only the consumer
+    # test step may authorize its use.  Never widen that exact-"1" escape hatch
+    # to every later step in the hosted job through GITHUB_ENV.
+    if [[ "$PROFILE" == bypassrls && "$key" == QUICKSCALE_ALLOW_BYPASSRLS ]]; then
+      continue
+    fi
     printf '%s=%s\n' "$key" "$value" >> "$env_file"
   done < <(description_json | "$PYTHON" -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(f"{k}={v}" for k,v in d["environment"].items()))')
   printf 'QUICKSCALE_POSTGRES_LEASE=%s\nQUICKSCALE_POSTGRES_LEASE_TOKEN=%s\n' "$LEASE_FILE" "$LEASE_TOKEN" >> "$env_file"

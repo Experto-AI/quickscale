@@ -526,7 +526,7 @@ def test_help_stage_numbers_match_runtime_stage_order(tmp_path: Path) -> None:
     assert help_headings[-1] == runtime_prefixes[-1][0] + 1
     for grouped_heading in (
         "  6. Module app declaration and org-context primitives gates",
-        "  7. CSRF-exempt, commit-testimony, registered script suites, dependency vulnerability, "
+        "  7. CSRF-exempt, registered script suites, dependency vulnerability, "
         "and security static-analysis gates",
         "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint",
         " 12. E2E tests (optional, with --e2e flag)",

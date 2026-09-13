@@ -21,7 +21,8 @@ OPTIONAL ENVIRONMENT VARIABLES:
 - TRUSTED_PROXY_COUNT: Defaults to ``1``; the number of reverse proxies in front of the app
 
 COMMAND-MODE ENVIRONMENT VARIABLES (mutually exclusive, one-shot):
-- QUICKSCALE_PRIVILEGED_COMMAND: Set by start.sh to ``migrate`` or ``createcachetable``
+- QUICKSCALE_PRIVILEGED_COMMAND: Set by a launcher to ``migrate``, ``createcachetable``,
+  or ``migrate_billing_to_orgs``
   to run privileged DB commands with the superuser ``DATABASE_URL``. Requires
   ``RUNTIME_DATABASE_URL=""`` (explicitly blank).
 - QUICKSCALE_NON_DB_COMMAND: Set by the launcher to ``collectstatic`` or
@@ -137,8 +138,8 @@ REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else 
 # raises a clear error instead of silently falling back to the privileged
 # superuser DATABASE_URL.
 #
-# Privileged DB commands (migrate, createcachetable) are launched by
-# start.sh with QUICKSCALE_PRIVILEGED_COMMAND and RUNTIME_DATABASE_URL=""
+# Privileged DB commands (migrate, createcachetable, migrate_billing_to_orgs) are
+# launched with QUICKSCALE_PRIVILEGED_COMMAND and RUNTIME_DATABASE_URL=""
 # so the superuser DATABASE_URL is used instead (schema changes require
 # elevated privileges).
 #
@@ -152,7 +153,9 @@ database_url = config("DATABASE_URL", default=None)
 _privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")
 _non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")
 
-_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})
+_KNOWN_PRIVILEGED_COMMANDS = frozenset(
+    {"migrate", "createcachetable", "migrate_billing_to_orgs"}
+)
 _KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})
 
 # Mutual exclusivity: cannot set both command-mode vars simultaneously.

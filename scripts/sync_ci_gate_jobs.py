@@ -70,6 +70,9 @@ HOSTED_GATE_ORDER = (
     "check-security-static-analysis",
 )
 UNOWNED_JOB_RATIONALES = {
+    "bypassrls": (
+        "The reusable service-backed BYPASSRLS suite remains a separately owned hosted job."
+    ),
     "lint-frontend": "Frontend toolchain validation remains a separately owned hosted job.",
     "backups-validation": (
         "Hosted PostgreSQL 18 service and client validation remains a fail-fast job."
@@ -88,6 +91,7 @@ UNOWNED_JOB_RATIONALES = {
 UNOWNED_JOB_IDS = frozenset(UNOWNED_JOB_RATIONALES)
 EXPECTED_UNOWNED_JOB_IDS = frozenset(
     {
+        "bypassrls",
         "lint-frontend",
         "backups-validation",
         "module-manifest-contract",
@@ -175,7 +179,7 @@ class GeneratorError(ValueError):
 def _validate_unowned_job_rationales() -> None:
     if frozenset(UNOWNED_JOB_RATIONALES) != EXPECTED_UNOWNED_JOB_IDS:
         raise GeneratorError(
-            "unowned hosted-job rationale keys do not match the six-job exemption set"
+            "unowned hosted-job rationale keys do not match the seven-job exemption set"
         )
     if any(
         not isinstance(reason, str) or not reason.strip()

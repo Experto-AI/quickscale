@@ -756,6 +756,31 @@ def test_hosted_setup_is_github_only_and_client_only_writes_lease(tmp_path: Path
     assert (lease_dirs[0] / "lease").stat().st_mode & 0o777 == 0o600
 
 
+def test_hosted_bypassrls_setup_keeps_authorization_step_scoped(tmp_path: Path) -> None:
+    """Provisioning persists its role mapping, but not the privileged escape hatch."""
+    tools, _ = fake_local_lifecycle_tools(tmp_path)
+    github_env = tmp_path / "GITHUB_ENV"
+
+    result = invoke(
+        "hosted-setup",
+        "--profile",
+        "bypassrls",
+        env={
+            "GITHUB_ACTIONS": "true",
+            "RUNNER_TEMP": str(tmp_path),
+            "GITHUB_ENV": str(github_env),
+            "PATH": f"{tools}:/usr/bin",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    lines = github_env.read_text().splitlines()
+    assert "QS_ANALYTICS_DB_USER=quickscale_bypassrls_test_role" in lines
+    assert not any(line.startswith("QUICKSCALE_ALLOW_BYPASSRLS=") for line in lines)
+    assert any(line.startswith("QUICKSCALE_POSTGRES_LEASE=") for line in lines)
+    assert any(line.startswith("QUICKSCALE_POSTGRES_LEASE_TOKEN=") for line in lines)
+
+
 @pytest.mark.parametrize("kind", ["forged", "stale", "mismatched"])
 def test_forged_stale_and_profile_mismatched_leases_fail_closed(tmp_path: Path, kind: str) -> None:
     directory = tmp_path / "lease-dir"
@@ -971,24 +996,18 @@ printf '%s' "$xml" > "$xml_file"
     )
 
 
-def test_isolation_empty_parameter_skip_authorization_is_identity_based(
+def test_isolation_empty_parameter_skips_fail_closed(
     tmp_path: Path,
 ) -> None:
-    """Only the two pending-remediation identities may be empty-param skips."""
-    authorized = _run_isolation_classifier(
-        tmp_path / "authorized",
-        (
-            "test_pending_remediation_has_equality_footprint[form-field]",
-            "test_pending_remediation_parent_fk_matches_seam[form-field]",
-        ),
-    )
-    assert authorized.returncode == 0, authorized.stdout + authorized.stderr
-    assert "No isolation tests skipped" in authorized.stdout
+    """Even empty-parameter skips fail the zero-skip isolation gate."""
+    clean = _run_isolation_classifier(tmp_path / "clean", ())
+    assert clean.returncode == 0, clean.stdout + clean.stderr
+    assert "No isolation tests skipped" in clean.stdout
 
-    enrolled = _run_isolation_classifier(
-        tmp_path / "enrolled",
-        ("test_enrolled_model_has_organization_id[forms.FormField]",),
+    empty_parameter = _run_isolation_classifier(
+        tmp_path / "empty-parameter",
+        ("test_completed_remediation_child_is_enrolled[form-field]",),
     )
-    assert enrolled.returncode != 0
-    assert "Some isolation tests were skipped" in enrolled.stdout
-    assert "test_enrolled_model_has_organization_id[forms.FormField]" in enrolled.stdout
+    assert empty_parameter.returncode != 0
+    assert "Some isolation tests were skipped" in empty_parameter.stdout
+    assert "test_completed_remediation_child_is_enrolled[form-field]" in empty_parameter.stdout

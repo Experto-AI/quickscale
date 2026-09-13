@@ -76,7 +76,7 @@ component internals, dr_engine internals.
 | Last-owner deletion is rejected through ORM paths | Canonical predicate, locked model delete, `pre_delete` receiver | Structural; cross-domain cleanup boundary-owned | unchanged |
 | Generated emission is byte-identical to the recorded manifest | SA90 fixture hash/mode comparison, with `_HOST_DEPENDENT_PATHS` exception | Gated, one exception entry | unchanged (still 1 entry — monotonic) |
 | **CI runtime environment (PG18 client, test DBs, roles, DB users)** | `scripts/provision_ci_postgres.sh` — one profile authority, five profiles, module list derived from the discovery shim | **Structural and gated** | **strengthened** — was "convention only, 4 divergent variants" |
-| Hosted CI job set is closed (no unregistered `ci.yml` job) | `sync_ci_gate_jobs.py:355-383` — `UNOWNED_JOB_IDS ∪ registry-bound` must equal the job set | Structural | unchanged (10 hosted + 6 unowned = 16) |
+| Hosted CI job set is closed (no unregistered `ci.yml` job) | `sync_ci_gate_jobs.py:358-386` — `UNOWNED_JOB_IDS ∪ registry-bound` must equal the job set | Structural | strengthened (10 hosted + 7 unowned = 17; dedicated BYPASSRLS lane joined) |
 | Declared gates are present in every required context | `check_gate_parity.py` registry→context membership | Gated, one-directional and registry-scoped | unchanged |
 | Gate implementations behave as specified | Retained `scripts/test_*.py` suites; registered `check-gate-suites` gate | Gated, cache/coverage-disabled | unchanged |
 | Planning-document counts agree across consumers | Counts **derived** from `roadmap.md`, asserted against `docs/index.md`, with a red-canary consistency test | **Gated and derived** | **strengthened** — literal ticket IDs, dates, positions and prose removed (`48e0a62a`) |
@@ -308,12 +308,12 @@ one call per station and the module list is derived. The registration half is in
 (`sync_ci_gate_jobs.py:60`), `HOSTED_JOB_CATALOG` (line 123), `NEEDS_GATE_IDS` (line 97), hand-edited
 `publish.yml`, three `case` arms in `check_ci_locally.sh` (lines 261, 313, 447), and exactly eight
 count-pinned oracle sites in `test_gate_parity.py` (three `all_ten` names, two `all_seven` names,
-the `all_twenty` run-value oracle, the 16-job projection literal, and `exactly_six`).
+ the `all_twenty` run-value oracle, the 17-job projection literal, and `exactly_six`).
 
 **Verdict: registration remains watchlist-scale; the fired count-oracle trigger is separately
 promoted.** Every station is protected by the closed-universe check at
-`sync_ci_gate_jobs.py:355-383`, which raises when `UNOWNED_JOB_IDS ∪ registry-bound` ≠ the actual
-16-job set. A missed station is a **red build, not silent drift** — the decisive difference from the
+`sync_ci_gate_jobs.py:358-386`, which raises when `UNOWNED_JOB_IDS ∪ registry-bound` ≠ the actual
+17-job set. A missed station is a **red build, not silent drift** — the decisive difference from the
 resolved environment finding, and from Probe A. That safeguard does not undo the historical evidence
 that the written count-oracle trigger fired; its promoted follow-up is recorded below.
 
@@ -385,7 +385,7 @@ independent of the generated-file ownership finding and should be designed toget
   **Not fired** — the DR contract does not require agreement today.
 - **Count-pinned oracles in `test_gate_parity.py` — trigger fired; separate follow-up promoted.**
   The current population is exactly **eight** sites: three `all_ten` names, two `all_seven` names,
-  the `all_twenty` run-value oracle, the 16-job projection literal, and `exactly_six`. **Trigger:**
+  the `all_twenty` run-value oracle, the 17-job projection literal, and `exactly_six`. **Trigger:**
   the next gate addition paying more than two oracle edits, or the counts disagreeing across two
   oracles. **Trigger fired.** Git history shows both `d31c6b41` and `437dd0e0` changed at least three
   logical count-oracle families and five literal sites while adding a gate, exceeding the written

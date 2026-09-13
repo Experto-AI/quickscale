@@ -58,7 +58,9 @@ QS_E2E_INTEGRATION_REF=<integration-branch> make ci-e2e
 
 Pass `QS_E2E_INTEGRATION_REF` explicitly — the default is a previous release branch and the
 provenance banner will otherwise compare against the wrong ref. **A partial run never satisfies this
-gate**; it announces itself as `PARTIAL CI — NOT a full pass`.
+gate**; it announces itself as `PARTIAL CI — NOT a full pass`. The unscoped target follows its
+restricted aggregate with the dedicated `make test-bypassrls` lane exactly once; partial stage
+reruns do not acquire the privileged profile.
 
 Then the closeout lanes from
 [validation_policy.md §Clean-Initial Migration Acceptance](validation_policy.md#clean-initial-migration-acceptance-sa151):

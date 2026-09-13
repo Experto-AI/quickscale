@@ -288,7 +288,7 @@ class TestPerformModuleEmbed:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
-        (module_dir / "module.yml").write_text('name: auth\nversion: "0.87.0"\n')
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.88.0"\n')
 
         result = _perform_module_embed(
             tmp_path,
@@ -297,7 +297,7 @@ class TestPerformModuleEmbed:
             "splits/auth-module",
             {},
             source_ref="a" * 40,
-            selected_ref="splits/auth-module/0.87.0",
+            selected_ref="splits/auth-module/0.88.0",
         )
 
         assert result[0] is True
@@ -307,7 +307,7 @@ class TestPerformModuleEmbed:
             module_name="auth",
             prefix="modules/auth",
             branch="splits/auth-module",
-            version="0.87.0",
+            version="0.88.0",
             project_path=tmp_path,
         )
         mock_sync_dependencies.assert_called_once_with(tmp_path, {"auth": {}})
@@ -316,7 +316,7 @@ class TestPerformModuleEmbed:
             tmp_path, module_names=["auth"], option_overrides={"auth": {}}
         )
         output = capsys.readouterr().out
-        assert "Selected ref: splits/auth-module/0.87.0" in output
+        assert "Selected ref: splits/auth-module/0.88.0" in output
         assert "Branch: splits/auth-module" not in output
 
     @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
@@ -341,7 +341,7 @@ class TestPerformModuleEmbed:
         mock_install.return_value = True
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.88.0"\n')
 
         configurator = Mock(return_value={})
 
@@ -389,7 +389,7 @@ class TestPerformModuleEmbed:
         module_dir = tmp_path / "modules" / "listings"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
-        (module_dir / "module.yml").write_text('name: listings\nversion: "0.87.0"\n')
+        (module_dir / "module.yml").write_text('name: listings\nversion: "0.88.0"\n')
 
         result = _perform_module_embed(
             tmp_path,
@@ -437,7 +437,7 @@ class TestPerformModuleEmbed:
             del remote, branch, squash
             module_dir = tmp_path / prefix
             module_dir.mkdir(parents=True, exist_ok=True)
-            (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
+            (module_dir / "module.yml").write_text('name: blog\nversion: "0.88.0"\n')
 
         with (
             patch(
@@ -488,7 +488,7 @@ class TestPerformModuleEmbed:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
-        (module_dir / "module.yml").write_text('name: auth\nversion: "0.87.0"\n')
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.88.0"\n')
 
         resolved_sha = "b" * 40
         success, provenance = _perform_module_embed(
@@ -515,7 +515,7 @@ class TestPerformModuleEmbed:
         assert provenance.tracking_branch == "splits/auth-module"
         assert provenance.module_name == "auth"
         assert provenance.prefix == "modules/auth"
-        assert provenance.installed_version == "0.87.0"
+        assert provenance.installed_version == "0.88.0"
         assert provenance.selected_ref == "feature/preseal-auth"
         mock_wiring.assert_called_once()
         assert "Selected ref: feature/preseal-auth" in capsys.readouterr().out
@@ -622,7 +622,7 @@ class TestModuleVersionMismatchEnforcement:
         """Embed must succeed when the module version matches the core version."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: auth\nversion: "0.87.0"\n')
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.88.0"\n')
 
         with (
             patch(
@@ -986,7 +986,7 @@ class TestEmbedModule:
         """Standalone embed should keep its immediate managed-wiring pass."""
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.88.0"\n')
 
         with (
             patch(
@@ -1309,8 +1309,8 @@ class TestEmbedModule:
             prefix="modules/auth",
             tracking_branch="splits/auth-module",
             source_ref=resolved_sha,
-            installed_version="0.87.0",
-            selected_ref="splits/auth-module/0.87.0",
+            installed_version="0.88.0",
+            selected_ref="splits/auth-module/0.88.0",
         )
         mock_perform.return_value = (True, expected_provenance)
 
@@ -1327,7 +1327,7 @@ class TestEmbedModule:
         # source_ref resolved exactly once after immutable tag validation
         mock_resolve.assert_called_once_with(
             "https://github.com/Experto-AI/quickscale.git",
-            "splits/auth-module/0.87.0",
+            "splits/auth-module/0.88.0",
         )
         # resolved SHA forwarded to _perform_module_embed for subtree add
         mock_perform.assert_called_once()
@@ -1370,7 +1370,7 @@ class TestEmbedModule:
         assert result is True
         mock_resolve.assert_called_once_with(
             "https://github.com/Experto-AI/quickscale.git",
-            "splits/auth-module/0.87.0",
+            "splits/auth-module/0.88.0",
         )
         assert mock_perform.call_args.kwargs["source_ref"] == resolved_sha
 
@@ -3181,7 +3181,7 @@ class TestUpdatePathDependencySync:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text(
-            'name: auth\nversion: "0.87.0"\ndependencies:\n  - django-allauth>=0.63.0\n'
+            'name: auth\nversion: "0.88.0"\ndependencies:\n  - django-allauth>=0.63.0\n'
         )
         (module_dir / "pyproject.toml").write_text(
             '[project]\nname = "quickscale-module-auth"\n\n'
@@ -3686,7 +3686,7 @@ class TestAF5RecoveryLedgerRegression:
 # Uses the real regenerate_managed_wiring — not the CLI or apply_command —
 # so there are no network/git/Docker/database mutations.
 # All 12 module manifests in quickscale_modules/ are already canonical
-# and in sync with VERSION (0.87.0).
+# and in sync with VERSION (0.88.0).
 # ============================================================================
 
 
@@ -3767,7 +3767,7 @@ class TestApplyAllModulesManagedWiringAcceptance:
 
         # Copy real module.yml files from the maintainer monorepo into
         # the embedded modules directory so the wiring function finds
-        # them.  All 12 manifests are already at version 0.87.0 which
+        # them.  All 12 manifests are already at version 0.88.0 which
         # matches the current core version.
         #
         # __file__ is quickscale_cli/tests/commands/test_module_commands.py;

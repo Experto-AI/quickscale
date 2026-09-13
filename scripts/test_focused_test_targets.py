@@ -110,6 +110,26 @@ def test_ci_without_selection_forwards_no_stage_flags() -> None:
         assert flag not in recipe
 
 
+def test_full_ci_e2e_runs_privileged_lane_once_after_restricted_ci() -> None:
+    recipe = _recipe("ci-e2e")
+    restricted = "scripts/check_ci_locally.sh --e2e"
+    privileged = "make test-bypassrls"
+    assert recipe.count(privileged) == 1
+    assert recipe.index(restricted) < recipe.index(privileged)
+
+
+@pytest.mark.parametrize(
+    "selector",
+    ["ONLY=integration", "FROM=coverage", "SKIP_INSTALL=1"],
+)
+def test_partial_ci_e2e_does_not_run_privileged_lane(selector: str) -> None:
+    assert "make test-bypassrls" not in _recipe("ci-e2e", selector)
+
+
+def test_release_gate_does_not_repeat_ci_e2e_privileged_lane() -> None:
+    assert "make test-bypassrls" not in _recipe("release-gate")
+
+
 def test_integration_focus_disables_the_module_coverage_gate() -> None:
     """The per-module mean-coverage check is as meaningless on a subset."""
     recipe = _recipe("test-integration", "K=test_example")

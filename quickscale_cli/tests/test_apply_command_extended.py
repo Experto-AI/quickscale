@@ -821,7 +821,7 @@ class TestEmbedModule:
         """Apply embedding should skip the per-module managed-wiring pass."""
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.88.0"\n')
 
         with (
             patch(
@@ -2915,7 +2915,7 @@ class TestSyncProjectModuleDependenciesForApply:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text(
-            'name: auth\nversion: "0.87.0"\ndependencies:\n  - django-allauth>=0.63.0\n'
+            'name: auth\nversion: "0.88.0"\ndependencies:\n  - django-allauth>=0.63.0\n'
         )
         (module_dir / "pyproject.toml").write_text(
             '[project]\nname = "quickscale-module-auth"\n\n'

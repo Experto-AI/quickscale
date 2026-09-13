@@ -143,8 +143,13 @@ class TestProjectGeneratorGeneration:
         assert makefile.exists()
         assert ".DEFAULT_GOAL := help" in makefile.read_text()
 
-    def test_generate_creates_project_structure(self, tmp_path: Path) -> None:
+    def test_generate_creates_project_structure(
+        self,
+        tmp_path: Path,
+        hermetic_poetry_lock: tuple[str, Path],
+    ) -> None:
         """Should create complete project structure"""
+        lock_content, invocation_log = hermetic_poetry_lock
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "testproject"
         output_path = tmp_path / project_name
@@ -154,8 +159,8 @@ class TestProjectGeneratorGeneration:
         # Check root files exist
         assert (output_path / "manage.py").exists()
         assert (output_path / "pyproject.toml").exists()
-        if not (output_path / "poetry.lock").exists():
-            pytest.skip("poetry.lock generation skipped (network unavailable)")
+        assert (output_path / "poetry.lock").read_text() == lock_content
+        assert invocation_log.read_text() == '["poetry", "lock"]\n'
         assert (output_path / ".gitignore").exists()
         assert (output_path / "Dockerfile").exists()
         assert (output_path / "docker-compose.yml").exists()

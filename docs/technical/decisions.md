@@ -766,7 +766,8 @@ set as inline command prefixes — never as persistent environment configuration
 **Design:**
 
 1. **``QUICKSCALE_PRIVILEGED_COMMAND``** — Privileged DB operations that
-   require the superuser ``DATABASE_URL`` (``migrate``, ``createcachetable``).
+   require the superuser ``DATABASE_URL`` (``migrate``, ``createcachetable``,
+   ``migrate_billing_to_orgs``).
    The launcher sets this as an inline prefix *and* blanks
    ``RUNTIME_DATABASE_URL=""`` so the superuser role is used for schema
    changes (the runtime role has ``NOSUPERUSER``/``NOBYPASSRLS`` and cannot
@@ -798,7 +799,7 @@ set as inline command prefixes — never as persistent environment configuration
 
 | Variable | Values | Set by | Connection selected |
 |---|---|---|---|
-| ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable`` | ``start.sh`` (inline prefix) | ``DATABASE_URL`` (superuser) |
+| ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable``, ``migrate_billing_to_orgs`` | ``start.sh`` / ``quickscale manage`` (inline prefix) | ``DATABASE_URL`` (superuser) |
 | ``QUICKSCALE_NON_DB_COMMAND`` | ``collectstatic``, ``compilemessages`` | ``Dockerfile`` build step (inline prefix) | Dummy ``postgresql://`` URL |
 
 **Related:** [Fail-Hard Principle](#fail-hard-principle) (the mutual-exclusion
@@ -904,9 +905,9 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
 - **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
-  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate`, `createcachetable`) — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `apps.py` module guard, generated production-settings validator, CLI producer, and generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
+  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate`, `createcachetable`, `migrate_billing_to_orgs`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The three-command contract is independently declared by the `apps.py` module guard, generated production-settings validator, CLI producer, and generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — environment-variable escape hatch for intentional single-tenant or development use.
-- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; `runserver`/`gunicorn` must still use the restricted runtime role
+- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate`, `createcachetable`, and its explicit one-shot `migrate_billing_to_orgs` mode; `quickscale manage migrate_billing_to_orgs` applies the same inline environment pair; `runserver`/`gunicorn` must still use the restricted runtime role
 
 **Isolation architecture rules (permanent):**
 - Registry authority: the marker-based derived registry overview (:func:`get_derived_registry_overview`) is the authoritative human-readable view of the shipped tenant-table surface. The derived view is purely marker-driven (``tenant_excluded`` attributes, ``TenantManager``/``TenantModel`` detection, and implicit M2M through inference) with no fallback to the literal ``TENANT_TABLE_REGISTRY``. The literal ``TENANT_TABLE_REGISTRY`` remains in place as a cross-check target so CI can confirm the two views stay in agreement. Its 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and a live FORCE-RLS policy.

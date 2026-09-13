@@ -22,8 +22,8 @@ from django.test import Client
 
 # SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
-# The collection hook below skips bypass_rls-marked tests when the env var
-# is not set. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
+# The collection hook below deselects bypass_rls-marked tests unless the env var
+# is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
 #
 # NOTE: For modules that use pytest-django's --ds flag (like orgs), the
 # conftest module-level code runs after Django setup. The boot guard already
@@ -152,25 +152,29 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "bypass_rls: test requires BYPASSRLS database privilege "
-        "(superuser / migration DDL). Skipped when QUICKSCALE_ALLOW_BYPASSRLS "
-        "is not set.",
+        "(superuser / migration DDL). Deselected unless QUICKSCALE_ALLOW_BYPASSRLS "
+        "is exactly '1'.",
     )
 
 
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """Skip bypass_rls-marked tests when QUICKSCALE_ALLOW_BYPASSRLS is not set.
+    """Deselect bypass_rls tests unless QUICKSCALE_ALLOW_BYPASSRLS is exactly "1".
 
     Under NOBYPASSRLS (the default), migration tests and other
     BYPASSRLS-dependent tests are deselected so the suite passes
     cleanly with a restricted DB role.
     """
     if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
-        return  # BYPASSRLS available — run all tests
-    skip_bypass_rls = pytest.mark.skip(
-        reason="QUICKSCALE_ALLOW_BYPASSRLS not set — skipping BYPASSRLS-dependent test"
-    )
+        return  # Explicit BYPASSRLS authorization — run all tests
+    selected: list[pytest.Item] = []
+    deselected: list[pytest.Item] = []
     for item in items:
         if item.get_closest_marker("bypass_rls"):
-            item.add_marker(skip_bypass_rls)
+            deselected.append(item)
+        else:
+            selected.append(item)
+    items[:] = selected
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)

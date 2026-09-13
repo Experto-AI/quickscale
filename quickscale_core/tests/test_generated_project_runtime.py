@@ -26,6 +26,7 @@ import sys
 import textwrap
 import threading
 import time
+import tomllib
 import urllib.error
 import urllib.request
 from contextlib import ExitStack, contextmanager
@@ -80,6 +81,55 @@ def _copytree_for_generated_project_smoke(source: Path, destination: Path) -> No
         destination,
         ignore=_ignore_repo_local_artifacts,
     )
+
+
+@pytest.fixture
+def local_core_wheelhouse(tmp_path: Path) -> Iterator[Path]:
+    """Build the current core wheel from a clean temporary source copy."""
+    build_root = tmp_path / "local-core-wheel-build"
+    source_copy = build_root / "quickscale_core"
+    wheelhouse = build_root / "wheelhouse"
+    build_root.mkdir()
+    _copytree_for_generated_project_smoke(
+        REPO_ROOT / "quickscale_core",
+        source_copy,
+    )
+
+    version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    source_metadata = tomllib.loads(
+        (source_copy / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    assert source_metadata["project"]["name"] == "quickscale-core"
+    assert source_metadata["project"]["version"] == version
+
+    build_result = subprocess.run(
+        ["poetry", "build", "--format", "wheel"],
+        cwd=source_copy,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=_standalone_generated_env(),
+    )
+    assert build_result.returncode == 0, (
+        "Temporary quickscale-core wheel build failed:\n"
+        f"stdout: {build_result.stdout}\nstderr: {build_result.stderr}"
+    )
+    candidates = sorted((source_copy / "dist").glob("quickscale_core-*.whl"))
+    assert len(candidates) == 1, (
+        "Expected exactly one temporary quickscale-core wheel, got "
+        f"{[candidate.name for candidate in candidates]}"
+    )
+    assert candidates[0].name.startswith(f"quickscale_core-{version}-"), (
+        f"Temporary core wheel does not match VERSION {version}: {candidates[0].name}"
+    )
+    wheelhouse.mkdir()
+    shutil.copy2(candidates[0], wheelhouse / candidates[0].name)
+
+    try:
+        yield wheelhouse
+    finally:
+        if build_root.exists():
+            shutil.rmtree(build_root)
 
 
 def _is_poetry_network_failure(output: str) -> bool:
@@ -1890,7 +1940,9 @@ class TestGeneratedProjectRuntimeSmoke:
     def test_all_module_initial_migrations_apply_from_embedded_sources(
         self,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         postgres_service: dict[str, Any],
+        local_core_wheelhouse: Path,
     ) -> None:
         """Every authoritative embedded module migrates from a clean PG18 DB."""
         from quickscale_cli.utils.module_dependency_sync import (
@@ -1939,7 +1991,15 @@ class TestGeneratedProjectRuntimeSmoke:
             "showcase_react",
             options,
         )
-        sync_result = sync_project_module_dependencies(project_path, options)
+        wheel_candidates = sorted(local_core_wheelhouse.glob("quickscale_core-*.whl"))
+        assert len(wheel_candidates) == 1
+        wheel_name = wheel_candidates[0].name
+        with monkeypatch.context() as sync_environment:
+            sync_environment.setenv(
+                "QUICKSCALE_LOCAL_WHEELHOUSE",
+                str(local_core_wheelhouse),
+            )
+            sync_result = sync_project_module_dependencies(project_path, options)
         path_dependencies = {
             dependency
             for dependency in sync_result.added_path_dependencies
@@ -1951,10 +2011,87 @@ class TestGeneratedProjectRuntimeSmoke:
         for name in names:
             assert any(f"quickscale-module-{name}" in dep for dep in path_dependencies)
 
+        copied_core_wheel = project_path / ".quickscale" / "wheels" / wheel_name
+        assert copied_core_wheel.is_file()
+        root_dependencies = tomllib.loads(
+            (project_path / "pyproject.toml").read_text(encoding="utf-8")
+        )["tool"]["poetry"]["dependencies"]
+        backups_dependencies = tomllib.loads(
+            (project_path / "modules" / "backups" / "pyproject.toml").read_text(
+                encoding="utf-8"
+            )
+        )["tool"]["poetry"]["dependencies"]
+        expected_root_wheel_path = Path(
+            os.path.relpath(copied_core_wheel, start=project_path)
+        ).as_posix()
+        expected_backups_wheel_path = Path(
+            os.path.relpath(
+                copied_core_wheel,
+                start=project_path / "modules" / "backups",
+            )
+        ).as_posix()
+        assert root_dependencies["quickscale-core"] == {
+            "path": expected_root_wheel_path
+        }
+        assert backups_dependencies["quickscale-core"] == {
+            "path": expected_backups_wheel_path
+        }
+
+        external_build_root = local_core_wheelhouse.parent
+        shutil.rmtree(external_build_root)
+        assert not external_build_root.exists()
+
         success, message = regenerate_managed_wiring(project_path)
         assert success, f"regenerate_managed_wiring failed: {message}"
 
         _install_project_dependencies(project_path, strict=True)
+        version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        lock_data = tomllib.loads(
+            (project_path / "poetry.lock").read_text(encoding="utf-8")
+        )
+        locked_core_packages = [
+            package
+            for package in lock_data["package"]
+            if package["name"] == "quickscale-core"
+        ]
+        assert len(locked_core_packages) == 1
+        locked_core = locked_core_packages[0]
+        assert locked_core["version"] == version
+        assert locked_core["source"] == {
+            "type": "file",
+            "url": expected_root_wheel_path,
+        }
+
+        installed_core_probe = subprocess.run(
+            [
+                "poetry",
+                "run",
+                "python",
+                "-c",
+                (
+                    "import importlib.metadata, json, pathlib, quickscale_core; "
+                    "print(json.dumps({"
+                    "'version': importlib.metadata.version('quickscale-core'), "
+                    "'origin': str(pathlib.Path(quickscale_core.__file__).resolve())"
+                    "}))"
+                ),
+            ],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=_standalone_generated_env(),
+        )
+        assert installed_core_probe.returncode == 0, (
+            "Installed quickscale-core provenance probe failed:\n"
+            f"stdout: {installed_core_probe.stdout}\n"
+            f"stderr: {installed_core_probe.stderr}"
+        )
+        installed_core = json.loads(installed_core_probe.stdout)
+        installed_core_origin = Path(installed_core["origin"])
+        assert installed_core["version"] == version
+        assert installed_core_origin.is_relative_to((project_path / ".venv").resolve())
+        assert not installed_core_origin.is_relative_to(REPO_ROOT.resolve())
         assert not any(
             path.name == "wheelhouse" or "wheelhouse" in path.name
             for path in project_path.rglob("*")
@@ -2466,7 +2603,10 @@ class TestGeneratedProjectRuntimeSmoke:
 
     @pytest.mark.e2e
     def test_production_shell_csrf_token_accepts_authenticated_org_mutation(
-        self, tmp_path: Path, postgres_url: str
+        self,
+        tmp_path: Path,
+        postgres_url: str,
+        playwright: Any,
     ) -> None:
         """The generated production UI must pass enforced Django CSRF."""
         from quickscale_cli.commands.module_config import (
@@ -2680,8 +2820,6 @@ class TestGeneratedProjectRuntimeSmoke:
                 server_process=server_process,
             )
 
-            from playwright.sync_api import sync_playwright
-
             observed_proxy_requests: list[dict[str, Any]] = []
             proxy_diagnostics: dict[str, Any] = {}
             proxy_stack = ExitStack()
@@ -2697,7 +2835,8 @@ class TestGeneratedProjectRuntimeSmoke:
             assert proxy_diagnostics["certificate_generation_count"] == 1
             assert len(session_fingerprint) == 64
             api_url = f"{base_url}/api/orgs/"
-            with sync_playwright() as playwright:
+
+            def run_browser_assertions() -> None:
                 netlog_path = tmp_path / "chromium-netlog.json"
                 proxy_diagnostics["chromium_netlog_path"] = str(netlog_path)
                 browser_args = [
@@ -3000,6 +3139,8 @@ class TestGeneratedProjectRuntimeSmoke:
                         control_context.close()
                 finally:
                     browser.close()
+
+            run_browser_assertions()
         finally:
             if proxy_stack is not None:
                 proxy_stack.close()

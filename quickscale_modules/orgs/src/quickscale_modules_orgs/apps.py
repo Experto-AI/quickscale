@@ -6,7 +6,7 @@ with the BYPASSRLS privilege and/or the SUPERUSER attribute.  The guard
 has two narrow exemptions:
 
 1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned privileged
-   DB command (``migrate``, ``createcachetable``) — ``start.sh`` sets
+   DB command (``migrate``, ``createcachetable``, ``migrate_billing_to_orgs``) — launchers set
    this env var alongside ``RUNTIME_DATABASE_URL=""`` so DDL runs under
    the superuser ``DATABASE_URL`` with BYPASSRLS.
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
@@ -33,14 +33,17 @@ from django.db.backends.signals import connection_created
 # Module-guard declaration of the sanctioned privileged DB commands.
 # Keep it aligned with the independent fail-closed declarations in the production
 # settings validator, CLI producer, and generated start.sh launcher; none is a SSOT.
-_PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})
+_PRIVILEGED_COMMANDS: frozenset[str] = frozenset(
+    {"migrate", "createcachetable", "migrate_billing_to_orgs"}
+)
 
 
 def _is_privileged_command() -> bool:
     """Return ``True`` when ``QUICKSCALE_PRIVILEGED_COMMAND`` is set to a
     sanctioned privileged DB command.
 
-    Sanctioned values (``migrate``, ``createcachetable``) are exempt from
+    Sanctioned values (``migrate``, ``createcachetable``,
+    ``migrate_billing_to_orgs``) are exempt from
     the BYPASSRLS/SUPERUSER boot guard because the generated ``start.sh``
     sets this env var alongside ``RUNTIME_DATABASE_URL=""`` so that
     database DDL/DML runs under the superuser ``DATABASE_URL`` with
@@ -103,7 +106,7 @@ def _check_rls_role() -> None:
     or ``DEBUG``) with two narrow exemptions:
 
     1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned value
-       (``migrate``, ``createcachetable``) — handled in ``ready()``
+       (``migrate``, ``createcachetable``, ``migrate_billing_to_orgs``) — handled in ``ready()``
        before this is called.
     2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
        intentional single-tenant or development use.
@@ -173,7 +176,7 @@ class QuickscaleOrgsConfig(AppConfig):
         # ---- SA68 Phase 1 — BYPASSRLS/SUPERUSER boot guard -------------
         # Two narrow exemptions:
         #   1. QUICKSCALE_PRIVILEGED_COMMAND set to a sanctioned value
-        #      (migrate, createcachetable) — start.sh sets this env var
+        #      (migrate, createcachetable, migrate_billing_to_orgs) — launchers set this env var
         #      alongside RUNTIME_DATABASE_URL="" so DDL/DML runs under
         #      the superuser DATABASE_URL with BYPASSRLS.
         #   2. QUICKSCALE_ALLOW_BYPASSRLS=1 env-var escape hatch

@@ -23,7 +23,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make test-cov` - Combined coverage path (core + CLI + optional backups module) with dual-threshold enforcement.
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make retry` - Re-run only the tests recorded as failing by the last run; `make retry-show` prints those commands without running them.
-- `make ci-e2e` - CI-parity release-gate validation including E2E.
+- `make ci-e2e` - CI-parity release-gate validation including E2E and the dedicated BYPASSRLS lane.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
 - `make check-commit-testimony` - Require each behavioural control commit to carry a vNN roadmap reference, bare (`v88`) or dotted (`v0.88.0`). Merge commits are exempt. Authorship-time enforcement is the `commit-msg` hook from `poetry run pre-commit install`; this target re-checks a range and is a hosted gate, not part of the local static fan-out.
 - `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
@@ -211,12 +211,12 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 ```
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
-and `fail_under = 90` are unchanged. The hosted CI job set also contains six
-separately justified unowned jobs, for sixteen jobs total. `isolation-conformance` is
-one of those hosted-unowned jobs: Make exposes the same runner for local verification,
+and `fail_under = 90` are unchanged. The hosted CI job set also contains seven
+separately justified unowned jobs, for seventeen jobs total. `isolation-conformance`
+and the reusable `bypassrls` suite are hosted-unowned jobs: Make exposes both runners for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by
 `scripts/provision_ci_postgres.sh`: Docker allocates a dynamic loopback endpoint and
-scoped databases, and the profile validates the restricted role before the runner starts.
+scoped databases, and each profile validates its declared database role before the runner starts.
 Hosted execution consumes its separately provisioned service and lease; no pre-created
 local host server or database set is implied by this target or policy.
 
@@ -299,10 +299,11 @@ skips. It generates a standalone all-module project, installs its dependencies
 without a maintainer wheelhouse or source path, applies migrations once to an
 empty database owned by a `NOSUPERUSER NOBYPASSRLS NOINHERIT` login role,
 checks `makemigrations --check --dry-run`, verifies runtime migration origins
-and recorder parity, and proves database/role cleanup. Release closeout also
-runs `make test-integration`, `make test-bypassrls`, `make typecheck`, and the
-serial `make test-e2e` lanes. These lanes are the canonical `release` tier for a
-plan closeout; see [Validation Tiers](#validation-tiers).
+and recorder parity, and proves database/role cleanup. The preceding unscoped
+`make ci-e2e` owns the single dedicated `make test-bypassrls` execution. Release
+closeout then runs `make test-integration`, `make typecheck`, and the serial
+`make test-e2e` lanes. These lanes are the canonical `release` tier for a plan
+closeout; see [Validation Tiers](#validation-tiers).
 
 **Running them:** `make release-gate` runs both commands above followed by those
 closeout lanes, aborting at the first failure. Prefer it to retyping the literals —

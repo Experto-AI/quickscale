@@ -35,6 +35,17 @@ def _isolate_poetry_cache_per_worker() -> None:
 _isolate_poetry_cache_per_worker()
 
 
+_HERMETIC_POETRY_LOCK_CONTENT = """\
+# Test-only deterministic Poetry lock; not for dependency installation.
+package = []
+
+[metadata]
+lock-version = "2.1"
+python-versions = "*"
+content-hash = "quickscale-test-shim"
+"""
+
+
 def _build_docker_compose_project_name() -> str:
     """Build a Docker Compose project name from environment context.
 
@@ -80,6 +91,58 @@ def _skip_generator_poetry_lock(request: pytest.FixtureRequest) -> None:
         os.environ.pop("QS_SKIP_POETRY_LOCK", None)
     else:
         os.environ["QS_SKIP_POETRY_LOCK"] = "1"
+
+
+@pytest.fixture
+def hermetic_poetry_lock(
+    _skip_generator_poetry_lock: None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> tuple[str, Path]:
+    """Run generated-project ``poetry lock`` through a fail-closed test shim."""
+    shim_dir = tmp_path / "poetry-shim-bin"
+    invocation_log = tmp_path / "poetry-shim-invocations.jsonl"
+    shim_dir.mkdir()
+
+    poetry_shim = shim_dir / "poetry"
+    poetry_shim.write_text(
+        f"""#!{sys.executable}
+import json
+import sys
+from pathlib import Path
+
+invocation_log = Path({str(invocation_log)!r})
+with invocation_log.open("a", encoding="utf-8") as stream:
+    stream.write(json.dumps(["poetry", *sys.argv[1:]]) + "\\n")
+
+if sys.argv[1:] != ["lock"]:
+    print("test Poetry shim accepts only: poetry lock", file=sys.stderr)
+    raise SystemExit(64)
+
+project_path = Path.cwd()
+missing = [
+    name
+    for name in ("pyproject.toml", "manage.py")
+    if not (project_path / name).is_file()
+]
+if missing:
+    print(
+        "poetry lock must run in a generated project; missing: "
+        + ", ".join(missing),
+        file=sys.stderr,
+    )
+    raise SystemExit(65)
+
+(project_path / "poetry.lock").write_bytes(
+    {_HERMETIC_POETRY_LOCK_CONTENT.encode("utf-8")!r}
+)
+"""
+    )
+    poetry_shim.chmod(0o755)
+
+    monkeypatch.delenv("QS_SKIP_POETRY_LOCK", raising=False)
+    monkeypatch.setenv("PATH", str(shim_dir), prepend=os.pathsep)
+    return _HERMETIC_POETRY_LOCK_CONTENT, invocation_log
 
 
 @pytest.fixture

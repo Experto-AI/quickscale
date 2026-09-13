@@ -2160,7 +2160,8 @@ def _extract_ci_job_names(path: Path) -> set[str]:
 
     Uses structural YAML parsing with duplicate-key rejection (BaseLoader-safe
     for the ``on:`` key).  Returns only top-level keys under ``jobs:`` that
-    have a ``steps:`` or ``runs-on:`` subkey (i.e. real jobs, not metadata).
+    have a ``steps:``, ``runs-on:``, or reusable-workflow ``uses:`` subkey
+    (i.e. real jobs, not metadata).
 
     Raises ``SchemaValidationError`` when the file is malformed, unreadable,
     or contains duplicate YAML keys (caller should treat this as exit 2).
@@ -2169,9 +2170,7 @@ def _extract_ci_job_names(path: Path) -> set[str]:
     jobs: set[str] = set()
     for key, value in jobs_raw.items():
         if isinstance(key, str) and isinstance(value, dict):
-            # A job is a mapping with runs-on and/or steps.  Reusable-workflow
-            # references and other YAML mappings are deliberately excluded.
-            if "runs-on" in value or "steps" in value:
+            if "runs-on" in value or "steps" in value or "uses" in value:
                 jobs.add(key)
     return jobs
 
@@ -2219,7 +2218,7 @@ def _extract_ci_needs(path: Path) -> dict[str, tuple[str, ...]]:
         for key, value in jobs_raw.items()
         if isinstance(key, str)
         and isinstance(value, dict)
-        and ("runs-on" in value or "steps" in value)
+        and ("runs-on" in value or "steps" in value or "uses" in value)
     }
     topology: dict[str, tuple[str, ...]] = {}
     for job_name in sorted(job_names):
@@ -2297,7 +2296,9 @@ def _extract_publish_gates(path: Path) -> set[str]:
     for job_name, job_value in jobs_raw.items():
         if not isinstance(job_name, str):
             continue
-        if not isinstance(job_value, dict) or not ("runs-on" in job_value or "steps" in job_value):
+        if not isinstance(job_value, dict) or not (
+            "runs-on" in job_value or "steps" in job_value or "uses" in job_value
+        ):
             continue
 
         # Add top-level job name as a gate identifier
@@ -2326,7 +2327,7 @@ def _extract_publish_run_values(path: Path) -> list[tuple[str, str]]:
     for job_name, job_value in jobs_raw.items():
         if not isinstance(job_name, str) or not isinstance(job_value, dict):
             continue
-        if not ("runs-on" in job_value or "steps" in job_value):
+        if not ("runs-on" in job_value or "steps" in job_value or "uses" in job_value):
             continue
         for step in _workflow_job_steps(path, job_name, job_value):
             run_value = step.get("run")

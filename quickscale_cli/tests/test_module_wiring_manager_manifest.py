@@ -1239,7 +1239,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         # Complete expected message including trailing period.
         assert message == (
             "Module 'analytics' version mismatch: "
-            "found 0.86.0; expected core version 0.87.0."
+            "found 0.86.0; expected core version 0.88.0."
         )
         # No spec building occurs when version mismatch is detected early.
         spy_spec.assert_not_called()
@@ -1287,7 +1287,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         (project / "modules" / "analytics" / "module.yml").write_text(
             'name: analytics\nversion: "0.86.0"\n'
         )
-        # auth has version 0.87.0 (matching core).
+        # auth has version 0.88.0 (matching core).
         auth_yml = (
             Path(__file__).resolve().parents[2]
             / "quickscale_modules"
@@ -1308,7 +1308,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         # Complete expected message including trailing period.
         assert message == (
             "Module 'analytics' version mismatch: "
-            "found 0.86.0; expected core version 0.87.0."
+            "found 0.86.0; expected core version 0.88.0."
         )
         # First-mismatch blocks spec building for all modules.
         spy_spec.assert_not_called()
@@ -1361,7 +1361,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         # Complete expected message including trailing period.
         assert message == (
             "Module 'analytics' version mismatch: "
-            "found 0.87.00; expected core version 0.87.0."
+            "found 0.87.00; expected core version 0.88.0."
         )
         # No spec building — version rejection happens before _build_wiring_specs.
         spy_spec.assert_not_called()
@@ -1392,7 +1392,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         # preserved verbatim without stripping or repr escaping.
         assert message == (
             "Module 'analytics' version mismatch: "
-            "found  0.87.0 ; expected core version 0.87.0."
+            "found  0.87.0 ; expected core version 0.88.0."
         )
         # No spec building — version rejection happens before _build_wiring_specs.
         spy_spec.assert_not_called()

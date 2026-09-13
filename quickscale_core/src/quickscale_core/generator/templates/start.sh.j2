@@ -8,6 +8,17 @@ set -u  # Exit on undefined variable
 # Disable Python output buffering to see logs immediately
 export PYTHONUNBUFFERED=1
 
+# Explicit one-shot data migration mode. This branch never starts Gunicorn and
+# keeps the privileged command marker scoped to this single process.
+if [[ "$#" -gt 0 ]]; then
+  if [[ "$#" -eq 1 && "$1" == "migrate_billing_to_orgs" ]]; then
+    echo "Running one-shot billing organization migration..."
+    QUICKSCALE_PRIVILEGED_COMMAND=migrate_billing_to_orgs RUNTIME_DATABASE_URL="" exec python manage.py migrate_billing_to_orgs
+  fi
+  echo "ERROR: unsupported start.sh command: $*" >&2
+  exit 2
+fi
+
 echo "========================================"
 echo "🚀 Starting deployment..."
 echo "========================================"

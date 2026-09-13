@@ -60,7 +60,7 @@
 #   make clean                - Remove build artifacts
 
 .PHONY: setup bootstrap smoke-install install \
-        test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-postgres-provisioning \
+        test test-unit test-integration test-bypassrls test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-postgres-provisioning \
         lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality fix check ci ci-e2e release-gate retry retry-show \
         docs \
@@ -283,7 +283,7 @@ help:
 	@echo "  make test-integration     - Integration tests for quickscale_modules/* (requires PostgreSQL)"
 	@echo "  make test-cov             - Tests with coverage report (aggregates backups DR-engine coverage when PostgreSQL is available)"
 	@echo "  make test-e2e             - E2E tests (needs Docker + Playwright)"
-	@echo "  make release-gate         - Release closeout lanes (migration topology + generated-project proof + integration/bypassrls/typecheck/e2e/quality)"
+	@echo "  make release-gate         - Post-ci-e2e closeout lanes (migration topology + generated-project proof + integration/typecheck/e2e/quality)"
 	@echo "  make quality              - Full quality analysis (dead code, complexity, duplication)"
 	@echo "  make lint-frontend        - Lint React theme templates (ESLint + TypeScript)"
 	@echo "  make frontend-proof       - Render showcase_react and run pnpm install/type-check/build"
@@ -535,7 +535,7 @@ test-integration:
 	fi
 
 # Run ONLY the BYPASSRLS-privileged tests (the `-m bypass_rls` migration/DDL
-# proofs that the default NOBYPASSRLS integration run skips). Kept separate on
+# proofs that the default NOBYPASSRLS integration run deselects). Kept separate on
 # purpose: it requires a DB role WITH the BYPASSRLS attribute, whereas the main
 # suite must stay NOBYPASSRLS so RLS-enforcement/boundary tests remain honest.
 # The `-m bypass_rls` filter deselects the restricted-role boundary tests, so a
@@ -1451,7 +1451,6 @@ release-gate:
 	$(PYTHON) -m pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short -o addopts= --no-cov
 	$(PYTHON) -m pytest quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::test_all_module_initial_migrations_apply_from_embedded_sources -q --tb=short -o addopts= --no-cov
 	@$(MAKE) test-integration
-	@$(MAKE) test-bypassrls
 	@$(MAKE) typecheck
 	@$(MAKE) test-e2e
 	@$(MAKE) quality
@@ -1463,6 +1462,9 @@ ci: test-ci-local-parallel
 # Run full CI including E2E tests with the same owned PostgreSQL lifecycle.
 ci-e2e:
 	@scripts/provision_ci_postgres.sh run --profile restricted -- scripts/check_ci_locally.sh --e2e $(CI_STAGE_ARGS)
+ifeq ($(strip $(CI_STAGE_ARGS)),)
+	@$(MAKE) test-bypassrls
+endif
 
 # Re-run only the tests that failed in the last recorded run.
 # `record_failures.py replay --quiet` prints one make command per rootdir that

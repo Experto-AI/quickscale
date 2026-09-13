@@ -122,6 +122,9 @@ def _hosted_setup_calls(path: Path, job_id: str) -> list[str]:
     assert isinstance(jobs, dict)
     job = jobs.get(job_id)
     assert isinstance(job, dict), f"{job_id} is missing from {path}"
+    if "uses" in job:
+        assert "steps" not in job
+        return []
     steps = job.get("steps")
     assert isinstance(steps, list)
     profiles: list[str] = []
@@ -358,6 +361,59 @@ class TestHostedPostgresProfileParity:
             else:
                 assert description["databases"]
                 assert description["role"]["flags"]
+
+    def test_bypassrls_reusable_workflow_is_the_only_authorized_hosted_lane(self) -> None:
+        ci_workflow = _parse_yaml_strict(CI_YML.read_text(encoding="utf-8"), str(CI_YML))
+        ci_jobs = ci_workflow["jobs"]
+        assert ci_jobs["bypassrls"] == {
+            "name": "Run BYPASSRLS-privileged tests",
+            "uses": "./.github/workflows/nightly-bypassrls.yml",
+        }
+
+        nightly_path = REPO_ROOT / ".github" / "workflows" / "nightly-bypassrls.yml"
+        nightly = _parse_yaml_strict(nightly_path.read_text(encoding="utf-8"), str(nightly_path))
+        assert set(nightly["on"]) == {"schedule", "workflow_dispatch", "workflow_call"}
+        privileged_step = next(
+            step
+            for step in nightly["jobs"]["bypassrls"]["steps"]
+            if step["name"] == "Run BYPASSRLS-privileged tests (make test-bypassrls)"
+        )
+        assert privileged_step["env"] == {"QUICKSCALE_ALLOW_BYPASSRLS": "1"}
+
+        backups_step = next(
+            step
+            for step in ci_jobs["backups-validation"]["steps"]
+            if step["name"] == "Run backups module validation tests"
+        )
+        assert "QUICKSCALE_ALLOW_BYPASSRLS" not in backups_step.get("env", {})
+
+        authorization_sites: list[tuple[str, str, str]] = []
+        workflow_dir = REPO_ROOT / ".github" / "workflows"
+        workflow_paths = sorted([*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")])
+        for workflow_path in workflow_paths:
+            workflow = _parse_yaml_strict(
+                workflow_path.read_text(encoding="utf-8"), str(workflow_path)
+            )
+            assert workflow.get("env", {}).get("QUICKSCALE_ALLOW_BYPASSRLS") != "1"
+            for job_id, job in workflow.get("jobs", {}).items():
+                assert job.get("env", {}).get("QUICKSCALE_ALLOW_BYPASSRLS") != "1"
+                for step in job.get("steps", []):
+                    if step.get("env", {}).get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
+                        authorization_sites.append(
+                            (
+                                workflow_path.relative_to(REPO_ROOT).as_posix(),
+                                job_id,
+                                step["name"],
+                            )
+                        )
+
+        assert authorization_sites == [
+            (
+                ".github/workflows/nightly-bypassrls.yml",
+                "bypassrls",
+                "Run BYPASSRLS-privileged tests (make test-bypassrls)",
+            )
+        ]
 
 
 # =========================================================================
@@ -1217,6 +1273,7 @@ class TestParserPrecision:
         """Hosted dependency edges are observed structurally and in order."""
         assert _extract_ci_needs(CI_YML) == {
             "backups-validation": (),
+            "bypassrls": (),
             "check-gate-suites": (),
             "dependency-vulnerabilities-gate": (),
             "security-static-analysis-gate": (),
@@ -3481,7 +3538,7 @@ class TestHostedCiGateGeneration:
         workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
         registry = _parse_registry(DEFAULT_REGISTRY)
         jobs, needs, run_values = self._projection(workflow_text)
-        assert len(jobs) == 16
+        assert len(jobs) == 17
         assert needs["test"] == (
             "backups-validation",
             "module-manifest-contract",
