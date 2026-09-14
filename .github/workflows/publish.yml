@@ -48,7 +48,7 @@ jobs:
 
       - name: Verify pyproject versions match VERSION
         run: |
-          ./scripts/version_tool.sh check
+          PYTHON="$(command -v python)" ./scripts/version_tool.sh check
 
   test:
     name: Run Tests
