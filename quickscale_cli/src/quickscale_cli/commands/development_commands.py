@@ -283,7 +283,7 @@ def _run_migrations_after_up() -> None:
         container_name,
         ["python", "manage.py", "migrate"],
         capture=True,
-        extra_docker_args=["-e", "QUICKSCALE_PRIVILEGED_COMMAND=migrate"],
+        privileged_command="migrate",
     )
     click.secho("✅ Database migrations applied", fg="green")
 
@@ -596,7 +596,7 @@ def _run_docker_exec_command(
     container_name: str,
     cmd_args: list[str],
     capture: bool = False,
-    extra_docker_args: list[str] | None = None,
+    privileged_command: str | None = None,
 ) -> None:
     """Run a command in a docker container with appropriate TTY handling.
 
@@ -604,20 +604,28 @@ def _run_docker_exec_command(
         container_name: Name of the target container.
         cmd_args: Command and arguments to execute inside the container.
         capture: When True, capture and echo output instead of streaming.
-        extra_docker_args: Optional extra arguments to pass to ``docker exec``
-            before the container name (e.g. ``["-e", "FOO="]`` to override
-            environment variables).
+        privileged_command: A sanctioned privileged Django command (one of
+            ``_PRIVILEGED_DJANGO_COMMANDS``).  Only then is
+            ``RUNTIME_DATABASE_URL`` cleared, so the command runs under the
+            superuser ``DATABASE_URL`` with the matching
+            ``QUICKSCALE_PRIVILEGED_COMMAND`` exemption.  Every other command
+            keeps the restricted runtime role: the orgs BYPASSRLS boot guard
+            rejects a superuser connection for anything outside that set.
     """
     docker_cmd = ["docker", "exec"]
-    # Unset RUNTIME_DATABASE_URL so Django's local.py falls back to the
-    # superuser DATABASE_URL for DDL / admin commands.  The restricted
-    # runtime role (NOSUPERUSER, NOCREATEDB, NOBYPASSRLS) is intended for
-    # production serving, not for dev / admin workflows.
-    docker_cmd.extend(["-e", "RUNTIME_DATABASE_URL="])
+    if privileged_command is not None:
+        if privileged_command not in _PRIVILEGED_DJANGO_COMMANDS:
+            raise ValueError(f"Not a privileged Django command: {privileged_command!r}")
+        docker_cmd.extend(
+            [
+                "-e",
+                "RUNTIME_DATABASE_URL=",
+                "-e",
+                f"QUICKSCALE_PRIVILEGED_COMMAND={privileged_command}",
+            ]
+        )
     if is_interactive():
         docker_cmd.append("-it")
-    if extra_docker_args:
-        docker_cmd.extend(extra_docker_args)
     docker_cmd.extend([container_name] + cmd_args)
 
     if is_interactive() or not capture:
@@ -691,17 +699,13 @@ def manage(args: tuple) -> None:
     try:
         container_name = get_backend_container_name()
         cmd_args = ["python", "manage.py"] + list(args)
-        extra_docker_args = None
-        if args and args[0] in _PRIVILEGED_DJANGO_COMMANDS:
-            extra_docker_args = [
-                "-e",
-                f"QUICKSCALE_PRIVILEGED_COMMAND={args[0]}",
-            ]
         _run_docker_exec_command(
             container_name,
             cmd_args,
             capture=True,
-            extra_docker_args=extra_docker_args,
+            privileged_command=args[0]
+            if args[0] in _PRIVILEGED_DJANGO_COMMANDS
+            else None,
         )
 
     except subprocess.CalledProcessError as e:

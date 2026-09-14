@@ -140,9 +140,11 @@ RUN echo "📦 Installing runtime dependencies..." && \
     && rm -rf /var/lib/apt/lists/* && \
     echo "✅ Runtime dependencies installed"
 
-# Create non-root user for security
+# Create non-root user for security. -m creates /home/django: gunicorn's
+# control server writes its socket under $HOME and logs a permission error
+# on every boot when the directory is missing.
 RUN echo "👤 Creating django user..." && \
-    groupadd -r django && useradd -r -g django django && \
+    groupadd -r django && useradd -r -m -g django django && \
     echo "✅ User created"
 
 # Set working directory

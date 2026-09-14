@@ -215,7 +215,13 @@ QuickScale production settings require two database connections:
 
 The ``quickscale deploy railway`` command does **not** create the restricted runtime role or set ``RUNTIME_DATABASE_URL``. You must do this manually after the automated deploy:
 
-1. Connect to your Railway PostgreSQL service and create the restricted role:
+1. Generate a URL-safe password, then connect to your Railway PostgreSQL service and create the
+   restricted role. Hex avoids characters that would need percent-encoding in the connection URL:
+   ```bash
+   RUNTIME_DB_PASSWORD=$(openssl rand -hex 24)
+   echo "$RUNTIME_DB_PASSWORD"     # record it: Railway does not issue or recover it
+   railway connect Postgres        # opens psql on the Railway database
+   ```
    ```sql
    CREATE ROLE quickscale_runtime WITH
      LOGIN
@@ -223,9 +229,9 @@ The ``quickscale deploy railway`` command does **not** create the restricted run
      NOBYPASSRLS
      NOCREATEDB
      NOCREATEROLE
-     PASSWORD '<strong-password>';
+     PASSWORD '<password>';
 
-   GRANT CONNECT ON DATABASE "<your-db>" TO quickscale_runtime;
+   GRANT CONNECT ON DATABASE railway TO quickscale_runtime;   -- Railway's default database name
    GRANT USAGE ON SCHEMA public TO quickscale_runtime;
    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO quickscale_runtime;
    GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO quickscale_runtime;
@@ -234,26 +240,22 @@ The ``quickscale deploy railway`` command does **not** create the restricted run
    ALTER DEFAULT PRIVILEGES IN SCHEMA public
      GRANT USAGE ON SEQUENCES TO quickscale_runtime;
    ```
-2. Set ``RUNTIME_DATABASE_URL`` as a Railway variable.
-
-   Where each substitution comes from:
-
-   - ``<password>`` — the password you chose in the ``CREATE ROLE`` above. It is not
-     issued by Railway and is not recoverable later; record it when you create the role.
-   - ``<host>``, ``<port>``, ``<db>`` — read them from the PostgreSQL **service**, not the
-     app service:
-     ```bash
-     railway variables --service Postgres
-     ```
-     Reuse the host, port, and database name exactly as they appear in that service's own
-     ``DATABASE_URL``. Only the role and password change; you are pointing at the same
-     database through a restricted login. Keep the host form Railway already uses for the
-     app's ``DATABASE_URL`` reference — substituting a public host for an internal one (or
-     the reverse) produces a URL that resolves in one context and fails in the other.
+2. Set ``RUNTIME_DATABASE_URL`` as a Railway variable. Only the password is yours to supply:
+   host, port, and database come from Railway **reference variables** on the PostgreSQL
+   service, resolved by Railway at deploy time, so there is nothing to look up or mistype:
 
    ```bash
-   railway variables --set RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:<password>@<host>:<port>/<db> --service myapp
+   railway variables --service myapp --set \
+     "RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:${RUNTIME_DB_PASSWORD}"'@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}'
    ```
+
+   Quoting matters: the double-quoted half lets your shell expand ``$RUNTIME_DB_PASSWORD``;
+   the single-quoted half passes ``${{...}}`` to Railway literally (double quotes there fail with
+   ``bad substitution``). ``PGHOST`` is the private ``*.railway.internal`` host — the same one the
+   app's ``DATABASE_URL`` reference resolves to — so only the role and password differ from it.
+   If your database service is named ``PostgreSQL`` rather than ``Postgres``, change the prefix;
+   ``railway variables --service Postgres --kv`` lists the names, and ``railway variables
+   --service myapp --kv`` shows the resolved URL afterwards.
 3. Redeploy after setting the variable:
    ```bash
    railway up --service myapp --detach
@@ -630,9 +632,8 @@ railway up --service myapp        # Uses railway.json automatically
 ```bash
 # Create restricted PostgreSQL role and set RUNTIME_DATABASE_URL.
 # See "Runtime Role Setup" section for detailed instructions.
-railway variables --set \
-  RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:<password>@<host>:<port>/<db> \
-  --service myapp
+railway variables --service myapp --set \
+  "RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:${RUNTIME_DB_PASSWORD}"'@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}'
 railway up --service myapp --detach   # Redeploy with runtime role
 ```
 
@@ -939,7 +940,8 @@ restricted PostgreSQL role (``NOSUPERUSER``/``NOBYPASSRLS``) and set
 ``RUNTIME_DATABASE_URL`` to that role's connection string. The guard has two narrow
 exemptions:
 1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned DB command (``migrate``,
-   ``createcachetable``) — used by ``start.sh`` for one-shot DDL operations.
+   ``createcachetable``, ``migrate_billing_to_orgs``) — used by ``start.sh`` for one-shot
+   privileged operations.
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` — development escape hatch (not for production).
 
 **Other database issues**:

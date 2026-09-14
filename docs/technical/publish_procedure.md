@@ -222,13 +222,13 @@ Deploy the same generated project and exercise it as a real site:
 quickscale deploy railway
 ```
 
-This does **not** create the restricted database role, and without it the RLS boot guard raises
-`ImproperlyConfigured` at startup because Railway's default role carries `BYPASSRLS`. Follow
-[railway.md §Runtime Role Setup](../deployment/railway.md#runtime-role-setup) for the role and
-grants, then:
+This does **not** create the restricted database role or set `RUNTIME_DATABASE_URL`, so the first
+boot is expected to fail with `RUNTIME_DATABASE_URL is required for runtime serving` and restart in a
+loop. Follow [railway.md §Runtime Role Setup](../deployment/railway.md#runtime-role-setup) for the
+role, grants, and the `railway variables` command — it fills host, port, and database from Railway
+reference variables, so only the password you chose is typed — then redeploy:
 
 ```bash
-railway variables --set RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:<pw>@<host>:<port>/<db> --service myapp
 railway up --service myapp --detach
 ```
 

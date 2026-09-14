@@ -245,6 +245,55 @@ class TestRunDockerExecCommand:
         mock_run.return_value = Mock(returncode=0)
         _run_docker_exec_command("container", ["bash"])
 
+    @patch(
+        "quickscale_cli.commands.development_commands.is_interactive",
+        return_value=False,
+    )
+    @patch("subprocess.run")
+    def test_unprivileged_command_keeps_runtime_role(self, mock_run, mock_interactive):
+        """createsuperuser must not be switched to the superuser DATABASE_URL"""
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+        _run_docker_exec_command(
+            "container", ["python", "manage.py", "createsuperuser"], capture=True
+        )
+        docker_cmd = mock_run.call_args.args[0]
+        assert "RUNTIME_DATABASE_URL=" not in docker_cmd
+        assert not any("QUICKSCALE_PRIVILEGED_COMMAND" in arg for arg in docker_cmd)
+
+    @patch(
+        "quickscale_cli.commands.development_commands.is_interactive",
+        return_value=False,
+    )
+    @patch("subprocess.run")
+    def test_privileged_command_clears_runtime_url_with_exemption(
+        self, mock_run, mock_interactive
+    ):
+        """migrate runs as superuser with the matching sanctioned exemption"""
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+        _run_docker_exec_command(
+            "container",
+            ["python", "manage.py", "migrate"],
+            capture=True,
+            privileged_command="migrate",
+        )
+        docker_cmd = mock_run.call_args.args[0]
+        assert docker_cmd[:6] == [
+            "docker",
+            "exec",
+            "-e",
+            "RUNTIME_DATABASE_URL=",
+            "-e",
+            "QUICKSCALE_PRIVILEGED_COMMAND=migrate",
+        ]
+
+    def test_unsanctioned_privileged_command_is_rejected(self):
+        with pytest.raises(ValueError):
+            _run_docker_exec_command(
+                "container",
+                ["python", "manage.py", "shell"],
+                privileged_command="shell",
+            )
+
 
 # ============================================================================
 # _superuser_exists_in_backend

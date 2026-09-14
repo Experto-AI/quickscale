@@ -3436,7 +3436,7 @@ class TestDockerfileContent:
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
         assert "groupadd" in output
-        assert "useradd" in output
+        assert "useradd -r -m -g django django" in output
         assert "USER django" in output
 
     def test_final_image_has_fixed_quickscale_contract_labels(
