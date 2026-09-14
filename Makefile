@@ -51,6 +51,7 @@
 #   make publish-prod         - Publish to production PyPI
 #   make publish-full         - Publish to TestPyPI then PyPI
 #   make publish-module       - Publish module to split branch (MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>)
+#   make publish-modules      - Publish every outdated module, each against its own freshly observed remote SHA
 #   make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version>)
 #   make seal-modules         - Seal all split-branch tags (VERSION=<version>)
 #   make seal-status          - Show seal status (VERSION=<version>)
@@ -66,7 +67,7 @@
         docs \
         build clean \
 		beta-migrate-fresh beta-migrate-in-place \
-        publish-build publish-test publish-prod publish-full publish-module \
+        publish-build publish-test publish-prod publish-full publish-module publish-modules \
         seal-module seal-modules seal-status \
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
@@ -311,6 +312,7 @@ help:
 	@echo "  make publish-prod         - Publish to production PyPI"
 	@echo "  make publish-full         - Publish TestPyPI → verify → PyPI"
 	@echo "  make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha> - Publish module to split branch"
+	@echo "  make publish-modules      - Publish every outdated module, each against its own freshly observed remote SHA"
 	@echo "  make publish-module-status - Show split-branch status for all modules"
 	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Was publish outdated modules; use per-module publish instead"
 	@echo "  make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version> [PREVIOUS_VERSION=<version>])"
@@ -1532,6 +1534,11 @@ publish-module:
 	case "$$expected_remote_sha" in *[!0-9a-fA-F]*) echo "Error: EXPECTED_REMOTE_SHA must be exactly 40 hexadecimal characters."; exit 1;; esac; \
 	if [ "$${#expected_remote_sha}" -ne 40 ]; then echo "Error: EXPECTED_REMOTE_SHA must be exactly 40 hexadecimal characters."; exit 1; fi; \
 	scripts/publish_module.sh "$$module" --expected-remote-sha "$$expected_remote_sha" $(if $(CLEAN),--clean,)
+
+# Publish every outdated module serially. Each module's remote SHA is observed
+# live right before its own force-with-lease push; stops at the first failure.
+publish-modules:
+	@scripts/publish_module.sh --publish-all $(if $(CLEAN),--clean,)
 
 # Show split-branch status for all modules
 publish-module-status:

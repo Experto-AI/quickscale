@@ -27,6 +27,7 @@ with the same explicit next-action guidance.
             --version <version> [--previous-version <version>]
         poetry run python scripts/publish_module.py --seal-all \
             --version <version> [--previous-version <version>]
+        poetry run python scripts/publish_module.py --publish-all [--clean]
         poetry run python scripts/publish_module.py --status [--version <version>]
         poetry run python scripts/publish_module.py --publish-outdated [--clean]
 
@@ -38,8 +39,8 @@ with the same explicit next-action guidance.
 
     Phase 4 also disables ``--publish-outdated`` entirely: it used bare
     ``--force`` internally, which violates the force-with-lease safety
-    contract.  Use single-module publish with per-module
-    ``--expected-remote-sha`` instead.
+    contract.  Use ``--publish-all`` (fresh per-module lease) or single-module
+    publish with ``--expected-remote-sha`` instead.
 """
 
 from __future__ import annotations
@@ -1189,7 +1190,9 @@ def _show_status(
             "       make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>"
         )
     else:
-        _print_info("  Publish each outdated module individually:")
+        _print_info("  Publish every outdated module (fresh lease per module):")
+        _print_info("    make publish-modules")
+        _print_info("  Or publish one module:")
         _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>")
         ready = [name for name in outdated + unpublished if remote_shas.get(name)]
         if ready:
@@ -1200,6 +1203,48 @@ def _show_status(
                     f"    make publish-module MODULE={name} EXPECTED_REMOTE_SHA={remote_shas[name]}"
                 )
     return all_sealed
+
+
+def _publish_all(runner: GitRunner, *, modules: list[str]) -> None:
+    """
+    Publish every outdated module serially, each against its own fresh lease.
+
+    This is not the disabled ``--publish-outdated``: that path pushed with a
+    bare ``--force``.  Here each module's remote SHA is observed live
+    immediately before its own push and handed to ``_publish_module`` as the
+    force-with-lease expectation, exactly as a hand-pasted
+    ``make publish-module`` would.  A module whose remote tip already equals
+    its local split is skipped.  An absent or unobservable remote branch is
+    not authorization, so it stops the batch.  The first failure also stops
+    the batch (``_publish_module`` exits), leaving later modules untouched.
+    """
+    published: list[str] = []
+    skipped: list[str] = []
+    for module_name in modules:
+        local_sha = _get_local_split_sha(resolve_module_path(module_name), runner)
+        if local_sha is None:
+            _print_error(f"Could not compute subtree split for module '{module_name}'")
+            sys.exit(1)
+        remote_sha = _observe_remote_branch_sha(module_name, runner)
+        if not remote_sha:
+            _print_error(
+                f"Remote split branch for '{module_name}' is absent or could not be observed; "
+                "an absent branch is not authorization"
+            )
+            _print_info(f"  Published so far: {' '.join(published) or 'none'}")
+            sys.exit(1)
+        if remote_sha.lower() == local_sha.lower():
+            _print_info(f"{module_name}: up to date ({local_sha[:12]}), skipping")
+            skipped.append(module_name)
+            continue
+        _print_info(f"{module_name}: remote {remote_sha[:12]} -> local {local_sha[:12]}")
+        _publish_module(module_name, expected_remote_sha=remote_sha, runner=runner)
+        published.append(module_name)
+        print()
+
+    _print_success(f"Published: {' '.join(published) or 'none'}")
+    if skipped:
+        _print_info(f"Already up to date: {' '.join(skipped)}")
 
 
 # ---------------------------------------------------------------------------
@@ -1242,6 +1287,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--seal-all",
         action="store_true",
         help="Seal every authoritative module serially at VERSION",
+    )
+    actions.add_argument(
+        "--publish-all",
+        action="store_true",
+        help=(
+            "Publish every outdated module serially, each against its own "
+            "freshly observed remote SHA (force-with-lease)"
+        ),
     )
     parser.add_argument(
         "--publish-outdated",
@@ -1324,6 +1377,17 @@ def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace
             parser.error("--clean is only supported with publish actions")
         if args.expected_remote_sha is not None:
             parser.error("--expected-remote-sha is not supported with --seal-all")
+        return
+
+    if args.publish_all:
+        if args.module_name is not None:
+            parser.error("--publish-all does not accept a module name")
+        if args.expected_remote_sha is not None:
+            parser.error("--expected-remote-sha is not supported with --publish-all")
+        if args.version is not None:
+            parser.error("--version is not supported with --publish-all")
+        if args.previous_version is not None:
+            parser.error("--previous-version is only supported with --seal or --seal-all")
         return
 
     if args.publish_outdated:
@@ -1450,6 +1514,15 @@ def main() -> None:
         if not _show_status(runner, version=args.version, modules=frozen_modules):
             _print_error("Seal-all verification did not produce a sealed status for every module")
             sys.exit(1)
+    elif args.publish_all:
+        frozen_modules = list(_list_modules())
+        _run_release_gates(runner)
+        if not _confirm_uncommitted_changes(runner):
+            return
+        _maybe_clean_subtree_cache(args.clean)
+        _publish_all(runner, modules=frozen_modules)
+        print()
+        _show_status(runner, modules=frozen_modules)
     elif args.module_name:
         module_name = args.module_name
 

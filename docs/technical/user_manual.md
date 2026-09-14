@@ -664,6 +664,7 @@ Use these from the repository root:
 - `make lint` / `make format` / `make typecheck` — shared quality checks
 - `make frontend-proof` — render `showcase_react` and run `pnpm install`, `pnpm type-check`, and `pnpm build` without Docker
 - `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` — publish module changes to split branches using force-with-lease safety; provide a freshly observed exact 40-hex remote SHA for every mutable update
+- `make publish-modules` — publish every outdated module serially, each against its own freshly observed remote SHA; stops at the first failure
 - `make publish-module-status` — show which module split branches are up to date, outdated, or unpublished
 - `make publish-modules-outdated` — **[DISABLED SA117 Phase 4]** publish only modules whose split branches are missing or outdated; use per-module publish with `EXPECTED_REMOTE_SHA` instead
 - `make version-check` — verify `VERSION` alignment across packages
@@ -695,7 +696,7 @@ Lower-level helpers still live in `scripts/` if you need to inspect the underlyi
 - Format: `make format`
 - Version parity: `make version-check`
 - Module publish status: `make publish-module-status`
-- Publish outdated modules: [DISABLED SA117 Phase 4] `make publish-modules-outdated` (use per-module publish instead)
+- Publish outdated modules: `make publish-modules` (the old `make publish-modules-outdated` stays disabled)
 
 **CLI Commands (Current)**:
 - CLI help: `quickscale --help`

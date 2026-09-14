@@ -1727,3 +1727,91 @@ class TestPublishMakeInterfaces:
         assert not marker.exists()
         assert "Traceback" not in output
         assert "scripts/publish_module.sh" not in output
+
+
+class TestPublishAll:
+    """``--publish-all`` publishes serially, each module against its own fresh lease."""
+
+    def _patch(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        local: dict[str, str],
+        remote: dict[str, str],
+    ) -> list[tuple[str, str]]:
+        pushes: list[tuple[str, str]] = []
+        monkeypatch.setattr(publish_module, "resolve_module_path", lambda m: m)
+        monkeypatch.setattr(
+            publish_module, "_get_local_split_sha", lambda path, runner: local[path]
+        )
+        monkeypatch.setattr(
+            publish_module, "_observe_remote_branch_sha", lambda m, runner: remote.get(m, "")
+        )
+
+        def _fake_publish(module_name: str, *, expected_remote_sha: str, runner: object) -> None:
+            pushes.append((module_name, expected_remote_sha))
+
+        monkeypatch.setattr(publish_module, "_publish_module", _fake_publish)
+        return pushes
+
+    def test_each_outdated_module_uses_its_own_observed_sha_and_up_to_date_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        pushes = self._patch(
+            monkeypatch,
+            local={"auth": "a" * 40, "blog": "b" * 40, "crm": "c" * 40},
+            remote={"auth": "1" * 40, "blog": "b" * 40, "crm": "3" * 40},
+        )
+
+        publish_module._publish_all(object(), modules=["auth", "blog", "crm"])
+        output = capsys.readouterr().out
+
+        assert pushes == [("auth", "1" * 40), ("crm", "3" * 40)]
+        assert "blog: up to date" in output
+
+    def test_absent_remote_branch_stops_the_batch_without_authorizing_a_push(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        pushes = self._patch(
+            monkeypatch,
+            local={"auth": "a" * 40, "blog": "b" * 40, "crm": "c" * 40},
+            remote={"auth": "1" * 40, "crm": "3" * 40},
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module._publish_all(object(), modules=["auth", "blog", "crm"])
+        output = capsys.readouterr().out
+
+        assert excinfo.value.code == 1
+        assert pushes == [("auth", "1" * 40)]
+        assert "not authorization" in output
+
+    @pytest.mark.parametrize(
+        ("argv", "expected_message"),
+        [
+            (["--publish-all", MODULE], "--publish-all does not accept a module name"),
+            (
+                ["--publish-all", "--expected-remote-sha", "a" * 40],
+                "--expected-remote-sha is not supported with --publish-all",
+            ),
+            (
+                ["--publish-all", "--version", VERSION],
+                "--version is not supported with --publish-all",
+            ),
+            (["--publish-all", "--status"], "not allowed with argument"),
+        ],
+    )
+    def test_invalid_options_fail_before_bootstrap(
+        self,
+        argv: list[str],
+        expected_message: str,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        code, bootstrap_calls, inventory_calls = _run_cli_with_bootstrap_sentinel(monkeypatch, argv)
+        captured = capsys.readouterr()
+
+        assert code != 0
+        assert expected_message in captured.out + captured.err
+        assert bootstrap_calls == []
+        assert inventory_calls == []

@@ -108,6 +108,12 @@ reports.
 
 ### Phase 1 — Stamp the version
 
+**Work on the integration branch** (the release branch, e.g. `v88`) for Phases 1–6: the release
+commit and the `X.Y.Z` tag both live there, and it is the `<integration-branch>` passed to
+`make ci-e2e`. Nothing merges into `main` (or any intermediate branch) until
+[Phase 7](#phase-7--close-out). Merge with a merge commit or fast-forward, never squash or rebase —
+either rewrites the tagged commit, leaving the published tag outside `main`'s history.
+
 ```bash
 make bump-version X.Y.Z
 ```
@@ -147,38 +153,24 @@ git config --local user.email '<email>'
 
 Keep credentials in the helper or an SSH agent — never in a remote URL or command argument.
 
-Publish each module that is not already up to date, observing its current remote SHA and publishing against
-it. On a first pass through this phase that is all twelve; on a re-entry from
-[Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) it is usually a subset, and status tells you which:
+Publish every module that is not already up to date. On a first pass through this phase that is all
+twelve; on a re-entry from [Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) it is usually a subset.
+One command does it:
 
 ```bash
-make publish-module-status                                  # per-module state, and a ready-to-paste line per module
-make publish-module MODULE=<module> EXPECTED_REMOTE_SHA=<40-hex>   # paste from status
-git ls-remote --heads origin splits/<module>-module         # optional: confirm the SHA by hand
+make publish-modules                                        # every outdated module, fresh lease each
+make publish-module-status                                  # confirm: all twelve up to date
 ```
 
-`<module>` is the bare directory slug under `quickscale_modules/` — `[a-zA-Z0-9][a-zA-Z0-9_-]*`, expanded
-internally to `quickscale_modules/<module>` and `splits/<module>-module`. The twelve authoritative values are
-`analytics`, `auth`, `backups`, `billing`, `blog`, `crm`, `forms`, `listings`, `notifications`, `orgs`,
-`social`, `storage`. The set comes from the authoritative shipped-module inventory, not from a directory
-listing, so an unapproved name fails closed before any push.
-
-`EXPECTED_REMOTE_SHA` is required for every mutable update and must be freshly observed. An absent
-remote branch is not authorization, and `ABSENT` is not a valid input.
+`make publish-modules` walks the shipped-module inventory serially. For each module it observes the remote
+split-branch SHA live, skips the module if that already equals its local split, and otherwise publishes with
+that SHA as the force-with-lease expectation. It stops at the first failure, and at any module whose remote
+branch is absent or unobservable. Re-running it after a failure is safe: already-published modules are
+skipped. It ends by printing status.
 
 `make publish-module-status` observes each remote split branch live and, for every module that is
 not up to date, prints a ready-to-paste `make publish-module …` line with the full 40-hex SHA
-already filled in — so the `git ls-remote` above is a way to confirm the value by hand, not a step
-you must perform to obtain it. The SHA is observed when status runs, not when you paste it: if
-anything else pushes in between, the lease fails and you re-observe. That is the interlock working,
-not a tooling defect. A module whose remote branch is absent gets no paste line, because `ABSENT` is not a
-valid `EXPECTED_REMOTE_SHA`.
-
-**There is no bulk publish, by design.** The batch path is disabled because it used a bare `--force`, which
-violates the force-with-lease contract that `EXPECTED_REMOTE_SHA` exists to enforce. Publish one module at a
-time, each against its own freshly observed SHA; re-running `make publish-module-status` between publishes
-reprints the remaining lines. Note the asymmetry with [Phase 5](#phase-5--seal-the-split-tags): sealing
-*is* a single bulk command, because a seal takes no lease input and fails closed on its own.
+already filled in.
 
 **Then verify before sealing.** Phases 4a and 4b below are the verification loop; a failure there means fixing
 the cause, re-running the quality gate, and republishing whatever status then reports as outdated, per the
@@ -269,9 +261,9 @@ coding assistant.
    Re-run [Part 1](#part-1--publish-quality-check) in full: a verdict earned before the fix does not carry
    over to the new bytes. Then go to step 3.
 
-3. **Republish exactly what changed.** Run `make publish-module-status` and republish every module it reports
-   as `outdated` or `unpublished`, per [Phase 3](#phase-3--publish-the-split-branches-re-enterable). Status is
-   the arbiter here — do not decide by hand which modules were affected.
+3. **Republish exactly what changed.** Run `make publish-modules`, per
+   [Phase 3](#phase-3--publish-the-split-branches-re-enterable): it republishes only modules whose split
+   changed. Do not decide by hand which modules were affected.
 
    A split branch carries only its own `quickscale_modules/<module>/` subtree, so a fix confined to core, the
    CLI, or the generator leaves all twelve branches byte-identical and status reports every module up to date.
@@ -348,7 +340,7 @@ defect costs a new version.
 | Artifact | Mutable until | How to correct |
 |---|---|---|
 | Local release commit and tag | always (pre-push) | amend; `git tag -d X.Y.Z` |
-| `splits/<module>-module` branches | always | republish with a fresh `EXPECTED_REMOTE_SHA` |
+| `splits/<module>-module` branches | always | `make publish-modules` (fresh lease per module) |
 | `splits/<module>-module/X.Y.Z` tags | PyPI publication | delete remote + local tag, republish branch, reseal |
 | PyPI distributions and the GitHub Release | never | ship a new version |
 
