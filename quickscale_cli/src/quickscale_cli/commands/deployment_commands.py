@@ -290,14 +290,20 @@ def _create_app_service_step(app_service: str) -> None:
         if app_service.lower() in (name.lower() for name in names):
             click.echo(f"✅ Service '{app_service}' already exists")
         else:
+            # Railway CLI 5.x prompts ("What do you need?", "Enter a variable")
+            # whenever it sees a TTY, even with --service, and its TUI leaves the
+            # terminal in raw mode on timeout. Run without a TTY so it never prompts.
             result = run_railway_command(
-                ["add", "--service", app_service], timeout=30, interactive=True
+                ["add", "--service", app_service], timeout=60, input_data=""
             )
 
             if result.returncode != 0:
                 click.secho(
                     f"⚠️  Warning: Could not create service '{app_service}'", fg="yellow"
                 )
+                detail = (result.stderr or result.stdout or "").strip()
+                if detail:
+                    click.echo(f"   {detail}", err=True)
                 click.echo("💡 Create manually: railway add --service", err=True)
             else:
                 click.secho(f"✅ Service '{app_service}' created", fg="green")
@@ -320,11 +326,11 @@ def _link_database_step(app_service: str) -> bool:
         click.secho(f"⚠️  Warning: {link_message}", fg="yellow")
         click.echo("💡 You may need to link DATABASE_URL manually:")
         click.echo(
-            f"   railway variables --set 'DATABASE_URL=${{{{Postgres.DATABASE_URL}}}}' "
+            f"   railway variable set 'DATABASE_URL=${{{{Postgres.DATABASE_URL}}}}' "
             f"--service {app_service}"
         )
         click.echo(
-            f"   railway variables --set 'DATABASE_URL=${{{{PostgreSQL.DATABASE_URL}}}}' "
+            f"   railway variable set 'DATABASE_URL=${{{{PostgreSQL.DATABASE_URL}}}}' "
             f"--service {app_service}"
         )
         click.echo("   Use single quotes to prevent shell expansion errors")
@@ -348,7 +354,7 @@ def _generate_domain_step(app_service: str) -> str | None:
     else:
         click.secho("⚠️  Warning: Could not auto-generate domain", fg="yellow")
         click.echo("💡 Generate manually: railway domain")
-        click.echo("💡 Then set: railway variables --set ALLOWED_HOSTS=<your-domain>")
+        click.echo("💡 Then set: railway variable set ALLOWED_HOSTS=<your-domain>")
         return None
 
 
@@ -577,7 +583,7 @@ def _display_summary(
     click.echo("   • Verify DATABASE_URL in Railway dashboard > Variables")
     if not database_linked:
         click.echo(
-            "   • Link DB manually: railway variables --set "
+            "   • Link DB manually: railway variable set "
             f"'DATABASE_URL=${{{{Postgres.DATABASE_URL}}}}' --service {app_service}"
         )
     click.echo("   • Check healthcheck status in Railway dashboard")

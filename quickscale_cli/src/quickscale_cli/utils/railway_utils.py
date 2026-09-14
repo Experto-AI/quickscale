@@ -896,8 +896,8 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
             try:
                 result = run_railway_command(
                     [
-                        "variables",
-                        "--set",
+                        "variable",
+                        "set",
                         f"DATABASE_URL=${{{{{reference}.DATABASE_URL}}}}",
                         "--service",
                         service,

@@ -1567,8 +1567,8 @@ class TestLinkDatabaseToService:
             # Verify the correct reference format was used
             mock_run.assert_called_once_with(
                 [
-                    "variables",
-                    "--set",
+                    "variable",
+                    "set",
                     "DATABASE_URL=${{Postgres.DATABASE_URL}}",
                     "--service",
                     "myapp",

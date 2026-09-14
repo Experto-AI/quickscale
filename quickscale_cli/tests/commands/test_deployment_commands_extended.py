@@ -393,6 +393,9 @@ class TestCreateAppServiceStep:
         # A name that merely contains the app name is not the app service.
         assert mock_run.call_args_list[0].args[0] == ["service", "list", "--json"]
         assert mock_run.call_args_list[1].args[0] == ["add", "--service", "myapp"]
+        # Railway 5.x prompts on a TTY even with --service; it must never get one.
+        assert mock_run.call_args_list[1].kwargs.get("interactive", False) is False
+        assert mock_run.call_args_list[1].kwargs["input_data"] == ""
 
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
     def test_create_fails(self, mock_run):

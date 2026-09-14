@@ -120,7 +120,7 @@ railway up --service myapp
 
 # 6. Configure environment variables
 # IMPORTANT: Set all variables in ONE command to avoid multiple deployments!
-railway variables --set \
+railway variable set \
   SECRET_KEY=your-secret-key \
   ALLOWED_HOSTS=myapp.railway.app \
   DEBUG=False \
@@ -129,7 +129,7 @@ railway variables --set \
   --service myapp
 
 # Alternative (NOT RECOMMENDED - triggers multiple deployments):
-# railway variables --set SECRET_KEY=your-secret-key --service myapp
+# railway variable set SECRET_KEY=your-secret-key --service myapp
 # etc.
 
 # 7. Run migrations
@@ -611,7 +611,7 @@ railway domain --service myapp    # Generate public domain
 **Phase 3: Environment Setup (Batch) - Automated**
 ```bash
 # All variables set in ONE command to trigger only ONE deployment
-railway variables --set \
+railway variable set \
   SECRET_KEY=<generated> \
   DEBUG=False \
   DJANGO_SETTINGS_MODULE=myapp.settings.production \
@@ -777,11 +777,11 @@ bash: DATABASE_URL=${{Postgres.DATABASE_URL}}: bad substitution
 
 **Solution**: Use single quotes so Railway receives the literal reference syntax:
 ```bash
-railway variables --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <app-name>
+railway variable set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <app-name>
 ```
 If your database service is named `PostgreSQL` instead of `Postgres`, use:
 ```bash
-railway variables --set 'DATABASE_URL=${{PostgreSQL.DATABASE_URL}}' --service <app-name>
+railway variable set 'DATABASE_URL=${{PostgreSQL.DATABASE_URL}}' --service <app-name>
 ```
 
 **Pre-flight Check Failures**:
@@ -887,11 +887,11 @@ django.db.utils.OperationalError: connection to server at "localhost" (::1), por
 
 2. Link the PostgreSQL service to your app (CLI or dashboard):
    ```bash
-   railway variables --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <app-name>
+   railway variable set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <app-name>
    ```
    If needed, try:
    ```bash
-   railway variables --set 'DATABASE_URL=${{PostgreSQL.DATABASE_URL}}' --service <app-name>
+   railway variable set 'DATABASE_URL=${{PostgreSQL.DATABASE_URL}}' --service <app-name>
    ```
    Or use dashboard linking:
    - Go to your Railway project dashboard
@@ -989,12 +989,12 @@ You may need to add 'myapp-production-abc123.up.railway.app' to ALLOWED_HOSTS.
 
 3. Set ALLOWED_HOSTS with the detected URL:
    ```bash
-   railway variables --set ALLOWED_HOSTS=myapp-production-abc123.up.railway.app --service <app-name>
+   railway variable set ALLOWED_HOSTS=myapp-production-abc123.up.railway.app --service <app-name>
    ```
 
 4. For multiple domains (including custom domains):
    ```bash
-   railway variables --set ALLOWED_HOSTS=myapp-production-abc123.up.railway.app,myapp.com,www.myapp.com --service <app-name>
+   railway variable set ALLOWED_HOSTS=myapp-production-abc123.up.railway.app,myapp.com,www.myapp.com --service <app-name>
    ```
 
 **Note**: Setting environment variables triggers a redeployment. Wait for the new deployment to complete before testing.
@@ -1073,11 +1073,11 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 - [ ] Add PostgreSQL database: `railway add --database postgres`
 - [ ] Create app service: `railway add --service myapp`
 - [ ] Configure environment variables:
-  - `railway variables --set SECRET_KEY=<generated-key> --service myapp`
-  - `railway variables --set DEBUG=False --service myapp`
-  - `railway variables --set DJANGO_SETTINGS_MODULE=myapp.settings.production --service myapp`
+  - `railway variable set SECRET_KEY=<generated-key> --service myapp`
+  - `railway variable set DEBUG=False --service myapp`
+  - `railway variable set DJANGO_SETTINGS_MODULE=myapp.settings.production --service myapp`
 - [ ] Generate public domain: `railway domain --service myapp`
-- [ ] Set ALLOWED_HOSTS with domain: `railway variables --set ALLOWED_HOSTS=<domain> --service myapp`
+- [ ] Set ALLOWED_HOSTS with domain: `railway variable set ALLOWED_HOSTS=<domain> --service myapp`
 - [ ] Deploy to Railway: `railway up --service myapp`
   - ✅ railway.json delegates runtime startup to `./start.sh` for migrations + gunicorn
   - ✅ Dockerfile handles `collectstatic` during the build
