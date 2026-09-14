@@ -3510,25 +3510,19 @@ class TestDockerfileContent:
         output = template.render(test_context)
         assert "HEALTHCHECK" in output
 
-    def test_gunicorn_command(
+    def test_dockerfile_cmd_runs_start_sh(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Test Dockerfile runs Gunicorn production server."""
+        """Dockerfile CMD must run start.sh, not gunicorn directly.
+
+        Railway does not reliably apply railway.json's startCommand to new
+        services; a direct gunicorn CMD skips runtime-role creation and
+        migrations, and the app fails password auth as the runtime role.
+        """
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "gunicorn" in output
-        assert "testproject.wsgi:application" in output
-
-    def test_dockerfile_gunicorn_worker_precedence(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Dockerfile runtime startup should match the generated worker fallback order."""
-        template = jinja_env.get_template("Dockerfile.j2")
-        output = template.render(test_context)
-
-        assert 'gunicorn_workers="${GUNICORN_WORKERS:-${WEB_CONCURRENCY:-1}}"' in output
-        assert '--workers "${gunicorn_workers}"' in output
-        assert "--workers 4" not in output
+        assert 'CMD ["./start.sh"]' in output
+        assert "exec gunicorn" not in output
 
     def test_poetry_requests_timeout_variable(
         self, jinja_env: Environment, test_context: dict[str, str]

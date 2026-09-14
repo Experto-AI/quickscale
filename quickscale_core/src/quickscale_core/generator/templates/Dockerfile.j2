@@ -200,13 +200,10 @@ EXPOSE ${PORT}
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"8000\")}/', timeout=5)"
 
-# Note: Migrations should run via railway.json startCommand at deployment time
-# This ensures DATABASE_URL is available when migrations run
-# Run gunicorn
-CMD gunicorn_workers="${GUNICORN_WORKERS:-${WEB_CONCURRENCY:-1}}" && \
-    exec gunicorn {{ package_name }}.wsgi:application \
-        --bind "0.0.0.0:${PORT}" \
-        --workers "${gunicorn_workers}" \
-        --timeout 60 \
-        --access-logfile - \
-        --error-logfile -
+# Run start.sh: it creates the restricted runtime database role, runs
+# migrations, then execs gunicorn. It is the CMD rather than only the
+# railway.json startCommand because Railway does not reliably apply
+# Config-as-Code startCommand to newly created services; without start.sh the
+# app boots as a runtime role that was never created. Local docker-compose
+# overrides this command with runserver.
+CMD ["./start.sh"]

@@ -35,7 +35,8 @@
       "sa170-c-correct": "Regenerated 2026-09-04 — db/init.sql now records the quickscale.init_complete database sentinel after every required initialization statement succeeds; docker-compose.yml now probes that sentinel instead of accepting PostgreSQL connection readiness alone. Only these two generated files changed in all three variants; all unrelated paths, hashes, and modes remain authoritative.",
       "sa160": "Regenerated 2026-09-10 — terminal remediation preserves the HttpOnly production CSRF cookie, injects Django's masked token through testproject/views.py and templates/index.html, makes frontend/src/lib/csrf.ts prefer that server token and otherwise match Django's last duplicate-cookie value, and extends frontend/src/test/csrf.test.tsx across the helper, apiRequest, and FormRenderer callers. These four changed generated paths supersede the 2026-09-09 first-match hashes in react_default, react_empty, and react_selected; the prior useApi.ts, FormRenderer.tsx, base.py, and production.py corrections remain authoritative.",
       "v88-privileged-command": "Regenerated 2026-09-13 — the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-runtime-role": "Regenerated 2026-09-14 — Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
+      "v88-runtime-role": "Regenerated 2026-09-14 — Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "v88-dockerfile-start-sh": "Regenerated 2026-09-14 — Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -77,7 +78,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "d178b25f538e8b7e4e5b527aed4e74ad82877164af81b5310b6e3cbcb1974d02"
+      "sha256": "f867e39863ae6ed5a97a5a187896ee08ef8bce9d9db2a45dee3ed1ace061164a"
     },
     "Makefile": {
       "mode": "664",
@@ -543,7 +544,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "d178b25f538e8b7e4e5b527aed4e74ad82877164af81b5310b6e3cbcb1974d02"
+      "sha256": "f867e39863ae6ed5a97a5a187896ee08ef8bce9d9db2a45dee3ed1ace061164a"
     },
     "Makefile": {
       "mode": "664",
@@ -1009,7 +1010,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "d178b25f538e8b7e4e5b527aed4e74ad82877164af81b5310b6e3cbcb1974d02"
+      "sha256": "f867e39863ae6ed5a97a5a187896ee08ef8bce9d9db2a45dee3ed1ace061164a"
     },
     "Makefile": {
       "mode": "664",
