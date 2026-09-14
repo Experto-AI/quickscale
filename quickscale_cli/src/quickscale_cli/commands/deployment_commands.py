@@ -1,5 +1,7 @@
 """Deployment commands for production platforms."""
 
+import json
+import secrets
 import sys
 from pathlib import Path
 
@@ -30,6 +32,23 @@ from quickscale_cli.utils.railway_utils import (
     verify_railway_dependencies,
     verify_railway_json,
 )
+
+
+RUNTIME_DB_ROLE = "quickscale_runtime"
+
+
+def runtime_database_url(postgres_service: str, password: str) -> str:
+    """Build RUNTIME_DATABASE_URL for the restricted runtime role.
+
+    Host, port and database are Railway reference variables on the PostgreSQL
+    service, resolved by Railway at deploy time. The generated start.sh creates
+    the role from RUNTIME_DB_ROLE and RUNTIME_DB_PASSWORD before migrating.
+    """
+    ref = postgres_service
+    return (
+        f"postgresql://{RUNTIME_DB_ROLE}:{password}"
+        f"@${{{{{ref}.PGHOST}}}}:${{{{{ref}.PGPORT}}}}/${{{{{ref}.PGDATABASE}}}}"
+    )
 
 
 @click.group()
@@ -225,13 +244,30 @@ def _init_railway_project_step() -> None:
         click.echo("✅ Railway project already initialized")
 
 
-def _setup_postgres_step() -> None:
-    """Set up PostgreSQL database service."""
-    try:
-        result = run_railway_command(["service"], timeout=10)
+def _list_railway_service_names() -> list[str]:
+    """Return the service names in the linked Railway environment.
 
-        if "postgres" in result.stdout.lower():
+    Uses ``railway service list --json``.  A bare ``railway service`` is the
+    deprecated interactive link prompt: once a project has services it waits
+    for a selection and only ends at the command timeout.
+    """
+    result = run_railway_command(["service", "list", "--json"], timeout=30)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"railway service list failed: {(result.stderr or result.stdout).strip()}"
+        )
+    return [str(service.get("name", "")) for service in json.loads(result.stdout)]
+
+
+def _setup_postgres_step() -> str:
+    """Set up PostgreSQL database service and return its service name."""
+    try:
+        names = _list_railway_service_names()
+
+        existing = [name for name in names if "postgres" in name.lower()]
+        if existing:
             click.echo("✅ PostgreSQL service already exists")
+            return existing[0]
         else:
             click.echo("Adding PostgreSQL service...")
             result = run_railway_command(["add", "--database", "postgres"], timeout=30)
@@ -243,14 +279,15 @@ def _setup_postgres_step() -> None:
                 click.secho("✅ PostgreSQL service added", fg="green")
     except Exception as e:
         click.secho(f"⚠️  Warning: Could not check database service: {e}", fg="yellow")
+    return "Postgres"
 
 
 def _create_app_service_step(app_service: str) -> None:
     """Create application service."""
     try:
-        result = run_railway_command(["service"], timeout=10)
+        names = _list_railway_service_names()
 
-        if app_service.lower() in result.stdout.lower():
+        if app_service.lower() in (name.lower() for name in names):
             click.echo(f"✅ Service '{app_service}' already exists")
         else:
             result = run_railway_command(
@@ -315,8 +352,42 @@ def _generate_domain_step(app_service: str) -> str | None:
         return None
 
 
-def _configure_env_vars_step(app_service: str, domain_name: str | None) -> None:
-    """Configure environment variables in batch."""
+def _existing_service_variables(app_service: str) -> dict[str, str]:
+    """Return the app service's current Railway variables, or {} if unreadable."""
+    try:
+        return get_railway_variables(app_service) or {}
+    except Exception:
+        return {}
+
+
+def _runtime_role_variables(
+    postgres_service: str, existing: dict[str, str]
+) -> dict[str, str]:
+    """Return the runtime-role variables to set, honouring what already exists.
+
+    - ``RUNTIME_DATABASE_URL`` set without ``RUNTIME_DB_PASSWORD``: the role is
+      operator-managed, so nothing is written.
+    - ``RUNTIME_DB_PASSWORD`` already set: it is reused, so a re-deploy never
+      rotates the password underneath the container still serving traffic.
+    - Otherwise a new URL-safe (hex) password is generated.
+    """
+    if existing.get("RUNTIME_DATABASE_URL") and not existing.get("RUNTIME_DB_PASSWORD"):
+        return {}
+    password = existing.get("RUNTIME_DB_PASSWORD") or secrets.token_hex(24)
+    return {
+        "RUNTIME_DB_ROLE": RUNTIME_DB_ROLE,
+        "RUNTIME_DB_PASSWORD": password,
+        "RUNTIME_DATABASE_URL": runtime_database_url(postgres_service, password),
+    }
+
+
+def _configure_env_vars_step(
+    app_service: str,
+    domain_name: str | None,
+    postgres_service: str = "Postgres",
+    existing_vars: dict[str, str] | None = None,
+) -> None:
+    """Configure environment variables in batch, including the runtime DB role."""
     click.echo(f"Setting variables for service: {app_service}")
     click.echo("💡 Setting all variables at once to minimize deployments")
 
@@ -329,6 +400,9 @@ def _configure_env_vars_step(app_service: str, domain_name: str | None) -> None:
         "DJANGO_SETTINGS_MODULE": f"{django_package}.settings.production",
     }
 
+    runtime_vars = _runtime_role_variables(postgres_service, existing_vars or {})
+    env_vars.update(runtime_vars)
+
     if domain_name:
         env_vars["ALLOWED_HOSTS"] = domain_name
 
@@ -337,10 +411,16 @@ def _configure_env_vars_step(app_service: str, domain_name: str | None) -> None:
     if success:
         click.secho("✅ All environment variables configured successfully", fg="green")
         for key in env_vars:
-            if key == "SECRET_KEY":
+            if key in ("SECRET_KEY", "RUNTIME_DB_PASSWORD"):
                 click.echo(f"   • {key}=<generated>")
+            elif key == "RUNTIME_DATABASE_URL":
+                click.echo(f"   • {key}=<{RUNTIME_DB_ROLE} @ {postgres_service}>")
             else:
                 click.echo(f"   • {key}={env_vars[key]}")
+        if not runtime_vars:
+            click.echo(
+                "   • RUNTIME_DATABASE_URL: operator-managed (RUNTIME_DB_PASSWORD unset), left unchanged"
+            )
         click.echo(
             "💡 Variables are set without triggering a deployment. The deploy step below will start one."
         )
@@ -487,7 +567,7 @@ def _display_summary(
         "dashboard — start.sh will create it on next deploy"
     )
     click.echo(
-        f"      Or manually: railway run --service {app_service} "
+        f"      Or manually: railway ssh --service {app_service} "
         f"python manage.py createsuperuser"
     )
     click.echo("   5. Configure custom domain (optional): railway domain")
@@ -502,6 +582,10 @@ def _display_summary(
         )
     click.echo("   • Check healthcheck status in Railway dashboard")
     click.echo("   • Migrations run automatically on first deploy")
+    click.echo(
+        f"   • start.sh creates the restricted '{RUNTIME_DB_ROLE}' database role "
+        "before migrating"
+    )
 
     click.echo("\n📖 Documentation:")
     click.echo("   • Railway: https://docs.railway.app")
@@ -552,7 +636,7 @@ def railway(project_name: str | None) -> None:
 
     # Step 4: Check for PostgreSQL service
     click.echo("\n🗄️  Setting up PostgreSQL database...")
-    _setup_postgres_step()
+    postgres_service = _setup_postgres_step()
 
     # Step 5: Create app service
     click.echo(f"\n📦 Creating application service: {app_service}...")
@@ -569,7 +653,12 @@ def railway(project_name: str | None) -> None:
 
     # Step 8: Configure environment variables in batch
     click.echo("\n⚙️  Configuring environment variables...")
-    _configure_env_vars_step(app_service, domain_name)
+    _configure_env_vars_step(
+        app_service,
+        domain_name,
+        postgres_service,
+        _existing_service_variables(app_service),
+    )
 
     # Step 9: Deploy to app service
     click.echo("\n🚢 Deploying application...")

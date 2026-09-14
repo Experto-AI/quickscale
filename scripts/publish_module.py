@@ -1217,34 +1217,70 @@ def _publish_all(runner: GitRunner, *, modules: list[str]) -> None:
     its local split is skipped.  An absent or unobservable remote branch is
     not authorization, so it stops the batch.  The first failure also stops
     the batch (``_publish_module`` exits), leaving later modules untouched.
+
+    The release gate runs once, before the batch.  Each publish's ``--rejoin``
+    merge moves HEAD without changing its tree, so the batch instead pins the
+    gated HEAD tree and refuses to continue if any iteration sees another one:
+    every module is split from exactly the release-authoritative bytes.
     """
+    gated_tree = _head_tree(runner)
     published: list[str] = []
     skipped: list[str] = []
-    for module_name in modules:
-        local_sha = _get_local_split_sha(resolve_module_path(module_name), runner)
-        if local_sha is None:
-            _print_error(f"Could not compute subtree split for module '{module_name}'")
-            sys.exit(1)
-        remote_sha = _observe_remote_branch_sha(module_name, runner)
-        if not remote_sha:
-            _print_error(
-                f"Remote split branch for '{module_name}' is absent or could not be observed; "
-                "an absent branch is not authorization"
+    try:
+        for module_name in modules:
+            if _head_tree(runner) != gated_tree:
+                _print_error(
+                    "HEAD tree changed during the batch; refusing to publish from bytes the "
+                    "release gate did not check"
+                )
+                sys.exit(1)
+            local_sha = _get_local_split_sha(resolve_module_path(module_name), runner)
+            if local_sha is None:
+                _print_error(f"Could not compute subtree split for module '{module_name}'")
+                sys.exit(1)
+            remote_sha = _observe_remote_branch_sha(module_name, runner)
+            if not remote_sha:
+                _print_error(
+                    f"Remote split branch for '{module_name}' is absent or could not be "
+                    "observed; an absent branch is not authorization"
+                )
+                sys.exit(1)
+            if remote_sha.lower() == local_sha.lower():
+                _print_info(f"{module_name}: up to date ({local_sha[:12]}), skipping")
+                skipped.append(module_name)
+                continue
+            _print_info(f"{module_name}: remote {remote_sha[:12]} -> local {local_sha[:12]}")
+            _publish_module(module_name, expected_remote_sha=remote_sha, runner=runner)
+            published.append(module_name)
+            print()
+    finally:
+        # Runs on success and on every exit above, so a partial batch still
+        # reports what was pushed and how to restore the release gate.
+        _print_success(f"Published: {' '.join(published) or 'none'}")
+        if skipped:
+            _print_info(f"Already up to date: {' '.join(skipped)}")
+        if published:
+            _print_warning(
+                "Each publish added a --rejoin merge commit, so HEAD is no longer tagged "
+                "(the tree is unchanged)."
             )
-            _print_info(f"  Published so far: {' '.join(published) or 'none'}")
-            sys.exit(1)
-        if remote_sha.lower() == local_sha.lower():
-            _print_info(f"{module_name}: up to date ({local_sha[:12]}), skipping")
-            skipped.append(module_name)
-            continue
-        _print_info(f"{module_name}: remote {remote_sha[:12]} -> local {local_sha[:12]}")
-        _publish_module(module_name, expected_remote_sha=remote_sha, runner=runner)
-        published.append(module_name)
-        print()
+            _print_info("  Move the local release tag before sealing or publishing again:")
+            _print_info(f"    git tag -f {_read_repository_version()}")
 
-    _print_success(f"Published: {' '.join(published) or 'none'}")
-    if skipped:
-        _print_info(f"Already up to date: {' '.join(skipped)}")
+
+def _head_tree(runner: GitRunner) -> str:
+    """Return the tree SHA of HEAD."""
+    result = runner.run(
+        ["rev-parse", "HEAD^{tree}"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    tree = result.stdout.strip() if result.returncode == 0 else ""
+    if not tree:
+        _print_error("Could not resolve the HEAD tree")
+        sys.exit(1)
+    return tree
 
 
 # ---------------------------------------------------------------------------

@@ -340,14 +340,14 @@ class TestSetupPostgresStep:
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
     def test_postgres_exists(self, mock_run):
         """Test when PostgreSQL already exists"""
-        mock_run.return_value = Mock(returncode=0, stdout="postgres available")
-        _setup_postgres_step()
+        mock_run.return_value = Mock(returncode=0, stdout='[{"name": "PostgreSQL"}]')
+        assert _setup_postgres_step() == "PostgreSQL"
 
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
     def test_add_postgres_success(self, mock_run):
         """Test adding PostgreSQL successfully"""
         mock_run.side_effect = [
-            Mock(returncode=0, stdout="no database"),
+            Mock(returncode=0, stdout='[{"name": "web"}]'),
             Mock(returncode=0, stdout="added"),
         ]
         _setup_postgres_step()
@@ -356,7 +356,7 @@ class TestSetupPostgresStep:
     def test_add_postgres_fails(self, mock_run):
         """Test adding PostgreSQL failure"""
         mock_run.side_effect = [
-            Mock(returncode=0, stdout="no database"),
+            Mock(returncode=0, stdout='[{"name": "web"}]'),
             Mock(returncode=1, stdout=""),
         ]
         _setup_postgres_step()
@@ -379,23 +379,26 @@ class TestCreateAppServiceStep:
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
     def test_service_exists(self, mock_run):
         """Test when service already exists"""
-        mock_run.return_value = Mock(returncode=0, stdout="myapp service running")
+        mock_run.return_value = Mock(returncode=0, stdout='[{"name": "myapp"}]')
         _create_app_service_step("myapp")
 
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
     def test_create_success(self, mock_run):
         """Test successful service creation"""
         mock_run.side_effect = [
-            Mock(returncode=0, stdout="no matching service"),
+            Mock(returncode=0, stdout='[{"name": "myapp-worker"}]'),
             Mock(returncode=0, stdout="created"),
         ]
         _create_app_service_step("myapp")
+        # A name that merely contains the app name is not the app service.
+        assert mock_run.call_args_list[0].args[0] == ["service", "list", "--json"]
+        assert mock_run.call_args_list[1].args[0] == ["add", "--service", "myapp"]
 
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
     def test_create_fails(self, mock_run):
         """Test service creation failure"""
         mock_run.side_effect = [
-            Mock(returncode=0, stdout="no matching"),
+            Mock(returncode=0, stdout="[]"),
             Mock(returncode=1, stdout=""),
         ]
         _create_app_service_step("myapp")
@@ -569,3 +572,59 @@ class TestRemainingHelpers:
         batch_vars = mock_batch.call_args[0][0]
         assert batch_vars["DJANGO_SETTINGS_MODULE"] == "bap_web.settings.production"
         assert mock_batch.call_args[1]["service"] == "bap-web"
+
+    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
+    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    def test_configure_env_vars_sets_runtime_role(
+        self, mock_secret, mock_batch, capsys
+    ):
+        """The deploy provisions the runtime role inputs start.sh consumes."""
+        mock_secret.return_value = "secret-key"
+        mock_batch.return_value = (True, [])
+
+        _configure_env_vars_step("myapp", None, "PostgreSQL")
+
+        batch_vars = mock_batch.call_args[0][0]
+        password = batch_vars["RUNTIME_DB_PASSWORD"]
+        assert batch_vars["RUNTIME_DB_ROLE"] == "quickscale_runtime"
+        assert len(password) == 48 and all(c in "0123456789abcdef" for c in password)
+        assert batch_vars["RUNTIME_DATABASE_URL"] == (
+            f"postgresql://quickscale_runtime:{password}"
+            "@${{PostgreSQL.PGHOST}}:${{PostgreSQL.PGPORT}}/${{PostgreSQL.PGDATABASE}}"
+        )
+        assert password not in capsys.readouterr().out
+
+    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
+    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    def test_configure_env_vars_reuses_runtime_password(self, mock_secret, mock_batch):
+        """A re-deploy keeps the password the running container authenticates with."""
+        mock_secret.return_value = "secret-key"
+        mock_batch.return_value = (True, [])
+
+        _configure_env_vars_step(
+            "myapp", None, "Postgres", {"RUNTIME_DB_PASSWORD": "f" * 48}
+        )
+
+        batch_vars = mock_batch.call_args[0][0]
+        assert batch_vars["RUNTIME_DB_PASSWORD"] == "f" * 48
+        assert f"quickscale_runtime:{'f' * 48}@" in batch_vars["RUNTIME_DATABASE_URL"]
+
+    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
+    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    def test_configure_env_vars_leaves_operator_managed_url(
+        self, mock_secret, mock_batch
+    ):
+        """A hand-set RUNTIME_DATABASE_URL without the CLI password is not overwritten."""
+        mock_secret.return_value = "secret-key"
+        mock_batch.return_value = (True, [])
+
+        _configure_env_vars_step(
+            "myapp", None, "Postgres", {"RUNTIME_DATABASE_URL": "postgresql://mine"}
+        )
+
+        batch_vars = mock_batch.call_args[0][0]
+        assert not {
+            "RUNTIME_DB_ROLE",
+            "RUNTIME_DB_PASSWORD",
+            "RUNTIME_DATABASE_URL",
+        } & set(batch_vars)

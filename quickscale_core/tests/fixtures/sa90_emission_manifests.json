@@ -34,7 +34,8 @@
       "sa142": "Regenerated 2026-08-25 — Dockerfile: added fixed QuickScale owner/SA142 contract/bound-digest final-image labels and their digest/contract build args; docker-compose.yml: added stable backend image/direct-Compose fallback, validated resource-prefix interpolation, and fixed owner/lifecycle/scope labels for every generated service, named volume, and default network. Only these two generated files changed; all unrelated paths, hashes, and modes remain authoritative.",
       "sa170-c-correct": "Regenerated 2026-09-04 — db/init.sql now records the quickscale.init_complete database sentinel after every required initialization statement succeeds; docker-compose.yml now probes that sentinel instead of accepting PostgreSQL connection readiness alone. Only these two generated files changed in all three variants; all unrelated paths, hashes, and modes remain authoritative.",
       "sa160": "Regenerated 2026-09-10 — terminal remediation preserves the HttpOnly production CSRF cookie, injects Django's masked token through testproject/views.py and templates/index.html, makes frontend/src/lib/csrf.ts prefer that server token and otherwise match Django's last duplicate-cookie value, and extends frontend/src/test/csrf.test.tsx across the helper, apiRequest, and FormRenderer callers. These four changed generated paths supersede the 2026-09-09 first-match hashes in react_default, react_empty, and react_selected; the prior useApi.ts, FormRenderer.tsx, base.py, and production.py corrections remain authoritative.",
-      "v88-privileged-command": "Regenerated 2026-09-13 — the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
+      "v88-privileged-command": "Regenerated 2026-09-13 — the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "v88-runtime-role": "Regenerated 2026-09-14 — Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -76,7 +77,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "06eb461ecef163127d85341b7e0838c3dcf131e9f82efd82038541358e8a5b2c"
+      "sha256": "d178b25f538e8b7e4e5b527aed4e74ad82877164af81b5310b6e3cbcb1974d02"
     },
     "Makefile": {
       "mode": "664",
@@ -84,7 +85,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-      "sha256": "94165c648f7b631bdcf53182fe06bceaf2037c9ebc2646dfeca556ece9ce0a40"
+      "sha256": "8eccd52a8ddcc5d3e4bc1dc20b2331c6932786ef2f1f680847b812061948bd0b"
     },
     "README.md": {
       "mode": "664",
@@ -416,7 +417,7 @@
     },
     "start.sh": {
       "mode": "664",
-      "sha256": "68fd4733ab6fdcc09fe2a6fea715017544643ca527c50543eeba05373d02bb86"
+      "sha256": "08e5f3b50fad5e73928420077e52e047676075aa553512a90dbbfa30660e540b"
     },
     "templates/404.html": {
       "mode": "664",
@@ -542,7 +543,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "06eb461ecef163127d85341b7e0838c3dcf131e9f82efd82038541358e8a5b2c"
+      "sha256": "d178b25f538e8b7e4e5b527aed4e74ad82877164af81b5310b6e3cbcb1974d02"
     },
     "Makefile": {
       "mode": "664",
@@ -550,7 +551,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-      "sha256": "94165c648f7b631bdcf53182fe06bceaf2037c9ebc2646dfeca556ece9ce0a40"
+      "sha256": "8eccd52a8ddcc5d3e4bc1dc20b2331c6932786ef2f1f680847b812061948bd0b"
     },
     "README.md": {
       "mode": "664",
@@ -882,7 +883,7 @@
     },
     "start.sh": {
       "mode": "664",
-      "sha256": "68fd4733ab6fdcc09fe2a6fea715017544643ca527c50543eeba05373d02bb86"
+      "sha256": "08e5f3b50fad5e73928420077e52e047676075aa553512a90dbbfa30660e540b"
     },
     "templates/404.html": {
       "mode": "664",
@@ -1008,7 +1009,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "06eb461ecef163127d85341b7e0838c3dcf131e9f82efd82038541358e8a5b2c"
+      "sha256": "d178b25f538e8b7e4e5b527aed4e74ad82877164af81b5310b6e3cbcb1974d02"
     },
     "Makefile": {
       "mode": "664",
@@ -1016,7 +1017,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-      "sha256": "94165c648f7b631bdcf53182fe06bceaf2037c9ebc2646dfeca556ece9ce0a40"
+      "sha256": "8eccd52a8ddcc5d3e4bc1dc20b2331c6932786ef2f1f680847b812061948bd0b"
     },
     "README.md": {
       "mode": "664",
@@ -1348,7 +1349,7 @@
     },
     "start.sh": {
       "mode": "664",
-      "sha256": "68fd4733ab6fdcc09fe2a6fea715017544643ca527c50543eeba05373d02bb86"
+      "sha256": "08e5f3b50fad5e73928420077e52e047676075aa553512a90dbbfa30660e540b"
     },
     "templates/404.html": {
       "mode": "664",

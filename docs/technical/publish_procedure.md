@@ -159,14 +159,23 @@ One command does it:
 
 ```bash
 make publish-modules                                        # every outdated module, fresh lease each
+git tag -f X.Y.Z                                            # re-point the local tag (see below)
 make publish-module-status                                  # confirm: all twelve up to date
 ```
 
 `make publish-modules` walks the shipped-module inventory serially. For each module it observes the remote
 split-branch SHA live, skips the module if that already equals its local split, and otherwise publishes with
 that SHA as the force-with-lease expectation. It stops at the first failure, and at any module whose remote
-branch is absent or unobservable. Re-running it after a failure is safe: already-published modules are
-skipped. It ends by printing status.
+branch is absent or unobservable. It ends by printing status.
+
+Every publish records a `Split '…' into commit '…'` merge on the integration branch (`git subtree split
+--rejoin`). The merge leaves the tree byte-identical but moves `HEAD` off the `X.Y.Z` tag, and every
+mutating flow — the next publish, and sealing — requires the tag at `HEAD`. The batch checks the gate once
+and then refuses to continue if the `HEAD` tree changes, so all modules come from the gated bytes; when it
+has published anything — including a batch that stopped partway — it prints the `git tag -f X.Y.Z` to
+run. The tag is still local, so moving it is free. After a partial batch, re-tag and re-run: modules already
+published are skipped. Commit nothing between the batch and the re-tag: the tag must land on the rejoin
+merge, not on new work.
 
 `make publish-module-status` observes each remote split branch live and, for every module that is
 not up to date, prints a ready-to-paste `make publish-module …` line with the full 40-hex SHA
@@ -216,25 +225,52 @@ want the same site shape next release.
 
 ### Phase 4b — Verify by deployment
 
-Deploy the same generated project and exercise it as a real site:
+Deploy the same generated project from Phase 4a. Replace `myapp` with your project slug; it is also
+the Railway app service name.
+
+**Step 1 — Deploy.** From the project directory, choosing *create a new project* when prompted:
 
 ```bash
+cd myapp
 quickscale deploy railway
 ```
 
-This does **not** create the restricted database role or set `RUNTIME_DATABASE_URL`, so the first
-boot is expected to fail with `RUNTIME_DATABASE_URL is required for runtime serving` and restart in a
-loop. Follow [railway.md §Runtime Role Setup](../deployment/railway.md#runtime-role-setup) for the
-role, grants, and the `railway variables` command — it fills host, port, and database from Railway
-reference variables, so only the password you chose is typed — then redeploy:
+It must finish with `✅ Deployment process completed successfully!` and no `⚠️ Warning` lines. The
+deploy also provisions the restricted runtime database role: it sets `RUNTIME_DB_ROLE`,
+`RUNTIME_DB_PASSWORD`, and `RUNTIME_DATABASE_URL`, and the generated `start.sh` creates the role
+before migrating ([railway.md §Runtime Role Setup](../deployment/railway.md#runtime-role-setup)).
+There is no manual database step.
+
+**Step 2 — Watch it boot.**
 
 ```bash
-railway up --service myapp --detach
+railway logs --service myapp
 ```
 
-Create a superuser with the `DJANGO_SUPERUSER_*` Railway variables or
-`railway run --service myapp python manage.py createsuperuser`, then confirm the deployed site
-loads and the same routes behave. First deploy takes 5–10 minutes.
+Pass: `✅ Runtime role 'quickscale_runtime' created`, then migrations, then `Booting worker` with no
+traceback, and `/healthcheck/` green in the dashboard. The first deploy takes 5–10 minutes.
+
+**Step 3 — Create a superuser.**
+
+```bash
+railway ssh --service myapp python manage.py createsuperuser
+```
+
+Use `railway ssh`, which runs inside the deployed container; its first use asks you to create an SSH
+key (`ssh-keygen -t ed25519`) and then retry. `railway run` would run on your machine, which cannot
+reach the `*.railway.internal` database host. To avoid SSH, set `DJANGO_SUPERUSER_USERNAME`,
+`DJANGO_SUPERUSER_EMAIL`, and `DJANGO_SUPERUSER_PASSWORD` as Railway variables instead; `start.sh`
+creates the user on the next deploy.
+
+**Step 4 — Exercise the site.** Open the URL from the deploy summary and walk the same routes as
+Phase 4a, including `/admin/`.
+
+**Cleanup.** When the loop is finished, delete the Railway project in the dashboard. Each re-run of
+this phase creates a new one, and the free tier allows two.
+
+A failure in any step is routed by its cause: a wrong Railway setting is an environment defect
+(re-entry step 4); anything the CLI or the generated project gets wrong is a repository defect
+(re-entry step 2). See [railway.md](../deployment/railway.md#runtime-role-setup) for troubleshooting.
 
 #### Re-entry loop for Phase 4a/4b defects
 
@@ -263,7 +299,8 @@ coding assistant.
 
 3. **Republish exactly what changed.** Run `make publish-modules`, per
    [Phase 3](#phase-3--publish-the-split-branches-re-enterable): it republishes only modules whose split
-   changed. Do not decide by hand which modules were affected.
+   changed. Do not decide by hand which modules were affected. If it published anything, run the
+   `git tag -f X.Y.Z` it prints.
 
    A split branch carries only its own `quickscale_modules/<module>/` subtree, so a fix confined to core, the
    CLI, or the generator leaves all twelve branches byte-identical and status reports every module up to date.
@@ -271,7 +308,7 @@ coding assistant.
    with the rebuilt install from Phase 4a.
 
 4. **Deployment-environment defect** (Phase 4b only) — the cause is outside the repository: a missing runtime
-   role, a wrong Railway variable, a bad `RUNTIME_DATABASE_URL`. Fix the environment, re-deploy, and go to
+   role, a wrong Railway variable, a deleted Postgres service. Fix the environment, re-deploy, and go to
    step 1. No commit, no tag, and no republish are involved.
 
 Nothing is consumed by iterating: split branches are mutable, no tag is pushed, and the version is not spent

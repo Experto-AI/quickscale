@@ -1752,6 +1752,8 @@ class TestPublishAll:
             pushes.append((module_name, expected_remote_sha))
 
         monkeypatch.setattr(publish_module, "_publish_module", _fake_publish)
+        monkeypatch.setattr(publish_module, "_head_tree", lambda runner: "t" * 40)
+        monkeypatch.setattr(publish_module, "_read_repository_version", lambda: VERSION)
         return pushes
 
     def test_each_outdated_module_uses_its_own_observed_sha_and_up_to_date_is_skipped(
@@ -1768,6 +1770,25 @@ class TestPublishAll:
 
         assert pushes == [("auth", "1" * 40), ("crm", "3" * 40)]
         assert "blog: up to date" in output
+        assert f"git tag -f {VERSION}" in output
+
+    def test_head_tree_change_mid_batch_stops_before_next_push(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        pushes = self._patch(
+            monkeypatch,
+            local={"auth": "a" * 40, "blog": "b" * 40},
+            remote={"auth": "1" * 40, "blog": "2" * 40},
+        )
+        trees = iter(["t" * 40, "t" * 40, "u" * 40])
+        monkeypatch.setattr(publish_module, "_head_tree", lambda runner: next(trees))
+
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module._publish_all(object(), modules=["auth", "blog"])
+
+        assert excinfo.value.code == 1
+        assert pushes == [("auth", "1" * 40)]
+        assert "HEAD tree changed" in capsys.readouterr().out
 
     def test_absent_remote_branch_stops_the_batch_without_authorizing_a_push(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -1785,6 +1806,7 @@ class TestPublishAll:
         assert excinfo.value.code == 1
         assert pushes == [("auth", "1" * 40)]
         assert "not authorization" in output
+        assert f"git tag -f {VERSION}" in output
 
     @pytest.mark.parametrize(
         ("argv", "expected_message"),

@@ -4,9 +4,20 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from quickscale_cli.commands.deployment_commands import railway
+
+
+@pytest.fixture(autouse=True)
+def _no_live_variable_read():
+    """Keep the pre-deploy variable read off the real Railway CLI."""
+    with patch(
+        "quickscale_cli.commands.deployment_commands._existing_service_variables",
+        return_value={},
+    ):
+        yield
 
 
 @contextmanager
@@ -501,7 +512,7 @@ class TestRailwayCommand:
                                                     stderr="",
                                                 ),  # postgres service check
                                                 Mock(
-                                                    returncode=0, stdout="", stderr=""
+                                                    returncode=0, stdout="[]", stderr=""
                                                 ),  # app service check (not found)
                                                 Mock(
                                                     returncode=0, stdout="", stderr=""
@@ -667,7 +678,7 @@ class TestRailwayCommand:
                                                     stderr="",
                                                 ),  # postgres service check
                                                 Mock(
-                                                    returncode=0, stdout="", stderr=""
+                                                    returncode=0, stdout="[]", stderr=""
                                                 ),  # app service check (not found)
                                                 Mock(
                                                     returncode=0, stdout="", stderr=""
@@ -1060,13 +1071,13 @@ class TestRailwayCommand:
                                             # (deploy goes through deploy_railway_service)
                                             mock_run.side_effect = [
                                                 Mock(
-                                                    returncode=0, stdout="", stderr=""
+                                                    returncode=0, stdout="[]", stderr=""
                                                 ),  # postgres check (not found)
                                                 Mock(
                                                     returncode=0, stdout="", stderr=""
                                                 ),  # add postgres
                                                 Mock(
-                                                    returncode=0, stdout="", stderr=""
+                                                    returncode=0, stdout="[]", stderr=""
                                                 ),  # app service check (not found)
                                                 Mock(
                                                     returncode=0, stdout="", stderr=""

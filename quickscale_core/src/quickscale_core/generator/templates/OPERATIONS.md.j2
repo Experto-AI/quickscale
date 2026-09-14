@@ -49,7 +49,15 @@ prefix, so the superuser ``DATABASE_URL`` is used for schema changes.
 
 ### Production (Railway / Manual Deploy)
 
-On Railway, the platform auto-injects `DATABASE_URL` with a superuser connection. To enable RLS enforcement:
+On Railway, the platform auto-injects `DATABASE_URL` with a superuser connection.
+
+**With `quickscale deploy railway` (automatic):** the deploy sets `RUNTIME_DB_ROLE`
+(`quickscale_runtime`), a generated `RUNTIME_DB_PASSWORD`, and `RUNTIME_DATABASE_URL`. On every boot,
+`start.sh` connects with `DATABASE_URL` and creates or updates that `NOSUPERUSER`/`NOBYPASSRLS` role
+before migrating. No manual step is needed.
+
+**Manual deploy:** leave `RUNTIME_DB_PASSWORD` unset (`start.sh` then skips role creation) and
+enable RLS enforcement yourself:
 
 1. Connect to your Railway PostgreSQL database:
    ```bash
@@ -79,7 +87,7 @@ On Railway, the platform auto-injects `DATABASE_URL` with a superuser connection
 
 3. Set `RUNTIME_DATABASE_URL` in your Railway environment:
    ```
-   RUNTIME_DATABASE_URL=postgresql://{{ runtime_db_role }}:<password>@<host>:<port>/{{ package_name }}
+   RUNTIME_DATABASE_URL=postgresql://{{ runtime_db_role }}:<password>@<host>:<port>/<database>
    ```
 
 4. The app's `start.sh` automatically uses `DATABASE_URL` (superuser) for migrations (with the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix) and the app uses `RUNTIME_DATABASE_URL` for runtime requests.

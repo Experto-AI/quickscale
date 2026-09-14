@@ -29,6 +29,8 @@ For adopters, the consequential change is the Python floor moving to 3.14 and th
 - **Commit-testimony gate**: any non-merge commit touching a workflow, the gate registry, or a provisioning station must carry a `vNN` roadmap reference, bare (`v88`) or dotted (`v0.88.0`); a ticket id or changelog entry does not satisfy it. A `commit-msg` hook rejects it while rewording is still free, and CI re-checks the range.
 - **Security and interpreter gates**: a consolidated security static-analysis gate with recorded, expiring suppressions, and a guard that keeps repository tooling on the project interpreter.
 - **Local CI stage selection and failure replay**: run part of the pipeline with `ONLY=`/`FROM=`/`SKIP_INSTALL=`, and replay just what failed. Partial runs announce themselves and never count as a full pass.
+- **Railway deploy provisions the runtime database role**: `quickscale deploy railway` now sets the restricted role's credentials, and the generated `start.sh` creates the `NOSUPERUSER/NOBYPASSRLS` role before migrating — the manual SQL step is gone. Re-deploys reuse the password; a hand-managed `RUNTIME_DATABASE_URL` is left untouched.
+- **One-command split publish** (maintainers): `make publish-modules` publishes every outdated module, each against its own freshly observed remote SHA.
 
 ### Improvements
 
@@ -37,6 +39,8 @@ For adopters, the consequential change is the Python floor moving to 3.14 and th
 - **E2E lifecycle** — content-addressed backend image identity with measured cold-versus-warm reuse, run-scoped resource labels, retention-aware teardown, and exact-label cleanup that leaves no stray containers, volumes, or networks.
 - **Installed-wheel proof** — a source-free, all-module `plan → apply → up` lifecycle runs from an external working directory against current artifacts.
 - **Quality and gate hygiene** — a merge-base monotonicity gate for the quality baseline, parallelised gate suites, and a closed-universe check that makes an unregistered CI job a red build.
+- **`quickscale manage` keeps the runtime role** — only the three sanctioned privileged commands use the superuser connection, so `quickscale manage createsuperuser` works in projects with the orgs module.
+- **Deployment fixes** — the generated Dockerfile creates the `django` home directory gunicorn's control socket needs, and `quickscale deploy railway` no longer hangs on Railway CLI's interactive service prompt.
 
 ## Breaking Changes
 
