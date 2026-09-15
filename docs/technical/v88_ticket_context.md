@@ -85,22 +85,6 @@ signature check are attacker-controlled, so malformed input produces a 500 and a
 instead of an authentication failure. Comparing encoded bytes keeps the constant-time property and
 turns the input into an ordinary mismatch.
 
-## SA182 — Let project-owned tenant tables join the tenant universe
-
-The tenant-isolation gate classifies models only through the literal `TENANT_TABLE_REGISTRY`, the
-exclusion marker, or M2M inference. A model that uses `tenant_org_fk()` and `TenantManager` but lives
-in a project app is unclassified, and every generated project's CI fails on it. The remediation
-hint points at module source, which the extension contract forbids editing and which the next
-`quickscale update` would overwrite. The property portal needs exactly such tables: any
-`AbstractListing` subclass is a tenant model by construction.
-
-A marker-derived classifier already exists and the documentation calls its overview authoritative,
-while the source calls the literal the single source of truth. Make the gate and the policy refresh
-use the derived set. Isolation stays default-deny in substance, because W003/W004 and the isolation
-check still demand `organization_id` and FORCE RLS for every tenant model, whether or not the literal
-lists it. The literal stays useful as a monorepo cross-check that shipped modules did not lose their
-markers.
-
 ## SA183 — Destructive teardown must not strand a live external obligation
 
 `purge_organization` deletes billing rows of every status and then the organization row holding
@@ -136,8 +120,8 @@ and concurrent `CREATE ROLE` notes in the technical audit are not promoted and s
 
 ## SA190 — Purge membership and removal obligations from one place
 
-After SA182, a project-owned tenant table is classified and refreshed, but purge still enumerates
-its own literal `_DELETE_SPECS`. Because tenant foreign keys are `PROTECT`, an organization that owns
+Marker-derived tenant discovery classifies and refreshes a project-owned tenant table, but purge
+still enumerates its own literal `_DELETE_SPECS`. Because tenant foreign keys are `PROTECT`, an organization that owns
 an unlisted row cannot be purged at all. Derive membership from the same tenant set, and order it
 topologically from installed foreign keys, with overrides where the graph is not enough.
 
@@ -197,8 +181,8 @@ QuickScale interface.
 Every new child table, including gallery images, must carry its own `organization_id` and RLS
 policy under the child-table decision in [decisions.md](decisions.md). Match the existing
 `test_rls_boundary.py` coverage pattern and verify tenant isolation across the API, the rendered
-pages, and inquiry handling. These tables join the tenant universe through the marker-derived
-classification of SA182, never through edits to the vendored `orgs` source.
+pages, and inquiry handling. These tables join the tenant universe through marker-derived
+classification, never through edits to the vendored `orgs` source.
 
 A public read API inside the reusable `listings` module, and generic support requiring no
 project-owned code, belong in the optional inventory until a second consumer justifies them.

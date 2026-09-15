@@ -136,7 +136,8 @@ rank-1 finding is narrowed rather than closed: SA190 still owns purge derivation
   written into both lock implementations. That is not a relocation, but it is the watch item's
   compounding paid once more.
 - **SA172 / `89d262bc`**: the FORCE-RLS refresh is idempotent. No new commitment was minted, but
-  the refresh still iterates the literal registry. That pre-existing gap is now rank-1 evidence.
+  at that closeout the refresh still iterated the literal registry. That then-pre-existing gap
+  became rank-1 evidence; SA182 later closed the refresh half.
 - **SA173**: module presence is three-state, and identity stays derived. Sound.
 - **SA160**: the template copy of `get_client_ip` was deleted in favour of the module resolver,
   plus a generated normalizing middleware. The mechanism is removed. The resolver still fails

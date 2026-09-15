@@ -67,8 +67,8 @@ A generated project may add tenant-scoped models in its own Django app without
 editing a vendored QuickScale module or adding an entry to
 `TENANT_TABLE_REGISTRY`. Runtime classification is marker-derived: a concrete
 model is enrolled when it inherits the tenant contract or declares the shared
-dual-manager contract, while an explicit `tenant_excluded = True` marker wins
-over any inherited or manager-based signal.
+dual-manager contract, while an explicit reason string on `tenant_excluded`
+wins over any inherited or manager-based signal.
 
 For example, a project-owned model extending the listings abstract base keeps
 both managers explicit:

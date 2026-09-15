@@ -10,7 +10,7 @@ import pytest
 
 ROOT = Path(__file__).parents[2]
 TICKET = r"SA\d+[a-z]?"
-RETAINED_CLOSED_TICKETS = {"SA160", "SA180", "SA181"}
+RETAINED_CLOSED_TICKETS = {"SA160", "SA180", "SA181", "SA182"}
 COLUMNS = [
     "Ticket",
     "Delivery",
@@ -236,13 +236,17 @@ def test_rejects_duplicate_schedule(roadmap: str) -> None:
         _roadmap_tickets(roadmap + table)
 
 
+@pytest.mark.parametrize("closed_ticket", sorted(RETAINED_CLOSED_TICKETS))
 def test_accepts_checked_ticket_outside_open_schedule_and_context(
-    roadmap: str, context: str
+    roadmap: str, context: str, closed_ticket: str
 ) -> None:
     closed_roadmap = (
-        roadmap.replace("SA902", "SA160")
-        .replace("| SA160 | Later delivery | post-v88 | 3 | SA901 | Deferred |\n", "")
-        .replace("- [ ] **SA160", "- [x] **SA160")
+        roadmap.replace("SA902", closed_ticket)
+        .replace(
+            f"| {closed_ticket} | Later delivery | post-v88 | 3 | SA901 | Deferred |\n",
+            "",
+        )
+        .replace(f"- [ ] **{closed_ticket}", f"- [x] **{closed_ticket}")
     )
     closed_context = context.replace("\n## SA902\nLater notes.\n", "\n")
     _check_coverage(closed_roadmap, closed_context)

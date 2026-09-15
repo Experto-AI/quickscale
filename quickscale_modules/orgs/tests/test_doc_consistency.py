@@ -2,7 +2,7 @@
 
 Verifies that the marker-based derived registry overview
 (:func:`get_derived_registry_overview`) agrees with the shipped-module literal
-``TENANT_TABLE_REGISTRY`` for the installed concrete model set,
+``TENANT_TABLE_REGISTRY`` for the installed shipped concrete-model set,
 and that the documented ``TenantManager`` API surface is consistent
 with the actual code in ``quickscale_modules_orgs.managers``.
 
@@ -51,7 +51,7 @@ _SHIPPED_APP_LABELS: frozenset[str] = frozenset(
 
 def test_derived_registry_enrolled_matches_literal_registry() -> None:
     """The ENROLLED model set from the derived view must match the literal
-    ``TENANT_TABLE_REGISTRY`` for all project-owned apps.
+    ``TENANT_TABLE_REGISTRY`` for shipped app labels represented by it.
 
     Project-owned app models outside the shipped registry are excluded from
     this parity comparison because the literal is not their enrollment API.
@@ -80,7 +80,7 @@ def test_derived_registry_enrolled_matches_literal_registry() -> None:
 
 def test_derived_registry_enrolled_per_app_matches_literal() -> None:
     """Per-app ENROLLED breakdown from the derived view must match the
-    literal ``TENANT_TABLE_REGISTRY`` for project-owned apps."""
+    literal ``TENANT_TABLE_REGISTRY`` for shipped app labels."""
     derived = get_derived_registry_overview()
     derived_enrolled = [
         e
@@ -205,7 +205,7 @@ def test_derived_registry_works_without_registry_lookup() -> None:
     for all installed shipped models. This is a regression test: if any code path in
     the derived overview still consults ``REGISTRY_LOOKUP`` indirectly
     (via :func:`is_classified_in_registry` or
-    :func:`_get_m2m_through_classification`), clearing the lookup would
+    :func:`_get_m2m_through_classification_marker_only`), clearing the lookup would
     cause ENROLLED models or auto-created M2M through tables to vanish
     from the derived view.
 

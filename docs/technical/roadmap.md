@@ -32,45 +32,43 @@ scope and acceptance; [context](v88_ticket_context.md) explains implementation c
 |---|---|---|---|---|---|
 | SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
-| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA182, SA191 | Deferred |
+| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA184 | Make `quickscale deploy railway` re-runs read live state and fail hard | post-v88 | 2 | — | Deferred |
 | SA185 | Enforce contract vintage when upgradable code meets an older project | post-v88 | 2 | SA184 | Deferred |
 | SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
 | SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | SA185 | Deferred |
-| SA182 | Enroll marker-declared tenant models in classification and policy refresh | post-v88 | 3 | — | Deferred |
 | SA183 | Refuse to purge an organization with a live Stripe subscription | post-v88 | 3 | — | Deferred |
-| SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | SA182 | Deferred |
+| SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | — | Deferred |
 | SA188 | Settle the privileged-command set behind one declaration | post-v88 | 3 | SA185 | Deferred |
 | SA189 | Provision the runtime database role in one place under one name | post-v88 | 3 | SA188 | Deferred |
-| SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | SA182, SA183 | Deferred |
+| SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | SA183 | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
 Track 2: SA184 ──► SA185 ──► SA186 ──► SA187 ──► SA192
-Track 3: SA182 ──► SA183 ──► SA177 ──► SA188 ──► SA189 ──► SA190
+Track 3: SA183 ──► SA177 ──► SA188 ──► SA189 ──► SA190
 
-Cross-track dependencies:  SA182 ──► SA153     SA185 ──► SA188
+Cross-track dependencies:  SA185 ──► SA188
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA152 → SA191 → SA153, with SA182 joining at SA153. The portal is built
-on the migrated `bap-web`, so the migration tools are verified first and then used for real. SA182
-is small and first on Track 3, so it lands long before SA153 needs it. SA154 is an inventory, not
-work. Every other ticket is off the critical path.
+**Critical path.** SA152 → SA191 → SA153. The portal is built on the migrated `bap-web`, so the
+migration tools are verified first and then used for real. Project-owned tenant tables no longer add
+a dependency to the portal. SA154 is an inventory, not work. Every other ticket is off the critical
+path.
 
 **Ordering.**
 
-- **SA182 precedes SA153 and SA177.** Without it the portal's first tenant table fails the generated
-  project's `check_tenant_isolation`, or needs module-source edits the extension contract forbids.
-  Landing it before SA177 lets predicate verification cover project-owned tables and keeps the two
-  out of `tenancy.py` at the same time.
+- **Derived tenant tables support SA153 and SA177.** Project-owned tenant tables pass the generated
+  project's `check_tenant_isolation` without module-source edits, and predicate verification covers
+  them through the same derived tenant-model set.
 - **SA183 precedes SA190.** Both edit `purge_organization.py`. SA183 is the small money-path refusal;
-  SA190 then folds it into the shared obligation list, on top of SA182's derived tenant set.
+  SA190 then folds it into the shared obligation list, on top of the derived tenant set.
 - **SA184 precedes SA185.** Both edit `deployment_commands.py`, and the deploy-time vintage check
   should read Railway state through the fail-hard path.
 - **SA185 precedes SA188, and SA188 precedes SA189.** SA188 changes contract-bearing templates and
@@ -106,7 +104,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA152 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA184 | yes | yes | yes | **yes** | no |
-| 3 | SA182 | yes, after merging `v89` into the stale worktree | yes | yes | **yes** | **yes** (feeds SA153) |
+| 3 | SA183 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -124,12 +122,12 @@ A track is **truly green** only when all three states are yes.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
   [ticket context](v88_ticket_context.md), and the owning audit: the arch audit for SA152,
-  SA182, SA185, SA188, SA189, and SA190; the tech audit for SA177, SA183, SA184, SA186, and
+  SA185, SA188, SA189, and SA190; the tech audit for SA177, SA183, SA184, SA186, and
   SA187 (SA183 and SA190 also close arch-audit items). SA191, SA153, and SA192 have no owning
   audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
-  Three code-adjacent overlaps cross tracks: SA182 and SA153 both edit the extension and
-  organizations documentation (SA182 lands first); SA192 restyles the `auth` account templates
+  Three code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
+  documentation; SA192 restyles the `auth` account templates
   while SA190 edits the account-delete view, so whichever lands second re-runs the auth tests; and
   SA189 edits `deployment_commands.py` after Track 2's deploy work has merged through its
   dependency chain. The serialized queue covers them:
@@ -203,7 +201,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   server-rendered so a crawler that runs no JavaScript receives the content and Open Graph tags; the
   site has a sitemap and `robots.txt` generated from published listings. The API exposes only
   published listings of the requested organization. Every new tenant-owned child table has its own `organization_id`, forced RLS, and boundary tests,
-  and passes the generated project's `check_tenant_isolation` through SA182's enrollment, with no
+  and passes the generated project's `check_tenant_isolation` through marker-derived enrollment, with no
   edit under vendored module source. Prove the search → detail → inquiry journey and isolation
   between organizations through both the API and the rendered pages. Correct reusable-module feature
   claims that the module does not provide. Adding a frontend dependency for prerendering follows the
@@ -247,7 +245,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   searches, favorites, and alerts; agent/office profiles; syndication; tours/video; paid
   placement; blog/listing cross-links; and PostgreSQL full-text search. Promote an item only with a concrete consumer, bounded acceptance, and
   a fresh dependency and track. Items that add tenant tables (saved searches, favorites, profiles,
-  tours) build on SA182's enrollment and SA190's purge derivation, not on module-source edits. Close
+  tours) build on marker-derived enrollment and SA190's purge derivation, not on module-source edits. Close
   when every item is promoted or dropped with rationale.
 
 - [x] **SA181 — Derive expected versions in tests from the repository version.**
@@ -300,20 +298,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** `blog/views.py`, `notifications/services.py`, their tests, and the technical audit.
 
-- [ ] **SA182 — Enroll marker-declared tenant models in classification and policy refresh.**
-
-  **Acceptance:** `is_classified_in_registry()` accepts a model for which `is_tenant_model()` holds,
-  as the derived overview already does, while W003/W004 and `check_tenant_isolation` still require
-  `organization_id` and FORCE RLS. `refresh_force_rls_policies()` iterates the derived tenant-model
-  set instead of `TENANT_TABLE_REGISTRY`. A regression with a non-module tenant model (a project app
-  subclassing `AbstractListing`) is classified and refreshed, and the same model without FORCE RLS
-  still fails. The literal registry remains only as a shipped-module cross-check; `tenancy.py`, the
-  `checks.py` remediation hint, `organizations.md`, and decisions agree on which classifier is
-  authoritative, and the extension documentation says how a project declares a tenant table. Purge
-  membership is SA190's.
-
-  **Surfaces:** `orgs/tenancy.py`, `orgs/checks.py`, orgs tests, `organizations.md`,
-  `module-extension.md`, decisions, and the architecture audit.
+- [x] **SA182 — Enroll marker-declared tenant models in classification and policy refresh.**
 
 - [ ] **SA183 — Refuse to purge an organization with a live Stripe subscription.**
 
@@ -332,7 +317,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA177 — Verify the predicates of enrolled RLS policies.**
 
   **Acceptance:** for each enrolled table — including marker-declared project tables, through
-  SA182's derived set — compare both policies' `qual` and `with_check` in `pg_policies` against the
+  the derived set — compare both policies' `qual` and `with_check` in `pg_policies` against the
   rendered expected policies, normalized for PostgreSQL's catalog representation. A deliberately
   weakened predicate fails for the intended reason and the exact policy is restored afterward. Then
   retire the tech audit's predicate-conformance tooling gap and structural smell.
@@ -369,7 +354,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA190 — Derive the purge plan and share organization-removal obligations.**
 
-  **Acceptance:** `purge_organization` takes its membership from SA182's derived tenant-model set and
+  **Acceptance:** `purge_organization` takes its membership from the derived tenant-model set and
   its deletion order from installed FK metadata, with explicit overrides, so purging an organization
   that owns project-owned tenant rows succeeds without a `_DELETE_SPECS` edit. The obligations of
   removing an organization — the SA183 billing refusal, owned-row purge, social cache invalidation,
