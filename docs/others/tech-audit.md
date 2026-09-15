@@ -88,13 +88,12 @@ All of these were read hunk by hunk, production and test.
 | TA73 `purge-org-orphans-live-stripe-subscription` | S2 | Data handling / money | `purge_organization` deletes current Stripe-backed subscriptions without cancelling or refusing | Small | High (code); Medium (post-purge webhook path) | open — new |
 | TA74 `railway-redeploy-rotates-secret-key` | S3 | Operability | Every `quickscale deploy railway` re-run replaces `SECRET_KEY` | Trivial ⚡ | High | open — new |
 | TA75 `railway-runtime-role-vars-fail-open` | S3 | Error handling (Fail-Hard) | Unreadable Railway state becomes a fresh runtime password and a guessed Postgres service | Small | High | open — new |
-| TA76 `version-bump-breaks-literal-tests` | S3 | Tests | The v89 bump left 13 tests pinned to `0.88.0`; `make ci` is red | Trivial ⚡ | High (executed) | open — new |
 | TA77 `publish-all-self-observed-lease` | S3 | Concurrency / publication safety | `--publish-all` feeds its own just-observed SHA to the lease, so it can overwrite unseen remote commits | Small | Medium | open — new |
 | TA78 `compare-digest-non-ascii-500` | S4 | Error handling | A non-ASCII token or signature header crashes two auth checks with a 500 | Trivial | High (executed) | open — new |
 
 ⚡ = quick win (Trivial-effort S2/S3).
 
-**Counts derived from the table:** S1 **0** · S2 **1** · S3 **4** · S4 **1** · **Total 6 open.**
+**Counts derived from the table:** S1 **0** · S2 **1** · S3 **3** · S4 **1** · **Total 5 open.**
 
 ---
 
@@ -167,14 +166,6 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 
 **Effort:** Small. **Confidence:** High. Reality 3, reached through the CLI.
 
-### TA76 `version-bump-breaks-literal-tests` · S3 · `quickscale_cli/tests/test_module_wiring_manager_manifest.py:1300-1393`, `quickscale_cli/tests/commands/test_module_commands.py`, `quickscale_modules/billing/tests/test_models.py:22`, `quickscale_modules/notifications/tests/test_models.py:14`
-
-**Defect:** `b9e072f4` "v89: version bump" moved `VERSION`, the `_version.py` files, and module `__init__` versions to `0.89.0`. Tests that compare real package versions against hand-written `"0.88.0"` literals were not moved.
-
-**Failure scenario:** **Executed:** 13 CLI tests fail at HEAD (4 in `TestRegenerateManagedWiringVersionMismatch`, 9 in `test_module_commands.py`). The two module `test_package_version_is_exposed` tests fail statically (`"0.88.0"` vs `__version__ = "0.89.0"`). `make ci` is red on `v89`. The previous bump needed the same hand edits (`0.87.0 → 0.88.0` across the same files in this delta), so this repeats every release.
-
-**Fix:** Derive the expected value from `REPO_ROOT / "VERSION"` or the package `__version__`, as the delta already did for `synced_core_constraint` in `test_e2e_full_workflow.py`. **Effort:** Trivial. **Confidence:** High. Reality 1/2.
-
 ### TA77 `publish-all-self-observed-lease` · S3 · `scripts/publish_module.py:1208-1253`
 
 **Defect:** `_publish_all` calls `_observe_remote_branch_sha` (a live `ls-remote`) and passes the result straight to `_publish_module` as `expected_remote_sha`. The lease then only guards the milliseconds between observation and push. It never checks that the observed remote tip is an ancestor of the local split. Nearby text contradicts the design: the helper's docstring warns that feeding an unseen SHA "would satisfy the lease while clobbering a remote commit nobody in this process ever saw", and `_publish_module` (`:1002`) relies on the same lease with no ancestry check.
@@ -200,7 +191,7 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 
 | Subsystem | What was read | Verdict |
 |---|---|---|
-| Commit delta `87e8c96a..HEAD` | full first-party production diff and every test hunk | TA74, TA75, TA76, TA77; test changes adjudicated in *Clean sweeps* |
+| Commit delta `87e8c96a..HEAD` | full first-party production diff and every test hunk | TA74, TA75, TA77; test changes adjudicated in *Clean sweeps* |
 | Generated boot sequence (`start.sh.j2`, `Dockerfile.j2`, `railway.json.j2`) | entire files; lifecycle walk boot → role → migrate → cache → superuser → WSGI → gunicorn | Clean. Role creation is identifier-safe, refuses a superuser or self role, and credentials stay off argv. Two watch items below |
 | CLI deploy (`deployment_commands.py`, `railway_utils.py` variable helpers) | delta in full plus read/set helpers | TA74, TA75 |
 | CLI dev (`development_commands.py`) | delta plus every `_run_docker_exec_command` caller | Clean. The privilege narrowing is correct and `manage` guards empty args at `:690` |
@@ -248,7 +239,6 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 | Gap | Would have caught | Recommendation |
 |---|---|---|
 | RLS policy assertions check existence, not predicate text | Structural smell #2 | Assert `pg_policies.qual`/`with_check` against `_FORCE_RLS_FORWARD_SQL` per enrolled table (SA177) |
-| Version literals in tests are not derived | TA76 | Have `version_tool.sh check` (or a small AST/grep gate) fail when a test file contains the previous release string next to `__version__`/"expected core version"; or derive from `VERSION` everywhere |
 | Dependency gate never sees the generated project's runtime dependencies | Future CVEs in `gunicorn`, `whitenoise`, `dj-database-url` (none in root `poetry.lock`) | Add a Trivy pass over the hermetic generated-project lock the E2E lane already produces, or add those pins to a scanned dev group |
 | No external-effect check on destructive org teardown | TA73 | Add a purge conformance test: for every `_DELETE_SPECS` model that carries an external provider id, the purge must refuse or reconcile |
 
@@ -318,6 +308,7 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 - 2026-09-15 — **TA74** `railway-redeploy-rotates-secret-key`: **new (S3).** Long-standing (`dcb558ce`, v0.60.0), made visible by the delta's password-reuse contrast.
 - 2026-09-15 — **TA75** `railway-runtime-role-vars-fail-open`: **new (S3).** Introduced by `461796ce` / `b8ca6283`.
 - 2026-09-15 — **TA76** `version-bump-breaks-literal-tests`: **new (S3).** Introduced by `b9e072f4`; executed.
+- 2026-09-15 — **TA76** `version-bump-breaks-literal-tests`: **retired by SA181.** Current-version expectations now derive from the repository or package version, so the next version bump requires no matching test edit; archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-15 — **TA77** `publish-all-self-observed-lease`: **new (S3).** Introduced by `296afa0e`.
 - 2026-09-15 — **TA78** `compare-digest-non-ascii-500`: **new (S4).** Long-standing; executed.
 - 2026-09-15 — **Clean sweep superseded:** the prior "four privileged-command declarations agree on exactly `{migrate, createcachetable}`" became "agree on three", after `b29d9a29` added `migrate_billing_to_orgs` at all four stations. Consistent; no finding.

@@ -35,7 +35,6 @@ scope and acceptance; [context](v88_ticket_context.md) explains implementation c
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA182, SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA181 | Derive expected versions in tests from the repository version | post-v88 | 2 | — | Deferred |
 | SA184 | Make `quickscale deploy railway` re-runs read live state and fail hard | post-v88 | 2 | — | Deferred |
 | SA185 | Enforce contract vintage when upgradable code meets an older project | post-v88 | 2 | SA184 | Deferred |
 | SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
@@ -51,11 +50,10 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA180 ──► SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
-Track 2: SA181 ──► SA184 ──► SA185 ──► SA186 ──► SA187
+Track 2: SA184 ──► SA185 ──► SA186 ──► SA187
 Track 3: SA182 ──► SA183 ──► SA177 ──► SA188 ──► SA189 ──► SA190
 
 Cross-track dependencies:  SA182 ──► SA153     SA185 ──► SA188
-Merge prerequisite:        SA181 restores a green `make ci` for every track
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -67,8 +65,6 @@ work. Every other ticket is off the critical path.
 
 **Ordering.**
 
-- **SA181 goes first.** The `v89` version bump left tests pinned to `0.88.0`, so `make ci` is red at
-  the branch head and no candidate on any track can pass validation until it lands.
 - **SA182 precedes SA153 and SA177.** Without it the portal's first tenant table fails the generated
   project's `check_tenant_isolation`, or needs module-source edits the extension contract forbids.
   Landing it before SA177 lets predicate verification cover project-owned tables and keeps the two
@@ -106,9 +102,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA180 | yes, after merging `v89` into the stale worktree | no — waits on SA181 | yes | no | **yes** |
-| 2 | SA181 | yes, after merging `v89` into the stale worktree | yes | yes | **yes** | no |
-| 3 | SA182 | yes, after merging `v89` into the stale worktree | no — waits on SA181 | yes | no | **yes** (feeds SA153) |
+| 1 | SA180 | yes, after merging `v89` into the stale worktree | yes | yes | **yes** | **yes** |
+| 2 | SA184 | yes | yes | yes | **yes** | no |
+| 3 | SA182 | yes, after merging `v89` into the stale worktree | yes | yes | **yes** | **yes** (feeds SA153) |
 
 ### Ownership and merge coordination
 
@@ -125,7 +121,7 @@ A track is **truly green** only when all three states are yes.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
   [ticket context](v88_ticket_context.md), and the owning audit: the arch audit for SA180, SA152,
-  SA182, SA185, SA188, SA189, and SA190; the tech audit for SA177, SA181, SA183, SA184, SA186, and
+  SA182, SA185, SA188, SA189, and SA190; the tech audit for SA177, SA183, SA184, SA186, and
   SA187 (SA183 and SA190 also close arch-audit items). SA191 has no owning audit; its evidence goes
   to the changelog and the migration playbook. All are Markdown with no generated consumer.
   Two code-adjacent overlaps cross tracks: SA182 and SA153 both edit the extension and
@@ -220,17 +216,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   tours) build on SA182's enrollment and SA190's purge derivation, not on module-source edits. Close
   when every item is promoted or dropped with rationale.
 
-- [ ] **SA181 — Derive expected versions in tests from the repository version.**
-
-  **Acceptance:** the tests that compare real package versions against the previous release string
-  — `TestRegenerateManagedWiringVersionMismatch`, the version cases in `test_module_commands.py`,
-  and the billing and notifications `test_package_version_is_exposed` — derive the expected value
-  from `VERSION` or the package `__version__`, as `test_e2e_full_workflow.py` already does. A search
-  finds no remaining prior-release literal used as the expected current version, and `make ci` is
-  green on `v89`. The next bump needs no test edit. This retires TA76 and its tooling gap without
-  adding a gate.
-
-  **Surfaces:** the affected CLI and module tests; the technical audit.
+- [x] **SA181 — Derive expected versions in tests from the repository version.**
 
 - [ ] **SA184 — Make `quickscale deploy railway` re-runs read live state and fail hard.**
 

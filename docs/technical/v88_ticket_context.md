@@ -57,15 +57,6 @@ every enrolled table, accounting for PostgreSQL's expression representation. Use
 and a negative control that weakens a predicate and is rejected. This checks policy meaning in
 addition to SA172's accepted application and table-resolution behavior.
 
-## SA181 — Stop pinning release strings in version tests
-
-Tests that ask "does the package report the current version?" or "does a mismatch name the
-expected core version?" wrote the answer as a literal. Every bump therefore breaks them until
-someone hand-edits the same files, and the `v89` bump did exactly that. The expected value already
-has an owner, `VERSION`, and the packages expose it as `__version__`; reading it there removes the
-recurring edit. Deriving is preferred over a new gate that would detect stale literals, because it
-removes the class instead of policing it.
-
 ## SA184 — Treat the live Railway environment as the source of truth
 
 `quickscale deploy railway` is designed to be re-run, and the Railway guide recommends re-running
