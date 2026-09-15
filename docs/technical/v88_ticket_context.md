@@ -27,24 +27,6 @@ where the mode promises to preserve them; do not require identical file disposit
 because files participate in one contract. Ownership manifests and taxonomy redesign need
 separate evidence of need.
 
-## SA180 — Compute the gate-parity count oracles instead of pinning them
-
-Several gate-parity assertions compare against hand-written integers: how many gates exist, how
-many provisioning stations, how many hosted jobs. Each is a copy of a fact that lives somewhere
-else, so every addition needs a matching hand edit, and a forgotten edit either fails loudly for
-an unrelated reason or, worse, keeps passing against the stale number.
-
-The written trigger for acting on this was more than two such edits. Historical review found that
-two separate changes each crossed it, so the trigger has fired and the item is now owned work
-rather than an observation. Correcting the surrounding documentation, as the command-set and
-allowlist work did, does not discharge it.
-
-Derive each count from the source it describes — the registry entries, the workflow job set, the
-station list — so the assertion cannot drift from reality. Keep the closed-universe check, which
-already makes an unregistered job loud, and keep the existing failure messages specific. A
-regression that adds a gate and observes the derived count follow it is the evidence that closes
-the watch item.
-
 ## SA177 — Verify RLS policy predicates
 
 RLS enabled, RLS forced, and a row in `pg_policies` do not prove tenant isolation: a permissive

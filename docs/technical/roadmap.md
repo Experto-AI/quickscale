@@ -30,8 +30,7 @@ scope and acceptance; [context](v88_ticket_context.md) explains implementation c
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA180 | Derive the gate-parity count oracles from the registry | post-v88 | 1 | — | Deferred |
-| SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 1 | SA180 | Deferred |
+| SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA182, SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
@@ -50,7 +49,7 @@ scope and acceptance; [context](v88_ticket_context.md) explains implementation c
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA180 ──► SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
+Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
 Track 2: SA181 ──► SA184 ──► SA185 ──► SA186 ──► SA187
 Track 3: SA182 ──► SA183 ──► SA177 ──► SA188 ──► SA189 ──► SA190
 
@@ -60,7 +59,7 @@ Merge prerequisite:        SA181 restores a green `make ci` for every track
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA180 → SA152 → SA191 → SA153, with SA182 joining at SA153. The portal is built
+**Critical path.** SA152 → SA191 → SA153, with SA182 joining at SA153. The portal is built
 on the migrated `bap-web`, so the migration tools are verified first and then used for real. SA182
 is small and first on Track 3, so it lands long before SA153 needs it. SA154 is an inventory, not
 work. Every other ticket is off the critical path.
@@ -81,8 +80,6 @@ work. Every other ticket is off the critical path.
   is the first real use of an enforced vintage move. SA188 and SA189 both edit `start.sh.j2` and
   regenerate the SA90 emission fixture; settle the command set before collapsing role provisioning
   around it.
-- **SA180 precedes SA152** because SA152 registers a new gate, which then becomes the first use of
-  the derived counts instead of another hand edit.
 - **SA152 precedes SA191, and SA191 precedes SA153.** `bap-web` is migrated with the maintainer
   tools only after SA152 has proven them on isolated fixtures, and the portal is built on the
   migrated project rather than on a fresh one. SA184 is not an edge: SA191 redeploys through
@@ -91,8 +88,8 @@ work. Every other ticket is off the critical path.
   SA188/SA189, but all three touch the privilege/runtime contract of generated `settings/production.py`
   and `start.sh`; whichever lands second re-runs the others' fixtures.
 
-**Rebalance.** Track 1 carries the whole critical path: the migration-tool verification (SA180,
-SA152), the `bap-web` migration (SA191), and the portal (SA153), because each feeds the next and
+**Rebalance.** Track 1 carries the whole critical path: the migration-tool verification (SA152),
+the `bap-web` migration (SA191), and the portal (SA153), because each feeds the next and
 splitting them across tracks would only add merge handoffs. Tracks 2 and 3 split the audit work by
 conflict surface. Track 2 takes the CLI deploy/update, publication, and test surfaces, which are
 mostly trivial or small. Track 3 takes orgs tenancy, purge, and the privileged/runtime-role
@@ -106,7 +103,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA180 | yes, after merging `v89` into the stale worktree | no — waits on SA181 | yes | no | **yes** |
+| 1 | SA152 | yes | no — waits on SA181 | yes | no | **yes** |
 | 2 | SA181 | yes, after merging `v89` into the stale worktree | yes | yes | **yes** | no |
 | 3 | SA182 | yes, after merging `v89` into the stale worktree | no — waits on SA181 | yes | no | **yes** (feeds SA153) |
 
@@ -124,7 +121,7 @@ A track is **truly green** only when all three states are yes.
   `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  [ticket context](v88_ticket_context.md), and the owning audit: the arch audit for SA180, SA152,
+  [ticket context](v88_ticket_context.md), and the owning audit: the arch audit for SA152,
   SA182, SA185, SA188, SA189, and SA190; the tech audit for SA177, SA181, SA183, SA184, SA186, and
   SA187 (SA183 and SA190 also close arch-audit items). SA191 has no owning audit; its evidence goes
   to the changelog and the migration playbook. All are Markdown with no generated consumer.
@@ -145,15 +142,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA180 — Derive the gate-parity count oracles from the registry.**
-
-  **Acceptance:** compute the eight count-pinned oracles in `scripts/test_gate_parity.py` from the
-  registry and workflow sources they describe. Keep the closed-universe check and its failure
-  messages. A regression shows that adding a gate updates the derived counts without a hand edit;
-  that evidence retires the arch-audit watch item. Renaming `trigger_inputs` is out of scope.
-
-  **Surfaces:** `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`,
-  `scripts/gate_registry.json` if a derivation source is needed, and the architecture audit.
+- [x] **SA180 — Derive the gate-parity count oracles from the registry.**
 
 - [ ] **SA152 — Verify maintainer migration modes and their runtime compatibility.**
 
