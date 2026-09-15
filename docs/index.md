@@ -15,7 +15,6 @@
   - [Decisions (authoritative)](technical/decisions.md) - Technical rules and architectural decisions
   - [Scaffolding (layout & templates)](technical/scaffolding.md) - Directory structures and file layouts
   - [Roadmap](technical/roadmap.md) - Development timeline and current tasks
-  - [Ticket Context](technical/v88_ticket_context.md) - Implementation rationale for roadmap tasks
   - [User Manual](technical/user_manual.md) - Commands and workflows
   - [Development](technical/development.md) - Dev environment setup
   - [Plan/Apply System](technical/plan-apply-system.md) - Terraform-style workflow

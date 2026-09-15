@@ -1,4 +1,4 @@
-"""Check schedule structure and context coverage, not acceptance evidence or prose."""
+"""Check schedule structure, not acceptance evidence or prose."""
 
 from __future__ import annotations
 
@@ -123,49 +123,13 @@ def _roadmap_tickets(text: str) -> set[str]:
     return tickets
 
 
-def _context_tickets(text: str) -> set[str]:
-    sections = re.findall(rf"^## ({TICKET})\b([^\n]*)$", text, re.MULTILINE)
-    assert all(not title or re.fullmatch(r" — .+", title) for _, title in sections), (
-        "invalid context heading"
-    )
-    tickets = _unique([ticket for ticket, _ in sections], "context ticket")
-    for table in _tables(text):
-        assert not set(table[0]) & {
-            "Track",
-            "Horizon",
-            "Depends on",
-            "Release requirement",
-            "Worktree",
-            "Band",
-            "Merge position",
-            "Readiness",
-        }, "context duplicates scheduling table"
-    assert not re.search(
-        r"(?:\bdeps\s*:|\bmerge\s+#\d+|\bW[123]\b|\bTrack\s+[123]\b|"
-        r"\bBand\s+[A-Z]\b|^\s*(?:\*\*)?(?:Track|Horizon|Dependencies|Readiness)\s*:)",
-        text,
-        re.MULTILINE | re.IGNORECASE,
-    ), "context duplicates classification metadata"
-    return tickets
+def test_roadmap_schedule() -> None:
+    _roadmap_tickets((ROOT / "docs/technical/roadmap.md").read_text())
 
 
-def _check_coverage(roadmap: str, context: str) -> None:
-    assert _roadmap_tickets(roadmap) == _context_tickets(context), (
-        "context coverage mismatch"
-    )
-
-
-def test_roadmap_schedule_and_context_coverage() -> None:
-    _check_coverage(
-        (ROOT / "docs/technical/roadmap.md").read_text(),
-        (ROOT / "docs/technical/v88_ticket_context.md").read_text(),
-    )
-
-
-def test_docs_index_links_to_canonical_documents() -> None:
+def test_docs_index_links_to_roadmap() -> None:
     text = (ROOT / "docs/index.md").read_text()
-    for target in ("technical/roadmap.md", "technical/v88_ticket_context.md"):
-        assert re.search(rf"\[[^\]]+\]\({re.escape(target)}\)", text)
+    assert re.search(r"\[[^\]]+\]\(technical/roadmap\.md\)", text)
 
 
 @pytest.fixture
@@ -184,13 +148,8 @@ def roadmap() -> str:
 """
 
 
-@pytest.fixture
-def context() -> str:
-    return "# Context\n\n## SA900\nFirst notes.\n\n## SA901\nSecond notes.\n\n## SA902\nLater notes.\n"
-
-
-def test_synthetic_valid_documents(roadmap: str, context: str) -> None:
-    _check_coverage(roadmap, context)
+def test_synthetic_valid_roadmap(roadmap: str) -> None:
+    _roadmap_tickets(roadmap)
 
 
 @pytest.mark.parametrize(
@@ -236,36 +195,10 @@ def test_rejects_duplicate_schedule(roadmap: str) -> None:
         _roadmap_tickets(roadmap + table)
 
 
-def test_accepts_checked_ticket_outside_open_schedule_and_context(
-    roadmap: str, context: str
-) -> None:
+def test_accepts_checked_ticket_outside_open_schedule(roadmap: str) -> None:
     closed_roadmap = (
         roadmap.replace("SA902", "SA160")
         .replace("| SA160 | Later delivery | post-v88 | 3 | SA901 | Deferred |\n", "")
         .replace("- [ ] **SA160", "- [x] **SA160")
     )
-    closed_context = context.replace("\n## SA902\nLater notes.\n", "\n")
-    _check_coverage(closed_roadmap, closed_context)
-
-
-@pytest.mark.parametrize(
-    ("extra", "error"),
-    [
-        ("\n## SA900\nRepeated notes.", "duplicate context"),
-        ("\n## SA903\nOrphan notes.", "context coverage"),
-        ("\n## SA904 / SA905\n", "heading"),
-        ("\n| Ticket | Track |\n| --- | --- |\n| SA900 | 1 |", "scheduling table"),
-        ("\ndeps: SA900", "classification metadata"),
-        ("\nTrack 2", "classification metadata"),
-    ],
-)
-def test_rejects_invalid_context(
-    roadmap: str, context: str, extra: str, error: str
-) -> None:
-    with pytest.raises(AssertionError, match=error):
-        _check_coverage(roadmap, context + extra)
-
-
-def test_rejects_missing_context(roadmap: str, context: str) -> None:
-    with pytest.raises(AssertionError, match="context coverage"):
-        _check_coverage(roadmap, context.replace("## SA902", "## Concept notes"))
+    _roadmap_tickets(closed_roadmap)
