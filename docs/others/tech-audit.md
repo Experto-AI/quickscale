@@ -1,55 +1,83 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit snapshot:** 2026-08-28 · **Prior pass:** 2026-08-22 (reconciled 2026-08-27 at `602f4be3`) · **Branch:** `v88` · **Findings reconciled at:** `87e8c96a`
+> **Audit snapshot:** 2026-09-15 · **Prior pass:** 2026-08-28 (reconciled through 2026-09-11 at `87e8c96a`) · **Branch:** `v89` · **Findings reconciled at:** `b9e072f4`
 
 ## Orientation summary
 
-QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**: a Click CLI, a Django-6 project generator, twelve shipped first-party modules (`teams` remains a source-less placeholder), and apply/recovery/DR tooling. First-party Python is ~294 non-test modules across `quickscale_core`, `quickscale_modules`, `quickscale_cli`, `scripts`, and `quickscale_devtools`.
+QuickScale is a Python 3.14 / Poetry **code generator and scaffolding platform**. It has a Click CLI, a Django 6 project generator, twelve shipped first-party modules (`teams` is still a source-less placeholder), and apply/recovery/DR tooling. Modules reach generated projects through `git subtree` split branches, which `scripts/publish_module.py` pushes.
 
 **Deployment realities** (every finding names one):
 
-1. **The maintainer workstation** — `make quality`, `make ci`, the CLI, `quickscale_devtools`. Solo-maintainer repo.
-2. **Hosted CI** — `ci.yml`, `publish.yml`, `e2e.yml`, `nightly-bypassrls.yml`.
-3. **The generated project** — Django 6 + PostgreSQL 18 + Vite/React on Railway, multi-tenant with FORCE RLS under a NOSUPERUSER/NOBYPASSRLS runtime role. Internet-facing.
-4. **Local generated-project development** — `docker-compose.yml`, `settings/local.py`, `DEBUG=True`, no published database port.
+1. **The maintainer workstation.** `make ci`, `make ci-e2e`, the new `make release-gate`, `make publish-modules`, the CLI, and `quickscale_devtools`. One maintainer, several worktrees.
+2. **Hosted CI.** `ci.yml` now calls `nightly-bypassrls.yml` as a reusable job on every push and PR. The nightly schedule is disabled.
+3. **The generated project.** Django 6 + PostgreSQL 18 + Vite/React on Railway, internet-facing and multi-tenant, with FORCE RLS under a NOSUPERUSER/NOBYPASSRLS runtime role. **New this pass:** `start.sh` is now the Dockerfile `CMD`. On every boot it creates or updates that runtime role from `RUNTIME_DB_PASSWORD`, then migrates. `quickscale deploy railway` generates that password.
+4. **Local generated-project development.** `docker-compose.yml` with `runserver`. `quickscale manage` now clears `RUNTIME_DATABASE_URL` only for sanctioned privileged commands.
 
-**Entry points and trust boundaries.** Untrusted input reaches the system through generated-project HTTP routes (DRF viewsets, the blog/forms/social public surfaces, two signed webhook endpoints, three `csrf_exempt` views), markdown authored into `Post.content` / `Listing.description`, operator-supplied restore archives fed to `pg_restore`, and `quickscale.yml` / module manifests consumed by the CLI. The Django admin (backup creation, restore, `TenantModelAdmin`) is an authenticated operator surface, not a public one. The CLI and `quickscale_devtools` are operator-trusted.
+**Entry points and trust boundaries.** Unchanged from the prior pass: generated-project HTTP routes, the two signed webhooks, the three `csrf_exempt` views, markdown content, restore archives, and `quickscale.yml` / manifests. **New operator surfaces in the delta:**
 
-**Tooling baseline.** ruff (`py314`, E/W/F/I/N/UP/D), mypy, pylint duplication-only, vulture, radon, pytest 9 with `--cov-fail-under=90`, pre-commit, a declared gate registry, checksum-pinned Trivy v0.74.0 dependency scanning, Bandit 1.9.4, AST gates, and a monotonic quality baseline with a waiver ledger.
+- The `start.sh migrate_billing_to_orgs` argv branch.
+- The Railway variables that `quickscale deploy railway` writes (`RUNTIME_DB_ROLE`, `RUNTIME_DB_PASSWORD`, `RUNTIME_DATABASE_URL`).
+- `apply --split-refs-from-branches`.
+- `publish_module.py --publish-all`, which force-pushes every outdated split branch.
 
-**Scope decision (§2e).** The delta since the prior pass is **5 commits / 3 files**, of which the only code change is a test file. A delta-driven sweep would therefore have been nearly empty. This pass instead spends its depth on the surfaces the two prior passes **sampled by signature but never read as code**: the orgs tenancy and request-scoping machinery in full, the `forms` cross-tenant operator surface, the billing credit ledger, the DR engine's lock and orchestration layers, and `quickscale_devtools/beta_migration.py` — which both prior passes explicitly skipped.
+**Tooling baseline.** ruff, mypy, pylint (duplication only), vulture, radon, pytest 9 with a 90% coverage floor, pre-commit (now with a `commit-msg` stage), 12 registered gates, Trivy dependency scanning, Bandit 1.9.4, and AST/conformance gates. `check-commit-testimony` is now hosted-only. Its accepted testimony narrowed to any `vN[.N…]` token.
 
-**Oracle list (§2g) — the project's own declared invariants, hunted as defect classes:**
+**Scope decision (§2e).** This is re-run mode. The delta `87e8c96a..HEAD` is 569 commits. Most are synthetic subtree-split mirrors. The first-party tree diff is 125 non-doc files (+2,275 / −656). The whole production diff was read, plus every test hunk. The rest of the depth went to three things:
 
-- **Fail-Hard Principle** (`decisions.md:725`, `:807-831`) — every configuration error, missing dependency, and invalid runtime state raises; no silent fallbacks, never substitute a default. This file is the declared SSOT for found-not-yet-fixed violations (`decisions.md:670`, `:831`).
-- **Tenant reads/writes stay organization-scoped**; `all_objects` is an operator escape hatch, not a scoping bypass; `operator_access` grants **read-only** cross-tenant visibility and requires a verified `is_superuser` caller inside `transaction.atomic()` (`organizations.md:729`).
-- **No shipped runtime BYPASSRLS path**; `QUICKSCALE_ALLOW_BYPASSRLS=1` is an explicit dev/test opt-out only; Django `is_superuser` does not infer database-level access (`organizations.md:587`).
-- **Launcher one-shot command-env contract** — `QUICKSCALE_PRIVILEGED_COMMAND` / `RUNTIME_DATABASE_URL` are set as inline command prefixes, **never** as persistent environment configuration (`decisions.md`, Launcher One-Shot Command-Env Contract).
-- **Project interpreter only** (`ruff.toml:8-11`).
-- **Raw credential values MUST NOT be persisted** in `quickscale.yml`, `.quickscale/state.yml`, or `BackupArtifact` rows; Stripe keys stay environment-only.
-- **Quality baseline monotonicity**; **CSRF-exempt endpoints carry an alternate integrity check**.
+- The arch audit's hand-off red flag (`purge_organization` × Stripe).
+- A lifecycle walk of the generated deployable's new boot sequence.
+- Taint traces through the client-IP resolver, the blog API auth path, and both webhook signature checks.
 
-**Delta classification (re-run mode, §2f).** `602f4be3..HEAD` = 5 commits, 3 files, 362 insertions / 705 deletions. *Review-tracked:* `8a8f364b`, `cc80a5f2` (roadmap/handoff docs), `74ba3c55` (merge). *Side-channel — read in full:* `990f660f` "Refactor assertions in ticket context consistency test" and `48e0a62a` "streamline ticket context consistency tests and remove unused variables" — two refactor-shaped messages carrying a **net removal of ~60 assertions** from a conformance test. That is the §4.VIII signature and it was read hunk by hunk; adjudication in *Clean sweeps* and the reconciliation log.
+**Oracle list (§2g).** The project's own declared invariants, hunted as defect classes:
+
+- **Fail-Hard Principle** (`decisions.md` → Fail-Hard): every configuration error, missing dependency, or invalid runtime state raises. No silent fallback ever substitutes a default.
+- **Tenant data stays organization-scoped.** `all_objects` is an operator escape hatch. `operator_access` is read-only and superuser-gated.
+- **No shipped runtime BYPASSRLS path.** `QUICKSCALE_ALLOW_BYPASSRLS=1` is a dev/test opt-out only.
+- **Launcher one-shot command-env contract.** `QUICKSCALE_PRIVILEGED_COMMAND` / `RUNTIME_DATABASE_URL=""` are inline prefixes, never persistent configuration.
+- **Raw credential values are never persisted** in `quickscale.yml`, state, or `BackupArtifact` rows. Stripe keys stay environment-only.
+- **Force-with-lease publication.** `EXPECTED_REMOTE_SHA` must come from a real observation, and `--publish-outdated` stays disabled because it pushed with bare `--force` (SA117 Phase 4).
+- **Teardown policy** (`decisions.md:921`): `on_delete=PROTECT` plus an explicit, GDPR-capable `purge_organization`.
+- **Quality-baseline monotonicity**; **CSRF-exempt endpoints carry an alternate integrity check**.
+
+**Delta classification (re-run mode, §2f).** Almost every behavioural commit in the window is **side-channel**. None carries a descriptive trail:
+
+- Seven commits share the release title `v0.88.0: QuickScale 0.88.0` while changing product or controls: `461796ce`/`b8ca6283` runtime-role creation and Railway variables; `a85f29ff` Dockerfile `CMD`; `296afa0e` `--publish-all`; `d73155d1` security-gate scope; `f4cb7964` bypassrls CI; `54aea5ab` publish workflow.
+- `b29d9a29` "v88 fix: make ci-e2e fixes" (48 files) added a third privileged command and changed `_run_docker_exec_command`'s privilege model.
+- Four `docs:` commits carry code: `5a6d1f4f` (`apply_command.py`, `publish_module.py`), `74d18f48` (compat gate, `version_tool.sh`), and `18d6084a`/`2e2a932a` (testimony gate).
+- `b9e072f4` "v89: version bump".
+
+All of these were read hunk by hunk, production and test.
 
 ### Coverage statement (§3.11)
 
-**Read in full:** the entire `602f4be3..HEAD` diff including every test hunk; `quickscale_modules/orgs/.../tenancy.py` (registry, `_FORCE_RLS_FORWARD_SQL`/`_REVERSE_SQL`, `apply_force_rls`, `refresh_force_rls_policies`, the equality-trigger helpers, and the conformance helpers `is_tenant_model` → `check_tenant_model_isolation`); `managers.py`; `middleware.py`; `permissions.py`; `checks.py`; `apps.py`; `public_context.py`; the `current_org.py` GUC layer (`_tenant_context`, `org_scope`, `_make_priming_execute_wrapper`, `install_priming_wrapper`, `operator_access`); `quickscale_modules/forms/.../views.py:140-520` and `throttles.py`; `quickscale_modules/billing/.../services.py` credit-ledger paths; `quickscale_modules/blog/.../feeds.py`; `quickscale_core/.../dr_engine/_lock.py` (entire file); the `dr_engine/orchestration.py` destructive sites, `create_backup` lock section, and admin restore staging pipeline; `advisory_lock.py` acquire/release/stale; `quickscale_devtools/beta_migration.py` mutation and guard sites; `scripts/security_suppressions.json`; the `start.sh.j2` privileged-command contract.
+**Read in full:**
 
-**Sampled:** the 53-site `getattr(settings, …, <default>)` census across all modules; subprocess-timeout and `rmtree`/`unlink` censuses across all first-party source; `poetry.lock` pins for the security-relevant packages; CLI destructive paths.
+- The entire first-party `87e8c96a..HEAD` diff, except docs, CHANGELOG, and version-string-only hunks. That includes `start.sh.j2`, `Dockerfile.j2`, `production.py.j2`, `OPERATIONS.md.j2`, `deployment_commands.py`, `development_commands.py`, `apply_command.py`, `railway_utils.py`, `orgs/apps.py`, `migrate_billing_to_orgs.py` (whole file), `publish_module.py`, `check_commit_testimony.py`, `check_module_core_compatibility.py`, `check_security_gates.py`, `check_gate_parity.py`, `sync_ci_gate_jobs.py`, `provision_ci_postgres.sh`, `test_isolation_conformance.sh`, `version_tool.sh`, all four workflows, and the Makefile.
+- Every test hunk in the delta.
+- `purge_organization.py` (whole file).
+- `_publish_module` and `_run_release_gates`.
+- `railway_utils.get_railway_variables` / `set_railway_variables_batch`.
+- `current_org.get_client_ip`.
+- `blog/views.py` `authenticate_blog_api_request`, `_get_authorization_token`, `upload_media_api`.
+- `notifications/views.py` and the signature check in `notifications/services.py:724-753`.
+- `billing/services.py` `cancel_current_subscription` and `_handle_invoice_paid_event`.
 
-**Skipped:** the React theme component bodies and `scripts/` gate internals (both read at depth by the prior passes this cycle); generated-project migrations; pylint/radon/vulture internals.
+**Sampled:**
 
-**Audit tools run (read-only):** `git log` / `git diff` / `git rev-parse` over the delta; CPython 3.14 for the two empirical checks below. No scanner was re-run this pass — the Trivy/Bandit gate is CI-owned and its ledger was read rather than re-executed.
+- The sibling management commands (`forms_anonymize_submissions`, `forms_seed_presets`, `promote_to_saas`), for the `objects`-vs-`all_objects` class that the `migrate_billing_to_orgs` fix repaired.
+- `production.py.j2` connection settings.
+- `poetry.lock` coverage of the generated project's runtime dependencies.
+- The prior watch-item anchors.
 
-**Empirical checks run (§1e):** on 2026-09-11 the clean integrated `v88` tip at
-`87e8c96ae89a9768a1a29fdadc7bb605f856a319` ran
-`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` to completion with exit 0. All twelve stages passed:
-Core/CLI coverage reported 5,099 passed and 2 skipped at a 93.12% equal-weight mean, backups
-reported 332 passed and 1 skipped, module integration reported a 94.55% mean, and concurrent E2E
-reported Core 38 passed with 1 environment skip plus CLI 54 passed. Both exact E2E lane scopes
-reported cleanup complete, no QuickScale run-labelled resources remained, and `pg18-af10` remained
-running. This exact-tip verdict release-accepts the retained correction and retires TA67. Detailed
-evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
+**Skipped:** React theme bodies, generated-project migrations, the DR engine (read at depth last pass, untouched by the delta), and gate-script internals beyond the delta hunks.
+
+**Audit tools run (read-only):** `git log` / `git diff` / `git show` / `git rev-list` over the delta, and `poetry run python` 3.14.6 for the checks below. No scanner was re-run; Trivy and Bandit are CI-owned.
+
+**Empirical checks run (§1e):**
+
+- **(1)** `secrets.compare_digest('tokén', 'token')` raises `TypeError: comparing strings with non-ASCII characters is not supported`. This confirms TA78.
+- **(2)** `pytest -p no:cacheprovider -o addopts= --no-cov` over the nine test files that still carry a `0.88.0` literal: **13 failed / 993 passed** at `b9e072f4`. This confirms TA76. For example, `test_mixed_versions_blocks_on_first_mismatch` reports `...rsion 0.89.0.` vs `...rsion 0.88.0.`. The working tree was unchanged afterwards.
+- **(3) Refuted chain:** "a guessed Postgres service name gives an unresolvable `RUNTIME_DATABASE_URL`, and the DB-free healthcheck then promotes a broken deploy." `orgs/apps.py` `_check_rls_role` opens a connection inside `ready()`, and `start.sh` step 7 imports the WSGI app under `set -e`. A bad runtime URL therefore fails the boot before Gunicorn starts. It is not promoted.
 
 ---
 
@@ -57,15 +85,114 @@ evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
+| TA73 `purge-org-orphans-live-stripe-subscription` | S2 | Data handling / money | `purge_organization` deletes current Stripe-backed subscriptions without cancelling or refusing | Small | High (code); Medium (post-purge webhook path) | open — new |
+| TA74 `railway-redeploy-rotates-secret-key` | S3 | Operability | Every `quickscale deploy railway` re-run replaces `SECRET_KEY` | Trivial ⚡ | High | open — new |
+| TA75 `railway-runtime-role-vars-fail-open` | S3 | Error handling (Fail-Hard) | Unreadable Railway state becomes a fresh runtime password and a guessed Postgres service | Small | High | open — new |
+| TA76 `version-bump-breaks-literal-tests` | S3 | Tests | The v89 bump left 13 tests pinned to `0.88.0`; `make ci` is red | Trivial ⚡ | High (executed) | open — new |
+| TA77 `publish-all-self-observed-lease` | S3 | Concurrency / publication safety | `--publish-all` feeds its own just-observed SHA to the lease, so it can overwrite unseen remote commits | Small | Medium | open — new |
+| TA78 `compare-digest-non-ascii-500` | S4 | Error handling | A non-ASCII token or signature header crashes two auth checks with a 500 | Trivial | High (executed) | open — new |
 
-**Counts derived from remaining live findings:** S1 **0** · S2 **0** · S3 **0** · S4 **0** ·
-**Total 0 open.**
+⚡ = quick win (Trivial-effort S2/S3).
+
+**Counts derived from the table:** S1 **0** · S2 **1** · S3 **4** · S4 **1** · **Total 6 open.**
 
 ---
 
 ## Findings
 
-No live findings.
+### Finding 1: `purge_organization` orphans live Stripe subscriptions
+
+- **ID:** TA73 `purge-org-orphans-live-stripe-subscription`
+- **Severity:** S2. The impact is financial and legal: a customer keeps being charged with no local account or record. The trigger is one realistic operator act, purging a paying org (the command is the declared GDPR teardown path, `decisions.md:921`). It needs no other precondition. It lives in the generated project (reality 3) and violates the Fail-Hard oracle: it destroys the only local handle on a live external obligation without refusing.
+- **Category:** IX Data handling (money path).
+- **Confidence:** High that local rows are deleted with no Stripe interaction. Medium on the exact post-purge webhook failure mode, which needs a Stripe test-mode run to confirm.
+- **Location:**
+  - `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py:193-212` (`_DELETE_SPECS` billing entries).
+  - `:514-530` (`Command._delete_owned_rows`).
+  - `:404-459` (`Command._purge_by_uuid`, which raw-deletes the `Organization` row holding `stripe_customer_id`).
+- **Defect:** The purge runs `Subscription.all_objects.filter(organization=org).delete()` for every status, including `ACTIVE`/`TRIALING`/`PAST_DUE` rows with a non-empty `stripe_subscription_id`. It then deletes the org row. It never calls `cancel_current_subscription` (`billing/services.py:736`), and it never refuses when a current Stripe-backed subscription exists.
+- **Failure scenario:**
+  1. An operator honours an account-deletion request with `purge_organization --organization-id <uuid>`.
+  2. The dry run shows `Subscriptions: 1`, and the purge succeeds with "has been purged."
+  3. Stripe keeps renewing the subscription. Each `invoice.paid` webhook reaches `_handle_invoice_paid_event` (`services.py:1044`), and `_resolve_organization_for_invoice` can no longer map the customer to an organization.
+  4. The webhook errors, Stripe retries, and the customer is billed every period until someone notices in the Stripe dashboard.
+- **Evidence:** `_DELETE_SPECS` lists `{"app_label": "quickscale_modules_billing", "model_name": "Subscription", "filter_key": "organization", ...}`, and `_delete_owned_rows` executes `qs.delete()` with no status or Stripe-id inspection. No `pre_delete`/`post_delete` receiver exists in `billing/src` (grep).
+- **Refutation:** Three candidates were checked, and none survived:
+  - (a) A billing delete signal that cancels remotely: none exists.
+  - (b) Documented operator guidance to cancel billing before purging: none in `decisions.md`, the module READMEs, CHANGELOG, or the roadmap.
+  - (c) A test blessing the behaviour: `test_purge_organization_with_billing_rows` (`test_management_commands.py:1213`) asserts an `ACTIVE` subscription with `stripe_subscription_id="sub_billing_purge"` is deleted. That pins *local* row deletion, the teardown decision, but says nothing about the external subscription. It is a test with a blind spot, not a decision to leave customers billed.
+
+  Hand-off note: the lead came from `arch-audit.md` → *Red flags*. It was re-verified independently here.
+- **Fix:** Before the atomic block in `_purge_by_uuid`, refuse with `CommandError` when the org has any `Subscription` whose `status in Subscription.current_statuses()` and whose `stripe_subscription_id` is non-empty. List the ids and tell the operator to cancel first. Optionally add an explicit `--billing-cancelled-out-of-band` acknowledgement flag. Keep the Stripe call out of the purge transaction. **Effort:** Small.
+- **Verification:** Extend `test_purge_organization_with_billing_rows` with a variant: an `ACTIVE` subscription with a Stripe id must raise and leave all rows and the org intact. A `CANCELED` subscription must still purge.
+- **Deliberate?** The teardown decision covers local rows only; nothing addresses the external subscription.
+- **Age:** Long-standing. The billing entries predate this window.
+
+### TA74 `railway-redeploy-rotates-secret-key` · S3 · `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py:403-404`
+
+**Defect:** `_configure_env_vars_step` always writes `SECRET_KEY = generate_django_secret_key()`, even though the caller already passes the service's existing variables (`:666`).
+
+**Failure scenario:** `docs/deployment/railway.md:936` tells operators to "Re-run `quickscale deploy railway`" as a remedy, and the command is built to be re-run: every step checks "already exists." Each re-run rotates the key, so on cutover:
+
+- every session is logged out;
+- outstanding password-reset and email-confirmation links stop working;
+- signed cookies and in-flight CSRF tokens fail.
+
+The same delta made the runtime DB password explicitly survive re-deploys (`:369-389`), which makes the asymmetry plain. There is no at-rest encryption keyed on `SECRET_KEY` (grep), so no data is lost. Reality 3, reached through the CLI.
+
+**Fix:** Reuse `existing_vars["SECRET_KEY"]` when present and generate only on first deploy. Mirror the `RUNTIME_DB_PASSWORD` reuse rule. **Effort:** Trivial. **Confidence:** High.
+
+### TA75 `railway-runtime-role-vars-fail-open` · S3 · `deployment_commands.py:361-366`, `:262-282`, `:369-389`
+
+**Defect:** Two helpers turn "could not read Railway state" into invented values, which violates the Fail-Hard oracle:
+
+- `_existing_service_variables` returns `{}` on any exception. It also returns `{}` when `get_railway_variables` returns `None`, which it does on a nonzero exit (`railway_utils.py:809`).
+- `_setup_postgres_step` swallows listing errors and `return "Postgres"`.
+
+**Failure scenario:** A transient `railway variables` failure during a re-deploy makes `_runtime_role_variables` see no `RUNTIME_DB_PASSWORD`. It then:
+
+- generates a new one;
+- overwrites an operator-managed `RUNTIME_DATABASE_URL` that the docstring promises to leave alone.
+
+The next boot's `start.sh` step 3 `ALTER ROLE … PASSWORD` rotates the credential before migrations run. The still-serving deployment then fails every new DB connection once its 600 s `CONN_MAX_AGE` connections recycle. If the new deploy later fails (migration, WSGI check), that becomes a full outage.
+
+Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` can pick an app service whose name contains "postgres", or an arbitrary one of several Postgres services. That writes a reference that fails boot. The failure is closed, per empirical check (3), but the deploy still fails.
+
+**Refutation:** The `{}` fallback is documented in the helper's docstring ("or {} if unreadable"), but it contradicts the same function's "never rotates" promise and the declared Fail-Hard policy. No test asserts the fallback's value: `test_check_exception` (`test_deployment_commands_extended.py:365`) checks nothing.
+
+**Fix:**
+
+- Raise `click.ClickException` when variables cannot be read, instead of returning `{}`.
+- Make `_setup_postgres_step` fail when listing fails or when anything other than exactly one database service matches. Prefer Railway's service type over a name substring if the JSON exposes it.
+
+**Effort:** Small. **Confidence:** High. Reality 3, reached through the CLI.
+
+### TA76 `version-bump-breaks-literal-tests` · S3 · `quickscale_cli/tests/test_module_wiring_manager_manifest.py:1300-1393`, `quickscale_cli/tests/commands/test_module_commands.py`, `quickscale_modules/billing/tests/test_models.py:22`, `quickscale_modules/notifications/tests/test_models.py:14`
+
+**Defect:** `b9e072f4` "v89: version bump" moved `VERSION`, the `_version.py` files, and module `__init__` versions to `0.89.0`. Tests that compare real package versions against hand-written `"0.88.0"` literals were not moved.
+
+**Failure scenario:** **Executed:** 13 CLI tests fail at HEAD (4 in `TestRegenerateManagedWiringVersionMismatch`, 9 in `test_module_commands.py`). The two module `test_package_version_is_exposed` tests fail statically (`"0.88.0"` vs `__version__ = "0.89.0"`). `make ci` is red on `v89`. The previous bump needed the same hand edits (`0.87.0 → 0.88.0` across the same files in this delta), so this repeats every release.
+
+**Fix:** Derive the expected value from `REPO_ROOT / "VERSION"` or the package `__version__`, as the delta already did for `synced_core_constraint` in `test_e2e_full_workflow.py`. **Effort:** Trivial. **Confidence:** High. Reality 1/2.
+
+### TA77 `publish-all-self-observed-lease` · S3 · `scripts/publish_module.py:1208-1253`
+
+**Defect:** `_publish_all` calls `_observe_remote_branch_sha` (a live `ls-remote`) and passes the result straight to `_publish_module` as `expected_remote_sha`. The lease then only guards the milliseconds between observation and push. It never checks that the observed remote tip is an ancestor of the local split. Nearby text contradicts the design: the helper's docstring warns that feeding an unseen SHA "would satisfy the lease while clobbering a remote commit nobody in this process ever saw", and `_publish_module` (`:1002`) relies on the same lease with no ancestry check.
+
+**Failure scenario:**
+
+1. The maintainer publishes 0.89 module splits from one worktree.
+2. Later they run `make publish-modules` from an older worktree still on an authoritative tag. `_run_release_gates` passes, because `_check_release_authoritative` is per-checkout.
+3. Every newer split branch is force-overwritten with older bytes.
+4. Consumers of `apply --split-refs-from-branches` then verify stale module code.
+
+`git subtree split` is deterministic, so a legitimate re-publish always fast-forwards. That makes the ancestry check safe to add.
+
+**Fix:** Before each push, require `git merge-base --is-ancestor <remote_sha> <local_split_sha>`. On divergence, stop the batch and name the module. **Effort:** Small. **Confidence:** Medium: the divergence scenario is inferred, not executed. Reality 1.
+
+### S4
+
+- **TA78** `compare-digest-non-ascii-500`: `quickscale_modules/blog/src/quickscale_modules_blog/views.py:351` (`secrets.compare_digest(token, configured_token)`) and `quickscale_modules/notifications/src/quickscale_modules_notifications/services.py:752` (`hmac.compare_digest(signature or "", …)`). Either check raises `TypeError` on a non-ASCII `Authorization` token or signature header (executed). Unauthenticated callers get a 500 with a logged traceback instead of 401/403. The blog path needs `BLOG_API_TOKENS` configured; the notifications path needs a fresh timestamp. **Fix:** compare `.encode()` bytes, or reject non-ASCII input as invalid first.
 
 ---
 
@@ -73,45 +200,46 @@ No live findings.
 
 | Subsystem | What was read | Verdict |
 |---|---|---|
-| Commit delta `602f4be3..HEAD` | all 3 files, production and test hunks, in full | Clean — the assertion removals are a defensible narrowing; see *Clean sweeps* and the reconciliation log |
-| orgs — tenant registry & RLS SQL | `tenancy.py` registry, both policy templates, `apply_force_rls` / `revert_force_rls` / `refresh_force_rls_policies`, equality-trigger helpers, `is_tenant_model` → `check_tenant_model_isolation` | Clean after SA172 made forward application idempotent and metadata-derived; the write/read policy split remains correct — see *Clean sweeps* |
-| orgs — request scoping | `managers.py`, `middleware.py`, `permissions.py`, `current_org.py` GUC layer, `public_context.py` | Clean — fail-closed at every branch examined; see *Clean sweeps* |
-| orgs — boot guards | `apps.py` `ready()`, `checks.py` | Clean — one suspected finding refuted, see *Clean sweeps* |
-| forms — operator surface | `views.py:140-520`, `throttles.py`, `models.py` settings helpers | Clean — superuser gating is consistent across queryset selection and `operator_access` wrapping |
-| billing — credit ledger | `services.py` `debit_user`, `credit_user`, balance helpers | Clean — `transaction.atomic()` + `select_for_update()` + `F()` deltas, integer credits, no float money |
-| blog — public read path | `feeds.py` | Clean (one watch item on the double `get_system_org()` resolution) |
-| DR engine — locking | `_lock.py` in full; `advisory_lock.py` acquire/release/stale | Clean after the accepted inode-bound lock correction; the fcntl cooperation limitation remains an advisory risk |
-| DR engine — orchestration | destructive sites, `create_backup` lock section, admin restore staging/upload pipeline | Clean; the upload path streams via `chunks()` — see *Notes* |
-| devtools — beta migration | `beta_migration.py` mutation sites, TOML writer, identity replacement, git guard | Clean — the clean-worktree blocker at `:1457` is the reversal path; see *Clean sweeps* |
-| Dependency & suppression hygiene | `poetry.lock` security-relevant pins; `scripts/security_suppressions.json` | Clean — all 7 remaining suppressions are accountable and unexpired, and no shared expiry cliff remains |
+| Commit delta `87e8c96a..HEAD` | full first-party production diff and every test hunk | TA74, TA75, TA76, TA77; test changes adjudicated in *Clean sweeps* |
+| Generated boot sequence (`start.sh.j2`, `Dockerfile.j2`, `railway.json.j2`) | entire files; lifecycle walk boot → role → migrate → cache → superuser → WSGI → gunicorn | Clean. Role creation is identifier-safe, refuses a superuser or self role, and credentials stay off argv. Two watch items below |
+| CLI deploy (`deployment_commands.py`, `railway_utils.py` variable helpers) | delta in full plus read/set helpers | TA74, TA75 |
+| CLI dev (`development_commands.py`) | delta plus every `_run_docker_exec_command` caller | Clean. The privilege narrowing is correct and `manage` guards empty args at `:690` |
+| orgs — privileged commands (`apps.py`, `migrate_billing_to_orgs.py`) | whole command, guard delta | Clean. See *Clean sweeps* |
+| orgs — `purge_organization` | whole file | TA73 |
+| Client identity / public auth (`get_client_ip`, blog API auth, notifications webhook) | functions in full | TA78; otherwise clean |
+| Publication tooling (`publish_module.py`, `version_tool.sh`, compat gate) | delta plus `_publish_module`, `_run_release_gates` | TA77 |
+| CI / gates (workflows, testimony, security gates, provisioning, isolation conformance) | delta in full | Clean as defects; one watch item and one tooling gap |
 
 ---
 
 ## Clean sweeps worth recording
 
-- **The FORCE-RLS policy split enforces the documented read/write asymmetry.** `_FORCE_RLS_FORWARD_SQL` (`tenancy.py:505-527`) creates a `FOR ALL` policy requiring `current_org_id = organization_id` in both `USING` and `WITH CHECK`, plus a separate `FOR SELECT` policy that adds the `operator_access` OR clause. Because PostgreSQL applies UPDATE/DELETE policies conjunctively with the SELECT visibility check, `operator_access` genuinely cannot widen a write — matching the CR-SA14.5-001 comment and `organizations.md:729`. Both policies use the `NULLIF(current_setting(…, true), '')::uuid` form, so an unprimed GUC yields `NULL`, which never equals `organization_id` — fail-closed.
-- **`TenantManager` is fail-closed by construction.** `managers.py:38-49`: no org in the ContextVar returns `.none()`, and `super_scope=True` is the only bypass. Verified as the default `objects` manager contract.
-- **The GUC priming wrapper handles transaction-boundary reuse correctly.** `_make_priming_execute_wrapper` (`current_org.py:453-563`) memoises per transaction against the **outermost `Atomic` object reference** rather than `id()`, explicitly to defeat CPython address reuse (CR-SA42-001); the autocommit branch clears the memo and wraps each statement in a short `transaction.atomic()` so `SET LOCAL` and the tenant SQL share a scope. `_tenant_context` restores both the ContextVar and the prior GUC on exit via `SET LOCAL` rather than session-scoped `RESET` (CR-AF11-001).
-- **`operator_access` is gated, audited, nesting-safe, and fails loudly outside a transaction.** `_get_operator_access` / `_set_operator_access` (`current_org.py:685-745`) raise `ImproperlyConfigured` on PostgreSQL when `connection.in_atomic_block` is false, so a `SET LOCAL` that would silently no-op is impossible (SA39). The context manager saves and restores the prior GUC. Its only HTTP-reachable consumer, `forms/views.py`, gates every use on `_is_superuser()` at both the queryset (`_get_org_bound_queryset:158-177`) and the wrapping (`_with_superuser_operator_access:180-200`), with non-superusers fail-closed to `.none()` when no org is active.
-- **Org management routes bypass middleware resolution but not authorization.** `TenantMiddleware._is_org_management_path` lets `/orgs/<slug>/…` through unresolved, and `permissions._resolve_request_org` then resolves the org *from the slug* with no implicit trust — `user_has_org_role` performs the membership and role check. Every mutating view (`MemberListView`, `InviteView`, `RevokeInvitationView`, `OrgSettingsView`) declares `min_org_role = OrgRole.ADMIN`, and the MRO places `OrgRoleMixin.dispatch` after `LoginRequiredMixin`. Unknown segments under `/orgs/` fall through to org resolution rather than bypassing.
-- **The `QUICKSCALE_PRIVILEGED_COMMAND` early return was investigated and refuted as a finding.** `apps.py` `ready()` returns before installing the priming wrapper, connecting the SA70 last-owner `pre_delete` backstop, and registering the SA1.3/SA1.4 system checks. Walked each consequence: during `migrate` the connection runs as the BYPASSRLS superuser so priming is moot; data migrations operate on historical model classes, which would not dispatch a `pre_delete` receiver registered against the real `OrganizationMembership` class even if it *were* connected; and the two skipped checks emit `Warning` only. No exposure. The env-var contract itself is honoured — `start.sh.j2:50,61` sets it as an inline command prefix alongside `RUNTIME_DATABASE_URL=""`, and it appears in neither `.env.j2` nor `docker-compose.yml.j2`.
-- **The four privileged-command declarations currently agree.** The companion structural pass promoted `privileged-command-set-multi-owner` on 2026-08-28 after observing that `orgs/apps.py` claimed to be the SSOT while other deciders existed; SA174 corrects that claim and demotes the structural issue under the settled two-command decision. Adjudicated here for a *behavioural* divergence, which is what would make it a defect in this document's scope: `orgs/apps.py` `_PRIVILEGED_COMMANDS`, `quickscale_cli/.../development_commands.py` `_PRIVILEGED_DJANGO_COMMANDS`, generated `production.py.j2` `_KNOWN_PRIVILEGED_COMMANDS`, and the `migrate`/`createcachetable` branches in generated `start.sh.j2` all declare exactly `{"migrate", "createcachetable"}`. Unknown values fail closed in both enforcing validators (`production.py.j2` raises; `apps.py:_is_privileged_command` returns `False` and the BYPASSRLS guard runs). `development_commands.py` interpolates a caller-supplied command into the env var, but both validators reject unrecognised values, so it cannot widen the exemption. **No finding here** — the structural ownership question remains an armed watch item in the arch audit.
-- **The billing credit ledger has no TOCTOU.** `debit_user` (`services.py:874-900`) opens `transaction.atomic()`, takes the balance row with `select_for_update()`, checks sufficiency, and applies the delta through `F("balance") + delta` — never a read-modify-write of a Python integer. Credits are `int`; no `FloatField` exists anywhere in first-party source and the only `Decimal` use is a display conversion (`billing/views.py:116`).
-- **`beta_migration.py` gates its in-place mutations behind a clean git worktree.** `_check_clean_git_worktree` (`:933-972`) requires both "inside a work tree" and an empty `git status --porcelain`, and `_validate_in_place_report_boundary` (`:1457`) records it as a blocking check. That makes `git checkout` the reversal path for `_replace_text_in_file`'s global identity substitution and `_copy_path`'s `_remove_path`-then-copy, both of which operate on fixed known-file lists. `_write_validated_toml` (`:777-785`) parses the rewritten document before writing, refusing to emit invalid TOML.
-- **Admin restore uploads stream rather than buffer.** `_iter_admin_restore_upload_chunks` (`orchestration.py:2579-2600`) prefers Django's `chunks()` generator and only falls back to a whole-`read()` when `chunks` is absent or yields nothing — not the live path for any real Django upload. `_stage_admin_restore_upload` hashes and sizes incrementally into a quarantined directory and rejects empty files.
-- **The suppression ledger remains accountable.** SA170's dependency upgrade removed four resolved
-  `sqlparse` CVE suppressions. All 7 remaining entries in `security_suppressions.json` carry an owner,
-  rationale, `decision_ref`, and 2026-09-30 expiry.
-- **The delta weakened no production invariant.** `990f660f` and `48e0a62a` remove ~60 assertions from `test_v88_ticket_context_consistency.py`, which is the §4.VIII signature — but every removed assertion pinned *documentation* state (roadmap prose, ticket dependency sets, merge positions, and this file's own finding counts and severities), not code behaviour. The removal is required by, not in tension with, `decisions.md:670`: this document is "live findings, not a ledger… no other artifact may pin its finding counts or IDs." The replacement `_assert_status_consumers_agree` **derives** counts from the roadmap instead of pinning literals, raises `AssertionError` with a diagnostic message instead of a bare `assert`, and the commit adds a new red-canary test (`test_v88_status_consumer_count_drift_is_expected_red_canary`) proving the check still fails on drift. Confirmed by grep that no test anywhere still reads `docs/others/tech-audit.md` or `arch-audit.md`.
+- **All four privileged-command declarations still agree after gaining a third command.** `orgs/apps.py:36` `_PRIVILEGED_COMMANDS`, `development_commands.py:44` `_PRIVILEGED_DJANGO_COMMANDS`, and `production.py.j2:156` `_KNOWN_PRIVILEGED_COMMANDS` all declare `{"migrate", "createcachetable", "migrate_billing_to_orgs"}`. `start.sh.j2` uses `migrate` and `createcachetable` inline and exposes `migrate_billing_to_orgs` only as an exact single-argv one-shot (`:13-19`) that `exec`s and never reaches Gunicorn. Unknown argv exits 2. This supersedes the prior pass's "exactly two" clean sweep; the behaviour stays consistent.
+- **`quickscale manage` no longer hands the superuser URL to every command.** Previously `_run_docker_exec_command` cleared `RUNTIME_DATABASE_URL` for *all* execs (`shell`, `createsuperuser`, arbitrary commands). Now it clears the URL only when `privileged_command` is in the sanctioned set, and it raises `ValueError` otherwise. This tightens the "No shipped runtime BYPASSRLS path" oracle for local development.
+- **Runtime-role creation in `start.sh` is injection-safe and refuses dangerous targets.** Role and database names go through `psycopg2.sql.Identifier` and the password through `sql.Literal`, read from the environment, never argv. The step refuses when `RUNTIME_DB_ROLE` equals the `DATABASE_URL` login or names an existing superuser. `ALTER DEFAULT PRIVILEGES` covers tables that later migrations create under the same login.
+- **The `migrate_billing_to_orgs` fix is complete across siblings.** The delta switched every billing lookup from fail-closed `objects` (always empty without an org context) to `all_objects`, and wrapped `handle` in `transaction.atomic`. The fix-regression pass looked for the same `objects`-in-command class in `forms_anonymize_submissions`, `forms_seed_presets`, and `promote_to_saas`. All scope correctly, through `operator_access` + `all_objects` for reads, `org_scope` for writes, or non-tenant models.
+- **`get_client_ip` resolves the rightmost-N forwarded hop and fails closed.** `current_org.py:616-671`: settings are type-checked and raise when missing. A chain shorter than `TRUSTED_PROXY_COUNT` falls back to `REMOTE_ADDR`, never to the spoofable leftmost entry.
+- **The blog API's `csrf_exempt` is paired correctly.** `authenticate_blog_api_request` (`blog/views.py:333-380`) applies `CsrfViewMiddleware.process_view` to every session-authenticated request. Only bearer-token requests skip CSRF, and they require staff.
+- **Test-integrity diff: no weakening found.** Every removed assertion or skip in the delta was either replaced by a stricter one or tracks a real behaviour move:
+  - `pytest.skip("network unavailable")` → a hermetic Poetry shim that asserts lock content and invocation.
+  - The always-skipped `migrate_billing_to_orgs` tests now run in the BYPASSRLS lane, with a fixture that recreates nullable ownership. This exposed the `objects` bug.
+  - The gunicorn-in-Dockerfile assertions moved to the start.sh `CMD`.
+  - `PENDING_REMEDIATION` parametrizations → completed-remediation assertions over the AF12 pairs.
+  - The isolation gate's empty-parameter exemption was deleted, so *any* skip now fails.
+  - `bypass_rls` skip became deselect, but `ci.yml` now runs the bypass lane on every push/PR, and `provision_ci_postgres.sh` refuses to widen `QUICKSCALE_ALLOW_BYPASSRLS` into `GITHUB_ENV`.
+- **Prior closures verified in code (§2f.3).**
+  - TA72: `DROP POLICY IF EXISTS` precedes both policy creations (`tenancy.py:506-507`, `:532-533`).
+  - TA71: the backup lock binds reclamation to `(st_dev, st_ino)` (`dr_engine/_lock.py:231-239`, `:269`).
 
 ---
 
 ## Structural smells
 
-*(candidate inputs for the companion `deep-architectural-audit` — not findings here)*
+*(candidate inputs for the companion `deep-architectural-audit`, not findings here)*
 
-- **Two independent filesystem-lock implementations.** `AdvisoryLock` (`advisory_lock.py`) and the DR backup lock (`dr_engine/_lock.py`) remain separate implementations after the release-accepted atomic, inode-bound correction. This is a non-defect consolidation watch question: revisit only if a third implementation appears, behavior or platform support diverges, or both public contracts can no longer be preserved independently.
-- **Conformance gates assert policy presence, not policy content.** `table_has_force_rls` (`tenancy.py:1623-1677`) accepts any table where `relrowsecurity` and `relforcerowsecurity` are true and `COUNT(*) FROM pg_policies >= 1`. A table carrying a permissive `USING (true)` policy would pass every isolation check the repository runs. The registry-driven parity tests constrain *which* tables are enrolled but not *what* their policies say.
+- **Two independent filesystem-lock implementations.** `AdvisoryLock` and the DR backup lock remain separate. Carried forward as a non-defect consolidation watch question.
+- **Conformance gates assert policy presence, not policy content.** `table_has_force_rls` (`tenancy.py:1633`) accepts any table with RLS enabled and forced and at least one policy. Still owned by post-v88 SA177.
+- **Deploy-time state is reconstructed, not reconciled.** TA74 and TA75 are both symptoms of `quickscale deploy railway` recomputing configuration each run instead of treating the live Railway environment as the source of truth that must be read successfully first.
 
 ---
 
@@ -119,7 +247,10 @@ No live findings.
 
 | Gap | Would have caught | Recommendation |
 |---|---|---|
-| RLS policy assertions check existence, not predicate text | Structural smell #3 | Extend the isolation conformance suite to assert the policy `qual`/`with_check` text from `pg_policies` matches the `_FORCE_RLS_FORWARD_SQL` template for each enrolled table — this pins the operator-read/tenant-write split as a gate rather than a comment |
+| RLS policy assertions check existence, not predicate text | Structural smell #2 | Assert `pg_policies.qual`/`with_check` against `_FORCE_RLS_FORWARD_SQL` per enrolled table (SA177) |
+| Version literals in tests are not derived | TA76 | Have `version_tool.sh check` (or a small AST/grep gate) fail when a test file contains the previous release string next to `__version__`/"expected core version"; or derive from `VERSION` everywhere |
+| Dependency gate never sees the generated project's runtime dependencies | Future CVEs in `gunicorn`, `whitenoise`, `dj-database-url` (none in root `poetry.lock`) | Add a Trivy pass over the hermetic generated-project lock the E2E lane already produces, or add those pins to a scanned dev group |
+| No external-effect check on destructive org teardown | TA73 | Add a purge conformance test: for every `_DELETE_SPECS` model that carries an external provider id, the purge must refuse or reconcile |
 
 ---
 
@@ -127,16 +258,20 @@ No live findings.
 
 **Carried forward from prior passes (re-verified, unchanged):**
 
-- **Integration-branch CI** — hosted CI does not run on pushes to the release branch (`ci.yml` triggers on `main`/`develop` and PRs to `main`). Accepted solo-maintainer workflow choice.
-- **Generator lock generation** — missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install stays fail-loud. Deliberate.
-- **The generated healthcheck checks nothing** (`urls.py.j2:39-45` returns `HttpResponse("OK")`; `railway.json.j2:11` points Railway's deploy gate at it). Not promoted — the DB-free property is deliberate and documented, and production settings already raise at import when `RUNTIME_DATABASE_URL` is absent. Revisit if a separate readiness endpoint is added.
-- **Cross-tenant count fallbacks in CRM serializers** (`serializers.py:133-136`, `:311-312`, `:409-410`, `:541-545`) use `all_objects` when the ContextVar is unset. Not a finding: under the supported NOBYPASSRLS role, FORCE RLS with an unset GUC returns zero rows. Re-examine if a BYPASSRLS serving mode is ever supported. **This pass adds:** the identical pattern is pervasive in `billing/services.py`, which uses `all_objects` with explicit `organization=` filters throughout. Same adjudication, same trigger for re-examination.
-- **Atomic state writes are rename-atomic but not durable** (`state_schema.py:352-356`, `:405-407`) — no `fsync()`. Standard workstation trade-off.
+- **Integration-branch CI.** `ci.yml` still triggers on `main`/`develop` pushes and PRs to `main`. Accepted solo-maintainer choice.
+- **Generator lock generation** warns and continues by explicit usability policy. Deliberate.
+- **The generated healthcheck checks nothing** (`urls.py.j2:39-45`; `railway.json.j2` `healthcheckPath`). Still not promoted. This pass confirmed boot-time `_check_rls_role` makes a broken runtime URL fail *before* the healthcheck can pass.
+- **Cross-tenant count fallbacks** in CRM serializers (`serializers.py:133-136`) and `billing/services.py` use `all_objects` with explicit org filters. They are safe under NOBYPASSRLS. Re-examine if a BYPASSRLS serving mode is ever supported.
+- **Atomic state writes are rename-atomic but not durable** (`schema/state_schema.py:356`, `:412`). No `fsync()`.
+- **`blog/feeds.py` resolves the System org twice with opposite error handling** (`:33` guarded, `:45` unguarded).
+- **`table_has_force_rls` queries `pg_class`/`pg_policies` without schema qualification.**
 
 **New this pass:**
 
-- **`blog/feeds.py` resolves the System org twice, with opposite error handling.** `__call__` (`:31-34`) swallows any exception into `org = None`, but `items()` (`:44-46`) calls `Organization.objects.get_system_org()` again *unguarded*. If the first call failed because of a corrupt System org row — `OrganizationManager._validate_system_org` raises `RuntimeError` by design — the feed enters fail-closed scope and then raises unhandled during item rendering, turning a fail-closed empty feed into a 500. Narrow trigger (a corrupt singleton), and the broad `except Exception` is itself the Fail-Hard shape worth noting.
-- **`table_has_force_rls` queries `pg_class` / `pg_policies` without schema qualification** (`tenancy.py:1650-1670`, matching on `relname` and `tablename`). Single-schema deployments are unaffected; recorded so a future schema-per-tenant option does not inherit an ambiguous check.
+- **`start.sh` puts the runtime password in DDL text.** `ALTER/CREATE ROLE … PASSWORD '<literal>'` reaches the server as statement text. If that statement errors (`log_min_error_statement=error`) or the server uses `log_statement=ddl`, the password lands in PostgreSQL logs, which Railway surfaces in its dashboard. Not promoted: Railway's Postgres logging configuration was not verified, and success-path statements are not logged by default. A pre-hashed SCRAM verifier would remove the exposure.
+- **Concurrent replica boot races `CREATE ROLE`.** With more than one replica on first deploy, two containers can both see the role absent. One fails "role already exists", exits under `set -e`, and restarts (`restartPolicyType: ON_FAILURE`); its next boot takes the `ALTER` branch. Self-healing, so not promoted.
+- **Commit testimony now accepts any `vN[.N…]` token.** `ROADMAP_REFERENCE_RE` (`check_commit_testimony.py:31`) matches a release title such as `v0.88.0: QuickScale 0.88.0`. Seven behavioural commits in this window changed product, workflows, or gates with only that subject line. Governance, not a product defect; recorded because the side-channel classification (§2f) depends on commit messages carrying intent.
+- **`migrate_billing_to_orgs` is privileged but effectively unreachable.** Under the clean-break migration policy, `organization_id` is `NOT NULL` on every current install; the tests have to drop the constraint to create migratable rows. The command still became a third privileged exemption plus a `start.sh` argv branch. Harmless while all validators agree; revisit if the command's scope grows.
 
 ---
 
@@ -161,7 +296,7 @@ No live findings.
   tooling gap and structural smell remain open under post-v88 SA177.
 - 2026-08-28 — **No prior closure claims required verification (§2f.3)**: the prior pass carried three open findings and claimed no new closures in the delta window, so there was no closure testimony to check against code. All three prior IDs were nonetheless re-verified at their anchors, as logged above.
 - 2026-08-28 — **Fix-regression pass (§3.6)**: not applicable — the delta contains no fix for any prior finding. The two behavioural commits are test-only.
-- 2026-08-28 — **Test-integrity diff (§3.7)**: the delta's ~60 removed assertions were read hunk by hunk against the "did any test get weaker?" question and **cleared**. Every removed assertion pinned documentation state, not code behaviour; the removal of the assertions over `arch-audit.md` and `tech-audit.md` is mandated by `decisions.md:670`; the replacement derives its counts from the roadmap rather than pinning literals, upgrades bare `assert`s to diagnostic `AssertionError`s, and adds a red-canary test proving drift still fails. No `skip`/`xfail` was added, no tolerance widened, no mock replaced a real dependency. Full adjudication in *Clean sweeps*.
+- 2026-08-28 — **Test-integrity diff (§3.7)**: the delta's ~60 removed assertions were read hunk by hunk against the "did any test get weaker?" question and **cleared**. Every removed assertion pinned documentation state, not code behaviour; the removal of the assertions over `arch-audit.md` and `tech-audit.md` is mandated by `decisions.md:670`; the replacement derives its counts from the roadmap rather than pinning literals, upgrades bare `assert`s to diagnostic `AssertionError`s, and adds a red-canary test proving drift still fails. No `skip`/`xfail` was added, no tolerance widened, no mock replaced a real dependency.
 - 2026-09-05 — **Ticket splits, no finding changed.** TA72's owner was carrying a two-line forward-template
   repair bundled with a predicate-text conformance assertion over every enrolled table. The repair stays with
   **SA172**; the assertion moves to post-v88 **SA177**, so the *"RLS policy assertions check existence, not
@@ -174,5 +309,18 @@ No live findings.
   `flush_empty_consolidated_sections` were held open only for SA165's closeout. SA165 closed on maintainer
   decision on 2026-09-09, so the notes are archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-05 — **SA165 retained-partial reconciliation:** the retained A-C product addresses `flush_empty_consolidated_sections`, the identity-blind isolation skip, `_HOST_DEPENDENT_PATHS`, and generated local credentials. Review of the five-file product candidate and the final release verdict remain outstanding, so the four notes remain live and SA165 remains open. SA165 now absorbs SA179's subsequent documentation closeout; the documents recording the review remain outside the frozen product evidence. Historical verdicts and continuation evidence are retained in [CHANGELOG.md](../../CHANGELOG.md); current scheduling is maintained in the [roadmap](../technical/roadmap.md).
+- 2026-09-15 — **Re-run over `87e8c96a..b9e072f4`.** 569 commits; the first-party tree diff (125 non-doc files) and every test hunk were read. No prior finding was open, so there is no still-open carry-forward.
+- 2026-09-15 — **Closure verification (§2f.3):** TA71 and TA72 closures **confirmed present in code** at the anchors listed in *Clean sweeps*. TA67 and TA70 closures rest on the archived release-acceptance evidence. Their fix sites were not touched by this delta, so there was nothing to re-open. **Regressed: none.**
+- 2026-09-15 — **Fix-regression pass (§3.6):** the one fix in the window, `migrate_billing_to_orgs` moving from `objects` to `all_objects` plus `@transaction.atomic`, was read adversarially and its siblings swept. **Cleared.**
+- 2026-09-15 — **Test-integrity diff (§3.7):** the removed skips and assertions in the delta were adjudicated as replaced-by-stricter or behaviour-moved (see *Clean sweeps*). **No weakening.**
+- 2026-09-15 — **Arch-audit red flag** *`purge_organization` can orphan live Stripe subscriptions*: independently verified and **promoted to TA73 (S2)**. The dismissed PEP 758 syntax lead was re-confirmed dismissed on Python 3.14.6.
+- 2026-09-15 — **TA73** `purge-org-orphans-live-stripe-subscription`: **new (S2).**
+- 2026-09-15 — **TA74** `railway-redeploy-rotates-secret-key`: **new (S3).** Long-standing (`dcb558ce`, v0.60.0), made visible by the delta's password-reuse contrast.
+- 2026-09-15 — **TA75** `railway-runtime-role-vars-fail-open`: **new (S3).** Introduced by `461796ce` / `b8ca6283`.
+- 2026-09-15 — **TA76** `version-bump-breaks-literal-tests`: **new (S3).** Introduced by `b9e072f4`; executed.
+- 2026-09-15 — **TA77** `publish-all-self-observed-lease`: **new (S3).** Introduced by `296afa0e`.
+- 2026-09-15 — **TA78** `compare-digest-non-ascii-500`: **new (S4).** Long-standing; executed.
+- 2026-09-15 — **Clean sweep superseded:** the prior "four privileged-command declarations agree on exactly `{migrate, createcachetable}`" became "agree on three", after `b29d9a29` added `migrate_billing_to_orgs` at all four stations. Consistent; no finding.
+- 2026-09-15 — **Chain pass (§3.9) ran.** One candidate chain was refuted (TA75 guessed service × DB-free healthcheck; see empirical check 3). TA75 × TA74 share a re-run trigger but compound only into disruption, not exposure. No chain raised a severity.
 
-*Categories swept with no qualifying finding this pass: injection sinks of every kind, authentication and authorization, secrets handling, cryptographic use, multi-tenant isolation, data handling and serialization, resources and I/O, performance, dependency and build hygiene, CLI destructive-path safety, and the frontend, library/SDK, code-generator, and infrastructure-as-code archetype lenses.*
+*Categories swept with no qualifying finding this pass: injection sinks (role DDL, publication git argv, testimony regex), authorization on the delta's new surfaces, secrets on argv or in logs (beyond the start.sh watch item), multi-tenant isolation in the privileged-command changes, CI secret and escape-hatch propagation, resources and I/O, performance, and the code-generator and IaC archetype lenses.*
