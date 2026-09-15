@@ -342,6 +342,50 @@ quickscale push --module blog
 
 See [decisions.md: CLI Command Matrix](./decisions.md#cli-command-matrix) for the authoritative command list.
 
+#### What `quickscale update` changes, and what stays yours
+
+`quickscale update` pulls module code into `modules/<name>/` through `git subtree` and regenerates
+the QuickScale-managed wiring files. It never rewrites the rest of what generation copied into your
+project.
+
+| Project part | Changed by `quickscale update`? | Notes |
+| --- | --- | --- |
+| `modules/<name>/` — module code, including its Django templates and static files | Yes | Local edits here are unsupported and must be reconciled by hand on every update. |
+| Managed wiring — `<package>/settings/modules.py` and `<package>/urls_modules.py` | Yes | QuickScale-owned; never edit them. |
+| `frontend/` — the React app | Never | Copied once at generation. New theme features reach existing projects only by manual adoption or migration. |
+| `templates/` — generated `base.html`, error pages, and any overrides of module templates | Never | Module pages extend your `base.html`, so shell changes in new releases arrive as manual adoption steps. An override hides every later change to the module template it replaces. |
+| Other generated files (`settings/base.py`, `Dockerfile`, `start.sh`, CI) | Never | Changes arrive as documented adoption steps; `quickscale status` reports contract-vintage gaps. |
+| Project-owned apps (for example a `properties` app) | Never | Yours entirely. |
+
+**Keeping the frontend separate from updates.** It already is: `frontend/` is your code and no
+QuickScale command rewrites it. What can still change under it is the backend it calls — module API
+responses such as `/api/orgs/`, `/api/forms/<slug>/`, and the CRM API, and the page configuration
+Django passes to the React bundle through `window.__QUICKSCALE__`. Keep the frontend in the same
+repository and deploy: the Dockerfile builds it into `static/frontend/` and Django serves it on the
+same domain, so session cookies and CSRF work without configuration. Moving it to a separate
+repository or host adds CORS, cookie-domain, and `CSRF_TRUSTED_ORIGINS` configuration and a second
+deploy to coordinate, and it does not remove the dependency on module APIs.
+
+**Customizing a module template.** Prefer module settings and documented extension surfaces first
+(see [module-extension.md](./module-extension.md)). When you do need a template override, copy the
+module template into the project's `templates/` directory at the same relative path — for example,
+`modules/auth/.../templates/account/login.html` becomes `templates/account/login.html`. Django
+searches `templates/` before module templates, so your copy wins. The cost is drift: your copy no
+longer receives the module's fixes to that template, including security and accessibility fixes,
+and nothing warns you. Override as few templates as possible, keep a list of them, and do not
+override a template only to restyle it. Module pages extend your `base.html`, so change the look —
+colors, fonts, header — there, and leave each page's own styling to the module so updates keep
+delivering it.
+
+**After every update:**
+
+1. Run the project's test suite, including frontend tests.
+2. Exercise the React pages that call module APIs (orgs, forms, CRM, and any project API).
+3. For each overridden template, compare your copy with the updated module version
+   (`git diff <commit-before-update> -- modules/<name>/templates/` shows what changed) and port
+   relevant changes.
+4. Check `quickscale status` for contract-vintage warnings and follow any adoption steps it names.
+
 ### 4.3) Plan/Apply Commands
 
 > **Status**: ✅ Available

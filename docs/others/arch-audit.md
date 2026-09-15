@@ -52,11 +52,10 @@ conformance gates, and monotonic quality baselines.
 **Growth direction (planning surface, authoritative).** `v88` is release-accepted, and
 **v0.88.0 is packaged but not published**. Publication is recorded as owed (`roadmap.md:12-16`).
 The critical path is **SA153: the first production property portal
-(`buenosairesproperties.com`) built as a *project-owned extension*** on a fresh generated project.
+(`buenosairesproperties.com`) built as a *project-owned extension*** on `bap-web`, after SA152
+verifies the migration tooling and SA191 migrates that site onto current QuickScale.
 Its acceptance requires that "every new tenant-owned child table has its own `organization_id`,
-forced RLS, and boundary tests" (`roadmap.md:98`). Off the critical path are SA152 (verify the
-maintainer migration modes) and SA177 (verify RLS
-policy predicates). The standing decisions still stand: no `teams` work and no third
+forced RLS, and boundary tests". SA177 (verify RLS policy predicates) is off the critical path. The standing decisions still stand: no `teams` work and no third
 generated-project updater. SA153 is not a teams trigger, so the teams tie-breaker
 (`decisions.md:151`) does not govern the promotions below.
 
