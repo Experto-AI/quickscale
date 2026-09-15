@@ -2,6 +2,7 @@
 
 import pytest
 
+from quickscale_core import __version__ as CORE_VERSION
 import quickscale_modules_notifications
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
@@ -11,7 +12,7 @@ from quickscale_modules_notifications.models import (
 
 
 def test_package_version_is_exposed() -> None:
-    assert quickscale_modules_notifications.__version__ == "0.88.0"
+    assert quickscale_modules_notifications.__version__ == CORE_VERSION
 
 
 @pytest.mark.django_db

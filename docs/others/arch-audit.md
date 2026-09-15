@@ -52,11 +52,10 @@ conformance gates, and monotonic quality baselines.
 **Growth direction (planning surface, authoritative).** `v88` is release-accepted, and
 **v0.88.0 is packaged but not published**. Publication is recorded as owed (`roadmap.md:12-16`).
 The critical path is **SA153: the first production property portal
-(`buenosairesproperties.com`) built as a *project-owned extension*** on a fresh generated project.
+(`buenosairesproperties.com`) built as a *project-owned extension*** on `bap-web`, after SA152
+verifies the migration tooling and SA191 migrates that site onto current QuickScale.
 Its acceptance requires that "every new tenant-owned child table has its own `organization_id`,
-forced RLS, and boundary tests" (`roadmap.md:98`). Off the critical path are SA180 (derive the
-gate-parity count oracles), SA152 (verify the maintainer migration modes), and SA177 (verify RLS
-policy predicates). The standing decisions still stand: no `teams` work and no third
+forced RLS, and boundary tests". SA177 (verify RLS policy predicates) is off the critical path. The standing decisions still stand: no `teams` work and no third
 generated-project updater. SA153 is not a teams trigger, so the teams tie-breaker
 (`decisions.md:151`) does not govern the promotions below.
 
@@ -607,11 +606,6 @@ purge-membership probe is:
 migration, child-boundary, classification, and refresh behaviours now have an extension path and
 Phase A regression coverage; purge membership remains in vendored module source.
 
-**Probe C — add a registered gate** (re-checked, not re-measured). Nothing changed: the registry
-still has 12 gates, and the closed-universe check (`sync_ci_gate_jobs.py:381-387`) still turns any
-missed station into a red build. The eight count-pinned oracles are unchanged and owned by SA180.
-**Verdict: watchlist**, unchanged.
-
 ---
 
 ## Fix order and interactions
@@ -624,7 +618,7 @@ missed station into a red build. The eight count-pinned oracles are unchanged an
   privileged set leaves the frozen templates, and rank 3's vintage enforcement has one fewer
   contract to police. Rank 3's first step (declaring an `orgs` vintage) is independent and cheap,
   and it should land before v0.88 is published.
-- **SA152 is already scoped** to rank 3's maintainer half and does not conflict. SA180 and SA177
+- **SA152 is already scoped** to rank 3's maintainer half and does not conflict. SA177
   are independent of all four findings, but SA177's "each enrolled table" scope inherits rank 1's
   closed universe. If rank 1 lands first, SA177 covers project tables for free.
 
@@ -663,11 +657,6 @@ missed station into a red build. The eight count-pinned oracles are unchanged an
   loudly, and the two PostgreSQL values are arguably separate owners. **Trigger:** a thirteenth
   module, `teams` graduating, or the backups DR `pg_dump`/`pg_restore` contract depending on the
   two majors agreeing. **Not fired:** the universe is 12 and the DR contract is unchanged.
-- **Count-pinned oracles in `test_gate_parity.py`** — **trigger fired (prior pass); owned by
-  SA180, still open.** The population was re-verified at exactly eight sites: three `all_ten`
-  (`:1039,1045,1051`), two `all_seven` (`:1088,1244`), `all_twenty` (`:1320`), the 17-job literal
-  (`:3540`), and `exactly_six` (`:301`). No gate was added this pass (the registry is at 12), so
-  the cost was not paid again.
 - **SA92 migration-squash discovery tuple** (`test_sa92_migration_squash_guardrail.py:83-100`).
   *Doesn't qualify:* it is a bounded tripwire, and `_migdir()` now fails loud. **Trigger:** another
   migration-bearing module, or the tuple omitting one. **Not fired:** the census shows 10 names and
@@ -817,6 +806,10 @@ contradicted by `b29d9a29`.*
   purge-membership half.** Classification and FORCE-RLS refresh now use the marker-derived tenant
   set, with project-owned fixture regressions and live-policy validation; `_DELETE_SPECS` remains
   the open purge seam. No purge implementation, status, or release surface changed.
+- 2026-09-15 — **The count-pinned gate-parity oracle watch item is retired.** Registry-bound
+  expectations now derive from the gate registry, workflow station counts derive from the station
+  contract, and a gate-addition regression proves the derived counts follow their source. No ranked
+  finding or other watch item changed.
 
 *Lenses scanned with no qualifying finding this pass: observability, API/contract stability of
 the CLI surface, performance and scalability, concurrency and state isolation (beyond the lock

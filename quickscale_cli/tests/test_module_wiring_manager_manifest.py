@@ -21,6 +21,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
+from quickscale_core import __version__ as CORE_VERSION
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.utils import module_wiring_manager
 from quickscale_core.contracts.module_discovery import ImproperlyConfigured
@@ -1239,7 +1240,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         # Complete expected message including trailing period.
         assert message == (
             "Module 'analytics' version mismatch: "
-            "found 0.86.0; expected core version 0.88.0."
+            f"found 0.86.0; expected core version {CORE_VERSION}."
         )
         # No spec building occurs when version mismatch is detected early.
         spy_spec.assert_not_called()
@@ -1287,7 +1288,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         (project / "modules" / "analytics" / "module.yml").write_text(
             'name: analytics\nversion: "0.86.0"\n'
         )
-        # auth has version 0.88.0 (matching core).
+        # auth has the repository version (matching core).
         auth_yml = (
             Path(__file__).resolve().parents[2]
             / "quickscale_modules"
@@ -1308,7 +1309,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         # Complete expected message including trailing period.
         assert message == (
             "Module 'analytics' version mismatch: "
-            "found 0.86.0; expected core version 0.88.0."
+            f"found 0.86.0; expected core version {CORE_VERSION}."
         )
         # First-mismatch blocks spec building for all modules.
         spy_spec.assert_not_called()
@@ -1361,7 +1362,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         # Complete expected message including trailing period.
         assert message == (
             "Module 'analytics' version mismatch: "
-            "found 0.87.00; expected core version 0.88.0."
+            f"found 0.87.00; expected core version {CORE_VERSION}."
         )
         # No spec building — version rejection happens before _build_wiring_specs.
         spy_spec.assert_not_called()
@@ -1392,7 +1393,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         # preserved verbatim without stripping or repr escaping.
         assert message == (
             "Module 'analytics' version mismatch: "
-            "found  0.87.0 ; expected core version 0.88.0."
+            f"found  0.87.0 ; expected core version {CORE_VERSION}."
         )
         # No spec building — version rejection happens before _build_wiring_specs.
         spy_spec.assert_not_called()

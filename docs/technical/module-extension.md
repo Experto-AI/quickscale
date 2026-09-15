@@ -128,6 +128,8 @@ arbitrary new module HTTP APIs.
 
 Any direct edit to files under `modules/<name>/` is outside the supported extension contract. Users who make such edits accept responsibility for manual reconciliation during `quickscale update`.
 
+A template override survives updates because updates never touch it, which also means it stops receiving the module's later fixes to that template. See [user_manual.md: What `quickscale update` changes, and what stays yours](./user_manual.md#what-quickscale-update-changes-and-what-stays-yours) for override placement, drift, and the post-update checklist.
+
 ## Special Case: Auth
 
 Auth is the strongest case where QuickScale should align closely with mainstream Django guidance.

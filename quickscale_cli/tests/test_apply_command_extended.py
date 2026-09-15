@@ -11,6 +11,7 @@ import pytest
 import shutil as _real_shutil
 import yaml
 
+from quickscale_core import __version__ as CORE_VERSION
 from quickscale_core.contracts.module_options import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
@@ -821,7 +822,9 @@ class TestEmbedModule:
         """Apply embedding should skip the per-module managed-wiring pass."""
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: blog\nversion: "0.88.0"\n')
+        (module_dir / "module.yml").write_text(
+            f'name: blog\nversion: "{CORE_VERSION}"\n'
+        )
 
         with (
             patch(
@@ -2915,7 +2918,8 @@ class TestSyncProjectModuleDependenciesForApply:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text(
-            'name: auth\nversion: "0.88.0"\ndependencies:\n  - django-allauth>=0.63.0\n'
+            f'name: auth\nversion: "{CORE_VERSION}"\ndependencies:\n'
+            "  - django-allauth>=0.63.0\n"
         )
         (module_dir / "pyproject.toml").write_text(
             '[project]\nname = "quickscale-module-auth"\n\n'
