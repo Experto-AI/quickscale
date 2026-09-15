@@ -6,6 +6,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 
+from quickscale_core import __version__ as CORE_VERSION
 import quickscale_modules_billing
 from quickscale_modules_billing.models import (
     CreditBalance,
@@ -19,7 +20,7 @@ from quickscale_modules_orgs.models import Organization
 
 
 def test_package_version_is_exposed() -> None:
-    assert quickscale_modules_billing.__version__ == "0.88.0"
+    assert quickscale_modules_billing.__version__ == CORE_VERSION
 
 
 @pytest.mark.django_db(transaction=True)
