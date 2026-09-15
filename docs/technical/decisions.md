@@ -550,8 +550,9 @@ Keep this anchor in place for compatibility. Update the companion doc when the s
 **Validation and Automation Entry Points:** See [validation_policy.md](./validation_policy.md#repository-command-reference) for the authoritative repository command baseline and assistant guidance, and [§Validation Tiers](./validation_policy.md#validation-tiers) for which of those commands a given change owes.
 
 **Security gate tooling:**
-- ✅ Dependency vulnerability scanning uses Trivy v0.74.0 against both committed
-  Poetry lockfiles, including development dependencies; Trivy is the approved
+- ✅ Dependency vulnerability scanning uses Trivy v0.74.0 against the single
+  committed root Poetry lockfile (which resolves core, CLI, and modules through
+  path dependencies), including development dependencies; Trivy is the approved
   lock-native replacement for the originally proposed `pip-audit` design
 - ✅ Static security analysis uses Bandit 1.9.4 over maintained first-party Python
   source with the focused category contract and reviewed suppression ledger

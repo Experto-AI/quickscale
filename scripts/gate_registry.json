@@ -235,8 +235,7 @@
             "trigger_inputs": [
                 "pyproject.toml",
                 "poetry.lock",
-                "quickscale_core/pyproject.toml",
-                "quickscale_core/poetry.lock"
+                "quickscale_core/pyproject.toml"
             ]
         },
         {

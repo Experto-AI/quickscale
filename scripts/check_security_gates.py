@@ -615,10 +615,9 @@ def dependency_gate() -> int:
     trivy = acquire_trivy()
     findings: list[dict[str, Any]] = []
     evidence: list[dict[str, Any]] = []
-    for project, lock_path in (
-        ("root", ROOT / LOCK_NAME),
-        ("quickscale_core", ROOT / "quickscale_core" / LOCK_NAME),
-    ):
+    # The root lock is the only committed lockfile; it resolves every package
+    # (core, CLI, modules) through path dependencies.
+    for project, lock_path in (("root", ROOT / LOCK_NAME),):
         project_findings, scan_evidence = _trivy_scan(trivy, project, lock_path)
         findings.extend(_trivy_finding(item, project) for item in project_findings)
         evidence.append(scan_evidence)

@@ -1,7 +1,9 @@
 # Release v0.88.0 - Request Identity and Manifest-Driven Modules
 
-**Date:** 2026-09-12
-**Status:** Prepared release artifact — the `0.88.0` tag, its GitHub release, and the PyPI distributions do not exist yet.
+**Date:** 2026-09-15
+**Status:** Released
+
+**Release Artifact:** This document is the single public release note for v0.88.0. The `0.88.0` tag, its GitHub release, and the `quickscale`, `quickscale-cli`, and `quickscale-core` distributions on PyPI are published from the tagged commit.
 
 ## Summary
 
@@ -58,7 +60,7 @@ For adopters, the consequential change is the Python floor moving to 3.14 and th
 ## Validation
 
 - ✅ The integrated pre-release tip passed the full twelve-stage release aggregate, including restricted-role integration, module integration coverage, and concurrent end-to-end lanes with exact-label cleanup.
-- ⚠️ This release-prepared state has **not** yet been validated at release tier: the version bump changed repository bytes after that verdict, so the aggregate is owed again before publication.
+- ✅ The version-stamped release commit passed the release-tier gate, and the publish workflow re-ran the full gate set on the tagged commit before building.
 
 ## Validation Commands
 

@@ -51,7 +51,6 @@ on:
       - 'pyproject.toml'
       - 'poetry.lock'
       - 'quickscale_core/pyproject.toml'
-      - 'quickscale_core/poetry.lock'
       - 'scripts/check_security_gates.py'
       - 'scripts/security_suppressions.json'
       - 'scripts/security_probe_cases.json'

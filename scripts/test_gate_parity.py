@@ -640,7 +640,6 @@ _E2E_PATHS: list[str] = [
     "pyproject.toml",
     "poetry.lock",
     "quickscale_core/pyproject.toml",
-    "quickscale_core/poetry.lock",
     "scripts/check_security_gates.py",
     "scripts/security_suppressions.json",
     "scripts/security_probe_cases.json",
@@ -1387,7 +1386,7 @@ class TestParserPrecision:
                 "fi\n"
                 'echo "✅ VERSION verified: $FILE_VERSION"\n',
             ),
-            ("verify", "./scripts/version_tool.sh check\n"),
+            ("verify", 'PYTHON="$(command -v python)" ./scripts/version_tool.sh check\n'),
             ("test", 'echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV'),
             ("test", "poetry install --with dev\n"),
             ("test", "make check-core-compat\n"),

@@ -1795,6 +1795,18 @@ files = [
 six = ">=1.5"
 
 [[package]]
+name = "python-decouple"
+version = "3.8"
+description = "Strict separation of settings from code."
+optional = false
+python-versions = "*"
+groups = ["dev"]
+files = [
+    {file = "python-decouple-3.8.tar.gz", hash = "sha256:ba6e2657d4f376ecc46f77a3a615e058d93ba5e465c01bbe57289bfb7cce680f"},
+    {file = "python_decouple-3.8-py3-none-any.whl", hash = "sha256:d0d45340815b25f4de59c974b855bb38d03151d81b037d9e3f463b0c9f8cbd66"},
+]
+
+[[package]]
 name = "python-discovery"
 version = "1.5.0"
 description = "Python interpreter discovery"
@@ -1913,7 +1925,7 @@ files = [
 
 [[package]]
 name = "quickscale"
-version = "0.87.0"
+version = "0.88.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -1922,8 +1934,8 @@ files = []
 develop = true
 
 [package.dependencies]
-quickscale-cli = "^0.87.0"
-quickscale-core = "^0.87.0"
+quickscale-cli = "^0.88.0"
+quickscale-core = "^0.88.0"
 
 [package.source]
 type = "directory"
@@ -1931,7 +1943,7 @@ url = "quickscale"
 
 [[package]]
 name = "quickscale-cli"
-version = "0.87.0"
+version = "0.88.0"
 description = "Command-line interface for QuickScale Django project generator"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -1949,7 +1961,7 @@ url = "quickscale_cli"
 
 [[package]]
 name = "quickscale-core"
-version = "0.87.0"
+version = "0.88.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -1967,7 +1979,7 @@ url = "quickscale_core"
 
 [[package]]
 name = "quickscale-devtools"
-version = "0.87.0"
+version = "0.88.0"
 description = "Maintainer-only development tools for QuickScale"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -1984,7 +1996,7 @@ url = "quickscale_devtools"
 
 [[package]]
 name = "quickscale-module-analytics"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale PostHog analytics module with service-style capture helpers"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2002,7 +2014,7 @@ url = "quickscale_modules/analytics"
 
 [[package]]
 name = "quickscale-module-auth"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale authentication module with django-allauth integration"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2020,7 +2032,7 @@ url = "quickscale_modules/auth"
 
 [[package]]
 name = "quickscale-module-backups"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale operational backups module with private local and remote artifact workflows"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2040,7 +2052,7 @@ url = "quickscale_modules/backups"
 
 [[package]]
 name = "quickscale-module-billing"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale credits-first billing module with a Django-owned ledger and Stripe-backed checkout services"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2059,7 +2071,7 @@ url = "quickscale_modules/billing"
 
 [[package]]
 name = "quickscale-module-blog"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale blog module with Markdown support and RSS feeds"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2078,7 +2090,7 @@ url = "quickscale_modules/blog"
 
 [[package]]
 name = "quickscale-module-crm"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale CRM module with contacts, companies, deals, and pipeline management"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2097,7 +2109,7 @@ url = "quickscale_modules/crm"
 
 [[package]]
 name = "quickscale-module-forms"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale generic form-builder module with admin management and React frontend renderer"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2116,7 +2128,7 @@ url = "quickscale_modules/forms"
 
 [[package]]
 name = "quickscale-module-listings"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale listings module with AbstractListing model for marketplace verticals"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2136,7 +2148,7 @@ url = "quickscale_modules/listings"
 
 [[package]]
 name = "quickscale-module-notifications"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale transactional notifications module with Resend-first Anymail delivery"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2154,7 +2166,7 @@ url = "quickscale_modules/notifications"
 
 [[package]]
 name = "quickscale-module-orgs"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale organizations module with core multi-tenant organization, membership, and invitation models"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2172,7 +2184,7 @@ url = "quickscale_modules/orgs"
 
 [[package]]
 name = "quickscale-module-social"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale curated social links and embeds module"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2189,7 +2201,7 @@ url = "quickscale_modules/social"
 
 [[package]]
 name = "quickscale-module-storage"
-version = "0.87.0"
+version = "0.88.0"
 description = "QuickScale storage infrastructure module with local/S3-compatible helpers"
 optional = false
 python-versions = ">=3.14,<3.15"
@@ -2487,4 +2499,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<3.15"
-content-hash = "60e711a2d38abbc118973234a9e3ed4b700362f766305c4c6364c8f6a8679294"
+content-hash = "5ed310b709011d3709c67b9844cfba75bac78e90f63258aea6138936ea4f4fab"
