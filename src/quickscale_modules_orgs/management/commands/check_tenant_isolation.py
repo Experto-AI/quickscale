@@ -66,14 +66,14 @@ class Command(BaseCommand):
         if _is_implicit_m2m_through(model):
             self.stdout.write(
                 "         Hint: Auto-created ManyToMany through model. "
-                "Add an EXCLUDED_REVIEWED entry to TENANT_TABLE_REGISTRY, "
-                "or ensure the related models are classified first so "
-                "that relation inference can classify it automatically.\n"
+                "Ensure its project-owned related models declare tenant "
+                "markers so relation inference can classify it automatically.\n"
             )
         else:
             self.stdout.write(
-                "         Hint: Add an entry to TENANT_TABLE_REGISTRY in "
-                "quickscale_modules_orgs.tenancy, or add a "
+                "         Hint: Declare objects = TenantManager() and "
+                "all_objects = TenantManager(super_scope=True), or inherit "
+                "TenantModel. Alternatively, add a reasoned "
                 "'tenant_excluded' class attribute to the model.\n"
             )
 
@@ -152,7 +152,7 @@ class Command(BaseCommand):
                     self.stdout.write(
                         self.style.ERROR(
                             "\nUnclassified project model(s) — not in "
-                            "TENANT_TABLE_REGISTRY:\n"
+                            "the marker-derived tenant contract:\n"
                         )
                     )
                     for m in unclassified:
@@ -212,7 +212,7 @@ class Command(BaseCommand):
                     self.stdout.write(
                         self.style.ERROR(
                             "Unclassified project model(s) — not in "
-                            "TENANT_TABLE_REGISTRY:\n"
+                            "the marker-derived tenant contract:\n"
                         )
                     )
                     for m in unclassified:
@@ -311,7 +311,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.ERROR(
                         "\nUnclassified project model(s) — not in "
-                        "TENANT_TABLE_REGISTRY:\n"
+                        "the marker-derived tenant contract:\n"
                     )
                 )
                 for m in unclassified:

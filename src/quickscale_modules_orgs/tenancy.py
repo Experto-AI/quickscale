@@ -2,7 +2,7 @@
 
 This module provides the canonical owned-model contract helpers
 for tenant-scoped models across all QuickScale modules (D3 — PROTECT),
-plus the central tenant-table registry used by the AF1 conformance gate.
+plus the shipped-module tenant-table registry used by the AF1 conformance gate.
 """
 
 from __future__ import annotations
@@ -117,9 +117,10 @@ class TenantTableEntry:
 # ---------------------------------------------------------------------------
 # Central tenant-table registry (AF1 Phase 1)
 # ---------------------------------------------------------------------------
-# This is the single source of truth for which models participate in
-# the tenant isolation contract.  Every installed concrete model must
-# appear in exactly one of the three categories below.
+# This is the shipped-module parity oracle for which models participate in
+# the tenant isolation contract. Runtime discovery is marker-derived and does
+# not consult this literal. Every shipped concrete model must appear in
+# exactly one of the three categories below.
 #
 # See `docs/technical/roadmap.md` → AF1 and `docs/others/arch-audit.md` → Finding 1
 # for the full rationale.
@@ -536,6 +537,31 @@ ALTER TABLE {table} DISABLE ROW LEVEL SECURITY;
 """
 
 
+def _render_force_rls_sql(
+    schema_editor: Any,
+    template: str,
+    *,
+    table: str,
+    policy_name: str,
+) -> str:
+    """Render an RLS template with independently quoted SQL identifiers."""
+    from django.db.backends.postgresql.operations import DatabaseOperations
+
+    quote_name = DatabaseOperations(schema_editor.connection).quote_name
+    # Keep the historical template placeholders stable for callers that inspect
+    # the templates while composing the derived select-policy identifier before
+    # quoting it as its own PostgreSQL identifier.
+    safe_template = template.replace(
+        "{policy_name}_select",
+        "{select_policy_name}",
+    )
+    return safe_template.format(
+        table=quote_name(table),
+        policy_name=quote_name(policy_name),
+        select_policy_name=quote_name(f"{policy_name}_select"),
+    )
+
+
 def apply_force_rls(
     schema_editor: Any,
     targets: tuple[tuple[str, str], ...],
@@ -555,7 +581,12 @@ def apply_force_rls(
         return
     for table, policy_name in targets:
         schema_editor.execute(
-            _FORCE_RLS_FORWARD_SQL.format(table=table, policy_name=policy_name),
+            _render_force_rls_sql(
+                schema_editor,
+                _FORCE_RLS_FORWARD_SQL,
+                table=table,
+                policy_name=policy_name,
+            ),
         )
 
 
@@ -575,7 +606,12 @@ def revert_force_rls(
         return
     for table, policy_name in targets:
         schema_editor.execute(
-            _FORCE_RLS_REVERSE_SQL.format(table=table, policy_name=policy_name),
+            _render_force_rls_sql(
+                schema_editor,
+                _FORCE_RLS_REVERSE_SQL,
+                table=table,
+                policy_name=policy_name,
+            ),
         )
 
 
@@ -585,21 +621,24 @@ def revert_force_rls(
 
 
 def refresh_force_rls_policies(schema_editor: Any) -> None:
-    """Drop and recreate FORCE RLS policies on all enrolled tables.
+    """Drop and recreate FORCE RLS policies on all discovered tenant tables.
 
     Uses the current ``_FORCE_RLS_FORWARD_SQL`` template so that any
     template changes (e.g. the SA14.5 ``operator_access`` OR clause) take
     effect on existing policies.
 
-    The function iterates ``TENANT_TABLE_REGISTRY`` for entries whose
-    ``status == ENROLLED`` and constructs the ``(table_name, policy_name)``
-    pairs from the entry's ``policy_name`` attribute and the registered
-    model's ``_meta.db_table`` value.
+    The function discovers tenant models from their marker-derived
+    ``TenantManager``/``TenantModel`` contract, resolves each physical table
+    from the installed model metadata, and reads that table's unique ``FOR
+    ALL`` policy name from PostgreSQL before issuing any DDL. The migration
+    that created the table owns that policy identity; refresh must not invent
+    or normalize a name from the model or app label.
 
-    Registry entries for optional apps that are not installed and tables
-    that do not exist yet in the database are silently skipped (handles the
-    case where this migration runs before other modules' schema migrations
-    in a fresh test database).
+    Models whose tables do not exist yet in the database are silently skipped
+    (handles the case where this migration runs before other modules' schema
+    migrations in a fresh test database). An existing table with zero or
+    multiple ``FOR ALL`` policies raises before any policy is reverted, so a
+    partial refresh cannot leave later tables in a mixed state.
 
     No-op on non-PostgreSQL databases.
 
@@ -609,36 +648,61 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
     if schema_editor.connection.vendor != "postgresql":
         return
 
-    from django.apps import apps
-
-    targets: list[tuple[str, str]] = []
-    for entry in TENANT_TABLE_REGISTRY:
-        if entry.status != TenantTableStatus.ENROLLED:
-            continue
-        if not entry.policy_name:
-            continue
-        try:
-            apps.get_app_config(entry.app_label)
-        except LookupError:
-            continue
-        table_name = apps.get_model(entry.app_label, entry.model_name)._meta.db_table
-        targets.append((table_name, entry.policy_name))
-
-    if not targets:
+    tenant_models = get_tenant_models()
+    if not tenant_models:
         return
 
-    # Filter out tables that do not exist yet in the database.  This can
-    # happen when the migration runs before other modules' schema
-    # migrations have created their tables (e.g. in a fresh test DB).
+    # Discover every target and its migration-owned policy identity before
+    # starting either the revert or apply phase. This ordering is deliberate:
+    # malformed policy metadata must fail without any preceding DDL.
     existing_targets: list[tuple[str, str]] = []
     with schema_editor.connection.cursor() as cursor:
-        for table, policy_name in targets:
+        for model in tenant_models:
+            table = model._meta.db_table
             cursor.execute(
-                "SELECT to_regclass(%s) IS NOT NULL",
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_catalog.pg_class AS c
+                    JOIN pg_catalog.pg_namespace AS n
+                      ON n.oid = c.relnamespace
+                    WHERE n.nspname = current_schema()
+                      AND c.relname = %s
+                      AND c.relkind IN ('r', 'p')
+                )
+                """,
                 [table],
             )
-            if cursor.fetchone()[0]:
-                existing_targets.append((table, policy_name))
+            table_row = cursor.fetchone()
+            if not table_row or not table_row[0]:
+                continue
+
+            cursor.execute(
+                """
+                SELECT policyname
+                FROM pg_policies
+                WHERE schemaname = current_schema()
+                  AND tablename = %s
+                  AND cmd = 'ALL'
+                ORDER BY policyname
+                """,
+                [table],
+            )
+            policy_rows = cursor.fetchall()
+            if len(policy_rows) != 1:
+                raise RuntimeError(
+                    f"Expected exactly one FOR ALL policy for tenant table "
+                    f"{table!r}, found {len(policy_rows)}. The table's "
+                    "migration must install one unique base policy before "
+                    "FORCE-RLS policies can be refreshed."
+                )
+            policy_name = policy_rows[0][0]
+            if not isinstance(policy_name, str) or not policy_name:
+                raise RuntimeError(
+                    f"FOR ALL policy metadata for tenant table {table!r} "
+                    "did not contain a valid policy name."
+                )
+            existing_targets.append((table, policy_name))
 
     if not existing_targets:
         return
@@ -1050,15 +1114,15 @@ ORG_ID_COLUMN: str = "organization_id"
 # ---------------------------------------------------------------------------
 # SA1.4 — Default-deny classification check
 # ---------------------------------------------------------------------------
-# Every concrete model from a project-owned app must appear in
-# ``TENANT_TABLE_REGISTRY`` — either as ENROLLED (tenant-scoped) or as
-# EXCLUDED_REVIEWED / PENDING_REMEDIATION (explicitly excluded).  Models
-# that are not in the registry at all fail the default-deny check.
+# Every concrete model from a project-owned app must carry a marker-derived
+# classification — either a tenant contract or an explicit
+# ``tenant_excluded`` marker. Models without a marker-derived classification
+# fail the default-deny check.
 #
-# This scope uses the ``quickscale_modules_`` prefix to identify
-# project-owned apps — matching the existing conformance-gate convention.
-# User projects should override or extend ``is_project_app()`` to include
-# their own custom app labels.
+# This scope uses ``is_project_app()`` to identify project-owned apps while
+# excluding Django contrib and known third-party labels. It recognizes
+# non-module project labels as well as shipped module labels, so generated
+# projects need no registry extension.
 # ---------------------------------------------------------------------------
 
 #: App-label prefix for QuickScale module apps.
@@ -1268,52 +1332,35 @@ def _is_implicit_m2m_through(model: type[models.Model]) -> bool:
 def _get_m2m_through_classification(model: type[models.Model]) -> bool:
     """Check if an implicit M2M through model is classifiable via its relations.
 
-    When an auto-created ManyToMany through model is not explicitly in
-    ``TENANT_TABLE_REGISTRY`` and does not carry a
-    ``tenant_excluded`` marker, it can still be classified by
-    consulting the two related models (source and target).  If both
-    related models are classified in the registry (ENROLLED,
-    EXCLUDED_REVIEWED, or PENDING_REMEDIATION), the through model
-    inherits classification automatically.
-
-    This prevents project-owned auto-created M2M through models from
-    becoming permanently unclassifiable under the widened SA15.1
-    default-deny scope.
+    This compatibility-named helper now uses the marker-only relation path.
+    It deliberately does not consult ``REGISTRY_LOOKUP`` or
+    ``TENANT_TABLE_REGISTRY``; project-owned implicit through models inherit
+    classification only from marker-classified endpoints.
 
     Args:
         model: A Django ``Model`` subclass (expected to be an implicit
             M2M through model per :func:`_is_implicit_m2m_through`).
 
     Returns:
-        ``True`` if both models participating in the M2M relationship
-        are themselves classified.
+        ``True`` if both project-owned models participating in the M2M
+        relationship are marker-classified.
     """
-    if not _is_implicit_m2m_through(model):
-        return False
-
-    from django.apps import apps
-
-    for candidate in apps.get_models():
-        for field in candidate._meta.many_to_many:
-            if field.remote_field.through is model:
-                source_model = candidate
-                target_model = field.remote_field.model
-                return is_classified_in_registry(
-                    source_model
-                ) and is_classified_in_registry(target_model)
-    return False
+    return _get_m2m_through_classification_marker_only(model)
 
 
 def is_classified_in_registry(model: type[models.Model]) -> bool:
-    """Return ``True`` if *model* is classified.
+    """Return ``True`` if *model* is classified by its tenant markers.
 
     A model is considered classified when:
-    * It has any entry in the registry (ENROLLED, EXCLUDED_REVIEWED,
-      or PENDING_REMEDIATION), **or**
-    * It declares the ``tenant_excluded`` class attribute marker
-      (SA15.1), **or**
+    * It declares the ``tenant_excluded`` class attribute marker, **or**
+    * It is a tenant model identified by ``TenantManager``/``TenantModel``,
+      **or**
     * It is an auto-created implicit ManyToMany through model whose
-      source and target models are both classified (SA15.1 — Option A).
+      project-owned endpoints are marker-classified (SA15.1 — Option A).
+
+    The historical function name is retained for compatibility. The literal
+    ``TENANT_TABLE_REGISTRY`` is a shipped-module parity oracle only and is
+    never consulted for runtime classification.
 
     Args:
         model: A Django ``Model`` subclass.
@@ -1321,25 +1368,19 @@ def is_classified_in_registry(model: type[models.Model]) -> bool:
     Returns:
         ``True`` if the model is classified.
     """
-    key = (model._meta.app_label, model.__name__)
-    if key in REGISTRY_LOOKUP:
-        return True
-    if has_tenant_excluded_marker(model):
-        return True
-    if _get_m2m_through_classification(model):
-        return True
-    return False
+    return _is_classified_by_marker_only(model)
 
 
 def get_unclassified_concrete_models() -> list[type[models.Model]]:
-    """Return concrete project models not in ``TENANT_TABLE_REGISTRY``.
+    """Return concrete project models without a tenant classification marker.
 
     These are models from :func:`get_concrete_project_models` that are
-    not registered at all — they are neither ENROLLED, EXCLUDED_REVIEWED,
-    nor PENDING_REMEDIATION.
+    neither tenant-scoped by ``TenantManager``/``TenantModel`` nor explicitly
+    excluded with ``tenant_excluded``.
 
-    A model is unclassified when it is not in ``TENANT_TABLE_REGISTRY``
-    and does not declare the ``tenant_excluded`` marker (SA15.1).
+    A model is unclassified when it has no marker-derived tenant contract
+    (SA15.1). The shipped literal registry is deliberately not part of this
+    runtime decision.
     Auto-created implicit ManyToMany through models whose source and
     target models are both classified are considered classified via
     relation inference (SA15.1 — Option A).
@@ -1357,8 +1398,8 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
 # ---------------------------------------------------------------------------
 # This function produces a human-readable tenant-table registry from model
 # markers, replacing the hand-maintained HTML count assertions that were
-# previously embedded in the technical docs.  The old literal
-# ``TENANT_TABLE_REGISTRY`` is kept temporarily as a cross-check target.
+# previously embedded in the technical docs. The shipped-module literal
+# ``TENANT_TABLE_REGISTRY`` remains only as a parity-oracle target.
 #
 # A model's status is determined as follows:
 #   1. ``tenant_excluded`` marker → ``EXCLUDED_REVIEWED``
@@ -1468,10 +1509,11 @@ def get_derived_registry_overview() -> list[TenantTableEntry]:
     * :func:`is_tenant_model` for ENROLLED detection via ``TenantManager``
       or ``TenantModel`` inheritance.
 
-    This is the **derived** alternative to the hand-maintained
-    ``TENANT_TABLE_REGISTRY`` literal.  A cross-check test asserts that
-    the two views agree for the installed concrete model set — every
-    model must be detectable by markers alone, with no registry fallback.
+    This is the **derived** alternative to the shipped-module
+    ``TENANT_TABLE_REGISTRY`` literal. A cross-check test asserts that the
+    two views agree for installed shipped models; project-owned models are
+    intentionally outside that literal parity set. Every model must be
+    detectable by markers alone, with no registry fallback.
 
     Returns:
         A list of ``TenantTableEntry`` objects sorted by
@@ -1514,14 +1556,9 @@ def get_derived_registry_overview() -> list[TenantTableEntry]:
                 )
             )
         else:
-            # Model is classified in the literal registry but is not
-            # marker-detectable (no ``tenant_excluded`` attribute,
-            # not an implicit M2M through, and not a tenant model).
-            # After the SA15.3 marker backfill every excluded model
-            # carries an explicit marker, so this fallback should no
-            # longer be needed.  Skip such models from the marker-
-            # driven overview — they do not belong unless a marker
-            # is added.
+            # Models without a marker-derived contract are intentionally
+            # absent. In particular, the shipped literal cannot enroll a
+            # project-owned model and is never a runtime fallback.
             continue
 
     result.sort(key=lambda e: (e.status.value, e.app_label, e.model_name))
@@ -1581,8 +1618,14 @@ def is_tenant_model(model: type[models.Model]) -> bool:
     # Check by class hierarchy (works after TenantModel adoption).
     from quickscale_modules_orgs.models import TenantModel
 
-    if issubclass(model, TenantModel):
-        return True
+    try:
+        if issubclass(model, TenantModel):
+            return True
+    except TypeError:
+        # Callers that inspect a model-like object (for example, system-check
+        # diagnostics and their unit tests) may not provide a Django model
+        # class. Such an object cannot satisfy the class-hierarchy marker.
+        return False
 
     return False
 

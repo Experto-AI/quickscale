@@ -22,8 +22,8 @@ from django.core.exceptions import ImproperlyConfigured
 
 from quickscale_modules_orgs.tenancy import (
     TENANT_TABLE_REGISTRY,
-    TenantTableEntry,
     TenantTableStatus,
+    apply_force_rls,
     refresh_force_rls_policies,
 )
 from quickscale_modules_orgs.current_org import (
@@ -346,40 +346,55 @@ class TestRefreshForceRlsPoliciesPostgres:
         return editor
 
     def test_calls_revert_and_apply(self, pg_schema_editor: MagicMock) -> None:
-        """The function calls both revert and apply for enrolled tables."""
-        refresh_force_rls_policies(pg_schema_editor)
-        # The function uses revert_force_rls then apply_force_rls internally.
-        # Each bundles multiple SQL statements into a single execute call
-        # per table: revert=1 call (DROP+NO FORCE+DISABLE), apply=1 call
-        # (DROP+ENABLE+FORCE+CREATE POLICY) = 2 calls per enrolled table.
-        enrolled_count = sum(
-            1
-            for e in TENANT_TABLE_REGISTRY
-            if e.status == TenantTableStatus.ENROLLED and e.policy_name
-        )
-        assert pg_schema_editor.execute.call_count == enrolled_count * 2
+        """The function calls both revert and apply for discovered tables."""
+        models = [MagicMock(), MagicMock()]
+        models[0]._meta.db_table = "tenant_first"
+        models[1]._meta.db_table = "tenant_second"
+        cursor = pg_schema_editor.connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.side_effect = [(True,), (True,)]
+        cursor.fetchall.side_effect = [
+            [("first_org_isolation",)],
+            [("second_org_isolation",)],
+        ]
+
+        with patch(
+            "quickscale_modules_orgs.tenancy.get_tenant_models",
+            return_value=models,
+        ):
+            refresh_force_rls_policies(pg_schema_editor)
+
+        # Revert and apply each bundle one execute call per table.
+        assert pg_schema_editor.execute.call_count == len(models) * 2
 
     def test_includes_current_policy_names(self, pg_schema_editor: MagicMock) -> None:
-        """The constructed policy names appear in the executed SQL."""
-        refresh_force_rls_policies(pg_schema_editor)
+        """Live policy names appear in the refreshed SQL."""
+        model = MagicMock()
+        model._meta.db_table = "tenant_crm_tag"
+        cursor = pg_schema_editor.connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = (True,)
+        cursor.fetchall.return_value = [("crm_tag_live_policy",)]
+
+        with patch(
+            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+        ):
+            refresh_force_rls_policies(pg_schema_editor)
+
         all_sql = " ".join(c[0][0] for c in pg_schema_editor.execute.call_args_list)
-        # Check a known policy name appears.
-        known_policies = {
-            "crm_tag_org_isolation",
-            "forms_form_org_isolation",
-            "billing_credit_balance_org_isolation",
-            "blog_category_org_isolation",
-            "listings_listing_org_isolation",
-            "social_link_org_isolation",
-        }
-        for policy in known_policies:
-            assert policy in all_sql, (
-                f"Expected policy name {policy!r} not found in executed SQL"
-            )
+        assert "crm_tag_live_policy" in all_sql
 
     def test_revert_apply_order(self, pg_schema_editor: MagicMock) -> None:
-        """The revert (DROP) phase comes before the apply (CREATE) phase."""
-        refresh_force_rls_policies(pg_schema_editor)
+        """The revert phase completes before the apply phase starts."""
+        model = MagicMock()
+        model._meta.db_table = "tenant_ordered"
+        cursor = pg_schema_editor.connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = (True,)
+        cursor.fetchall.return_value = [("ordered_policy",)]
+
+        with patch(
+            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+        ):
+            refresh_force_rls_policies(pg_schema_editor)
+
         calls = pg_schema_editor.execute.call_args_list
 
         revert_indexes = [
@@ -400,83 +415,57 @@ class TestRefreshForceRlsPoliciesPostgres:
     def test_uses_registered_models_non_conventional_db_table(
         self, pg_schema_editor: MagicMock
     ) -> None:
-        """Refresh resolves the physical table from Django model metadata."""
-        entry = TenantTableEntry(
-            app_label="quickscale_modules_forms",
-            model_name="Form",
-            status=TenantTableStatus.ENROLLED,
-            policy_name="forms_form_org_isolation",
-        )
+        """Refresh resolves the physical table and policy from live metadata."""
         model = MagicMock()
         model._meta.db_table = "tenant_forms"
         cursor = pg_schema_editor.connection.cursor.return_value.__enter__.return_value
         cursor.fetchone.return_value = (True,)
+        cursor.fetchall.return_value = [("forms_form_live_policy",)]
 
         with (
             patch(
-                "quickscale_modules_orgs.tenancy.TENANT_TABLE_REGISTRY",
-                (entry,),
+                "quickscale_modules_orgs.tenancy.get_tenant_models",
+                return_value=[model],
             ),
-            patch("django.apps.apps.get_app_config") as get_app_config,
-            patch("django.apps.apps.get_model", return_value=model) as get_model,
         ):
             refresh_force_rls_policies(pg_schema_editor)
 
-        get_app_config.assert_called_once_with("quickscale_modules_forms")
-        get_model.assert_called_once_with("quickscale_modules_forms", "Form")
-        assert cursor.execute.call_args.args[1] == ["tenant_forms"]
+        assert cursor.execute.call_args_list[0].args[1] == ["tenant_forms"]
         all_sql = " ".join(c[0][0] for c in pg_schema_editor.execute.call_args_list)
         assert "tenant_forms" in all_sql
-        assert "quickscale_modules_forms_form" not in all_sql
+        assert "forms_form_live_policy" in all_sql
 
     def test_skips_registry_entries_for_uninstalled_optional_apps(
         self, pg_schema_editor: MagicMock
     ) -> None:
-        """Refresh remains usable when an optional tenant module is not installed."""
-        entry = TenantTableEntry(
-            app_label="quickscale_modules_forms",
-            model_name="Form",
-            status=TenantTableStatus.ENROLLED,
-            policy_name="forms_form_org_isolation",
-        )
-
-        with (
-            patch(
-                "quickscale_modules_orgs.tenancy.TENANT_TABLE_REGISTRY",
-                (entry,),
-            ),
-            patch("django.apps.apps.get_app_config", side_effect=LookupError),
-            patch("django.apps.apps.get_model") as get_model,
+        """Refresh remains usable when no tenant models are discovered."""
+        with patch(
+            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[]
         ):
             refresh_force_rls_policies(pg_schema_editor)
 
-        get_model.assert_not_called()
         pg_schema_editor.connection.cursor.assert_not_called()
         pg_schema_editor.execute.assert_not_called()
 
     def test_fails_loudly_for_unknown_model_in_installed_app(
         self, pg_schema_editor: MagicMock
     ) -> None:
-        """An installed app with stale registry metadata is a configuration error."""
-        entry = TenantTableEntry(
-            app_label="quickscale_modules_forms",
-            model_name="MissingModel",
-            status=TenantTableStatus.ENROLLED,
-            policy_name="missing_model_org_isolation",
-        )
+        """Missing live policy metadata is a configuration error."""
+        model = MagicMock()
+        model._meta.db_table = "tenant_missing_policy"
+        cursor = pg_schema_editor.connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = (True,)
+        cursor.fetchall.return_value = []
 
         with (
             patch(
-                "quickscale_modules_orgs.tenancy.TENANT_TABLE_REGISTRY",
-                (entry,),
+                "quickscale_modules_orgs.tenancy.get_tenant_models",
+                return_value=[model],
             ),
-            patch("django.apps.apps.get_app_config"),
-            patch("django.apps.apps.get_model", side_effect=LookupError("missing")),
-            pytest.raises(LookupError, match="missing"),
+            pytest.raises(RuntimeError, match="exactly one FOR ALL policy"),
         ):
             refresh_force_rls_policies(pg_schema_editor)
 
-        pg_schema_editor.connection.cursor.assert_not_called()
         pg_schema_editor.execute.assert_not_called()
 
 
@@ -567,7 +556,7 @@ class TestTenantTableEntryPolicyName:
 
 
 class TestRefreshForceRlsPoliciesMissingNames:
-    """Entries without a policy_name are skipped."""
+    """Empty discovery is a no-op."""
 
     @pytest.fixture
     def pg_schema_editor(self) -> MagicMock:
@@ -575,19 +564,324 @@ class TestRefreshForceRlsPoliciesMissingNames:
         editor.connection.vendor = "postgresql"
         return editor
 
-    def test_entries_without_policy_name_are_skipped(
-        self, pg_schema_editor: MagicMock
-    ) -> None:
-        """An ENROLLED entry with empty policy_name is silently skipped."""
-        refresh_force_rls_policies(pg_schema_editor)
-        # No error should be raised; only enrolled entries with a policy
-        # name are processed (2 execute calls per table: 1 revert + 1 apply).
-        enrolled_with_name = sum(
-            1
-            for e in TENANT_TABLE_REGISTRY
-            if e.status == TenantTableStatus.ENROLLED and e.policy_name
+    def test_no_tenant_models_are_skipped(self, pg_schema_editor: MagicMock) -> None:
+        """No error should be raised when no tenant models are installed."""
+        with patch(
+            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[]
+        ):
+            refresh_force_rls_policies(pg_schema_editor)
+        pg_schema_editor.execute.assert_not_called()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_sa182_project_table_refresh_uses_live_migration_policy() -> None:
+    """A project-owned table is refreshed without a registry entry."""
+    from django.db import connection
+
+    import quickscale_modules_orgs.tenancy as tenancy_mod
+    from tests.sa182_project_app.models import ProjectListing
+
+    table = ProjectListing._meta.db_table
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT policyname
+            FROM pg_policies
+            WHERE schemaname = current_schema()
+              AND tablename = %s
+              AND cmd = 'ALL'
+            """,
+            [table],
         )
-        assert pg_schema_editor.execute.call_count == enrolled_with_name * 2
+        policy_rows = cursor.fetchall()
+    assert len(policy_rows) == 1
+    policy_name = policy_rows[0][0]
+
+    original_registry = tenancy_mod.TENANT_TABLE_REGISTRY
+    try:
+        tenancy_mod.TENANT_TABLE_REGISTRY = []
+        with connection.schema_editor() as schema_editor:
+            refresh_force_rls_policies(schema_editor)
+    finally:
+        tenancy_mod.TENANT_TABLE_REGISTRY = original_registry
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT relforcerowsecurity
+            FROM pg_class
+            WHERE relname = %s
+            """,
+            [table],
+        )
+        assert cursor.fetchone() == (True,)
+        cursor.execute(
+            """
+            SELECT policyname
+            FROM pg_policies
+            WHERE schemaname = current_schema()
+              AND tablename = %s
+            ORDER BY policyname
+            """,
+            [table],
+        )
+        assert {row[0] for row in cursor.fetchall()} == {
+            policy_name,
+            f"{policy_name}_select",
+        }
+
+
+@pytest.mark.django_db(transaction=True)
+def test_sa182_refresh_preserves_quote_requiring_identifiers_exactly() -> None:
+    """Quoted table and policy identities refresh without folded duplicates."""
+    from django.db import connection
+
+    table = "SA182QuotedTenantTable"
+    policy_name = "TenantPolicy"
+    select_policy_name = f"{policy_name}_select"
+    quote_name = connection.ops.quote_name
+    quoted_table = quote_name(table)
+    quoted_policy = quote_name(policy_name)
+    model = MagicMock()
+    model._meta.db_table = table
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"CREATE TABLE {quoted_table} (organization_id uuid NOT NULL)"
+            )
+            cursor.execute(f"ALTER TABLE {quoted_table} ENABLE ROW LEVEL SECURITY")
+            cursor.execute(f"ALTER TABLE {quoted_table} FORCE ROW LEVEL SECURITY")
+            cursor.execute(
+                f"CREATE POLICY {quoted_policy} ON {quoted_table} "
+                "FOR ALL USING (true) WITH CHECK (true)"
+            )
+
+        with (
+            patch(
+                "quickscale_modules_orgs.tenancy.get_tenant_models",
+                return_value=[model],
+            ),
+            connection.schema_editor() as schema_editor,
+        ):
+            refresh_force_rls_policies(schema_editor)
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT policyname
+                FROM pg_policies
+                WHERE schemaname = current_schema()
+                  AND tablename = %s
+                ORDER BY policyname
+                """,
+                [table],
+            )
+            policy_rows = cursor.fetchall()
+
+        assert policy_rows == [(policy_name,), (select_policy_name,)]
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
+
+
+def test_sa182_fixture_rls_migration_reverse_removes_policy() -> None:
+    """The project fixture migration exposes a working reverse RLS step."""
+    import importlib
+
+    migration_module = importlib.import_module(
+        "tests.sa182_project_app.migrations.0001_initial"
+    )
+    operation = migration_module.Migration.operations[-1]
+    assert operation.reverse_code is migration_module._reverse_rls
+    editor = MagicMock()
+
+    with (
+        patch.object(migration_module, "revert_force_rls") as revert,
+        patch.object(migration_module, "apply_force_rls") as apply,
+    ):
+        operation.reverse_code(MagicMock(), editor)
+
+    revert.assert_called_once_with(
+        editor,
+        migration_module._PROJECT_LISTING_RLS_TARGETS,
+    )
+    apply.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "policy_rows",
+    [[], [("first_policy",), ("second_policy",)]],
+    ids=["missing", "ambiguous"],
+)
+def test_sa182_refresh_rejects_missing_or_ambiguous_policy_before_ddl(
+    policy_rows: list[tuple[str, ...]],
+) -> None:
+    """Malformed catalog state fails before either DDL phase starts."""
+    editor = MagicMock()
+    editor.connection.vendor = "postgresql"
+    model = MagicMock()
+    model._meta.db_table = "sa182_missing_or_ambiguous"
+    cursor = editor.connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (True,)
+    cursor.fetchall.return_value = policy_rows
+
+    with (
+        patch(
+            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+        ),
+        patch("quickscale_modules_orgs.tenancy.revert_force_rls") as revert,
+        patch("quickscale_modules_orgs.tenancy.apply_force_rls") as apply,
+        pytest.raises(RuntimeError, match="exactly one FOR ALL policy"),
+    ):
+        refresh_force_rls_policies(editor)
+
+    revert.assert_not_called()
+    apply.assert_not_called()
+    editor.execute.assert_not_called()
+
+
+@pytest.mark.parametrize("policy_name", [None, ""], ids=["null", "empty"])
+def test_sa182_refresh_rejects_invalid_policy_name_before_ddl(
+    policy_name: object,
+) -> None:
+    """Invalid catalog policy names fail before either DDL phase starts."""
+    editor = MagicMock()
+    editor.connection.vendor = "postgresql"
+    model = MagicMock()
+    model._meta.db_table = "sa182_invalid_policy_name"
+    cursor = editor.connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (True,)
+    cursor.fetchall.return_value = [(policy_name,)]
+
+    with (
+        patch(
+            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+        ),
+        patch("quickscale_modules_orgs.tenancy.revert_force_rls") as revert,
+        patch("quickscale_modules_orgs.tenancy.apply_force_rls") as apply,
+        pytest.raises(RuntimeError, match="valid policy name"),
+    ):
+        refresh_force_rls_policies(editor)
+
+    revert.assert_not_called()
+    apply.assert_not_called()
+    editor.execute.assert_not_called()
+
+
+def test_sa182_refresh_discovers_all_targets_before_revert() -> None:
+    """Every catalog target is bound before the first revert call."""
+    editor = MagicMock()
+    editor.connection.vendor = "postgresql"
+    models = [MagicMock(), MagicMock()]
+    models[0]._meta.db_table = "sa182_first"
+    models[1]._meta.db_table = "sa182_second"
+    cursor = editor.connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [(True,), (True,)]
+    cursor.fetchall.side_effect = [[("first_policy",)], [("second_policy",)]]
+    events: list[str] = []
+
+    with (
+        patch("quickscale_modules_orgs.tenancy.get_tenant_models", return_value=models),
+        patch(
+            "quickscale_modules_orgs.tenancy.revert_force_rls",
+            side_effect=lambda *_args: events.append("revert"),
+        ) as revert,
+        patch(
+            "quickscale_modules_orgs.tenancy.apply_force_rls",
+            side_effect=lambda *_args: events.append("apply"),
+        ) as apply,
+    ):
+        refresh_force_rls_policies(editor)
+
+    assert events == ["revert", "apply"]
+    revert.assert_called_once_with(
+        editor,
+        (("sa182_first", "first_policy"), ("sa182_second", "second_policy")),
+    )
+    apply.assert_called_once_with(
+        editor,
+        (("sa182_first", "first_policy"), ("sa182_second", "second_policy")),
+    )
+
+
+def test_sa182_refresh_skips_missing_project_table() -> None:
+    """A discovered model whose table is absent remains a no-op."""
+    editor = MagicMock()
+    editor.connection.vendor = "postgresql"
+    model = MagicMock()
+    model._meta.db_table = "sa182_not_created"
+    cursor = editor.connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (False,)
+
+    with patch(
+        "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+    ):
+        refresh_force_rls_policies(editor)
+
+    cursor.fetchall.assert_not_called()
+    editor.execute.assert_not_called()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_sa182_missing_force_rls_fails_command_and_restores_fixture() -> None:
+    """W004 and command failure do not leave the fixture policy disabled."""
+    from django.core.management import call_command
+    from django.db import connection
+
+    from quickscale_modules_orgs.tenancy import check_tenant_model_isolation
+    from tests.sa182_project_app.models import ProjectListing
+
+    table = ProjectListing._meta.db_table
+    quoted_table = connection.ops.quote_name(table)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT policyname
+            FROM pg_policies
+            WHERE schemaname = current_schema()
+              AND tablename = %s
+              AND cmd = 'ALL'
+            """,
+            [table],
+        )
+        policy_rows = cursor.fetchall()
+    assert len(policy_rows) == 1
+    policy_name = policy_rows[0][0]
+    targets = ((table, policy_name),)
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(f"ALTER TABLE {quoted_table} NO FORCE ROW LEVEL SECURITY")
+
+        result = check_tenant_model_isolation(ProjectListing)
+        assert result["has_organization_id"] is True
+        assert result["has_force_rls"] is False
+
+        with pytest.raises(SystemExit) as exc_info:
+            call_command("check_tenant_isolation", verbosity=0)
+        assert exc_info.value.code == 1
+    finally:
+        with connection.schema_editor() as schema_editor:
+            apply_force_rls(schema_editor, targets)
+
+    restored = check_tenant_model_isolation(ProjectListing)
+    assert restored["has_force_rls"] is True
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT policyname
+            FROM pg_policies
+            WHERE schemaname = current_schema()
+              AND tablename = %s
+            ORDER BY policyname
+            """,
+            [table],
+        )
+        assert {row[0] for row in cursor.fetchall()} == {
+            policy_name,
+            f"{policy_name}_select",
+        }
 
 
 # =========================================================================

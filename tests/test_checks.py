@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from pytest import MonkeyPatch
+
 from quickscale_modules_orgs.checks import check_tenant_isolation
 
 
@@ -380,8 +382,9 @@ class TestW005HintIncludesRemediationGuidance:
         assert "MyModel" in msg
         assert "not classified" in msg
         # Must mention registry edits
-        assert "TENANT_TABLE_REGISTRY" in hint
-        # Must mention tenant_excluded marker for regular models
+        assert "TENANT_TABLE_REGISTRY" not in hint
+        # Must mention the dual tenant-manager contract and exclusion marker
+        assert "TenantManager" in hint
         assert "tenant_excluded" in hint
 
     @patch("quickscale_modules_orgs.checks.get_unclassified_concrete_models")
@@ -419,7 +422,9 @@ class TestIsClassifiedInRegistryWithImplicitM2M:
     """``is_classified_in_registry()`` must return True for implicit M2M
     through models whose related models are classified."""
 
-    @patch("quickscale_modules_orgs.tenancy._get_m2m_through_classification")
+    @patch(
+        "quickscale_modules_orgs.tenancy._get_m2m_through_classification_marker_only"
+    )
     def test_implicit_m2m_through_is_classified(self, mock_m2m: MagicMock) -> None:
         """When _get_m2m_through_classification returns True, the model
         must be considered classified."""
@@ -432,10 +437,12 @@ class TestIsClassifiedInRegistryWithImplicitM2M:
         model._meta = MagicMock()
         model._meta.app_label = "myapp"
 
-        # Not in REGISTRY_LOOKUP, no tenant_excluded marker.
+        # No tenant markers are present.
         assert is_classified_in_registry(model) is True
 
-    @patch("quickscale_modules_orgs.tenancy._get_m2m_through_classification")
+    @patch(
+        "quickscale_modules_orgs.tenancy._get_m2m_through_classification_marker_only"
+    )
     def test_unrelated_m2m_through_not_classified(self, mock_m2m: MagicMock) -> None:
         """When _get_m2m_through_classification returns False, the model
         must NOT be considered classified via this path."""
@@ -448,5 +455,49 @@ class TestIsClassifiedInRegistryWithImplicitM2M:
         model._meta = MagicMock()
         model._meta.app_label = "myapp"
 
-        # Not in REGISTRY_LOOKUP, no tenant_excluded marker.
+        # No tenant markers are present.
         assert is_classified_in_registry(model) is False
+
+
+def test_sa182_project_listing_is_marker_classified_without_registry() -> None:
+    """A project-owned ``AbstractListing`` subclass needs no registry entry."""
+    import quickscale_modules_orgs.tenancy as tenancy_mod
+
+    from tests.sa182_project_app.models import ProjectListing
+    from quickscale_modules_orgs.tenancy import (
+        get_unclassified_concrete_models,
+        is_classified_in_registry,
+        is_tenant_model,
+    )
+
+    original_lookup = tenancy_mod.REGISTRY_LOOKUP
+    try:
+        tenancy_mod.REGISTRY_LOOKUP = {}
+        assert is_tenant_model(ProjectListing) is True
+        assert is_classified_in_registry(ProjectListing) is True
+        assert ProjectListing not in get_unclassified_concrete_models()
+    finally:
+        tenancy_mod.REGISTRY_LOOKUP = original_lookup
+
+
+def test_sa182_tenant_excluded_wins_over_tenant_manager(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """An explicit exclusion overrides the project's positive tenant marker."""
+    from tests.sa182_project_app.models import ProjectListing
+    from quickscale_modules_orgs.tenancy import (
+        get_tenant_models,
+        is_classified_in_registry,
+        is_tenant_model,
+    )
+
+    monkeypatch.setattr(
+        ProjectListing,
+        "tenant_excluded",
+        "Regression fixture explicitly excluded from tenant membership.",
+        raising=False,
+    )
+
+    assert is_tenant_model(ProjectListing) is False
+    assert is_classified_in_registry(ProjectListing) is True
+    assert ProjectListing not in get_tenant_models()
