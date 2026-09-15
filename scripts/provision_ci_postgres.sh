@@ -278,7 +278,9 @@ verify_clients() {
 }
 
 install_hosted_clients() {
-  verify_clients 2>/dev/null || {
+  # Subshell: verify_clients dies via `exit`, which would otherwise end the
+  # whole script (silently, with stderr discarded) instead of installing.
+  (verify_clients) 2>/dev/null || {
     command -v apt-get >/dev/null 2>&1 || die "apt-get is required to install PostgreSQL 18 clients"
     local -a elevate=()
     if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then

@@ -12,9 +12,7 @@ name: Nightly BYPASSRLS Tests
 # BYPASSRLS role never produces false isolation failures here.
 
 on:
-  schedule:
-    # 03:17 UTC daily (off-peak, avoids top-of-hour contention).
-    - cron: "17 3 * * *"
+  # Daily schedule disabled; run on demand or via workflow_call.
   workflow_dispatch: {}
   workflow_call: {}
 

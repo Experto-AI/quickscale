@@ -372,7 +372,7 @@ class TestHostedPostgresProfileParity:
 
         nightly_path = REPO_ROOT / ".github" / "workflows" / "nightly-bypassrls.yml"
         nightly = _parse_yaml_strict(nightly_path.read_text(encoding="utf-8"), str(nightly_path))
-        assert set(nightly["on"]) == {"schedule", "workflow_dispatch", "workflow_call"}
+        assert set(nightly["on"]) == {"workflow_dispatch", "workflow_call"}
         privileged_step = next(
             step
             for step in nightly["jobs"]["bypassrls"]["steps"]
