@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as json_lib
 import uuid as uuid_lib
 from collections.abc import Iterator
 from io import StringIO
@@ -2206,17 +2207,34 @@ def test_purge_organization_clears_social_cache() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _sa182_expected_tenant_model_keys() -> set[tuple[str, str]]:
+    """Bind command expectations to shipped entries plus the project fixture."""
+    from django.apps import apps
+
+    from quickscale_modules_orgs.tenancy import (
+        TENANT_TABLE_REGISTRY,
+        TenantTableStatus,
+    )
+
+    project_listing = apps.get_model("sa182_project_app", "ProjectListing")
+    assert project_listing is not None
+    shipped_keys = {
+        (entry.app_label, entry.model_name)
+        for entry in TENANT_TABLE_REGISTRY
+        if entry.status == TenantTableStatus.ENROLLED
+    }
+    return shipped_keys | {(project_listing._meta.app_label, project_listing.__name__)}
+
+
 @pytest.mark.django_db
 def test_check_tenant_isolation_pass_on_current_models() -> None:
     """The command must report the correct pass/fail counts for current
     installed tenant models.
 
-    All real ENROLLED models (21 total) should have organization_id + FORCE
-    RLS.  Test-only models (ConcreteTenantResource, ForwardFKChild) are
-    detected as tenant models (they inherit TenantModel) but their test
-    tables lack FORCE-RLS — on PostgreSQL this would cause a fail, but on
-    SQLite all models pass (``force_rls`` is None so only
-    ``organization_id`` is checked).
+    Every shipped ENROLLED model and the project-owned fixture should have
+    organization_id + FORCE RLS. Expectations are bound from the shipped
+    literal plus the fixture model at test execution rather than from a
+    duplicated count.
     """
     from io import StringIO
 
@@ -2234,10 +2252,10 @@ def test_check_tenant_isolation_pass_on_current_models() -> None:
     # Should have discovered tenant models.
     assert "Discovered" in output
     assert "Result:" in output
-    # On SQLite, all models pass (force_rls is None; only org_id checked).
-    # Test-only models (ConcreteTenantResource, ForwardFKChild) are only
-    # present when test_models is explicitly imported, so 21 models total.
-    assert "21 passed, 0 failed" in output
+    expected_keys = _sa182_expected_tenant_model_keys()
+    for app_label, model_name in expected_keys:
+        assert f"{app_label}.{model_name}" in output
+    assert f"Result: {len(expected_keys)} passed, 0 failed" in output
 
 
 @pytest.mark.django_db
@@ -2264,11 +2282,44 @@ def test_check_tenant_isolation_json_output() -> None:
     assert "total" in data["tenant_models"]
     assert "passed" in data["tenant_models"]
     assert "results" in data["tenant_models"]
-    # On SQLite, all models pass (force_rls is None; only org_id checked).
-    assert data["tenant_models"]["total"] == 21
-    assert data["tenant_models"]["passed"] == 21
+    expected_keys = _sa182_expected_tenant_model_keys()
+    actual_keys = {
+        (result["app_label"], result["model_name"])
+        for result in data["tenant_models"]["results"]
+    }
+    assert actual_keys == expected_keys
+    assert data["tenant_models"]["total"] == len(expected_keys)
+    assert data["tenant_models"]["passed"] == len(expected_keys)
     assert data["tenant_models"]["failed"] == 0
     assert "unclassified" in data
+
+
+@pytest.mark.django_db
+def test_sa182_project_listing_appears_in_human_and_json_output() -> None:
+    """The project-owned tenant model is reported by both output formats."""
+    human_stdout = StringIO()
+    call_command(
+        "check_tenant_isolation",
+        stdout=human_stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+    assert "sa182_project_app.ProjectListing" in human_stdout.getvalue()
+
+    json_stdout = StringIO()
+    call_command(
+        "check_tenant_isolation",
+        format="json",
+        stdout=json_stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+    data = json_lib.loads(json_stdout.getvalue())
+    result_keys = {
+        (result["app_label"], result["model_name"])
+        for result in data["tenant_models"]["results"]
+    }
+    assert ("sa182_project_app", "ProjectListing") in result_keys
 
 
 @pytest.mark.django_db

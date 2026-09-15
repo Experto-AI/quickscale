@@ -95,7 +95,7 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 | Invariant | Enforcement | Posture | Trend since last pass |
 |---|---|---|---|
 | Tenant reads/writes stay organization-scoped | `TenantManager`, `FORCE RLS`, restricted-role boot guard | Structural | unchanged |
-| **Tenant-model universe is classified (and refreshed, and purged)** | Literal `TENANT_TABLE_REGISTRY` (49 entries) consumed by the W005 system check, by `check_tenant_isolation` (run by every generated project's CI, `ci.yml.j2:110`), and by `refresh_force_rls_policies`; 21-entry `_DELETE_SPECS` for purge. The marker-derived overview is called "authoritative" in the docs but no gate consumes it | **Gated only for shipped modules; closed to project-owned tenant models; two classifiers disagree** | **re-characterized** (was "Gated") — rank 1 |
+| **Tenant-model universe is classified (and refreshed, and purged)** | Marker-derived tenant classification and FORCE-RLS refresh; 21-entry `_DELETE_SPECS` remains the purge membership list. The shipped `TENANT_TABLE_REGISTRY` is a parity oracle only | **Classification and refresh are marker-derived; purge remains closed to project-owned tenant models** | **narrowed to SA190 purge membership** — rank 1 |
 | Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard; exemption set declared in four places | Guard structural; **set membership convention-only (4 declarations, 3 members, no cross-station gate)** | **weakened** — third member added in `b29d9a29` with no station test |
 | **Restricted runtime role exists with the right grants** | `db/init.sql.j2` (role `{package}_app`), `start.sh.j2` Step 3 (role `quickscale_runtime`, adds `GRANT CONNECT`), `OPERATIONS.md.j2` manual SQL | **Convention: three implementations, two role names** | **new row** (seam minted in `461796ce`) |
 | **Template ↔ upgradable-code contract compatibility across versions** | `project_contract` in state plus `contract_vintage` in manifests (2 of 12 modules declare it); read only by `quickscale status` | **Convention (advisory, opt-in)** | **new row** — rank 3 |
@@ -114,15 +114,16 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 
 | Rank | ID | Horizon | Confidence | Size | Problem in one line |
 |---:|---|---|---|---|---|
-| 1 | `org-model-universe-hand-enumerated` | now (SA153) | High | M | Tenant classification, policy refresh, and purge are literal lists inside the orgs module source, closed to project-owned tenant tables — the exact shape SA153 must ship. |
+| 1 | `org-model-universe-hand-enumerated` | now (SA190) | High | S | Purge membership remains a literal `_DELETE_SPECS` list inside the orgs module, closed to project-owned tenant tables even though classification and policy refresh are marker-derived. |
 | 2 | `privileged-command-set-multi-owner` | now (fired) | High | M | Four independent declarations own the privileged-command set. It grew to three with no gate, and the frozen template copy rejects the new command in the projects that need it. |
 | 3 | `generated-file-ownership-unmodeled` | now, on v0.88 publication | High (mechanism) / Medium (user impact) | M | Contract-bearing emitted files are frozen at generation, while their counterparts upgrade through `quickscale update`/`deploy`. Vintage machinery exists but nothing enforces it. |
 | 4 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | Two org-deletion boundaries already exist, and each discharges a different subset of cross-domain obligations. |
 
-Promotions this pass: rank 1 moves from deferred to now. Rank 2 returns from the watchlist
+Promotions this pass: rank 1 remains now as the still-open SA190 purge-membership half; its
+classification and policy-refresh halves are implemented by SA182. Rank 2 returns from the watchlist
 because its trigger fired. Rank 3 moves from 6–18 months to now, conditioned on publication.
-Rank 4 moves from deferred to 6–18 months, because prior passes mis-evaluated its trigger. No
-finding was resolved.
+Rank 4 moves from deferred to 6–18 months, because prior passes mis-evaluated its trigger. The
+rank-1 finding is narrowed rather than closed: SA190 still owns purge derivation.
 
 ---
 
@@ -164,126 +165,104 @@ properties to that gate is additive, and the better lever is the structural fixe
 
 ---
 
-## Finding — The tenant-model universe is closed to project-owned tables
+## Finding — Purge membership remains closed to project-owned tables
 
 **ID:** `org-model-universe-hand-enumerated` · **Horizon:** now · **Confidence:** High ·
-**Size:** M · **Context dependence:** `wrong-for-now` (new domain — first project-owned tenant tables)
+**Size:** S · **Context dependence:** `wrong-for-now` (new domain — first project-owned tenant tables)
 
-**Rank rationale:** the blast radius is the isolation gate, the policy lifecycle, and org teardown
-for the first production portal. The trigger is certain, because SA153 is the next ticket on the
-critical path.
+**Rank rationale:** the remaining blast radius is org teardown for the first production portal.
+Classification and policy refresh now accept project-owned tenant models; purge remains the
+unresolved SA190 half. The trigger is certain because SA153 is the next ticket on the critical path.
 
 **Trigger (restated):** a project-owned or module tenant model is scheduled. **Fired** — SA153's
 acceptance requires new tenant-owned child tables with their own `organization_id` and forced RLS
 (`roadmap.md:98`; `v88_ticket_context.md:73-77`). The prior trigger ("teams adds a tenant model")
 named the wrong growth vector.
 
-**Problem:** Three consumers treat the set of tenant models as a literal list inside the orgs
-module's source, and none has a project-side registration seam:
-
-- the classification gate;
-- the policy-refresh helper;
-- the organization purge plan.
-
-The documented extension model forbids editing module source, and SA153 is required to ship
-exactly the kind of table these lists cannot see.
+**Problem:** The organization purge plan still treats the set of tenant models as a literal list
+inside the orgs module's source and has no project-side extension seam. The documented extension
+model forbids editing module source, and SA153 is required to ship exactly the kind of table this
+list cannot see.
 
 **Evidence** (all anchors established or re-verified this pass):
 
-- **Classification gate consults only the literal.**
-  - `is_classified_in_registry()` (`tenancy.py:1307-1332`) accepts only three things: a
-    `REGISTRY_LOOKUP` hit, a `tenant_excluded` marker, or M2M inference. A `TenantManager` model
-    that is not in the literal list is *unclassified*.
-  - `is_project_app()` (`:1168-1200`) returns `True` for every non-contrib, non-third-party app, so
-    a project extension app is in scope.
-  - `check_tenant_isolation` fails on unclassified models (`check_tenant_isolation.py:89`), and
-    every generated project runs it in CI (`ci.yml.j2:110`, `Makefile.j2:70`).
-  - The remediation hint names module source: "Add an entry to TENANT_TABLE_REGISTRY in
-    quickscale_modules_orgs.tenancy" (`checks.py:128`).
-- **The docs call a different classifier authoritative.** `_is_classified_by_marker_only()`
-  (`tenancy.py:1431-1456`) *does* accept `is_tenant_model()`, and `get_derived_registry_overview()`
-  uses it. `organizations.md:12` and `decisions.md` call that overview "authoritative" and the
-  literal a "cross-check target." Meanwhile `tenancy.py:120` calls the literal "the single source
-  of truth." Two classifiers, two authorities, and the gate uses the one the docs demote.
+- **Classification and policy refresh are now marker-derived.** `is_tenant_model()` and
+  `get_tenant_models()` identify installed concrete project models, while
+  `is_classified_in_registry()` uses the marker-only classifier. W003/W004 and
+  `check_tenant_isolation` therefore cover project-owned models without a literal registry entry.
+  `refresh_force_rls_policies()` binds each existing table to its unique live `FOR ALL` policy
+  from `pg_policies` before performing the revert/apply cycle. The shipped literal remains only a
+  parity oracle.
 - **SA153's model is a tenant model by construction.** `AbstractListing` carries `tenant_org_fk()`
   and `objects = TenantManager()` (`listings/models.py:12,22,124-125`), so any property subclass
-  is one.
-- **Policy refresh iterates the literal.** `refresh_force_rls_policies()` (`tenancy.py:587-640`)
-  iterates `TENANT_TABLE_REGISTRY`. A project table enrolled by its own `apply_force_rls()`
-  migration would be skipped by the next policy-template refresh, silently. The helper has no
-  migration caller after the SA90 squash, so this is latent until the next policy change.
+  with the dual-manager contract is one. The Phase A project fixture proves classification,
+  command output, live policy refresh, and missing-policy fail-closed behavior without a literal
+  registry entry.
 - **Purge is closed and order-dependent.**
   - `_DELETE_SPECS` (`purge_organization.py:64`, **21 entries**, re-derived by AST) is the whole
     purge universe (`_resolve_models`, `:215`).
   - The organization row is removed with `_raw_delete` (`:448`), and `tenant_org_fk` is `PROTECT`
     (`tenancy.py:450-476`).
   - Purging any org that owns a project-owned tenant row therefore fails on the database FK.
-- **The contract forbids the only available fix.** `implementation_contract.md:355`: projects
+- **The remaining fix belongs to SA190.** `implementation_contract.md:355` requires projects to
   extend modules "through a project-owned extension app … never by editing module source
-  directly." Both required registrations are module-source edits, and each would have to survive
-  every later `quickscale update` subtree pull.
+  directly." Adding project-owned purge membership to `_DELETE_SPECS` would violate that
+  boundary and would have to survive every later `quickscale update` subtree pull.
 
 **Counter-evidence:**
 
-- **No project-side hook exists.** Searched `tenancy.py` for any settings or AppConfig hook (there
-  is no `settings.` reference) and searched `module-extension.md` and `organizations.md` for
-  project-owned tenant guidance. Found neither.
-- **The marker path cannot enroll.** `tenant_excluded` is a real marker path, but for *exclusion*
-  only.
-- **Isolation stays guarded without the literal.** W003/W004 and `check_tenant_isolation` still
-  require `organization_id` and FORCE RLS for every `TenantManager` model, whatever the literal
-  list says.
+- **The project-side marker hook now exists.** The module extension and organizations contracts
+  document the dual-manager/marker path; the shipped parity literal remains separate.
+- **Isolation stays guarded without the literal.** W003/W004 and `check_tenant_isolation` require
+  `organization_id` and FORCE RLS for every marker-derived `TenantManager` model.
 - **Purge fails loud.** No silent partial teardown is possible.
 
 Those last two points are what keep this a registration/extension problem rather than an
 isolation leak.
 
 Runtime confirmation: generate a project with `listings`, add an extension model subclassing
-`AbstractListing`, and run `manage.py check_tenant_isolation --format json`. The expected result
-is `fail` with that model unclassified.
+`AbstractListing`, and run `manage.py check_tenant_isolation --format json`. Classification and
+policy refresh should include the model; purging an organization that owns its row still fails
+until SA190 derives purge membership.
 
 **Why it compounds:**
 
-- Every project-owned tenant table needs two module-source edits: a registry entry, and a purge
-  spec at a hand-chosen FK position.
-- Both edits must be carried through every later module update.
-- The table gets no policy refresh, and it sits outside SA177's predicate-conformance scope, which
-  is defined over "each enrolled table."
+- Every project-owned tenant table still needs a purge-membership seam, currently a hand-chosen
+  `_DELETE_SPECS` position in module source.
+- That edit must be carried through every later module update.
+- Purge ordering remains manual, while classification and policy refresh now see the table.
 - SA154's inventory (saved searches, favorites, agent/office profiles, tours) is a list of more
   tenant tables built on the same pattern.
 
-**Detection signal:** a generated project's CI failing `check_tenant_isolation` on its own
-extension model. Hand edits appearing under `quickscale_modules_orgs/` in a generated project's
-git history. `purge_organization` raising `IntegrityError` or `ProtectedError`.
+**Detection signal:** a generated project's `purge_organization` raising `IntegrityError` or
+`ProtectedError` while a project-owned tenant row exists. Hand edits appearing under
+`quickscale_modules_orgs/` in a generated project's git history remain evidence of the wrong
+extension shape, not a requirement for classification or policy refresh.
 
-**Steelman:** a closed literal is default-deny. Nothing is tenant-trusted unless a maintainer
-reviewed it, and the literal was deliberately kept as a cross-check against marker drift. For
-shipped modules only, that is the right posture. Do not fix if SA153 is re-scoped to ship its
-tables inside a first-party module.
+**Steelman:** a closed purge list is default-deny. Nothing is deleted unless a maintainer reviewed
+its ordering, and `_DELETE_SPECS` protects against accidental cross-domain deletion. Do not fix if
+SA153 is re-scoped to ship its tables inside a first-party module.
 
-**Correct shape:** the tenant-model universe is declared by markers on the models themselves.
-Classification, policy refresh, and purge all read that one derived set. Any literal list is a
-monorepo-side cross-check over shipped modules, never the runtime authority in a generated
-project.
+**Correct shape:** purge membership is derived from the same marker-derived tenant-model set used
+by classification and policy refresh, with explicit ordering from installed FK metadata and
+documented overrides where needed. Any literal list is a monorepo-side cross-check over shipped
+modules, never the runtime authority in a generated project.
 
 **Options:**
 
-1. **Open the literal.** Merge a project-declared list (a setting or AppConfig hook) into
-   `TENANT_TABLE_REGISTRY` and `_DELETE_SPECS`. This is small and keeps default-deny, but it adds
-   another hand-maintained station per table and leaves purge ordering manual.
-2. **Derive from markers.** Make the gate classifier accept `is_tenant_model()`, as the derived
-   overview already does, with isolation still enforced by W003/W004. Drive refresh from
-   `get_tenant_models()`. Derive purge membership from the same set, and order it topologically
-   from installed FK metadata with explicit overrides (the prior Option 1). Keep the literal only
-   as a monorepo test. This removes the compounding.
-3. **Keep it closed and require first-party modules for tenant tables.** This contradicts SA153's
-   scope and the extension contract.
+1. **Open `_DELETE_SPECS`.** Merge a project-declared list (a setting or AppConfig hook) into the
+   purge plan. This is small and keeps default-deny, but adds another hand-maintained station per
+   table and leaves purge ordering manual.
+2. **Derive purge membership from markers.** Drive purge membership from `get_tenant_models()` and
+   order it topologically from installed FK metadata with explicit overrides. Keep the shipped
+   literal only as a monorepo parity test. This removes the remaining compounding.
+3. **Keep purge closed and require first-party modules for tenant tables.** This contradicts
+   SA153's scope and the extension contract.
 
-**Recommendation:** Option 2, sequenced. First align the classifier with the derived overview
-(`S`) so SA153's first migration passes its own CI without module edits. Then derive the purge
-plan (the purge half is `M`), designed with `deletion-invariants-per-boundary-reimplementation`.
-· **First step:** make `is_classified_in_registry()` accept `is_tenant_model()` behind the existing
-isolation checks, with a regression that uses a non-module tenant model.
+**Recommendation:** Option 2. SA182 has aligned classification and policy refresh with the
+marker-derived set. SA190 should now derive purge membership from `get_tenant_models()`, preserving
+the existing ordered deletion and last-owner safeguards while proving a non-module tenant row can
+be purged safely.
 
 ---
 
@@ -613,22 +592,20 @@ Not edited though owed: station tests at 3 of the 4 executable stations, the `or
 0 gated. Contrast `NON_DB`: one station.
 
 **Probe B — SA153: add one project-owned tenant child table** (for example, a property gallery
-image). On paper, in order:
+image). SA182 now covers the classification and policy-refresh stations. The remaining SA190
+purge-membership probe is:
 
 1. The project model: `tenant_org_fk()` plus `TenantManager()` and `TenantManager(super_scope=True)`.
 2. A project migration calling `apply_force_rls()`, plus `add_composite_child_fk()` for the parent
    equality.
 3. A child boundary test on the `test_rls_boundary.py` pattern.
-4. **Module source:** a `TENANT_TABLE_REGISTRY` entry. Without it, generated CI's
-   `check_tenant_isolation` fails.
-5. **Module source:** a `_DELETE_SPECS` entry at a hand-chosen FK position. Without it, purging any
+4. **Module source:** a `_DELETE_SPECS` entry at a hand-chosen FK position. Without it, purging any
    org that owns the row fails on `PROTECT`.
-6. *(silent)* No station exists for `refresh_force_rls_policies`. The table misses the next
-   policy-template refresh.
-7. Carry edits 4–5 through every later `quickscale update` of `orgs`.
+5. Carry the purge-membership change through every later `quickscale update` of `orgs`.
 
-**Verdict: finding evidence** (rank 1): 7 stations. Two sit in vendored module source that the
-extension contract forbids editing. One required behaviour has no station at all.
+**Verdict: finding evidence** (rank 1): 5 stations remain in the SA190 half. The project model,
+migration, child-boundary, classification, and refresh behaviours now have an extension path and
+Phase A regression coverage; purge membership remains in vendored module source.
 
 **Probe C — add a registered gate** (re-checked, not re-measured). Nothing changed: the registry
 still has 12 gates, and the closed-universe check (`sync_ci_gate_jobs.py:381-387`) still turns any
@@ -639,10 +616,10 @@ missed station into a red build. The eight count-pinned oracles are unchanged an
 
 ## Fix order and interactions
 
-- **Rank 1 comes first:** it blocks SA153's first migration. Its classifier half is independent
-  and small.
-- **Purge derivation pairs with rank 4:** rank 1's purge half and rank 4's coordinator touch the
-  same command, so design them together.
+- **SA182's rank-1 classification/refresh half is complete:** it unblocks SA153's first migration
+  and keeps the shipped literal as parity-only evidence.
+- **Purge derivation pairs with rank 4:** the remaining rank-1/SA190 purge half and rank 4's
+  coordinator touch the same command, so design them together.
 - **Ranks 2 and 3 interact.** If rank 2 takes Option 2 (commands declare themselves), the
   privileged set leaves the frozen templates, and rank 3's vintage enforcement has one fewer
   contract to police. Rank 3's first step (declaring an `orgs` vintage) is independent and cheap,
@@ -655,8 +632,9 @@ missed station into a red build. The eight count-pinned oracles are unchanged an
 
 - **Tenant isolation is dual-layer and fails closed.** Ambient `TenantManager` scoping plus
   restricted-role `FORCE RLS`. A boot guard rejects a `rolbypassrls`/`rolsuper` runtime role, and
-  `_check_quickscale_mode()` runs before the privileged exemption. The W003/W004 isolation checks
-  are what make rank 1's Option 2 safe; keep them.
+  `_check_quickscale_mode()` runs before the privileged exemption. Marker-derived membership and
+  the W003/W004 isolation checks are what make SA182's runtime shape safe; keep them while SA190
+  derives purge membership.
 - **Last-owner safety is a model/signal backstop, not a view check.** One predicate serves six
   callsites, plus a `pre_delete` receiver that catches direct ORM deletes. Rank 4's coordinator
   must not replace it.
@@ -835,6 +813,10 @@ contradicted by `b29d9a29`.*
 - 2026-09-15 — Census: two rows added (runtime-role provisioning; template ↔ upgradable-code
   vintage), three re-characterized (tenant-model universe, privileged set, deletion obligations),
   and one narrowed (commit testimony, `2e2a932a`).
+- 2026-09-15 — **SA182 Phase A narrowed `org-model-universe-hand-enumerated` to its SA190
+  purge-membership half.** Classification and FORCE-RLS refresh now use the marker-derived tenant
+  set, with project-owned fixture regressions and live-policy validation; `_DELETE_SPECS` remains
+  the open purge seam. No purge implementation, status, or release surface changed.
 
 *Lenses scanned with no qualifying finding this pass: observability, API/contract stability of
 the CLI surface, performance and scalability, concurrency and state isolation (beyond the lock

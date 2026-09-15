@@ -6,7 +6,7 @@ Registers two system checks with the ``quickscale_modules_orgs`` app:
 1. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
    ``organization_id`` or FORCE-RLS policies.
 2. ``check_model_classification`` (SA1.4) — warns when a concrete project
-   model is not classified in ``TENANT_TABLE_REGISTRY``.
+   model has no marker-derived tenant classification.
 
 Both checks use the same marker-based discovery as the management command.
 They emit ``WARNING`` level messages so they do not block startup in
@@ -100,11 +100,12 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
 
 @register("quickscale_modules_orgs")
 def check_model_classification(app_configs: object, **kwargs: object) -> list:
-    """Warn about concrete project models not classified in ``TENANT_TABLE_REGISTRY``.
+    """Warn about concrete project models without tenant markers.
 
-    Every concrete model from a project-owned app must be classified in
-    the registry as ENROLLED, EXCLUDED_REVIEWED, or PENDING_REMEDIATION.
-    Unclassified models emit ``quickscale_modules_orgs.W005``.
+    Every concrete model from a project-owned app must either declare the
+    tenant manager/base-model contract or provide a reasoned
+    ``tenant_excluded`` marker. Unclassified models emit
+    ``quickscale_modules_orgs.W005``.
 
     Returns:
         A list of ``CheckMessage`` instances.
@@ -125,29 +126,28 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
 
     for model in unclassified:
         hint_parts: list[str] = [
-            "Add an entry to TENANT_TABLE_REGISTRY in "
-            "quickscale_modules_orgs.tenancy with status "
-            "ENROLLED, EXCLUDED_REVIEWED, or PENDING_REMEDIATION.",
+            "Declare the tenant contract with objects = TenantManager() and "
+            "all_objects = TenantManager(super_scope=True), or inherit "
+            "TenantModel.",
         ]
         if not model._meta.auto_created:
             hint_parts.append(
-                "Alternatively, add a 'tenant_excluded' class attribute "
-                "with a reason string to mark the model excluded."
+                "Alternatively, add a reasoned 'tenant_excluded' class "
+                "attribute to mark the model excluded."
             )
         # Auto-created M2M through models that reach this point could not
         # be classified by relation inference (the related models
         # themselves are unclassified).  Advise adding them manually.
         if _is_implicit_m2m_through(model):
             hint_parts.append(
-                "Auto-created ManyToMany through model — add an "
-                "EXCLUDED_REVIEWED entry to TENANT_TABLE_REGISTRY, "
-                "or ensure the related models are classified first so "
-                "that relation inference can classify it automatically."
+                "Auto-created ManyToMany through model — ensure its "
+                "project-owned related models declare their markers so "
+                "relation inference can classify it automatically."
             )
         messages.append(
             Warning(
                 f"Concrete project model {model._meta.app_label}.{model.__name__} "
-                f"is not classified in TENANT_TABLE_REGISTRY.",
+                "is not classified by tenant markers.",
                 hint=" ".join(hint_parts),
                 id="quickscale_modules_orgs.W005",
             )

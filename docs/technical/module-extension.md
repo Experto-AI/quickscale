@@ -61,6 +61,46 @@ Every module declares its supported extension mechanisms from this set:
 
 Every module does **not** need to implement every surface.
 
+### Project-Owned Tenant Models
+
+A generated project may add tenant-scoped models in its own Django app without
+editing a vendored QuickScale module or adding an entry to
+`TENANT_TABLE_REGISTRY`. Runtime classification is marker-derived: a concrete
+model is enrolled when it inherits the tenant contract or declares the shared
+dual-manager contract, while an explicit `tenant_excluded = True` marker wins
+over any inherited or manager-based signal.
+
+For example, a project-owned model extending the listings abstract base keeps
+both managers explicit:
+
+```python
+from quickscale_modules_listings.models import AbstractListing
+from quickscale_modules_orgs.managers import TenantManager
+
+
+class ProjectListing(AbstractListing):
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
+
+    class Meta(AbstractListing.Meta):
+        abstract = False
+        base_manager_name = "all_objects"
+```
+
+The project app must be installed and its initial migration must create the
+concrete table and its FORCE-RLS base policy. The policy must be a live,
+migration-created `FOR ALL` policy; its actual name is not assumed by runtime
+code. The FORCE-RLS refresh discovers the unique base policy for each existing
+marker-derived table from PostgreSQL `pg_policies` before changing any RLS
+state, and fails closed when the policy is absent or ambiguous. Additional
+operator `FOR SELECT` policy rows may coexist with the base policy.
+
+The resulting project-owned model participates in the same W003/W004 system
+check and `check_tenant_isolation` command as shipped module models. Their
+human-readable output and JSON results should include the model. The shipped
+literal registry remains a CI parity oracle for shipped modules only; it is not
+an enrollment API for project-owned extensions.
+
 ## Module Categories
 
 | Module category | Preferred extension model | Example modules |

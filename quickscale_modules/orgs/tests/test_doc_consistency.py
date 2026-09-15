@@ -1,17 +1,16 @@
 """SA15.3 — CI doc-consistency gate.
 
 Verifies that the marker-based derived registry overview
-(:func:`get_derived_registry_overview`) agrees with the literal
+(:func:`get_derived_registry_overview`) agrees with the shipped-module literal
 ``TENANT_TABLE_REGISTRY`` for the installed concrete model set,
 and that the documented ``TenantManager`` API surface is consistent
 with the actual code in ``quickscale_modules_orgs.managers``.
 
 The hand-maintained ``<!-- enrolled-models assertion: ... -->`` HTML
 comments have been removed from the technical docs in favour of the
-derived overview.  The literal ``TENANT_TABLE_REGISTRY`` remains in
-place temporarily as a cross-check target so the CI gate can confirm
-the marker-driven view matches the design-time registry for every
-installed model — no registry fallback is used.
+derived overview. The literal ``TENANT_TABLE_REGISTRY`` remains as a
+shipped-module cross-check target. Project-owned app models are validated
+separately through marker discovery and do not edit the literal.
 
 After the SA15.3 marker backfill, all excluded models carry explicit
 ``tenant_excluded`` class attributes, so the derived view is purely
@@ -36,33 +35,32 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 # ---------------------------------------------------------------------------
 # Cross-check: derived marker-based registry vs literal registry
 # ---------------------------------------------------------------------------
-# The literal ``TENANT_TABLE_REGISTRY`` is the temporary SSOT.  The derived
-# view uses marker-based detection.  This test asserts they agree on the
-# ENROLLED model set for project-owned apps, so the derived view can
-# eventually replace the hand-maintained literal.
+# The literal ``TENANT_TABLE_REGISTRY`` is a shipped-module parity oracle. The
+# derived view uses marker-based detection. These tests assert parity only for
+# app labels represented by that shipped literal; project-owned app models are
+# covered by separate marker-discovery assertions below.
 # ---------------------------------------------------------------------------
 
-#: App labels that host test-only models (excluded from ENROLLED cross-check
-#: comparisons).  No longer strictly necessary after the SA15.3 marker backfill
-#: (test models carry explicit ``tenant_excluded`` markers), but kept to
-#: preserve the existing ENROLLED-only assertions as-is.
-_TEST_APP_LABELS: frozenset[str] = frozenset({"quickscale_modules_orgs"})
+#: App labels represented by the shipped literal registry. This keeps the
+#: literal useful as a parity oracle without making it a runtime enrollment
+#: requirement for project-owned apps.
+_SHIPPED_APP_LABELS: frozenset[str] = frozenset(
+    entry.app_label for entry in TENANT_TABLE_REGISTRY
+)
 
 
 def test_derived_registry_enrolled_matches_literal_registry() -> None:
     """The ENROLLED model set from the derived view must match the literal
     ``TENANT_TABLE_REGISTRY`` for all project-owned apps.
 
-    Test-only models (those in ``quickscale_modules_orgs`` app label) are
-    excluded from the comparison because they exist only in the test
-    environment and do not represent real tenant tables.
+    Project-owned app models outside the shipped registry are excluded from
+    this parity comparison because the literal is not their enrollment API.
     """
     derived = get_derived_registry_overview()
     derived_enrolled = {
         (e.app_label, e.model_name)
         for e in derived
-        if e.status == TenantTableStatus.ENROLLED
-        and e.app_label not in _TEST_APP_LABELS
+        if e.status == TenantTableStatus.ENROLLED and e.app_label in _SHIPPED_APP_LABELS
     }
     literal_enrolled = {
         (e.app_label, e.model_name)
@@ -87,8 +85,7 @@ def test_derived_registry_enrolled_per_app_matches_literal() -> None:
     derived_enrolled = [
         e
         for e in derived
-        if e.status == TenantTableStatus.ENROLLED
-        and e.app_label not in _TEST_APP_LABELS
+        if e.status == TenantTableStatus.ENROLLED and e.app_label in _SHIPPED_APP_LABELS
     ]
     literal_enrolled = [
         e for e in TENANT_TABLE_REGISTRY if e.status == TenantTableStatus.ENROLLED
@@ -119,7 +116,11 @@ def test_derived_registry_full_overview_matches_literal() -> None:
     from django.apps import apps
 
     derived = get_derived_registry_overview()
-    derived_set = {(e.status, e.app_label, e.model_name) for e in derived}
+    derived_set = {
+        (e.status, e.app_label, e.model_name)
+        for e in derived
+        if e.app_label in _SHIPPED_APP_LABELS
+    }
 
     # Build a set of models actually installed in this environment.
     installed_model_keys: set[tuple[str, str]] = {
@@ -141,7 +142,7 @@ def test_derived_registry_full_overview_matches_literal() -> None:
         f"  In literal but missing from derived: {missing_from_derived}\n"
         f"  In derived but absent from literal: {extra_in_derived}\n"
         f"The derived view must be purely marker-driven and agree with "
-        f"the literal registry for every installed model.  If you added "
+        f"the shipped literal registry for every installed model.  If you added "
         f"a model, ensure it carries the correct marker (tenant_excluded, "
         f"TenantManager/TenantModel, or implicit M2M through detection)."
     )
@@ -200,8 +201,8 @@ def test_derived_registry_works_without_registry_lookup() -> None:
 
     Monkeypatches ``REGISTRY_LOOKUP`` on the ``tenancy`` module to an empty
     dict and proves :func:`get_derived_registry_overview` still produces
-    the same overview as the literal ``TENANT_TABLE_REGISTRY`` for all
-    installed models.  This is a regression test: if any code path in
+    the same shipped-module overview as the literal ``TENANT_TABLE_REGISTRY``
+    for all installed shipped models. This is a regression test: if any code path in
     the derived overview still consults ``REGISTRY_LOOKUP`` indirectly
     (via :func:`is_classified_in_registry` or
     :func:`_get_m2m_through_classification`), clearing the lookup would
@@ -221,7 +222,11 @@ def test_derived_registry_works_without_registry_lookup() -> None:
         tenancy_mod.REGISTRY_LOOKUP = {}
 
         derived = get_derived_registry_overview()
-        derived_set = {(e.status, e.app_label, e.model_name) for e in derived}
+        derived_set = {
+            (e.status, e.app_label, e.model_name)
+            for e in derived
+            if e.app_label in _SHIPPED_APP_LABELS
+        }
 
         from django.apps import apps
 
@@ -243,11 +248,35 @@ def test_derived_registry_works_without_registry_lookup() -> None:
             f"With REGISTRY_LOOKUP cleared, parity mismatch:\n"
             f"  In literal but missing from derived: {missing_from_derived}\n"
             f"  In derived but absent from literal: {extra_in_derived}\n"
-            f"The derived view must be purely marker-driven and work "
+            f"The shipped-derived view must be purely marker-driven and work "
             f"without REGISTRY_LOOKUP."
         )
     finally:
         tenancy_mod.REGISTRY_LOOKUP = original_lookup
+
+
+def test_sa182_project_model_is_derived_from_markers() -> None:
+    """Project-owned tenant models appear without literal registry entries."""
+    from django.apps import apps
+
+    from quickscale_modules_orgs.tenancy import (
+        get_derived_registry_overview,
+        is_classified_in_registry,
+        is_tenant_model,
+    )
+
+    project_listing = apps.get_model("sa182_project_app", "ProjectListing")
+    assert project_listing is not None
+    assert is_tenant_model(project_listing) is True
+    assert is_classified_in_registry(project_listing) is True
+    assert (
+        TenantTableStatus.ENROLLED,
+        "sa182_project_app",
+        "ProjectListing",
+    ) in {
+        (entry.status, entry.app_label, entry.model_name)
+        for entry in get_derived_registry_overview()
+    }
 
 
 # ---------------------------------------------------------------------------
