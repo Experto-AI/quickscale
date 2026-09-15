@@ -2,7 +2,7 @@
 
 This module provides the canonical owned-model contract helpers
 for tenant-scoped models across all QuickScale modules (D3 — PROTECT),
-plus the central tenant-table registry used by the AF1 conformance gate.
+plus the shipped-module tenant-table registry used by the AF1 conformance gate.
 """
 
 from __future__ import annotations
@@ -117,9 +117,10 @@ class TenantTableEntry:
 # ---------------------------------------------------------------------------
 # Central tenant-table registry (AF1 Phase 1)
 # ---------------------------------------------------------------------------
-# This is the single source of truth for which models participate in
-# the tenant isolation contract.  Every installed concrete model must
-# appear in exactly one of the three categories below.
+# This is the shipped-module parity oracle for which models participate in
+# the tenant isolation contract. Runtime discovery is marker-derived and does
+# not consult this literal. Every shipped concrete model must appear in
+# exactly one of the three categories below.
 #
 # See `docs/technical/roadmap.md` → AF1 and `docs/others/arch-audit.md` → Finding 1
 # for the full rationale.
@@ -585,21 +586,24 @@ def revert_force_rls(
 
 
 def refresh_force_rls_policies(schema_editor: Any) -> None:
-    """Drop and recreate FORCE RLS policies on all enrolled tables.
+    """Drop and recreate FORCE RLS policies on all discovered tenant tables.
 
     Uses the current ``_FORCE_RLS_FORWARD_SQL`` template so that any
     template changes (e.g. the SA14.5 ``operator_access`` OR clause) take
     effect on existing policies.
 
-    The function iterates ``TENANT_TABLE_REGISTRY`` for entries whose
-    ``status == ENROLLED`` and constructs the ``(table_name, policy_name)``
-    pairs from the entry's ``policy_name`` attribute and the registered
-    model's ``_meta.db_table`` value.
+    The function discovers tenant models from their marker-derived
+    ``TenantManager``/``TenantModel`` contract, resolves each physical table
+    from the installed model metadata, and reads that table's unique ``FOR
+    ALL`` policy name from PostgreSQL before issuing any DDL. The migration
+    that created the table owns that policy identity; refresh must not invent
+    or normalize a name from the model or app label.
 
-    Registry entries for optional apps that are not installed and tables
-    that do not exist yet in the database are silently skipped (handles the
-    case where this migration runs before other modules' schema migrations
-    in a fresh test database).
+    Models whose tables do not exist yet in the database are silently skipped
+    (handles the case where this migration runs before other modules' schema
+    migrations in a fresh test database). An existing table with zero or
+    multiple ``FOR ALL`` policies raises before any policy is reverted, so a
+    partial refresh cannot leave later tables in a mixed state.
 
     No-op on non-PostgreSQL databases.
 
