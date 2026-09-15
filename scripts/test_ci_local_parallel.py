@@ -188,6 +188,11 @@ def _fake_environment(
         "PGHOST",
         "PGPORT",
         "QS_CI_PARALLEL",
+        # A hosted runner's markers would switch the fixture onto the hosted path.
+        "GITHUB_ACTIONS",
+        "RUNNER_TEMP",
+        "GITHUB_ENV",
+        "GITHUB_PATH",
     ):
         environment.pop(key, None)
     runtime_bin = tmp_path / "runtime-bin"

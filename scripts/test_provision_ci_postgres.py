@@ -34,6 +34,12 @@ def _invoke_environment(env: dict[str, str] | None = None) -> dict[str, str]:
         "PGPORT",
         "PGUSER",
         "QS_PROVISION_SCOPE",
+        # Hosted-runner markers; cases that model GitHub set them explicitly.
+        "GITHUB_ACTIONS",
+        "RUNNER_TEMP",
+        "GITHUB_ENV",
+        "GITHUB_PATH",
+        "GITHUB_RUN_ID",
     ):
         variables.pop(key, None)
     for key in tuple(variables):
