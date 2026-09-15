@@ -2654,7 +2654,7 @@ def test_check_tenant_isolation_json_no_models_postgres_only_skip() -> None:
 @pytest.mark.django_db
 def test_classification_check_ok_when_all_models_classified() -> None:
     """The classification check must pass when all project models are
-    classified in TENANT_TABLE_REGISTRY.
+    classified by tenant markers.
 
     In the current maintainer repo, every ``quickscale_modules_*`` model
     is accounted for, so ``get_unclassified_concrete_models()`` returns
@@ -2935,7 +2935,7 @@ class TestImplicitM2MThroughClassification:
     def test_implicit_m2m_through_not_reported_when_classified(
         self, mock_get_unclassified: MagicMock, mock_tenant: MagicMock
     ) -> None:
-        """When _get_m2m_through_classification returns True for a through
+        """When marker-only M2M classification returns True for a through
         model, it must not appear in the command's unclassified output."""
         mock_get_unclassified.return_value = []
         mock_tenant.return_value = []

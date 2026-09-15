@@ -381,7 +381,7 @@ class TestW005HintIncludesRemediationGuidance:
         hint = messages[0].hint
         assert "MyModel" in msg
         assert "not classified" in msg
-        # Must mention registry edits
+        # Must reject literal-registry edits as the enrollment path.
         assert "TENANT_TABLE_REGISTRY" not in hint
         # Must mention the dual tenant-manager contract and exclusion marker
         assert "TenantManager" in hint
@@ -426,7 +426,7 @@ class TestIsClassifiedInRegistryWithImplicitM2M:
         "quickscale_modules_orgs.tenancy._get_m2m_through_classification_marker_only"
     )
     def test_implicit_m2m_through_is_classified(self, mock_m2m: MagicMock) -> None:
-        """When _get_m2m_through_classification returns True, the model
+        """When marker-only M2M classification returns True, the model
         must be considered classified."""
         from quickscale_modules_orgs.tenancy import is_classified_in_registry
 
@@ -444,7 +444,7 @@ class TestIsClassifiedInRegistryWithImplicitM2M:
         "quickscale_modules_orgs.tenancy._get_m2m_through_classification_marker_only"
     )
     def test_unrelated_m2m_through_not_classified(self, mock_m2m: MagicMock) -> None:
-        """When _get_m2m_through_classification returns False, the model
+        """When marker-only M2M classification returns False, the model
         must NOT be considered classified via this path."""
         from quickscale_modules_orgs.tenancy import is_classified_in_registry
 

@@ -15,8 +15,8 @@ from django.db import models
 class TenantTableStatus(Enum):
     """Lifecycle status of a model in the tenant-table registry.
 
-    Every installed concrete model must appear in exactly one of these
-    three states within ``TENANT_TABLE_REGISTRY``.
+    The marker-derived overview and the shipped-module parity registry use
+    these three states to describe tenant-table classification.
     """
 
     #: Fully enrolled: has a direct ``organization_id`` column, a
@@ -1420,14 +1420,11 @@ def _get_m2m_through_classification_marker_only(
 ) -> bool:
     """Check if an implicit M2M through model is classifiable via marker-only checks.
 
-    Like :func:`_get_m2m_through_classification`, but uses
-    :func:`_is_classified_by_marker_only` instead of
-    :func:`is_classified_in_registry` to avoid consulting
+    This implementation is shared by the compatibility-named
+    :func:`_get_m2m_through_classification` wrapper, runtime classification,
+    and :func:`get_derived_registry_overview`. It recursively uses
+    :func:`_is_classified_by_marker_only`, so no path consults
     ``REGISTRY_LOOKUP``.
-
-    This is the marker-only variant used by
-    :func:`get_derived_registry_overview` to ensure the derived view
-    is purely marker-driven with no registry fallback.
 
     Only **project-owned** endpoints must be marker-classified.
     Non-project endpoints (Django contrib models, third-party packages)
@@ -1472,9 +1469,9 @@ def _get_m2m_through_classification_marker_only(
 def _is_classified_by_marker_only(model: type[models.Model]) -> bool:
     """Return ``True`` if *model* is classifiable via markers only.
 
-    Unlike :func:`is_classified_in_registry`, this function does NOT
-    consult ``REGISTRY_LOOKUP``.  It uses the same marker-based checks
-    that :func:`get_derived_registry_overview` relies on:
+    This function does not consult ``REGISTRY_LOOKUP``. It is the
+    marker-based implementation used by :func:`is_classified_in_registry`
+    and :func:`get_derived_registry_overview`:
 
     * :func:`has_tenant_excluded_marker` for exclusion markers.
     * :func:`is_tenant_model` for ENROLLED detection.
