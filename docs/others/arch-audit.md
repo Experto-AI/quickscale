@@ -176,7 +176,7 @@ unresolved SA190 half. The trigger is certain because SA153 is the next ticket o
 
 **Trigger (restated):** a project-owned or module tenant model is scheduled. **Fired** — SA153's
 acceptance requires new tenant-owned child tables with their own `organization_id` and forced RLS
-(`roadmap.md:98`; `v88_ticket_context.md:73-77`). The prior trigger ("teams adds a tenant model")
+(`roadmap.md`, SA153). The prior trigger ("teams adds a tenant model")
 named the wrong growth vector.
 
 **Problem:** The organization purge plan still treats the set of tenant models as a literal list
