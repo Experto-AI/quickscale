@@ -30,8 +30,7 @@ scope and acceptance; [context](v88_ticket_context.md) explains implementation c
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA180 | Derive the gate-parity count oracles from the registry | post-v88 | 1 | — | Deferred |
-| SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 1 | SA180 | Deferred |
+| SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA182, SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
@@ -39,6 +38,7 @@ scope and acceptance; [context](v88_ticket_context.md) explains implementation c
 | SA185 | Enforce contract vintage when upgradable code meets an older project | post-v88 | 2 | SA184 | Deferred |
 | SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
 | SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
+| SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | SA185 | Deferred |
 | SA182 | Enroll marker-declared tenant models in classification and policy refresh | post-v88 | 3 | — | Deferred |
 | SA183 | Refuse to purge an organization with a live Stripe subscription | post-v88 | 3 | — | Deferred |
 | SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | SA182 | Deferred |
@@ -49,8 +49,8 @@ scope and acceptance; [context](v88_ticket_context.md) explains implementation c
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA180 ──► SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
-Track 2: SA184 ──► SA185 ──► SA186 ──► SA187
+Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
+Track 2: SA184 ──► SA185 ──► SA186 ──► SA187 ──► SA192
 Track 3: SA182 ──► SA183 ──► SA177 ──► SA188 ──► SA189 ──► SA190
 
 Cross-track dependencies:  SA182 ──► SA153     SA185 ──► SA188
@@ -58,7 +58,7 @@ Cross-track dependencies:  SA182 ──► SA153     SA185 ──► SA188
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA180 → SA152 → SA191 → SA153, with SA182 joining at SA153. The portal is built
+**Critical path.** SA152 → SA191 → SA153, with SA182 joining at SA153. The portal is built
 on the migrated `bap-web`, so the migration tools are verified first and then used for real. SA182
 is small and first on Track 3, so it lands long before SA153 needs it. SA154 is an inventory, not
 work. Every other ticket is off the critical path.
@@ -77,18 +77,20 @@ work. Every other ticket is off the critical path.
   is the first real use of an enforced vintage move. SA188 and SA189 both edit `start.sh.j2` and
   regenerate the SA90 emission fixture; settle the command set before collapsing role provisioning
   around it.
-- **SA180 precedes SA152** because SA152 registers a new gate, which then becomes the first use of
-  the derived counts instead of another hand edit.
 - **SA152 precedes SA191, and SA191 precedes SA153.** `bap-web` is migrated with the maintainer
   tools only after SA152 has proven them on isolated fixtures, and the portal is built on the
   migrated project rather than on a fresh one. SA184 is not an edge: SA191 redeploys through
   `deploy railway` only if SA184 has landed, and otherwise deploys manually.
+- **SA185 precedes SA192.** The module pages extend the generated, project-owned `base.html`, which
+  `quickscale update` never rewrites, so a design change there is contract-bearing and existing
+  projects adopt it through an enforced vintage move. SA192 is not an SA153 edge: the portal's
+  React pages do not need the restyled Django pages to ship.
 - **Independent.** SA186 and SA187 have no edges and sit by severity. SA152 shares no files with
   SA188/SA189, but all three touch the privilege/runtime contract of generated `settings/production.py`
   and `start.sh`; whichever lands second re-runs the others' fixtures.
 
-**Rebalance.** Track 1 carries the whole critical path: the migration-tool verification (SA180,
-SA152), the `bap-web` migration (SA191), and the portal (SA153), because each feeds the next and
+**Rebalance.** Track 1 carries the whole critical path: the migration-tool verification (SA152),
+the `bap-web` migration (SA191), and the portal (SA153), because each feeds the next and
 splitting them across tracks would only add merge handoffs. Tracks 2 and 3 split the audit work by
 conflict surface. Track 2 takes the CLI deploy/update, publication, and test surfaces, which are
 mostly trivial or small. Track 3 takes orgs tenancy, purge, and the privileged/runtime-role
@@ -102,7 +104,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA180 | yes, after merging `v89` into the stale worktree | yes | yes | **yes** | **yes** |
+| 1 | SA152 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA184 | yes | yes | yes | **yes** | no |
 | 3 | SA182 | yes, after merging `v89` into the stale worktree | yes | yes | **yes** | **yes** (feeds SA153) |
 
@@ -111,7 +113,8 @@ A track is **truly green** only when all three states are yes.
 - Track 1 owns gate documentation, `scripts/gate_registry.json`, the parity oracles, the maintainer
   migration tools and playbook, the `bap-web` migration, the property extension, public templates,
   and the portal's extension documentation.
-- Track 2 owns `scripts/publish_module.py`, the CLI deploy and update commands
+- Track 2 owns `scripts/publish_module.py`, the module-shipped page templates and stylesheets, the
+  generated `base.html`, the CLI deploy and update commands
   (`deployment_commands.py`, `railway_utils.py`, `module_commands.py`, the vintage check), version
   expectations in tests, and the blog/notifications credential comparisons.
 - Track 3 owns the isolation-conformance runner, `orgs/tenancy.py` and its checks, the orgs policy
@@ -120,13 +123,16 @@ A track is **truly green** only when all three states are yes.
   `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  [ticket context](v88_ticket_context.md), and the owning audit: the arch audit for SA180, SA152,
+  [ticket context](v88_ticket_context.md), and the owning audit: the arch audit for SA152,
   SA182, SA185, SA188, SA189, and SA190; the tech audit for SA177, SA183, SA184, SA186, and
-  SA187 (SA183 and SA190 also close arch-audit items). SA191 has no owning audit; its evidence goes
-  to the changelog and the migration playbook. All are Markdown with no generated consumer.
-  Two code-adjacent overlaps cross tracks: SA182 and SA153 both edit the extension and
-  organizations documentation (SA182 lands first), and SA189 edits `deployment_commands.py` after
-  Track 2's deploy work has merged through its dependency chain. The serialized queue covers them:
+  SA187 (SA183 and SA190 also close arch-audit items). SA191, SA153, and SA192 have no owning
+  audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
+  Markdown with no generated consumer.
+  Three code-adjacent overlaps cross tracks: SA182 and SA153 both edit the extension and
+  organizations documentation (SA182 lands first); SA192 restyles the `auth` account templates
+  while SA190 edits the account-delete view, so whichever lands second re-runs the auth tests; and
+  SA189 edits `deployment_commands.py` after Track 2's deploy work has merged through its
+  dependency chain. The serialized queue covers them:
   each track resolves the shared set at its own merge, after the previous merge lands, then runs the
   consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
@@ -141,15 +147,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA180 — Derive the gate-parity count oracles from the registry.**
-
-  **Acceptance:** compute the eight count-pinned oracles in `scripts/test_gate_parity.py` from the
-  registry and workflow sources they describe. Keep the closed-universe check and its failure
-  messages. A regression shows that adding a gate updates the derived counts without a hand edit;
-  that evidence retires the arch-audit watch item. Renaming `trigger_inputs` is out of scope.
-
-  **Surfaces:** `scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`,
-  `scripts/gate_registry.json` if a derivation source is needed, and the architecture audit.
+- [x] **SA180 — Derive the gate-parity count oracles from the registry.**
 
 - [ ] **SA152 — Verify maintainer migration modes and their runtime compatibility.**
 
@@ -174,44 +172,80 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and its lock, and passes its own test suite and local verification stack. The project-owned
   `properties` app, its migrations and catalog seed, forms and contact customizations, content,
   and frontend pages carry over and behave as before; `.git`, `media/`, `.env`, and `poetry.lock`
-  are not copied. Every manual step the tool did not automate is recorded in the migration report
-  and fed back into the playbook, or into a tool fix when it is deterministic. The migrated project
-  replaces the old repository and deploys, with a written rollback to the previous deploy;
-  redeploying through `deploy railway` requires SA184, and otherwise the deploy is manual. No
-  property-portal features, frontend stack change, or module-source edits.
+  are not copied between the two trees. Every manual step the tool did not automate is recorded in
+  the migration report and fed back into the playbook, or into a tool fix when it is deterministic.
+  The migrated project replaces the old repository and deploys, with a written rollback to the
+  previous deploy. The production database and media are carried over by a verified backup and
+  restore, and listing, form, and user counts match before and after. Redeploying through
+  `deploy railway` requires SA184; otherwise the deploy is manual. No property-portal features,
+  frontend stack change, or module-source edits.
 
   **Surfaces:** the `bap-web` repository; the migration playbook and, for deterministic gaps found,
   `quickscale_devtools/.../beta_migration.py` and its tests.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
-  Target `buenosairesproperties.com` with one Django-rendered public surface, using the documented
-  project-owned extension pattern for property models, views, URLs, filters, and templates. No public
-  JSON API, second React implementation, or generic property behavior in every generated project.
+  Target `buenosairesproperties.com` with one React public property surface over a project-owned
+  JSON read API, using the documented project-owned extension pattern for property models,
+  serializers, API views, URLs, and filters. Build on the React pages and `/api/properties/` that
+  SA191 carries over instead of replacing them. No Django-rendered property pages, public API in the
+  reusable `listings` module, or generic property behavior in every generated project.
 
-  **Open decision before work starts:** whether the public surface stays Django-rendered as written
-  here or becomes React over a JSON API, which `bap-web` already has.
-
-  **Acceptance:** the `bap-web` project migrated by SA191 serves an organization-scoped property
-  catalog and detail page with ordered image galleries; bedrooms, bathrooms, area, property type,
-  sale/rent, and explicitly labeled currency fields; keyword and attribute filters. Public listing
-  and blog pages share a theme and render in Spanish. A listing inquiry creates a CRM record with a
-  listing reference. Detail pages have Open Graph output; the site has a sitemap and `robots.txt`.
-  Every new tenant-owned child table has its own `organization_id`, forced RLS, and boundary tests,
+  **Acceptance:** first record in decisions that React is the standard frontend for new application
+  and public pages; `auth` and `billing` stay Django-rendered on the shared design (SA192); the
+  existing module-shipped Django pages (blog, listings, CRM dashboard) stay Django-rendered on that
+  design until an SA154 item promotes a React replacement; Django admin stays as shipped. Then the
+  `bap-web` project migrated by SA191 serves an organization-scoped React property catalog and
+  detail page with ordered image galleries; bedrooms, bathrooms, area, property type, sale/rent,
+  and explicitly labeled currency fields; keyword and attribute filters that the API applies
+  server-side. Property pages use the React app's visual design and render in Spanish. A listing
+  inquiry creates a CRM record with a listing reference. Catalog and detail pages are prerendered or
+  server-rendered so a crawler that runs no JavaScript receives the content and Open Graph tags; the
+  site has a sitemap and `robots.txt` generated from published listings. The API exposes only
+  published listings of the requested organization. Every new tenant-owned child table has its own `organization_id`, forced RLS, and boundary tests,
   and passes the generated project's `check_tenant_isolation` through SA182's enrollment, with no
   edit under vendored module source. Prove the search → detail → inquiry journey and isolation
-  between organizations. Correct reusable-module feature claims that the module does not provide.
-  No production data cutover; purging an organization that owns property rows is SA190's.
+  between organizations through both the API and the rendered pages. Correct reusable-module feature
+  claims that the module does not provide. Adding a frontend dependency for prerendering follows the
+  decisions rule for the approved frontend stack. Purging an organization that owns property rows
+  is SA190's.
 
-  **Surfaces:** the project-owned property extension and public templates; listings/blog/forms/CRM
-  seams only where needed; extension documentation.
+  **Surfaces:** the project-owned property extension, its API and React pages, and the project's
+  prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
+  extension documentation.
+
+- [ ] **SA192 — Style the module-shipped Django pages with the shared design.**
+
+  **Acceptance:** every user-facing page template shipped by `auth` (account pages), `billing`
+  (pricing, dashboard, checkout and portal return pages), `blog`, `listings`, and the `crm`
+  dashboard uses the same design tokens (colors, radius, typography) and component look as
+  `showcase_react`, so moving between the React app and these pages shows no visual break. The
+  tokens are the shadcn/ui CSS variables (`--primary`, `--radius`, …) defined once for the project
+  and loaded by both the React app and `base.html`, so changing a token restyles React and Django
+  pages together; module styles read those variables instead of hard-coded colors. The
+  module-specific styling ships inside each module — its templates and a module stylesheet built
+  from the shared tokens — not as project-level `templates/` overrides, so `quickscale update`
+  delivers it and later design fixes; a generated project contains no copy of a module template.
+  The page shell stays the generated, project-owned `base.html`: fresh generations get the shared
+  tokens and header there, and the change moves the owning vintage through SA185 with manual
+  adoption steps for existing projects. Styling must not depend on Tailwind classes that the
+  project's frontend build does not emit, since that build scans only `frontend/src`. Flow logic,
+  URLs, forms, CSRF and session handling, allauth behavior, and the Stripe hosted checkout hand-off
+  are unchanged, and existing module tests pass without behavior edits. A generated-project check
+  fails when a module page stops extending `base.html` or loses its module stylesheet. Django admin
+  and notification emails are out of scope.
+
+  **Surfaces:** `auth`, `billing`, `blog`, `listings`, and `crm` templates and static styles; the
+  generated `base.html` template; the module vintage declarations; generator tests; the theme
+  documentation; and the user manual's update-ownership section.
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
-  Inventory only: public read API and alternate frontend; generalizing the property extension into
-  reusable modules; broader translations; maps/geocoding; saved searches, favorites, and alerts;
-  agent/office profiles; syndication; tours/video; paid placement; blog/listing cross-links; and
-  PostgreSQL full-text search. Promote an item only with a concrete consumer, bounded acceptance, and
+  Inventory only: generalizing the property API, React pages, or prerender step into reusable
+  modules or the theme; React read API and pages for the blog, generic listings, and the CRM
+  dashboard; React `auth` and `billing` flows; broader translations; maps/geocoding; saved
+  searches, favorites, and alerts; agent/office profiles; syndication; tours/video; paid
+  placement; blog/listing cross-links; and PostgreSQL full-text search. Promote an item only with a concrete consumer, bounded acceptance, and
   a fresh dependency and track. Items that add tenant tables (saved searches, favorites, profiles,
   tours) build on SA182's enrollment and SA190's purge derivation, not on module-source edits. Close
   when every item is promoted or dropped with rationale.

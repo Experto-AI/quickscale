@@ -27,24 +27,6 @@ where the mode promises to preserve them; do not require identical file disposit
 because files participate in one contract. Ownership manifests and taxonomy redesign need
 separate evidence of need.
 
-## SA180 — Compute the gate-parity count oracles instead of pinning them
-
-Several gate-parity assertions compare against hand-written integers: how many gates exist, how
-many provisioning stations, how many hosted jobs. Each is a copy of a fact that lives somewhere
-else, so every addition needs a matching hand edit, and a forgotten edit either fails loudly for
-an unrelated reason or, worse, keeps passing against the stale number.
-
-The written trigger for acting on this was more than two such edits. Historical review found that
-two separate changes each crossed it, so the trigger has fired and the item is now owned work
-rather than an observation. Correcting the surrounding documentation, as the command-set and
-allowlist work did, does not discharge it.
-
-Derive each count from the source it describes — the registry entries, the workflow job set, the
-station list — so the assertion cannot drift from reality. Keep the closed-universe check, which
-already makes an unregistered job loud, and keep the existing failure messages specific. A
-regression that adds a gate and observes the derived count follow it is the evidence that closes
-the watch item.
-
 ## SA177 — Verify RLS policy predicates
 
 RLS enabled, RLS forced, and a row in `pg_policies` do not prove tenant isolation: a permissive
@@ -180,37 +162,77 @@ migration is the first real run of the tools that SA152 verifies on fixtures, wh
 for that verification. Manual continuation is expected where the tool stops safely; the value of
 this ticket is that every such stop becomes either a playbook step or a deterministic tool fix.
 
-The migration preserves behavior, including the existing React and JSON API property surface.
-Whether the portal keeps that surface or moves to Django-rendered pages is decided for the portal,
-not here.
+The migration preserves behavior, including the existing React and JSON API property surface that
+the portal then builds on.
 
 ## SA153 — Launch the property portal through a project-owned extension
 
 `listings` provides `AbstractListing`, but its shipped views, URLs, admin registration, and
-filters target the concrete `Listing`. A property subclass therefore needs project-owned public
-views, URLs, and filters under the documented [extension contract](module-extension.md).
+filters target the concrete `Listing`. A property subclass therefore needs a project-owned read
+API, URLs, and filters under the documented [extension contract](module-extension.md).
 Use that extension path to launch `buenosairesproperties.com` and let working project needs
 inform later reusable module changes.
 
+**Frontend direction.** React is the standard frontend for new application and public pages.
+Django keeps the flows where its ready-made behavior is the point: `auth` (allauth login, signup,
+reset, profile) and `billing` (pricing and status around Stripe's hosted checkout) stay
+Django-rendered and adopt the shared visual design instead of being rebuilt. The module pages that
+are already Django-rendered — blog, generic listings, the CRM dashboard — keep that rendering on
+the same design until a concrete consumer promotes a React replacement, and Django admin stays as
+shipped. The deciding costs were rebuilding security-sensitive flows against
+an API for little user-visible gain; the look comes from the shared Tailwind design, not from
+the rendering technology. `bap-web` already follows this shape, so the portal extends its React
+pages and `/api/properties/` rather than replacing them.
+
+A client-rendered page gives crawlers and link-preview bots an empty document, so catalog and
+detail pages must be prerendered or server-rendered for Open Graph and indexing. Choosing that
+mechanism adds to the approved frontend stack and needs its decision entry.
+
 The launch needs property fields and galleries, explicit currency labels, attribute filtering
-and keyword search, Spanish public pages, listing-linked inquiries into `crm`, and launch SEO
-including metadata, sitemap, and robots guidance. Django templates provide one public presentation
-path. Currency labels must not imply exchange-rate conversion, and Spanish launch coverage does
-not require translating every QuickScale interface.
+and keyword search applied by the API, Spanish public pages, listing-linked inquiries into `crm`,
+and launch SEO including metadata, sitemap, and robots guidance. Currency labels must not imply
+exchange-rate conversion, and Spanish launch coverage does not require translating every
+QuickScale interface.
 
 Every new child table, including gallery images, must carry its own `organization_id` and RLS
 policy under the child-table decision in [decisions.md](decisions.md). Match the existing
-`test_rls_boundary.py` coverage pattern and verify tenant isolation across public presentation
-and inquiry handling. These tables join the tenant universe through the marker-derived
+`test_rls_boundary.py` coverage pattern and verify tenant isolation across the API, the rendered
+pages, and inquiry handling. These tables join the tenant universe through the marker-derived
 classification of SA182, never through edits to the vendored `orgs` source.
 
-A public JSON API and generic support requiring no project-owned views belong in the optional
-inventory until a concrete consumer justifies them.
+A public read API inside the reusable `listings` module, and generic support requiring no
+project-owned code, belong in the optional inventory until a second consumer justifies them.
+
+## SA192 — Give Django-rendered pages the application's look
+
+After the frontend direction, a user moves between React screens and Django-rendered module pages:
+`auth` account pages, `billing` pricing and status, and the blog, generic listings, and CRM
+dashboard pages. Those pages use their own plainer styling, which reads as a different product.
+The fix is presentation only.
+
+Two layers produce a module page's look, and they update differently. The module's own templates
+and static files (for example `quickscale_modules_auth/base.html` and its `auth.css`) live under
+`modules/<name>/`, so `quickscale update` delivers changes to them. Those templates extend the
+generated `base.html`, which is project-owned and never rewritten. Module-specific styling therefore
+belongs in the module, where updates reach existing projects; the shell's tokens and header belong
+in the generated `base.html`, which fresh projects receive and existing projects adopt through the
+vintage rule from SA185.
+
+The styling must not rely on project-level overrides. Django resolves a project `templates/` copy
+before the module's, so an override would freeze that page at generation time and hide every later
+module fix. It also cannot assume Tailwind utility classes are available: the project's Tailwind
+build scans only `frontend/src`, so classes used only in module templates are never emitted. A
+module stylesheet expressed in the shared design tokens avoids both traps.
+
+Behavior stays exactly as tested. Allauth flows, form handling, CSRF and session semantics, and
+the Stripe hosted checkout hand-off must not change, which is why existing tests should pass
+without behavior edits.
 
 ## SA154 — Evaluate optional property-portal capabilities
 
-The inventory includes a public JSON API, reusable generalization of proven property-extension
-and presentation code, maps and geocoding, saved searches and alerts, agent and office profiles,
+The inventory includes reusable generalization of the proven property API, React pages, and
+prerender step; React pages for the blog, generic listings, and CRM dashboard; React `auth` and
+`billing` flows; maps and geocoding, saved searches and alerts, agent and office profiles,
 syndication feeds, virtual tours, featured placement tied to billing credits, blog/listing links,
 and PostgreSQL full-text search.
 

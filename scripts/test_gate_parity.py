@@ -68,6 +68,7 @@ from sync_ci_gate_jobs import (
     JOB_END,
     NEEDS_BEGIN,
     NEEDS_END,
+    UNOWNED_JOB_IDS,
     GeneratorError,
     _atomic_write,
     _expected_e2e_paths,
@@ -102,7 +103,7 @@ CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PUBLISH_YML = REPO_ROOT / ".github" / "workflows" / "publish.yml"
 E2E_YML = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
 
-# The six service-backed workflow stations are the only callers allowed to
+# These service-backed workflow stations are the only callers allowed to
 # provision hosted PostgreSQL.  This mapping is the test-owned station
 # contract; profile facts themselves come from provision_ci_postgres.sh.
 EXPECTED_HOSTED_PROFILE_BY_STATION: dict[tuple[str, str], str] = {
@@ -152,33 +153,55 @@ def _workflow_job_run_text(path: Path, job_id: str) -> str:
     )
 
 
-# The 7 publish-bound conformance gate make targets
-CONFORMANCE_MAKE_TARGETS: frozenset[str] = frozenset(
-    {
-        "check-core-compat",
-        "check-module-core-imports",
-        "check-manifest-sync",
-        "check-org-context-primitives",
-        "check-csrf-exempt",
-        "check-dependency-vulnerabilities",
-        "check-security-static-analysis",
-    }
-)
-
-
-def _registry_local_gate_targets() -> list[str]:
+def _registry_local_gate_targets(registry: Path = DEFAULT_REGISTRY) -> list[str]:
     """Return local registry targets in their declared stage order."""
-    registry = json.loads(
-        (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
-    )
     gates = [
         (gate["bindings"]["local_ci_stage"], index, gate["bindings"]["make_target"])
-        for index, gate in enumerate(registry["gates"])
+        for index, gate in enumerate(_parse_registry(registry))
         if gate["bindings"].get("make_target")
         and gate["bindings"].get("local_ci_stage") is not None
         and 3 <= gate["bindings"]["local_ci_stage"] <= 7
     ]
     return [target for _, _, target in sorted(gates)]
+
+
+def _registry_hosted_bindings(registry: Path = DEFAULT_REGISTRY) -> dict[str, str]:
+    """Return hosted CI job IDs mapped to their registry-owned Make targets."""
+    bindings: dict[str, str] = {}
+    for gate in _parse_registry(registry):
+        if "hosted" not in gate["required_contexts"]:
+            continue
+        ci_job = gate["bindings"].get("ci_job")
+        make_target = gate["bindings"].get("make_target")
+        assert isinstance(ci_job, str) and isinstance(make_target, str)
+        bindings[ci_job] = make_target
+    return bindings
+
+
+def _registry_publish_check_targets(registry: Path = DEFAULT_REGISTRY) -> frozenset[str]:
+    """Return publish-bound conformance targets from the gate registry."""
+    return frozenset(
+        gate["bindings"]["make_target"]
+        for gate in _parse_registry(registry)
+        if "publish" in gate["required_contexts"]
+        and isinstance(gate["bindings"].get("make_target"), str)
+        and gate["bindings"]["make_target"].startswith("check-")
+    )
+
+
+def _expected_hosted_run_values(
+    registry: Path = DEFAULT_REGISTRY,
+) -> dict[str, tuple[str, str]]:
+    """Return exact generated run values for every registry-bound hosted job."""
+    return {
+        ci_job: ("poetry install --with dev\n", f"make {make_target}\n")
+        for ci_job, make_target in _registry_hosted_bindings(registry).items()
+    }
+
+
+def _expected_ci_job_ids(registry: Path = DEFAULT_REGISTRY) -> frozenset[str]:
+    """Return the closed hosted workflow job universe for a registry."""
+    return UNOWNED_JOB_IDS | frozenset(_registry_hosted_bindings(registry))
 
 
 # All five known execution contexts
@@ -298,7 +321,7 @@ class TestCurrentRepositoryState:
 class TestHostedPostgresProfileParity:
     """Hosted workflow stations delegate to the single profile authority."""
 
-    def test_exactly_six_stations_use_expected_profiles(self) -> None:
+    def test_workflow_stations_use_expected_profiles(self) -> None:
         observed: dict[tuple[str, str], str] = {}
         actual_call_counts: dict[tuple[str, str], int] = {}
         workflow_dir = REPO_ROOT / ".github" / "workflows"
@@ -1036,35 +1059,22 @@ class TestMalformedSources:
 class TestParserPrecision:
     """Extraction functions correctly identify gates in each source."""
 
-    def test_serial_extracts_all_ten_registered_conformance_gates(self) -> None:
-        """The serial path in check_ci_locally.sh has all ten registered gates."""
+    def test_serial_extracts_registered_conformance_gates(self) -> None:
+        """The serial path has every registry-bound local gate."""
         targets = _extract_check_ci_serial_gates(CHECK_CI)
         expected = set(_registry_local_gate_targets())
         assert targets == expected, f"Serial extraction returned {targets}, expected {expected}"
 
-    def test_parallel_extracts_all_ten_registered_conformance_gates(self) -> None:
-        """The parallel path in check_ci_locally.sh has all ten registered gates."""
+    def test_parallel_extracts_registered_conformance_gates(self) -> None:
+        """The parallel path has every registry-bound local gate."""
         targets = _extract_check_ci_parallel_gates(CHECK_CI)
         expected = set(_registry_local_gate_targets())
         assert targets == expected, f"Parallel extraction returned {targets}, expected {expected}"
 
-    def test_hosted_has_all_ten_registered_conformance_jobs(self) -> None:
-        """ci.yml job names include all ten registered conformance jobs."""
+    def test_hosted_has_registered_conformance_jobs(self) -> None:
+        """ci.yml job names include every registry-bound hosted job."""
         ci_jobs = _extract_ci_job_names(CI_YML)
-        expected_jobs: frozenset[str] = frozenset(
-            {
-                "module-core-compat",
-                "module-core-import-linter",
-                "manifest-sync-gate",
-                "module-app-declaration-gate",
-                "org-context-primitives-gate",
-                "csrf-exempt-gate",
-                "commit-testimony-gate",
-                "check-gate-suites",
-                "dependency-vulnerabilities-gate",
-                "security-static-analysis-gate",
-            }
-        )
+        expected_jobs = frozenset(_registry_hosted_bindings())
         assert expected_jobs.issubset(ci_jobs), (
             f"ci.yml jobs {ci_jobs} missing some conformance jobs"
         )
@@ -1085,17 +1095,17 @@ class TestParserPrecision:
         actual = [job_id for job_id in jobs if job_id in expected]
         assert actual == expected
 
-    def test_publish_has_all_seven_check_gates(self) -> None:
+    def test_publish_has_registered_check_gates(self) -> None:
         """publish.yml contains every conformance gate make target."""
         targets = _extract_publish_gates(PUBLISH_YML)
-        missing = CONFORMANCE_MAKE_TARGETS - targets
+        missing = _registry_publish_check_targets() - targets
         assert not missing, f"publish.yml is missing make targets: {missing}"
 
     def test_serial_does_not_pick_up_parallel_gates(self) -> None:
         """Serial extraction should not pick gates that only exist in parallel."""
         serial = _extract_check_ci_serial_gates(CHECK_CI)
         parallel = _extract_check_ci_parallel_gates(CHECK_CI)
-        # All ten registered conformance gates are in both — verify this holds
+        # All registry-bound local gates are in both paths.
         assert serial == parallel, (
             f"Serial and parallel extraction disagree: serial={serial}, parallel={parallel}"
         )
@@ -1148,6 +1158,60 @@ class TestParserPrecision:
                 if argument == "check-temporary-local-gate"
             ]
             assert observed == ["check-temporary-local-gate"]
+
+    def test_registry_addition_updates_derived_count_oracles(self, tmp_path: Path) -> None:
+        """Adding one gate updates every registry-derived count without hand edits."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"].append(
+            {
+                "id": "temporary-derived-oracle-gate",
+                "description": "Temporary derived-oracle gate",
+                "required_contexts": [
+                    "local-serial",
+                    "local-parallel",
+                    "hosted",
+                    "publish",
+                ],
+                "bindings": {
+                    "make_target": "check-temporary-derived-oracle",
+                    "ci_job": "temporary-derived-oracle-gate",
+                    "local_ci_stage": 7,
+                },
+                "depends_on": [],
+                "trigger_inputs": [],
+            }
+        )
+        registry_path = tmp_path / "derived_oracle_registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+
+        baseline_local = _registry_local_gate_targets()
+        updated_local = _registry_local_gate_targets(registry_path)
+        assert len(updated_local) == len(baseline_local) + 1
+        assert updated_local[-1] == "check-temporary-derived-oracle"
+
+        baseline_hosted = _registry_hosted_bindings()
+        updated_hosted = _registry_hosted_bindings(registry_path)
+        assert len(updated_hosted) == len(baseline_hosted) + 1
+        assert updated_hosted["temporary-derived-oracle-gate"] == ("check-temporary-derived-oracle")
+
+        baseline_publish = _registry_publish_check_targets()
+        updated_publish = _registry_publish_check_targets(registry_path)
+        assert len(updated_publish) == len(baseline_publish) + 1
+        assert "check-temporary-derived-oracle" in updated_publish
+
+        baseline_runs = _expected_hosted_run_values()
+        updated_runs = _expected_hosted_run_values(registry_path)
+        assert len(updated_runs) == len(baseline_runs) + 1
+        assert sum(map(len, updated_runs.values())) == sum(map(len, baseline_runs.values())) + 2
+        assert updated_runs["temporary-derived-oracle-gate"] == (
+            "poetry install --with dev\n",
+            "make check-temporary-derived-oracle\n",
+        )
+
+        baseline_jobs = _expected_ci_job_ids()
+        updated_jobs = _expected_ci_job_ids(registry_path)
+        assert len(updated_jobs) == len(baseline_jobs) + 1
+        assert "temporary-derived-oracle-gate" in updated_jobs
 
     def test_serial_isolation_from_parallel_content(self, tmp_path: Path) -> None:
         """Serial parser does not pick up gates only in the parallel function."""
@@ -1241,10 +1305,10 @@ class TestParserPrecision:
         for job in expected_jobs:
             assert job in jobs, f"Expected {job} in publish.yml jobs, got: {jobs}"
 
-    def test_publish_has_all_seven_check_targets(self) -> None:
-        """publish.yml must contain all seven conformance gate make targets."""
+    def test_publish_has_registered_check_targets(self) -> None:
+        """publish.yml must contain every registry-bound conformance target."""
         targets = _extract_publish_gates(PUBLISH_YML)
-        missing = CONFORMANCE_MAKE_TARGETS - targets
+        missing = _registry_publish_check_targets() - targets
         assert not missing, f"publish.yml is missing make targets: {missing}"
 
     def test_publish_structural_parsing_rejects_duplicate_yaml_keys(self, tmp_path: Path) -> None:
@@ -1317,50 +1381,10 @@ class TestParserPrecision:
             ),
         }
 
-    def test_all_twenty_bound_hosted_run_values_match_current_source(self) -> None:
-        """The ten bound hosted jobs expose their twenty exact run values."""
-        bound_jobs = {
-            "module-core-compat",
-            "module-core-import-linter",
-            "manifest-sync-gate",
-            "module-app-declaration-gate",
-            "org-context-primitives-gate",
-            "csrf-exempt-gate",
-            "commit-testimony-gate",
-            "check-gate-suites",
-            "dependency-vulnerabilities-gate",
-            "security-static-analysis-gate",
-        }
-        assert _extract_hosted_run_values(CI_YML, bound_jobs) == {
-            "module-core-compat": ("poetry install --with dev\n", "make check-core-compat\n"),
-            "module-core-import-linter": (
-                "poetry install --with dev\n",
-                "make check-module-core-imports\n",
-            ),
-            "manifest-sync-gate": ("poetry install --with dev\n", "make check-manifest-sync\n"),
-            "module-app-declaration-gate": (
-                "poetry install --with dev\n",
-                "make check-module-app-declaration\n",
-            ),
-            "org-context-primitives-gate": (
-                "poetry install --with dev\n",
-                "make check-org-context-primitives\n",
-            ),
-            "csrf-exempt-gate": ("poetry install --with dev\n", "make check-csrf-exempt\n"),
-            "commit-testimony-gate": (
-                "poetry install --with dev\n",
-                "make check-commit-testimony\n",
-            ),
-            "check-gate-suites": ("poetry install --with dev\n", "make check-gate-suites\n"),
-            "dependency-vulnerabilities-gate": (
-                "poetry install --with dev\n",
-                "make check-dependency-vulnerabilities\n",
-            ),
-            "security-static-analysis-gate": (
-                "poetry install --with dev\n",
-                "make check-security-static-analysis\n",
-            ),
-        }
+    def test_bound_hosted_run_values_match_registry_source(self) -> None:
+        """Registry-bound hosted jobs expose their generated run values."""
+        expected = _expected_hosted_run_values()
+        assert _extract_hosted_run_values(CI_YML, set(expected)) == expected
 
     def test_publish_run_values_preserve_ordered_oracle(self) -> None:
         """Every publish run block matches the literal ordered oracle."""
@@ -3004,19 +3028,7 @@ class TestYamlStructuralParsing:
     def test_ci_job_names_extracted(self) -> None:
         """ci.yml job names are extracted via structural YAML parsing."""
         jobs = _extract_ci_job_names(CI_YML)
-        # Should include the ten registered conformance gate job names
-        for job in (
-            "module-core-compat",
-            "module-core-import-linter",
-            "manifest-sync-gate",
-            "module-app-declaration-gate",
-            "org-context-primitives-gate",
-            "csrf-exempt-gate",
-            "commit-testimony-gate",
-            "check-gate-suites",
-            "dependency-vulnerabilities-gate",
-            "security-static-analysis-gate",
-        ):
+        for job in _registry_hosted_bindings():
             assert job in jobs, f"Expected {job} in ci.yml jobs, got: {jobs}"
 
     def test_on_not_confused_with_job(self) -> None:
@@ -3380,9 +3392,9 @@ class TestRealCheckMembership:
     """The repository Makefile's check aggregation invariant (F-001)."""
 
     def test_standalone_conformance_gates_are_check_members(self) -> None:
-        """All seven standalone conformance gates are reachable from the real check target."""
+        """Publish-bound conformance gates are reachable from the real check target."""
         members = _extract_check_members(REPO_ROOT / "Makefile")
-        for target in CONFORMANCE_MAKE_TARGETS:
+        for target in _registry_publish_check_targets():
             assert target in members, f"Expected {target} in check members"
 
     def test_standalone_targets_absent_from_check(self) -> None:
@@ -3537,7 +3549,7 @@ class TestHostedCiGateGeneration:
         workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
         registry = _parse_registry(DEFAULT_REGISTRY)
         jobs, needs, run_values = self._projection(workflow_text)
-        assert len(jobs) == 17
+        assert jobs == _expected_ci_job_ids()
         assert needs["test"] == (
             "backups-validation",
             "module-manifest-contract",
