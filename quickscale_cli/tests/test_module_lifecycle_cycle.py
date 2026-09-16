@@ -558,7 +558,11 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
     ):
         apply_result = cli_runner.invoke(
             apply,
-            ["quickscale.yml", "--no-docker"],
+            [
+                "quickscale.yml",
+                "--no-docker",
+                "--acknowledge-contract-vintage",
+            ],
             input="y\n",
             catch_exceptions=False,
         )
@@ -1015,7 +1019,11 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         ):
             result = cli_runner.invoke(
                 apply,
-                ["myproject/quickscale.yml", "--no-docker"],
+                [
+                    "myproject/quickscale.yml",
+                    "--no-docker",
+                    "--acknowledge-contract-vintage",
+                ],
                 input="y\n",
                 catch_exceptions=False,
             )

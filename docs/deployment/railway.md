@@ -90,11 +90,20 @@ The `quickscale deploy railway` command automatically:
 # Specify project name (auto-detected from directory if omitted)
 quickscale deploy railway --project-name myapp
 
+# Continue only after adopting the generated-file changes named by the refusal
+quickscale deploy railway --acknowledge-contract-vintage
+
 # View all options
 quickscale deploy railway --help
 ```
 
 **Note**: Migrations and static file collection are handled automatically by railway.json on every deployment. The `--skip-migrations` and `--skip-collectstatic` flags have been removed in favor of the config-first approach.
+
+For an existing generated project, deploy checks the recorded `project_contract` before any
+Railway preflight or remote operation. Projects older than the CLI's runtime-role contract stop and
+name the required `settings/production.py`, `start.sh`, and `Dockerfile` adoption work. After
+manually adopting all three, use `--acknowledge-contract-vintage` for that invocation. The flag
+does not update those files or advance the recorded contract.
 
 ## Manual Deployment (Alternative)
 

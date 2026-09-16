@@ -68,6 +68,7 @@ class TestApplyCommandBasic:
         assert "--no-docker" in result.output
         assert "--no-modules" in result.output
         assert "--verbose-docker" in result.output
+        assert "--acknowledge-contract-vintage" in result.output
 
     def test_apply_invalid_yaml_syntax(self):
         """Test apply command with invalid YAML"""
@@ -1243,7 +1244,12 @@ docker:
             # Apply should show no changes since auth is already in state
             result = runner.invoke(
                 apply,
-                ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                [
+                    "testapp/quickscale.yml",
+                    "--no-modules",
+                    "--no-docker",
+                    "--acknowledge-contract-vintage",
+                ],
                 input="y\ny\n",
             )
 
@@ -1303,7 +1309,11 @@ git_index_checkpoint: "deadbeefcafebabedeadbeefcafebabedeadbeef"
             ) as mock_execute:
                 result = runner.invoke(
                     apply,
-                    ["testapp/quickscale.yml", "--no-docker"],
+                    [
+                        "testapp/quickscale.yml",
+                        "--no-docker",
+                        "--acknowledge-contract-vintage",
+                    ],
                     input="y\ny\n",
                 )
 

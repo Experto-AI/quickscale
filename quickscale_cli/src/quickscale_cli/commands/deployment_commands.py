@@ -7,6 +7,11 @@ from pathlib import Path
 
 import click
 
+from quickscale_cli.commands.contract_vintage import enforce_contract_vintage
+from quickscale_core.manifest import ContractVintage
+from quickscale_core.project_state import ProjectStateManager
+from quickscale_core.schema.state_schema import StateError
+
 from quickscale_cli.utils.railway_utils import (
     check_poetry_lock_consistency,
     check_railway_cli_version,
@@ -35,6 +40,14 @@ from quickscale_cli.utils.railway_utils import (
 
 
 RUNTIME_DB_ROLE = "quickscale_runtime"
+RAILWAY_CONTRACT_VINTAGE = ContractVintage(
+    minimum="0.88.0",
+    manual_adoption_steps=[
+        "Compare and manually adopt the current settings/production.py runtime-role and privileged-command contract.",
+        "Compare and manually adopt the current start.sh runtime-role provisioning and privileged-command launch contract.",
+        "Compare and manually adopt the current Dockerfile startup contract.",
+    ],
+)
 
 
 def runtime_database_url(postgres_service: str, password: str) -> str:
@@ -680,7 +693,12 @@ def _display_summary(
     "--project-name",
     help="Railway project name (derived from directory name if not provided)",
 )
-def railway(project_name: str | None) -> None:
+@click.option(
+    "--acknowledge-contract-vintage",
+    is_flag=True,
+    help="Proceed after manually adopting the required generated deployment files.",
+)
+def railway(project_name: str | None, acknowledge_contract_vintage: bool) -> None:
     """
     Deploy project to Railway with automated setup.
 
@@ -689,6 +707,21 @@ def railway(project_name: str | None) -> None:
     - Migrations and static files run automatically via startCommand
     - Public domain is auto-generated and ALLOWED_HOSTS is auto-configured
     """
+    project_path = Path.cwd()
+    try:
+        state = ProjectStateManager(project_path).load_state()
+    except (StateError, OSError) as error:
+        raise click.ClickException(
+            f"Unable to read project state for the contract-vintage check: {error}"
+        ) from error
+    enforce_contract_vintage(
+        state,
+        None,
+        operation="'quickscale deploy railway'",
+        acknowledged=acknowledge_contract_vintage,
+        requirements={"quickscale deploy railway": RAILWAY_CONTRACT_VINTAGE},
+    )
+
     click.echo("🚀 Deploying to Railway...")
 
     if project_name is None:

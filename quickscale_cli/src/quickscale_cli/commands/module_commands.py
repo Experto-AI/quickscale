@@ -67,6 +67,7 @@ from quickscale_core.utils.git_utils import (
 )
 from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 from .module_config import MODULE_CONFIGURATOR_REGISTRY
+from .contract_vintage import enforce_shipped_contract_vintage
 from .module_output import (
     _print_installation_error,
     _report_local_pre_pull_guard_block,
@@ -1426,7 +1427,12 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
     is_flag=True,
     help="Skip diff preview before updating",
 )
-def update(no_preview: bool) -> None:
+@click.option(
+    "--acknowledge-contract-vintage",
+    is_flag=True,
+    help="Proceed after manually adopting every required generated-file contract.",
+)
+def update(no_preview: bool, acknowledge_contract_vintage: bool) -> None:
     r"""
     Update all installed QuickScale modules to their latest versions.
 
@@ -1470,6 +1476,13 @@ def update(no_preview: bool) -> None:
             click.secho("✅ No modules installed. Nothing to update.", fg="green")
             click.echo("\n💡 Tip: Add modules with 'quickscale plan --add'")
             return
+
+        enforce_shipped_contract_vintage(
+            state,
+            state.modules,
+            operation="'quickscale update'",
+            acknowledged=acknowledge_contract_vintage,
+        )
 
         # Surface module version drift between state and legacy config.
         # Non-fatal: update reconciles both files at the end.
@@ -1539,6 +1552,8 @@ def update(no_preview: bool) -> None:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
         raise click.Abort()
     except click.Abort:
+        raise
+    except click.ClickException:
         raise
     except Exception as e:
         click.secho(f"❌ Unexpected error: {e}", fg="red", err=True)
