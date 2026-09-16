@@ -388,23 +388,25 @@ suite, and merge only the reviewed delivery through the serialized queue.
   cross-station test. The two frozen template copies also reject the command in exactly the
   pre-0.88 projects that would need it.
 
-  The first decision is whether the third member stays. The command is documented for existing
-  deployments with user-scoped billing, yet `organization_id` is `NOT NULL` on every current install.
-  If it is retired, the set returns to two and the duplication cost stays flat. If it stays, the
-  declaration should live on the command itself, so it ships and upgrades with its module; settings
-  import before commands load, so settings can only validate that privileged mode was requested
-  explicitly. Each station keeps an independent refusal either way; the goal is one declaration, not
-  one check.
+  The third member is retired. The command is documented for existing deployments with user-scoped
+  billing, yet `organization_id` is `NOT NULL` on every current install, so it cannot reach a real
+  row without dropping the constraint its own tests drop. Retiring it returns the sanctioned set to
+  `migrate` and `createcachetable` — two stable Django built-ins — and removes the launcher's second
+  declaration shape, the argv branch that never matched the frozenset form the other three stations
+  use. Four copies of a two-member list is duplication the architecture audit accepts at flat cost,
+  so no self-declaring mechanism is built here. Each station keeps an independent refusal; the
+  duplication that remains is covered by a cross-station regression rather than by collapsing the
+  stations.
 
-  **Acceptance:** first record in decisions whether `migrate_billing_to_orgs` is a permanent member
-  or is retired; this answers the architecture audit's open question and supersedes the 2026-08-31
-  "permanent two" answer. If retired, remove it from the orgs guard, `production.py.j2`,
-  `development_commands.py`, and the `start.sh.j2` argv branch, and return the item to the
-  watchlist with a dated retirement. If permanent, a privileged command declares itself on its
-  command class; the orgs guard and the launcher read that declaration, settings validate only that
-  privileged mode was requested explicitly, and every station keeps its own fail-closed refusal.
-  Either way, each executable station has a regression naming every member, the SA90 emission
-  fixture is regenerated once, and the template change moves the `orgs` vintage through SA185.
+  **Acceptance:** first record in decisions that `migrate_billing_to_orgs` is retired rather than a
+  permanent member; this answers the architecture audit's open question and supersedes the
+  2026-08-31 "permanent two" answer. Then remove it from the orgs guard, `production.py.j2`,
+  `development_commands.py`, and the `start.sh.j2` argv branch, so an unsupported argv exits 2 with
+  no privileged path, and return the item to the watchlist with a dated retirement. The command file
+  itself stays as an unsanctioned management command and records that it no longer runs privileged.
+  Each executable station has a regression naming every member of the reduced set, and a regression
+  fails when a station's declaration diverges from the others. The SA90 emission fixture is
+  regenerated once, and the template change moves the `orgs` vintage through SA185.
 
   **Surfaces:** `orgs/apps.py`, `migrate_billing_to_orgs.py`, `production.py.j2`, `start.sh.j2`,
   `development_commands.py`, generator/CLI/boot-guard tests, the SA90 fixture, decisions,
