@@ -84,8 +84,9 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
                     f"(table {result['db_table']}) does not match the "
                     "FORCE RLS policy contract.",
                     hint=(
-                        "Run the module's enable_rls migration or restore the "
-                        "policies with "
+                        "Remove any extra or misnamed policies, then run the "
+                        "module's enable_rls migration or restore the canonical "
+                        "pair with "
                         "quickscale_modules_orgs.tenancy.apply_force_rls()."
                     ),
                     id="quickscale_modules_orgs.W004",

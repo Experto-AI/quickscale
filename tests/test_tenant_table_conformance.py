@@ -615,7 +615,8 @@ def test_weakened_rls_predicate_is_rejected_and_restored() -> None:
                 """
                 SELECT policyname, permissive, roles, cmd, qual, with_check
                 FROM pg_policies
-                WHERE tablename = %s
+                WHERE schemaname = current_schema()
+                  AND tablename = %s
                 ORDER BY policyname
                 """,
                 [db_table],
@@ -668,7 +669,8 @@ def test_force_rls_rejects_base_name_that_would_truncate_select_policy() -> None
                 """
                 SELECT policyname, permissive, roles, cmd, qual, with_check
                 FROM pg_policies
-                WHERE tablename = %s
+                WHERE schemaname = current_schema()
+                  AND tablename = %s
                 ORDER BY policyname
                 """,
                 [db_table],
@@ -681,6 +683,111 @@ def test_force_rls_rejects_base_name_that_would_truncate_select_policy() -> None
             apply_force_rls(schema_editor, ((db_table, "p" * 57),))
 
     assert policy_rows() == original_policies
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.skipif(
+    not _is_postgres,
+    reason="FORCE-RLS schema isolation requires PostgreSQL.",
+)
+def test_force_rls_catalog_checks_ignore_same_named_table_in_other_schema() -> None:
+    """A same-named table in another schema cannot satisfy conformance."""
+    from django.db import connection
+
+    from tests.sa182_project_app.models import ProjectListing
+
+    db_table = ProjectListing._meta.db_table
+    shadow_schema = "sa177_policy_shadow"
+    quote_name = connection.ops.quote_name
+    quoted_table = quote_name(db_table)
+    quoted_shadow_schema = quote_name(shadow_schema)
+    quoted_shadow_table = f"{quoted_shadow_schema}.{quoted_table}"
+
+    def policy_rows() -> list[tuple[Any, ...]]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT policyname, permissive, roles, cmd, qual, with_check
+                FROM pg_policies
+                WHERE schemaname = current_schema()
+                  AND tablename = %s
+                ORDER BY policyname
+                """,
+                [db_table],
+            )
+            return cursor.fetchall()
+
+    original_policies = policy_rows()
+    all_policies = [row for row in original_policies if row[3] in ("ALL", "*")]
+    assert len(all_policies) == 1
+    policy_name = all_policies[0][0]
+    select_policy_name = f"{policy_name}_select"
+    quoted_policy = quote_name(policy_name)
+    quoted_select_policy = quote_name(select_policy_name)
+    targets = ((db_table, policy_name),)
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(f"DROP SCHEMA IF EXISTS {quoted_shadow_schema} CASCADE")
+            cursor.execute(f"CREATE SCHEMA {quoted_shadow_schema}")
+            cursor.execute(f"CREATE TABLE {quoted_shadow_table} (organization_id uuid)")
+            cursor.execute(
+                f"ALTER TABLE {quoted_shadow_table} ENABLE ROW LEVEL SECURITY"
+            )
+            cursor.execute(
+                f"ALTER TABLE {quoted_shadow_table} FORCE ROW LEVEL SECURITY"
+            )
+            cursor.execute(
+                f"""
+                CREATE POLICY {quoted_policy} ON {quoted_shadow_table}
+                    FOR ALL
+                    USING (
+                        NULLIF(
+                            current_setting('app.current_org_id', true), ''
+                        )::uuid = organization_id
+                    )
+                    WITH CHECK (
+                        NULLIF(
+                            current_setting('app.current_org_id', true), ''
+                        )::uuid = organization_id
+                    )
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE POLICY {quoted_select_policy} ON {quoted_shadow_table}
+                    FOR SELECT
+                    USING (
+                        NULLIF(
+                            current_setting('app.current_org_id', true), ''
+                        )::uuid = organization_id
+                        OR NULLIF(
+                            current_setting('app.operator_access', true), ''
+                        ) = 'on'
+                    )
+                """
+            )
+            cursor.execute(f"DROP POLICY {quoted_policy} ON {quoted_table}")
+            cursor.execute(f"DROP POLICY {quoted_select_policy} ON {quoted_table}")
+            cursor.execute(f"ALTER TABLE {quoted_table} DISABLE ROW LEVEL SECURITY")
+
+        mismatches = _force_rls_policy_mismatches(db_table)
+        assert mismatches is not None
+        assert any(
+            "must have RLS enabled and forced" in mismatch for mismatch in mismatches
+        ), f"The current-schema table flags were not checked: {mismatches}"
+        assert any(
+            "must have exactly two RLS policies; found 0" in mismatch
+            for mismatch in mismatches
+        ), f"The current-schema policy gap was not detected: {mismatches}"
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute(f"DROP SCHEMA IF EXISTS {quoted_shadow_schema} CASCADE")
+        with connection.schema_editor() as schema_editor:
+            apply_force_rls(schema_editor, targets)
+
+    assert policy_rows() == original_policies
+    assert _force_rls_policy_mismatches(db_table) == []
 
 
 # ---------------------------------------------------------------------------

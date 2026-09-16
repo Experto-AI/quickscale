@@ -1889,9 +1889,13 @@ def _force_rls_policy_mismatches(db_table: str) -> list[str] | None:
     with connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT relrowsecurity, relforcerowsecurity
-            FROM pg_class
-            WHERE relname = %s
+            SELECT c.relrowsecurity, c.relforcerowsecurity
+            FROM pg_catalog.pg_class AS c
+            JOIN pg_catalog.pg_namespace AS n
+              ON n.oid = c.relnamespace
+            WHERE n.nspname = current_schema()
+              AND c.relname = %s
+              AND c.relkind IN ('r', 'p')
             """,
             [db_table],
         )
@@ -1906,7 +1910,8 @@ def _force_rls_policy_mismatches(db_table: str) -> list[str] | None:
             """
             SELECT policyname, permissive, roles, cmd, qual, with_check
             FROM pg_policies
-            WHERE tablename = %s
+            WHERE schemaname = current_schema()
+              AND tablename = %s
             ORDER BY policyname
             """,
             [db_table],
