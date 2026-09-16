@@ -7,8 +7,10 @@ plus the shipped-module tenant-table registry used by the AF1 conformance gate.
 
 from __future__ import annotations
 
-from typing import Any
+import re
 from enum import Enum, auto
+from typing import Any
+
 from django.db import models
 
 
@@ -537,6 +539,72 @@ ALTER TABLE {table} DISABLE ROW LEVEL SECURITY;
 """
 
 
+_POSTGRES_IDENTIFIER_MAX_BYTES = 63
+_SELECT_POLICY_SUFFIX = "_select"
+_MAX_BASE_POLICY_NAME_BYTES = _POSTGRES_IDENTIFIER_MAX_BYTES - len(
+    _SELECT_POLICY_SUFFIX.encode("utf-8")
+)
+
+
+_SQL_QUOTED_SEGMENT = re.compile(r"""('(?:''|[^'])*'|"(?:[^"]|"")*")""")
+
+
+def _outer_parentheses_enclose_expression(expression: str) -> bool:
+    """Return whether one parenthesis pair encloses the whole expression."""
+    unquoted = _SQL_QUOTED_SEGMENT.sub(
+        lambda match: " " * len(match.group(0)), expression
+    )
+    depth = 0
+    for index, char in enumerate(unquoted):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        if depth == 0 and index < len(unquoted) - 1:
+            return False
+    return depth == 0
+
+
+def _normalize_pg_policy_expression(expression: str | None) -> str:
+    """Normalize PostgreSQL-deparsed policy expressions for exact comparison.
+
+    PostgreSQL's ``pg_policies`` view adds formatting and outer parentheses to
+    policy predicates. This normalizer removes only that representational
+    variance while preserving quoted literal and identifier content.
+    """
+    if expression is None:
+        return ""
+
+    normalized = expression.strip()
+    while (
+        len(normalized) > 1 and normalized.startswith("(") and normalized.endswith(")")
+    ):
+        if not _outer_parentheses_enclose_expression(normalized):
+            break
+        normalized = normalized[1:-1].strip()
+
+    segments = _SQL_QUOTED_SEGMENT.split(normalized)
+    return "".join(
+        segment if index % 2 else re.sub(r"\s+", " ", segment.lower())
+        for index, segment in enumerate(segments)
+    ).strip()
+
+
+# PostgreSQL 18's canonical ``pg_policies`` forms for the predicates rendered
+# by ``_FORCE_RLS_FORWARD_SQL``. PostgreSQL adds explicit ``::text`` casts to
+# string literals when it deparses the stored expression.
+_EXPECTED_TENANT_POLICY_EXPRESSION = _normalize_pg_policy_expression(
+    "((NULLIF(current_setting('app.current_org_id'::text, true), "
+    "''::text))::uuid = organization_id)"
+)
+_EXPECTED_OPERATOR_SELECT_EXPRESSION = _normalize_pg_policy_expression(
+    "(((NULLIF(current_setting('app.current_org_id'::text, true), "
+    "''::text))::uuid = organization_id) OR "
+    "(NULLIF(current_setting('app.operator_access'::text, true), "
+    "''::text) = 'on'::text))"
+)
+
+
 def _render_force_rls_sql(
     schema_editor: Any,
     template: str,
@@ -558,8 +626,28 @@ def _render_force_rls_sql(
     return safe_template.format(
         table=quote_name(table),
         policy_name=quote_name(policy_name),
-        select_policy_name=quote_name(f"{policy_name}_select"),
+        select_policy_name=quote_name(f"{policy_name}{_SELECT_POLICY_SUFFIX}"),
     )
+
+
+def _validate_force_rls_policy_names(
+    targets: tuple[tuple[str, str], ...],
+) -> None:
+    """Reject base names whose select companion PostgreSQL would truncate."""
+    for table, policy_name in targets:
+        if not isinstance(policy_name, str) or not policy_name:
+            raise ValueError(
+                f"FORCE-RLS base policy name for table {table!r} must be a "
+                "non-empty string."
+            )
+        policy_name_bytes = len(policy_name.encode("utf-8"))
+        if policy_name_bytes > _MAX_BASE_POLICY_NAME_BYTES:
+            raise ValueError(
+                f"FORCE-RLS base policy name {policy_name!r} for table {table!r} "
+                f"is {policy_name_bytes} UTF-8 bytes; expected at most "
+                f"{_MAX_BASE_POLICY_NAME_BYTES} so the {_SELECT_POLICY_SUFFIX!r} "
+                "companion fits PostgreSQL's 63-byte identifier limit."
+            )
 
 
 def apply_force_rls(
@@ -579,6 +667,7 @@ def apply_force_rls(
     """
     if schema_editor.connection.vendor != "postgresql":
         return
+    _validate_force_rls_policy_names(targets)
     for table, policy_name in targets:
         schema_editor.execute(
             _render_force_rls_sql(
@@ -604,6 +693,7 @@ def revert_force_rls(
     """
     if schema_editor.connection.vendor != "postgresql":
         return
+    _validate_force_rls_policy_names(targets)
     for table, policy_name in targets:
         schema_editor.execute(
             _render_force_rls_sql(
@@ -1670,34 +1760,133 @@ def has_organization_id_field(model: type[models.Model]) -> bool:
         return False
 
 
-def table_has_force_rls(db_table: str) -> bool | None:
-    """Check whether a database table has FORCE RLS enabled.
+_PolicyRow = tuple[str, str, list[str], str, str | None, str | None]
 
-    Queries the PostgreSQL catalog (``pg_class`` + ``pg_policies``) to
-    verify that:
 
-    1. ``relrowsecurity`` is true (RLS enabled).
-    2. ``relforcerowsecurity`` is true (FORCE RLS).
-    3. At least one policy exists in ``pg_policies`` for the table.
+def _policy_defaults_mismatches(
+    *,
+    db_table: str,
+    command: str,
+    policy_name: str,
+    permissive: str,
+    roles: list[str],
+) -> list[str]:
+    """Return deviations from the template's default policy mode and roles."""
+    mismatches: list[str] = []
+    if permissive != "PERMISSIVE":
+        mismatches.append(
+            f"{command} policy {policy_name!r} on {db_table!r} must be permissive"
+        )
+    if roles not in ([], ["public"]):
+        mismatches.append(
+            f"{command} policy {policy_name!r} on {db_table!r} must apply to PUBLIC"
+        )
+    return mismatches
 
-    Returns ``None`` on non-PostgreSQL databases (safe to call from any
-    environment without a vendor check).
 
-    Args:
-        db_table: The physical database table name (``model._meta.db_table``).
+def _all_policy_mismatches(db_table: str, policy: _PolicyRow) -> list[str]:
+    """Compare one live FOR ALL policy with the rendered write contract."""
+    policy_name, permissive, roles, _cmd, qual, with_check = policy
+    mismatches = _policy_defaults_mismatches(
+        db_table=db_table,
+        command="FOR ALL",
+        policy_name=policy_name,
+        permissive=permissive,
+        roles=roles,
+    )
+    if _normalize_pg_policy_expression(qual) != _EXPECTED_TENANT_POLICY_EXPRESSION:
+        mismatches.append(
+            f"FOR ALL policy {policy_name!r} on {db_table!r} has a non-conforming "
+            "USING predicate"
+        )
+    if (
+        _normalize_pg_policy_expression(with_check)
+        != _EXPECTED_TENANT_POLICY_EXPRESSION
+    ):
+        mismatches.append(
+            f"FOR ALL policy {policy_name!r} on {db_table!r} has a non-conforming "
+            "WITH CHECK predicate"
+        )
+    return mismatches
 
-    Returns:
-        ``True`` if FORCE RLS is active with at least one policy,
-        ``False`` if RLS is disabled or not forced, ``None`` on
-        non-PostgreSQL databases.
+
+def _select_policy_mismatches(
+    db_table: str,
+    base_policy_name: str,
+    policy: _PolicyRow,
+) -> list[str]:
+    """Compare one live FOR SELECT policy with the rendered read contract."""
+    policy_name, permissive, roles, _cmd, qual, with_check = policy
+    mismatches = _policy_defaults_mismatches(
+        db_table=db_table,
+        command="FOR SELECT",
+        policy_name=policy_name,
+        permissive=permissive,
+        roles=roles,
+    )
+    expected_name = f"{base_policy_name}{_SELECT_POLICY_SUFFIX}"
+    if policy_name != expected_name:
+        mismatches.append(
+            f"FOR SELECT policy on {db_table!r} must be named "
+            f"{expected_name!r}; found {policy_name!r}"
+        )
+    if _normalize_pg_policy_expression(qual) != _EXPECTED_OPERATOR_SELECT_EXPRESSION:
+        mismatches.append(
+            f"FOR SELECT policy {policy_name!r} on {db_table!r} has a "
+            "non-conforming USING predicate"
+        )
+    if with_check is not None:
+        mismatches.append(
+            f"FOR SELECT policy {policy_name!r} on {db_table!r} must not have "
+            "a WITH CHECK predicate"
+        )
+    return mismatches
+
+
+def _partition_rls_policies(
+    db_table: str,
+    policies: list[_PolicyRow],
+) -> tuple[list[str], list[_PolicyRow], list[_PolicyRow]]:
+    """Partition live policies and report deviations from the two-policy shape."""
+    mismatches: list[str] = []
+    if len(policies) != 2:
+        mismatches.append(
+            f"table {db_table!r} must have exactly two RLS policies; "
+            f"found {len(policies)}"
+        )
+    all_policies = [policy for policy in policies if policy[3] in ("ALL", "*")]
+    select_policies = [policy for policy in policies if policy[3] in ("SELECT", "s")]
+    if len(all_policies) != 1:
+        mismatches.append(
+            f"table {db_table!r} must have exactly one FOR ALL policy; "
+            f"found {len(all_policies)}"
+        )
+    if len(select_policies) != 1:
+        mismatches.append(
+            f"table {db_table!r} must have exactly one FOR SELECT policy; "
+            f"found {len(select_policies)}"
+        )
+    return mismatches, all_policies, select_policies
+
+
+def _force_rls_policy_mismatches(db_table: str) -> list[str] | None:
+    """Return live FORCE-RLS contract mismatches for one tenant table.
+
+    The expected contract is the exact pair rendered by
+    ``_FORCE_RLS_FORWARD_SQL``: a tenant-only ``FOR ALL`` policy with matching
+    ``USING``/``WITH CHECK`` predicates and a read-only ``FOR SELECT`` policy
+    carrying the operator-access predicate. PostgreSQL catalog formatting is
+    normalized before exact predicate comparison.
+
+    ``None`` means the active database is not PostgreSQL.
     """
     from django.db import connection
 
     if connection.vendor != "postgresql":
         return None
 
+    mismatches: list[str] = []
     with connection.cursor() as cursor:
-        # Check relrowsecurity and relforcerowsecurity in pg_class.
         cursor.execute(
             """
             SELECT relrowsecurity, relforcerowsecurity
@@ -1708,22 +1897,48 @@ def table_has_force_rls(db_table: str) -> bool | None:
         )
         row = cursor.fetchone()
         if row is None:
-            return False
+            return [f"table {db_table!r} is missing from pg_class"]
         relrowsecurity, relforcerowsecurity = row
         if not relrowsecurity or not relforcerowsecurity:
-            return False
+            mismatches.append(f"table {db_table!r} must have RLS enabled and forced")
 
-        # Check at least one policy exists in pg_policies.
         cursor.execute(
             """
-            SELECT COUNT(*)
+            SELECT policyname, permissive, roles, cmd, qual, with_check
             FROM pg_policies
             WHERE tablename = %s
+            ORDER BY policyname
             """,
             [db_table],
         )
-        policy_count = cursor.fetchone()[0]
-        return policy_count > 0
+        policies: list[_PolicyRow] = cursor.fetchall()
+
+    policy_mismatches, all_policies, select_policies = _partition_rls_policies(
+        db_table, policies
+    )
+    mismatches.extend(policy_mismatches)
+    if len(all_policies) != 1 or len(select_policies) != 1:
+        return mismatches
+
+    base_policy = all_policies[0]
+    mismatches.extend(_all_policy_mismatches(db_table, base_policy))
+    mismatches.extend(
+        _select_policy_mismatches(db_table, base_policy[0], select_policies[0])
+    )
+    return mismatches
+
+
+def table_has_force_rls(db_table: str) -> bool | None:
+    """Check whether a table satisfies the complete FORCE-RLS policy contract.
+
+    Returns ``None`` on non-PostgreSQL databases, otherwise ``True`` only when
+    RLS is enabled and forced and both live policies exactly match the
+    predicates rendered by ``_FORCE_RLS_FORWARD_SQL``.
+    """
+    mismatches = _force_rls_policy_mismatches(db_table)
+    if mismatches is None:
+        return None
+    return not mismatches
 
 
 def check_tenant_model_isolation(
@@ -1733,8 +1948,8 @@ def check_tenant_model_isolation(
 
     Checks:
     1. The model has a direct ``organization_id`` column.
-    2. If on PostgreSQL, the model's table has FORCE RLS enabled with
-       at least one policy.
+    2. If on PostgreSQL, the model's table has FORCE RLS enabled with the
+       exact tenant-write and operator-read policy predicates.
 
     Args:
         model: A Django ``Model`` subclass (typically from
