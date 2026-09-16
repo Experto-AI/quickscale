@@ -181,7 +181,6 @@ All of these were read hunk by hunk, production and test.
 - **Cross-tenant count fallbacks** in CRM serializers (`serializers.py:133-136`) and `billing/services.py` use `all_objects` with explicit org filters. They are safe under NOBYPASSRLS. Re-examine if a BYPASSRLS serving mode is ever supported.
 - **Atomic state writes are rename-atomic but not durable** (`schema/state_schema.py:356`, `:412`). No `fsync()`.
 - **`blog/feeds.py` resolves the System org twice with opposite error handling** (`:33` guarded, `:45` unguarded).
-- **`table_has_force_rls` queries `pg_class`/`pg_policies` without schema qualification.**
 
 **New this pass:**
 
@@ -243,6 +242,6 @@ All of these were read hunk by hunk, production and test.
 - 2026-09-15 — **Chain pass (§3.9) ran.** One candidate chain was refuted (TA75 guessed service × DB-free healthcheck; see empirical check 3). TA75 × TA74 share a re-run trigger but compound only into disruption, not exposure. No chain raised a severity.
 - 2026-09-16 — **TA74** `railway-redeploy-rotates-secret-key`: **retired by SA184.** Re-runs now reuse the service's `SECRET_KEY`, generating one only on first deploy; archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-16 — **TA75** `railway-runtime-role-vars-fail-open`: **retired by SA184.** Unreadable Railway state and ambiguous PostgreSQL listings now fail the deploy instead of inventing values; archived in [CHANGELOG.md](../../CHANGELOG.md).
-- 2026-09-16 — **RLS predicate-conformance gap retired.** The isolation gate now compares both live policies for every marker-enrolled table with the exact normalized contract and proves a weakened predicate is rejected and restored; archived in [CHANGELOG.md](../../CHANGELOG.md).
+- 2026-09-16 — **RLS predicate-conformance gap retired.** The isolation gate now compares both live policies for every marker-enrolled table with the exact normalized contract, scopes catalog reads to `current_schema()`, and proves both a weakened predicate and a same-named cross-schema decoy are rejected; archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 *Categories swept with no qualifying finding this pass: injection sinks (role DDL, publication git argv, testimony regex), authorization on the delta's new surfaces, secrets on argv or in logs (beyond the start.sh watch item), multi-tenant isolation in the privileged-command changes, CI secret and escape-hatch propagation, resources and I/O, performance, and the code-generator and IaC archetype lenses.*

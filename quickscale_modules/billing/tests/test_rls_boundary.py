@@ -38,16 +38,30 @@ from quickscale_modules_orgs.current_org import (
     set_current_org_id,
 )
 from quickscale_modules_orgs.models import Organization
+from quickscale_modules_orgs.tenancy import (
+    _force_rls_policy_mismatches,
+    apply_force_rls,
+)
 
 # ---------------------------------------------------------------------------
 # Restricted role helpers (mirror the social module pattern)
 # ---------------------------------------------------------------------------
 
-_BILLING_RLS_TABLES = (
-    "quickscale_modules_billing_creditbalance",
-    "quickscale_modules_billing_credittransaction",
-    "quickscale_modules_billing_subscription",
+_BILLING_RLS_TARGETS = (
+    (
+        "quickscale_modules_billing_creditbalance",
+        "billing_credit_balance_org_isolation",
+    ),
+    (
+        "quickscale_modules_billing_credittransaction",
+        "billing_credit_transaction_org_isolation",
+    ),
+    (
+        "quickscale_modules_billing_subscription",
+        "billing_subscription_org_isolation",
+    ),
 )
+_BILLING_RLS_TABLES = tuple(table for table, _policy in _BILLING_RLS_TARGETS)
 
 
 def _verify_role_is_nobypassrls() -> None:
@@ -68,65 +82,92 @@ def _verify_role_is_nobypassrls() -> None:
         )
 
 
+def _rls_policy_names(table: str) -> list[str]:
+    """Return the current schema's policy names for one Billing table."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT policyname
+            FROM pg_policies
+            WHERE schemaname = current_schema()
+              AND tablename = %s
+            ORDER BY policyname
+            """,
+            [table],
+        )
+        return [policy_name for (policy_name,) in cursor.fetchall()]
+
+
 def _ensure_rls_policies() -> None:
-    """Re-apply FORCE-RLS policies on Billing tables if they are missing.
+    """Reconcile Billing tables to the exact FORCE-RLS policy contract.
 
     DDL side effects from prior tests (e.g. the migration test that
-    reverses 0002_enable_rls) can permanently drop RLS policies because
-    the reverse DDL auto-commits.  This helper checks and re-applies RLS
-    so the RLS boundary tests are self-healing.
+    reverses the initial migration) can permanently alter RLS policies because
+    the reverse DDL auto-commits. This helper checks every table, removes any
+    non-canonical policy set, and restores the shared exact contract so the RLS
+    boundary tests are self-healing.
 
-    Connects via psycopg2 with autocommit=True so DDL persists even
-    inside a Django test transaction.  Idempotent.
+    These tests use ``transaction=True``, so the Django connection is in
+    autocommit mode and the repair DDL persists. Idempotent.
     """
-    import psycopg2
+    if all(
+        _force_rls_policy_mismatches(table) == []
+        and _rls_policy_names(table) == [policy_name, f"{policy_name}_select"]
+        for table, policy_name in _BILLING_RLS_TARGETS
+    ):
+        return
 
-    db = connection.settings_dict
-    conn = psycopg2.connect(
-        dbname=db["NAME"],
-        user=db["USER"],
-        password=db["PASSWORD"],
-        host=db.get("HOST", "localhost"),
-        port=db.get("PORT", "5432"),
-    )
-    conn.autocommit = True
+    quote_name = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        for table, _policy in _BILLING_RLS_TARGETS:
+            cursor.execute(
+                """
+                SELECT policyname
+                FROM pg_policies
+                WHERE schemaname = current_schema()
+                  AND tablename = %s
+                ORDER BY policyname
+                """,
+                [table],
+            )
+            for (policy_name,) in cursor.fetchall():
+                cursor.execute(
+                    f"DROP POLICY {quote_name(policy_name)} ON {quote_name(table)}"
+                )
+
+    with connection.schema_editor() as schema_editor:
+        apply_force_rls(schema_editor, _BILLING_RLS_TARGETS)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_rls_policy_repair_restores_exact_contract() -> None:
+    """The repair replaces an exact but renamed pair with canonical names."""
+    if connection.vendor != "postgresql":
+        pytest.skip("RLS policy repair requires PostgreSQL")
+
+    _ensure_rls_policies()
+    table, policy_name = _BILLING_RLS_TARGETS[0]
+    quote_name = connection.ops.quote_name
+    quoted_table = quote_name(table)
+    quoted_policy = quote_name(policy_name)
+    quoted_select_policy = quote_name(f"{policy_name}_select")
+    stale_policy_name = f"{policy_name}_legacy"
+    canonical_names = [policy_name, f"{policy_name}_select"]
+
     try:
-        with conn.cursor() as cur:
-            # Check if RLS policies exist on the credit balance table
-            cur.execute(
-                "SELECT COUNT(*) FROM pg_policies "
-                "WHERE tablename = 'quickscale_modules_billing_creditbalance'"
-            )
-            (policy_count,) = cur.fetchone()
-            if policy_count > 0:
-                return  # RLS is already active
+        with connection.cursor() as cursor:
+            cursor.execute(f"DROP POLICY {quoted_policy} ON {quoted_table}")
+            cursor.execute(f"DROP POLICY {quoted_select_policy} ON {quoted_table}")
+        with connection.schema_editor() as schema_editor:
+            apply_force_rls(schema_editor, ((table, stale_policy_name),))
 
-            # Re-apply RLS for every enrolled table with explicit policy names
-            _rls_targets = (
-                (
-                    "quickscale_modules_billing_creditbalance",
-                    "billing_credit_balance_org_isolation",
-                ),
-                (
-                    "quickscale_modules_billing_credittransaction",
-                    "billing_credit_transaction_org_isolation",
-                ),
-                (
-                    "quickscale_modules_billing_subscription",
-                    "billing_subscription_org_isolation",
-                ),
-            )
-            for table, policy_name in _rls_targets:
-                cur.execute(f"""
-                    ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
-                    ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
-                    CREATE POLICY {policy_name} ON {table}
-                        FOR ALL
-                        USING (NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id)
-                        WITH CHECK (NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id);
-                """)
+        assert _force_rls_policy_mismatches(table) == []
+        assert _rls_policy_names(table) != canonical_names
+        _ensure_rls_policies()
+        assert _force_rls_policy_mismatches(table) == []
+        assert _rls_policy_names(table) == canonical_names
     finally:
-        conn.close()
+        _ensure_rls_policies()
 
 
 def _make_plan() -> Plan:
