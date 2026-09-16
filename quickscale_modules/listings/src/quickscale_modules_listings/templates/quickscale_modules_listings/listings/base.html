@@ -1,39 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Listings{% endblock %}</title>
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'quickscale_modules_listings/listings.css' %}">
-    {% block extra_css %}{% endblock %}
-</head>
-<body>
-    {% include "quickscale_modules_orgs/_debug_banner.html" %}
-    <header>
-        <nav>
-            <a href="{% url 'quickscale_listings:listing_list' %}">Listings Home</a>
-        </nav>
-    </header>
+{% extends "base.html" %}
+{% load static %}
 
-    <main>
-        {% if messages %}
-        <div>
-            {% for message in messages %}
-            <div>
-                {{ message }}
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
+{% block title %}Listings{% endblock %}
 
-        {% block content %}{% endblock %}
-    </main>
+{% block extra_css %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'quickscale_modules_listings/listings.css' %}">
+{% endblock %}
 
-    <footer>
-        <p>&copy; {% now "Y" %} Listings. Built with QuickScale.</p>
-    </footer>
+{% block content %}
+{% include "quickscale_modules_orgs/_debug_banner.html" %}
+<nav class="listings-nav">
+    <a href="{% url 'quickscale_listings:listing_list' %}">Listings Home</a>
+</nav>
 
-    {% block extra_js %}{% endblock %}
-</body>
-</html>
+<div class="listings-content">
+{% block listings_content %}{% endblock %}
+</div>
+{% endblock %}

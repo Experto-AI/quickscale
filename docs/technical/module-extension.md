@@ -1,7 +1,7 @@
 # Module Extension Contract
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Technical** → Module Extension Contract
-> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [User Manual](user_manual.md)
+> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [User Manual](user_manual.md) | [Frontend Architecture](frontend.md)
 
 ## Goal
 

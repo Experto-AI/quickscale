@@ -480,6 +480,18 @@ code before it works is not shippable.
   test settings file is a Database Policy violation
 - ✅ 90% overall mean + 80% per-file minimum coverage (CI enforced)
 - ✅ Module code MUST read configurable values from settings, never hardcode them
+- ✅ A module's server-rendered templates **extend the project's `base.html`** and
+  never emit their own `<html>` document. Child templates fill a module-named
+  block (`<module>_content`); the module base owns `{% block content %}`. A module
+  stylesheet carries **content styling only** — the page shell belongs to
+  `base.html`. See [frontend.md § Styling ownership](./frontend.md#styling-ownership).
+- ✅ Module templates use **only the blocks `base.html` already defines**
+  (`title`, `extra_css`, `content`, `extra_js`). `templates/base.html` is
+  user-owned category U3 (see
+  [generated_file_ownership.md](./generated_file_ownership.md)) and is never
+  rewritten by `quickscale update`, so a module template that depends on a *new*
+  block renders empty in every already-generated project — Django ignores a child
+  block the parent does not define.
 - ❌ Do not hand-edit `AVAILABLE_MODULES` — CLI module discovery is
   discovery-derived (`get_discovered_module_names()`); a module only needs to be
   discoverable

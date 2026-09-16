@@ -19,6 +19,7 @@
   - [Development](technical/development.md) - Dev environment setup
   - [Plan/Apply System](technical/plan-apply-system.md) - Terraform-style workflow
   - [Module Extension Contract](technical/module-extension.md) - Extension surfaces, support tiers, and per-module contracts
+  - [Frontend Architecture](technical/frontend.md) - Django/React seam, URL ownership, static pipeline, and template roles
   - [Publish Procedure (authoritative)](technical/publish_procedure.md) - Pre-publish quality gate and the ordered release phases
   - [Versioning](technical/versioning.md) - `VERSION` single source and propagation
 

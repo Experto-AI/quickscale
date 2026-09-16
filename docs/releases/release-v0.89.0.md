@@ -14,17 +14,43 @@ Project-owned tenant models can now join classification and FORCE RLS policy ref
 marker-derived tenant contract. This keeps organization ownership and forced row-level security
 requirements in place without requiring edits under embedded module source.
 
+Server-rendered module pages share one page shell. The blog, listings, and CRM base templates
+extend the project's `base.html` rather than emitting their own HTML document, so those pages
+inherit the site topbar, messages, and footer instead of restating a shell each. The frontend
+architecture this depends on — the `window.__QUICKSCALE__` seam, URL ownership between the React
+shell and module routes, the static pipeline, and the template-inheritance rule — is now written
+down in `docs/technical/frontend.md`.
+
 ## Adoption
 
 A project-owned model declares the tenant-manager contract and installs its own FORCE RLS policy in
 its migration. A project-owned `AbstractListing` subclass declares both the tenant-scoped and
 super-scope managers before running the project's isolation checks.
 
+A project that has **overridden** `quickscale_modules_blog/blog/*.html`,
+`quickscale_modules_listings/listings/*.html`, or `quickscale_modules_crm/crm/*.html` renames the
+content block in its override to the module block — `blog_content`, `listings_content`, or
+`crm_content`. An override left on `{% block content %}` renders empty, because the module base
+template now occupies that block itself. A project that overrode a module *base* template keeps
+its standalone document and is unaffected until it adopts the new base.
+
+New server-rendered module surfaces extend `base.html` and use only the blocks it already defines
+(`title`, `extra_css`, `content`, `extra_js`), so they render correctly in projects generated
+before this release. They wrap their page content in a `<div class="<module>-content">` and scope
+the module stylesheet's spacing rules to it, because `base.html` applies a reset that zeroes
+default margins.
+
 ## Compatibility
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps
 existing organization ownership and FORCE RLS requirements in place without changing package APIs
 or upgrade requirements.
+
+The shared-shell change is **breaking for template overrides only**, in the way described under
+Adoption; module Python APIs, URLs, and settings are unchanged. Blog and listings stylesheets keep
+their existing rules; CRM page styling moved from an inline `<style>` block to
+`quickscale_modules_crm/crm.css`, so a project that copied those inline rules keeps its copy and
+takes no action.
 
 ## Validation
 

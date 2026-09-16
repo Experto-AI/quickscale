@@ -377,6 +377,11 @@ override a template only to restyle it. Module pages extend your `base.html`, so
 colors, fonts, header — there, and leave each page's own styling to the module so updates keep
 delivering it.
 
+When you override a module *page* template, copy its block structure exactly. A module page fills a
+module-named block — `blog_content`, `listings_content`, `crm_content`, `auth_content` — not
+`content`, which the module's own base template occupies. An override left on `{% block content %}`
+parses without error and renders nothing.
+
 **After every update:**
 
 1. Run the project's test suite, including frontend tests.

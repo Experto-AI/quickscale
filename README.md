@@ -56,6 +56,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - 📋 **Planning a feature?** Check [decisions.md](./docs/technical/decisions.md) for the authoritative implementation scope and technical rules
 - 🗓️ **Timeline & tasks?** See [roadmap.md](./docs/technical/roadmap.md)
 - 🏗️ **Project structure?** See [scaffolding.md](./docs/technical/scaffolding.md) for complete directory layouts
+- ⚛️ **Working on the frontend?** See [frontend.md](./docs/technical/frontend.md) for the Django/React seam, URL ownership, and the static pipeline
 - 🎯 **Why QuickScale?** See [quickscale.md](./docs/overview/quickscale.md) for competitive positioning
 
 **Quick Reference:**

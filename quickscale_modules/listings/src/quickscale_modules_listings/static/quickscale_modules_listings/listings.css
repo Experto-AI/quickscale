@@ -13,3 +13,52 @@
 .listing-markdown-content p {
     margin-bottom: 0.75rem;
 }
+
+/* Page shell (reset, body, topbar, main, footer, link colour) comes from the
+ * project's base.html. Its reset zeroes default margins, so listings content --
+ * which is plain semantic HTML -- restores its own vertical rhythm here.
+ */
+
+.listings-nav {
+    margin-bottom: 1.5rem;
+}
+
+.listings-content h1 {
+    font-size: 1.875rem;
+    margin-bottom: 1rem;
+}
+
+.listings-content h2 {
+    font-size: 1.375rem;
+    margin-bottom: 0.75rem;
+}
+
+.listings-content h3 {
+    font-size: 1.125rem;
+    margin-bottom: 0.5rem;
+}
+
+.listings-content p,
+.listings-content ul,
+.listings-content ol {
+    margin-bottom: 1rem;
+}
+
+.listings-content ul,
+.listings-content ol {
+    padding-left: 1.25rem;
+}
+
+.listings-content article + article,
+.listings-content section + section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.listings-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}

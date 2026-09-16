@@ -22,3 +22,56 @@
 .blog-markdown-content pre {
     overflow-x: auto;
 }
+
+/* Page shell (reset, body, topbar, main, footer, link colour) comes from the
+ * project's base.html. Its reset zeroes default margins, so blog content --
+ * which is plain semantic HTML -- restores its own vertical rhythm here.
+ */
+
+.blog-nav {
+    margin-bottom: 1.5rem;
+}
+
+.blog-content h1 {
+    font-size: 1.875rem;
+    margin-bottom: 1rem;
+}
+
+.blog-content h2 {
+    font-size: 1.375rem;
+    margin-bottom: 0.75rem;
+}
+
+.blog-content h3 {
+    font-size: 1.125rem;
+    margin-bottom: 0.5rem;
+}
+
+.blog-content p,
+.blog-content ul,
+.blog-content ol {
+    margin-bottom: 1rem;
+}
+
+.blog-content ul,
+.blog-content ol {
+    padding-left: 1.25rem;
+}
+
+.blog-content article + article {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.blog-content article > footer {
+    color: #64748b;
+    font-size: 0.875rem;
+}
+
+.blog-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
