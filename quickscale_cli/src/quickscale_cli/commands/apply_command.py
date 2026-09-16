@@ -68,6 +68,7 @@ from quickscale_cli.commands.apply_support import (
     _report_theme_preflight_error,
 )
 from quickscale_cli.commands.apply_support import _resolve_apply_raw_root  # noqa: F401
+from quickscale_cli.commands.contract_vintage import enforce_shipped_contract_vintage
 from quickscale_cli.commands.module_commands import (
     APPLY_MODULE_EXECUTION_MODE,
     embed_module,
@@ -3975,6 +3976,50 @@ def _resolve_apply_preflight(config_path: Path) -> Path:
     return resolve_root
 
 
+def _enforce_apply_contract_vintage_preflight(
+    config_path: Path,
+    output_path: Path,
+    *,
+    acknowledged: bool,
+) -> None:
+    """Refuse incompatible existing projects before config normalization writes."""
+    if not output_path.exists():
+        return
+
+    try:
+        authoritative_state = ProjectStateManager(output_path).load_state()
+        recovery_state = _load_apply_recovery_state(output_path)
+    except StateError as error:
+        click.secho(
+            f"\n❌ Failed to load existing project state: {error}",
+            fg="red",
+            err=True,
+        )
+        raise click.Abort() from error
+    existing_state = _merge_apply_recovery_state(
+        authoritative_state,
+        recovery_state,
+    )
+    if existing_state is None:
+        return
+
+    module_names = set(existing_state.modules)
+    try:
+        preflight_config = validate_config(config_path.read_text())
+    except ConfigValidationError, OSError:
+        return
+    configured_modules = set(preflight_config.modules)
+    module_names.update(configured_modules)
+    module_names.update(resolve_module_implications(configured_modules))
+
+    enforce_shipped_contract_vintage(
+        existing_state,
+        module_names,
+        operation="'quickscale apply'",
+        acknowledged=acknowledged,
+    )
+
+
 @click.command()
 @click.argument(
     "config",
@@ -4018,6 +4063,11 @@ def _resolve_apply_preflight(config_path: Path) -> Path:
     is_flag=True,
     help="Show Docker build output (useful for debugging build issues)",
 )
+@click.option(
+    "--acknowledge-contract-vintage",
+    is_flag=True,
+    help="Proceed after manually adopting every required generated-file contract.",
+)
 def apply(
     config: str,
     force: bool,
@@ -4026,6 +4076,7 @@ def apply(
     split_refs: tuple[str, ...],
     split_refs_from_branches: bool,
     verbose_docker: bool,
+    acknowledge_contract_vintage: bool,
 ) -> None:
     """
     Execute project configuration from quickscale.yml.
@@ -4073,10 +4124,22 @@ def apply(
         )
     split_ref_overrides = _parse_split_ref_overrides(split_refs)
     config_path = Path(config)
-    _resolve_apply_preflight(config_path)
+    output_path = _resolve_apply_preflight(config_path)
+    _enforce_apply_contract_vintage_preflight(
+        config_path,
+        output_path,
+        acknowledged=acknowledge_contract_vintage,
+    )
 
     # Prepare context
     ctx = _prepare_apply_context(config_path)
+    enforce_shipped_contract_vintage(
+        ctx.existing_state,
+        set(ctx.qs_config.modules)
+        | set(ctx.existing_state.modules if ctx.existing_state else ()),
+        operation="'quickscale apply'",
+        acknowledged=acknowledge_contract_vintage,
+    )
     if split_refs_from_branches:
         split_ref_overrides = _expand_split_refs_from_branches(ctx)
     _validate_split_ref_override_coverage(
