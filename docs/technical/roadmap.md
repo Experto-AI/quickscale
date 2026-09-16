@@ -15,8 +15,8 @@ release-prepared public note; `v89` has since bumped the repository to `0.89.0`.
 split-branch republication, seal, or PyPI upload has happened. Outstanding before publication:
 release-tier validation on the packaged bytes, the ordered phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. SA185 now declares
-the `orgs` contract vintage that the 0.88 templates introduced; SA186 remains scheduled to guard
-the split-branch force-push that publication runs. Including either fix in 0.88.0 means repackaging;
+the `orgs` contract vintage that the 0.88 templates introduced; SA186 now requires a fast-forward
+before the split-branch force-push that publication runs. Including either fix in 0.88.0 means repackaging;
 publishing bytes without a fix ships its recorded issue. Publication itself stays a maintainer
 decision; this planner tracks only that it is owed.
 
@@ -34,7 +34,6 @@ context, scope, and acceptance;
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
 | SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | — | Deferred |
 | SA188 | Settle the privileged-command set behind one declaration | post-v88 | 3 | — | Deferred |
@@ -45,7 +44,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
-Track 2: SA186 ──► SA187 ──► SA192
+Track 2: SA187 ──► SA192
 Track 3: SA188 ──► SA189 ──► SA190
 ```
 
@@ -72,7 +71,7 @@ path.
   project-owned `base.html`, which `quickscale update` never rewrites, so a design change there is
   contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not an SA153 edge: the portal's
   React pages do not need the restyled Django pages to ship.
-- **Independent.** SA186 and SA187 have no edges and sit by severity. SA152 shares no files with
+- **Independent.** SA187 has no edges and sits by severity. SA152 shares no files with
   SA188/SA189, but all three touch the privilege/runtime contract of generated `settings/production.py`
   and `start.sh`; whichever lands second re-runs the others' fixtures.
 
@@ -82,8 +81,8 @@ splitting them across tracks would only add merge handoffs. Tracks 2 and 3 split
 conflict surface. Track 2 takes the CLI deploy/update, publication, and test surfaces, which are
 mostly trivial or small. Track 3 takes orgs tenancy, purge, and the privileged/runtime-role
 templates, which carry the medium tickets. Track 3 completed its independent RLS predicate work
-while Track 2 delivered SA185 and can now proceed to SA188. SA186 and SA187 could move to Track 3's
-tail without a conflict, but would only lengthen that track.
+while Track 2 delivered SA186 and can now proceed to SA187. SA187 could move to Track 3's tail
+without a conflict, but would only lengthen that track.
 
 ### Track states
 
@@ -92,7 +91,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA152 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA186 | yes | yes | yes | **yes** | no |
+| 2 | SA187 | yes | yes | yes | **yes** | no |
 | 3 | SA188 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -111,7 +110,7 @@ A track is **truly green** only when all three states are yes.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
   and the owning audit: the arch audit for SA152, SA188, SA189, and SA190; the tech audit
-  for SA186 and SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
+  for SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
   audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
   Three code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
@@ -343,22 +342,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA185 — Enforce contract vintage when upgradable code meets an older project.**
 
-- [ ] **SA186 — Require a fast-forward before publication force-pushes a split branch.**
-
-  **Context:** Force-with-lease prevents overwriting a remote commit nobody observed. `--publish-all` observes the
-  remote tip and immediately feeds it to the lease, so the lease only guards the moment between
-  observation and push. Publishing from an older worktree then force-overwrites newer split branches
-  with older bytes, and consumers verifying module code from split refs get stale modules. Because
-  `git subtree split` is deterministic, a legitimate republish always fast-forwards; an ancestry check
-  costs nothing on the happy path and stops exactly the overwrite the lease was meant to prevent.
-
-  **Acceptance:** before each push, `--publish-all` (and single-module publication, which relies on
-  the same lease) requires the observed remote tip to be an ancestor of the local split. On
-  divergence the batch stops before any further push and names the module. A regression with a
-  non-ancestor remote tip refuses; a fast-forward republish proceeds. This retires TA77.
-
-  **Surfaces:** `scripts/publish_module.py`, its tests, the publish procedure where it describes the
-  lease, and the technical audit.
+- [x] **SA186 — Require a fast-forward before publication force-pushes a split branch.**
 
 - [ ] **SA187 — Reject non-ASCII tokens and signatures as authentication failures.**
 

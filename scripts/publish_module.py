@@ -39,8 +39,9 @@ with the same explicit next-action guidance.
 
     Phase 4 also disables ``--publish-outdated`` entirely: it used bare
     ``--force`` internally, which violates the force-with-lease safety
-    contract.  Use ``--publish-all`` (fresh per-module lease) or single-module
-    publish with ``--expected-remote-sha`` instead.
+    contract.  For an existing branch, use ``--publish-all`` (fresh per-module
+    lease) or single-module publish with ``--expected-remote-sha``.  A confirmed
+    absent branch requires maintainer recovery instead of publication.
 """
 
 from __future__ import annotations
@@ -240,6 +241,10 @@ class SealError(GitError):
         self.cleanup_error = cleanup_error
 
 
+class RemoteBranchAbsentError(GitError):
+    """The named remote split branch was observed successfully and is absent."""
+
+
 # These aliases keep the result/error vocabulary explicit for callers that
 # consume the primitive without exposing a CLI or batch dispatch yet.
 SealResult = SealOutcome
@@ -388,7 +393,7 @@ def resolve_remote_ref(
             version=version,
         )
         if not parsed:
-            raise GitError(f"Remote branch {ref!r} is absent")
+            raise RemoteBranchAbsentError(f"Remote branch {ref!r} is absent")
         return next(iter(parsed.values()))
 
     validate_tag_name(ref)
@@ -874,47 +879,13 @@ def _get_local_split_sha(module_path: str, runner: GitRunner) -> str | None:
     return sha if sha else None
 
 
-def _get_published_split_ref(split_branch: str, runner: GitRunner) -> tuple[str, str]:
-    """
-    Return ``(sha, source)`` for the published split branch.
-
-    *source* is one of ``local-branch``, ``remote-tracking``, or ``none``.
-    """
-    # Check local branch first
-    result = runner.run(
-        ["rev-parse", "--verify", split_branch],
-        cwd=_REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        sha = result.stdout.strip()
-        if sha:
-            return sha, "local-branch"
-
-    # Check remote-tracking branch
-    result = runner.run(
-        ["rev-parse", "--verify", f"origin/{split_branch}"],
-        cwd=_REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        sha = result.stdout.strip()
-        if sha:
-            return sha, "remote-tracking"
-
-    return "", "none"
-
-
 def _get_module_publish_state(
     module_name: str,
     runner: GitRunner,
 ) -> tuple[str, str, str, str]:
-    """Return ``(state, local_sha, published_sha, published_source)``."""
+    """Return state from the computed local split and the live remote branch tip."""
     try:
         module_path = resolve_module_path(module_name)
-        split_branch = resolve_split_branch(module_name)
     except GitError as e:
         _print_error(str(e))
         sys.exit(1)
@@ -924,13 +895,15 @@ def _get_module_publish_state(
         _print_error(f"Could not compute subtree split for module '{module_name}'")
         sys.exit(1)
 
-    published_sha, published_source = _get_published_split_ref(split_branch, runner)
+    published_sha = _observe_remote_branch_sha(module_name, runner)
 
+    if published_sha is None:
+        return "unobservable", local_sha, "", "none"
     if not published_sha:
-        return "unpublished", local_sha, "", published_source
+        return "unpublished", local_sha, "", "none"
     if local_sha == published_sha:
-        return "up-to-date", local_sha, published_sha, published_source
-    return "outdated", local_sha, published_sha, published_source
+        return "up-to-date", local_sha, published_sha, "remote-live"
+    return "outdated", local_sha, published_sha, "remote-live"
 
 
 def _read_repository_version() -> str:
@@ -999,6 +972,41 @@ def _get_module_seal_state(
     return "sealed-conflict"
 
 
+def _require_fast_forward(
+    expected_remote_sha: str,
+    local_split_sha: str,
+    *,
+    runner: GitRunner,
+) -> None:
+    """Fail closed unless the observed remote tip can fast-forward to the local split."""
+    validate_expected_sha(expected_remote_sha)
+    try:
+        result = runner.run(
+            ["merge-base", "--is-ancestor", expected_remote_sha, local_split_sha],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise GitError(f"Could not verify split-branch ancestry: {exc}") from exc
+
+    if result.returncode == 0:
+        return
+    if result.returncode == 1:
+        raise GitError(
+            f"observed remote tip {expected_remote_sha} is not an ancestor of "
+            f"local split {local_split_sha}; refusing a non-fast-forward overwrite"
+        )
+
+    detail = (result.stderr or result.stdout).strip()
+    if not detail:
+        detail = f"git merge-base exited with status {result.returncode}"
+    raise GitError(
+        "Could not verify that the split publication is a fast-forward; "
+        f"fetch the remote history and retry ({detail})"
+    )
+
+
 def _publish_module(
     module_name: str,
     *,
@@ -1027,6 +1035,18 @@ def _publish_module(
     _print_info(f"Split branch: {split_branch}")
     print()
 
+    local_split_sha = _get_local_split_sha(module_path, runner)
+    if local_split_sha is None:
+        _print_error(f"Could not compute subtree split for module '{module_name}'")
+        sys.exit(1)
+
+    _print_info("Checking that publication fast-forwards the observed remote tip...")
+    try:
+        _require_fast_forward(expected_remote_sha, local_split_sha, runner=runner)
+    except GitError as e:
+        _print_error(f"Refusing to publish module '{module_name}': {e}")
+        sys.exit(1)
+
     _print_info("Running git subtree split...")
     try:
         split_sha = run_git_subtree_split(
@@ -1046,12 +1066,20 @@ def _publish_module(
             _print_info(f"  {sys.argv[0]} {module_name} --clean")
         sys.exit(1)
 
+    if split_sha.lower() != local_split_sha.lower():
+        _print_error(
+            f"Refusing to publish module '{module_name}': split identity changed "
+            "after the ancestry check; retry from a stable worktree"
+        )
+        sys.exit(1)
+
     _print_info("Pushing split branch to origin...")
     try:
         push_split_branch(
             split_branch,
             remote="origin",
             expected_remote_sha=expected_remote_sha,
+            source_sha=split_sha,
             path=_REPO_ROOT,
             runner=runner,
         )
@@ -1095,25 +1123,24 @@ def _show_provenance_diagnostics(runner: GitRunner) -> bool:
     return False
 
 
-def _observe_remote_branch_sha(module_name: str, runner: GitRunner) -> str:
+def _observe_remote_branch_sha(module_name: str, runner: GitRunner) -> str | None:
     """
     Freshly observe the remote split-branch SHA for *module_name*, read-only.
 
-    This is deliberately a live ``ls-remote`` rather than the published SHA that
-    ``_get_module_publish_state`` reports: that value prefers the *local* branch
-    and then the remote-tracking ref, either of which can be stale.  Feeding a
-    stale SHA to ``EXPECTED_REMOTE_SHA`` would satisfy the lease while clobbering
-    a remote commit nobody in this process ever saw, which is precisely what the
-    lease exists to prevent.
+    This live ``ls-remote`` result is the publication-status authority.  Local
+    and remote-tracking refs can be stale, and feeding one to
+    ``EXPECTED_REMOTE_SHA`` could satisfy the wrong lease.
 
-    The empty string means "could not observe" (no origin, no network, or an
-    absent branch).  Status is a diagnostic and never fails closed, so every
-    resolution failure degrades to that instead of raising.
+    The empty string means the remote was observed and the branch is absent;
+    ``None`` means origin, network, or another resolution failure prevented an
+    observation.  Status remains diagnostic, while mutating paths reject both.
     """
     try:
         return resolve_remote_ref("origin", resolve_split_branch(module_name), runner=runner)
-    except GitError, SealError, ModuleNotFoundError:
+    except RemoteBranchAbsentError:
         return ""
+    except GitError, SealError, ModuleNotFoundError:
+        return None
 
 
 def _show_status(
@@ -1136,13 +1163,14 @@ def _show_status(
 
     outdated: list[str] = []
     unpublished: list[str] = []
+    unobservable: list[str] = []
 
     all_sealed = True
     remote_shas: dict[str, str] = {}
     for module_name in frozen_modules:
         state, local_sha, pub_sha, pub_source = _get_module_publish_state(module_name, runner)
         seal_state = _get_module_seal_state(module_name, version, pub_sha, runner)
-        remote_shas[module_name] = _observe_remote_branch_sha(module_name, runner)
+        remote_shas[module_name] = pub_sha
         if state == "up-to-date":
             print(f"  {module_name:<16} {seal_state} up to date ({pub_source}, {local_sha[:12]})")
         elif state == "outdated":
@@ -1157,14 +1185,26 @@ def _show_status(
                 f"(local {local_sha[:12]}, no split branch)"
             )
             unpublished.append(module_name)
+        elif state == "unobservable":
+            print(
+                f"  {module_name:<16} {seal_state} remote state unobservable "
+                f"(local {local_sha[:12]})"
+            )
+            unobservable.append(module_name)
         if state != "up-to-date":
             observed = remote_shas[module_name]
-            print(f"  {'':<16} remote branch now: {observed or 'could not observe'}")
+            if state == "unpublished":
+                remote_state = "absent"
+            elif state == "unobservable":
+                remote_state = "could not observe"
+            else:
+                remote_state = observed
+            print(f"  {'':<16} remote branch now: {remote_state}")
         if seal_state != f"sealed@{version}":
             all_sealed = False
 
     print()
-    if not outdated and not unpublished:
+    if not outdated and not unpublished and not unobservable:
         _print_success("All module split branches are up to date.")
         if not is_auth:
             print()
@@ -1176,6 +1216,8 @@ def _show_status(
         _print_warning(f"Outdated split branches: {' '.join(outdated)}")
     if unpublished:
         _print_warning(f"Unpublished split branches: {' '.join(unpublished)}")
+    if unobservable:
+        _print_warning(f"Unobservable split branches: {' '.join(unobservable)}")
 
     # F2.9b: explicit next-action guidance (read-only; --status never fails closed).
     print()
@@ -1184,17 +1226,21 @@ def _show_status(
         # NOTE: keep --status output free of the lowercase substring
         # "not release-authoritative"; the read-only status test asserts that
         # substring is absent so --status is never mistaken for the F2.9a gate.
-        _print_info("  1. Tag HEAD to match VERSION so the source is release-authoritative.")
-        _print_info("  2. Re-run single-module publish:")
+        _print_info("  Tag HEAD to match VERSION so the source is release-authoritative.")
+    if unobservable:
+        _print_info("  Restore remote access, then re-run status before publishing.")
+    if unpublished:
         _print_info(
-            "       make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>"
+            "  A confirmed absent branch is not publication authorization; "
+            "restore it through maintainer recovery, then re-run status."
         )
-    else:
-        _print_info("  Publish every outdated module (fresh lease per module):")
-        _print_info("    make publish-modules")
-        _print_info("  Or publish one module:")
-        _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>")
-        ready = [name for name in outdated + unpublished if remote_shas.get(name)]
+    if outdated:
+        if unpublished or unobservable:
+            _print_info("  Recover every blocked branch before using make publish-modules.")
+        else:
+            _print_info("  Publish every outdated module (fresh lease per module):")
+            _print_info("    make publish-modules")
+        ready = [name for name in outdated if remote_shas.get(name)]
         if ready:
             print()
             _print_info("  Observed just now -- re-observe if anything else may have pushed since:")
@@ -1213,10 +1259,11 @@ def _publish_all(runner: GitRunner, *, modules: list[str]) -> None:
     bare ``--force``.  Here each module's remote SHA is observed live
     immediately before its own push and handed to ``_publish_module`` as the
     force-with-lease expectation, exactly as a hand-pasted
-    ``make publish-module`` would.  A module whose remote tip already equals
-    its local split is skipped.  An absent or unobservable remote branch is
-    not authorization, so it stops the batch.  The first failure also stops
-    the batch (``_publish_module`` exits), leaving later modules untouched.
+    ``make publish-module`` would.  Before pushing, ``_publish_module`` also
+    requires that observed tip to be an ancestor of the newly generated local
+    split.  A module whose remote tip already equals its local split is skipped.
+    An absent, unobservable, or divergent remote branch stops the batch.  The
+    first failure leaves later modules untouched.
 
     The release gate runs once, before the batch.  Each publish's ``--rejoin``
     merge moves HEAD without changing its tree, so the batch instead pins the
@@ -1295,7 +1342,9 @@ def _report_publish_outdated_disabled() -> None:
         "Batch --publish-outdated used bare --force, which violates the "
         "force-with-lease safety contract."
     )
-    _print_info("Publish each module individually with --expected-remote-sha:")
+    _print_info("Run --status to distinguish outdated branches from blocked branches.")
+    _print_info("Publish an outdated branch with its observed --expected-remote-sha.")
+    _print_info("Restore a confirmed absent branch through maintainer recovery.")
     sys.exit(1)
 
 
@@ -1336,9 +1385,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--publish-outdated",
         action="store_true",
         help=(
-            "[DISABLED in SA117 Phase 4] Previously published modules with "
-            "missing or outdated split branches.  Now exits with safety "
-            "guidance; use single-module publish instead."
+            "[DISABLED in SA117 Phase 4] Previously targeted missing or outdated "
+            "split branches. Now exits with safety guidance: publish only an "
+            "outdated observed branch; recover an absent branch."
         ),
     )
     parser.add_argument(

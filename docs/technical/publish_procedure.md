@@ -157,20 +157,24 @@ git config --local user.email '<email>'
 
 Keep credentials in the helper or an SSH agent — never in a remote URL or command argument.
 
-Publish every module that is not already up to date. On a first pass through this phase that is all
-twelve; on a re-entry from [Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) it is usually a subset.
-One command does it:
+Publish every module that status reports as outdated. On a normal first pass that is all twelve
+existing split branches; an absent or unobservable branch must be recovered first. On a re-entry
+from [Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) the outdated set is usually a subset.
+One command handles that set:
 
 ```bash
 make publish-modules                                        # every outdated module, fresh lease each
 git tag -f X.Y.Z                                            # re-point the local tag (see below)
-make publish-module-status                                  # confirm: all twelve up to date
+make publish-module-status                                  # confirm: every branch is up to date
 ```
 
 `make publish-modules` walks the shipped-module inventory serially. For each module it observes the remote
-split-branch SHA live, skips the module if that already equals its local split, and otherwise publishes with
-that SHA as the force-with-lease expectation. It stops at the first failure, and at any module whose remote
-branch is absent or unobservable. It ends by printing status.
+split-branch SHA live, skips the module if that already equals its local split, and otherwise requires that
+SHA to be an ancestor of the local split before publishing that exact split commit with it as the
+force-with-lease expectation; a mutable local branch name is never the push source.
+A non-ancestor tip stops the batch before any further push and names the module; single-module publication
+enforces the same ancestry rule. The batch also stops at any absent or unobservable remote branch and ends
+by printing status.
 
 Every publish records a `Split '…' into commit '…'` merge on the integration branch (`git subtree split
 --rejoin`). The merge leaves the tree byte-identical but moves `HEAD` off the `X.Y.Z` tag, and every
@@ -181,9 +185,12 @@ run. The tag is still local, so moving it is free. After a partial batch, re-tag
 published are skipped. Commit nothing between the batch and the re-tag: the tag must land on the rejoin
 merge, not on new work.
 
-`make publish-module-status` observes each remote split branch live and, for every module that is
-not up to date, prints a ready-to-paste `make publish-module …` line with the full 40-hex SHA
-already filled in.
+`make publish-module-status` reports four live-remote states: up to date, outdated, unpublished
+(the remote branch was confirmed absent), and unobservable. For each outdated module whose existing
+remote tip was observed, it prints a ready-to-paste `make publish-module …` line with the full
+40-hex SHA already filled in. An absent branch is not publication authorization and must be restored
+through maintainer recovery; an unobservable branch requires restoring remote access and re-running
+status. Neither state emits a publish command that is guaranteed to fail.
 
 **Then verify before sealing.** Phases 4a and 4b below are the verification loop; a failure there means fixing
 the cause, re-running the quality gate, and republishing whatever status then reports as outdated, per the
@@ -381,7 +388,7 @@ defect costs a new version.
 | Artifact | Mutable until | How to correct |
 |---|---|---|
 | Local release commit and tag | always (pre-push) | amend; `git tag -d X.Y.Z` |
-| `splits/<module>-module` branches | always | `make publish-modules` (fresh lease per module) |
+| `splits/<module>-module` branches | always | `make publish-modules` (fresh lease and fast-forward check per module) |
 | `splits/<module>-module/X.Y.Z` tags | PyPI publication | delete remote + local tag, republish branch, reseal |
 | PyPI distributions and the GitHub Release | never | ship a new version |
 

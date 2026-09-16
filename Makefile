@@ -314,7 +314,7 @@ help:
 	@echo "  make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha> - Publish module to split branch"
 	@echo "  make publish-modules      - Publish every outdated module, each against its own freshly observed remote SHA"
 	@echo "  make publish-module-status - Show split-branch status for all modules"
-	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Was publish outdated modules; use per-module publish instead"
+	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Check status; publish observed outdated branches or recover confirmed absent branches"
 	@echo "  make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version> [PREVIOUS_VERSION=<version>])"
 	@echo "  make seal-modules         - Seal all split-branch tags (VERSION=<version> [PREVIOUS_VERSION=<version>])"
 	@echo "                             Requires repo-local credential.helper, user.name, and user.email; global/system Git config is ignored"
@@ -1544,9 +1544,9 @@ publish-modules:
 publish-module-status:
 	@scripts/publish_module.sh --status
 
-# Disabled in SA117 Phase 4: publish each module only with an exact remote SHA.
+# Disabled in SA117 Phase 4: inspect status before choosing publication or recovery.
 publish-modules-outdated:
-	@echo "Error: publish-modules-outdated is disabled in SA117 Phase 4; use per-module publish with EXPECTED_REMOTE_SHA=<40-hex-remote-sha>."; exit 1
+	@echo "Error: publish-modules-outdated is disabled in SA117 Phase 4; run make publish-module-status, publish only observed outdated branches, and recover confirmed absent branches."; exit 1
 
 # Seal tags are deliberately narrower than a broad ``git push --tags``: that
 # unsafe command could push the local core tag and trigger PyPI publication.

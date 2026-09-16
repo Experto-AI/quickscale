@@ -566,6 +566,7 @@ class TestPublicationGitControls:
         push_split_branch(
             "splits/auth-module",
             expected_remote_sha="a" * 40,
+            source_sha="b" * 40,
             path=tmp_path,
             runner=runner,
         )
@@ -575,6 +576,7 @@ class TestPublicationGitControls:
             "push",
             "--force-with-lease=refs/heads/splits/auth-module:" + "a" * 40,
         ]
+        assert commands[1][-1] == f"{'b' * 40}:refs/heads/splits/auth-module"
         assert commands[2][:4] == ["diff", "--cached", "--name-only", "-z"]
 
     @patch("subprocess.run")
@@ -1761,6 +1763,24 @@ class TestPushSplitBranch:
         assert "--force" not in args
 
     @patch("subprocess.run")
+    def test_push_with_source_sha_uses_exact_object_refspec(
+        self, mock_run: MagicMock
+    ) -> None:
+        """The pushed object cannot drift when the local branch moves."""
+        mock_run.return_value = MagicMock(returncode=0)
+        source_sha = "b" * 40
+
+        push_split_branch(
+            "splits/auth-module",
+            expected_remote_sha="a" * 40,
+            source_sha=source_sha,
+        )
+
+        args = mock_run.call_args[0][0]
+        assert args[-1] == f"{source_sha}:refs/heads/splits/auth-module"
+        assert "splits/auth-module" not in args[:-1]
+
+    @patch("subprocess.run")
     def test_custom_remote(self, mock_run: MagicMock) -> None:
         """push_split_branch accepts a custom remote name."""
         mock_run.return_value = MagicMock(returncode=0)
@@ -2582,19 +2602,20 @@ class TestPublishModuleReleaseAuthoritativeGate:
         assert result.returncode == 0
         assert "Release provenance: authoritative" in combined
 
-    def test_status_reports_unpublished_with_next_action(self, tmp_path: Path) -> None:
-        """--status reports unpublished split branches with explicit next-action guidance.
+    def test_status_reports_unobservable_with_next_action(self, tmp_path: Path) -> None:
+        """--status reports an unavailable remote with explicit next-action guidance.
 
-        Hermetic: untagged HEAD with a never-published fake module.  --status
-        must report the unpublished split branch and give explicit next-action
-        guidance (tag HEAD first) while remaining read-only.
+        Hermetic: untagged HEAD without an origin.  Since absence cannot be
+        confirmed, --status must report the branch as unobservable and give
+        both provenance and remote-access guidance while remaining read-only.
         """
         repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
         result = self._run_wrapper(repo_dir, "--status", timeout=120)
         combined = result.stdout + result.stderr
         assert result.returncode == 0
-        # The fake 'auth' module has no published split branch.
-        assert "unpublished" in combined
+        assert "unobservable" in combined
+        assert "unpublished" not in combined
+        assert "Restore remote access" in combined
         # Explicit next-action guidance points at tagging first.
         assert "Next action" in combined
         assert "Tag HEAD to match VERSION" in combined

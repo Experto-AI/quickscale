@@ -990,6 +990,7 @@ def push_split_branch(
     remote: str = "origin",
     *,
     expected_remote_sha: str | None = None,
+    source_sha: str | None = None,
     path: Path | None = None,
     runner: GitRunner | None = None,
 ) -> None:
@@ -1001,6 +1002,10 @@ def push_split_branch(
     - A 40-character hex SHA produces
       ``--force-with-lease=refs/heads/<branch>:<sha>``, which rejects the
       push if the remote ref has moved away from the expected commit.
+
+    When *source_sha* is provided, the push source is that exact commit object
+    rather than the mutable local branch name.  Publication callers use this
+    to bind their ancestry proof to the object Git sends.
 
     When *expected_remote_sha* is ``None``, the push is performed without
     any ``--force`` flag (fast-forward-only).  Callers that require
@@ -1017,7 +1022,14 @@ def push_split_branch(
         validate_expected_sha(expected_remote_sha)
         cmd.append(f"--force-with-lease=refs/heads/{branch}:{expected_remote_sha}")
 
-    cmd.extend([remote, branch])
+    source_ref = branch
+    if source_sha is not None:
+        source_ref = _validate_commit_sha(source_sha, description="split source SHA")
+        if all(character == "0" for character in source_ref):
+            raise GitError("Split source SHA must not be all-zero")
+
+    refspec = branch if source_sha is None else f"{source_ref}:refs/heads/{branch}"
+    cmd.extend([remote, refspec])
 
     try:
         if runner is not None and runner.publication:

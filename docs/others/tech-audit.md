@@ -85,31 +85,15 @@ All of these were read hunk by hunk, production and test.
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| TA77 `publish-all-self-observed-lease` | S3 | Concurrency / publication safety | `--publish-all` feeds its own just-observed SHA to the lease, so it can overwrite unseen remote commits | Small | Medium | open — new |
 | TA78 `compare-digest-non-ascii-500` | S4 | Error handling | A non-ASCII token or signature header crashes two auth checks with a 500 | Trivial | High (executed) | open — new |
 
 ⚡ = quick win (Trivial-effort S2/S3).
 
-**Counts derived from the table:** S1 **0** · S2 **0** · S3 **1** · S4 **1** · **Total 2 open.**
+**Counts derived from the table:** S1 **0** · S2 **0** · S3 **0** · S4 **1** · **Total 1 open.**
 
 ---
 
 ## Findings
-
-### TA77 `publish-all-self-observed-lease` · S3 · `scripts/publish_module.py:1208-1253`
-
-**Defect:** `_publish_all` calls `_observe_remote_branch_sha` (a live `ls-remote`) and passes the result straight to `_publish_module` as `expected_remote_sha`. The lease then only guards the milliseconds between observation and push. It never checks that the observed remote tip is an ancestor of the local split. Nearby text contradicts the design: the helper's docstring warns that feeding an unseen SHA "would satisfy the lease while clobbering a remote commit nobody in this process ever saw", and `_publish_module` (`:1002`) relies on the same lease with no ancestry check.
-
-**Failure scenario:**
-
-1. The maintainer publishes 0.89 module splits from one worktree.
-2. Later they run `make publish-modules` from an older worktree still on an authoritative tag. `_run_release_gates` passes, because `_check_release_authoritative` is per-checkout.
-3. Every newer split branch is force-overwritten with older bytes.
-4. Consumers of `apply --split-refs-from-branches` then verify stale module code.
-
-`git subtree split` is deterministic, so a legitimate re-publish always fast-forwards. That makes the ancestry check safe to add.
-
-**Fix:** Before each push, require `git merge-base --is-ancestor <remote_sha> <local_split_sha>`. On divergence, stop the batch and name the module. **Effort:** Small. **Confidence:** Medium: the divergence scenario is inferred, not executed. Reality 1.
 
 ### S4
 
@@ -121,14 +105,14 @@ All of these were read hunk by hunk, production and test.
 
 | Subsystem | What was read | Verdict |
 |---|---|---|
-| Commit delta `87e8c96a..HEAD` | full first-party production diff and every test hunk | TA77 remains open; test changes adjudicated in *Clean sweeps* |
+| Commit delta `87e8c96a..HEAD` | full first-party production diff and every test hunk | Clean; test changes adjudicated in *Clean sweeps* |
 | Generated boot sequence (`start.sh.j2`, `Dockerfile.j2`, `railway.json.j2`) | entire files; lifecycle walk boot → role → migrate → cache → superuser → WSGI → gunicorn | Clean. Role creation is identifier-safe, refuses a superuser or self role, and credentials stay off argv. Two watch items below |
 | CLI deploy (`deployment_commands.py`, `railway_utils.py` variable helpers) | delta in full plus read/set helpers | Clean after live-state reconciliation and exact database-service selection |
 | CLI dev (`development_commands.py`) | delta plus every `_run_docker_exec_command` caller | Clean. The privilege narrowing is correct and `manage` guards empty args at `:690` |
 | orgs — privileged commands (`apps.py`, `migrate_billing_to_orgs.py`) | whole command, guard delta | Clean. See *Clean sweeps* |
 | orgs — `purge_organization` | whole file | Clean for live Stripe-backed subscriptions; the broader teardown tooling gap remains below |
 | Client identity / public auth (`get_client_ip`, blog API auth, notifications webhook) | functions in full | TA78; otherwise clean |
-| Publication tooling (`publish_module.py`, `version_tool.sh`, compat gate) | delta plus `_publish_module`, `_run_release_gates` | TA77 |
+| Publication tooling (`publish_module.py`, `version_tool.sh`, compat gate) | delta plus `_publish_module`, `_run_release_gates` | Clean after the fast-forward ancestry check before each push |
 | CI / gates (workflows, testimony, security gates, provisioning, isolation conformance) | delta in full | Clean as defects; remaining watch items and tooling gaps are listed below |
 
 ---
@@ -242,6 +226,7 @@ All of these were read hunk by hunk, production and test.
 - 2026-09-15 — **Chain pass (§3.9) ran.** One candidate chain was refuted (TA75 guessed service × DB-free healthcheck; see empirical check 3). TA75 × TA74 share a re-run trigger but compound only into disruption, not exposure. No chain raised a severity.
 - 2026-09-16 — **TA74** `railway-redeploy-rotates-secret-key`: **retired by SA184.** Re-runs now reuse the service's `SECRET_KEY`, generating one only on first deploy; archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-16 — **TA75** `railway-runtime-role-vars-fail-open`: **retired by SA184.** Unreadable Railway state and ambiguous PostgreSQL listings now fail the deploy instead of inventing values; archived in [CHANGELOG.md](../../CHANGELOG.md).
+- 2026-09-16 — **TA77** `publish-all-self-observed-lease`: **retired by SA186.** Every split publication now requires the observed existing remote tip to be an ancestor of the local split before push; archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-16 — **RLS predicate-conformance gap retired.** The isolation gate now compares both live policies for every marker-enrolled table with the exact normalized contract, scopes catalog reads to `current_schema()`, and proves both a weakened predicate and a same-named cross-schema decoy are rejected; archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 *Categories swept with no qualifying finding this pass: injection sinks (role DDL, publication git argv, testimony regex), authorization on the delta's new surfaces, secrets on argv or in logs (beyond the start.sh watch item), multi-tenant isolation in the privileged-command changes, CI secret and escape-hatch propagation, resources and I/O, performance, and the code-generator and IaC archetype lenses.*

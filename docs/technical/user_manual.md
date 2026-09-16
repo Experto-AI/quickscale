@@ -728,9 +728,9 @@ Use these from the repository root:
 - `make lint` / `make format` / `make typecheck` — shared quality checks
 - `make frontend-proof` — render `showcase_react` and run `pnpm install`, `pnpm type-check`, and `pnpm build` without Docker
 - `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` — publish module changes to split branches using force-with-lease safety; provide a freshly observed exact 40-hex remote SHA for every mutable update
-- `make publish-modules` — publish every outdated module serially, each against its own freshly observed remote SHA; stops at the first failure
-- `make publish-module-status` — show which module split branches are up to date, outdated, or unpublished
-- `make publish-modules-outdated` — **[DISABLED SA117 Phase 4]** publish only modules whose split branches are missing or outdated; use per-module publish with `EXPECTED_REMOTE_SHA` instead
+- `make publish-modules` — publish every outdated module serially, each against its own freshly observed existing remote SHA and ancestry check; stops at the first failure and refuses absent or unobservable branches
+- `make publish-module-status` — show which module split branches are up to date, outdated, unpublished (confirmed absent), or unobservable; paste-ready commands appear only for outdated branches with an observed existing tip
+- `make publish-modules-outdated` — **[DISABLED SA117 Phase 4]** old unsafe batch; use status, publish an outdated observed branch with `EXPECTED_REMOTE_SHA`, and restore a confirmed absent branch through maintainer recovery
 - `make version-check` — verify `VERSION` alignment across packages
 
 > Publishing a release is an ordered procedure, not a single command. Follow

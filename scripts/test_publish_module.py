@@ -1158,7 +1158,7 @@ class TestSealCliAndStatus:
         monkeypatch.setattr(
             publish_module,
             "_get_module_publish_state",
-            lambda module, runner: ("up-to-date", HEAD_SHA, HEAD_SHA, "remote-tracking"),
+            lambda module, runner: ("up-to-date", HEAD_SHA, HEAD_SHA, "remote-live"),
         )
         monkeypatch.setattr(
             publish_module,
@@ -1177,10 +1177,9 @@ class TestSealCliAndStatus:
         """
         An outdated module gets a live-observed 40-hex SHA, not the stale published one.
 
-        The published SHA reported by ``_get_module_publish_state`` prefers the
-        local branch and can be stale; pasting it would satisfy the lease while
-        clobbering an unseen remote commit.  The offered command must therefore
-        carry the ``ls-remote`` value.
+        A local or remote-tracking branch can be stale; pasting its SHA would
+        satisfy the wrong lease.  The offered command must carry the live
+        ``ls-remote`` value used to derive publication status.
         """
         stale_sha = "b" * 40
         monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
@@ -1188,14 +1187,23 @@ class TestSealCliAndStatus:
         monkeypatch.setattr(publish_module, "_show_provenance_diagnostics", lambda runner: True)
         monkeypatch.setattr(
             publish_module,
-            "_get_module_publish_state",
-            lambda module, runner: ("outdated", HEAD_SHA, stale_sha, "local-branch"),
+            "resolve_module_path",
+            lambda module: f"quickscale_modules/{module}",
         )
-        monkeypatch.setattr(publish_module, "resolve_split_branch", lambda module: "splits/auth")
         monkeypatch.setattr(
             publish_module,
-            "resolve_remote_ref",
-            lambda remote, ref, *, runner: HEAD_SHA,
+            "_get_local_split_sha",
+            lambda path, runner: stale_sha,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_observe_remote_branch_sha",
+            lambda module, runner: HEAD_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_module_seal_state",
+            lambda module, version, published_sha, runner: "unsealed",
         )
 
         publish_module._show_status(object(), version=VERSION)
@@ -1207,27 +1215,85 @@ class TestSealCliAndStatus:
     def test_status_degrades_when_remote_branch_cannot_be_observed(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """No origin or no network reports 'could not observe' instead of failing closed."""
+        """No origin or no network is distinct from a confirmed absent branch."""
         monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
         monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
         monkeypatch.setattr(publish_module, "_show_provenance_diagnostics", lambda runner: True)
         monkeypatch.setattr(
             publish_module,
-            "_get_module_publish_state",
-            lambda module, runner: ("unpublished", HEAD_SHA, "", "none"),
+            "resolve_module_path",
+            lambda module: f"quickscale_modules/{module}",
         )
-        monkeypatch.setattr(publish_module, "resolve_split_branch", lambda module: "splits/auth")
-
-        def _absent(remote: str, ref: str, *, runner: object) -> str:
-            raise publish_module.GitError(f"Remote branch {ref!r} is absent")
-
-        monkeypatch.setattr(publish_module, "resolve_remote_ref", _absent)
+        monkeypatch.setattr(
+            publish_module,
+            "_get_local_split_sha",
+            lambda path, runner: HEAD_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_observe_remote_branch_sha",
+            lambda module, runner: None,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_module_seal_state",
+            lambda module, version, published_sha, runner: "unsealed",
+        )
 
         publish_module._show_status(object(), version=VERSION)
         output = capsys.readouterr().out
 
+        assert "remote state unobservable" in output
+        assert "Unobservable split branches: auth" in output
+        assert "Unpublished split branches" not in output
         assert "could not observe" in output
-        assert "EXPECTED_REMOTE_SHA=" in output  # the generic placeholder line survives
+        assert "Restore remote access" in output
+
+    @pytest.mark.parametrize("is_authoritative", [True, False])
+    def test_status_reports_confirmed_absence_without_unusable_publish_commands(
+        self,
+        is_authoritative: bool,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
+        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(
+            publish_module,
+            "_show_provenance_diagnostics",
+            lambda runner: is_authoritative,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_module_path",
+            lambda module: f"quickscale_modules/{module}",
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_local_split_sha",
+            lambda path, runner: HEAD_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_observe_remote_branch_sha",
+            lambda module, runner: "",
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_module_seal_state",
+            lambda module, version, published_sha, runner: "unsealed",
+        )
+
+        publish_module._show_status(object(), version=VERSION)
+        output = capsys.readouterr().out
+
+        assert "unpublished (local" in output
+        assert "remote branch now: absent" in output
+        assert "confirmed absent branch is not publication authorization" in output
+        assert "make publish-modules" not in output
+        assert "EXPECTED_REMOTE_SHA=" not in output
+        if not is_authoritative:
+            assert "Tag HEAD to match VERSION" in output
 
     def test_status_accepts_lightweight_direct_target_fallback(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1595,10 +1661,20 @@ class TestPublishMakeInterfaces:
         assert "EXPECTED_REMOTE_SHA=<sha|ABSENT>" not in output
         assert "40hex_or_ABSENT" not in output
         assert "publish-modules-outdated - [DISABLED SA117 Phase 4]" in output
+        assert "recover confirmed absent branches" in output
         assert (
             "Requires repo-local credential.helper, user.name, and user.email; "
             "global/system Git config is ignored"
         ) in output
+
+    def test_disabled_make_batch_distinguishes_outdated_from_absent(self) -> None:
+        result = self._make("publish-modules-outdated")
+        output = result.stdout + result.stderr
+
+        assert result.returncode != 0
+        assert "run make publish-module-status" in output
+        assert "observed outdated branches" in output
+        assert "recover confirmed absent branches" in output
 
     @pytest.mark.parametrize(
         ("make_args", "expected_message"),
@@ -1729,6 +1805,183 @@ class TestPublishMakeInterfaces:
         assert "scripts/publish_module.sh" not in output
 
 
+class TestPublishFastForward:
+    """Every leased split push also proves it advances the observed remote tip."""
+
+    @staticmethod
+    def _patch_publish(
+        monkeypatch: pytest.MonkeyPatch,
+        pushed: list[tuple[str, str, str]],
+    ) -> None:
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_module_path",
+            lambda module: f"quickscale_modules/{module}",
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_split_branch",
+            lambda module: f"splits/{module}-module",
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "run_git_subtree_split",
+            lambda **kwargs: HEAD_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_local_split_sha",
+            lambda path, runner: HEAD_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "push_split_branch",
+            lambda branch, *, expected_remote_sha, source_sha, **kwargs: pushed.append(
+                (branch, expected_remote_sha, source_sha)
+            ),
+        )
+
+    def test_fast_forward_republish_proceeds_after_ancestry_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pushed: list[tuple[str, str, str]] = []
+        self._patch_publish(monkeypatch, pushed)
+        runner = _ScriptedGitRunner([_GitResponse()])
+
+        publish_module._publish_module(
+            MODULE,
+            expected_remote_sha=OTHER_SHA,
+            runner=runner,
+        )
+
+        assert [call[0] for call in runner.calls] == [
+            ("merge-base", "--is-ancestor", OTHER_SHA, HEAD_SHA)
+        ]
+        assert pushed == [(BRANCH, OTHER_SHA, HEAD_SHA)]
+
+    def test_non_ancestor_refuses_before_push_and_names_module(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        pushed: list[tuple[str, str, str]] = []
+        split: list[str] = []
+        self._patch_publish(monkeypatch, pushed)
+        monkeypatch.setattr(
+            publish_module,
+            "run_git_subtree_split",
+            lambda **kwargs: split.append("split") or HEAD_SHA,
+        )
+        runner = _ScriptedGitRunner([_GitResponse(returncode=1)])
+
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module._publish_module(
+                MODULE,
+                expected_remote_sha=OTHER_SHA,
+                runner=runner,
+            )
+
+        assert excinfo.value.code == 1
+        assert pushed == []
+        assert split == []
+        output = capsys.readouterr().out
+        assert MODULE in output
+        assert "not an ancestor" in output
+        assert "non-fast-forward overwrite" in output
+
+    def test_unverifiable_ancestry_fails_closed_before_push(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        pushed: list[tuple[str, str, str]] = []
+        self._patch_publish(monkeypatch, pushed)
+        runner = _ScriptedGitRunner(
+            [_GitResponse(returncode=128, stderr="shallow history cannot prove ancestry")]
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module._publish_module(
+                MODULE,
+                expected_remote_sha=OTHER_SHA,
+                runner=runner,
+            )
+
+        assert excinfo.value.code == 1
+        assert pushed == []
+        output = capsys.readouterr().out
+        assert "fetch the remote history and retry" in output
+        assert "shallow history cannot prove ancestry" in output
+
+    def test_split_identity_change_refuses_before_exact_object_push(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        pushed: list[tuple[str, str, str]] = []
+        self._patch_publish(monkeypatch, pushed)
+        changed_split_sha = "c" * 40
+        monkeypatch.setattr(
+            publish_module,
+            "run_git_subtree_split",
+            lambda **kwargs: changed_split_sha,
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module._publish_module(
+                MODULE,
+                expected_remote_sha=OTHER_SHA,
+                runner=_ScriptedGitRunner([_GitResponse()]),
+            )
+
+        assert excinfo.value.code == 1
+        assert pushed == []
+        output = capsys.readouterr().out
+        assert MODULE in output
+        assert "split identity changed after the ancestry check" in output
+
+    def test_status_uses_live_remote_instead_of_matching_local_branch(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setattr(publish_module, "_list_modules", lambda: [MODULE])
+        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(
+            publish_module,
+            "_show_provenance_diagnostics",
+            lambda runner: True,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_module_path",
+            lambda module: f"quickscale_modules/{module}",
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_local_split_sha",
+            lambda path, runner: HEAD_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_observe_remote_branch_sha",
+            lambda module, runner: OTHER_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_module_seal_state",
+            lambda module, version, published_sha, runner: "unsealed",
+        )
+
+        publish_module._show_status(object(), version=VERSION)
+
+        output = capsys.readouterr().out
+        assert "outdated (remote-live" in output
+        assert HEAD_SHA[:12] in output
+        assert OTHER_SHA[:12] in output
+        assert "All module split branches are up to date" not in output
+
+
 class TestPublishAll:
     """``--publish-all`` publishes serially, each module against its own fresh lease."""
 
@@ -1807,6 +2060,106 @@ class TestPublishAll:
         assert pushes == [("auth", "1" * 40)]
         assert "not authorization" in output
         assert f"git tag -f {VERSION}" in output
+
+    def test_divergence_stops_before_any_later_module_push(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        local = {"auth": "a" * 40, "blog": "b" * 40, "crm": "c" * 40}
+        remote = {"auth": "1" * 40, "blog": "2" * 40, "crm": "3" * 40}
+        pushed: list[str] = []
+        split: list[str] = []
+        monkeypatch.setattr(publish_module, "resolve_module_path", lambda module: module)
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_split_branch",
+            lambda module: f"splits/{module}-module",
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_local_split_sha",
+            lambda path, runner: local[path],
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_observe_remote_branch_sha",
+            lambda module, runner: remote[module],
+        )
+
+        def _split(**kwargs: object) -> str:
+            prefix = kwargs["prefix"]
+            assert isinstance(prefix, str)
+            split.append(prefix)
+            return local[prefix]
+
+        monkeypatch.setattr(publish_module, "run_git_subtree_split", _split)
+        monkeypatch.setattr(
+            publish_module,
+            "push_split_branch",
+            lambda branch, **kwargs: pushed.append(branch),
+        )
+        monkeypatch.setattr(publish_module, "_head_tree", lambda runner: "t" * 40)
+        monkeypatch.setattr(publish_module, "_read_repository_version", lambda: VERSION)
+        runner = _ScriptedGitRunner([_GitResponse(returncode=0), _GitResponse(returncode=1)])
+
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module._publish_all(runner, modules=["auth", "blog", "crm"])
+
+        assert excinfo.value.code == 1
+        assert split == ["auth"]
+        assert pushed == ["splits/auth-module"]
+        output = capsys.readouterr().out
+        assert "blog" in output
+        assert "non-fast-forward overwrite" in output
+        assert "crm" not in output
+        assert f"git tag -f {VERSION}" in output
+
+    def test_first_divergence_stops_before_rejoin_or_push(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        split: list[str] = []
+        pushed: list[str] = []
+        monkeypatch.setattr(publish_module, "resolve_module_path", lambda module: module)
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_split_branch",
+            lambda module: f"splits/{module}-module",
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_get_local_split_sha",
+            lambda path, runner: HEAD_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_observe_remote_branch_sha",
+            lambda module, runner: OTHER_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "run_git_subtree_split",
+            lambda **kwargs: split.append("split") or HEAD_SHA,
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "push_split_branch",
+            lambda branch, **kwargs: pushed.append(branch),
+        )
+        monkeypatch.setattr(publish_module, "_head_tree", lambda runner: "t" * 40)
+        monkeypatch.setattr(publish_module, "_read_repository_version", lambda: VERSION)
+
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module._publish_all(
+                _ScriptedGitRunner([_GitResponse(returncode=1)]),
+                modules=[MODULE, "blog"],
+            )
+
+        assert excinfo.value.code == 1
+        assert split == []
+        assert pushed == []
+        output = capsys.readouterr().out
+        assert MODULE in output
+        assert "Published: none" in output
+        assert f"git tag -f {VERSION}" not in output
 
     @pytest.mark.parametrize(
         ("argv", "expected_message"),
