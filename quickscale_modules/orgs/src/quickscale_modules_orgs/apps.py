@@ -6,11 +6,12 @@ with the BYPASSRLS privilege and/or the SUPERUSER attribute.  The guard
 has two narrow exemptions:
 
 1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned privileged
-   DB command (``migrate``, ``createcachetable``, ``migrate_billing_to_orgs``) — launchers set
+   DB command (``migrate`` or ``createcachetable``) — launchers set
    this env var alongside ``RUNTIME_DATABASE_URL=""`` so DDL runs under
    the superuser ``DATABASE_URL`` with BYPASSRLS.
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
-   intentional single-tenant or development use.
+   intentional single-tenant/development use or the explicitly acknowledged
+   retired billing recovery command, never runtime serving.
 
 All other startup paths (including ``manage.py runserver``,
 gunicorn, and WSGI) remain fail-closed regardless of
@@ -33,17 +34,14 @@ from django.db.backends.signals import connection_created
 # Module-guard declaration of the sanctioned privileged DB commands.
 # Keep it aligned with the independent fail-closed declarations in the production
 # settings validator, CLI producer, and generated start.sh launcher; none is a SSOT.
-_PRIVILEGED_COMMANDS: frozenset[str] = frozenset(
-    {"migrate", "createcachetable", "migrate_billing_to_orgs"}
-)
+_PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})
 
 
 def _is_privileged_command() -> bool:
     """Return ``True`` when ``QUICKSCALE_PRIVILEGED_COMMAND`` is set to a
     sanctioned privileged DB command.
 
-    Sanctioned values (``migrate``, ``createcachetable``,
-    ``migrate_billing_to_orgs``) are exempt from
+    Sanctioned values (``migrate`` and ``createcachetable``) are exempt from
     the BYPASSRLS/SUPERUSER boot guard because the generated ``start.sh``
     sets this env var alongside ``RUNTIME_DATABASE_URL=""`` so that
     database DDL/DML runs under the superuser ``DATABASE_URL`` with
@@ -106,10 +104,11 @@ def _check_rls_role() -> None:
     or ``DEBUG``) with two narrow exemptions:
 
     1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned value
-       (``migrate``, ``createcachetable``, ``migrate_billing_to_orgs``) — handled in ``ready()``
+       (``migrate`` or ``createcachetable``) — handled in ``ready()``
        before this is called.
     2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
-       intentional single-tenant or development use.
+       intentional single-tenant/development use or the explicitly acknowledged
+       retired billing recovery command, never runtime serving.
 
     This module guard declares its sanctioned command set in
     ``_PRIVILEGED_COMMANDS`` and checks it via ``_is_privileged_command()``;
@@ -119,7 +118,8 @@ def _check_rls_role() -> None:
     No-op on SQLite (non-PostgreSQL).
     """
     # ---- Escape hatch --------------------------------------------------
-    # Explicit opt-in for single-tenant / development environments.
+    # Explicit non-serving opt-in for single-tenant/development environments or
+    # the acknowledged retired billing recovery command.
     if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
         return
 
@@ -176,7 +176,7 @@ class QuickscaleOrgsConfig(AppConfig):
         # ---- SA68 Phase 1 — BYPASSRLS/SUPERUSER boot guard -------------
         # Two narrow exemptions:
         #   1. QUICKSCALE_PRIVILEGED_COMMAND set to a sanctioned value
-        #      (migrate, createcachetable, migrate_billing_to_orgs) — launchers set this env var
+        #      (migrate or createcachetable) — launchers set this env var
         #      alongside RUNTIME_DATABASE_URL="" so DDL/DML runs under
         #      the superuser DATABASE_URL with BYPASSRLS.
         #   2. QUICKSCALE_ALLOW_BYPASSRLS=1 env-var escape hatch

@@ -60,7 +60,7 @@ def _orgs_manifest() -> ModuleManifest:
         name="orgs",
         version="0.89.0",
         contract_vintage=ContractVintage(
-            minimum="0.88.0",
+            minimum="0.89.0",
             manual_adoption_steps=[
                 "Adopt settings/production.py",
                 "Adopt start.sh",
@@ -70,20 +70,20 @@ def _orgs_manifest() -> ModuleManifest:
     )
 
 
-def test_orgs_declares_the_088_generated_file_contract() -> None:
+def test_orgs_declares_the_089_generated_file_contract() -> None:
     manifest_path = Path(__file__).parents[2] / "quickscale_modules/orgs/module.yml"
     manifest = load_manifest_from_path(manifest_path)
 
     assert manifest.contract_vintage is not None
-    assert manifest.contract_vintage.minimum == "0.88.0"
+    assert manifest.contract_vintage.minimum == "0.89.0"
     steps = " ".join(manifest.contract_vintage.manual_adoption_steps)
     assert "settings/production.py" in steps
     assert "start.sh" in steps
     assert "Dockerfile" in steps
 
 
-def test_railway_declares_the_same_088_generated_file_contract() -> None:
-    assert RAILWAY_CONTRACT_VINTAGE.minimum == "0.88.0"
+def test_railway_declares_the_same_089_generated_file_contract() -> None:
+    assert RAILWAY_CONTRACT_VINTAGE.minimum == "0.89.0"
     steps = " ".join(RAILWAY_CONTRACT_VINTAGE.manual_adoption_steps)
     assert "settings/production.py" in steps
     assert "start.sh" in steps
@@ -125,7 +125,7 @@ docker:
     )
 
     assert result.exit_code == 1
-    assert "orgs requires project_contract >= 0.88.0" in result.output
+    assert "orgs requires project_contract >= 0.89.0" in result.output
     assert config_path.read_text() == original_config
     assert "Added implied module config" not in result.output
 
@@ -149,7 +149,7 @@ def test_status_uses_shipped_vintage_for_old_embedded_manifest(
     assert diagnostics["project_contract"] == "0.87.0"
     assert diagnostics["modules_behind_count"] == 1
     assert diagnostics["modules_behind"][0]["module"] == "orgs"
-    assert diagnostics["modules_behind"][0]["minimum"] == "0.88.0"
+    assert diagnostics["modules_behind"][0]["minimum"] == "0.89.0"
 
 
 def test_status_keeps_unknown_orphan_as_drift(
@@ -223,7 +223,7 @@ def test_update_enforces_vintage_before_module_mutation(
     assert result.exit_code == expected_exit
     assert update_module.call_count == (1 if expected_exit == 0 else 0)
     if expected_exit:
-        assert "orgs requires project_contract >= 0.88.0" in result.output
+        assert "orgs requires project_contract >= 0.89.0" in result.output
 
 
 @pytest.mark.parametrize(
@@ -290,7 +290,7 @@ def test_apply_enforces_vintage_before_execution(
     assert result.exit_code == expected_exit
     assert execute.call_count == (1 if expected_exit == 0 else 0)
     if expected_exit:
-        assert "orgs requires project_contract >= 0.88.0" in result.output
+        assert "orgs requires project_contract >= 0.89.0" in result.output
 
 
 @pytest.mark.parametrize(
@@ -359,6 +359,6 @@ def test_deploy_enforces_vintage_before_preflight(
     assert first_step.call_count == (1 if expected_exit == 0 else 0)
     if expected_exit:
         assert (
-            "quickscale deploy railway requires project_contract >= 0.88.0"
+            "quickscale deploy railway requires project_contract >= 0.89.0"
             in result.output
         )
