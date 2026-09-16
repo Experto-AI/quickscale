@@ -54,6 +54,12 @@ def _create_plan(*, slug: str, price_id: str) -> Plan:
 
 
 @pytest.fixture
+def explicit_billing_recovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Acknowledge the retired command inside its authorized bypass lane."""
+    monkeypatch.setenv("QUICKSCALE_ALLOW_BYPASSRLS", "1")
+
+
+@pytest.fixture
 def nullable_billing_organization_ownership(
     transactional_db: None,
 ) -> Iterator[None]:
@@ -90,7 +96,9 @@ def nullable_billing_organization_ownership(
 
 
 @pytest.mark.bypass_rls
-@pytest.mark.usefixtures("nullable_billing_organization_ownership")
+@pytest.mark.usefixtures(
+    "nullable_billing_organization_ownership", "explicit_billing_recovery"
+)
 @pytest.mark.django_db(transaction=True)
 def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> None:
     user = get_user_model().objects.create_user(
@@ -165,7 +173,9 @@ def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> Non
 
 
 @pytest.mark.bypass_rls
-@pytest.mark.usefixtures("nullable_billing_organization_ownership")
+@pytest.mark.usefixtures(
+    "nullable_billing_organization_ownership", "explicit_billing_recovery"
+)
 @pytest.mark.django_db(transaction=True)
 def test_migrate_billing_to_orgs_reuses_sole_existing_membership() -> None:
     user = get_user_model().objects.create_user(
@@ -214,7 +224,9 @@ def test_migrate_billing_to_orgs_reuses_sole_existing_membership() -> None:
 
 
 @pytest.mark.bypass_rls
-@pytest.mark.usefixtures("nullable_billing_organization_ownership")
+@pytest.mark.usefixtures(
+    "nullable_billing_organization_ownership", "explicit_billing_recovery"
+)
 @pytest.mark.django_db(transaction=True)
 def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates() -> (
     None
@@ -267,8 +279,9 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
 # Current-schema migrate_billing_to_orgs tests
 #
 # The pre-migration tests above temporarily reproduce nullable ownership in the
-# explicitly authorized BYPASSRLS lane. These tests exercise the helper functions
-# and Command.handle() paths that work with the current NOT NULL schema.
+# explicitly authorized BYPASSRLS lane. Helper tests below use the restricted
+# role; Command.handle() paths stay in the acknowledged BYPASSRLS lane even for
+# the current NOT NULL schema.
 # ---------------------------------------------------------------------------
 
 
@@ -514,6 +527,8 @@ def test_migrate_billing_collect_unmigratable_empty() -> None:
     assert messages == []
 
 
+@pytest.mark.bypass_rls
+@pytest.mark.usefixtures("explicit_billing_recovery")
 @pytest.mark.django_db
 def test_migrate_billing_no_users_early_return() -> None:
     """Command.handle() must exit early when no billing users exist."""
@@ -528,6 +543,8 @@ def test_migrate_billing_no_users_early_return() -> None:
     assert "No billing users required migration" in output
 
 
+@pytest.mark.bypass_rls
+@pytest.mark.usefixtures("explicit_billing_recovery")
 @pytest.mark.django_db
 def test_migrate_billing_completes_with_preassigned_org() -> None:
     """Command.handle() must complete cleanly when billing rows already point at the resolved org.
@@ -592,6 +609,8 @@ def test_migrate_billing_completes_with_preassigned_org() -> None:
     assert "completed for 1 billing users" in output
 
 
+@pytest.mark.bypass_rls
+@pytest.mark.usefixtures("explicit_billing_recovery")
 @pytest.mark.django_db
 def test_migrate_billing_syncs_stripe_customer_id_when_org_has_none() -> None:
     """Command.handle() must sync stripe_customer_id from billing rows when org has none."""
@@ -642,6 +661,8 @@ def test_migrate_billing_syncs_stripe_customer_id_when_org_has_none() -> None:
     assert org.stripe_customer_id == "cus_synced"
 
 
+@pytest.mark.bypass_rls
+@pytest.mark.usefixtures("explicit_billing_recovery")
 @pytest.mark.django_db
 def test_migrate_billing_fails_on_conflicting_stripe_customer_id() -> None:
     """Command.handle() must detect when org's existing stripe_customer_id conflicts with billing rows."""

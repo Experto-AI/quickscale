@@ -124,8 +124,8 @@ class TenantTableEntry:
 # not consult this literal. Every shipped concrete model must appear in
 # exactly one of the three categories below.
 #
-# See `docs/technical/roadmap.md` → AF1 and `docs/others/arch-audit.md` → Finding 1
-# for the full rationale.
+# Runtime classification remains marker-derived; this literal supplies only
+# the shipped-model parity oracle for repository conformance checks.
 # ---------------------------------------------------------------------------
 
 TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [

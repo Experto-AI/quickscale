@@ -1,16 +1,55 @@
-"""Backfill billing rows to organization-authoritative ownership idempotently."""
+"""Backfill billing rows to organization-authoritative ownership idempotently.
+
+Retired from QuickScale's sanctioned privileged-command set on 2026-09-16.
+The command remains available for explicit operator recovery, but QuickScale's
+launchers and CLI no longer grant it the superuser connection automatically.
+"""
 
 from __future__ import annotations
 
 from collections import defaultdict
+import os
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Q
 
 from quickscale_modules_orgs.models import Organization, OrganizationMembership
+
+
+def _require_explicit_recovery_connection() -> None:
+    """Refuse to run unless the operator selected a bypassing role explicitly."""
+    if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") != "1":
+        raise CommandError(
+            "migrate_billing_to_orgs is a retired recovery command and requires "
+            "the explicit QUICKSCALE_ALLOW_BYPASSRLS=1 acknowledgement. See the "
+            "organizations guide for the reviewed recovery invocation."
+        )
+    if connection.vendor != "postgresql":
+        raise CommandError(
+            "migrate_billing_to_orgs requires an explicit PostgreSQL recovery "
+            "connection with BYPASSRLS or SUPERUSER privilege."
+        )
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT rolbypassrls, rolsuper
+            FROM pg_roles
+            WHERE rolname = current_user
+            """
+        )
+        role_flags = cursor.fetchone()
+
+    if role_flags is None or not any(role_flags):
+        raise CommandError(
+            "migrate_billing_to_orgs refuses the restricted runtime role because "
+            "RLS can hide historical rows with null organization ownership. Set "
+            "RUNTIME_DATABASE_URL to DATABASE_URL explicitly for this reviewed "
+            "recovery invocation; automatic privilege is not available."
+        )
 
 
 def _normalized_text(value: object) -> str:
@@ -152,12 +191,15 @@ def _collect_unmigratable_row_messages() -> list[str]:
 class Command(BaseCommand):
     help = (
         "Backfill billing subscriptions, balances, and transactions to the "
-        "authoritative organization for each billing user without guessing through ambiguity."
+        "authoritative organization for each billing user without guessing through "
+        "ambiguity. This retired backfill is not granted privileged database access "
+        "automatically."
     )
 
     @transaction.atomic
     def handle(self, *args: object, **options: object) -> None:
         del args, options
+        _require_explicit_recovery_connection()
         Subscription = _billing_model("Subscription")
         CreditBalance = _billing_model("CreditBalance")
         CreditTransaction = _billing_model("CreditTransaction")
