@@ -39,18 +39,17 @@ context, scope, and acceptance;
 | SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
 | SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | SA185 | Deferred |
-| SA183 | Refuse to purge an organization with a live Stripe subscription | post-v88 | 3 | — | Deferred |
 | SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | — | Deferred |
 | SA188 | Settle the privileged-command set behind one declaration | post-v88 | 3 | SA185 | Deferred |
 | SA189 | Provision the runtime database role in one place under one name | post-v88 | 3 | SA188 | Deferred |
-| SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | SA183 | Deferred |
+| SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
 Track 2: SA184 ──► SA185 ──► SA186 ──► SA187 ──► SA192
-Track 3: SA183 ──► SA177 ──► SA188 ──► SA189 ──► SA190
+Track 3: SA177 ──► SA188 ──► SA189 ──► SA190
 
 Cross-track dependencies:  SA185 ──► SA188
 ```
@@ -67,8 +66,6 @@ path.
 - **Derived tenant tables support SA153 and SA177.** Project-owned tenant tables pass the generated
   project's `check_tenant_isolation` without module-source edits, and predicate verification covers
   them through the same derived tenant-model set.
-- **SA183 precedes SA190.** Both edit `purge_organization.py`. SA183 is the small money-path refusal;
-  SA190 then folds it into the shared obligation list, on top of the derived tenant set.
 - **SA184 precedes SA185.** Both edit `deployment_commands.py`, and the deploy-time vintage check
   should read Railway state through the fail-hard path.
 - **SA185 precedes SA188, and SA188 precedes SA189.** SA188 changes contract-bearing templates and
@@ -104,7 +101,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA152 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA184 | yes | yes | yes | **yes** | no |
-| 3 | SA183 | yes | yes | yes | **yes** | no |
+| 3 | SA177 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -122,8 +119,8 @@ A track is **truly green** only when all three states are yes.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
   and the owning audit: the arch audit for SA152, SA185, SA188, SA189, and SA190; the tech audit
-  for SA177, SA183, SA184, SA186, and
-  SA187 (SA183 and SA190 also close arch-audit items). SA191, SA153, and SA192 have no owning
+  for SA177, SA184, SA186, and
+  SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
   audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
   Three code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
@@ -439,25 +436,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA182 — Enroll marker-declared tenant models in classification and policy refresh.**
 
-- [ ] **SA183 — Refuse to purge an organization with a live Stripe subscription.**
-
-  **Context:** `purge_organization` deletes billing rows of every status and then the organization row holding
-  the Stripe customer id, without cancelling or refusing. Stripe keeps charging, and renewal webhooks
-  can no longer resolve an organization. Refusing is the smallest correct behavior: it keeps network
-  effects out of the purge transaction, preserves the local handle until billing is resolved, and
-  leaves the explicit teardown decision intact for everything already cancelled.
-
-  **Acceptance:** before its atomic block, `purge_organization` raises `CommandError` when the
-  organization has a `Subscription` in `Subscription.current_statuses()` with a non-empty
-  `stripe_subscription_id`, lists those ids, and tells the operator to cancel first; the dry run
-  reports the same refusal. No Stripe call runs inside the purge transaction, and an out-of-band
-  acknowledgement flag is out of scope. A variant of `test_purge_organization_with_billing_rows`
-  shows an active Stripe-backed subscription refuses and leaves every row and the organization
-  intact, while a cancelled one still purges. This retires TA73 and the architecture audit's red
-  flag.
-
-  **Surfaces:** `purge_organization.py`, its orgs tests, the purge operator documentation, and both
-  audits.
+- [x] **SA183 — Refuse to purge an organization with a live Stripe subscription.**
 
 - [ ] **SA177 — Verify the predicates of enrolled RLS policies.**
 

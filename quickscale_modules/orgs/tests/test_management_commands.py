@@ -1211,8 +1211,102 @@ def test_purge_organization_one_owner_multi_member_succeeds() -> None:
 
 
 @pytest.mark.django_db
-def test_purge_organization_with_billing_rows() -> None:
-    """A successful purge must delete billing rows (CreditTransaction, Subscription, CreditBalance)."""
+@pytest.mark.parametrize("dry_run", [False, True], ids=["purge", "dry-run"])
+def test_purge_organization_refuses_live_stripe_subscription(
+    dry_run: bool,
+) -> None:
+    """A live Stripe subscription must refuse both purge and dry run."""
+    owner = get_user_model().objects.create_user(
+        username="billing-refusal-owner",
+        email="billing-refusal-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Billing Refusal", slug="billing-refusal"
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    plan = _create_plan(
+        slug="growth-billing-refusal",
+        price_id="price_growth_billing_refusal",
+    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            stripe_subscription_id="sub_billing_refusal",
+            stripe_customer_id="cus_billing_refusal",
+            status=Subscription.Status.ACTIVE,
+        )
+        CreditBalance.objects.create(
+            organization=organization,
+            user=owner,
+            balance=100,
+        )
+        CreditTransaction.objects.create(
+            organization=organization,
+            user=owner,
+            amount=100,
+            transaction_type=CreditTransaction.TransactionType.PURCHASE,
+            description="Billing refusal test",
+            balance_after=100,
+        )
+    finally:
+        reset_current_org_id()
+
+    with (
+        patch(
+            "quickscale_modules_billing.services.cancel_current_subscription"
+        ) as cancel_subscription,
+        pytest.raises(CommandError) as exc_info,
+    ):
+        call_command(
+            "purge_organization",
+            organization_id=str(organization.pk),
+            dry_run=dry_run,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    message = str(exc_info.value)
+    assert "sub_billing_refusal" in message
+    assert "Cancel these subscriptions in Stripe before retrying" in message
+    cancel_subscription.assert_not_called()
+    assert Organization.objects.filter(pk=organization.pk).exists()
+    assert OrganizationMembership.objects.filter(organization=organization).count() == 1
+    set_current_org_id(organization.pk)
+    try:
+        assert Subscription.all_objects.filter(organization=organization).count() == 1
+        assert CreditBalance.all_objects.filter(organization=organization).count() == 1
+        assert (
+            CreditTransaction.all_objects.filter(organization=organization).count() == 1
+        )
+    finally:
+        reset_current_org_id()
+    assert not OrganizationTombstone.objects.filter(
+        organization_id=organization.pk
+    ).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("status", "stripe_subscription_id"),
+    [
+        (Subscription.Status.CANCELED, "sub_billing_purge"),
+        (Subscription.Status.ACTIVE, None),
+    ],
+    ids=["cancelled", "current-without-stripe-id"],
+)
+def test_purge_organization_with_billing_rows(
+    status: str, stripe_subscription_id: str | None
+) -> None:
+    """Cancelled or non-Stripe billing rows must still purge successfully."""
     from quickscale_modules_billing.models import (
         CreditBalance,
         CreditTransaction,
@@ -1248,9 +1342,9 @@ def test_purge_organization_with_billing_rows() -> None:
             organization=organization,
             user=owner,
             plan=plan,
-            stripe_subscription_id="sub_billing_purge",
+            stripe_subscription_id=stripe_subscription_id,
             stripe_customer_id="cus_billing_purge",
-            status=Subscription.Status.ACTIVE,
+            status=status,
         )
         CreditBalance.objects.create(
             organization=organization,
@@ -1330,7 +1424,7 @@ def test_purge_organization_rollback_on_error() -> None:
             plan=plan,
             stripe_subscription_id="sub_rollback",
             stripe_customer_id="cus_rollback",
-            status=Subscription.Status.ACTIVE,
+            status=Subscription.Status.CANCELED,
         )
         CreditBalance.objects.create(
             organization=organization,

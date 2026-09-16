@@ -99,7 +99,7 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 | **Restricted runtime role exists with the right grants** | `db/init.sql.j2` (role `{package}_app`), `start.sh.j2` Step 3 (role `quickscale_runtime`, adds `GRANT CONNECT`), `OPERATIONS.md.j2` manual SQL | **Convention: three implementations, two role names** | **new row** (seam minted in `461796ce`) |
 | **Template ↔ upgradable-code contract compatibility across versions** | `project_contract` in state plus `contract_vintage` in manifests (2 of 12 modules declare it); read only by `quickscale status` | **Convention (advisory, opt-in)** | **new row** — rank 3 |
 | Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy | Membership gated; ownership hand-authored | unchanged; paid again for two new emitted paths (`31a93768`) |
-| Cross-domain deletion obligations are discharged | Last-owner: one predicate, locked model delete, `pre_delete` receiver. Billing cancellation: account-delete view only. Row purge, cache invalidation, tombstone: `purge_organization` only | Last-owner structural; **obligations convention, split across two boundaries** | **re-characterized** — rank 4 |
+| Cross-domain deletion obligations are discharged | Last-owner: one predicate, locked model delete, `pre_delete` receiver. Billing cancellation: account-delete view; live-subscription refusal plus row purge, cache invalidation, and tombstone: `purge_organization` | Last-owner and live-subscription refusal are structural; **remaining obligations convention, split across two boundaries** | **re-characterized** — rank 4 |
 | CSRF-exempt endpoints have alternate integrity checks | AST gate plus sanctioned endpoint bases | Structural and gated | unchanged |
 | Core/module dependency direction and lockstep pin | Import-compatibility and reverse-import gates; exact `>=X.Y.0,<X.(Y+1).0` pin derived from `VERSION` | Gated | strengthened (floor → exact, `74d18f48`) |
 | Module identity (the twelve-module universe) | `module_discovery.py --list-modules`, consumed fail-hard (`provision_ci_postgres.sh:81`, `check_sa117_scope.py:57`, `version_tool.sh:34`) | Structural and derived | unchanged (SA173 three-state presence added behind the same shim) |
@@ -512,7 +512,7 @@ boundaries discharge disjoint subsets.
 | Obligation | Account-delete view (`AccountDeleteView`, `auth/views.py:56-240`) | `purge_organization` |
 |---|---|---|
 | Last-owner guard | ✅ `:164` via the one predicate | n/a (whole org) |
-| Cancel Stripe subscription | ✅ `_cancel_personal_org_subscriptions`, `:172-240` | ❌ deletes `Subscription` rows (`:193-212`, `qs.delete()` `:528`); no `cancel_current_subscription` call |
+| Cancel Stripe subscription | ✅ `_cancel_personal_org_subscriptions`, `:172-240` | Refuses current Stripe-backed subscriptions before deletion; cancellation remains out of band |
 | Delete tenant rows | ❌ personal org and its rows survive (membership `CASCADE`, `orgs/models.py:116-120`) | ✅ `_delete_owned_rows`, `:514` |
 | Invalidate social caches | ❌ | ✅ `_clear_social_cache`, `:538` |
 | Tombstone | ❌ | ✅ `:452` |
@@ -525,14 +525,10 @@ boundaries discharge disjoint subsets.
 
 - **No billing delete hooks.** Searched billing for `pre_delete`/`post_delete` receivers or
   model-level `delete()` hooks; found none.
-- **No documented precondition.** Searched the purge docs and `organizations.md` for a
-  "cancel billing first" requirement; found none.
-- **Partial mitigation only.** `_guard_reserved_org` (`:585`) refuses personal and System orgs
-  without `--force`. That protects personal orgs only.
+- **The live-subscription precondition is now enforced and documented.** The purge and dry-run
+  paths list current Stripe subscription IDs and refuse before deletion. This closes the money-path
+  red flag without unifying the remaining cross-domain obligations.
 - **Last-owner safety is sound**, so this finding is scoped to cross-domain obligations.
-
-Runtime confirmation of the Stripe side: purge a test-mode org that has an active subscription,
-then check the Stripe dashboard.
 
 **Why it compounds:**
 
@@ -541,9 +537,9 @@ then check the Stripe dashboard.
 - **Each new boundary** — bulk admin, GDPR erasure, or `teams` — copies a subset.
 - **The subsets have already diverged.**
 
-**Detection signal:** Stripe subscriptions whose `organization_id` no longer exists locally.
-Memberless personal organizations still holding tenant rows. Stale `social` cache entries after
-account deletion.
+**Detection signal:** a new organization-deletion boundary that omits the live-subscription
+refusal, memberless personal organizations still holding tenant rows, or stale `social` cache
+entries after account deletion.
 
 **Steelman:** the two boundaries have different intents. Account deletion removes a *person* and
 deliberately retains organization data. Purge is an operator's hard teardown. Network calls
@@ -564,9 +560,8 @@ set, idempotently.
 
 **Recommendation:** Option 1. Design it together with rank 1's purge derivation, so that purge
 membership and obligations come from one place. Preserve the last-owner model/signal backstop.
-· **First step:** have purge call billing's cancellation (or refuse on a live subscription)
-through a named obligation list shared with the account view. The ticket-shaped half of this is
-the red flag below.
+· **First step:** fold the shipped live-subscription refusal and the remaining purge obligations
+into a named list shared with the account view; the purge-plan work owns that consolidation.
 
 ---
 
@@ -674,21 +669,12 @@ Phase A regression coverage; purge membership remains in vendored module source.
 - **`generated-file-ownership-unmodeled`:** do generated projects on ≤0.87 exist outside the
   maintainer's own sites, and will they `quickscale update` to 0.88 modules? If there are none,
   the horizon returns to 6–18 months.
-- **`deletion-invariants-per-boundary-reimplementation`:** is `purge_organization` meant to run
-  only after billing has been cancelled out of band? If so, the red flag becomes a documentation
-  ticket, but the finding stands.
-
 *Both questions from the prior pass were answered on 2026-08-31; the answers and their effects are
 recorded in the reconciliation log. The first answer ("permanent two commands") has since been
 contradicted by `b29d9a29`.*
 
 ## Red flags (out of scope — fix now)
 
-- **`purge_organization` can orphan live Stripe subscriptions.** It deletes `Subscription` rows
-  (`purge_organization.py:193-212`, `:528`) without calling `cancel_current_subscription`, and
-  without refusing when a live Stripe id exists. An operator purging a paying organization leaves
-  the customer billed with no local record. *Needs runtime confirmation in Stripe test mode.*
-  Ticket-shaped fix: cancel, or refuse, before deleting billing rows.
 - *(Dismissed, retained so it is not re-raised)* `except ValueError, AttributeError:` at
   `purge_organization.py:337` is valid PEP 758 syntax on the pinned Python 3.14.6.
 
@@ -811,6 +797,9 @@ contradicted by `b29d9a29`.*
   expectations now derive from the gate registry, workflow station counts derive from the station
   contract, and a gate-addition regression proves the derived counts follow their source. No ranked
   finding or other watch item changed.
+- 2026-09-16 — **The `purge_organization` live-Stripe red flag is retired.** The command and dry
+  run refuse before deletion, list current Stripe subscription IDs, and preserve local rows until
+  the operator cancels them. Rank 4 remains open for the broader shared-obligation work.
 
 *Lenses scanned with no qualifying finding this pass: observability, API/contract stability of
 the CLI surface, performance and scalability, concurrency and state isolation (beyond the lock

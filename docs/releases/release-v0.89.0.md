@@ -14,6 +14,10 @@ Project-owned tenant models can now join classification and FORCE RLS policy ref
 marker-derived tenant contract. This keeps organization ownership and forced row-level security
 requirements in place without requiring edits under embedded module source.
 
+Organization purge now refuses to remove local data while a current Stripe-backed subscription
+still exists. The command and its dry run list the live Stripe subscription IDs so the operator can
+cancel them before retrying.
+
 Server-rendered module pages share one page shell. The blog, listings, and CRM base templates
 extend the project's `base.html` rather than emitting their own HTML document, so those pages
 inherit the site topbar, messages, and footer instead of restating a shell each. The frontend
@@ -44,7 +48,8 @@ default margins.
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps
 existing organization ownership and FORCE RLS requirements in place without changing package APIs
-or upgrade requirements.
+or upgrade requirements. Organization purge adds a fail-closed precondition but no new command-line
+option; cancelled subscriptions and current rows without a Stripe subscription ID remain purgeable.
 
 The shared-shell change is **breaking for template overrides only**, in the way described under
 Adoption; module Python APIs, URLs, and settings are unchanged. Blog and listings stylesheets keep
@@ -64,4 +69,5 @@ This note does not claim release-tier validation, publication, or a v0.89.0 tag.
 
 ## Deferred scope
 
-Purge membership and account-deletion behavior remain deferred and unchanged by this capability.
+Derived purge membership and shared account-deletion obligations remain deferred. The live Stripe
+subscription refusal is implemented independently of those broader changes.

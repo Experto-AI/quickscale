@@ -760,4 +760,4 @@ No async job path should use the default tenant manager without first establishi
 - [`docs/technical/decisions.md`](decisions.md) — architecture decision log
 - [`quickscale_modules/billing/`](../../quickscale_modules/billing/) — billing models to extend
 - [`quickscale_modules/auth/`](../../quickscale_modules/auth/) — User model base
-- [`quickscale_modules/orgs/README.md`](../../quickscale_modules/orgs/README.md) — module placeholder
+- [`quickscale_modules/orgs/README.md`](../../quickscale_modules/orgs/README.md) — module and purge operator documentation

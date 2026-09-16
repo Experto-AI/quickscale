@@ -85,7 +85,6 @@ All of these were read hunk by hunk, production and test.
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| TA73 `purge-org-orphans-live-stripe-subscription` | S2 | Data handling / money | `purge_organization` deletes current Stripe-backed subscriptions without cancelling or refusing | Small | High (code); Medium (post-purge webhook path) | open — new |
 | TA74 `railway-redeploy-rotates-secret-key` | S3 | Operability | Every `quickscale deploy railway` re-run replaces `SECRET_KEY` | Trivial ⚡ | High | open — new |
 | TA75 `railway-runtime-role-vars-fail-open` | S3 | Error handling (Fail-Hard) | Unreadable Railway state becomes a fresh runtime password and a guessed Postgres service | Small | High | open — new |
 | TA77 `publish-all-self-observed-lease` | S3 | Concurrency / publication safety | `--publish-all` feeds its own just-observed SHA to the lease, so it can overwrite unseen remote commits | Small | Medium | open — new |
@@ -93,39 +92,11 @@ All of these were read hunk by hunk, production and test.
 
 ⚡ = quick win (Trivial-effort S2/S3).
 
-**Counts derived from the table:** S1 **0** · S2 **1** · S3 **3** · S4 **1** · **Total 5 open.**
+**Counts derived from the table:** S1 **0** · S2 **0** · S3 **3** · S4 **1** · **Total 4 open.**
 
 ---
 
 ## Findings
-
-### Finding 1: `purge_organization` orphans live Stripe subscriptions
-
-- **ID:** TA73 `purge-org-orphans-live-stripe-subscription`
-- **Severity:** S2. The impact is financial and legal: a customer keeps being charged with no local account or record. The trigger is one realistic operator act, purging a paying org (the command is the declared GDPR teardown path, `decisions.md:921`). It needs no other precondition. It lives in the generated project (reality 3) and violates the Fail-Hard oracle: it destroys the only local handle on a live external obligation without refusing.
-- **Category:** IX Data handling (money path).
-- **Confidence:** High that local rows are deleted with no Stripe interaction. Medium on the exact post-purge webhook failure mode, which needs a Stripe test-mode run to confirm.
-- **Location:**
-  - `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py:193-212` (`_DELETE_SPECS` billing entries).
-  - `:514-530` (`Command._delete_owned_rows`).
-  - `:404-459` (`Command._purge_by_uuid`, which raw-deletes the `Organization` row holding `stripe_customer_id`).
-- **Defect:** The purge runs `Subscription.all_objects.filter(organization=org).delete()` for every status, including `ACTIVE`/`TRIALING`/`PAST_DUE` rows with a non-empty `stripe_subscription_id`. It then deletes the org row. It never calls `cancel_current_subscription` (`billing/services.py:736`), and it never refuses when a current Stripe-backed subscription exists.
-- **Failure scenario:**
-  1. An operator honours an account-deletion request with `purge_organization --organization-id <uuid>`.
-  2. The dry run shows `Subscriptions: 1`, and the purge succeeds with "has been purged."
-  3. Stripe keeps renewing the subscription. Each `invoice.paid` webhook reaches `_handle_invoice_paid_event` (`services.py:1044`), and `_resolve_organization_for_invoice` can no longer map the customer to an organization.
-  4. The webhook errors, Stripe retries, and the customer is billed every period until someone notices in the Stripe dashboard.
-- **Evidence:** `_DELETE_SPECS` lists `{"app_label": "quickscale_modules_billing", "model_name": "Subscription", "filter_key": "organization", ...}`, and `_delete_owned_rows` executes `qs.delete()` with no status or Stripe-id inspection. No `pre_delete`/`post_delete` receiver exists in `billing/src` (grep).
-- **Refutation:** Three candidates were checked, and none survived:
-  - (a) A billing delete signal that cancels remotely: none exists.
-  - (b) Documented operator guidance to cancel billing before purging: none in `decisions.md`, the module READMEs, CHANGELOG, or the roadmap.
-  - (c) A test blessing the behaviour: `test_purge_organization_with_billing_rows` (`test_management_commands.py:1213`) asserts an `ACTIVE` subscription with `stripe_subscription_id="sub_billing_purge"` is deleted. That pins *local* row deletion, the teardown decision, but says nothing about the external subscription. It is a test with a blind spot, not a decision to leave customers billed.
-
-  Hand-off note: the lead came from `arch-audit.md` → *Red flags*. It was re-verified independently here.
-- **Fix:** Before the atomic block in `_purge_by_uuid`, refuse with `CommandError` when the org has any `Subscription` whose `status in Subscription.current_statuses()` and whose `stripe_subscription_id` is non-empty. List the ids and tell the operator to cancel first. Optionally add an explicit `--billing-cancelled-out-of-band` acknowledgement flag. Keep the Stripe call out of the purge transaction. **Effort:** Small.
-- **Verification:** Extend `test_purge_organization_with_billing_rows` with a variant: an `ACTIVE` subscription with a Stripe id must raise and leave all rows and the org intact. A `CANCELED` subscription must still purge.
-- **Deliberate?** The teardown decision covers local rows only; nothing addresses the external subscription.
-- **Age:** Long-standing. The billing entries predate this window.
 
 ### TA74 `railway-redeploy-rotates-secret-key` · S3 · `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py:403-404`
 
@@ -196,7 +167,7 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 | CLI deploy (`deployment_commands.py`, `railway_utils.py` variable helpers) | delta in full plus read/set helpers | TA74, TA75 |
 | CLI dev (`development_commands.py`) | delta plus every `_run_docker_exec_command` caller | Clean. The privilege narrowing is correct and `manage` guards empty args at `:690` |
 | orgs — privileged commands (`apps.py`, `migrate_billing_to_orgs.py`) | whole command, guard delta | Clean. See *Clean sweeps* |
-| orgs — `purge_organization` | whole file | TA73 |
+| orgs — `purge_organization` | whole file | Clean for live Stripe-backed subscriptions; the broader teardown tooling gap remains below |
 | Client identity / public auth (`get_client_ip`, blog API auth, notifications webhook) | functions in full | TA78; otherwise clean |
 | Publication tooling (`publish_module.py`, `version_tool.sh`, compat gate) | delta plus `_publish_module`, `_run_release_gates` | TA77 |
 | CI / gates (workflows, testimony, security gates, provisioning, isolation conformance) | delta in full | Clean as defects; one watch item and one tooling gap |
@@ -240,7 +211,7 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 |---|---|---|
 | RLS policy assertions check existence, not predicate text | Structural smell #2 | Assert `pg_policies.qual`/`with_check` against `_FORCE_RLS_FORWARD_SQL` per enrolled table (SA177) |
 | Dependency gate never sees the generated project's runtime dependencies | Future CVEs in `gunicorn`, `whitenoise`, `dj-database-url` (none in root `poetry.lock`) | Add a Trivy pass over the hermetic generated-project lock the E2E lane already produces, or add those pins to a scanned dev group |
-| No external-effect check on destructive org teardown | TA73 | Add a purge conformance test: for every `_DELETE_SPECS` model that carries an external provider id, the purge must refuse or reconcile |
+| No exhaustive external-provider conformance check for destructive org teardown | Future provider-ID obligations beyond the shipped Stripe-subscription refusal | For every `_DELETE_SPECS` model that carries an external provider id, verify that purge refuses or reconciles it |
 
 ---
 
@@ -305,6 +276,7 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 - 2026-09-15 — **Test-integrity diff (§3.7):** the removed skips and assertions in the delta were adjudicated as replaced-by-stricter or behaviour-moved (see *Clean sweeps*). **No weakening.**
 - 2026-09-15 — **Arch-audit red flag** *`purge_organization` can orphan live Stripe subscriptions*: independently verified and **promoted to TA73 (S2)**. The dismissed PEP 758 syntax lead was re-confirmed dismissed on Python 3.14.6.
 - 2026-09-15 — **TA73** `purge-org-orphans-live-stripe-subscription`: **new (S2).**
+- 2026-09-16 — **TA73** `purge-org-orphans-live-stripe-subscription`: **retired.** `purge_organization` and its dry run now refuse before deletion when a current subscription has a Stripe ID, preserve every local row, list the IDs, and direct the operator to cancel first. The shipped behavior is archived in [CHANGELOG.md](../../CHANGELOG.md); the broader teardown tooling gap remains assigned to the purge-plan work.
 - 2026-09-15 — **TA74** `railway-redeploy-rotates-secret-key`: **new (S3).** Long-standing (`dcb558ce`, v0.60.0), made visible by the delta's password-reuse contrast.
 - 2026-09-15 — **TA75** `railway-runtime-role-vars-fail-open`: **new (S3).** Introduced by `461796ce` / `b8ca6283`.
 - 2026-09-15 — **TA76** `version-bump-breaks-literal-tests`: **new (S3).** Introduced by `b9e072f4`; executed.
