@@ -69,7 +69,7 @@ The `quickscale deploy railway` command automatically:
 - ✅ Adds PostgreSQL 18 database service
 - ✅ Creates application service
 - ✅ Retries `DATABASE_URL` reference linking while PostgreSQL finishes provisioning
-- ✅ Generates and sets SECRET_KEY securely
+- ✅ Reuses the service's SECRET_KEY, generating one only on the first deploy
 - ✅ Sets DEBUG=False for production
 - ✅ Sets DJANGO_SETTINGS_MODULE
 - ✅ **Auto-generates public domain** (e.g., myapp-production-abc123.up.railway.app)
@@ -144,7 +144,7 @@ railway run --service myapp /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate 
 |----------|-------------|---------|
 | `SECRET_KEY` | Django secret key (generate a secure random string) | `django-insecure-...` |
 | `DATABASE_URL` | PostgreSQL connection (auto-provided by Railway) | `postgresql://...` |
-| `RUNTIME_DATABASE_URL` | PostgreSQL connection for the restricted runtime role (``NOSUPERUSER``/``NOBYPASSRLS``) — the production settings fail closed without this, using the superuser ``DATABASE_URL`` only for privileged one-shot commands. Set by the CLI deploy | `postgresql://quickscale_runtime:...@${{Postgres.PGHOST}}:...` |
+| `RUNTIME_DATABASE_URL` | PostgreSQL connection for the restricted runtime role (``NOSUPERUSER``/``NOBYPASSRLS``) — the production settings fail closed without this, using the superuser ``DATABASE_URL`` only for privileged one-shot commands. Set by the CLI deploy | `postgresql://quickscale_runtime:...@${{<selected-postgres-service>.PGHOST}}:...` |
 | `RUNTIME_DB_ROLE` / `RUNTIME_DB_PASSWORD` | Credentials ``start.sh`` uses to create or update the runtime role. Set by the CLI deploy; leave unset for a hand-managed role | `quickscale_runtime` / `<generated>` |
 | `ALLOWED_HOSTS` | Comma-separated list of allowed hosts | `myapp.railway.app` |
 | `DEBUG` | Debug mode (always False in production) | `False` |
@@ -172,7 +172,7 @@ The `quickscale deploy railway` command follows this config-first workflow:
 4. **Link DATABASE_URL Reference**: Links app `DATABASE_URL` to PostgreSQL with retry/backoff
 5. **Generate Public Domain**: Auto-generates Railway domain (e.g., myapp-production-abc123.up.railway.app)
 6. **Configure Environment (Single Batch)**: Sets all variables in one command to trigger only ONE deployment
-   - SECRET_KEY (auto-generated)
+   - SECRET_KEY (generated once, reused on re-deploy)
    - DEBUG=False
    - DJANGO_SETTINGS_MODULE
    - ALLOWED_HOSTS (using generated domain)
@@ -198,6 +198,7 @@ The `quickscale deploy railway` command follows this config-first workflow:
 - **Config-as-Code**: railway.json is generated with every `quickscale apply` and handles build/deploy configuration.
 - **Automatic Migrations**: The generated `./start.sh` runs on every deployment via `startCommand`, so migrations happen at runtime with `DATABASE_URL` available. Migrations use the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix so the superuser `DATABASE_URL` is used (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
 - **RUNTIME_DATABASE_URL Required**: Production serving fails closed without it. The CLI deploy sets it together with the role credentials; manual deployments must follow [Runtime Role Setup](#runtime-role-setup).
+- **Live State Required**: Re-deploys abort when Railway variables or services cannot be read. The CLI never treats an unreadable environment as empty, and it requires exactly one PostgreSQL service before writing configuration.
 - **DATABASE_URL Validation**: Production settings now validate DATABASE_URL is set and provide clear error messages if missing.
 - **Default Scaling Baseline**: Generated projects start with one Railway replica and one Gunicorn worker. Increase replicas in Railway if you want more containers; set `GUNICORN_WORKERS` or `WEB_CONCURRENCY` if you want more workers inside each container. These controls are independent.
 
@@ -216,7 +217,7 @@ The deploy sets three variables on the app service:
 |---|---|
 | ``RUNTIME_DB_ROLE`` | ``quickscale_runtime`` |
 | ``RUNTIME_DB_PASSWORD`` | a generated 48-character hex password |
-| ``RUNTIME_DATABASE_URL`` | ``postgresql://quickscale_runtime:<password>@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}`` |
+| ``RUNTIME_DATABASE_URL`` | ``postgresql://quickscale_runtime:<password>@${{<selected-postgres-service>.PGHOST}}:${{<selected-postgres-service>.PGPORT}}/${{<selected-postgres-service>.PGDATABASE}}`` |
 
 Host, port, and database are Railway reference variables on the PostgreSQL service, resolved at
 deploy time. On every boot, when ``RUNTIME_DB_PASSWORD`` is set, ``start.sh`` connects with the
@@ -230,6 +231,10 @@ traffic keeps authenticating during the rollover. If the service has ``RUNTIME_D
 written. ``start.sh`` refuses a ``RUNTIME_DB_ROLE`` that is the ``DATABASE_URL`` login itself or an
 existing superuser, instead of demoting it.
 
+The same re-run reuses the service's existing ``SECRET_KEY``, preserving sessions and signed links;
+a new key is generated only when the live environment has none. If the CLI cannot read the live
+variables, it stops without changing credentials or an operator-managed ``RUNTIME_DATABASE_URL``.
+
 ### Manual
 
 Skip this when you used the CLI deploy. For a manual deployment, or to manage the role yourself,
@@ -239,7 +244,7 @@ leave ``RUNTIME_DB_PASSWORD`` unset (``start.sh`` then skips role creation) and:
    ```bash
    RUNTIME_DB_PASSWORD=$(openssl rand -hex 24)
    echo "$RUNTIME_DB_PASSWORD"
-   railway connect Postgres
+   railway connect primary-db
    ```
    ```sql
    CREATE ROLE quickscale_runtime WITH LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD '<password>';
@@ -253,10 +258,11 @@ leave ``RUNTIME_DB_PASSWORD`` unset (``start.sh`` then skips role creation) and:
 2. Set only ``RUNTIME_DATABASE_URL`` on the app service, in the same shell:
    ```bash
    railway variables --service myapp --set \
-     "RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:${RUNTIME_DB_PASSWORD}"'@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}'
+     "RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:${RUNTIME_DB_PASSWORD}"'@${{primary-db.PGHOST}}:${{primary-db.PGPORT}}/${{primary-db.PGDATABASE}}'
    ```
-   The double-quoted half expands your shell variable; the single-quoted half passes ``${{...}}``
-   to Railway literally. If the database service is named ``PostgreSQL``, change the prefix.
+   Replace ``primary-db`` in both commands with the exact PostgreSQL service name shown by
+   ``railway service list``. The double-quoted half expands your shell variable; the single-quoted
+   half passes ``${{...}}`` to Railway literally.
 3. Redeploy: ``railway up --service myapp --detach``.
 
 **Why this is necessary**: The RLS boot guard in the orgs module raises ``ImproperlyConfigured`` at startup if the connected role has ``BYPASSRLS`` or ``SUPERUSER`` — both of which the default Railway superuser role has. Setting ``RUNTIME_DATABASE_URL`` to a restricted role satisfies the guard and keeps RLS enforcement active during production serving.
@@ -612,13 +618,13 @@ railway domain --service myapp    # Generate public domain
 ```bash
 # All variables set in ONE command to trigger only ONE deployment
 railway variable set \
-  SECRET_KEY=<generated> \
+  SECRET_KEY=<existing or generated on first deploy> \
   DEBUG=False \
   DJANGO_SETTINGS_MODULE=myapp.settings.production \
   ALLOWED_HOSTS=<detected-url> \
   RUNTIME_DB_ROLE=quickscale_runtime \
   RUNTIME_DB_PASSWORD=<generated> \
-  RUNTIME_DATABASE_URL=<role @ Postgres reference variables> \
+  RUNTIME_DATABASE_URL=<role @ selected PostgreSQL service reference variables> \
   --service myapp
 ```
 
@@ -771,18 +777,16 @@ This displays a pairing code and URL you can use from any device.
 
 **Error: `bad substitution` when setting DATABASE_URL manually**:
 ```bash
-bash: DATABASE_URL=${{Postgres.DATABASE_URL}}: bad substitution
+bash: DATABASE_URL=${{primary-db.DATABASE_URL}}: bad substitution
 ```
 **Cause**: Bash interprets `${{...}}` when double quotes are used.
 
 **Solution**: Use single quotes so Railway receives the literal reference syntax:
 ```bash
-railway variable set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <app-name>
+railway variable set 'DATABASE_URL=${{primary-db.DATABASE_URL}}' --service <app-name>
 ```
-If your database service is named `PostgreSQL` instead of `Postgres`, use:
-```bash
-railway variable set 'DATABASE_URL=${{PostgreSQL.DATABASE_URL}}' --service <app-name>
-```
+Replace ``primary-db`` with the exact PostgreSQL service name shown by
+``railway service list``.
 
 **Pre-flight Check Failures**:
 
@@ -887,12 +891,10 @@ django.db.utils.OperationalError: connection to server at "localhost" (::1), por
 
 2. Link the PostgreSQL service to your app (CLI or dashboard):
    ```bash
-   railway variable set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <app-name>
+   railway variable set 'DATABASE_URL=${{primary-db.DATABASE_URL}}' --service <app-name>
    ```
-   If needed, try:
-   ```bash
-   railway variable set 'DATABASE_URL=${{PostgreSQL.DATABASE_URL}}' --service <app-name>
-   ```
+   Replace ``primary-db`` with the exact PostgreSQL service name shown by
+   ``railway service list``.
    Or use dashboard linking:
    - Go to your Railway project dashboard
    - Click on your app service

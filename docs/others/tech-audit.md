@@ -86,14 +86,12 @@ All of these were read hunk by hunk, production and test.
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
 | TA73 `purge-org-orphans-live-stripe-subscription` | S2 | Data handling / money | `purge_organization` deletes current Stripe-backed subscriptions without cancelling or refusing | Small | High (code); Medium (post-purge webhook path) | open — new |
-| TA74 `railway-redeploy-rotates-secret-key` | S3 | Operability | Every `quickscale deploy railway` re-run replaces `SECRET_KEY` | Trivial ⚡ | High | open — new |
-| TA75 `railway-runtime-role-vars-fail-open` | S3 | Error handling (Fail-Hard) | Unreadable Railway state becomes a fresh runtime password and a guessed Postgres service | Small | High | open — new |
 | TA77 `publish-all-self-observed-lease` | S3 | Concurrency / publication safety | `--publish-all` feeds its own just-observed SHA to the lease, so it can overwrite unseen remote commits | Small | Medium | open — new |
 | TA78 `compare-digest-non-ascii-500` | S4 | Error handling | A non-ASCII token or signature header crashes two auth checks with a 500 | Trivial | High (executed) | open — new |
 
 ⚡ = quick win (Trivial-effort S2/S3).
 
-**Counts derived from the table:** S1 **0** · S2 **1** · S3 **3** · S4 **1** · **Total 5 open.**
+**Counts derived from the table:** S1 **0** · S2 **1** · S3 **1** · S4 **1** · **Total 3 open.**
 
 ---
 
@@ -127,45 +125,6 @@ All of these were read hunk by hunk, production and test.
 - **Deliberate?** The teardown decision covers local rows only; nothing addresses the external subscription.
 - **Age:** Long-standing. The billing entries predate this window.
 
-### TA74 `railway-redeploy-rotates-secret-key` · S3 · `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py:403-404`
-
-**Defect:** `_configure_env_vars_step` always writes `SECRET_KEY = generate_django_secret_key()`, even though the caller already passes the service's existing variables (`:666`).
-
-**Failure scenario:** `docs/deployment/railway.md:936` tells operators to "Re-run `quickscale deploy railway`" as a remedy, and the command is built to be re-run: every step checks "already exists." Each re-run rotates the key, so on cutover:
-
-- every session is logged out;
-- outstanding password-reset and email-confirmation links stop working;
-- signed cookies and in-flight CSRF tokens fail.
-
-The same delta made the runtime DB password explicitly survive re-deploys (`:369-389`), which makes the asymmetry plain. There is no at-rest encryption keyed on `SECRET_KEY` (grep), so no data is lost. Reality 3, reached through the CLI.
-
-**Fix:** Reuse `existing_vars["SECRET_KEY"]` when present and generate only on first deploy. Mirror the `RUNTIME_DB_PASSWORD` reuse rule. **Effort:** Trivial. **Confidence:** High.
-
-### TA75 `railway-runtime-role-vars-fail-open` · S3 · `deployment_commands.py:361-366`, `:262-282`, `:369-389`
-
-**Defect:** Two helpers turn "could not read Railway state" into invented values, which violates the Fail-Hard oracle:
-
-- `_existing_service_variables` returns `{}` on any exception. It also returns `{}` when `get_railway_variables` returns `None`, which it does on a nonzero exit (`railway_utils.py:809`).
-- `_setup_postgres_step` swallows listing errors and `return "Postgres"`.
-
-**Failure scenario:** A transient `railway variables` failure during a re-deploy makes `_runtime_role_variables` see no `RUNTIME_DB_PASSWORD`. It then:
-
-- generates a new one;
-- overwrites an operator-managed `RUNTIME_DATABASE_URL` that the docstring promises to leave alone.
-
-The next boot's `start.sh` step 3 `ALTER ROLE … PASSWORD` rotates the credential before migrations run. The still-serving deployment then fails every new DB connection once its 600 s `CONN_MAX_AGE` connections recycle. If the new deploy later fails (migration, WSGI check), that becomes a full outage.
-
-Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` can pick an app service whose name contains "postgres", or an arbitrary one of several Postgres services. That writes a reference that fails boot. The failure is closed, per empirical check (3), but the deploy still fails.
-
-**Refutation:** The `{}` fallback is documented in the helper's docstring ("or {} if unreadable"), but it contradicts the same function's "never rotates" promise and the declared Fail-Hard policy. No test asserts the fallback's value: `test_check_exception` (`test_deployment_commands_extended.py:365`) checks nothing.
-
-**Fix:**
-
-- Raise `click.ClickException` when variables cannot be read, instead of returning `{}`.
-- Make `_setup_postgres_step` fail when listing fails or when anything other than exactly one database service matches. Prefer Railway's service type over a name substring if the JSON exposes it.
-
-**Effort:** Small. **Confidence:** High. Reality 3, reached through the CLI.
-
 ### TA77 `publish-all-self-observed-lease` · S3 · `scripts/publish_module.py:1208-1253`
 
 **Defect:** `_publish_all` calls `_observe_remote_branch_sha` (a live `ls-remote`) and passes the result straight to `_publish_module` as `expected_remote_sha`. The lease then only guards the milliseconds between observation and push. It never checks that the observed remote tip is an ancestor of the local split. Nearby text contradicts the design: the helper's docstring warns that feeding an unseen SHA "would satisfy the lease while clobbering a remote commit nobody in this process ever saw", and `_publish_module` (`:1002`) relies on the same lease with no ancestry check.
@@ -191,9 +150,9 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 
 | Subsystem | What was read | Verdict |
 |---|---|---|
-| Commit delta `87e8c96a..HEAD` | full first-party production diff and every test hunk | TA74, TA75, TA77; test changes adjudicated in *Clean sweeps* |
+| Commit delta `87e8c96a..HEAD` | full first-party production diff and every test hunk | TA77 remains open; test changes adjudicated in *Clean sweeps* |
 | Generated boot sequence (`start.sh.j2`, `Dockerfile.j2`, `railway.json.j2`) | entire files; lifecycle walk boot → role → migrate → cache → superuser → WSGI → gunicorn | Clean. Role creation is identifier-safe, refuses a superuser or self role, and credentials stay off argv. Two watch items below |
-| CLI deploy (`deployment_commands.py`, `railway_utils.py` variable helpers) | delta in full plus read/set helpers | TA74, TA75 |
+| CLI deploy (`deployment_commands.py`, `railway_utils.py` variable helpers) | delta in full plus read/set helpers | Clean after live-state reconciliation and exact database-service selection |
 | CLI dev (`development_commands.py`) | delta plus every `_run_docker_exec_command` caller | Clean. The privilege narrowing is correct and `manage` guards empty args at `:690` |
 | orgs — privileged commands (`apps.py`, `migrate_billing_to_orgs.py`) | whole command, guard delta | Clean. See *Clean sweeps* |
 | orgs — `purge_organization` | whole file | TA73 |
@@ -230,7 +189,6 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 
 - **Two independent filesystem-lock implementations.** `AdvisoryLock` and the DR backup lock remain separate. Carried forward as a non-defect consolidation watch question.
 - **Conformance gates assert policy presence, not policy content.** `table_has_force_rls` (`tenancy.py:1633`) accepts any table with RLS enabled and forced and at least one policy. Still owned by post-v88 SA177.
-- **Deploy-time state is reconstructed, not reconciled.** TA74 and TA75 are both symptoms of `quickscale deploy railway` recomputing configuration each run instead of treating the live Railway environment as the source of truth that must be read successfully first.
 
 ---
 
@@ -313,5 +271,7 @@ Separately, the substring match `"postgres" in name.lower()` plus `existing[0]` 
 - 2026-09-15 — **TA78** `compare-digest-non-ascii-500`: **new (S4).** Long-standing; executed.
 - 2026-09-15 — **Clean sweep superseded:** the prior "four privileged-command declarations agree on exactly `{migrate, createcachetable}`" became "agree on three", after `b29d9a29` added `migrate_billing_to_orgs` at all four stations. Consistent; no finding.
 - 2026-09-15 — **Chain pass (§3.9) ran.** One candidate chain was refuted (TA75 guessed service × DB-free healthcheck; see empirical check 3). TA75 × TA74 share a re-run trigger but compound only into disruption, not exposure. No chain raised a severity.
+- 2026-09-16 — **TA74** `railway-redeploy-rotates-secret-key`: **retired by SA184.** Re-runs now reuse the service's `SECRET_KEY`, generating one only on first deploy; archived in [CHANGELOG.md](../../CHANGELOG.md).
+- 2026-09-16 — **TA75** `railway-runtime-role-vars-fail-open`: **retired by SA184.** Unreadable Railway state and ambiguous PostgreSQL listings now fail the deploy instead of inventing values; archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 *Categories swept with no qualifying finding this pass: injection sinks (role DDL, publication git argv, testimony regex), authorization on the delta's new surfaces, secrets on argv or in logs (beyond the start.sh watch item), multi-tenant isolation in the privileged-command changes, CI secret and escape-hatch propagation, resources and I/O, performance, and the code-generator and IaC archetype lenses.*

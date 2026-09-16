@@ -801,9 +801,8 @@ def get_railway_variables(
             # silently collapsing to {}. Truly empty output is benign.
             if not variables and result.stdout.strip():
                 raise ValueError(
-                    f"Railway CLI returned success with non-empty output but no "
-                    f"KEY=VALUE pairs could be parsed. Output may have changed "
-                    f"format: {result.stdout[:200]}"
+                    "Railway CLI returned success with non-empty output but no "
+                    "KEY=VALUE pairs could be parsed. Output format may have changed."
                 )
             return variables
         return None
@@ -833,32 +832,35 @@ def _get_railway_variables_json(
             data = json.loads(result.stdout)
         except json.JSONDecodeError:
             raise ValueError(
-                f"Railway CLI returned success but JSON output could not be "
-                f"parsed (output format may have changed): "
-                f"{result.stdout[:200]}"
+                "Railway CLI returned success but JSON output could not be "
+                "parsed. Output format may have changed."
             )
         # Railway JSON output can be a dict of {key: value} or a list of objects
         if isinstance(data, dict):
             return {k: str(v) for k, v in data.items()}
         if isinstance(data, list):
-            variables: dict[str, str] = {}
-            for item in data:
-                if isinstance(item, dict) and "name" in item and "value" in item:
-                    variables[item["name"]] = str(item["value"])
-            if variables:
-                return variables
-            # Empty list — no variables set, which is benign
-            return {}
+            if not data:
+                return {}
+            if not all(
+                isinstance(item, dict) and "name" in item and "value" in item
+                for item in data
+            ):
+                raise ValueError(
+                    "Railway CLI returned a non-empty variables list with "
+                    f"unrecognized entries ({len(data)} received). "
+                    "Output format may have changed."
+                )
+            return {str(item["name"]): str(item["value"]) for item in data}
         raise ValueError(
             f"Railway CLI returned success but output format is unrecognized "
             f"(expected dict or list, got {type(data).__name__}). "
-            f"Output may have changed: {result.stdout[:200]}"
+            "Output may have changed."
         )
     except TimeoutError:
         return None
 
 
-def link_database_to_service(service: str) -> tuple[bool, str]:
+def link_database_to_service(service: str, database_service: str) -> tuple[bool, str]:
     """
     Link PostgreSQL DATABASE_URL reference to app service.
 
@@ -868,6 +870,7 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
     Args:
     ----
         service: App service name to link database to
+        database_service: Exact Railway PostgreSQL service name to reference
 
     Returns:
     -------
@@ -876,7 +879,6 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
         - message: Status or error message
 
     """
-    reference_services = ("Postgres", "PostgreSQL")
     max_attempts = 12
     retry_delay_seconds = 10
     max_wait_seconds = 180
@@ -889,34 +891,28 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
             break
 
         attempts_completed = attempt
-        for reference in reference_services:
-            if time.monotonic() - start_time >= max_wait_seconds:
-                break
-
-            try:
-                result = run_railway_command(
-                    [
-                        "variable",
-                        "set",
-                        f"DATABASE_URL=${{{{{reference}.DATABASE_URL}}}}",
-                        "--service",
-                        service,
-                    ],
-                    timeout=45,
-                )
-            except TimeoutError:
-                last_error = (
-                    f"Timed out while waiting for {reference}.DATABASE_URL reference"
-                )
-                continue
-            except Exception as e:
-                error_text = str(e).strip()
-                if error_text:
-                    last_error = error_text
-                if _is_non_retryable_database_link_error(error_text):
-                    return False, f"Error linking DATABASE_URL: {error_text}"
-                continue
-
+        try:
+            result = run_railway_command(
+                [
+                    "variable",
+                    "set",
+                    f"DATABASE_URL=${{{{{database_service}.DATABASE_URL}}}}",
+                    "--service",
+                    service,
+                ],
+                timeout=45,
+            )
+        except TimeoutError:
+            last_error = (
+                f"Timed out while waiting for {database_service}.DATABASE_URL reference"
+            )
+        except Exception as e:
+            error_text = str(e).strip()
+            if error_text:
+                last_error = error_text
+            if _is_non_retryable_database_link_error(error_text):
+                return False, f"Error linking DATABASE_URL: {error_text}"
+        else:
             if result.returncode == 0:
                 return True, "DATABASE_URL reference linked successfully"
 
@@ -926,12 +922,6 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
 
             if _is_non_retryable_database_link_error(error_text):
                 return False, f"Failed to link DATABASE_URL: {error_text}"
-
-        deployed_vars = get_railway_variables(service)
-        if deployed_vars:
-            db_val = deployed_vars.get("DATABASE_URL", "")
-            if db_val and not db_val.startswith("${"):
-                return True, "DATABASE_URL reference linked successfully"
 
         if attempt < max_attempts and time.monotonic() - start_time < max_wait_seconds:
             time.sleep(retry_delay_seconds)
