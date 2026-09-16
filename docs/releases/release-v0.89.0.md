@@ -27,9 +27,10 @@ down in `docs/technical/frontend.md`.
 
 ## Adoption
 
-A project-owned model declares the tenant-manager contract and installs its own FORCE RLS policy in
-its migration. A project-owned `AbstractListing` subclass declares both the tenant-scoped and
-super-scope managers before running the project's isolation checks.
+A project-owned model declares the tenant-manager contract and calls `apply_force_rls()` from its
+initial migration to install the exact pair required by isolation checks: one tenant-only `FOR ALL`
+policy and its `<base>_select` operator-read `FOR SELECT` policy. A project-owned `AbstractListing`
+subclass declares both the tenant-scoped and super-scope managers before running those checks.
 
 A project that has **overridden** `quickscale_modules_blog/blog/*.html`,
 `quickscale_modules_listings/listings/*.html`, or `quickscale_modules_crm/crm/*.html` renames the

@@ -38,7 +38,6 @@ context, scope, and acceptance;
 | SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
 | SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | SA185 | Deferred |
-| SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | — | Deferred |
 | SA188 | Settle the privileged-command set behind one declaration | post-v88 | 3 | SA185 | Deferred |
 | SA189 | Provision the runtime database role in one place under one name | post-v88 | 3 | SA188 | Deferred |
 | SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | — | Deferred |
@@ -48,7 +47,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
 Track 2: SA185 ──► SA186 ──► SA187 ──► SA192
-Track 3: SA177 ──► SA188 ──► SA189 ──► SA190
+Track 3: SA188 ──► SA189 ──► SA190
 
 Cross-track dependencies:  SA185 ──► SA188
 ```
@@ -86,9 +85,9 @@ the `bap-web` migration (SA191), and the portal (SA153), because each feeds the 
 splitting them across tracks would only add merge handoffs. Tracks 2 and 3 split the audit work by
 conflict surface. Track 2 takes the CLI deploy/update, publication, and test surfaces, which are
 mostly trivial or small. Track 3 takes orgs tenancy, purge, and the privileged/runtime-role
-templates, which carry the medium tickets. SA177 sits ahead of SA188 so Track 3 keeps working while
-Track 2 delivers SA185. SA186 and SA187 could move to Track 3's tail without a conflict, but would
-only lengthen that track.
+templates, which carry the medium tickets. Track 3 completed its independent RLS predicate work
+first and now waits for Track 2 to deliver SA185 before SA188. SA186 and SA187 could move to Track
+3's tail without a conflict, but would only lengthen that track.
 
 ### Track states
 
@@ -98,7 +97,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA152 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA185 | yes | yes | yes | **yes** | no |
-| 3 | SA177 | yes | yes | yes | **yes** | no |
+| 3 | SA188 | no | no | no | **no** | no |
 
 ### Ownership and merge coordination
 
@@ -116,7 +115,7 @@ A track is **truly green** only when all three states are yes.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
   and the owning audit: the arch audit for SA152, SA185, SA188, SA189, and SA190; the tech audit
-  for SA177, SA186, and SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
+  for SA186 and SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
   audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
   Three code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
@@ -411,25 +410,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA183 — Refuse to purge an organization with a live Stripe subscription.**
 
-- [ ] **SA177 — Verify the predicates of enrolled RLS policies.**
-
-  **Context:** RLS enabled, RLS forced, and a row in `pg_policies` do not prove tenant isolation: a permissive
-  `USING (true)` policy can satisfy all three. The intended contract scopes writes to the current
-  organization and permits cross-tenant reads only with the operator flag. Operator access belongs
-  to a `FOR SELECT` policy so it cannot expand write or delete visibility.
-
-  Compare the database's `qual` and `with_check` expressions with the rendered policy contract for
-  every enrolled table, accounting for PostgreSQL's expression representation. Use a live database
-  and a negative control that weakens a predicate and is rejected. This checks policy meaning in
-  addition to SA172's accepted application and table-resolution behavior.
-
-  **Acceptance:** for each enrolled table — including marker-declared project tables, through
-  the derived set — compare both policies' `qual` and `with_check` in `pg_policies` against the
-  rendered expected policies, normalized for PostgreSQL's catalog representation. A deliberately
-  weakened predicate fails for the intended reason and the exact policy is restored afterward. Then
-  retire the tech audit's predicate-conformance tooling gap and structural smell.
-
-  **Surfaces:** isolation-conformance runner, orgs policy template/tests, technical audit.
+- [x] **SA177 — Verify the predicates of enrolled RLS policies.**
 
 - [ ] **SA188 — Settle the privileged-command set behind one declaration.**
 

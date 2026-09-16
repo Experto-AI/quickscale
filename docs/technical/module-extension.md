@@ -88,12 +88,18 @@ class ProjectListing(AbstractListing):
 ```
 
 The project app must be installed and its initial migration must create the
-concrete table and its FORCE-RLS base policy. The policy must be a live,
-migration-created `FOR ALL` policy; its actual name is not assumed by runtime
-code. The FORCE-RLS refresh discovers the unique base policy for each existing
-marker-derived table from PostgreSQL `pg_policies` before changing any RLS
-state, and fails closed when the policy is absent or ambiguous. Additional
-operator `FOR SELECT` policy rows may coexist with the base policy.
+concrete table and call `apply_force_rls()` to install the exact two-policy
+contract: one tenant-only `FOR ALL` base policy with identical current-org
+`USING` and `WITH CHECK` predicates, plus one `<base>_select` operator-read
+`FOR SELECT` policy with the rendered current-org-or-operator `USING` predicate
+and no `WITH CHECK`. Both policies are permissive and apply to `PUBLIC`; extra
+policies are rejected. The base policy's actual name is owned by the migration,
+not inferred by runtime code. Keep that base name to at most 56 UTF-8 bytes so
+the `_select` suffix fits PostgreSQL's 63-byte identifier limit;
+`apply_force_rls()` rejects longer names before issuing DDL. FORCE-RLS refresh
+discovers that unique base policy for each existing marker-derived table from
+PostgreSQL `pg_policies` before changing any RLS state and fails closed when
+policy metadata is absent or ambiguous.
 
 The resulting project-owned model participates in the same W003/W004 system
 check and `check_tenant_isolation` command as shipped module models. Their
