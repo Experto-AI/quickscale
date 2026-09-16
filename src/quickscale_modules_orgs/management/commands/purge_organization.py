@@ -14,6 +14,7 @@ Contract rules enforced by this command:
 * Missing live UUID with tombstone → no-op success with already-gone message.
 * Rerun after successful purge → no-op success with clear message.
 * System and personal orgs are guarded by default; ``--force`` overrides.
+* Current Stripe-backed subscriptions must be cancelled before any purge.
 * Ownership/count map always includes ``OrganizationInvitation`` rows.
 * Tombstone is created in the same transaction as the purge.
 * Cross-module owned rows (social, forms, listings, blog, crm, billing) are
@@ -259,6 +260,7 @@ def _get_qs(model: object, filter_kwargs: dict[str, object]) -> object:
 class Command(BaseCommand):
     help = (
         "Purge an organization and all owned rows across all modules. "
+        "Current Stripe-backed subscriptions must be cancelled first. "
         "Use --organization-id <uuid> for destructive execution; "
         "--slug <slug> for non-destructive preflight only."
     )
@@ -386,6 +388,7 @@ class Command(BaseCommand):
             )
 
         self._guard_reserved_org(organization)
+        self._guard_live_stripe_subscriptions(organization)
         self._print_ownership_summary(
             organization, self._build_ownership_map_guarded(organization)
         )
@@ -413,6 +416,7 @@ class Command(BaseCommand):
             )
 
         self._guard_reserved_org(organization)
+        self._guard_live_stripe_subscriptions(organization)
 
         ownership_map: dict[str, int] = {}
         with transaction.atomic():
@@ -562,6 +566,40 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     # Shared helpers
     # ------------------------------------------------------------------
+
+    def _guard_live_stripe_subscriptions(self, organization: Organization) -> None:
+        """Refuse when Stripe still has a current subscription for the org."""
+        try:
+            subscription_model = apps.get_model(
+                "quickscale_modules_billing", "Subscription"
+            )
+        except LookupError:
+            return
+
+        with transaction.atomic():
+            set_current_org_for_context(org_id=organization.pk)
+            try:
+                current_statuses = subscription_model.current_statuses()  # type: ignore[attr-defined]
+                queryset = _get_qs(subscription_model, {"organization": organization})
+                stripe_subscription_ids = sorted(
+                    str(subscription_id)
+                    for subscription_id in queryset.filter(  # type: ignore[attr-defined]
+                        status__in=current_statuses,
+                        stripe_subscription_id__isnull=False,
+                    )
+                    .exclude(stripe_subscription_id="")
+                    .values_list("stripe_subscription_id", flat=True)
+                )
+            finally:
+                reset_current_org_id()
+
+        if stripe_subscription_ids:
+            joined_ids = ", ".join(stripe_subscription_ids)
+            raise CommandError(
+                f"Cannot purge organization {organization.pk} while it has current "
+                f"Stripe subscriptions: {joined_ids}. Cancel these subscriptions "
+                "in Stripe before retrying."
+            )
 
     def _check_tombstone(self, org_id: uuid.UUID) -> None:
         """Check for a tombstone when the org does not exist."""
