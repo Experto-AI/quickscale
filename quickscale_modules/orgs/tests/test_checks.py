@@ -128,6 +128,7 @@ class TestCheckTenantIsolationW004:
         assert len(messages) == 1
         assert messages[0].id == "quickscale_modules_orgs.W004"
         assert "does not match the FORCE RLS policy contract" in messages[0].msg
+        assert "Remove any extra or misnamed policies" in messages[0].hint
 
 
 class TestCheckTenantIsolationHappy:
