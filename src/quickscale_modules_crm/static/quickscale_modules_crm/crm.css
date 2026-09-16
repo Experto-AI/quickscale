@@ -1,0 +1,76 @@
+/* CRM module styles.
+ *
+ * The page shell (reset, body, topbar, main, footer, link colour) comes from
+ * the project's base.html. Its reset zeroes default margins, so CRM content
+ * restores its own vertical rhythm here. Only CRM content styling belongs in
+ * this file.
+ */
+
+.crm-nav {
+    margin-bottom: 1.5rem;
+}
+
+.crm-content h1 {
+    font-size: 1.875rem;
+    margin-bottom: 1rem;
+}
+
+.crm-content h2 {
+    font-size: 1.375rem;
+    margin-bottom: 0.75rem;
+}
+
+.crm-content h3 {
+    margin-bottom: 1rem;
+}
+
+.crm-content p {
+    margin-bottom: 1rem;
+}
+
+.crm-content .card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.crm-content .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.crm-content .stat-card {
+    text-align: center;
+}
+
+.crm-content .stat-card h3 {
+    font-size: 2rem;
+    color: #2563eb;
+    margin-bottom: 0.25rem;
+}
+
+.crm-content .stat-card p {
+    color: #64748b;
+    margin-bottom: 0;
+}
+
+.crm-content table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.crm-content th,
+.crm-content td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.crm-content th {
+    background: #f8fafc;
+    font-weight: 600;
+}
