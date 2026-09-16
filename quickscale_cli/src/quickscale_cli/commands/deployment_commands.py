@@ -41,10 +41,10 @@ from quickscale_cli.utils.railway_utils import (
 
 RUNTIME_DB_ROLE = "quickscale_runtime"
 RAILWAY_CONTRACT_VINTAGE = ContractVintage(
-    minimum="0.88.0",
+    minimum="0.89.0",
     manual_adoption_steps=[
-        "Compare and manually adopt the current settings/production.py runtime-role and privileged-command contract.",
-        "Compare and manually adopt the current start.sh runtime-role provisioning and privileged-command launch contract.",
+        "Compare and manually adopt the current settings/production.py runtime-role contract and the migrate/createcachetable privileged-command set.",
+        "Compare and manually adopt the current start.sh runtime-role provisioning, migrate/createcachetable launch prefixes, and unsupported-argv refusal.",
         "Compare and manually adopt the current Dockerfile startup contract.",
     ],
 )

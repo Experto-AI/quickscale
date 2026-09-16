@@ -7,6 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from quickscale_cli.commands.development_commands import (
+    _PRIVILEGED_DJANGO_COMMANDS,
     _SUPERUSER_SENTINEL,
     _dependencies_changed_since_last_build,
     _handle_superuser_after_up,
@@ -216,6 +217,10 @@ class TestVerifierComposeProjectPropagation:
 class TestRunDockerExecCommand:
     """Tests for _run_docker_exec_command"""
 
+    def test_privileged_command_set_names_every_sanctioned_member(self):
+        """The CLI elevates exactly the two stable Django built-ins."""
+        assert _PRIVILEGED_DJANGO_COMMANDS == frozenset({"migrate", "createcachetable"})
+
     @patch(
         "quickscale_cli.commands.development_commands.is_interactive",
         return_value=False,
@@ -292,6 +297,14 @@ class TestRunDockerExecCommand:
                 "container",
                 ["python", "manage.py", "shell"],
                 privileged_command="shell",
+            )
+
+    def test_retired_billing_backfill_is_rejected_as_privileged(self):
+        with pytest.raises(ValueError):
+            _run_docker_exec_command(
+                "container",
+                ["python", "manage.py", "migrate_billing_to_orgs"],
+                privileged_command="migrate_billing_to_orgs",
             )
 
 

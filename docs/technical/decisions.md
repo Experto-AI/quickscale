@@ -778,8 +778,8 @@ set as inline command prefixes — never as persistent environment configuration
 **Design:**
 
 1. **``QUICKSCALE_PRIVILEGED_COMMAND``** — Privileged DB operations that
-   require the superuser ``DATABASE_URL`` (``migrate``, ``createcachetable``,
-   ``migrate_billing_to_orgs``).
+   require the superuser ``DATABASE_URL`` (``migrate`` and
+   ``createcachetable``).
    The launcher sets this as an inline prefix *and* blanks
    ``RUNTIME_DATABASE_URL=""`` so the superuser role is used for schema
    changes (the runtime role has ``NOSUPERUSER``/``NOBYPASSRLS`` and cannot
@@ -811,8 +811,22 @@ set as inline command prefixes — never as persistent environment configuration
 
 | Variable | Values | Set by | Connection selected |
 |---|---|---|---|
-| ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable``, ``migrate_billing_to_orgs`` | ``start.sh`` / ``quickscale manage`` (inline prefix) | ``DATABASE_URL`` (superuser) |
+| ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable`` | ``start.sh`` / ``quickscale manage`` (inline prefix) | ``DATABASE_URL`` (superuser) |
 | ``QUICKSCALE_NON_DB_COMMAND`` | ``collectstatic``, ``compilemessages`` | ``Dockerfile`` build step (inline prefix) | Dummy ``postgresql://`` URL |
+
+**2026-09-16 retirement decision:** ``migrate_billing_to_orgs`` is not a
+permanent privileged command. Current installs cannot contain its historical
+nullable ownership shape, so the command remains available only as an explicit
+operator recovery tool and receives no automatic superuser connection. The
+sanctioned set is permanently the two stable Django built-ins above. Each of
+the four enforcing stations keeps an independent fail-closed refusal, with a
+cross-station regression requiring their declarations to agree. This dated
+decision supersedes the informal 2026-08-31 “permanent two” answer and the
+intervening three-command contract. The retired command itself fails unless the
+operator sets ``QUICKSCALE_ALLOW_BYPASSRLS=1``, explicitly selects
+``RUNTIME_DATABASE_URL="$DATABASE_URL"``, and the connected PostgreSQL role is
+actually ``BYPASSRLS`` or ``SUPERUSER``; the exact reviewed invocations live in
+[organizations.md](./organizations.md#migration-path-from-user-scoped-billing).
 
 **Related:** [Fail-Hard Principle](#fail-hard-principle) (the mutual-exclusion
 check and missing-arg validation follow fail-hard); [Multi-tenant SaaS
@@ -917,11 +931,11 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
 - **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
-  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate`, `createcachetable`, `migrate_billing_to_orgs`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The three-command contract is independently declared by the `apps.py` module guard, generated production-settings validator, CLI producer, and generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
-  2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — environment-variable escape hatch for intentional single-tenant or development use.
-- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate`, `createcachetable`, and its explicit one-shot `migrate_billing_to_orgs` mode; `quickscale manage migrate_billing_to_orgs` applies the same inline environment pair; `runserver`/`gunicorn` must still use the restricted runtime role
-- `quickscale manage` clears `RUNTIME_DATABASE_URL` only for those three sanctioned commands; every other management command (for example `createsuperuser`) runs under the restricted runtime role, which the boot guard requires
-- Runtime-role provisioning is not a fourth privileged Django command: when `RUNTIME_DB_PASSWORD` is set (as `quickscale deploy railway` does), `start.sh` creates or updates the `NOSUPERUSER/NOBYPASSRLS` role with a direct superuser `DATABASE_URL` connection *before* Django boots, so the guard and the three-command contract are untouched. It refuses a role that is the superuser login or an existing superuser
+  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `apps.py` module guard, generated production-settings validator, CLI producer, and generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
+  2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — non-serving environment-variable escape hatch for intentional single-tenant/development use or the explicitly acknowledged retired billing recovery invocation. It is never a production serving mode.
+- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; supplied argv, including the retired `migrate_billing_to_orgs` mode, exits 2 without a privileged path; `runserver`/`gunicorn` must still use the restricted runtime role
+- `quickscale manage` clears `RUNTIME_DATABASE_URL` only for those two sanctioned commands; every other management command (for example `createsuperuser` or `migrate_billing_to_orgs`) runs under the restricted runtime role, which the boot guard requires
+- Runtime-role provisioning is not a third privileged Django command: when `RUNTIME_DB_PASSWORD` is set (as `quickscale deploy railway` does), `start.sh` creates or updates the `NOSUPERUSER/NOBYPASSRLS` role with a direct superuser `DATABASE_URL` connection *before* Django boots, so the guard and the two-command contract are untouched. It refuses a role that is the superuser login or an existing superuser
 
 **Isolation architecture rules (permanent):**
 - Runtime tenant classification and membership: `is_classified_in_registry()` classifies installed concrete project models from explicit ``tenant_excluded`` markers, ``TenantManager``/``TenantModel`` detection, and implicit M2M-through inference. `is_tenant_model()` and `get_tenant_models()` derive only the positively enrolled tenant-model set from ``TenantManager``/``TenantModel`` detection; ``tenant_excluded`` wins over every enrollment signal. Classification and FORCE-RLS refresh must not fall back to or consult the literal ``TENANT_TABLE_REGISTRY``. The literal remains only a shipped-module CI parity oracle. Its 21 shipped ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and the exact two-policy FORCE-RLS contract rendered by ``apply_force_rls``.

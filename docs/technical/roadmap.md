@@ -37,8 +37,7 @@ context, scope, and acceptance;
 | SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
 | SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | — | Deferred |
-| SA188 | Settle the privileged-command set behind one declaration | post-v88 | 3 | — | Deferred |
-| SA189 | Provision the runtime database role in one place under one name | post-v88 | 3 | SA188 | Deferred |
+| SA189 | Provision the runtime database role in one place under one name | post-v88 | 3 | — | Deferred |
 | SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -46,7 +45,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
 Track 2: SA186 ──► SA187 ──► SA192
-Track 3: SA188 ──► SA189 ──► SA190
+Track 3: SA189 ──► SA190
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -61,9 +60,6 @@ path.
 - **Derived tenant tables support SA153 and SA177.** Project-owned tenant tables pass the generated
   project's `check_tenant_isolation` without module-source edits, and predicate verification covers
   them through the same derived tenant-model set.
-- **SA188 precedes SA189.** SA188 changes contract-bearing templates and is the first follow-up to
-  move the enforced vintage. SA188 and SA189 both edit `start.sh.j2` and regenerate the SA90
-  emission fixture; settle the command set before collapsing role provisioning around it.
 - **SA152 precedes SA191, and SA191 precedes SA153.** `bap-web` is migrated with the maintainer
   tools only after SA152 has proven them on isolated fixtures, and the portal is built on the
   migrated project rather than on a fresh one. SA191 redeploys through the fail-hard
@@ -73,7 +69,7 @@ path.
   contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not an SA153 edge: the portal's
   React pages do not need the restyled Django pages to ship.
 - **Independent.** SA186 and SA187 have no edges and sit by severity. SA152 shares no files with
-  SA188/SA189, but all three touch the privilege/runtime contract of generated `settings/production.py`
+  SA189, but both touch the privilege/runtime contract of generated `settings/production.py`
   and `start.sh`; whichever lands second re-runs the others' fixtures.
 
 **Rebalance.** Track 1 carries the whole critical path: the migration-tool verification (SA152),
@@ -82,7 +78,7 @@ splitting them across tracks would only add merge handoffs. Tracks 2 and 3 split
 conflict surface. Track 2 takes the CLI deploy/update, publication, and test surfaces, which are
 mostly trivial or small. Track 3 takes orgs tenancy, purge, and the privileged/runtime-role
 templates, which carry the medium tickets. Track 3 completed its independent RLS predicate work
-while Track 2 delivered SA185 and can now proceed to SA188. SA186 and SA187 could move to Track 3's
+while Track 2 delivered SA185 and can now proceed to SA189. SA186 and SA187 could move to Track 3's
 tail without a conflict, but would only lengthen that track.
 
 ### Track states
@@ -93,7 +89,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA152 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA186 | yes | yes | yes | **yes** | no |
-| 3 | SA188 | yes | yes | yes | **yes** | no |
+| 3 | SA189 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -110,7 +106,7 @@ A track is **truly green** only when all three states are yes.
   `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  and the owning audit: the arch audit for SA152, SA188, SA189, and SA190; the tech audit
+  and the owning audit: the arch audit for SA152, SA189, and SA190; the tech audit
   for SA186 and SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
   audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
@@ -380,37 +376,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA177 — Verify the predicates of enrolled RLS policies.**
 
-- [ ] **SA188 — Settle the privileged-command set behind one declaration.**
-
-  **Context:** Four stations independently declare which one-shot commands may run under the superuser connection:
-  the orgs boot guard, generated production settings, the CLI, and the generated launcher, which
-  added a second declaration shape. Adding `migrate_billing_to_orgs` edited eight places with no
-  cross-station test. The two frozen template copies also reject the command in exactly the
-  pre-0.88 projects that would need it.
-
-  The third member is retired. The command is documented for existing deployments with user-scoped
-  billing, yet `organization_id` is `NOT NULL` on every current install, so it cannot reach a real
-  row without dropping the constraint its own tests drop. Retiring it returns the sanctioned set to
-  `migrate` and `createcachetable` — two stable Django built-ins — and removes the launcher's second
-  declaration shape, the argv branch that never matched the frozenset form the other three stations
-  use. Four copies of a two-member list is duplication the architecture audit accepts at flat cost,
-  so no self-declaring mechanism is built here. Each station keeps an independent refusal; the
-  duplication that remains is covered by a cross-station regression rather than by collapsing the
-  stations.
-
-  **Acceptance:** first record in decisions that `migrate_billing_to_orgs` is retired rather than a
-  permanent member; this answers the architecture audit's open question and supersedes the
-  2026-08-31 "permanent two" answer. Then remove it from the orgs guard, `production.py.j2`,
-  `development_commands.py`, and the `start.sh.j2` argv branch, so an unsupported argv exits 2 with
-  no privileged path, and return the item to the watchlist with a dated retirement. The command file
-  itself stays as an unsanctioned management command and records that it no longer runs privileged.
-  Each executable station has a regression naming every member of the reduced set, and a regression
-  fails when a station's declaration diverges from the others. The SA90 emission fixture is
-  regenerated once, and the template change moves the `orgs` vintage through SA185.
-
-  **Surfaces:** `orgs/apps.py`, `migrate_billing_to_orgs.py`, `production.py.j2`, `start.sh.j2`,
-  `development_commands.py`, generator/CLI/boot-guard tests, the SA90 fixture, decisions,
-  `docs/deployment/railway.md`, and the architecture audit.
+- [x] **SA188 — Settle the privileged-command set behind one declaration.**
 
 - [ ] **SA189 — Provision the runtime database role in one place under one name.**
 

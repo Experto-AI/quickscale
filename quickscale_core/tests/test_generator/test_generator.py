@@ -365,7 +365,7 @@ class TestGeneratedProjectSa63RegenerationEvidence:
             "production.py must reference QUICKSCALE_NON_DB_COMMAND"
         )
 
-        # Must still contain the ALLOW_BYPASSRLS bridge as dev/test opt-out
+        # Must retain the non-serving dev/test and retired-recovery bridge
         assert "QUICKSCALE_ALLOW_BYPASSRLS" in content, (
             "production.py must still reference QUICKSCALE_ALLOW_BYPASSRLS"
         )

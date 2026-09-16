@@ -41,9 +41,7 @@ from quickscale_cli.utils.project_manager import (
 
 VERIFY_COMPOSE_PROJECT_ENV_VAR = "QUICKSCALE_VERIFY_COMPOSE_PROJECT"
 _VERIFY_COMPOSE_PROJECT_PATTERN = re.compile(r"qs-sa117b-[0-9a-f]{32}\Z")
-_PRIVILEGED_DJANGO_COMMANDS = frozenset(
-    {"migrate", "createcachetable", "migrate_billing_to_orgs"}
-)
+_PRIVILEGED_DJANGO_COMMANDS = frozenset({"migrate", "createcachetable"})
 
 
 def _validated_verifier_compose_project() -> str | None:

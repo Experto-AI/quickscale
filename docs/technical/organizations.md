@@ -397,7 +397,24 @@ This decorator resolves the current organization's active subscription through t
 
 ### Migration Path from User-Scoped Billing
 
-For deployments already using user-scoped billing, `migrate_billing_to_orgs` ships as the idempotent bridge command. It reuses a sole existing organization when one is already resolvable for the billing user; otherwise it creates a personal org via the standard helper, migrates authoritative `Subscription`, `CreditBalance`, and `CreditTransaction` ownership to that organization, syncs a sole Stripe customer id when safe, and aborts ambiguous cases instead of guessing. Run it once after deploying the organizations module.
+For historical deployments that still contain user-scoped billing data, `migrate_billing_to_orgs` remains available as an idempotent recovery command. It reuses a sole existing organization when one is already resolvable for the billing user; otherwise it creates a personal org via the standard helper, migrates authoritative `Subscription`, `CreditBalance`, and `CreditTransaction` ownership to that organization, syncs a sole Stripe customer id when safe, and aborts ambiguous cases instead of guessing. Current installs already require organization ownership, so normal deployments do not run it. The launcher and CLI do not grant this retired command a privileged database connection automatically.
+
+The command fails before inspecting billing rows unless the operator explicitly acknowledges the
+break-glass path and selects the superuser URL. For local Docker, run the reviewed recovery form:
+
+```bash
+docker compose exec backend sh -c 'QUICKSCALE_ALLOW_BYPASSRLS=1 RUNTIME_DATABASE_URL="$DATABASE_URL" python manage.py migrate_billing_to_orgs'
+```
+
+For Railway, run the same in the deployed container rather than on the local machine:
+
+```bash
+railway ssh --service <app-service> /bin/bash -c 'QUICKSCALE_ALLOW_BYPASSRLS=1 RUNTIME_DATABASE_URL="$DATABASE_URL" python manage.py migrate_billing_to_orgs'
+```
+
+Use this only for a verified historical nullable-ownership schema. The command confirms that the
+connected PostgreSQL role actually has `BYPASSRLS` or `SUPERUSER`; the acknowledgement on a
+restricted runtime role fails loudly instead of reporting that no rows need migration.
 
 ---
 
@@ -636,7 +653,7 @@ All open questions from the original design were resolved before implementation 
 | Multi-org membership? | **No** — regular SaaS users belong to exactly one org | Eliminates the dual-source-of-truth problem (session is sole authority); removes need for explicit-org API contract. Multi-org membership at the DB level is not precluded but is not exposed in the UI. VIEW-AS handles operator debug needs. |
 | `Organization` model location? | **`quickscale_modules_orgs`** | Auth stays minimal and standalone; orgs depends on auth, not the reverse |
 | Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
-| Billing migration path? | **Auto-create personal org per user** | Management command `migrate_billing_to_orgs`; idempotent; zero manual operator work |
+| Billing migration path? | **Current installs require organization ownership** | Retired recovery command `migrate_billing_to_orgs`; idempotent, explicit operator use, no automatic privileged connection |
 | Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | The enrolled tenant-table surface now runs under the per-org runtime-role admin contract (explicit per-org selection → session → fail-closed); no operator bypass or `BYPASSRLS` deployed |
 | Active org routing? | **Session-based in SaaS; personal-org resolution in Solo** | Org-management pages stay under `/orgs/...`; shipped server content routes are flat for CRM, blog, forms, listings, and billing; fresh `showcase_react` SaaS pages keep org-slug blog/listings routes with flat redirect shims. Solo mode resolves the personal org transparently. |
 | Post-signup flow? | **SaaS: force `/orgs/new/`. Solo: auto-create personal org** | SaaS users must name their workspace; solo users should not see org concepts |

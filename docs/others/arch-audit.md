@@ -1,7 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-09-15 · **Branch:** `v89` · **Range audited:** `48e0a62a..b9e072f4` ·
-> **Prior pass:** 2026-08-28 (reconciled through 2026-09-06)
+> **Audit snapshot:** 2026-09-15 · **Branch:** `v89` · **Range audited:** `48e0a62a..b9e072f4`
 >
 > Live structural findings only. Findings are identified by their **slug**; ordinal numbering is
 > pass-local and is not a stable identifier (see
@@ -59,8 +58,7 @@ forced RLS, and boundary tests". SA177 (verify RLS policy predicates) is off the
 generated-project updater. SA153 is not a teams trigger, so the teams tie-breaker
 (`decisions.md:151`) does not govern the promotions below.
 
-**Scope decision.** Prior passes spent their depth on the governance/CI layer and on the
-template/runtime boundary. This pass has three jobs:
+**Scope decision.** This pass has three jobs:
 
 1. Reconstruct the large delta, and re-verify every prior anchor and watchlist trigger.
 2. Run the **change-cost probe against SA153**, the growth direction that is actually scheduled.
@@ -95,11 +93,11 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 |---|---|---|---|
 | Tenant reads/writes stay organization-scoped | `TenantManager`, `FORCE RLS`, restricted-role boot guard | Structural | unchanged |
 | **Tenant-model universe is classified (and refreshed, and purged)** | Marker-derived tenant classification and FORCE-RLS refresh; 21-entry `_DELETE_SPECS` remains the purge membership list. The shipped `TENANT_TABLE_REGISTRY` is a parity oracle only | **Classification and refresh are marker-derived; purge remains closed to project-owned tenant models** | **narrowed to SA190 purge membership** — rank 1 |
-| Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard; exemption set declared in four places | Guard structural; **set membership convention-only (4 declarations, 3 members, no cross-station gate)** | **weakened** — third member added in `b29d9a29` with no station test |
+| Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard; exemption set declared in four places and checked by exact-member station regressions | Guard structural; **two-member set duplicated across four fail-closed stations and cross-checked** | **strengthened** — recovery backfill excluded and declaration drift gated |
 | **Restricted runtime role exists with the right grants** | `db/init.sql.j2` (role `{package}_app`), `start.sh.j2` Step 3 (role `quickscale_runtime`, adds `GRANT CONNECT`), `OPERATIONS.md.j2` manual SQL | **Convention: three implementations, two role names** | **new row** (seam minted in `461796ce`) |
-| **Template ↔ upgradable-code contract compatibility across versions** | `project_contract` in state plus declared module/CLI vintages; `status` reports gaps and existing-project `update`, `apply`, and Railway deploy enforce them | **Structural at mutation boundaries, with explicit per-invocation acknowledgement** | **strengthened** — finding retired |
+| **Template ↔ upgradable-code contract compatibility across versions** | `project_contract` in state plus declared module/CLI vintages; `status` reports gaps and existing-project `update`, `apply`, and Railway deploy enforce them | **Structural at mutation boundaries, with explicit per-invocation acknowledgement** | **strengthened** — compatibility boundary enforced |
 | Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy | Membership gated; ownership hand-authored | unchanged; paid again for two new emitted paths (`31a93768`) |
-| Cross-domain deletion obligations are discharged | Last-owner: one predicate, locked model delete, `pre_delete` receiver. Billing cancellation: account-delete view; live-subscription refusal plus row purge, cache invalidation, and tombstone: `purge_organization` | Last-owner and live-subscription refusal are structural; **remaining obligations convention, split across two boundaries** | **re-characterized** — rank 3 |
+| Cross-domain deletion obligations are discharged | Last-owner: one predicate, locked model delete, `pre_delete` receiver. Billing cancellation: account-delete view; live-subscription refusal plus row purge, cache invalidation, and tombstone: `purge_organization` | Last-owner and live-subscription refusal are structural; **remaining obligations convention, split across two boundaries** | **re-characterized** — rank 2 |
 | CSRF-exempt endpoints have alternate integrity checks | AST gate plus sanctioned endpoint bases | Structural and gated | unchanged |
 | Core/module dependency direction and lockstep pin | Import-compatibility and reverse-import gates; exact `>=X.Y.0,<X.(Y+1).0` pin derived from `VERSION` | Gated | strengthened (floor → exact, `74d18f48`) |
 | Module identity (the twelve-module universe) | `module_discovery.py --list-modules`, consumed fail-hard (`provision_ci_postgres.sh:81`, `check_sa117_scope.py:57`, `version_tool.sh:34`) | Structural and derived | unchanged (SA173 three-state presence added behind the same shim) |
@@ -114,53 +112,12 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 | Rank | ID | Horizon | Confidence | Size | Problem in one line |
 |---:|---|---|---|---|---|
 | 1 | `org-model-universe-hand-enumerated` | now (SA190) | High | S | Purge membership remains a literal `_DELETE_SPECS` list inside the orgs module, closed to project-owned tenant tables even though classification and policy refresh are marker-derived. |
-| 2 | `privileged-command-set-multi-owner` | now (fired) | High | M | Four independent declarations own the privileged-command set. It grew to three with no gate, and the frozen template copy rejects the new command in the projects that need it. |
-| 3 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | Two org-deletion boundaries already exist, and each discharges a different subset of cross-domain obligations. |
+| 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | Two org-deletion boundaries already exist, and each discharges a different subset of cross-domain obligations. |
 
-Promotions this pass: rank 1 remains now as the still-open SA190 purge-membership half; its
-classification and policy-refresh halves are implemented by SA182. Rank 2 returns from the watchlist
-because its trigger fired. Rank 3 moves from deferred to 6–18 months, because prior passes
-mis-evaluated its trigger. The
-rank-1 finding is narrowed rather than closed: SA190 still owns purge derivation.
-
----
-
-## Fix-regression and delta audit
-
-**Closeouts since the last pass.** Each was scored against the three §3 questions:
-
-- **SA164** (`5d2c4ab5`): the guardrail now fails loud. The mechanism is fixed and the tuple
-  stays literal; see the watchlist.
-- **SA171** (`bf153e36`): stale-lock reclamation is atomic. The *same* correction had to be
-  written into both lock implementations. That is not a relocation, but it is the watch item's
-  compounding paid once more.
-- **SA172 / `89d262bc`**: the FORCE-RLS refresh is idempotent. No new commitment was minted, but
-  at that closeout the refresh still iterated the literal registry. That then-pre-existing gap
-  became rank-1 evidence; SA182 later closed the refresh half.
-- **SA173**: module presence is three-state, and identity stays derived. Sound.
-- **SA160**: the template copy of `get_client_ip` was deleted in favour of the module resolver,
-  plus a generated normalizing middleware. The mechanism is removed. The resolver still fails
-  closed without the middleware (`current_org.py:598-603`), so the template/module split did not
-  mint a skew hazard. Sound.
-- **SA174**: the command-set docstring now says "none is a single source of truth." It landed and
-  was then overtaken by `b29d9a29`.
-- **SA167c**: a new gate. Its count-oracle cost is already recorded.
-
-None relocated a prior finding's mechanism.
-
-**Unlabeled-behavioral commits.** Three changed load-bearing semantics on the privilege/runtime-role
-seam (`b29d9a29`, `461796ce`, `a85f29ff`), and one narrowed a gate (`2e2a932a`):
-
-- `decisions.md` was updated for the first two.
-- The prior pass's recorded maintainer answer (2026-08-31, "the two-command set is permanent") was
-  not revisited.
-- `b29d9a29` itself edited this file, changing a job count from 16 to 17, while leaving the
-  privileged-command watch item marked "Not fired." That is decision-record drift in the §5.IX
-  sense: plausibly correct behaviour, but the governing record now contradicts the code.
-
-The testimony gate as narrowed accepts any `vNN` token, and every commit on a `vNN` branch
-carries one, so it could not have flagged any of these. This is recorded, not promoted. Adding
-properties to that gate is additive, and the better lever is the structural fixes below.
+Rank 1 is the still-open SA190 purge-membership half; classification and policy refresh are
+marker-derived, while SA190 still owns purge derivation. The permanent two-command contract is
+cross-checked across all four enforcing stations, whose duplication remains a watch item. Rank 2
+is scheduled at the 6–18 month horizon.
 
 ---
 
@@ -173,10 +130,9 @@ properties to that gate is additive, and the better lever is the structural fixe
 Classification and policy refresh now accept project-owned tenant models; purge remains the
 unresolved SA190 half. The trigger is certain because SA153 is the next ticket on the critical path.
 
-**Trigger (restated):** a project-owned or module tenant model is scheduled. **Fired** — SA153's
+**Trigger:** a project-owned or module tenant model is scheduled. **Fired** — SA153's
 acceptance requires new tenant-owned child tables with their own `organization_id` and forced RLS
-(`roadmap.md`, SA153). The prior trigger ("teams adds a tenant model")
-named the wrong growth vector.
+(`roadmap.md`, SA153).
 
 **Problem:** The organization purge plan still treats the set of tenant models as a literal list
 inside the orgs module's source and has no project-side extension seam. The documented extension
@@ -265,117 +221,6 @@ be purged safely.
 
 ---
 
-## Finding — The privileged-command set has four owners and a frozen copy
-
-**ID:** `privileged-command-set-multi-owner` · **Horizon:** now · **Confidence:** High · **Size:** M ·
-**Context dependence:** `wrong-for-now` (a set that grows / generated projects in the field)
-
-**Rank rationale:** the blast radius is the RLS privilege seam in every generated project. Every
-divergence fails closed, so the cost is availability and operability rather than a leak. The
-trigger has already fired.
-
-**Trigger:** "a third sanctioned command, or any two declarations disagreeing." **Fired** by
-`b29d9a29` (2026-09-13, "v88 fix: make ci-e2e fixes"), which added `migrate_billing_to_orgs`. The
-decision this watch item was held under — the maintainer's 2026-08-31 answer that the two-command
-set is permanent — has not been revisited.
-
-**Problem:** Which one-shot commands may run under the superuser connection is declared
-independently in four places:
-
-- the module boot guard (`orgs/apps.py`);
-- the generated production-settings validator (`production.py.j2`);
-- the CLI producer (`development_commands.py`);
-- the generated launcher (`start.sh.j2`).
-
-Nothing derives or cross-checks them. Two of the four are frozen into every generated project at
-generation time.
-
-**Evidence** (re-verified and extended this pass):
-
-- **The four declarations now:**
-  - `production.py.j2:156`: `_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable", "migrate_billing_to_orgs"})`.
-  - `orgs/apps.py:36`: `_PRIVILEGED_COMMANDS`.
-  - `development_commands.py:44`: `_PRIVILEGED_DJANGO_COMMANDS`.
-  - `start.sh.j2:11-20`: a *new declaration shape*, an argv dispatch branch for the third command.
-    The first two members stay as inline env prefixes (`:115`, `:126`).
-- **Station tests do not name the new member.** `createcachetable` appears in the generator's
-  start.sh tests 26 times and in the boot-guard tests 7 times. `migrate_billing_to_orgs` appears
-  in no generator, CLI, or boot-guard test; the only tests naming it are the command's own
-  behaviour tests (`orgs/tests/test_management_commands.py`).
-- **The frozen station rejects the command where it is needed.** The command's documented users
-  are existing deployments with user-scoped billing (`release-v0.86.0.md:49,56`;
-  `organizations.md:400`). Those projects were generated before 0.88.
-  - Their `production.py` raises `ValueError("Unknown QUICKSCALE_PRIVILEGED_COMMAND value …")`.
-  - Their `start.sh` has no one-shot branch.
-  - An upgraded `orgs` module plus an upgraded CLI still cannot run it through the sanctioned
-    path. The only route is the `QUICKSCALE_ALLOW_BYPASSRLS=1` escape hatch.
-- **An adjacent seam was minted in the same release.** Runtime-role provisioning (`461796ce`) now
-  has three implementations with two role names:
-  - `db/init.sql.j2:23-50` creates `{package}_app` (`generator.py:507`) without `GRANT CONNECT`;
-  - `start.sh.j2:56-104` creates `quickscale_runtime` with `GRANT CONNECT` (`:94`), and its
-    default name duplicates `deployment_commands.py:37`;
-  - `OPERATIONS.md.j2:55,71-85` gives the manual SQL.
-
-  `decisions.md` records that provisioning "is not a fourth privileged Django command." That is
-  correct for the guard, and it is still a fifth station on the same privilege seam.
-
-**Counter-evidence:**
-
-- **No derivation or cross-station gate.** Searched for a derivation, a cross-station equality
-  test, and a `runtime_pins`-style shared constant for the command set; found none.
-- **All four stations agree today**, and every miss fails closed. The module guard's independent
-  check (run before the exemption) is intact.
-- **No flat-cost counterpart.** Searched for evidence that the third member is a time-boxed
-  exception; `decisions.md:908` now calls it "the three-command contract," with no retirement
-  condition. The adjacent `NON_DB` contract still has a one-station change cost.
-
-**Why it compounds:** the measured probe below is 8 edited stations over 2 commits (4 executable,
-0 derived, 0 gated). Beyond that:
-
-- **Member tests lag.** Each new member is tested at fewer stations than the last.
-- **Declaration shapes multiply.** Each launcher mode introduces a new shape: env prefix, then
-  argv branch.
-- **Frozen copies block new members.** Each member added after a project is generated is
-  un-runnable there without hand-editing emitted files.
-- **Role provisioning repeats the pattern.** It is growing the same way (three implementations
-  and two names within one release).
-
-**Detection signal:** `Unknown QUICKSCALE_PRIVILEGED_COMMAND value` in deploy logs. Operators
-reaching for `QUICKSCALE_ALLOW_BYPASSRLS=1` to run a data backfill. Password-authentication
-failures for `quickscale_runtime` or `{package}_app` after a role-name mix-up.
-
-**Steelman:** four fail-closed declarations are defence in depth. Settings validation, the module
-guard, the CLI producer, and the launcher each refuse independently, and a single shared constant
-would be a single point of trust. For a set that really does stay at two members, the duplication
-cost is flat. Do not fix if `migrate_billing_to_orgs` is retired once the backfill window closes.
-
-**Correct shape:** the sanctioned set is declared once, in a place that upgrades with the code that
-adds members. Each enforcing station *reads* that declaration and keeps its own independent refusal.
-Runtime-role provisioning has one implementation and one role-naming rule.
-
-**Options:**
-
-1. **Render-time single declaration.** A `runtime_pins`-style constant in `quickscale_core`,
-   rendered into `production.py.j2` and `start.sh.j2`, and imported by the CLI and by the orgs
-   guard (modules already depend on core). This fixes in-tree sync but not projects already in
-   the field.
-2. **Commands declare themselves.** A `requires_privileged_role = True` attribute on the Django
-   command class. The guard and the launcher check the attribute; settings validate only that
-   privileged mode was requested explicitly. The declaration then ships and upgrades with the
-   command inside its module, which removes the frozen station for future members. It needs care,
-   because settings import before commands load.
-3. **Keep four declarations and add a cross-station equality test.** Cheapest, but it is a gate
-   holding a copy-pair honest — the §0 fix-regression shape.
-
-**Recommendation:** Option 2 if the answer to the question below is "permanent." It is the only
-option under which a member added in a module release reaches already-generated projects. Choose
-Option 1 if the third member is retired. In either case, fold role provisioning into one
-implementation (the `start.sh` step, with `init.sql` delegating to the same SQL and one naming
-rule). · **First step:** record whether `migrate_billing_to_orgs` is permanent, then collapse
-role-name derivation to a single rule.
-
----
-
 ## Finding — Organization deletion obligations are split across two boundaries
 
 **ID:** `deletion-invariants-per-boundary-reimplementation` · **Horizon:** 6–18 months ·
@@ -386,9 +231,9 @@ compliance)
 SA153 is the first to create. Likelihood is moderate: both boundaries exist today, but the
 production volume does not yet.
 
-**Trigger:** "another account/organization deletion boundary." **Mis-evaluated by prior passes.**
-`purge_organization` has existed since `63a25b6e` (2026-06-26), before the last three passes, and
-it is that second boundary. It re-promotes on SA153's production launch rather than on teams.
+**Trigger:** another account/organization deletion boundary. **Fired:** `purge_organization` is
+the second boundary, and SA153's production launch makes the split obligations operationally
+relevant.
 
 **Problem:** Last-owner safety is structural, but the other cross-domain obligations of removing
 an organization — cancelling billing, deleting tenant rows, invalidating caches, writing a
@@ -455,26 +300,7 @@ into a named list shared with the account view; the purge-plan work owns that co
 
 ## Change-cost probe
 
-**Probe A — adding a third sanctioned privileged command, measured against the real addition.**
-The prior pass predicted this on paper. `b29d9a29` plus `3923eb58` actually edited:
-
-1. `production.py.j2`: the set at `:156` plus two comment blocks. Frozen in generated projects.
-2. `start.sh.j2:11-20`: a new argv dispatch branch, a new declaration shape. Frozen.
-3. `orgs/apps.py:36`: the set plus four docstrings.
-4. `development_commands.py:44`: the set.
-5. `decisions.md`: three sites.
-6. `docs/deployment/railway.md`.
-7. The SA90 emission fixture, regenerated across three variants. It was regenerated **twice**,
-   because `3923eb58`'s reformat of line `:156` changed the emitted bytes again.
-8. `CHANGELOG.md`.
-
-Not edited though owed: station tests at 3 of the 4 executable stations, the `orgs`
-`contract_vintage`, the settled-decision answer, and this document's watch item.
-
-**Verdict: finding evidence** (rank 2): 8 stations over 2 commits, 4 executable, 0 derived, and
-0 gated. Contrast `NON_DB`: one station.
-
-**Probe B — SA153: add one project-owned tenant child table** (for example, a property gallery
+**Probe — SA153: add one project-owned tenant child table** (for example, a property gallery
 image). SA182 now covers the classification and policy-refresh stations. The remaining SA190
 purge-membership probe is:
 
@@ -496,9 +322,9 @@ Phase A regression coverage; purge membership remains in vendored module source.
 
 - **SA182's rank-1 classification/refresh half is complete:** it unblocks SA153's first migration
   and keeps the shipped literal as parity-only evidence.
-- **Purge derivation pairs with rank 3:** the remaining rank-1/SA190 purge half and rank 3's
+- **Purge derivation pairs with rank 2:** the remaining rank-1/SA190 purge half and rank 2's
   coordinator touch the same command, so design them together.
-- **SA177 is independent of all three findings,** but its "each enrolled table" scope inherits rank 1's
+- **SA177 is independent of both findings,** but its "each enrolled table" scope inherits rank 1's
   closed universe. If rank 1 lands first, SA177 covers project tables for free.
 
 ## Sound load-bearing decisions
@@ -509,7 +335,7 @@ Phase A regression coverage; purge membership remains in vendored module source.
   the W003/W004 isolation checks are what make SA182's runtime shape safe; keep them while SA190
   derives purge membership.
 - **Last-owner safety is a model/signal backstop, not a view check.** One predicate serves six
-  callsites, plus a `pre_delete` receiver that catches direct ORM deletes. Rank 3's coordinator
+  callsites, plus a `pre_delete` receiver that catches direct ORM deletes. Rank 2's coordinator
   must not replace it.
 - **Single-declaration derivation seams work where they are used.** Module identity is shelled out
   to `module_discovery.py --list-modules` by every consumer. `runtime_pins.py` renders Python,
@@ -525,6 +351,11 @@ Phase A regression coverage; purge membership remains in vendored module source.
 
 ## Watchlist
 
+- **Privileged-command set has four independent enforcing stations.** The permanent sanctioned set
+  is the ``migrate``/``createcachetable`` pair, each station has an exact-member regression, and a
+  cross-station test rejects divergence. *Doesn't qualify:* the two-member duplication is flat-cost
+  defence in depth and every miss fails closed. **Trigger:** a third sanctioned command, a second
+  launcher declaration shape, or any declaration/test mismatch. **Not fired.**
 - **Two independent filesystem-lock implementations** (`advisory_lock.py`, 514 lines;
   `dr_engine/_lock.py`, 298 lines). *Doesn't qualify:* both public contracts are preserved and
   the fix is release-accepted. **Trigger:** a third implementation, divergent behaviour or
@@ -546,134 +377,8 @@ Phase A regression coverage; purge membership remains in vendored module source.
 
 ## Questions that would change the ranking
 
-- **`privileged-command-set-multi-owner`:** is `migrate_billing_to_orgs` a permanent third member,
-  reversing the 2026-08-31 answer, or a one-shot to retire once pre-org billing data is
-  backfilled? A dated retirement demotes this back to the watchlist; permanence confirms Option 2.
-*The prior answer from 2026-08-31 ("permanent two commands") has since been contradicted by
-`b29d9a29`; its earlier effect is recorded in the reconciliation log.*
-
-## Red flags (out of scope — fix now)
-
-- *(Dismissed, retained so it is not re-raised)* `except ValueError, AttributeError:` at
-  `purge_organization.py:337` is valid PEP 758 syntax on the pinned Python 3.14.6.
-
-## Reconciliation log
-
-- 2026-08-28 — `ci-environment-hand-replicated`: **resolved** and archived; the full fix-regression
-  narrative is in [CHANGELOG.md](../../CHANGELOG.md). Only its residue stays live here — the two
-  hand-pinned literals on the watchlist, restated by SA174 after it absorbed SA178.
-- 2026-08-28 — `privileged-command-set-multi-owner`: **new**, promoted from the prior watchlist item
-  "privileged-command template/runtime pair", whose trigger ("a third sanctioned command, or a mismatch")
-  **fired** — not as a value mismatch but as a third and fourth *owner*. `3523f9f8` (2026-08-18, labeled
-  `test:`) added the CLI decider without reconciling the SSOT claim at `apps.py:52`.
-- 2026-08-28 — `deletion-invariants-per-boundary-reimplementation`: **still-open**, deferred. All six
-  callsites re-verified. Trigger not fired; `teams` remains README-only.
-- 2026-08-28 — `org-model-universe-hand-enumerated`: **still-open**, deferred. Anchors re-verified and the
-  spec count re-derived by AST rather than transcribed: **21**, matching the prior pass. Trigger not fired.
-- 2026-08-28 — Fix-regression audit of the delta's two behavioral commits (`990f660f`, `48e0a62a`):
-  compounding **removed, not relocated**. Literal ticket IDs, merge positions, dependency edges, dates and
-  prose deleted from the planning conformance gate and replaced with roadmap-derived counts plus a red
-  canary; structural invariants (no checked entries, dependency validity, position uniqueness, no
-  schedulable restatement) all survive with their own canaries. No invariant weakened, no station minted.
-- 2026-08-28 — Prior watchlist reconciled: *module universe in environment lists* **not fired** (and its
-  parent finding resolved); *SA92 migration-squash tuple* **not fired**, still SA164's; *frontend runtime
-  module keys* **not fired** (universe unchanged at twelve); *privileged-command pair* **fired — promoted**;
-  *`trigger_inputs` name drift* **not fired**, verified against `check_gate_parity.py:498-524`. Two items
-  added from the fix-regression audit; one added for the count-pinned oracles.
-- 2026-08-28 — Prior red flags: none were open at the last pass and none opened this pass.
-- 2026-09-05 — **Watchlist ownership split, no finding changed.** SA164 was carrying one executable
-  repair plus two documentation obligations. The repair — making the SA92 guardrail's `_migdir()`
-  fail loudly and re-anchoring its `v87` backstop — stays with **SA164**. The `trigger_inputs` naming
-  correction and the restatement of the three not-fired items moved to **SA178** at this checkpoint;
-  the consolidation below supersedes that assignment. No item was closed, promoted, demoted, or had
-  its trigger altered; the ranked findings and their deferrals are untouched.
-- 2026-09-05 — **SA164 guardrail repair completed.** The SA92 tripwire now raises on a missing
-  conventional migration directory instead of skipping the module, its regression proves the scan
-  cannot pass by absence, and its backstop wording points at the current regenerated migration
-  baseline rather than retired `v87`. The watch item remains open with its trigger unchanged and
-  future restatement now owned by SA174; no ranked finding changed.
-- 2026-09-05 — **Planning consolidation, no finding changed.** SA174 absorbs SA178's
-  documentation-only semantics correction and watchlist reconciliation. Post-v88 SA152 absorbs
-  SA175 as mode-aware migration compatibility smoke verification; the prior assertion-only
-  acceptance is superseded, not discharged. Current dependencies and tracks live only in the
-  [roadmap](../technical/roadmap.md). No product work or release verification occurred in this edit.
-- 2026-09-06 — **SA174 documentation candidate reconciled the watchlist.** The false command-set
-  SSOT instruction is corrected, `privileged-command-set-multi-owner` is demoted under the settled
-  two-command decision, and every watch trigger remains armed. Retained `trigger_inputs` semantics
-  describe the exact bidirectional E2E allowlist partition without changing behavior. The historical
-  count-oracle trigger is confirmed fired and promoted to a separately owned gate-parity follow-up;
-  deriving those oracles is independent of this documentation correction. No watch item is closed.
-- 2026-09-06 — **The fired count-oracle follow-up is ticketed as SA180.** The promotion was carried
-  as an unassigned note with an owner role but no planner entry; it now has a post-v88 ticket, an
-  acceptance condition (derive each count from the source it describes and prove it with a
-  gate-addition regression), and a track. The watch item, its trigger, and its severity are
-  unchanged, and no other finding is touched. Closed-ticket release narrative for SA166, SA167c,
-  SA167d, SA170, SA171, and SA176 was removed from the orientation section above; all of it is
-  archived in [CHANGELOG.md](../../CHANGELOG.md) and none of it constrained an open finding.
-- 2026-09-06 — **SA174 closed; no finding retired.** The command-set and gate-input documentation
-  corrections were already integrated on `v88`, and their validation is now green: the gate-parity
-  check reported *All gates present in all required contexts.* (exit 0), `scripts/test_gate_parity.py`
-  passed **238 tests**, and Ruff check and format were clean on `check_gate_parity.py`,
-  `test_gate_parity.py`, and `orgs/apps.py`. The `privileged-command-set-multi-owner` demotion and
-  the watchlist restatement stand as recorded; every watch item above keeps its live status and
-  trigger. The fired count-oracle trigger remains owned by SA180. Evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md).
-- 2026-09-15 — **Commit delta `48e0a62a..b9e072f4` reconstructed.** 759 commits: 109 merges, 472
-  synthetic subtree-split commits (excluded), 178 monorepo commits (99 docs-only, 32 tests-only, 29
-  ticket-labelled closeouts, 18 unlabeled-behavioral, all read at depth). Every prior anchor was
-  re-resolved against current code. Moved anchors: `beta_migration.py` is now 2,716 lines, with
-  collections at `:55`/`:86`/`:108`/`:123`, `_execute_copy_selected_django_files` at `:1842`, and
-  in-place targets at `:121`/`:125`/`:128`; the closed-universe check is at
-  `sync_ci_gate_jobs.py:381-387`.
-- 2026-09-15 — `org-model-universe-hand-enumerated`: **still-open, promoted deferred → now.** It
-  was re-scoped from purge ordering to the root: classification, policy refresh, and purge are
-  literal module-source lists closed to project-owned tenant tables. The trigger was restated from
-  "teams" to SA153, which fires it. The spec count was re-derived by AST at 21.
-- 2026-09-15 — `privileged-command-set-multi-owner`: **watchlist → finding (trigger fired).** A
-  third member was added in all four declarations by `b29d9a29` ("v88 fix: make ci-e2e fixes"),
-  contradicting the 2026-08-31 "permanent two" answer. The same commit edited this document
-  without re-evaluating the trigger. Evidence was extended with the frozen-station
-  un-runnability and the three-implementation runtime-role seam (`461796ce`).
-- 2026-09-15 — `deletion-invariants-per-boundary-reimplementation`: **still-open, promoted deferred
-  → 6–18 months.** Prior passes mis-evaluated the trigger: `purge_organization` (since 2026-06-26)
-  is a second boundary, and a census shows the two boundaries discharge disjoint obligation
-  subsets. Size re-estimated S → M.
-- 2026-09-15 — Fix-regression audit of the delta's closeouts (SA160, SA164, SA167c, SA171,
-  SA172/`89d262bc`, SA173, SA174): **no mechanism relocated.** SA171 applied one correction to both
-  lock implementations, which is recorded under that watch item. SA160 removed a template/module
-  copy-pair and is recorded as a sound decision.
-- 2026-09-15 — Prior watchlist reconciled:
-  - *Two lock implementations*: **not fired** (SA171 note added).
-  - *Provisioning hand-pinned literals* and *second PostgreSQL major*: **merged into one item**,
-    both **not fired**.
-  - *Count-pinned oracles*: **fired (prior), SA180 open**, population re-verified at 8.
-  - *SA92 tuple*: **not fired** (10 = 10).
-  - *`trigger_inputs`*: **not fired**.
-  - *`privileged-command-set-multi-owner`*: **fired — promoted to finding**.
-- 2026-09-15 — Prior red flags: none were open. **One opened:** `purge_organization` orphaning
-  live Stripe subscriptions.
-- 2026-09-15 — Prior questions: both were answered 2026-08-31. The first answer is now contradicted
-  by code (see above), and the second's scope ("no updater for users") was found not to cover
-  `quickscale update` and `deploy`. Three new questions were added.
-- 2026-09-15 — Census: two rows added (runtime-role provisioning; template ↔ upgradable-code
-  vintage), three re-characterized (tenant-model universe, privileged set, deletion obligations),
-  and one narrowed (commit testimony, `2e2a932a`).
-- 2026-09-15 — **SA182 Phase A narrowed `org-model-universe-hand-enumerated` to its SA190
-  purge-membership half.** Classification and FORCE-RLS refresh now use the marker-derived tenant
-  set, with project-owned fixture regressions and live-policy validation; `_DELETE_SPECS` remains
-  the open purge seam. No purge implementation, status, or release surface changed.
-- 2026-09-15 — **The count-pinned gate-parity oracle watch item is retired.** Registry-bound
-  expectations now derive from the gate registry, workflow station counts derive from the station
-  contract, and a gate-addition regression proves the derived counts follow their source. No ranked
-  finding or other watch item changed.
-- 2026-09-16 — **The `purge_organization` live-Stripe red flag is retired.** The command and dry
-  run refuse before deletion, list current Stripe subscription IDs, and preserve local rows until
-  the operator cancels them. Rank 3 remains open for the broader shared-obligation work.
-- 2026-09-16 — **`generated-file-ownership-unmodeled` is retired.** The `orgs` manifest and
-  Railway runtime-role command declare the 0.88 contract boundary, while existing-project
-  `quickscale update`, `quickscale apply`, and `quickscale deploy railway` refuse old or unknown
-  contracts before mutation. The refusal names the owner, minimum, and manual adoption steps; a
-  dedicated acknowledgement resumes one invocation without pretending to update generated files.
+No open question changes the current ranking. The privileged-command permanence question was
+settled by the permanent two-command contract.
 
 *Lenses scanned with no qualifying finding this pass: observability, API/contract stability of
 the CLI surface, performance and scalability, concurrency and state isolation (beyond the lock

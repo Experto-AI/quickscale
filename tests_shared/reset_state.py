@@ -42,8 +42,7 @@ def reset_test_state() -> Iterator[None]:
 
     Tests without the ``db`` marker safely skip DB GUC resets.
 
-    Resolves arch-audit Finding 9 (module-commons-unowned) Option 1 —
-    test-plumbing half.
+    This is the shared test-plumbing reset for cross-module isolation state.
     """
     from quickscale_modules_orgs.current_org import reset_current_org_id
 
