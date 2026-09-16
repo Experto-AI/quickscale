@@ -31,7 +31,7 @@ or upgrade requirements.
 The task-tier validation command for this prepared capability is:
 
 ```text
-make test-integration MODULE=orgs && make test-unit -- --core && poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov
+make test-integration MODULE=orgs && make test-unit -- --core && poetry run pytest quickscale_core/tests/test_roadmap_consistency.py -q -o addopts= --no-cov
 ```
 
 This note does not claim release-tier validation, publication, or a v0.89.0 tag.
