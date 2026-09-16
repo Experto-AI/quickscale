@@ -244,8 +244,8 @@ def _init_railway_project_step() -> None:
         click.echo("✅ Railway project already initialized")
 
 
-def _list_railway_service_names() -> list[str]:
-    """Return the service names in the linked Railway environment.
+def _list_railway_services() -> list[dict[str, object]]:
+    """Return services in the linked Railway environment.
 
     Uses ``railway service list --json``.  A bare ``railway service`` is the
     deprecated interactive link prompt: once a project has services it waits
@@ -256,30 +256,86 @@ def _list_railway_service_names() -> list[str]:
         raise RuntimeError(
             f"railway service list failed: {(result.stderr or result.stdout).strip()}"
         )
-    return [str(service.get("name", "")) for service in json.loads(result.stdout)]
+    services = json.loads(result.stdout)
+    if not isinstance(services, list) or not all(
+        isinstance(service, dict) for service in services
+    ):
+        raise RuntimeError("railway service list returned an invalid JSON payload")
+    return services
+
+
+def _list_railway_service_names() -> list[str]:
+    """Return the service names in the linked Railway environment."""
+    return [str(service.get("name", "")) for service in _list_railway_services()]
+
+
+def _postgres_service_matches(services: list[dict[str, object]]) -> list[str]:
+    """Return PostgreSQL service names, preferring declared service types."""
+    typed_matches: list[str] = []
+    name_matches: list[str] = []
+    for service in services:
+        name = str(service.get("name", "")).strip()
+        if not name:
+            continue
+        service_type = next(
+            (
+                str(service[key]).strip().casefold()
+                for key in ("type", "serviceType", "service_type")
+                if service.get(key)
+            ),
+            "",
+        )
+        if "postgres" in service_type:
+            typed_matches.append(name)
+        elif not service_type and "postgres" in name.casefold():
+            name_matches.append(name)
+    return typed_matches or name_matches
 
 
 def _setup_postgres_step() -> str:
-    """Set up PostgreSQL database service and return its service name."""
+    """Return the one unambiguous PostgreSQL service name."""
+    try:
+        matches = _postgres_service_matches(_list_railway_services())
+    except Exception as exc:
+        raise click.ClickException(f"Unable to list Railway services: {exc}") from exc
+
+    if not matches:
+        click.echo("Adding PostgreSQL service...")
+        result = run_railway_command(["add", "--database", "postgres"], timeout=30)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            raise click.ClickException(
+                f"Unable to add a PostgreSQL service: {detail or 'unknown error'}"
+            )
+        try:
+            matches = _postgres_service_matches(_list_railway_services())
+        except Exception as exc:
+            raise click.ClickException(
+                f"Unable to confirm the PostgreSQL service: {exc}"
+            ) from exc
+
+    if len(matches) != 1:
+        matched_names = ", ".join(matches) if matches else "none"
+        raise click.ClickException(
+            "Expected exactly one PostgreSQL service, "
+            f"found {len(matches)} ({matched_names}). "
+            "Create or remove Railway database services, then re-run the deploy."
+        )
+
+    click.echo(f"✅ PostgreSQL service found: {matches[0]}")
+    return matches[0]
+
+
+def _app_service_exists_step(app_service: str) -> bool:
+    """Return whether the app service already exists, failing on unreadable state."""
     try:
         names = _list_railway_service_names()
-
-        existing = [name for name in names if "postgres" in name.lower()]
-        if existing:
-            click.echo("✅ PostgreSQL service already exists")
-            return existing[0]
-        else:
-            click.echo("Adding PostgreSQL service...")
-            result = run_railway_command(["add", "--database", "postgres"], timeout=30)
-
-            if result.returncode != 0:
-                click.secho("⚠️  Warning: Could not auto-add PostgreSQL", fg="yellow")
-                click.echo("💡 Add manually: railway add", err=True)
-            else:
-                click.secho("✅ PostgreSQL service added", fg="green")
-    except Exception as e:
-        click.secho(f"⚠️  Warning: Could not check database service: {e}", fg="yellow")
-    return "Postgres"
+    except Exception as exc:
+        raise click.ClickException(f"Unable to list Railway services: {exc}") from exc
+    exists = app_service.casefold() in (name.casefold() for name in names)
+    if exists:
+        click.echo(f"✅ Service '{app_service}' already exists")
+    return exists
 
 
 def _create_app_service_step(app_service: str) -> None:
@@ -311,10 +367,12 @@ def _create_app_service_step(app_service: str) -> None:
         click.secho(f"⚠️  Warning: Could not create app service: {e}", fg="yellow")
 
 
-def _link_database_step(app_service: str) -> bool:
+def _link_database_step(app_service: str, postgres_service: str) -> bool:
     """Link DATABASE_URL from PostgreSQL to app service."""
     try:
-        link_success, link_message = link_database_to_service(app_service)
+        link_success, link_message = link_database_to_service(
+            app_service, postgres_service
+        )
     except ValueError as exc:
         click.secho(f"❌ Error: {exc}", fg="red", err=True)
         sys.exit(1)
@@ -326,11 +384,8 @@ def _link_database_step(app_service: str) -> bool:
         click.secho(f"⚠️  Warning: {link_message}", fg="yellow")
         click.echo("💡 You may need to link DATABASE_URL manually:")
         click.echo(
-            f"   railway variable set 'DATABASE_URL=${{{{Postgres.DATABASE_URL}}}}' "
-            f"--service {app_service}"
-        )
-        click.echo(
-            f"   railway variable set 'DATABASE_URL=${{{{PostgreSQL.DATABASE_URL}}}}' "
+            f"   railway variable set "
+            f"'DATABASE_URL=${{{{{postgres_service}.DATABASE_URL}}}}' "
             f"--service {app_service}"
         )
         click.echo("   Use single quotes to prevent shell expansion errors")
@@ -359,11 +414,18 @@ def _generate_domain_step(app_service: str) -> str | None:
 
 
 def _existing_service_variables(app_service: str) -> dict[str, str]:
-    """Return the app service's current Railway variables, or {} if unreadable."""
+    """Return the app service's current Railway variables or fail hard."""
     try:
-        return get_railway_variables(app_service) or {}
-    except Exception:
-        return {}
+        variables = get_railway_variables(app_service)
+    except Exception as exc:
+        raise click.ClickException(
+            f"Unable to read Railway variables for service '{app_service}': {exc}"
+        ) from exc
+    if variables is None:
+        raise click.ClickException(
+            f"Unable to read Railway variables for service '{app_service}'."
+        )
+    return variables
 
 
 def _runtime_role_variables(
@@ -394,6 +456,11 @@ def _configure_env_vars_step(
     existing_vars: dict[str, str] | None = None,
 ) -> None:
     """Configure environment variables in batch, including the runtime DB role."""
+    if existing_vars is None:
+        raise click.ClickException(
+            f"Railway variables for service '{app_service}' were not loaded."
+        )
+
     click.echo(f"Setting variables for service: {app_service}")
     click.echo("💡 Setting all variables at once to minimize deployments")
 
@@ -401,12 +468,12 @@ def _configure_env_vars_step(
     django_package = app_service.replace("-", "_")
 
     env_vars = {
-        "SECRET_KEY": generate_django_secret_key(),
+        "SECRET_KEY": existing_vars.get("SECRET_KEY") or generate_django_secret_key(),
         "DEBUG": "False",
         "DJANGO_SETTINGS_MODULE": f"{django_package}.settings.production",
     }
 
-    runtime_vars = _runtime_role_variables(postgres_service, existing_vars or {})
+    runtime_vars = _runtime_role_variables(postgres_service, existing_vars)
     env_vars.update(runtime_vars)
 
     if domain_name:
@@ -418,7 +485,8 @@ def _configure_env_vars_step(
         click.secho("✅ All environment variables configured successfully", fg="green")
         for key in env_vars:
             if key in ("SECRET_KEY", "RUNTIME_DB_PASSWORD"):
-                click.echo(f"   • {key}=<generated>")
+                state = "reused" if existing_vars.get(key) else "generated"
+                click.echo(f"   • {key}=<{state}>")
             elif key == "RUNTIME_DATABASE_URL":
                 click.echo(f"   • {key}=<{RUNTIME_DB_ROLE} @ {postgres_service}>")
             else:
@@ -487,57 +555,61 @@ def _verify_deployment_step(app_service: str) -> bool:
     """Verify environment variables were set correctly."""
     try:
         deployed_vars = get_railway_variables(app_service)
-    except ValueError as exc:
-        click.secho(f"❌ Error: {exc}", fg="red", err=True)
-        sys.exit(1)
+    except Exception as exc:
+        raise click.ClickException(
+            f"Unable to verify Railway variables for service '{app_service}': {exc}"
+        ) from exc
+    if deployed_vars is None:
+        raise click.ClickException(
+            f"Unable to verify Railway variables for service '{app_service}'."
+        )
     database_url_present = False
 
-    if deployed_vars:
-        required_vars = [
-            "DATABASE_URL",
-            "SECRET_KEY",
-            "DEBUG",
-            "DJANGO_SETTINGS_MODULE",
-            "ALLOWED_HOSTS",
-        ]
-        missing_vars: list[str] = []
-        present_vars: list[tuple[str, str]] = []
-        for var in required_vars:
-            if var in deployed_vars and deployed_vars[var]:
-                if var == "SECRET_KEY":
-                    present_vars.append((var, "<set>"))
-                elif var == "DATABASE_URL":
-                    present_vars.append((var, "<linked to PostgreSQL>"))
-                    database_url_present = True
-                else:
-                    value = deployed_vars[var]
-                    if len(value) > 50:
-                        value = value[:50] + "..."
-                    present_vars.append((var, value))
+    required_vars = [
+        "DATABASE_URL",
+        "SECRET_KEY",
+        "DEBUG",
+        "DJANGO_SETTINGS_MODULE",
+        "ALLOWED_HOSTS",
+    ]
+    missing_vars: list[str] = []
+    present_vars: list[tuple[str, str]] = []
+    for var in required_vars:
+        if var in deployed_vars and deployed_vars[var]:
+            if var == "SECRET_KEY":
+                present_vars.append((var, "<set>"))
+            elif var == "DATABASE_URL":
+                present_vars.append((var, "<linked to PostgreSQL>"))
+                database_url_present = True
             else:
-                missing_vars.append(var)
-
-        if not missing_vars:
-            click.secho("✅ Environment variables verified", fg="green")
+                value = deployed_vars[var]
+                if len(value) > 50:
+                    value = value[:50] + "..."
+                present_vars.append((var, value))
         else:
-            click.secho(
-                f"⚠️  Environment variables partially configured "
-                f"({len(missing_vars)} missing)",
-                fg="yellow",
-            )
-        for var, value in present_vars:
-            click.echo(f"   • {var}={value}")
-        for var in missing_vars:
-            click.secho(f"   ⚠️  {var} not set", fg="yellow")
+            missing_vars.append(var)
+
+    if not missing_vars:
+        click.secho("✅ Environment variables verified", fg="green")
     else:
-        click.secho("⚠️  Warning: Could not verify environment variables", fg="yellow")
-        click.echo("💡 Check manually: railway variables")
+        click.secho(
+            f"⚠️  Environment variables partially configured "
+            f"({len(missing_vars)} missing)",
+            fg="yellow",
+        )
+    for var, value in present_vars:
+        click.echo(f"   • {var}={value}")
+    for var in missing_vars:
+        click.secho(f"   ⚠️  {var} not set", fg="yellow")
 
     return database_url_present
 
 
 def _display_summary(
-    app_service: str, domain_url: str | None, database_linked: bool
+    app_service: str,
+    domain_url: str | None,
+    database_linked: bool,
+    postgres_service: str,
 ) -> None:
     """Display deployment summary."""
     click.echo("\n" + "=" * 60)
@@ -584,7 +656,8 @@ def _display_summary(
     if not database_linked:
         click.echo(
             "   • Link DB manually: railway variable set "
-            f"'DATABASE_URL=${{{{Postgres.DATABASE_URL}}}}' --service {app_service}"
+            f"'DATABASE_URL=${{{{{postgres_service}.DATABASE_URL}}}}' "
+            f"--service {app_service}"
         )
     click.echo("   • Check healthcheck status in Railway dashboard")
     click.echo("   • Migrations run automatically on first deploy")
@@ -640,39 +713,52 @@ def railway(project_name: str | None) -> None:
     # Step 3: Initialize Railway project if needed
     _init_railway_project_step()
 
-    # Step 4: Check for PostgreSQL service
+    # Step 4: Read app state before any re-deploy mutation
+    app_service_exists = _app_service_exists_step(app_service)
+    existing_vars = (
+        _existing_service_variables(app_service) if app_service_exists else None
+    )
+
+    # Step 5: Check for PostgreSQL service
     click.echo("\n🗄️  Setting up PostgreSQL database...")
     postgres_service = _setup_postgres_step()
 
-    # Step 5: Create app service
-    click.echo(f"\n📦 Creating application service: {app_service}...")
-    _create_app_service_step(app_service)
+    # Step 6: Create a first-deploy app service, then read its empty live state
+    if not app_service_exists:
+        click.echo(f"\n📦 Creating application service: {app_service}...")
+        _create_app_service_step(app_service)
+        existing_vars = _existing_service_variables(app_service)
 
-    # Step 6: Link DATABASE_URL from PostgreSQL to app service
+    # Step 7: Link DATABASE_URL from PostgreSQL to app service
     click.echo("\n🔗 Linking DATABASE_URL to app service...")
-    database_linked = _link_database_step(app_service)
+    database_linked = _link_database_step(app_service, postgres_service)
 
-    # Step 7: Generate public domain first
+    # Step 8: Generate public domain first
     click.echo("\n🌐 Generating public domain...")
     domain_name = _generate_domain_step(app_service)
     domain_url = f"https://{domain_name}" if domain_name else None
 
-    # Step 8: Configure environment variables in batch
+    # Step 9: Configure environment variables in batch
     click.echo("\n⚙️  Configuring environment variables...")
     _configure_env_vars_step(
         app_service,
         domain_name,
         postgres_service,
-        _existing_service_variables(app_service),
+        existing_vars,
     )
 
-    # Step 9: Deploy to app service
+    # Step 10: Deploy to app service
     click.echo("\n🚢 Deploying application...")
     _deploy_app_step(app_service)
 
-    # Step 10: Verify environment variables
+    # Step 11: Verify environment variables
     click.echo("\n🔍 Verifying environment configuration...")
-    database_verified = _verify_deployment_step(app_service)
+    _verify_deployment_step(app_service)
 
-    # Step 11: Display deployment summary
-    _display_summary(app_service, domain_url, database_linked or database_verified)
+    # Step 12: Display deployment summary
+    _display_summary(
+        app_service,
+        domain_url,
+        database_linked,
+        postgres_service,
+    )

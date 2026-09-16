@@ -34,8 +34,7 @@ context, scope, and acceptance;
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA184 | Make `quickscale deploy railway` re-runs read live state and fail hard | post-v88 | 2 | — | Deferred |
-| SA185 | Enforce contract vintage when upgradable code meets an older project | post-v88 | 2 | SA184 | Deferred |
+| SA185 | Enforce contract vintage when upgradable code meets an older project | post-v88 | 2 | — | Deferred |
 | SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
 | SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | SA185 | Deferred |
@@ -48,7 +47,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
-Track 2: SA184 ──► SA185 ──► SA186 ──► SA187 ──► SA192
+Track 2: SA185 ──► SA186 ──► SA187 ──► SA192
 Track 3: SA177 ──► SA188 ──► SA189 ──► SA190
 
 Cross-track dependencies:  SA185 ──► SA188
@@ -66,16 +65,14 @@ path.
 - **Derived tenant tables support SA153 and SA177.** Project-owned tenant tables pass the generated
   project's `check_tenant_isolation` without module-source edits, and predicate verification covers
   them through the same derived tenant-model set.
-- **SA184 precedes SA185.** Both edit `deployment_commands.py`, and the deploy-time vintage check
-  should read Railway state through the fail-hard path.
 - **SA185 precedes SA188, and SA188 precedes SA189.** SA188 changes contract-bearing templates and
   is the first real use of an enforced vintage move. SA188 and SA189 both edit `start.sh.j2` and
   regenerate the SA90 emission fixture; settle the command set before collapsing role provisioning
   around it.
 - **SA152 precedes SA191, and SA191 precedes SA153.** `bap-web` is migrated with the maintainer
   tools only after SA152 has proven them on isolated fixtures, and the portal is built on the
-  migrated project rather than on a fresh one. SA184 is not an edge: SA191 redeploys through
-  `deploy railway` only if SA184 has landed, and otherwise deploys manually.
+  migrated project rather than on a fresh one. SA191 redeploys through the fail-hard
+  `deploy railway` path.
 - **SA185 precedes SA192.** The module pages extend the generated, project-owned `base.html`, which
   `quickscale update` never rewrites, so a design change there is contract-bearing and existing
   projects adopt it through an enforced vintage move. SA192 is not an SA153 edge: the portal's
@@ -100,7 +97,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA152 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA184 | yes | yes | yes | **yes** | no |
+| 2 | SA185 | yes | yes | yes | **yes** | no |
 | 3 | SA177 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -119,8 +116,7 @@ A track is **truly green** only when all three states are yes.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
   and the owning audit: the arch audit for SA152, SA185, SA188, SA189, and SA190; the tech audit
-  for SA177, SA184, SA186, and
-  SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
+  for SA177, SA186, and SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
   audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
   Three code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
@@ -203,8 +199,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   the migration report and fed back into the playbook, or into a tool fix when it is deterministic.
   The migrated project replaces the old repository and deploys, with a written rollback to the
   previous deploy. The production database and media are carried over by a verified backup and
-  restore, and listing, form, and user counts match before and after. Redeploying through
-  `deploy railway` requires SA184; otherwise the deploy is manual. No property-portal features,
+  restore, and listing, form, and user counts match before and after. Redeploy through
+  `deploy railway`. No property-portal features,
   frontend stack change, or module-source edits.
 
   **Surfaces:** the `bap-web` repository; the migration playbook and, for deterministic gaps found,
@@ -348,30 +344,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA181 — Derive expected versions in tests from the repository version.**
 
-- [ ] **SA184 — Make `quickscale deploy railway` re-runs read live state and fail hard.**
-
-  **Context:** `quickscale deploy railway` is designed to be re-run, and the Railway guide recommends re-running
-  it. The runtime-role work made the database password survive re-runs, but `SECRET_KEY` is still
-  regenerated each time, which logs everyone out and invalidates signed links. The same step turns an
-  unreadable variable listing into an empty mapping, and an ambiguous Postgres service listing into
-  a guessed name. Both violate Fail-Hard: a transient CLI failure becomes a rotated database
-  credential that breaks the still-serving deployment when its pooled connections recycle.
-
-  The shared cause is that deploy reconstructs configuration instead of reconciling with state it
-  has read successfully. Read first, refuse when the read fails, and generate a secret only when the
-  live environment genuinely has none.
-
-  **Acceptance:** a re-run reuses the service's existing `SECRET_KEY` and generates one only on first
-  deploy, mirroring the `RUNTIME_DB_PASSWORD` reuse rule. When Railway variables cannot be read —
-  an exception or a `None` result — the command raises `click.ClickException` instead of treating
-  state as empty, so it never regenerates the runtime password or overwrites an operator-managed
-  `RUNTIME_DATABASE_URL`. `_setup_postgres_step` fails when listing fails or when anything other than
-  exactly one database service matches, preferring Railway's service type to a name substring when
-  the JSON exposes it. Regressions cover key reuse, the unreadable-state refusal, and zero or several
-  Postgres matches. This retires TA74 and TA75.
-
-  **Surfaces:** `deployment_commands.py`, the `railway_utils.py` variable helpers, CLI deploy tests,
-  `docs/deployment/railway.md`, and the technical audit.
+- [x] **SA184 — Make `quickscale deploy railway` re-runs read live state and fail hard.**
 
 - [ ] **SA185 — Enforce contract vintage when upgradable code meets an older project.**
 

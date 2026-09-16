@@ -1028,6 +1028,27 @@ class TestGetRailwayVariablesJson:
             result = _get_railway_variables_json(["variables", "--service", "myapp"])
             assert result == {}
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            '[{"key": "SECRET_KEY", "value": "live-secret"}]',
+            '[{"name": "SECRET_KEY", "value": "live-secret"}, {"key": "DEBUG"}]',
+        ],
+    )
+    def test_non_empty_json_list_with_unrecognized_entries_fails(self, payload):
+        """Malformed or partially recognized live state cannot become empty state."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout=payload)
+            from quickscale_cli.utils.railway_utils import (
+                _get_railway_variables_json,
+            )
+
+            with pytest.raises(ValueError, match="unrecognized entries") as exc_info:
+                _get_railway_variables_json(["variables", "--service", "myapp"])
+            assert "live-secret" not in str(exc_info.value)
+
     def test_valid_json_returns_dict(self):
         """Test that valid JSON dict returns parsed variables."""
         with patch(
@@ -1560,7 +1581,7 @@ class TestLinkDatabaseToService:
             "quickscale_cli.utils.railway_utils.run_railway_command"
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
-            success, message = link_database_to_service("myapp")
+            success, message = link_database_to_service("myapp", "Postgres")
 
             assert success is True
             assert "linked successfully" in message.lower()
@@ -1576,29 +1597,20 @@ class TestLinkDatabaseToService:
                 timeout=45,
             )
 
-    def test_fallback_to_postgresql_name(self):
-        """Test fallback to PostgreSQL service name when Postgres fails."""
-        with (
-            patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run,
-            patch(
-                "quickscale_cli.utils.railway_utils.get_railway_variables"
-            ) as mock_vars,
-        ):
-            # First call (Postgres) fails, second call (PostgreSQL) succeeds
-            mock_run.side_effect = [
-                Mock(returncode=1, stdout="", stderr="Service not found"),
-                Mock(returncode=0, stdout="", stderr=""),
-            ]
-            mock_vars.return_value = None
-            success, message = link_database_to_service("myapp")
+    def test_uses_exact_selected_database_service_name(self):
+        """Test the selected custom PostgreSQL service reaches the reference."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+            success, message = link_database_to_service("myapp", "primary-db")
 
             assert success is True
             assert "linked successfully" in message.lower()
-            # Verify both attempts were made
-            assert mock_run.call_count == 2
-            # Check second call used PostgreSQL
-            second_call = mock_run.call_args_list[1]
-            assert "PostgreSQL.DATABASE_URL" in second_call[0][0][2]
+            assert (
+                mock_run.call_args.args[0][2]
+                == "DATABASE_URL=${{primary-db.DATABASE_URL}}"
+            )
 
     def test_retries_until_postgres_reference_is_ready(self):
         """Test retries when PostgreSQL service is still provisioning."""
@@ -1615,12 +1627,15 @@ class TestLinkDatabaseToService:
                 Mock(returncode=0, stdout="", stderr=""),
             ]
             mock_vars.return_value = None
-            success, message = link_database_to_service("myapp")
+            success, message = link_database_to_service("myapp", "Postgres")
 
             assert success is True
             assert "linked successfully" in message.lower()
             assert mock_run.call_count == 3
-            mock_sleep.assert_called_once_with(10)
+            assert mock_sleep.call_args_list == [
+                ((10,), {}),
+                ((10,), {}),
+            ]
 
     def test_link_fails_after_all_retries(self):
         """Test function returns helpful failure after exhausting retries."""
@@ -1637,12 +1652,35 @@ class TestLinkDatabaseToService:
                 stderr="Service not found",
             )
             mock_vars.return_value = None
-            success, message = link_database_to_service("myapp")
+            success, message = link_database_to_service("myapp", "Postgres")
 
             assert success is False
             assert "failed to link" in message.lower()
             assert "after 12 attempts" in message.lower()
-            assert mock_run.call_count == 24
+            assert mock_run.call_count == 12
+
+    def test_old_database_url_does_not_confirm_selected_service_link(self):
+        """A stale URL cannot prove that the selected database was linked."""
+        with (
+            patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run,
+            patch(
+                "quickscale_cli.utils.railway_utils.get_railway_variables"
+            ) as mock_vars,
+            patch("quickscale_cli.utils.railway_utils.time.sleep"),
+        ):
+            mock_run.return_value = Mock(
+                returncode=1,
+                stdout="",
+                stderr="Database service is still provisioning",
+            )
+            mock_vars.return_value = {"DATABASE_URL": "postgresql://old-host/old-db"}
+
+            success, message = link_database_to_service("myapp", "primary-db")
+
+            assert success is False
+            assert "failed to link" in message.lower()
+            assert mock_run.call_count == 12
+            mock_vars.assert_not_called()
 
     def test_link_fails_fast_for_non_retryable_errors(self):
         """Test function does not retry authentication/permission errors."""
@@ -1654,7 +1692,7 @@ class TestLinkDatabaseToService:
                 stdout="",
                 stderr="Not authenticated. Please run railway login",
             )
-            success, message = link_database_to_service("myapp")
+            success, message = link_database_to_service("myapp", "Postgres")
 
             assert success is False
             assert "failed to link" in message.lower()
@@ -1667,7 +1705,7 @@ class TestLinkDatabaseToService:
             "quickscale_cli.utils.railway_utils.run_railway_command"
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
-            success, _ = link_database_to_service("custom-app-123")
+            success, _ = link_database_to_service("custom-app-123", "Postgres")
 
             assert success is True
             call_args = mock_run.call_args[0][0]

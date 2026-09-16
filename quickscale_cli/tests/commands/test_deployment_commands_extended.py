@@ -2,6 +2,7 @@
 
 from unittest.mock import Mock, patch
 
+import click
 import pytest
 
 from quickscale_cli.commands.deployment_commands import (
@@ -14,6 +15,7 @@ from quickscale_cli.commands.deployment_commands import (
     _display_summary,
     _ensure_railway_auth_step,
     _ensure_railway_cli_step,
+    _existing_service_variables,
     _generate_domain_step,
     _init_railway_project_step,
     _link_database_step,
@@ -344,28 +346,64 @@ class TestSetupPostgresStep:
         assert _setup_postgres_step() == "PostgreSQL"
 
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
-    def test_add_postgres_success(self, mock_run):
-        """Test adding PostgreSQL successfully"""
-        mock_run.side_effect = [
-            Mock(returncode=0, stdout='[{"name": "web"}]'),
-            Mock(returncode=0, stdout="added"),
-        ]
-        _setup_postgres_step()
+    def test_postgres_type_wins_over_name_substring(self, mock_run):
+        """A declared PostgreSQL type wins over an app name containing postgres."""
+        mock_run.return_value = Mock(
+            returncode=0,
+            stdout=(
+                '[{"name": "postgres-dashboard", "type": "service"}, '
+                '{"name": "primary-db", "type": "postgresql"}]'
+            ),
+        )
+        assert _setup_postgres_step() == "primary-db"
 
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
-    def test_add_postgres_fails(self, mock_run):
-        """Test adding PostgreSQL failure"""
-        mock_run.side_effect = [
-            Mock(returncode=0, stdout='[{"name": "web"}]'),
-            Mock(returncode=1, stdout=""),
+    def test_typed_non_database_name_is_not_a_fallback_match(self, mock_run):
+        """An explicitly typed app is never selected because of its name."""
+        mock_run.return_value = Mock(
+            returncode=0,
+            stdout='[{"name": "postgres-dashboard", "type": "service"}]',
+        )
+        with pytest.raises(click.ClickException, match="found 0"):
+            _setup_postgres_step()
+        assert mock_run.call_args_list[1].args[0] == [
+            "add",
+            "--database",
+            "postgres",
         ]
-        _setup_postgres_step()
+
+    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    def test_no_postgres_match_fails(self, mock_run):
+        """A listing without a database service is not replaced by a guess."""
+        mock_run.return_value = Mock(returncode=0, stdout='[{"name": "web"}]')
+        with pytest.raises(click.ClickException, match="found 0"):
+            _setup_postgres_step()
+
+    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    def test_multiple_postgres_matches_fail(self, mock_run):
+        """Multiple database services require an operator decision."""
+        mock_run.return_value = Mock(
+            returncode=0,
+            stdout='[{"name": "Postgres"}, {"name": "Postgres-backup"}]',
+        )
+        with pytest.raises(click.ClickException, match="found 2"):
+            _setup_postgres_step()
+
+    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    def test_service_listing_failure_fails(self, mock_run):
+        """A failed service listing aborts instead of assuming Postgres."""
+        mock_run.return_value = Mock(
+            returncode=1, stdout="", stderr="network unavailable"
+        )
+        with pytest.raises(click.ClickException, match="network unavailable"):
+            _setup_postgres_step()
 
     @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
     def test_check_exception(self, mock_run):
         """Test exception during check"""
         mock_run.side_effect = Exception("network error")
-        _setup_postgres_step()
+        with pytest.raises(click.ClickException, match="network error"):
+            _setup_postgres_step()
 
 
 # ============================================================================
@@ -471,7 +509,8 @@ class TestVerifyDeploymentStep:
     def test_no_vars(self, mock_vars):
         """Test when vars can't be retrieved"""
         mock_vars.return_value = None
-        _verify_deployment_step("myapp")
+        with pytest.raises(click.ClickException, match="Unable to verify"):
+            _verify_deployment_step("myapp")
 
     @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
     def test_long_value_truncated(self, mock_vars):
@@ -492,8 +531,29 @@ class TestVerifyDeploymentStep:
             "Railway CLI returned success with non-empty output but no "
             "KEY=VALUE pairs could be parsed."
         )
-        with pytest.raises(SystemExit):
+        with pytest.raises(click.ClickException, match="no KEY=VALUE pairs"):
             _verify_deployment_step("myapp")
+
+
+class TestExistingServiceVariables:
+    """Tests for fail-hard reads of live Railway configuration."""
+
+    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    def test_none_result_fails(self, mock_vars):
+        mock_vars.return_value = None
+        with pytest.raises(click.ClickException, match="Unable to read"):
+            _existing_service_variables("myapp")
+
+    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    def test_exception_fails(self, mock_vars):
+        mock_vars.side_effect = RuntimeError("temporary failure")
+        with pytest.raises(click.ClickException, match="temporary failure"):
+            _existing_service_variables("myapp")
+
+    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    def test_empty_mapping_is_valid_first_deploy_state(self, mock_vars):
+        mock_vars.return_value = {}
+        assert _existing_service_variables("myapp") == {}
 
 
 # ============================================================================
@@ -506,23 +566,28 @@ class TestRemainingHelpers:
 
     def test_display_summary_with_domain(self):
         """Display summary with domain"""
-        _display_summary("myapp", "https://myapp.up.railway.app", True)
+        _display_summary("myapp", "https://myapp.up.railway.app", True, "Postgres")
 
-    def test_display_summary_without_domain(self):
-        """Display summary without domain"""
-        _display_summary("myapp", None, False)
+    def test_display_summary_uses_selected_database_name(self, capsys):
+        """Manual recovery guidance uses the selected custom database name."""
+        _display_summary("myapp", None, False, "primary-db")
+        output = capsys.readouterr().out
+        assert "${{primary-db.DATABASE_URL}}" in output
+        assert "${{Postgres.DATABASE_URL}}" not in output
 
     @patch("quickscale_cli.commands.deployment_commands.link_database_to_service")
     def test_link_database_success(self, mock_link):
         """Test successful database link"""
         mock_link.return_value = (True, "Linked")
-        _link_database_step("myapp")
+        _link_database_step("myapp", "Postgres")
+        mock_link.assert_called_once_with("myapp", "Postgres")
 
     @patch("quickscale_cli.commands.deployment_commands.link_database_to_service")
     def test_link_database_failure(self, mock_link):
         """Test failed database link"""
         mock_link.return_value = (False, "Failed")
-        _link_database_step("myapp")
+        _link_database_step("myapp", "primary-db")
+        mock_link.assert_called_once_with("myapp", "primary-db")
 
     @patch("quickscale_cli.commands.deployment_commands.generate_railway_domain")
     def test_generate_domain_success(self, mock_gen):
@@ -544,7 +609,8 @@ class TestRemainingHelpers:
         """Test successful env var configuration"""
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (True, [])
-        _configure_env_vars_step("myapp", "myapp.up.railway.app")
+        _configure_env_vars_step("myapp", "myapp.up.railway.app", existing_vars={})
+        mock_secret.assert_called_once_with()
 
     @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
     @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
@@ -553,7 +619,7 @@ class TestRemainingHelpers:
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (False, ["SECRET_KEY"])
         with pytest.raises(SystemExit):
-            _configure_env_vars_step("myapp", None)
+            _configure_env_vars_step("myapp", None, existing_vars={})
 
     @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
     @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
@@ -561,7 +627,7 @@ class TestRemainingHelpers:
         """Test env var config without domain"""
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (True, [])
-        _configure_env_vars_step("myapp", None)
+        _configure_env_vars_step("myapp", None, existing_vars={})
 
     @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
     @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
@@ -570,7 +636,7 @@ class TestRemainingHelpers:
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (True, [])
 
-        _configure_env_vars_step("bap-web", None)
+        _configure_env_vars_step("bap-web", None, existing_vars={})
 
         batch_vars = mock_batch.call_args[0][0]
         assert batch_vars["DJANGO_SETTINGS_MODULE"] == "bap_web.settings.production"
@@ -585,7 +651,7 @@ class TestRemainingHelpers:
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (True, [])
 
-        _configure_env_vars_step("myapp", None, "PostgreSQL")
+        _configure_env_vars_step("myapp", None, "PostgreSQL", {})
 
         batch_vars = mock_batch.call_args[0][0]
         password = batch_vars["RUNTIME_DB_PASSWORD"]
@@ -596,6 +662,19 @@ class TestRemainingHelpers:
             "@${{PostgreSQL.PGHOST}}:${{PostgreSQL.PGPORT}}/${{PostgreSQL.PGDATABASE}}"
         )
         assert password not in capsys.readouterr().out
+
+    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
+    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    def test_configure_env_vars_reuses_secret_key(self, mock_secret, mock_batch):
+        """A re-deploy keeps sessions and signed values valid."""
+        mock_batch.return_value = (True, [])
+
+        _configure_env_vars_step(
+            "myapp", None, "Postgres", {"SECRET_KEY": "existing-secret"}
+        )
+
+        assert mock_batch.call_args[0][0]["SECRET_KEY"] == "existing-secret"
+        mock_secret.assert_not_called()
 
     @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
     @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")

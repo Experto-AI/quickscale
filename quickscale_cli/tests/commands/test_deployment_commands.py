@@ -7,15 +7,31 @@ from unittest.mock import Mock, patch
 import pytest
 from click.testing import CliRunner
 
-from quickscale_cli.commands.deployment_commands import railway
+from quickscale_cli.commands.deployment_commands import (
+    _existing_service_variables,
+    railway,
+)
+from quickscale_cli.utils.railway_utils import get_railway_variables
 
 
 @pytest.fixture(autouse=True)
 def _no_live_variable_read():
-    """Keep the pre-deploy variable read off the real Railway CLI."""
-    with patch(
-        "quickscale_cli.commands.deployment_commands._existing_service_variables",
-        return_value={},
+    """Keep pre- and post-deploy variable reads off the real Railway CLI."""
+    with (
+        patch(
+            "quickscale_cli.commands.deployment_commands._existing_service_variables",
+            return_value={},
+        ),
+        patch(
+            "quickscale_cli.commands.deployment_commands.get_railway_variables",
+            return_value={
+                "DATABASE_URL": "postgresql://database",
+                "SECRET_KEY": "secret",
+                "DEBUG": "False",
+                "DJANGO_SETTINGS_MODULE": "myapp.settings.production",
+                "ALLOWED_HOSTS": "myapp.up.railway.app",
+            },
+        ),
     ):
         yield
 
@@ -145,7 +161,7 @@ class TestRailwayCommand:
                                             mock_project_init.return_value = True
                                             mock_run.return_value = Mock(
                                                 returncode=0,
-                                                stdout="postgres available",
+                                                stdout='[{"name": "Postgres"}]',
                                                 stderr="",
                                             )
                                             mock_deploy.return_value = Mock(
@@ -203,7 +219,7 @@ class TestRailwayCommand:
                                             mock_project_init.return_value = False
                                             mock_run.return_value = Mock(
                                                 returncode=0,
-                                                stdout="postgres available",
+                                                stdout='[{"name": "Postgres"}]',
                                                 stderr="",
                                             )
                                             mock_deploy.return_value = Mock(
@@ -259,7 +275,7 @@ class TestRailwayCommand:
                                             mock_secret.return_value = "test-secret-key"
                                             mock_run.return_value = Mock(
                                                 returncode=0,
-                                                stdout="postgres available",
+                                                stdout='[{"name": "Postgres"}]',
                                                 stderr="",
                                             )
                                             mock_deploy.return_value = Mock(
@@ -324,7 +340,7 @@ class TestRailwayCommand:
                                                 )
                                                 mock_run.return_value = Mock(
                                                     returncode=0,
-                                                    stdout="postgres available",
+                                                    stdout='[{"name": "Postgres"}]',
                                                     stderr="",
                                                 )
                                                 mock_deploy.return_value = Mock(
@@ -380,7 +396,7 @@ class TestRailwayCommand:
                                             mock_project_init.return_value = True
                                             mock_run.return_value = Mock(
                                                 returncode=0,
-                                                stdout="postgres available",
+                                                stdout='[{"name": "Postgres"}]',
                                                 stderr="",
                                             )
                                             mock_deploy.return_value = Mock(
@@ -442,7 +458,7 @@ class TestRailwayCommand:
                                             mock_project_init.return_value = True
                                             mock_run.return_value = Mock(
                                                 returncode=0,
-                                                stdout="postgres available",
+                                                stdout='[{"name": "Postgres"}]',
                                                 stderr="",
                                             )
                                             mock_deploy.return_value = Mock(
@@ -502,22 +518,11 @@ class TestRailwayCommand:
                                             mock_secret.return_value = "test-secret-key"
                                             mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                            # Call sequence: postgres service check, app service
-                                            # check, app service creation (deploy goes through
-                                            # deploy_railway_service not run_railway_command)
-                                            mock_run.side_effect = [
-                                                Mock(
-                                                    returncode=0,
-                                                    stdout="postgres",
-                                                    stderr="",
-                                                ),  # postgres service check
-                                                Mock(
-                                                    returncode=0, stdout="[]", stderr=""
-                                                ),  # app service check (not found)
-                                                Mock(
-                                                    returncode=0, stdout="", stderr=""
-                                                ),  # app service creation
-                                            ]
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout='[{"name": "Postgres"}]',
+                                                stderr="",
+                                            )
                                             mock_deploy.return_value = Mock(
                                                 returncode=1,
                                                 stdout="",
@@ -594,7 +599,7 @@ class TestRailwayCommand:
                                             mock_project_init.return_value = True
                                             mock_run.return_value = Mock(
                                                 returncode=0,
-                                                stdout="postgres available",
+                                                stdout='[{"name": "Postgres"}]',
                                                 stderr="",
                                             )
                                             mock_deploy.return_value = Mock(
@@ -668,22 +673,11 @@ class TestRailwayCommand:
                                             mock_secret.return_value = "test-secret-key"
                                             mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                            # Call sequence: postgres check, app service check,
-                                            # app service creation (deploy goes through
-                                            # deploy_railway_service not run_railway_command)
-                                            mock_run.side_effect = [
-                                                Mock(
-                                                    returncode=0,
-                                                    stdout="postgres",
-                                                    stderr="",
-                                                ),  # postgres service check
-                                                Mock(
-                                                    returncode=0, stdout="[]", stderr=""
-                                                ),  # app service check (not found)
-                                                Mock(
-                                                    returncode=0, stdout="", stderr=""
-                                                ),  # app service creation
-                                            ]
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout='[{"name": "Postgres"}]',
+                                                stderr="",
+                                            )
                                             mock_deploy.side_effect = TimeoutError(
                                                 "Railway command timed out"
                                             )
@@ -839,7 +833,7 @@ class TestRailwayCommand:
                                                     )
                                                     mock_run.return_value = Mock(
                                                         returncode=0,
-                                                        stdout="postgres available",
+                                                        stdout='[{"name": "Postgres"}]',
                                                         stderr="",
                                                     )
                                                     mock_deploy.return_value = Mock(
@@ -927,7 +921,7 @@ class TestRailwayCommand:
                                                     )
                                                     mock_run.return_value = Mock(
                                                         returncode=0,
-                                                        stdout="postgres available",
+                                                        stdout='[{"name": "Postgres"}]',
                                                         stderr="",
                                                     )
                                                     mock_deploy.return_value = Mock(
@@ -1004,7 +998,7 @@ class TestRailwayCommand:
                                                         mock_project_init.return_value = True
                                                         mock_run.return_value = Mock(
                                                             returncode=0,
-                                                            stdout="postgres available",
+                                                            stdout='[{"name": "Postgres"}]',
                                                             stderr="",
                                                         )
                                                         mock_deploy.return_value = Mock(
@@ -1030,8 +1024,8 @@ class TestRailwayCommand:
                                                         )
                                                         mock_upgrade.assert_called_once()
 
-    def test_railway_postgres_service_created(self):
-        """Test railway command creates PostgreSQL service when not present."""
+    def test_railway_without_postgres_service_hard_stops(self):
+        """Test railway command refuses to guess when PostgreSQL is absent."""
         runner = CliRunner()
 
         with mock_preflight_checks():
@@ -1066,23 +1060,9 @@ class TestRailwayCommand:
                                             mock_secret.return_value = "test-secret-key"
                                             mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                            # Call sequence: postgres check (not found), add postgres,
-                                            # app service check, app service creation
-                                            # (deploy goes through deploy_railway_service)
-                                            mock_run.side_effect = [
-                                                Mock(
-                                                    returncode=0, stdout="[]", stderr=""
-                                                ),  # postgres check (not found)
-                                                Mock(
-                                                    returncode=0, stdout="", stderr=""
-                                                ),  # add postgres
-                                                Mock(
-                                                    returncode=0, stdout="[]", stderr=""
-                                                ),  # app service check (not found)
-                                                Mock(
-                                                    returncode=0, stdout="", stderr=""
-                                                ),  # app service creation
-                                            ]
+                                            mock_run.return_value = Mock(
+                                                returncode=0, stdout="[]", stderr=""
+                                            )
                                             mock_deploy.return_value = Mock(
                                                 returncode=0,
                                                 stdout="Deployment started",
@@ -1091,11 +1071,12 @@ class TestRailwayCommand:
 
                                             result = runner.invoke(railway)
 
-                                            assert result.exit_code == 0
+                                            assert result.exit_code == 1
                                             assert (
-                                                "PostgreSQL service added"
+                                                "Expected exactly one PostgreSQL service"
                                                 in result.output
                                             )
+                                            mock_deploy.assert_not_called()
 
     def test_railway_batch_variables_failure_hard_stops(self):
         """Test railway command hard-stops when batch variable set fails (SA31).
@@ -1135,7 +1116,7 @@ class TestRailwayCommand:
                                             mock_project_init.return_value = True
                                             mock_run.return_value = Mock(
                                                 returncode=0,
-                                                stdout="postgres available",
+                                                stdout='[{"name": "Postgres"}]',
                                                 stderr="",
                                             )
                                             mock_deploy.return_value = Mock(
@@ -1171,6 +1152,82 @@ class TestRailwayCommand:
                                             )
                                             # Deploy step must NOT have been called
                                             mock_deploy.assert_not_called()
+
+    def test_railway_unreadable_live_variables_hard_stops(self):
+        """An unreadable live environment cannot trigger credential replacement."""
+        runner = CliRunner()
+
+        with mock_preflight_checks():
+            with (
+                patch(
+                    "quickscale_cli.commands.deployment_commands._ensure_railway_cli_step"
+                ),
+                patch(
+                    "quickscale_cli.commands.deployment_commands._ensure_railway_auth_step"
+                ),
+                patch(
+                    "quickscale_cli.commands.deployment_commands._init_railway_project_step"
+                ),
+                patch(
+                    "quickscale_cli.commands.deployment_commands._app_service_exists_step",
+                    return_value=True,
+                ),
+                patch(
+                    "quickscale_cli.commands.deployment_commands._setup_postgres_step",
+                    return_value="Postgres",
+                ) as mock_setup,
+                patch(
+                    "quickscale_cli.commands.deployment_commands._create_app_service_step"
+                ) as mock_create,
+                patch(
+                    "quickscale_cli.commands.deployment_commands._link_database_step",
+                    return_value=True,
+                ) as mock_link_step,
+                patch(
+                    "quickscale_cli.commands.deployment_commands._generate_domain_step",
+                    return_value="myapp.up.railway.app",
+                ) as mock_domain_step,
+                patch(
+                    "quickscale_cli.commands.deployment_commands._existing_service_variables",
+                    side_effect=_existing_service_variables,
+                ),
+                patch(
+                    "quickscale_cli.commands.deployment_commands.get_railway_variables",
+                    side_effect=get_railway_variables,
+                ),
+                patch(
+                    "quickscale_cli.utils.railway_utils.run_railway_command",
+                    return_value=Mock(
+                        returncode=0,
+                        stdout=(
+                            '[{"name": "SECRET_KEY", "value": "live-secret"}, '
+                            '{"key": "DEBUG"}]'
+                        ),
+                        stderr="",
+                    ),
+                ),
+                patch(
+                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                ) as mock_batch_set,
+                patch(
+                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                ) as mock_secret,
+                patch(
+                    "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                ) as mock_deploy,
+            ):
+                result = runner.invoke(railway)
+
+        assert result.exit_code == 1
+        assert "unrecognized entries" in result.output
+        assert "live-secret" not in result.output
+        mock_setup.assert_not_called()
+        mock_create.assert_not_called()
+        mock_link_step.assert_not_called()
+        mock_domain_step.assert_not_called()
+        mock_batch_set.assert_not_called()
+        mock_secret.assert_not_called()
+        mock_deploy.assert_not_called()
 
     def test_railway_login_success(self):
         """Test railway command successfully authenticates when not logged in."""
@@ -1210,7 +1267,7 @@ class TestRailwayCommand:
                                                 mock_project_init.return_value = True
                                                 mock_run.return_value = Mock(
                                                     returncode=0,
-                                                    stdout="postgres available",
+                                                    stdout='[{"name": "Postgres"}]',
                                                     stderr="",
                                                 )
                                                 mock_deploy.return_value = Mock(
@@ -1270,7 +1327,10 @@ class TestRailwayCommand:
                                                 mock_project_init.return_value = True
                                                 mock_run.return_value = Mock(
                                                     returncode=0,
-                                                    stdout="postgres available",
+                                                    stdout=(
+                                                        '[{"name": "primary-db", '
+                                                        '"type": "postgresql"}]'
+                                                    ),
                                                     stderr="",
                                                 )
                                                 mock_deploy.return_value = Mock(
@@ -1300,11 +1360,11 @@ class TestRailwayCommand:
                                                 # Verify link_database_to_service was called with
                                                 # correct service name
                                                 mock_link.assert_called_once_with(
-                                                    "myapp"
+                                                    "myapp", "primary-db"
                                                 )
 
-    def test_railway_database_link_failure_shows_warning(self):
-        """Test railway command shows warning when DATABASE_URL linking fails."""
+    def test_railway_custom_database_link_failure_shows_exact_guidance(self):
+        """A custom database name reaches failed-link recovery guidance."""
         runner = CliRunner()
 
         with mock_preflight_checks():
@@ -1340,7 +1400,10 @@ class TestRailwayCommand:
                                                 mock_project_init.return_value = True
                                                 mock_run.return_value = Mock(
                                                     returncode=0,
-                                                    stdout="postgres available",
+                                                    stdout=(
+                                                        '[{"name": "primary-db", '
+                                                        '"type": "postgresql"}]'
+                                                    ),
                                                     stderr="",
                                                 )
                                                 mock_deploy.return_value = Mock(
@@ -1358,9 +1421,22 @@ class TestRailwayCommand:
                                                 )
                                                 mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                                result = runner.invoke(railway)
+                                                with patch(
+                                                    "quickscale_cli.commands.deployment_commands.get_railway_variables",
+                                                    return_value={
+                                                        "DATABASE_URL": "postgresql://old-host/old-db",
+                                                        "SECRET_KEY": "secret",
+                                                        "DEBUG": "False",
+                                                        "DJANGO_SETTINGS_MODULE": "myapp.settings.production",
+                                                        "ALLOWED_HOSTS": "myapp.up.railway.app",
+                                                    },
+                                                ):
+                                                    result = runner.invoke(railway)
 
                                                 assert result.exit_code == 0
+                                                mock_link.assert_called_once_with(
+                                                    "myapp", "primary-db"
+                                                )
                                                 assert (
                                                     "Failed to link DATABASE_URL"
                                                     in result.output
@@ -1368,6 +1444,22 @@ class TestRailwayCommand:
                                                 assert (
                                                     "link DATABASE_URL manually"
                                                     in result.output
+                                                )
+                                                assert (
+                                                    "• DATABASE_URL not linked"
+                                                    in result.output
+                                                )
+                                                assert (
+                                                    "• DATABASE_URL linked"
+                                                    not in result.output
+                                                )
+                                                assert (
+                                                    "${{primary-db.DATABASE_URL}}"
+                                                    in result.output
+                                                )
+                                                assert (
+                                                    "${{Postgres.DATABASE_URL}}"
+                                                    not in result.output
                                                 )
 
     def test_railway_database_link_format_drift_fails_command(self):
@@ -1395,7 +1487,7 @@ class TestRailwayCommand:
                                 mock_project_init.return_value = True
                                 mock_run.return_value = Mock(
                                     returncode=0,
-                                    stdout="postgres available",
+                                    stdout='[{"name": "Postgres"}]',
                                     stderr="",
                                 )
                                 mock_link.side_effect = ValueError(
@@ -1445,7 +1537,7 @@ class TestRailwayCommand:
                                             mock_project_init.return_value = True
                                             mock_run.return_value = Mock(
                                                 returncode=0,
-                                                stdout="postgres available",
+                                                stdout='[{"name": "Postgres"}]',
                                                 stderr="",
                                             )
                                             mock_deploy.return_value = Mock(
