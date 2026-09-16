@@ -29,6 +29,13 @@ settings:
   ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter
   QUICKSCALE_MODE: solo
 
+contract_vintage:
+  minimum: "0.88.0"
+  manual_adoption_steps:
+    - "Compare and manually adopt the current settings/production.py runtime-role and privileged-command contract."
+    - "Compare and manually adopt the current start.sh runtime-role provisioning and privileged-command launch contract."
+    - "Compare and manually adopt the current Dockerfile startup contract."
+
 derivation:
   wiring_projections:
     - wiring_field: apps
