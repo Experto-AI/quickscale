@@ -1,39 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Blog{% endblock %}</title>
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'quickscale_modules_blog/blog.css' %}">
-    {% block extra_css %}{% endblock %}
-</head>
-<body>
-    {% include "quickscale_modules_orgs/_debug_banner.html" %}
-    <header>
-        <nav>
-            <a href="{% url 'quickscale_blog:post_list' %}">Blog Home</a>
-        </nav>
-    </header>
+{% extends "base.html" %}
+{% load static %}
 
-    <main>
-        {% if messages %}
-        <div class="messages">
-            {% for message in messages %}
-            <div class="message {{ message.tags }}">
-                {{ message }}
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
+{% block title %}Blog{% endblock %}
 
-        {% block content %}{% endblock %}
-    </main>
+{% block extra_css %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'quickscale_modules_blog/blog.css' %}">
+{% endblock %}
 
-    <footer>
-        <p>&copy; {% now "Y" %} Blog. Built with QuickScale.</p>
-    </footer>
+{% block content %}
+{% include "quickscale_modules_orgs/_debug_banner.html" %}
+<nav class="blog-nav">
+    <a href="{% url 'quickscale_blog:post_list' %}">Blog Home</a>
+</nav>
 
-    {% block extra_js %}{% endblock %}
-</body>
-</html>
+<div class="blog-content">
+{% block blog_content %}{% endblock %}
+</div>
+{% endblock %}
