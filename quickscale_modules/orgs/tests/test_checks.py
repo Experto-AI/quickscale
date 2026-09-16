@@ -5,7 +5,7 @@ Covers every code path in ``check_tenant_isolation()``:
 * W001 — exception during tenant-model discovery
 * W002 — no tenant models discovered
 * W003 — model missing ``organization_id`` field
-* W004 — model without FORCE RLS
+* W004 — model without the exact FORCE-RLS policy contract
 * Happy path — all checks pass, no warnings
 * Multi-model — both W003 and W004 emitted for separate models
 
@@ -102,7 +102,7 @@ class TestCheckTenantIsolationW003:
 
 
 class TestCheckTenantIsolationW004:
-    """Model without FORCE RLS → W004."""
+    """Model without the FORCE-RLS policy contract → W004."""
 
     @patch("quickscale_modules_orgs.checks.get_tenant_models")
     @patch("quickscale_modules_orgs.checks.check_tenant_model_isolation")
@@ -127,7 +127,7 @@ class TestCheckTenantIsolationW004:
 
         assert len(messages) == 1
         assert messages[0].id == "quickscale_modules_orgs.W004"
-        assert "does not have FORCE RLS enabled" in messages[0].msg
+        assert "does not match the FORCE RLS policy contract" in messages[0].msg
 
 
 class TestCheckTenantIsolationHappy:

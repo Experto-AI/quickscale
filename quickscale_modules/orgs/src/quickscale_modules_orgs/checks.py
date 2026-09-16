@@ -4,7 +4,7 @@ SA1.4 — Default-deny classification system check.
 Registers two system checks with the ``quickscale_modules_orgs`` app:
 
 1. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
-   ``organization_id`` or FORCE-RLS policies.
+   ``organization_id`` or the exact FORCE-RLS policy contract.
 2. ``check_model_classification`` (SA1.4) — warns when a concrete project
    model has no marker-derived tenant classification.
 
@@ -81,10 +81,12 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
             messages.append(
                 Warning(
                     f"Tenant model {result['app_label']}.{result['model_name']} "
-                    f"(table {result['db_table']}) does not have FORCE RLS enabled.",
+                    f"(table {result['db_table']}) does not match the "
+                    "FORCE RLS policy contract.",
                     hint=(
-                        "Run the module's enable_rls migration or add one "
-                        "using quickscale_modules_orgs.tenancy.apply_force_rls()."
+                        "Run the module's enable_rls migration or restore the "
+                        "policies with "
+                        "quickscale_modules_orgs.tenancy.apply_force_rls()."
                     ),
                     id="quickscale_modules_orgs.W004",
                 )

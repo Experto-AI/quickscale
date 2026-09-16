@@ -34,6 +34,10 @@ from quickscale_modules_orgs.managers import TenantManager
 from quickscale_modules_orgs.tenancy import (
     TENANT_TABLE_REGISTRY,
     TenantTableStatus,
+    _force_rls_policy_mismatches,
+    apply_force_rls,
+    get_tenant_models,
+    table_has_force_rls,
 )
 
 # ---------------------------------------------------------------------------
@@ -571,71 +575,112 @@ except Exception:
     not _is_postgres,
     reason="FORCE-RLS policy check requires PostgreSQL.",
 )
-@pytest.mark.parametrize(
-    "entry",
-    [e for e in TENANT_TABLE_REGISTRY if e.status == TenantTableStatus.ENROLLED],
-    ids=lambda e: f"{e.app_label}.{e.model_name}",
+def test_enrolled_model_has_force_rls_policy() -> None:
+    """Every marker-enrolled model has the exact rendered RLS contract."""
+    from tests.sa182_project_app.models import ProjectListing
+
+    tenant_models = get_tenant_models()
+    assert ProjectListing in tenant_models, (
+        "The marker-derived conformance set must include project-owned models."
+    )
+
+    failures = {
+        model._meta.db_table: mismatches
+        for model in tenant_models
+        if (mismatches := _force_rls_policy_mismatches(model._meta.db_table))
+    }
+    assert not failures, (
+        "Every marker-enrolled table must match the exact FORCE-RLS policy "
+        f"contract; mismatches: {failures}"
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.skipif(
+    not _is_postgres,
+    reason="FORCE-RLS negative control requires PostgreSQL.",
 )
-def test_enrolled_model_has_force_rls_policy(entry: Any) -> None:
-    """Every ENROLLED model must have a live FORCE-RLS policy in pg_policies.
-
-    This assertion reads straight from the PostgreSQL catalog to verify
-    that:
-    1. The table has RLS enabled (``relrowsecurity`` = true).
-    2. RLS is forced (``relforcerowsecurity`` = true).
-    3. At least one policy exists in ``pg_policies`` for the table.
-
-    Skipped on SQLite (the default test database).
-    """
+def test_weakened_rls_predicate_is_rejected_and_restored() -> None:
+    """A permissive predicate fails conformance and the exact policy is restored."""
     from django.db import connection
 
-    model = apps.get_model(entry.app_label, entry.model_name)
-    assert model is not None
+    from tests.sa182_project_app.models import ProjectListing
 
-    db_table = model._meta.db_table
+    db_table = ProjectListing._meta.db_table
+    quoted_table = connection.ops.quote_name(db_table)
 
-    with connection.cursor() as cursor:
-        # Check relrowsecurity and relforcerowsecurity in pg_class.
-        cursor.execute(
-            """
-            SELECT
-                relrowsecurity,
-                relforcerowsecurity
-            FROM pg_class
-            WHERE relname = %s
-            """,
-            [db_table],
-        )
-        row = cursor.fetchone()
-        assert row is not None, (
-            f"Table {db_table} not found in pg_class. "
-            f"Has the migration for {entry.app_label}.{entry.model_name} "
-            f"been run?"
-        )
-        relrowsecurity, relforcerowsecurity = row
-        assert relrowsecurity is True, (
-            f"Table {db_table} does not have RLS enabled (relrowsecurity "
-            f"is false). An 'enable_rls' migration is missing."
-        )
-        assert relforcerowsecurity is True, (
-            f"Table {db_table} does not have FORCE RLS enabled "
-            f"(relforcerowsecurity is false). The policy should use "
-            f"FORCE RLS, not regular RLS."
-        )
+    def policy_rows() -> list[tuple[Any, ...]]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT policyname, permissive, roles, cmd, qual, with_check
+                FROM pg_policies
+                WHERE tablename = %s
+                ORDER BY policyname
+                """,
+                [db_table],
+            )
+            return cursor.fetchall()
 
-        # Check at least one policy exists in pg_policies.
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM pg_policies
-            WHERE tablename = %s
-            """,
-            [db_table],
-        )
-        policy_count = cursor.fetchone()[0]
-        assert policy_count > 0, (
-            f"Table {db_table} has no RLS policies defined in pg_policies."
-        )
+    original_policies = policy_rows()
+    all_policies = [row for row in original_policies if row[3] in ("ALL", "*")]
+    assert len(all_policies) == 1
+    policy_name = all_policies[0][0]
+    quoted_policy = connection.ops.quote_name(policy_name)
+    targets = ((db_table, policy_name),)
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"ALTER POLICY {quoted_policy} ON {quoted_table} USING (true)"
+            )
+
+        mismatches = _force_rls_policy_mismatches(db_table)
+        assert mismatches is not None
+        assert any(
+            "non-conforming USING predicate" in mismatch for mismatch in mismatches
+        ), f"The weakened USING predicate failed for the wrong reason: {mismatches}"
+        assert table_has_force_rls(db_table) is False
+    finally:
+        with connection.schema_editor() as schema_editor:
+            apply_force_rls(schema_editor, targets)
+
+    assert policy_rows() == original_policies
+    assert _force_rls_policy_mismatches(db_table) == []
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.skipif(
+    not _is_postgres,
+    reason="FORCE-RLS policy-name limit requires PostgreSQL.",
+)
+def test_force_rls_rejects_base_name_that_would_truncate_select_policy() -> None:
+    """A base name longer than 56 bytes fails before helper-owned DDL."""
+    from django.db import connection
+
+    from tests.sa182_project_app.models import ProjectListing
+
+    db_table = ProjectListing._meta.db_table
+
+    def policy_rows() -> list[tuple[Any, ...]]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT policyname, permissive, roles, cmd, qual, with_check
+                FROM pg_policies
+                WHERE tablename = %s
+                ORDER BY policyname
+                """,
+                [db_table],
+            )
+            return cursor.fetchall()
+
+    original_policies = policy_rows()
+    with connection.schema_editor() as schema_editor:
+        with pytest.raises(ValueError, match="expected at most 56"):
+            apply_force_rls(schema_editor, ((db_table, "p" * 57),))
+
+    assert policy_rows() == original_policies
 
 
 # ---------------------------------------------------------------------------

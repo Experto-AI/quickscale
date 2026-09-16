@@ -6,7 +6,8 @@ labels — not just the ``quickscale_modules_*`` prefix — and reports whether
 each has:
 
 1. A direct ``organization_id`` column.
-2. On PostgreSQL, a live FORCE-RLS policy in ``pg_policies``.
+2. On PostgreSQL, the exact tenant-write and operator-read FORCE-RLS policy
+   contract in ``pg_policies``.
 
 Usage::
 
@@ -42,7 +43,7 @@ class Command(BaseCommand):
     help = (
         "Discover tenant models by marker (TenantManager or TenantModel "
         "subclass) across all installed apps and verify each has "
-        "organization_id + FORCE RLS."
+        "organization_id + conformant FORCE RLS policies."
     )
 
     def add_arguments(self, parser: object) -> None:
@@ -298,13 +299,15 @@ class Command(BaseCommand):
                 elif r["has_force_rls"]:
                     rls_status = "OK"
                 else:
-                    rls_status = self.style.ERROR("MISSING")  # type: ignore[assignment]
+                    rls_status = self.style.ERROR(  # type: ignore[assignment]
+                        "NON-CONFORMING"
+                    )
 
                 self.stdout.write(
                     f"\n  [{status}] {r['app_label']}.{r['model_name']}\n"
                     f"         Table: {r['db_table']}\n"
                     f"         organization_id: {org_status}\n"
-                    f"         FORCE RLS: {rls_status}"
+                    f"         FORCE RLS contract: {rls_status}"
                 )
 
             if has_unclassified:

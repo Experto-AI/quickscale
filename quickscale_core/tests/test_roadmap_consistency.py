@@ -12,6 +12,7 @@ ROOT = Path(__file__).parents[2]
 TICKET = r"SA\d+[a-z]?"
 RETAINED_CLOSED_TICKETS = {
     "SA160",
+    "SA177",
     "SA180",
     "SA181",
     "SA182",
