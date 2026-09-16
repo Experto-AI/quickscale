@@ -48,7 +48,11 @@ Restamp with `make version-update`, not with `--sync`.
 
 `contract_vintage.minimum` is **not** a lockstep field. It is the adoption boundary for projects
 whose generation contract predates a module's vintage; leave it alone unless that module genuinely
-gained new manual adoption steps.
+gained new manual adoption steps. Conversely, every change to a contract-bearing emitted file must
+move the vintage owned by each upgradable module or CLI command that depends on the new bytes and
+must list the manual adoption steps. Existing-project `update`, `apply`, and Railway deploy enforce
+those declarations before mutation; `--acknowledge-contract-vintage` is a one-invocation assertion
+that the operator completed the steps, not permission to omit the declaration.
 
 ### 1.2 Release-tier validation
 

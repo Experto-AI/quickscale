@@ -357,6 +357,18 @@ project.
 | Other generated files (`settings/base.py`, `Dockerfile`, `start.sh`, CI) | Never | Changes arrive as documented adoption steps; `quickscale status` reports contract-vintage gaps. |
 | Project-owned apps (for example a `properties` app) | Never | Yours entirely. |
 
+**Contract-vintage enforcement.** Before `quickscale update`, an existing-project `quickscale
+apply`, or `quickscale deploy railway` can combine current code with generated files, QuickScale
+compares `.quickscale/state.yml`'s `project_contract` with the current module or command minimum.
+An old or unknown legacy contract stops before mutation and names each incompatible module or
+command, its minimum, and the manual adoption steps. Fresh projects without state keep the normal
+generation flow.
+
+After completing every named adoption step, repeat the command with
+`--acknowledge-contract-vintage`. The acknowledgement applies only to that invocation; it neither
+rewrites generated files nor advances `project_contract`. Review the steps again after a later
+vintage increase.
+
 **Keeping the frontend separate from updates.** It already is: `frontend/` is your code and no
 QuickScale command rewrites it. What can still change under it is the backend it calls — module API
 responses such as `/api/orgs/`, `/api/forms/<slug>/`, and the CRM API, and the page configuration
@@ -587,6 +599,9 @@ quickscale apply --no-modules
 
 # Force overwrite existing project directory
 quickscale apply --force
+
+# Continue an existing project after manually adopting every named contract step
+quickscale apply --acknowledge-contract-vintage
 ```
 
 **Apply execution order**:

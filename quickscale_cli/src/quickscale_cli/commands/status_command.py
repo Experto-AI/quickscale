@@ -30,74 +30,17 @@ from quickscale_core.contracts.module_discovery import (
     ModulePresenceState,
     discover_module_presence,
 )
-from quickscale_core.manifest import ModuleManifest, parse_version_tuple
+from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 from quickscale_core.project_state import (
     FILE_HASHES_FILENAME,
     ProjectStateManager,
     check_version_drift,
 )
-
-
-def _check_contract_vintage(
-    project_contract: str | None,
-    manifests: dict[str, ModuleManifest] | None,
-) -> dict:
-    """Compare each installed module's contract-vintage requirement against
-    the project's recorded ``project_contract``.
-
-    For every installed module that declares a ``contract_vintage`` block
-    in its manifest, this function checks whether the project's contract
-    meets or exceeds ``minimum``.  When the project is behind (or the
-    project contract is unknown/``None`` — legacy project), the gap is
-    recorded together with the manual-adoption steps the module declares.
-
-    Returns a diagnostics dict suitable for both text display and JSON
-    serialization:
-
-    * ``project_contract`` — the project's recorded contract version
-      (``None`` for legacy projects).
-    * ``modules_behind`` — list of modules whose vintage minimum exceeds
-      the project contract.  Each entry carries ``module``, ``minimum``,
-      and ``manual_adoption_steps``.
-    * ``module_count`` — total number of installed modules that declare
-      a contract-vintage boundary.
-    * ``modules_behind_count`` — count of modules behind.
-    """
-    if not manifests:
-        return {
-            "project_contract": project_contract,
-            "modules_behind": [],
-            "module_count": 0,
-            "modules_behind_count": 0,
-        }
-
-    project_tuple = parse_version_tuple(project_contract) if project_contract else (0,)
-    modules_behind: list[dict[str, object]] = []
-    module_count = 0
-
-    for module_name, manifest in manifests.items():
-        vintage = manifest.contract_vintage
-        if vintage is None:
-            continue
-        module_count += 1
-
-        minimum_tuple = parse_version_tuple(vintage.minimum)
-        if project_tuple < minimum_tuple:
-            modules_behind.append(
-                {
-                    "module": module_name,
-                    "minimum": vintage.minimum,
-                    "manual_adoption_steps": list(vintage.manual_adoption_steps),
-                }
-            )
-
-    return {
-        "project_contract": project_contract,
-        "modules_behind": modules_behind,
-        "module_count": module_count,
-        "modules_behind_count": len(modules_behind),
-    }
+from quickscale_cli.commands.contract_vintage import (
+    check_contract_vintage as _check_contract_vintage,
+    load_shipped_contract_manifests,
+)
 
 
 def _get_docker_status() -> dict[str, str] | None:
@@ -494,6 +437,7 @@ def _compute_drift_diagnostics(
     state_manager: StateManager,
     manifests: dict[str, ModuleManifest] | None = None,
     presence_records: list[ModulePresenceRecord] | None = None,
+    contract_manifests: dict[str, ModuleManifest] | None = None,
 ) -> dict:
     """Compute M2 drift and compatibility diagnostics.
 
@@ -549,7 +493,10 @@ def _compute_drift_diagnostics(
 
     # SA10.2: contract-vintage check.
     project_contract = state.project.project_contract if state else None
-    contract_vintage = _check_contract_vintage(project_contract, manifests)
+    vintage_manifests = (
+        contract_manifests if contract_manifests is not None else manifests
+    )
+    contract_vintage = _check_contract_vintage(project_contract, vintage_manifests)
     contract_vintage["has_state"] = state is not None
 
     return {
@@ -985,6 +932,14 @@ def status(json_output: bool) -> None:
         project_path, config_path
     )
     manifests, presence_records = _load_status_manifests(project_path, state)
+    contract_module_names = {
+        record.name
+        for record in presence_records
+        if record.state is ModulePresenceState.ACTIVE
+        and state is not None
+        and record.name in state.modules
+    }
+    contract_manifests = load_shipped_contract_manifests(contract_module_names)
 
     # Handle JSON output
     if json_output:
@@ -995,6 +950,7 @@ def status(json_output: bool) -> None:
             state_manager,
             manifests=manifests,
             presence_records=presence_records,
+            contract_manifests=contract_manifests,
         )
         output = _build_json_output(
             project_path,
@@ -1015,6 +971,7 @@ def status(json_output: bool) -> None:
         state_manager,
         manifests=manifests,
         presence_records=presence_records,
+        contract_manifests=contract_manifests,
     )
 
     # Display text status

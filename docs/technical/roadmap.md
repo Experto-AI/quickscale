@@ -14,11 +14,11 @@ the verified migration tools (SA152) move it onto current QuickScale (SA191).
 release-prepared public note; `v89` has since bumped the repository to `0.89.0`. No core tag,
 split-branch republication, seal, or PyPI upload has happened. Outstanding before publication:
 release-tier validation on the packaged bytes, the ordered phases in
-[publish_procedure.md](publish_procedure.md), and the release PR into `main`. Two scheduled fixes
-bear on what gets published: SA186 guards the split-branch force-push that publication runs, and
-SA185 declares the `orgs` contract vintage that the 0.88 templates introduced. Landing either in
-0.88.0 means repackaging; publishing without them ships the recorded issues. Publication itself
-stays a maintainer decision; this planner tracks only that it is owed.
+[publish_procedure.md](publish_procedure.md), and the release PR into `main`. SA185 now declares
+the `orgs` contract vintage that the 0.88 templates introduced; SA186 remains scheduled to guard
+the split-branch force-push that publication runs. Including either fix in 0.88.0 means repackaging;
+publishing bytes without a fix ships its recorded issue. Publication itself stays a maintainer
+decision; this planner tracks only that it is owed.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance;
@@ -34,12 +34,11 @@ context, scope, and acceptance;
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA185 | Enforce contract vintage when upgradable code meets an older project | post-v88 | 2 | — | Deferred |
 | SA186 | Require a fast-forward before publication force-pushes a split branch | post-v88 | 2 | — | Deferred |
 | SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
-| SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | SA185 | Deferred |
+| SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | — | Deferred |
 | SA177 | Verify the predicates of enrolled RLS policies | post-v88 | 3 | — | Deferred |
-| SA188 | Settle the privileged-command set behind one declaration | post-v88 | 3 | SA185 | Deferred |
+| SA188 | Settle the privileged-command set behind one declaration | post-v88 | 3 | — | Deferred |
 | SA189 | Provision the runtime database role in one place under one name | post-v88 | 3 | SA188 | Deferred |
 | SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | — | Deferred |
 
@@ -47,10 +46,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
-Track 2: SA185 ──► SA186 ──► SA187 ──► SA192
+Track 2: SA186 ──► SA187 ──► SA192
 Track 3: SA177 ──► SA188 ──► SA189 ──► SA190
-
-Cross-track dependencies:  SA185 ──► SA188
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -65,17 +62,16 @@ path.
 - **Derived tenant tables support SA153 and SA177.** Project-owned tenant tables pass the generated
   project's `check_tenant_isolation` without module-source edits, and predicate verification covers
   them through the same derived tenant-model set.
-- **SA185 precedes SA188, and SA188 precedes SA189.** SA188 changes contract-bearing templates and
-  is the first real use of an enforced vintage move. SA188 and SA189 both edit `start.sh.j2` and
-  regenerate the SA90 emission fixture; settle the command set before collapsing role provisioning
-  around it.
+- **SA188 precedes SA189.** SA188 changes contract-bearing templates and is the first follow-up to
+  move the enforced vintage. SA188 and SA189 both edit `start.sh.j2` and regenerate the SA90
+  emission fixture; settle the command set before collapsing role provisioning around it.
 - **SA152 precedes SA191, and SA191 precedes SA153.** `bap-web` is migrated with the maintainer
   tools only after SA152 has proven them on isolated fixtures, and the portal is built on the
   migrated project rather than on a fresh one. SA191 redeploys through the fail-hard
   `deploy railway` path.
-- **SA185 precedes SA192.** The module pages extend the generated, project-owned `base.html`, which
-  `quickscale update` never rewrites, so a design change there is contract-bearing and existing
-  projects adopt it through an enforced vintage move. SA192 is not an SA153 edge: the portal's
+- **SA192 uses the enforced vintage boundary.** The module pages extend the generated,
+  project-owned `base.html`, which `quickscale update` never rewrites, so a design change there is
+  contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not an SA153 edge: the portal's
   React pages do not need the restyled Django pages to ship.
 - **Independent.** SA186 and SA187 have no edges and sit by severity. SA152 shares no files with
   SA188/SA189, but all three touch the privilege/runtime contract of generated `settings/production.py`
@@ -86,8 +82,8 @@ the `bap-web` migration (SA191), and the portal (SA153), because each feeds the 
 splitting them across tracks would only add merge handoffs. Tracks 2 and 3 split the audit work by
 conflict surface. Track 2 takes the CLI deploy/update, publication, and test surfaces, which are
 mostly trivial or small. Track 3 takes orgs tenancy, purge, and the privileged/runtime-role
-templates, which carry the medium tickets. SA177 sits ahead of SA188 so Track 3 keeps working while
-Track 2 delivers SA185. SA186 and SA187 could move to Track 3's tail without a conflict, but would
+templates, which carry the medium tickets. SA177 sits ahead of SA188 so Track 3 could keep working
+while Track 2 delivered SA185. SA186 and SA187 could move to Track 3's tail without a conflict, but would
 only lengthen that track.
 
 ### Track states
@@ -97,7 +93,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA152 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA185 | yes | yes | yes | **yes** | no |
+| 2 | SA186 | yes | yes | yes | **yes** | no |
 | 3 | SA177 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -115,7 +111,7 @@ A track is **truly green** only when all three states are yes.
   `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  and the owning audit: the arch audit for SA152, SA185, SA188, SA189, and SA190; the tech audit
+  and the owning audit: the arch audit for SA152, SA188, SA189, and SA190; the tech audit
   for SA177, SA186, and SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
   audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
@@ -346,35 +342,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA184 — Make `quickscale deploy railway` re-runs read live state and fail hard.**
 
-- [ ] **SA185 — Enforce contract vintage when upgradable code meets an older project.**
-
-  **Context:** Some runtime contracts are split: one half is an emitted file frozen at generation
-  (`settings/production.py`, `start.sh`, the `Dockerfile`), and the other half ships in code that users
-  upgrade — CLI releases and module subtree pulls through `quickscale update`. v0.88 changed two such
-  contracts in a skew-unsafe way: the privileged-command set and the runtime role that `deploy
-  railway` now expects `start.sh` to create. A pre-0.88 project that updates `orgs` or deploys with
-  the new CLI breaks.
-
-  The machinery to detect this already exists: `project_contract` is recorded at apply, and manifests
-  may declare `contract_vintage`. Only `quickscale status` reads it, and `orgs` declares none. Declare
-  the vintage the 0.88 templates need, and make the paths that apply upgradable code consult the same
-  check and refuse unless acknowledged. The client-identity resolver, which fails closed without its
-  generated middleware, is the skew-safe shape to point future contract changes toward. This is an
-  enforcement check, not a template updater.
-
-  **Acceptance:** `orgs` declares `contract_vintage.minimum: 0.88.0` with manual adoption steps for
-  `settings/production.py`, `start.sh`, and the `Dockerfile`, and the CLI declares the same minimum
-  for the runtime-role variables `deploy railway` writes. `quickscale update`, `apply`, and
-  `deploy railway` run the vintage check that `quickscale status` already computes and refuse when
-  the project's recorded contract is behind, unless the operator explicitly acknowledges it; the
-  refusal names the module or command, the minimum, and the adoption steps. Regressions prove an
-  old-vintage project is refused, and that acknowledged and current projects proceed. Document the
-  rule that a change to a contract-bearing emitted file moves the owning vintage. No template
-  updater; deriving vintages from the SA90 fixture is out of scope.
-
-  **Surfaces:** the `orgs` manifest, the manifest loader and `status_command.py` vintage check (reuse),
-  `module_commands.py` update, `apply_command.py`, `deployment_commands.py`, CLI tests, upgrade
-  documentation, and the architecture audit.
+- [x] **SA185 — Enforce contract vintage when upgradable code meets an older project.**
 
 - [ ] **SA186 — Require a fast-forward before publication force-pushes a split branch.**
 

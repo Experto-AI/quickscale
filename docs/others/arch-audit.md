@@ -97,9 +97,9 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 | **Tenant-model universe is classified (and refreshed, and purged)** | Marker-derived tenant classification and FORCE-RLS refresh; 21-entry `_DELETE_SPECS` remains the purge membership list. The shipped `TENANT_TABLE_REGISTRY` is a parity oracle only | **Classification and refresh are marker-derived; purge remains closed to project-owned tenant models** | **narrowed to SA190 purge membership** — rank 1 |
 | Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard; exemption set declared in four places | Guard structural; **set membership convention-only (4 declarations, 3 members, no cross-station gate)** | **weakened** — third member added in `b29d9a29` with no station test |
 | **Restricted runtime role exists with the right grants** | `db/init.sql.j2` (role `{package}_app`), `start.sh.j2` Step 3 (role `quickscale_runtime`, adds `GRANT CONNECT`), `OPERATIONS.md.j2` manual SQL | **Convention: three implementations, two role names** | **new row** (seam minted in `461796ce`) |
-| **Template ↔ upgradable-code contract compatibility across versions** | `project_contract` in state plus `contract_vintage` in manifests (2 of 12 modules declare it); read only by `quickscale status` | **Convention (advisory, opt-in)** | **new row** — rank 3 |
+| **Template ↔ upgradable-code contract compatibility across versions** | `project_contract` in state plus declared module/CLI vintages; `status` reports gaps and existing-project `update`, `apply`, and Railway deploy enforce them | **Structural at mutation boundaries, with explicit per-invocation acknowledgement** | **strengthened** — finding retired |
 | Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy | Membership gated; ownership hand-authored | unchanged; paid again for two new emitted paths (`31a93768`) |
-| Cross-domain deletion obligations are discharged | Last-owner: one predicate, locked model delete, `pre_delete` receiver. Billing cancellation: account-delete view; live-subscription refusal plus row purge, cache invalidation, and tombstone: `purge_organization` | Last-owner and live-subscription refusal are structural; **remaining obligations convention, split across two boundaries** | **re-characterized** — rank 4 |
+| Cross-domain deletion obligations are discharged | Last-owner: one predicate, locked model delete, `pre_delete` receiver. Billing cancellation: account-delete view; live-subscription refusal plus row purge, cache invalidation, and tombstone: `purge_organization` | Last-owner and live-subscription refusal are structural; **remaining obligations convention, split across two boundaries** | **re-characterized** — rank 3 |
 | CSRF-exempt endpoints have alternate integrity checks | AST gate plus sanctioned endpoint bases | Structural and gated | unchanged |
 | Core/module dependency direction and lockstep pin | Import-compatibility and reverse-import gates; exact `>=X.Y.0,<X.(Y+1).0` pin derived from `VERSION` | Gated | strengthened (floor → exact, `74d18f48`) |
 | Module identity (the twelve-module universe) | `module_discovery.py --list-modules`, consumed fail-hard (`provision_ci_postgres.sh:81`, `check_sa117_scope.py:57`, `version_tool.sh:34`) | Structural and derived | unchanged (SA173 three-state presence added behind the same shim) |
@@ -115,13 +115,12 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 |---:|---|---|---|---|---|
 | 1 | `org-model-universe-hand-enumerated` | now (SA190) | High | S | Purge membership remains a literal `_DELETE_SPECS` list inside the orgs module, closed to project-owned tenant tables even though classification and policy refresh are marker-derived. |
 | 2 | `privileged-command-set-multi-owner` | now (fired) | High | M | Four independent declarations own the privileged-command set. It grew to three with no gate, and the frozen template copy rejects the new command in the projects that need it. |
-| 3 | `generated-file-ownership-unmodeled` | now, on v0.88 publication | High (mechanism) / Medium (user impact) | M | Contract-bearing emitted files are frozen at generation, while their counterparts upgrade through `quickscale update`/`deploy`. Vintage machinery exists but nothing enforces it. |
-| 4 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | Two org-deletion boundaries already exist, and each discharges a different subset of cross-domain obligations. |
+| 3 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | Two org-deletion boundaries already exist, and each discharges a different subset of cross-domain obligations. |
 
 Promotions this pass: rank 1 remains now as the still-open SA190 purge-membership half; its
 classification and policy-refresh halves are implemented by SA182. Rank 2 returns from the watchlist
-because its trigger fired. Rank 3 moves from 6–18 months to now, conditioned on publication.
-Rank 4 moves from deferred to 6–18 months, because prior passes mis-evaluated its trigger. The
+because its trigger fired. Rank 3 moves from deferred to 6–18 months, because prior passes
+mis-evaluated its trigger. The
 rank-1 finding is narrowed rather than closed: SA190 still owns purge derivation.
 
 ---
@@ -377,117 +376,6 @@ role-name derivation to a single rule.
 
 ---
 
-## Finding — Contract-bearing emitted files are frozen while their counterparts upgrade
-
-**ID:** `generated-file-ownership-unmodeled` · **Horizon:** now, on v0.88 publication ·
-**Confidence:** High (mechanism) / Medium (user impact) · **Size:** M ·
-**Context dependence:** `wrong-for-now` (published cross-version consumers)
-
-**Rank rationale:** the blast radius is every already-generated project whenever a template-side
-contract changes. Likelihood is high at publication, which the roadmap records as owed. The size
-of the external installed base is unknown.
-
-**Trigger:** "a third generated-project consumer, a public updater, an emitted-file expansion, or a
-second theme." **Fired twice.**
-
-- **Emitted-file expansion:** `a5077bcf` emits two new paths, `frontend/src/lib/csrf.ts` and
-  `frontend/src/test/csrf.test.tsx`, and `31a93768` paid the matching taxonomy edit
-  (`beta_migration.py:197,201`).
-- **Published cross-version consumers:** this pass establishes that they already exist.
-  `quickscale update` (`module_commands.py:1429`) subtree-pulls new module code into old
-  projects, and `quickscale deploy railway` writes environment that assumes current templates.
-  The prior answer ("no generated-project updater for users") covered template updating, not
-  these two paths.
-
-**Problem:** Several runtime contracts are split so that one half is emitted once and frozen, and
-the other half ships in code that users upgrade: CLI releases and module subtree pulls. The
-generator has no model of which emitted files take part in such contracts. The vintage machinery
-built to detect incompatibility is advisory, opt-in, and consulted by neither updating path.
-
-**Evidence:**
-
-- **Vintage machinery exists but nothing enforces it.**
-  - `project_contract` is recorded at apply (`apply_command.py:2471`; `state_schema.py:108-116`).
-  - `contract_vintage` is parsed from manifests (`loader.py:494-560`).
-  - The only consumer is `quickscale status` (`status_command.py:42-95,552`).
-  - Only 2 of 12 modules declare a vintage (`backups`, `social`, both `0.87.0`).
-  - `orgs` declares none, despite the contract change below.
-  - Neither `update` nor `deploy` reads it.
-- **Census of v0.88 changes where a template-side contract meets upgradable code.**
-  - **(a) Privileged-command set — skew-unsafe.** The orgs guard and CLI moved ahead of
-    `production.py.j2` and `start.sh.j2`; see rank 2.
-  - **(b) Runtime role — skew-unsafe.** `deployment_commands.py:369-388` now writes
-    `RUNTIME_DB_PASSWORD` and a `RUNTIME_DATABASE_URL` for a role that only the 0.88 `start.sh`
-    creates (`start.sh.j2:56`). That `start.sh` runs only because the 0.88 `Dockerfile` CMD
-    invokes it (`Dockerfile.j2:209`). At `48e0a62a`, the generated `start.sh` had zero
-    `RUNTIME_DB_PASSWORD` references, and the CLI set no runtime URL at all.
-  - **(c) Client identity — skew-safe.** The module resolver fails closed without the generated
-    middleware (`current_org.py:598-603`). It is the counter-example that shows the safe shape.
-  - Tally: 2 of 3 contract changes are skew-unsafe, and 0 of them declared a vintage.
-- **Maintainer half.** Anchors re-verified: `get_generator_emission_mapping()` at `generator.py:142`.
-  `beta_migration.py` is 2,716 lines, with collections at `:55`, `:86`, `:108`, and `:123`. It
-  still carries `settings/production.py` from the donor (`:59`, `:92`) while `start.sh` and the
-  `Dockerfile` are substituted (`:121`, `:125`, `:128`). `_execute_copy_selected_django_files` is at
-  `:1842`. SA152, not started, owns verification of this half.
-
-**Counter-evidence:**
-
-- **`update` does not consult vintage.** Searched `update`, `apply`, and `deploy` for vintage
-  consumption; only `status` computes it.
-- **Old-vintage projects are never exercised.** `test_generated_project_runtime.py` proves that a
-  *fresh* generation boots, migrates, and serves (`TestGeneratedProjectRuntimeSmoke`, `:1804`),
-  but no test runs new modules or a new CLI against an old-vintage project.
-- **The maintainer half stays contained.** `quickscale_devtools` is still excluded from
-  publication (`prepare_publish.py:27-41`).
-- **No external installed base is evidenced in the repository.** That is why user-impact
-  confidence is Medium.
-
-**Why it compounds:**
-
-- **Every contract change risks silent skew.** Each release that changes a contract-bearing
-  template creates skew with every project already generated, and it is caught only if the author
-  remembers to declare a vintage (0 of 2 did in v0.88).
-- **The maintainer taxonomy is paid per emitted file.** Every emitted-file addition also pays the
-  hand-authored edit (SA114, `31a93768`).
-- **Already built on top:** the privileged-command contract, runtime-role provisioning, the
-  Dockerfile/start.sh launch contract, and the SA160 CSRF seams.
-
-**Detection signal:** `quickscale status` reporting `modules_behind` (it would, if modules
-declared vintages). Deploys of older projects failing password authentication as
-`quickscale_runtime`. Support reports of "Unknown QUICKSCALE_PRIVILEGED_COMMAND" after
-`quickscale update`.
-
-**Steelman:** QuickScale's stated policy is that generated files are user-owned after generation,
-and a project that wants new template behaviour regenerates or adopts it by hand. With one
-maintainer and no confirmed external users, advisory `status` output is proportionate. Do not
-fix if every generated project is maintainer-owned and regenerated each release.
-
-**Correct shape:** any change to an emitted file that takes part in a runtime contract with
-upgradable code moves a contract version. Every path that applies upgradable code to an existing
-project — update, apply, deploy — refuses, or demands explicit acknowledgement, when the project's
-recorded vintage is behind.
-
-**Options:**
-
-1. **Typed ownership metadata** on generator emission entries; derive the beta-migration
-   collections (the prior Option 1; maintainer half only).
-2. **Enforce the vintage that already exists.** Modules and the CLI declare `contract_vintage`
-   when they depend on a template change, and `update`, `apply`, and `deploy` consume
-   `_check_contract_vintage()`. The declaration can itself be derived: the SA90 fixture already
-   records, per release, which emitted paths changed hash.
-3. **Move contract logic out of templates** into an upgradable runtime package that generated
-   settings import, leaving templates as wiring only. This removes the frozen class, but it adds a
-   runtime dependency to every generated project, and there is none today (`pyproject.toml.j2`).
-
-**Recommendation:** Option 2 now. It reuses `project_contract`, `contract_vintage`, and the SA90
-hash fixture, so almost nothing new is built. It also keeps Option 3 open for the privileged set
-if rank 2's Option 2 is chosen. Keep Option 1 behind SA152's verification. · **First step:**
-declare `contract_vintage.minimum: 0.88.0` on `orgs` with manual adoption steps for
-`production.py`, `start.sh`, and the `Dockerfile`, and have `quickscale update` print the vintage
-check that `status` already computes.
-
----
-
 ## Finding — Organization deletion obligations are split across two boundaries
 
 **ID:** `deletion-invariants-per-boundary-reimplementation` · **Horizon:** 6–18 months ·
@@ -608,14 +496,9 @@ Phase A regression coverage; purge membership remains in vendored module source.
 
 - **SA182's rank-1 classification/refresh half is complete:** it unblocks SA153's first migration
   and keeps the shipped literal as parity-only evidence.
-- **Purge derivation pairs with rank 4:** the remaining rank-1/SA190 purge half and rank 4's
+- **Purge derivation pairs with rank 3:** the remaining rank-1/SA190 purge half and rank 3's
   coordinator touch the same command, so design them together.
-- **Ranks 2 and 3 interact.** If rank 2 takes Option 2 (commands declare themselves), the
-  privileged set leaves the frozen templates, and rank 3's vintage enforcement has one fewer
-  contract to police. Rank 3's first step (declaring an `orgs` vintage) is independent and cheap,
-  and it should land before v0.88 is published.
-- **SA152 is already scoped** to rank 3's maintainer half and does not conflict. SA177
-  are independent of all four findings, but SA177's "each enrolled table" scope inherits rank 1's
+- **SA177 is independent of all three findings,** but its "each enrolled table" scope inherits rank 1's
   closed universe. If rank 1 lands first, SA177 covers project tables for free.
 
 ## Sound load-bearing decisions
@@ -626,19 +509,19 @@ Phase A regression coverage; purge membership remains in vendored module source.
   the W003/W004 isolation checks are what make SA182's runtime shape safe; keep them while SA190
   derives purge membership.
 - **Last-owner safety is a model/signal backstop, not a view check.** One predicate serves six
-  callsites, plus a `pre_delete` receiver that catches direct ORM deletes. Rank 4's coordinator
+  callsites, plus a `pre_delete` receiver that catches direct ORM deletes. Rank 3's coordinator
   must not replace it.
 - **Single-declaration derivation seams work where they are used.** Module identity is shelled out
   to `module_discovery.py --list-modules` by every consumer. `runtime_pins.py` renders Python,
   Django, and PostgreSQL pins into templates. The lockstep pin is now derived exactly from
-  `VERSION` (`74d18f48`). These are the precedent for ranks 1–3.
+  `VERSION` (`74d18f48`). These are the precedent for ranks 1–2.
 - **The PostgreSQL CI environment is one contract with five profiles.** `provision_ci_postgres.sh`
   derives its module list and hard-fails on drift, and parity tests assert that the old
   hand-rolled shell is absent. `b29d9a29` also stopped the BYPASSRLS authorization leaking into
   `GITHUB_ENV` (`provision_ci_postgres.sh:439-444`), which strengthens it.
-- **The SA160 client-identity seam removed a template/module copy-pair the right way.** The module
-  resolver is canonical and fails closed without the generated middleware, so template vintage
-  cannot weaken it. This is the skew-safe shape rank 3 should generalize.
+- **Contract-bearing generated files now have an enforced compatibility boundary.** Existing-project
+  update, apply, and Railway deploy compare the recorded project contract with declared module or
+  command vintages before mutation, while fresh generation remains unaffected.
 
 ## Watchlist
 
@@ -666,12 +549,8 @@ Phase A regression coverage; purge membership remains in vendored module source.
 - **`privileged-command-set-multi-owner`:** is `migrate_billing_to_orgs` a permanent third member,
   reversing the 2026-08-31 answer, or a one-shot to retire once pre-org billing data is
   backfilled? A dated retirement demotes this back to the watchlist; permanence confirms Option 2.
-- **`generated-file-ownership-unmodeled`:** do generated projects on ≤0.87 exist outside the
-  maintainer's own sites, and will they `quickscale update` to 0.88 modules? If there are none,
-  the horizon returns to 6–18 months.
-*Both questions from the prior pass were answered on 2026-08-31; the answers and their effects are
-recorded in the reconciliation log. The first answer ("permanent two commands") has since been
-contradicted by `b29d9a29`.*
+*The prior answer from 2026-08-31 ("permanent two commands") has since been contradicted by
+`b29d9a29`; its earlier effect is recorded in the reconciliation log.*
 
 ## Red flags (out of scope — fix now)
 
@@ -687,11 +566,6 @@ contradicted by `b29d9a29`.*
   "privileged-command template/runtime pair", whose trigger ("a third sanctioned command, or a mismatch")
   **fired** — not as a value mismatch but as a third and fourth *owner*. `3523f9f8` (2026-08-18, labeled
   `test:`) added the CLI decider without reconciling the SSOT claim at `apps.py:52`.
-- 2026-08-28 — `generated-file-ownership-unmodeled`: **still-open**, deferred. Anchors re-verified
-  (`generator.py:142`; `beta_migration.py` 2,714 lines; conformance test present). New evidence added: the
-  taxonomy assigns opposite upgrade dispositions to one contract's producer and validator
-  (`beta_migration.py:59,92` donor vs `:109,121,125,128` substituted). Trigger still not fired; severity
-  held down by the verified fact that `quickscale_devtools` is maintainer-only and unpublished.
 - 2026-08-28 — `deletion-invariants-per-boundary-reimplementation`: **still-open**, deferred. All six
   callsites re-verified. Trigger not fired; `teams` remains README-only.
 - 2026-08-28 — `org-model-universe-hand-enumerated`: **still-open**, deferred. Anchors re-verified and the
@@ -760,11 +634,6 @@ contradicted by `b29d9a29`.*
   contradicting the 2026-08-31 "permanent two" answer. The same commit edited this document
   without re-evaluating the trigger. Evidence was extended with the frozen-station
   un-runnability and the three-implementation runtime-role seam (`461796ce`).
-- 2026-09-15 — `generated-file-ownership-unmodeled`: **still-open, promoted 6–18 months → now (on
-  publication).** The trigger fired on emitted-file expansion (`a5077bcf`; taxonomy paid in
-  `31a93768`). Broadened: `quickscale update` and `deploy railway` are already-published
-  cross-version consumers, and the `contract_vintage` machinery is advisory and undeclared by
-  `orgs`. The maintainer-only devtools fact still holds, but no longer bounds the blast radius.
 - 2026-09-15 — `deletion-invariants-per-boundary-reimplementation`: **still-open, promoted deferred
   → 6–18 months.** Prior passes mis-evaluated the trigger: `purge_organization` (since 2026-06-26)
   is a second boundary, and a census shows the two boundaries discharge disjoint obligation
@@ -799,7 +668,12 @@ contradicted by `b29d9a29`.*
   finding or other watch item changed.
 - 2026-09-16 — **The `purge_organization` live-Stripe red flag is retired.** The command and dry
   run refuse before deletion, list current Stripe subscription IDs, and preserve local rows until
-  the operator cancels them. Rank 4 remains open for the broader shared-obligation work.
+  the operator cancels them. Rank 3 remains open for the broader shared-obligation work.
+- 2026-09-16 — **`generated-file-ownership-unmodeled` is retired.** The `orgs` manifest and
+  Railway runtime-role command declare the 0.88 contract boundary, while existing-project
+  `quickscale update`, `quickscale apply`, and `quickscale deploy railway` refuse old or unknown
+  contracts before mutation. The refusal names the owner, minimum, and manual adoption steps; a
+  dedicated acknowledgement resumes one invocation without pretending to update generated files.
 
 *Lenses scanned with no qualifying finding this pass: observability, API/contract stability of
 the CLI surface, performance and scalability, concurrency and state isolation (beyond the lock
