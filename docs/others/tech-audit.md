@@ -129,7 +129,7 @@ All of these were read hunk by hunk, production and test.
 | orgs — `purge_organization` | whole file | Clean for live Stripe-backed subscriptions; the broader teardown tooling gap remains below |
 | Client identity / public auth (`get_client_ip`, blog API auth, notifications webhook) | functions in full | TA78; otherwise clean |
 | Publication tooling (`publish_module.py`, `version_tool.sh`, compat gate) | delta plus `_publish_module`, `_run_release_gates` | TA77 |
-| CI / gates (workflows, testimony, security gates, provisioning, isolation conformance) | delta in full | Clean as defects; one watch item and one tooling gap |
+| CI / gates (workflows, testimony, security gates, provisioning, isolation conformance) | delta in full | Clean as defects; remaining watch items and tooling gaps are listed below |
 
 ---
 
@@ -159,7 +159,6 @@ All of these were read hunk by hunk, production and test.
 *(candidate inputs for the companion `deep-architectural-audit`, not findings here)*
 
 - **Two independent filesystem-lock implementations.** `AdvisoryLock` and the DR backup lock remain separate. Carried forward as a non-defect consolidation watch question.
-- **Conformance gates assert policy presence, not policy content.** `table_has_force_rls` (`tenancy.py:1633`) accepts any table with RLS enabled and forced and at least one policy. Still owned by post-v88 SA177.
 
 ---
 
@@ -167,7 +166,6 @@ All of these were read hunk by hunk, production and test.
 
 | Gap | Would have caught | Recommendation |
 |---|---|---|
-| RLS policy assertions check existence, not predicate text | Structural smell #2 | Assert `pg_policies.qual`/`with_check` against `_FORCE_RLS_FORWARD_SQL` per enrolled table (SA177) |
 | Dependency gate never sees the generated project's runtime dependencies | Future CVEs in `gunicorn`, `whitenoise`, `dj-database-url` (none in root `poetry.lock`) | Add a Trivy pass over the hermetic generated-project lock the E2E lane already produces, or add those pins to a scanned dev group |
 | No exhaustive external-provider conformance check for destructive org teardown | Future provider-ID obligations beyond the shipped Stripe-subscription refusal | For every `_DELETE_SPECS` model that carries an external provider id, verify that purge refuses or reconciles it |
 
@@ -245,5 +243,6 @@ All of these were read hunk by hunk, production and test.
 - 2026-09-15 — **Chain pass (§3.9) ran.** One candidate chain was refuted (TA75 guessed service × DB-free healthcheck; see empirical check 3). TA75 × TA74 share a re-run trigger but compound only into disruption, not exposure. No chain raised a severity.
 - 2026-09-16 — **TA74** `railway-redeploy-rotates-secret-key`: **retired by SA184.** Re-runs now reuse the service's `SECRET_KEY`, generating one only on first deploy; archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-09-16 — **TA75** `railway-runtime-role-vars-fail-open`: **retired by SA184.** Unreadable Railway state and ambiguous PostgreSQL listings now fail the deploy instead of inventing values; archived in [CHANGELOG.md](../../CHANGELOG.md).
+- 2026-09-16 — **RLS predicate-conformance gap retired.** The isolation gate now compares both live policies for every marker-enrolled table with the exact normalized contract and proves a weakened predicate is rejected and restored; archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 *Categories swept with no qualifying finding this pass: injection sinks (role DDL, publication git argv, testimony regex), authorization on the delta's new surfaces, secrets on argv or in logs (beyond the start.sh watch item), multi-tenant isolation in the privileged-command changes, CI secret and escape-hatch propagation, resources and I/O, performance, and the code-generator and IaC archetype lenses.*
