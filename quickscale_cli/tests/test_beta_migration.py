@@ -1,5 +1,6 @@
 """Tests for beta migration maintainer tooling."""
 
+import hashlib
 import io
 import json
 import os
@@ -8,6 +9,14 @@ from pathlib import Path
 
 import pytest
 import quickscale_core.schema as schema_module
+from quickscale_core.advisory_lock import AdvisoryLock
+from quickscale_core.schema.state_schema import (
+    ManagedFileRecord,
+    ModuleState,
+    ProjectState,
+    QuickScaleState,
+    StateManager,
+)
 
 from quickscale_devtools.beta_migration import (
     BetaMigrationInput,
@@ -65,6 +74,7 @@ def _write_project(
 
     dependency_lines = [
         'python = "^3.14"',
+        'python-decouple = "^3.8"',
         'Django = ">=6.0.3,<7.0.0"',
     ]
     dependency_lines.extend(
@@ -84,6 +94,12 @@ def _write_project(
     )
     (root / "pyproject.toml").write_text(pyproject_content)
 
+    for dependency_name in path_dependencies:
+        module_name = dependency_name.removeprefix("quickscale-module-")
+        module_dir = root / "modules" / module_name
+        module_dir.mkdir(parents=True, exist_ok=True)
+        (module_dir / "README.md").write_text(f"{module_name} module\n")
+
     package_dir = root / package
     settings_dir = package_dir / "settings"
     settings_dir.mkdir(parents=True, exist_ok=True)
@@ -97,32 +113,68 @@ def _write_project(
     (package_dir / "sitemaps.py").write_text(f"# {marker}-sitemaps-marker\n")
     (package_dir / "urls_modules.py").write_text(f"# {marker}-urls-modules-marker\n")
     (package_dir / "asgi.py").write_text(
+        f'"""ASGI config for {slug} project."""\n'
         "import os\n"
         f'os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{package}.settings.production")\n'
-        f"# {marker}-asgi-marker {slug}\n"
+        f"# {marker}-asgi-marker\n"
     )
     (package_dir / "wsgi.py").write_text(
+        f'"""WSGI config for {slug} project."""\n'
         "import os\n"
         f'os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{package}.settings.production")\n'
-        f"# {marker}-wsgi-marker {slug}\n"
+        f"# {marker}-wsgi-marker\n"
     )
     (settings_dir / "__init__.py").write_text(f"# {marker}-settings-init-marker\n")
     (settings_dir / "modules.py").write_text(
         f"# {marker}-modules-marker\nMODULE_INSTALLED_APPS = []\nMODULE_MIDDLEWARE = []\nMODULE_SETTINGS = {{}}\n"
     )
     (settings_dir / "base.py").write_text(
-        f'"""{marker}-base-marker {slug}"""\n'
+        f'"""Django base settings for {slug} project. {marker}-base-marker"""\n'
         f'ROOT_URLCONF = "{package}.urls"\n'
         f'CONTEXT_PROCESSOR = "{package}.context_processors.project_settings"\n'
         f'WSGI_APPLICATION = "{package}.wsgi.application"\n'
         f'DATABASE_NAME = "{package}"\n'
         f'LOGGER = "{package}"\n'
+        f'RUNTIME_DB_ROLE = "{package}_app"\n'
     )
     (settings_dir / "local.py").write_text(
-        f'"""{marker}-local-marker {slug}"""\nLOGGER = "{package}"\n'
+        f'"""Local development settings for {slug}. {marker}-local-marker"""\n'
+        f'LOGGER = "{package}"\n'
     )
     (settings_dir / "production.py").write_text(
         f'"""{marker}-production-marker {slug}"""\n'
+        "import dj_database_url\n"
+        "import os\n"
+        "from decouple import config\n"
+        '\n_runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)\n'
+        'database_url = config("DATABASE_URL", default=None)\n'
+        '_privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")\n'
+        '_non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")\n'
+        '_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})\n'
+        '_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})\n'
+        "if _privileged_command and _non_db_command:\n"
+        '    raise ValueError("command modes are mutually exclusive")\n'
+        "if _privileged_command:\n"
+        "    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:\n"
+        '        raise ValueError("unknown privileged command")\n'
+        '    if _runtime_db_url is None or _runtime_db_url != "":\n'
+        '        raise ValueError("privileged command requires blank runtime URL")\n'
+        "    if not database_url:\n"
+        '        raise ValueError("DATABASE_URL is required")\n'
+        "    _db_url = database_url\n"
+        "elif _non_db_command:\n"
+        "    if _non_db_command not in _KNOWN_NON_DB_COMMANDS:\n"
+        '        raise ValueError("unknown non-database command")\n'
+        '    _db_url = database_url or "postgresql://dummy:dummy@localhost/dummy"\n'
+        "elif _runtime_db_url:\n"
+        "    _db_url = _runtime_db_url\n"
+        'elif _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":\n'
+        "    if not database_url:\n"
+        '        raise ValueError("DATABASE_URL is required")\n'
+        "    _db_url = database_url\n"
+        "else:\n"
+        '    raise ValueError("RUNTIME_DATABASE_URL is required")\n'
+        'DATABASES = {"default": dj_database_url.parse(_db_url)}\n'
         f'DEFAULT_FROM_EMAIL = "noreply@{slug}.com"\n'
         f'LOGGER = "{package}"\n'
     )
@@ -134,6 +186,12 @@ def _write_project(
     )
     (root / "railway.json").write_text(
         json.dumps({"marker": f"{marker}-railway-marker"}, indent=2) + "\n"
+    )
+    (root / "start.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate --noinput\n'
+        'QUICKSCALE_PRIVILEGED_COMMAND=createcachetable RUNTIME_DATABASE_URL="" python manage.py createcachetable\n'
+        f"exec gunicorn {package}.wsgi:application\n"
     )
 
     frontend_src = root / "frontend" / "src"
@@ -205,16 +263,49 @@ def _write_project(
         (root / "Dockerfile").write_text(
             "FROM python:3.14-slim-bookworm\n"
             f"ENV DJANGO_SETTINGS_MODULE={package}.settings.production\n"
+            "RUN QUICKSCALE_NON_DB_COMMAND=collectstatic python manage.py collectstatic --noinput\n"
+            "HEALTHCHECK --interval=30s \\\n"
+            '    CMD python -c "print(1)"\n'
+            'CMD ["./start.sh"]\n'
             f"# {marker}-docker-marker {slug}\n"
         )
         (root / "docker-compose.yml").write_text(
             "services:\n"
-            f"  backend:\n    container_name: {slug}_backend\n"
+            f"  backend:\n    image: quickscale-backend:{slug}\n"
+            f"    container_name: {slug}_backend\n"
+            f"    labels:\n      com.quickscale.scope: {slug}\n"
             "    environment:\n"
             f"      - DJANGO_SETTINGS_MODULE={package}.settings.local\n"
             f"      - DATABASE_URL=postgresql://postgres:postgres@db:5432/{package}\n"
+            f"      - RUNTIME_DATABASE_URL=postgresql://{package}_app:{package}_app_password@db:5432/{package}\n"
+            "    command: python manage.py runserver 0.0.0.0:8000\n"
             f"# {marker}-compose-marker\n"
         )
+
+    managed_paths = (
+        f"{package}/settings/modules.py",
+        f"{package}/urls_modules.py",
+    )
+    managed_files = {
+        relative_path: ManagedFileRecord(
+            path=relative_path,
+            hash=hashlib.sha256((root / relative_path).read_bytes()).hexdigest(),
+        )
+        for relative_path in managed_paths
+    }
+    state_manager = StateManager(root)
+    state_manager.save(
+        QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug=slug,
+                package=package,
+                theme="showcase_react",
+            ),
+            managed_files=managed_files,
+        )
+    )
+    state_manager.flush_empty_consolidated_sections()
 
     return root
 
@@ -241,7 +332,7 @@ def _init_clean_git_repo(path: Path) -> None:
         ["git", "add", "."], cwd=path, check=True, capture_output=True, text=True
     )
     subprocess.run(
-        ["git", "commit", "-m", "init"],
+        ["git", "-c", "commit.gpgSign=false", "commit", "-m", "init"],
         cwd=path,
         check=True,
         capture_output=True,
@@ -311,8 +402,6 @@ def _install_in_place_success_stub(
                     )
                 )
 
-            (recipient / ".quickscale").mkdir(exist_ok=True)
-            (recipient / ".quickscale" / "state.yml").write_text("applied: true\n")
             (recipient / "modules" / "forms").mkdir(parents=True, exist_ok=True)
             (recipient / "modules" / "social").mkdir(parents=True, exist_ok=True)
             (recipient / "modules" / "forms" / "README.md").write_text("forms module\n")
@@ -323,6 +412,16 @@ def _install_in_place_success_stub(
             settings_modules_path.write_text(
                 settings_modules_path.read_text() + "FORMS = True\nSOCIAL = True\n"
             )
+            state_manager = StateManager(recipient)
+            state = state_manager.load()
+            assert state is not None
+            for module_name in ("forms", "social"):
+                state.modules[module_name] = ModuleState(
+                    name=module_name,
+                    version="0.1.0",
+                )
+            state_manager.save(state)
+            state_manager.flush_empty_consolidated_sections()
             return subprocess.CompletedProcess(
                 command_tuple,
                 0,
@@ -488,6 +587,31 @@ def test_missing_required_file_blocks_preflight(tmp_path: Path) -> None:
     assert any("frontend/package.json" in blocker for blocker in report.blockers)
 
 
+def test_symlink_aliased_project_roots_block_preflight(tmp_path: Path) -> None:
+    """Filesystem aliases must not let donor and recipient identify the same tree."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="donor-app",
+        package="donor_app",
+        marker="donor",
+    )
+    recipient = tmp_path / "recipient-alias"
+    recipient.symlink_to(donor, target_is_directory=True)
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("non-overlapping directories" in blocker for blocker in report.blockers)
+
+
 def test_fresh_first_plan_loads_identity_and_diffs(tmp_path: Path) -> None:
     """Fresh-first planning should compute identity and module/path diffs."""
     donor = _write_project(
@@ -506,6 +630,7 @@ def test_fresh_first_plan_loads_identity_and_diffs(tmp_path: Path) -> None:
         modules=("auth",),
         path_dependencies=("quickscale-module-auth",),
     )
+    (recipient / "modules" / "blog").mkdir(parents=True)
 
     report = plan_beta_migration(
         BetaMigrationInput(
@@ -522,6 +647,10 @@ def test_fresh_first_plan_loads_identity_and_diffs(tmp_path: Path) -> None:
     assert report.module_diff.donor_only == ["blog"]
     assert report.path_dependency_diff is not None
     assert report.path_dependency_diff.donor_only == ["quickscale-module-blog"]
+    assert report.runtime_provenance is not None
+    assert report.runtime_provenance.settings_production == "donor"
+    assert report.runtime_provenance.start_sh == "recipient"
+    assert report.runtime_provenance.dockerfile == "recipient"
     assert report.changed_files == []
     assert any(
         action.step == "sync-missing-path-dependencies"
@@ -530,6 +659,44 @@ def test_fresh_first_plan_loads_identity_and_diffs(tmp_path: Path) -> None:
     assert any(
         step.step == "perform-fresh-first-file-copy-sequence"
         for step in report.skipped_steps
+    )
+
+
+def test_fresh_first_missing_path_dependency_target_blocks_preflight(
+    tmp_path: Path,
+) -> None:
+    """A dependency declaration cannot be transferred without its recipient module."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="donor-app",
+        package="donor_app",
+        marker="donor",
+        modules=("auth", "blog"),
+        path_dependencies=("quickscale-module-auth", "quickscale-module-blog"),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="recipient-app",
+        package="recipient_app",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "quickscale-module-blog" in blocker and "missing recipient directory" in blocker
+        for blocker in report.blockers
     )
 
 
@@ -563,6 +730,10 @@ def test_in_place_clean_git_worktree_yields_checkpoint_report(tmp_path: Path) ->
     assert report.status == "checkpoint"
     assert report.module_diff is not None
     assert report.module_diff.donor_only == ["social"]
+    assert report.runtime_provenance is not None
+    assert report.runtime_provenance.settings_production == "recipient"
+    assert report.runtime_provenance.start_sh == "donor"
+    assert report.runtime_provenance.dockerfile == "donor"
     assert any(
         check.name == "recipient-clean-git-worktree" and check.status == "passed"
         for check in report.preflight_checks
@@ -571,6 +742,2556 @@ def test_in_place_clean_git_worktree_yields_checkpoint_report(tmp_path: Path) ->
         action.step == "pre-apply-review-checkpoint"
         for action in report.planned_actions
     )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "privileged_allowlist",
+    [
+        'frozenset({"migrate"})',
+        'frozenset({"migrate", "createcachetable", "migrate_billing_to_orgs"})',
+    ],
+)
+def test_runtime_privileged_allowlist_skew_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+    privileged_allowlist: str,
+) -> None:
+    """Production settings must declare exactly the fixed privileged commands."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_path.write_text(
+        settings_path.read_text().replace(
+            'frozenset({"migrate", "createcachetable"})', privileged_allowlist
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any("must contain exactly" in blocker for blocker in report.blockers)
+    assert any(
+        check.name == "runtime-launcher-settings-compatibility"
+        and check.status == "failed"
+        for check in report.preflight_checks
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_runtime_package_skew_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Effective launchers must resolve to the package that will own production settings."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    launcher_package = "beta_site" if mode == "fresh-first" else "fresh_donor"
+    start_script = launcher_root / "start.sh"
+    start_script.write_text(
+        start_script.read_text().replace(
+            f"{launcher_package}.wsgi", "unrelated_package.wsgi"
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any("unrelated_package" in blocker for blocker in report.blockers)
+    assert any(
+        check.name == "runtime-launcher-settings-compatibility"
+        and check.status == "failed"
+        for check in report.preflight_checks
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_dynamic_gunicorn_package_is_not_masked_by_static_import_probe(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Every execution package target must resolve statically and independently."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    launcher_package = "beta_site" if mode == "fresh-first" else "fresh_donor"
+    start_script = launcher_root / "start.sh"
+    start_script.write_text(
+        start_script.read_text().replace(
+            f"exec gunicorn {launcher_package}.wsgi:application",
+            (
+                f'python -c "from {launcher_package}.wsgi import application"\n'
+                'exec gunicorn "${WRONG_PACKAGE}.wsgi:application"'
+            ),
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any(
+        "gunicorn" in blocker and "unresolved" in blocker for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "launcher_lines",
+    [
+        (
+            'runtime_command="${1:-migrate}"\n'
+            'QUICKSCALE_PRIVILEGED_COMMAND="$runtime_command" '
+            'python manage.py "$runtime_command"\n'
+        ),
+        ('QUICKSCALE_PRIVILEGED_COMMAND="migrate"x python manage.py migratex\n'),
+        ("QUICKSCALE_PRIVILEGED_COMMAND=\\\nmigrate python manage.py migrate\n"),
+        (
+            "selector=QUICKSCALE_PRIVILEGED\n"
+            'env "${selector}_COMMAND=unsupported_migration" '
+            'RUNTIME_DATABASE_URL="" python manage.py unsupported_migration\n'
+        ),
+        (
+            'env_name="QUICKSCALE_PRIVILEGED_"COMMAND\n'
+            'env "$env_name=unsupported_migration" RUNTIME_DATABASE_URL="" '
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            'env_name="QUICKSCALE_PRIVILEGED_"COMMAND\n'
+            'python manage.py check && env "$env_name=unsupported_migration" '
+            'RUNTIME_DATABASE_URL="" python manage.py unsupported_migration\n'
+        ),
+        (
+            'env_name="QUICKSCALE_PRIVILEGED_"COMMAND\n'
+            '/usr/bin/env "$env_name=unsupported_migration" '
+            'RUNTIME_DATABASE_URL="" python manage.py unsupported_migration\n'
+        ),
+        (
+            'env "$(printf QUICK)SCALE_PRIVILEGED_COMMAND=custom" '
+            "python manage.py custom\n"
+        ),
+        (
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'export "$selector_name=unsupported_migration"\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "export QUICKSCALE_{PRIVILEGED_,}COMMAND=unsupported_migration\n"
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'declare -x "$selector_name=migrate"\n'
+            "declare -x RUNTIME_DATABASE_URL=\n"
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'IGNORED=1 export "$selector_name=unsupported_migration"\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "persist=export\n"
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            '$persist "$selector_name=unsupported_migration"\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "persist=export\n"
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'true && $persist "$selector_name=unsupported_migration"\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "persist=export\n"
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'false || command $persist "$selector_name=unsupported_migration"\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "persist=export\n"
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'true; IGNORED=1 $persist "$selector_name=unsupported_migration"\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "persist=export\n"
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'printf ok | $persist "$selector_name=unsupported_migration"\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "persist=export\n"
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            '( $persist "$selector_name=unsupported_migration" )\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'sh -c "export ${selector_name}=unsupported_migration '
+            'RUNTIME_DATABASE_URL=; python manage.py unsupported_migration"\n'
+        ),
+        ("bash scripts/privileged.sh\n"),
+        (
+            "persist=export\n"
+            "selector_name=QUICKSCALE_PRIVILEGED_COMMAND\n"
+            'case x in x) $persist "$selector_name=unsupported_migration" '
+            "RUNTIME_DATABASE_URL=;; esac\n"
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "persist=export\n"
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'if true; then $persist "$selector_name=unsupported_migration"; fi\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        (
+            "shopt -s expand_aliases\n"
+            "alias persist=export\n"
+            'selector_name="$(printf QUICKSCALE_PRIVILEGED)_$(printf COMMAND)"\n'
+            'persist "$selector_name=unsupported_migration"\n'
+            "python manage.py unsupported_migration\n"
+        ),
+        ("QUICKSCALE_${MODE}_COMMAND=${CMD} python manage.py ${CMD}\n"),
+        (
+            'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+            'python manage.py "$CMD"\n'
+        ),
+        ("QUICKSCALE_PRIVILEGED_COMMAND=migrate python manage.py migrate\n"),
+        (
+            "QUICKSCALE_PRIVILEGED_COMMAND=migrate "
+            'QUICKSCALE_NON_DB_COMMAND=collectstatic RUNTIME_DATABASE_URL="" '
+            "python manage.py migrate\n"
+        ),
+    ],
+)
+def test_nonstatic_runtime_command_assignment_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+    launcher_lines: str,
+) -> None:
+    """Dynamic or concatenated launcher assignments must not bypass the allowlist."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    launcher_package = "beta_site" if mode == "fresh-first" else "fresh_donor"
+    start_script = launcher_root / "start.sh"
+    gunicorn_line = f"exec gunicorn {launcher_package}.wsgi:application\n"
+    start_script.write_text(
+        start_script.read_text().replace(
+            gunicorn_line,
+            launcher_lines + gunicorn_line,
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any(
+        "QUICKSCALE_PRIVILEGED_COMMAND" in blocker and "static literal" in blocker
+        for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    ("launcher_line", "expected_blocker"),
+    [
+        (
+            'export QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+            "python manage.py migrate\n",
+            "one-shot command environment prefixes",
+        ),
+        (
+            "QUICKSCALE_PRIVILEGED_COMMAND=migrate python manage.py migrate "
+            'RUNTIME_DATABASE_URL="" --noinput\n',
+            "before python manage.py",
+        ),
+        (
+            'env "QUICKSCALE_$(printf PRIVILEGED)_COMMAND=migrate" '
+            'RUNTIME_DATABASE_URL="" python manage.py migrate\n',
+            "static literal",
+        ),
+        (
+            'RUNTIME_DATABASE_URL="" QUICKSCALE_ALLOW_BYPASSRLS=1 '
+            "python manage.py migrate\n",
+            "only supported as a one-shot prefix",
+        ),
+    ],
+)
+def test_runtime_selector_must_be_one_shot_static_command_prefix(
+    tmp_path: Path,
+    mode: str,
+    launcher_line: str,
+    expected_blocker: str,
+) -> None:
+    """Persistent, misordered, or dynamically named selector forms must block."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    with (launcher_root / "start.sh").open("a") as start_script:
+        start_script.write(launcher_line)
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any(expected_blocker in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_static_unrelated_env_name_with_expanded_value_is_allowed(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Value expansion on an unrelated static environment name is compatible."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    with (launcher_root / "start.sh").open("a") as start_script:
+        start_script.write(
+            "count=0\n"
+            "(( count += 1 )) || true\n"
+            'if [[ "$#" -eq 1 && "$1" == "maintenance_check" ]]; then :; fi\n'
+            'env DJANGO_SETTINGS_MODULE="$SETTINGS_MODULE" python manage.py check\n'
+        )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == ("ready" if mode == "fresh-first" else "checkpoint"), (
+        report.blockers
+    )
+    assert report.changed_files == []
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    ("env_line", "expected_blocker"),
+    [
+        (
+            "ENV QUICKSCALE_NON_DB_COMMAND unsupported_migration",
+            "persistent Docker ENV",
+        ),
+        (
+            "ENV QUICKSCALE_NON_DB_COMMAND=unsupported_migration",
+            "persistent Docker ENV",
+        ),
+        (
+            "ENV QUICKSCALE_NON_DB_COMMAND=collectstatic # persisted value text",
+            "persistent Docker ENV",
+        ),
+    ],
+)
+def test_docker_env_runtime_command_forms_block_before_mutation(
+    tmp_path: Path,
+    mode: str,
+    env_line: str,
+    expected_blocker: str,
+) -> None:
+    """Modern, legacy, and unresolved Docker ENV forms must fail closed."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    dockerfile = launcher_root / "Dockerfile"
+    dockerfile.write_text(dockerfile.read_text() + f"\n{env_line}\n")
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any(expected_blocker in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_nonliteral_runtime_allowlist_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Computed production command allowlists must fail closed."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_path.write_text(
+        settings_path.read_text().replace(
+            '_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})',
+            "_KNOWN_PRIVILEGED_COMMANDS = load_commands()",
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any(
+        "_KNOWN_PRIVILEGED_COMMANDS must be a literal collection" in blocker
+        for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        (
+            "\nif ENABLE_EXTRA_COMMANDS:\n"
+            "    _KNOWN_PRIVILEGED_COMMANDS = load_commands()\n"
+        ),
+        "\n_KNOWN_PRIVILEGED_COMMANDS |= load_commands()\n",
+        "\n_KNOWN_PRIVILEGED_COMMANDS.clear()\n",
+        ("\nglobals()['_KNOWN_' + 'PRIVILEGED_COMMANDS'] = frozenset()\n"),
+        (
+            "\nimport sys\n"
+            "sys.modules[__name__]._KNOWN_PRIVILEGED_COMMANDS = frozenset()\n"
+        ),
+        (
+            "\nnamespace = globals\n"
+            "namespace()['_KNOWN_' + 'PRIVILEGED_COMMANDS'] = frozenset()\n"
+        ),
+        (
+            "\nnamespace = globals\n"
+            'namespace()["".join(["_KNOWN_PRIVILEGED", "_COMMANDS"])] = '
+            'frozenset({"createcachetable"})\n'
+        ),
+        "\nallowlist_alias = _KNOWN_PRIVILEGED_COMMANDS\n",
+        (
+            "\nimport sys\n"
+            "sys.modules[__name__].__dict__.update("
+            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+        ),
+        (
+            "\nimport sys\n"
+            "sys.modules.get(__name__).__dict__.update("
+            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+        ),
+        (
+            "\nfrom sys import modules as module_registry\n"
+            "module_registry.get(__name__).__dict__.update("
+            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+        ),
+        (
+            "\nimport sys\n"
+            "module_name = __name__\n"
+            "sys.modules.get(module_name).__dict__.update("
+            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+        ),
+        (
+            "\nimport sys\n"
+            "module_registry = sys.modules\n"
+            "module_lookup = module_registry.get\n"
+            "current_module = module_lookup(__name__)\n"
+            "current_module.__dict__.update("
+            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+        ),
+        (
+            "\nimport sys\n"
+            'module_registry = getattr(sys, "modules")\n'
+            "current_module = module_registry[__name__]\n"
+            'setattr(current_module, "_KNOWN_PRIVILEGED_COMMANDS", frozenset())\n'
+        ),
+        (
+            "\nimport sys\n"
+            'module_registry = getattr(sys, "modules")\n'
+            'module_lookup = getattr(module_registry, "get")\n'
+            "current_module = module_lookup(__name__)\n"
+            "current_module.__dict__.update("
+            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+        ),
+        (
+            "\nimport importlib\n"
+            "module_loader = importlib.import_module\n"
+            "current_module = module_loader(__name__)\n"
+            "current_module.__dict__.update("
+            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+        ),
+        (
+            "\nfrom importlib import import_module as load_module\n"
+            "loader = load_module\n"
+            "current_module = loader(__name__)\n"
+            "current_module._KNOWN_PRIVILEGED_COMMANDS = frozenset()\n"
+        ),
+        (
+            "\nimport importlib\n"
+            'load_module = getattr(importlib, "import_module")\n'
+            "current_module = load_module(__name__)\n"
+            "current_module._KNOWN_PRIVILEGED_COMMANDS = frozenset()\n"
+        ),
+        (
+            "\ndef capture_module_namespace(namespace=locals()):\n"
+            "    return namespace\n"
+            "capture_module_namespace().update("
+            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+        ),
+        (
+            "\nfrom builtins import setattr as mutate\n"
+            "import sys\n"
+            "mutate(sys.modules[__name__], "
+            '"".join(["_KNOWN_PRIVILEGED", "_COMMANDS"]), frozenset())\n'
+        ),
+        (
+            "\nimport builtins\n"
+            "import sys\n"
+            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
+            'mutate = getattr(builtins, "set" + "attr")\n'
+            "mutate(sys.modules[__name__], target_name, frozenset())\n"
+        ),
+        (
+            "\nimport sys\n"
+            "sys.modules[__name__].__setattr__("
+            '"_KNOWN_" + "PRIVILEGED_COMMANDS", frozenset())\n'
+        ),
+        (
+            '\n__builtins__["exec"](\'_KNOWN_PRIVILEGED_COMMANDS = '
+            'frozenset({"migrate"})\')\n'
+        ),
+        (
+            '\n__builtins__.get("exec")(\'_KNOWN_PRIVILEGED_COMMANDS = '
+            'frozenset({"unsupported_migration"})\')\n'
+        ),
+        (
+            "\nb = __builtins__\n"
+            'mutate = b.get("exec")\n'
+            "mutate('_KNOWN_PRIVILEGED_COMMANDS = "
+            'frozenset({"unsupported_migration"})\')\n'
+        ),
+        (
+            "\nimport builtins as b\n"
+            "import sys\n"
+            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
+            'mutate = b.__getattribute__("set" + "attr")\n'
+            "mutate(sys.modules[__name__], target_name, frozenset())\n"
+        ),
+        (
+            "\nimport builtins as b\n"
+            'runner = b.__getattribute__("ex" + "ec")\n'
+            "runner('_KNOWN_PRIVILEGED_COMMANDS = "
+            'frozenset({"unsupported_migration"})\')\n'
+        ),
+        (
+            "\nimport sys\n"
+            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
+            "lookup = object.__getattribute__\n"
+            'mutate = lookup(__import__("builtins"), "set" + "attr")\n'
+            "mutate(sys.modules[__name__], target_name, frozenset())\n"
+        ),
+        (
+            "\nimport sys\n"
+            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
+            'lookup = getattr(object, "__getattribute__")\n'
+            'mutate = lookup(__import__("builtins"), "set" + "attr")\n'
+            "mutate(sys.modules[__name__], target_name, frozenset())\n"
+        ),
+        (
+            "\nclass Mutator:\n"
+            "    def __eq__(self, namespace):\n"
+            "        namespace.update(\n"
+            '            {"_KNOWN_PRIVILEGED_COMMANDS": frozenset({"unsupported_migration"})}\n'
+            "        )\n"
+            "        return False\n"
+            "\nMutator() == globals()\n"
+        ),
+        (
+            "\nimport operator\n"
+            "import sys\n"
+            'module_name = "".join(["built", "ins"])\n'
+            'helper_name = "set" + "attr"\n'
+            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
+            "builtins_module = __import__(module_name)\n"
+            "getter = operator.attrgetter(helper_name)\n"
+            "mutate = getter(builtins_module)\n"
+            "mutate(sys.modules[__name__], target_name, frozenset())\n"
+        ),
+        (
+            "\nimport sys\n"
+            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
+            "namespace = sys._getframe().f_globals\n"
+            "namespace.update(\n"
+            '    {target_name: frozenset({"unsupported_migration"})}\n'
+            ")\n"
+        ),
+        (
+            "\nimport builtins\n"
+            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
+            "builtins.globals()[target_name] = "
+            'frozenset({"unsupported_migration"})\n'
+        ),
+        (
+            "\ndef replace_commands():\n"
+            "    global _KNOWN_PRIVILEGED_COMMANDS\n"
+            "    _KNOWN_PRIVILEGED_COMMANDS = "
+            'frozenset({"unsupported_migration"})\n'
+            "replace_commands()\n"
+        ),
+        (
+            "\ndef widen_commands():\n"
+            "    global _KNOWN_PRIVILEGED_COMMANDS\n"
+            '    _KNOWN_PRIVILEGED_COMMANDS |= {"unsupported_migration"}\n'
+            "widen_commands()\n"
+        ),
+    ],
+)
+def test_runtime_allowlist_reassignment_or_mutation_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+    mutation: str,
+) -> None:
+    """An allowlist must have one immutable literal definition and no mutations."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_path.write_text(settings_path.read_text() + mutation)
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any("_KNOWN_PRIVILEGED_COMMANDS" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_concrete_importlib_current_module_mutation_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """The effective settings module path must count as a current-module lookup."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_path.write_text(
+        settings_path.read_text()
+        + "\nimport importlib\n"
+        + f'current_module = importlib.import_module("{package}.settings.production")\n'
+        + "current_module.__dict__.update("
+        + '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("current-module lookup" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    ("old_bridge", "replacement"),
+    [
+        (
+            "if _privileged_command and _non_db_command:\n"
+            '    raise ValueError("command modes are mutually exclusive")\n',
+            "",
+        ),
+        (
+            "if _privileged_command and _non_db_command:\n"
+            '    raise ValueError("command modes are mutually exclusive")\n',
+            "if False and _privileged_command and _non_db_command:\n"
+            '    raise ValueError("command modes are mutually exclusive")\n',
+        ),
+        (
+            "    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:\n"
+            '        raise ValueError("unknown privileged command")\n',
+            "    if False and _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:\n"
+            '        raise ValueError("unknown privileged command")\n',
+        ),
+        (
+            '    if _runtime_db_url is None or _runtime_db_url != "":\n'
+            '        raise ValueError("privileged command requires blank runtime URL")\n',
+            '    if _runtime_db_url is not None and _runtime_db_url == "":\n'
+            '        raise ValueError("privileged command requires blank runtime URL")\n',
+        ),
+        (
+            '    _db_url = database_url or "postgresql://dummy:dummy@localhost/dummy"\n',
+            '    _db_url = "postgresql://dummy:dummy@localhost/dummy" or database_url\n',
+        ),
+        (
+            "elif _non_db_command:\n"
+            "    if _non_db_command not in _KNOWN_NON_DB_COMMANDS:\n"
+            '        raise ValueError("unknown non-database command")\n'
+            '    _db_url = database_url or "postgresql://dummy:dummy@localhost/dummy"\n'
+            "elif _runtime_db_url:\n"
+            "    _db_url = _runtime_db_url\n",
+            "elif _runtime_db_url:\n"
+            "    _db_url = _runtime_db_url\n"
+            "elif _non_db_command:\n"
+            "    if _non_db_command not in _KNOWN_NON_DB_COMMANDS:\n"
+            '        raise ValueError("unknown non-database command")\n'
+            '    _db_url = database_url or "postgresql://dummy:dummy@localhost/dummy"\n',
+        ),
+        (
+            "elif _runtime_db_url:\n    _db_url = _runtime_db_url\n",
+            "elif _runtime_db_url:\n    _db_url = database_url\n",
+        ),
+        (
+            'elif _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":\n',
+            'elif False and _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":\n',
+        ),
+    ],
+)
+def test_incomplete_runtime_database_bridge_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+    old_bridge: str,
+    replacement: str,
+) -> None:
+    """Incomplete or reordered database-role selection must fail closed."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_text = settings_path.read_text()
+    assert old_bridge in settings_text
+    settings_path.write_text(settings_text.replace(old_bridge, replacement))
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("runtime" in blocker.lower() for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        '\nos.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"\n',
+        ('\nenvironment = os.environ\nenvironment["RUNTIME_DATABASE_URL"] = ""\n'),
+        '\nos.environ.update({"QUICKSCALE_PRIVILEGED_COMMAND": "migrate"})\n',
+        '\nos.putenv("DATABASE_URL", "postgresql://wrong")\n',
+        (
+            "\nfrom os import environ as process_environment\n"
+            'process_environment["DATABASE_URL"] = "postgresql://wrong"\n'
+        ),
+        (
+            "\nfrom os import putenv as mutate_process_environment\n"
+            'mutate_process_environment("DATABASE_URL", "postgresql://wrong")\n'
+        ),
+        (
+            "\ndef mutate_runtime_environment():\n"
+            '    os.environ.pop("QUICKSCALE_NON_DB_COMMAND", None)\n'
+            "mutate_runtime_environment()\n"
+        ),
+        (
+            "\ndef mutate_runtime_environment(environment):\n"
+            '    environment["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"\n'
+            "mutate_runtime_environment(os.environ)\n"
+        ),
+        (
+            '\nenvironment = os.__getattribute__("environ")\n'
+            'environment.__setitem__("DATABASE_URL", "postgresql://wrong")\n'
+        ),
+        (
+            '\nos.environ.__getattribute__("update")('
+            '{"DATABASE_URL": "postgresql://wrong"})\n'
+        ),
+        '\nos.__getattribute__("putenv")("RUNTIME_DATABASE_URL", "")\n',
+        '\nsetattr(os, "environ", {})\n',
+        (
+            "\ndef mutate_runtime_environment(environment=os.environ):\n"
+            '    environment["QUICKSCALE_NON_DB_COMMAND"] = "collectstatic"\n'
+            "mutate_runtime_environment()\n"
+        ),
+        (
+            "\ndef mutate_runtime_environment(wrapper):\n"
+            '    wrapper[0]["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"\n'
+            "mutate_runtime_environment([os.environ])\n"
+        ),
+        (
+            "\ndef mutate_runtime_environment():\n"
+            "    [None for os in ()]\n"
+            '    os.environ["DATABASE_URL"] = "postgresql://wrong"\n'
+            "mutate_runtime_environment()\n"
+        ),
+        (
+            "\ndef mutate_runtime_environment():\n"
+            '    [environment.__setitem__("DATABASE_URL", "postgresql://wrong") '
+            "for environment in [os.environ]]\n"
+            "mutate_runtime_environment()\n"
+        ),
+        (
+            "\nclass RuntimeMutation:\n"
+            '    os.environ["RUNTIME_DATABASE_URL"] = ""\n'
+            "    os = object()\n"
+        ),
+        (
+            "\nclass RuntimeMutation:\n"
+            "    environment = os.environ\n"
+            '    environment["RUNTIME_DATABASE_URL"] = ""\n'
+        ),
+        (
+            "\ndef mutate_runtime_environment():\n"
+            "    environment, = (os.environ,)\n"
+            '    environment["RUNTIME_DATABASE_URL"] = ""\n'
+            "mutate_runtime_environment()\n"
+        ),
+        (
+            "\ndef mutate_runtime_environment():\n"
+            "    dict = lambda environment: environment\n"
+            "    def mutate_from_closure():\n"
+            "        environment = dict(os.environ)\n"
+            '        environment["RUNTIME_DATABASE_URL"] = ""\n'
+            "    mutate_from_closure()\n"
+            "mutate_runtime_environment()\n"
+        ),
+        (
+            "\n[(environment := os.environ) for _ in [0]]\n"
+            'environment["RUNTIME_DATABASE_URL"] = ""\n'
+        ),
+        (
+            "\ndef mutate_runtime_environment():\n"
+            "    [(environment := os.environ) for _ in [0]]\n"
+            '    environment["RUNTIME_DATABASE_URL"] = ""\n'
+            "mutate_runtime_environment()\n"
+        ),
+        ('\n(environment := os.environ)["RUNTIME_DATABASE_URL"] = ""\n'),
+    ],
+)
+def test_runtime_database_environment_mutation_blocks_before_migration(
+    tmp_path: Path,
+    mode: str,
+    mutation: str,
+) -> None:
+    """Settings must not mutate inputs after the validator extracts the bridge."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_path.write_text(settings_path.read_text() + mutation)
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("environment" in blocker.lower() for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        '\nDATABASES |= {"default": dj_database_url.parse(database_url)}\n',
+        "\ndel DATABASES\n",
+        "\ndatabase_alias = DATABASES\ndatabase_alias.clear()\n",
+        '\nDATABASES["default"] = dj_database_url.parse(database_url)\n',
+        '\nDATABASES = {"default": dj_database_url.parse(database_url)}\n',
+        (
+            "\ndef replace_databases():\n"
+            "    global DATABASES\n"
+            '    DATABASES = {"default": dj_database_url.parse(database_url)}\n'
+            "replace_databases()\n"
+        ),
+        (
+            "\ndef mutate_databases():\n"
+            "    database_alias = DATABASES\n"
+            "    database_alias.clear()\n"
+            "mutate_databases()\n"
+        ),
+        (
+            "\nclass MutateDatabases:\n"
+            '    DATABASES |= {"default": dj_database_url.parse(database_url)}\n'
+        ),
+        '\n[(DATABASES := {"overwritten": True}) for _ in [0]]\n',
+    ],
+)
+def test_runtime_databases_reassignment_or_mutation_blocks_before_migration(
+    tmp_path: Path,
+    mode: str,
+    mutation: str,
+) -> None:
+    """The canonical DATABASES bridge must remain the sole immutable binding."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_path.write_text(settings_path.read_text() + mutation)
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("DATABASES" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "binding_source",
+    [
+        '    _db_url = "postgresql://other.invalid/other"\n',
+        "    import sys as _db_url\n",
+    ],
+)
+def test_nested_global_selected_database_url_write_blocks_before_migration(
+    tmp_path: Path,
+    mode: str,
+    binding_source: str,
+) -> None:
+    """Nested global writes must not retarget the selected database URL."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    database_assignment = 'DATABASES = {"default": dj_database_url.parse(_db_url)}\n'
+    settings_text = settings_path.read_text()
+    assert database_assignment in settings_text
+    settings_path.write_text(
+        settings_text.replace(
+            database_assignment,
+            "def retarget_selected_url():\n"
+            "    global _db_url\n"
+            + binding_source
+            + "retarget_selected_url()\n"
+            + database_assignment,
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "selected runtime database URL" in blocker for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_unrelated_custom_production_settings_are_allowed(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Donor-owned integrations must not be rejected by allowlist extraction."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_path.write_text(
+        settings_path.read_text()
+        + "\nimport builtins\n"
+        + "import sys\n"
+        + "import sentry_sdk\n"
+        + "from os import environ as process_environment\n"
+        + "from os import putenv as mutate_process_environment\n"
+        + "from sentry_sdk.integrations.django import DjangoIntegration\n"
+        + "def custom_option(frozenset):\n"
+        + '    return getattr(frozenset, "value", None)\n'
+        + 'SENTRY_DSN = "https://public@example.invalid/1"\n'
+        + 'CUSTOM_VALUE = getattr(object(), "missing", None)\n'
+        + 'CUSTOM_BUILTIN_VALUE = builtins.getattr(object(), "missing", None)\n'
+        + 'SENTRY_MODULE = sys.modules.get("sentry_sdk")\n'
+        + "def build_request_context(request):\n"
+        + '    config = {"enabled": True}\n'
+        + '    os = "local-only"\n'
+        + '    dj_database_url = "local-only"\n'
+        + '    _KNOWN_PRIVILEGED_COMMANDS = {"local-only"}\n'
+        + "    context = dict(locals())\n"
+        + "    context.update(vars())\n"
+        + "    context.update(builtins.locals())\n"
+        + "    return context\n"
+        + "class CustomEnvironment:\n"
+        + "    def __init__(self):\n"
+        + "        self.environ = {}\n"
+        + "def annotate_local_environment():\n"
+        + "    os = CustomEnvironment()\n"
+        + '    os.environ["DATABASE_URL"] = "display-only"\n'
+        + "    return os.environ\n"
+        + "LOCAL_ENVIRONMENT = annotate_local_environment()\n"
+        + "class LocalClassEnvironment:\n"
+        + "    os = CustomEnvironment()\n"
+        + '    os.environ["DATABASE_URL"] = "display-only"\n'
+        + "def build_local_mapping():\n"
+        + "    process_environment = {}\n"
+        + '    process_environment["DATABASE_URL"] = "display-only"\n'
+        + "    return process_environment\n"
+        + "LOCAL_MAPPING = build_local_mapping()\n"
+        + "def build_local_databases():\n"
+        + '    [(DATABASES := {"local": True}) for _ in [0]]\n'
+        + "    return DATABASES\n"
+        + "LOCAL_DATABASES = build_local_databases()\n"
+        + "def build_local_frozenset():\n"
+        + "    [(frozenset := lambda values: set(values)) for _ in [0]]\n"
+        + "    return frozenset\n"
+        + "LOCAL_FROZENSET = build_local_frozenset()\n"
+        + "def record_local_mutation():\n"
+        + "    mutate_process_environment = lambda *_args: None\n"
+        + '    mutate_process_environment("DATABASE_URL", "display-only")\n'
+        + "record_local_mutation()\n"
+        + 'os.environ.setdefault("SENTRY_ENVIRONMENT", "production")\n'
+        + "environment = os.environ\n"
+        + 'environment.update({"CUSTOM_INTEGRATION_MODE": "enabled"})\n'
+        + "ENVIRONMENT_SNAPSHOT = dict(os.environ)\n"
+        + "CHILD_ENVIRONMENT = os.environ.copy()\n"
+        + "def annotate_custom_mapping(environment):\n"
+        + '    environment["DATABASE_URL"] = "display-only"\n'
+        + "    return environment\n"
+        + "CUSTOM_MAPPING = annotate_custom_mapping({})\n"
+        + "if SENTRY_DSN:\n"
+        + "    sentry_sdk.init(dsn=SENTRY_DSN, integrations=[DjangoIntegration()])\n"
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == ("ready" if mode == "fresh-first" else "checkpoint")
+    assert report.changed_files == []
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_dockerfile_package_skew_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Dockerfile production settings references must target the effective package."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    launcher_package = "beta_site" if mode == "fresh-first" else "fresh_donor"
+    dockerfile = launcher_root / "Dockerfile"
+    dockerfile.write_text(
+        dockerfile.read_text().replace(
+            f"{launcher_package}.settings.production",
+            "unrelated_package.settings.production",
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any("unrelated_package" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_dockerfile_requires_effective_final_stage_production_settings(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """A package token outside final-stage ENV must not satisfy runtime settings."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    launcher_package = "beta_site" if mode == "fresh-first" else "fresh_donor"
+    dockerfile = launcher_root / "Dockerfile"
+    dockerfile.write_text(
+        dockerfile.read_text().replace(
+            f"ENV DJANGO_SETTINGS_MODULE={launcher_package}.settings.production",
+            f'LABEL note="{launcher_package}.settings.production"',
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("final stage must define ENV" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "shadow_source",
+    [
+        "frozenset = lambda values: set()\n",
+        "[(frozenset := lambda values: set()) for _ in [0]]\n",
+        (
+            "def poison_default(\n"
+            "    default=[(frozenset := lambda values: set()) for _ in [0]],\n"
+            "):\n"
+            "    return default\n"
+        ),
+        "import builtins\nbuiltins.frozenset = lambda values: set()\n",
+        (
+            "import builtins\n"
+            'builtins.__setattr__("frozen" + "set", lambda values=(): set())\n'
+        ),
+    ],
+)
+def test_shadowed_frozenset_blocks_runtime_allowlist_preflight(
+    tmp_path: Path,
+    mode: str,
+    shadow_source: str,
+) -> None:
+    """Static extraction must not trust a shadowed immutable constructor name."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_root = donor if mode == "fresh-first" else recipient
+    package = "fresh_donor" if mode == "fresh-first" else "beta_site"
+    settings_path = settings_root / package / "settings" / "production.py"
+    settings_path.write_text(shadow_source + settings_path.read_text())
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "frozenset" in blocker or "__setattr__" in blocker
+        for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_dockerfile_runtime_entrypoint_skew_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Effective Dockerfiles must retain one canonical start.sh runtime command."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    with (launcher_root / "Dockerfile").open("a") as dockerfile:
+        dockerfile.write('CMD ["gunicorn", "unrelated_package.wsgi:application"]\n')
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any("canonical Docker runtime" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_required_migrate_invocation_cannot_disappear(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """The effective launcher must keep every required generated command mode."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    start_script = launcher_root / "start.sh"
+    start_script.write_text(
+        start_script.read_text().replace(
+            'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+            "python manage.py migrate --noinput\n",
+            "",
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "required QUICKSCALE_PRIVILEGED_COMMAND=migrate" in blocker
+        for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_required_command_after_final_exec_is_not_counted_as_reachable(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """A valid command in the shell's dead suffix cannot satisfy compatibility."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    start_script = launcher_root / "start.sh"
+    migrate_line = (
+        'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+        "python manage.py migrate --noinput\n"
+    )
+    start_text = start_script.read_text()
+    assert migrate_line in start_text
+    start_script.write_text(start_text.replace(migrate_line, "") + migrate_line)
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "QUICKSCALE_PRIVILEGED_COMMAND=migrate" in blocker
+        and "unconditionally executable" in blocker
+        for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_required_migrate_invocation_must_be_unconditional(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """A conditional branch cannot satisfy the required startup migration."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    start_script = launcher_root / "start.sh"
+    migrate_line = (
+        'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+        "python manage.py migrate --noinput\n"
+    )
+    start_text = start_script.read_text()
+    assert migrate_line in start_text
+    start_script.write_text(
+        start_text.replace(
+            migrate_line,
+            f"if [[ 1 == 0 ]]; then\n  {migrate_line}fi\n",
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "must be unconditionally executable" in blocker for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_compound_exit_before_required_migrate_blocks(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Compound top-level exits must not hide an unreachable migration."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    start_script = launcher_root / "start.sh"
+    migrate_line = (
+        'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+        "python manage.py migrate --noinput\n"
+    )
+    start_text = start_script.read_text()
+    assert migrate_line in start_text
+    start_script.write_text(
+        start_text.replace(migrate_line, "true && exit\n" + migrate_line)
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("compound top-level exit/exec" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_errexit_failure_before_required_migrate_blocks(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """A guaranteed failure under active errexit cannot precede migration."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    start_script = launcher_root / "start.sh"
+    migrate_line = (
+        'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+        "python manage.py migrate --noinput\n"
+    )
+    start_text = start_script.read_text()
+    assert migrate_line in start_text
+    start_script.write_text(
+        start_text.replace(migrate_line, "set -e\nfalse\n" + migrate_line)
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "top-level false under active set -e" in blocker for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_required_startup_command_cannot_move_to_docker_build(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """A privileged Docker RUN cannot replace the required startup migration."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    start_script = launcher_root / "start.sh"
+    migrate_line = (
+        'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+        "python manage.py migrate --noinput\n"
+    )
+    start_text = start_script.read_text()
+    assert migrate_line in start_text
+    start_script.write_text(start_text.replace(migrate_line, ""))
+    dockerfile = launcher_root / "Dockerfile"
+    dockerfile.write_text(
+        dockerfile.read_text().replace(
+            'CMD ["./start.sh"]\n',
+            "RUN QUICKSCALE_PRIVILEGED_COMMAND=migrate "
+            'RUNTIME_DATABASE_URL="" python manage.py migrate --noinput\n'
+            'CMD ["./start.sh"]\n',
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "only supported in start.sh" in blocker
+        or "missing from the effective start.sh" in blocker
+        for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_dead_launcher_package_references_do_not_create_runtime_skew(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Package references after final exec are validated text, not runtime targets."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    with (launcher_root / "start.sh").open("a") as start_script:
+        start_script.write("echo unrelated_package.wsgi:application\n")
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == ("ready" if mode == "fresh-first" else "checkpoint")
+    assert report.changed_files == []
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_required_manage_command_without_selector_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """A required management command cannot run without its one-shot selector."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    start_script = launcher_root / "start.sh"
+    start_script.write_text(
+        start_script.read_text().replace(
+            'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
+            "python manage.py migrate --noinput",
+            "python manage.py migrate --noinput",
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("required one-shot" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_later_unguarded_manage_command_on_same_line_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """Every management-command invocation on a launcher line must be classified."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    with (launcher_root / "start.sh").open("a") as start_script:
+        start_script.write("python manage.py check && python manage.py migrate\n")
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("python manage.py migrate" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "launcher_lines",
+    [
+        (
+            'python -c "import subprocess; '
+            "subprocess.run(['python', 'manage.py', 'migrate'])\"\n"
+        ),
+        (
+            "python - <<'PY'\n"
+            "import subprocess\n"
+            'subprocess.run(["python", "manage.py", "migrate"])\n'
+            "PY\n"
+        ),
+        (
+            'python manage.py shell -c "import os; '
+            "os.system('python manage.py migrate')\"\n"
+        ),
+        "python ./scripts/runtime_wrapper.py\n",
+        "python manage.py shell < /tmp/runtime_payload.py\n",
+    ],
+)
+def test_indirect_python_launcher_execution_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+    launcher_lines: str,
+) -> None:
+    """Executable Python payloads must not hide an unmarked manage.py process."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    launcher_package = "beta_site" if mode == "fresh-first" else "fresh_donor"
+    start_script = launcher_root / "start.sh"
+    gunicorn_line = f"exec gunicorn {launcher_package}.wsgi:application\n"
+    start_script.write_text(
+        start_script.read_text().replace(
+            gunicorn_line,
+            launcher_lines + gunicorn_line,
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any(
+        "static" in blocker.lower() or "payload" in blocker.lower()
+        for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+@pytest.mark.parametrize(
+    "docker_run",
+    [
+        (
+            "RUN python -c \"import subprocess; subprocess.run(['python', "
+            "'manage' + '.py', 'migrate'])\"\n"
+        ),
+        (
+            'RUN python -c "import os; raise SystemExit('
+            "os.system('python manage' + '.py migrate'))\"\n"
+        ),
+        ("RUN echo `python -c 'import os; os.system(\"python manage.py migrate\")'`\n"),
+    ],
+)
+def test_indirect_docker_python_execution_blocks_before_mutation(
+    tmp_path: Path,
+    mode: str,
+    docker_run: str,
+) -> None:
+    """Docker build instructions must not hide an unmarked manage.py process."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    dockerfile = launcher_root / "Dockerfile"
+    dockerfile.write_text(
+        dockerfile.read_text().replace(
+            'CMD ["./start.sh"]\n', docker_run + 'CMD ["./start.sh"]\n'
+        )
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any("static" in blocker.lower() for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_python_package_identity_preserves_launcher_executables(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    """A valid package named python must not rewrite the Python executable."""
+    if mode == "fresh-first":
+        donor = _write_project(
+            tmp_path / "donor",
+            slug="target-site",
+            package="target_site",
+            marker="donor",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="python",
+            package="python",
+            marker="recipient",
+        )
+        _install_verification_success_stub(monkeypatch)
+    else:
+        donor = _write_project(
+            tmp_path / "donor",
+            slug="python",
+            package="python",
+            marker="donor",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="target-site",
+            package="target_site",
+            marker="recipient",
+        )
+        _init_clean_git_repo(recipient)
+        _install_in_place_success_stub(
+            monkeypatch,
+            recipient=recipient,
+            package="target_site",
+        )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=mode == "in-place",
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    start_text = (recipient / "start.sh").read_text()
+    assert "python manage.py migrate" in start_text
+    assert "python manage.py createcachetable" in start_text
+    assert "target_site.wsgi:application" in start_text
+    pyproject_text = (recipient / "pyproject.toml").read_text()
+    assert 'python = "^3.14"' in pyproject_text
+    assert 'python-decouple = "^3.8"' in pyproject_text
+    compose_text = (recipient / "docker-compose.yml").read_text()
+    assert "command: python manage.py runserver" in compose_text
+    assert "command: target-site manage.py runserver" not in compose_text
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_overlapping_identity_substitution_is_non_cascading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    """A source slug inside its package must not rewrite replacement output."""
+    if mode == "fresh-first":
+        donor = _write_project(
+            tmp_path / "donor",
+            slug="beta-site",
+            package="beta_site_v2",
+            marker="donor",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="beta",
+            package="beta_site",
+            marker="recipient",
+        )
+        _install_verification_success_stub(monkeypatch)
+    else:
+        donor = _write_project(
+            tmp_path / "donor",
+            slug="beta",
+            package="beta_site",
+            marker="donor",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="beta-site",
+            package="beta_site_v2",
+            marker="recipient",
+        )
+        _init_clean_git_repo(recipient)
+        _install_in_place_success_stub(
+            monkeypatch,
+            recipient=recipient,
+            package="beta_site_v2",
+        )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=mode == "in-place",
+        )
+    )
+
+    assert report.status == "ready"
+    start_script = (recipient / "start.sh").read_text()
+    dockerfile = (recipient / "Dockerfile").read_text()
+    assert "beta_site_v2.wsgi" in start_script
+    assert "beta_site_v2.settings.production" in dockerfile
+    assert "beta-site_site_v2" not in start_script + dockerfile
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_equal_source_slug_and_package_use_path_specific_identity_semantics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    """A one-word source identity must map slug and package contexts separately."""
+    if mode == "fresh-first":
+        donor = _write_project(
+            tmp_path / "donor",
+            slug="beta-site",
+            package="beta_site_v2",
+            marker="donor",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="test80",
+            package="test80",
+            marker="recipient",
+        )
+        _install_verification_success_stub(monkeypatch)
+    else:
+        donor = _write_project(
+            tmp_path / "donor",
+            slug="test80",
+            package="test80",
+            marker="donor",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="beta-site",
+            package="beta_site_v2",
+            marker="recipient",
+        )
+        _init_clean_git_repo(recipient)
+        _install_in_place_success_stub(
+            monkeypatch,
+            recipient=recipient,
+            package="beta_site_v2",
+        )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=mode == "in-place",
+        )
+    )
+
+    assert report.status == "ready"
+    project_text = (recipient / "quickscale.yml").read_text()
+    assert "slug: beta-site" in project_text
+    assert "package: beta_site_v2" in project_text
+    start_script = (recipient / "start.sh").read_text()
+    dockerfile = (recipient / "Dockerfile").read_text()
+    compose = (recipient / "docker-compose.yml").read_text()
+    hook = (recipient / "frontend" / "src" / "hooks" / "useModules.ts").read_text()
+    assert "beta_site_v2.wsgi" in start_script
+    assert "beta_site_v2.settings.production" in dockerfile
+    assert "beta-site_backend" in compose
+    assert "quickscale-backend:beta-site" in compose
+    assert "com.quickscale.scope: beta-site" in compose
+    assert "5432/beta_site_v2" in compose
+    assert "beta_site_v2_app:beta_site_v2_app_password" in compose
+    assert "projectName: 'beta-site'" in hook
+    if mode == "fresh-first":
+        pyproject = (recipient / "pyproject.toml").read_text()
+        assert 'name = "beta-site"' in pyproject
+        assert 'packages = [{include = "beta_site_v2"}]' in pyproject
+        assert 'DJANGO_SETTINGS_MODULE = "beta_site_v2.settings.local"' in pyproject
+        package_root = recipient / "beta_site_v2"
+        assert (
+            "ASGI config for beta-site project"
+            in (package_root / "asgi.py").read_text()
+        )
+        assert (
+            "beta_site_v2.settings.production" in (package_root / "asgi.py").read_text()
+        )
+        base_text = (package_root / "settings" / "base.py").read_text()
+        assert "Django base settings for beta-site project" in base_text
+        assert 'RUNTIME_DB_ROLE = "beta_site_v2_app"' in base_text
+        local_text = (package_root / "settings" / "local.py").read_text()
+        assert "Local development settings for beta-site" in local_text
+        assert 'LOGGER = "beta_site_v2"' in local_text
+
+
+def test_fresh_first_identity_fields_disambiguate_package_derived_slug_overlap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Structural fields distinguish a slug that equals a package-derived value."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="target-site",
+        package="target_pkg",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="acme-frontend",
+        package="acme",
+        marker="recipient",
+    )
+    calls = _install_verification_success_stub(monkeypatch)
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    assert calls
+    assert not (recipient / "acme").exists()
+    assert (recipient / "target_pkg").is_dir()
+    assert 'name = "target-site"' in (recipient / "pyproject.toml").read_text()
+    assert (
+        '"name": "target_pkg-frontend"'
+        in (recipient / "frontend" / "package.json").read_text()
+    )
+    compose_text = (recipient / "docker-compose.yml").read_text()
+    assert "quickscale-backend:target-site" in compose_text
+    assert "target_pkg_app:target_pkg_app_password" in compose_text
+
+
+def test_malformed_authoritative_state_blocks_identity_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed authoritative state file must block before identity writes."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="target-site",
+        package="target_pkg",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="fresh-temp",
+        package="fresh_temp",
+        marker="recipient",
+    )
+    state_path = recipient / ".quickscale" / "state.yml"
+    state_path.write_text("project: [not-a-mapping\n")
+    calls = _install_verification_success_stub(monkeypatch)
+    config_before = (recipient / "quickscale.yml").read_bytes()
+    state_before = state_path.read_bytes()
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert (recipient / "quickscale.yml").read_bytes() == config_before
+    assert state_path.read_bytes() == state_before
+    assert (recipient / "fresh_temp").is_dir()
+    assert not (recipient / "target_pkg").exists()
+    assert any("state" in blocker.lower() for blocker in report.blockers)
+
+
+def test_mismatched_authoritative_state_blocks_identity_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Well-formed state for another identity must block before identity writes."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="target-site",
+        package="target_pkg",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="fresh-temp",
+        package="fresh_temp",
+        marker="recipient",
+    )
+    state_manager = StateManager(recipient)
+    state = state_manager.load()
+    assert state is not None
+    state.project.slug = "stale-site"
+    state.project.package = "stale_site"
+    state_manager.save(state)
+    calls = _install_verification_success_stub(monkeypatch)
+    config_before = (recipient / "quickscale.yml").read_bytes()
+    state_before = state_manager.state_file.read_bytes()
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert (recipient / "quickscale.yml").read_bytes() == config_before
+    assert state_manager.state_file.read_bytes() == state_before
+    assert (recipient / "fresh_temp").is_dir()
+    assert not (recipient / "target_pkg").exists()
+    assert any(
+        "does not match the recipient identity" in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_matching_project_identity_still_validates_authoritative_state(
+    tmp_path: Path,
+) -> None:
+    """Stale state must block even when donor and recipient identities already match."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="shared-site",
+        package="shared_site",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="shared-site",
+        package="shared_site",
+        marker="recipient",
+    )
+    state_manager = StateManager(recipient)
+    state = state_manager.load()
+    assert state is not None
+    state.project.slug = "stale-site"
+    state.project.package = "stale_site"
+    state_manager.save(state)
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "does not match the recipient identity" in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_identity_reconciliation_respects_authoritative_state_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A held state lock must stop fresh-first reconciliation before mutation."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="target-site",
+        package="target_pkg",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="fresh-temp",
+        package="fresh_temp",
+        marker="recipient",
+    )
+    calls = _install_verification_success_stub(monkeypatch)
+    config_before = (recipient / "quickscale.yml").read_bytes()
+    state_path = recipient / ".quickscale" / "state.yml"
+    state_before = state_path.read_bytes()
+    lock = AdvisoryLock(recipient, operation="test-contention")
+
+    with lock:
+        report = run_beta_migration(
+            BetaMigrationInput(
+                mode="fresh-first",
+                donor=donor,
+                recipient=recipient,
+                dry_run=False,
+            )
+        )
+        assert lock.lock_path.is_file()
+
+    assert report.status == "blocked"
+    assert report.phase == "fresh-first-partial"
+    assert report.changed_files == []
+    assert calls == []
+    assert (recipient / "quickscale.yml").read_bytes() == config_before
+    assert state_path.read_bytes() == state_before
+    assert (recipient / "fresh_temp").is_dir()
+    assert not (recipient / "target_pkg").exists()
+    assert not lock.lock_path.exists()
+    assert any("Advisory lock" in blocker for blocker in report.blockers)
+
+
+def test_identity_reconciliation_records_package_rename_before_later_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A post-rename write failure must retain both sides of the rename in recovery data."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="target-site",
+        package="target_pkg",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="fresh-temp",
+        package="fresh_temp",
+        marker="recipient",
+    )
+    source_package = recipient / "fresh_temp"
+    target_package = recipient / "target_pkg"
+    failing_path = target_package / "asgi.py"
+    original_write_text = Path.write_text
+
+    def fail_after_package_rename(
+        path: Path, data: str, *args: object, **kwargs: object
+    ) -> int:
+        if path == failing_path:
+            raise OSError("forced post-rename write failure")
+        return original_write_text(path, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_after_package_rename)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.phase == "fresh-first-partial"
+    assert not source_package.exists()
+    assert target_package.is_dir()
+    assert str(source_package) in report.changed_files
+    assert str(target_package) in report.changed_files
+    assert any(
+        "forced post-rename write failure" in blocker for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "missing_role"),
+    [("fresh-first", "recipient"), ("in-place", "donor")],
+)
+def test_missing_effective_start_script_blocks_preflight(
+    tmp_path: Path,
+    mode: str,
+    missing_role: str,
+) -> None:
+    """A missing effective start.sh must block instead of being silently skipped."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    missing_root = donor if missing_role == "donor" else recipient
+    (missing_root / "start.sh").unlink()
+
+    report = plan_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any("start.sh" in blocker for blocker in report.blockers)
 
 
 def test_run_in_place_without_continuation_keeps_checkpoint_default(
@@ -718,12 +3439,6 @@ def test_run_in_place_with_continuation_executes_apply_and_verification(
     ).write_text("export default 'recipient-existing-social';\n")
     (donor / "frontend" / "src" / "hooks" / "usePublicSocialSurface.ts").write_text(
         "export const marker = 'donor-public-social-hook'\n"
-    )
-
-    # Create donor start.sh with donor's package reference for SA66
-    # identity-substitution regression coverage
-    (donor / "start.sh").write_text(
-        "#!/usr/bin/env bash\nexec gunicorn fresh_donor.wsgi:application\n"
     )
 
     _init_clean_git_repo(recipient)
@@ -887,6 +3602,53 @@ def test_run_in_place_with_continuation_executes_apply_and_verification(
     )
 
 
+def test_in_place_continuation_adopts_missing_surface_for_shared_module(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A legacy recipient can lack a managed surface for an already-shared module."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("forms",),
+        path_dependencies=("quickscale-module-forms",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("forms",),
+        path_dependencies=("quickscale-module-forms",),
+    )
+    donor_surface = donor / "frontend" / "src" / "pages" / "FormsPage.tsx"
+    donor_surface.write_text("export default 'donor-shared-forms';\n")
+    recipient_surface = recipient / "frontend" / "src" / "pages" / "FormsPage.tsx"
+    assert not recipient_surface.exists()
+    _init_clean_git_repo(recipient)
+    _install_in_place_success_stub(
+        monkeypatch,
+        recipient=recipient,
+        package="beta_site",
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="in-place",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=True,
+        )
+    )
+
+    assert report.status == "ready"
+    assert "donor-shared-forms" in recipient_surface.read_text()
+    assert any(str(recipient_surface) == path for path in report.changed_files)
+
+
 def test_run_fresh_first_different_slug_executes_verification_and_preserves_boundaries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -912,6 +3674,7 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
         modules=("auth", "blog"),
         path_dependencies=("quickscale-module-auth", "quickscale-module-blog"),
     )
+    (recipient / "modules" / "social").mkdir(parents=True)
 
     donor_package_dir = donor / "experto_ai_web"
     recipient_package_dir = recipient / "fresh_temp"
@@ -957,12 +3720,6 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
     )
     (donor_package_dir / "middleware.py").write_text("# donor-middleware-marker\n")
     (donor_package_dir / "sitemaps.py").write_text("# donor-sitemaps-marker\n")
-    (donor_package_dir / "settings" / "production.py").write_text(
-        '"""donor-production-marker experto-ai-web"""\n'
-        'DEFAULT_FROM_EMAIL = "noreply@experto-ai-web.com"\n'
-        'LOGGER = "experto_ai_web"\n'
-    )
-
     env_calls: list[tuple[tuple[str, ...], dict[str, str] | None]] = []
     ambient_venv = tmp_path / "ambient-venv"
     ambient_venv_bin = str(ambient_venv / "bin")
@@ -1020,6 +3777,14 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
     quickscale_text = (recipient / "quickscale.yml").read_text()
     assert "slug: experto-ai-web" in quickscale_text
     assert "package: experto_ai_web" in quickscale_text
+    reconciled_state = StateManager(recipient).load()
+    assert reconciled_state is not None
+    assert reconciled_state.project.slug == "experto-ai-web"
+    assert reconciled_state.project.package == "experto_ai_web"
+    assert set(reconciled_state.managed_files) == {
+        "experto_ai_web/settings/modules.py",
+        "experto_ai_web/urls_modules.py",
+    }
 
     pyproject_text = (recipient / "pyproject.toml").read_text()
     assert 'name = "experto-ai-web"' in pyproject_text
@@ -1053,6 +3818,10 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
     hook_text = (recipient / "frontend" / "src" / "hooks" / "useModules.ts").read_text()
     assert "projectName: 'experto-ai-web'" in hook_text
     assert "recipient-hook-marker" in hook_text
+
+    start_sh_text = (recipient / "start.sh").read_text()
+    assert "experto_ai_web.wsgi" in start_sh_text
+    assert "fresh_temp.wsgi" not in start_sh_text
 
     base_text = (new_package_dir / "settings" / "base.py").read_text()
     assert "recipient-base-marker" in base_text
@@ -1120,6 +3889,7 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
         for action in report.pending_manual_actions
     )
     assert any(path.endswith("quickscale.yml") for path in report.changed_files)
+    assert any(path.endswith(".quickscale/state.yml") for path in report.changed_files)
     assert any(path.endswith("frontend/src/App.tsx") for path in report.changed_files)
 
 
@@ -1144,6 +3914,7 @@ def test_run_fresh_first_same_slug_skips_identity_reconciliation_and_copies_only
         modules=("auth",),
         path_dependencies=("quickscale-module-auth",),
     )
+    (recipient / "modules" / "social").mkdir(parents=True)
 
     package_dir = recipient / "bap_web"
     donor_package_dir = donor / "bap_web"
@@ -1175,12 +3946,6 @@ def test_run_fresh_first_same_slug_skips_identity_reconciliation_and_copies_only
     (donor_package_dir / "context_processors.py").write_text(
         "# donor-context-processors-marker\n"
     )
-    (donor_package_dir / "settings" / "production.py").write_text(
-        '"""donor-production-marker bap-web"""\n'
-        'DEFAULT_FROM_EMAIL = "noreply@bap-web.com"\n'
-        'LOGGER = "bap_web"\n'
-    )
-
     calls = _install_verification_success_stub(monkeypatch)
     report = run_beta_migration(
         BetaMigrationInput(
@@ -1296,6 +4061,7 @@ def test_run_beta_migration_cli_writes_report_and_stdout_json(tmp_path: Path) ->
         modules=("auth",),
         path_dependencies=("quickscale-module-auth",),
     )
+    (recipient / "modules" / "blog").mkdir(parents=True)
     report_path = tmp_path / "artifacts" / "beta-report.json"
     stdout = io.StringIO()
 
@@ -1316,8 +4082,15 @@ def test_run_beta_migration_cli_writes_report_and_stdout_json(tmp_path: Path) ->
     output = stdout.getvalue()
     summary, json_payload = output.strip().split("\n\n", maxsplit=1)
     assert "Beta migration summary" in summary
+    assert "Runtime provenance:" in summary
     parsed_stdout_json = json.loads(json_payload)
+    assert parsed_stdout_json["report_version"] == "1"
     assert parsed_stdout_json["mode"] == "fresh-first"
+    assert parsed_stdout_json["runtime_provenance"] == {
+        "settings_production": "donor",
+        "start_sh": "recipient",
+        "dockerfile": "recipient",
+    }
     assert report_path.exists()
     parsed_file_json = json.loads(report_path.read_text())
     assert parsed_file_json["written_report_path"] == str(report_path.resolve())
@@ -1605,16 +4378,10 @@ def test_replace_toml_section_preserves_sibling_array_of_tables(
     assert "[tool.poetry.group.dev.dependencies]" in updated
 
 
-def test_insert_missing_path_dependencies_inserts_after_array_of_tables(
+def test_insert_missing_path_dependencies_inserts_before_array_of_tables(
     tmp_path: Path,
 ) -> None:
-    """The new dependency is appended to the body, after any [[...]] content.
-
-    The boundary detection treats [[...]] headers as part of the body, so
-    insertion lands at the end of the body, which is after the [[...]] block.
-    The [[...]] declaration itself is still present because insertion only
-    adds lines; it does not replace existing content.
-    """
+    """Parent-table keys must be inserted before a child array-of-tables header."""
     target = tmp_path / "pyproject.toml"
     target.write_text(_PYPROJECT_WITH_ARRAY_OF_TABLES)
 
@@ -1636,24 +4403,26 @@ def test_insert_missing_path_dependencies_inserts_after_array_of_tables(
     # The [[...]] array-of-tables that lived under the same section is still
     # there because insertion only adds lines.
     assert "[[tool.poetry.dependencies.quickscale-module-extra]]" in updated
-    # The new dependency is appended AFTER the [[...]] block contents.
+    # Parent keys after a child header would bind to the child table instead.
     extra_idx = updated.index("[[tool.poetry.dependencies.quickscale-module-extra]]")
     new_dep_idx = updated.index("quickscale-module-blog")
-    assert new_dep_idx > extra_idx
+    assert new_dep_idx < extra_idx
+    import tomllib
+
+    parsed = tomllib.loads(updated)
+    assert parsed["tool"]["poetry"]["dependencies"]["quickscale-module-blog"] == {
+        "path": "./modules/blog",
+        "develop": True,
+    }
     # Sibling sections remain after the rewritten body.
     assert "[tool.poetry.group.dev.dependencies]" in updated
     assert "[tool.pytest.ini_options]" in updated
 
 
-def test_insert_missing_path_dependencies_inserts_after_nested_tables(
+def test_insert_missing_path_dependencies_inserts_before_nested_tables(
     tmp_path: Path,
 ) -> None:
-    """The new dependency is appended after any nested-table content.
-
-    The boundary detection treats ``[parent.child]`` (a strict child of the
-    current section) as part of the body, so insertion lands at the end of
-    the body, which is after the nested table's contents.
-    """
+    """Parent-table keys must be inserted before a nested child table."""
     document = (
         "[tool.poetry]\n"
         'name = "demo"\n'
@@ -1685,10 +4454,17 @@ def test_insert_missing_path_dependencies_inserts_after_nested_tables(
     # The nested table declaration is still present (insertion only adds).
     assert "[tool.poetry.dependencies.sources]" in updated
     assert 'default = {url = "https://pypi.org/simple"}' in updated
-    # The new entry is present and was inserted after the nested-table content.
+    # The new entry must remain a key of the parent dependency table.
     new_dep_idx = updated.index("quickscale-module-blog")
-    nested_idx = updated.index('default = {url = "https://pypi.org/simple"}')
-    assert new_dep_idx > nested_idx
+    nested_idx = updated.index("[tool.poetry.dependencies.sources]")
+    assert new_dep_idx < nested_idx
+    import tomllib
+
+    parsed = tomllib.loads(updated)
+    assert parsed["tool"]["poetry"]["dependencies"]["quickscale-module-blog"] == {
+        "path": "./modules/blog",
+        "develop": True,
+    }
     # The section that lives after the rewritten body is still intact.
     assert "[tool.pytest.ini_options]" in updated
 

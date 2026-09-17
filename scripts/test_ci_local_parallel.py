@@ -399,6 +399,7 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "check-gate-suites": "Running registered scripts",
         "check-dependency-vulnerabilities": "Running dependency vulnerability",
         "check-security-static-analysis": "Running security static-analysis",
+        "check-beta-migration-smoke": "Running check-beta-migration-smoke",
     }
     replay_markers = [
         "[2/11] Running linters",
@@ -531,8 +532,8 @@ def test_help_stage_numbers_match_runtime_stage_order(tmp_path: Path) -> None:
     assert help_headings[-1] == runtime_prefixes[-1][0] + 1
     for grouped_heading in (
         "  6. Module app declaration and org-context primitives gates",
-        "  7. CSRF-exempt, registered script suites, dependency vulnerability, "
-        "and security static-analysis gates",
+        "  7. Registered script suites, CSRF-exempt, dependency vulnerability, "
+        "security static-analysis, and beta-migration smoke gates",
         "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint",
         " 12. E2E tests (optional, with --e2e flag)",
     ):

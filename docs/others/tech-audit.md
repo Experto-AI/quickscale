@@ -20,7 +20,7 @@ QuickScale is a Python 3.14 / Poetry **code generator and scaffolding platform**
 - `apply --split-refs-from-branches`.
 - `publish_module.py --publish-all`, which force-pushes every outdated split branch.
 
-**Tooling baseline.** ruff, mypy, pylint (duplication only), vulture, radon, pytest 9 with a 90% coverage floor, pre-commit (now with a `commit-msg` stage), 12 registered gates, Trivy dependency scanning, Bandit 1.9.4, and AST/conformance gates. `check-commit-testimony` is now hosted-only. Its accepted testimony narrowed to any `vN[.N…]` token.
+**Tooling baseline.** ruff, mypy, pylint (duplication only), vulture, radon, pytest 9 with a 90% coverage floor, pre-commit (now with a `commit-msg` stage), 13 registered gates, Trivy dependency scanning, Bandit 1.9.4, and AST/conformance gates. `check-commit-testimony` is now hosted-only. Its accepted testimony narrowed to any `vN[.N…]` token.
 
 **Scope decision (§2e).** This is re-run mode. The delta `87e8c96a..b9e072f4` is 569 commits. Most are synthetic subtree-split mirrors. The first-party tree diff is 125 non-doc files (+2,275 / −656). The whole production diff was read, plus every test hunk. The rest of the depth went to three things:
 

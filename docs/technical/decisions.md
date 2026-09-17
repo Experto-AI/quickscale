@@ -1032,8 +1032,8 @@ Implementation detail: [organizations.md §Operator Debug Mode](./organizations.
 
 **Rule:** The beta-migration maintainer tooling
 (``quickscale_devtools/beta_migration.py``) carries a file taxonomy that
-classifies every generator-emitted file by its migration path.  The taxonomy
-is a set of explicit tuple literals; a conformance gate
+classifies every generator-emitted file by its migration path. The taxonomy
+combines explicit path tuples with operation-derived directory selectors; a conformance gate
 (``test_beta_migration_ownership_conformance.py``) derives the expected file
 inventory from the template tree (``quickscale_core/generator/templates/``)
 and asserts every emitted file is classified.
@@ -1057,11 +1057,17 @@ and asserts every emitted file is classified.
    fix reaches beta sites through the in-place path (the path that existing
    sites actually use).  Classified under ``IN_PLACE_INFRASTRUCTURE_TARGETS``.
 
-3. **``INTENTIONALLY_UNMANAGED`` is an explicit-only class.**  Files listed
-   there are deliberately outside all migration paths.  The tuple must be
-   empty unless a current template has a documented exemption rationale in
-   this section of ``decisions.md``.  No implicit fallback — every emitted
-   file must be explicitly accounted for.
+3. **``INTENTIONALLY_UNMANAGED`` is an explicit-only replacement/merge
+   ownership class.** Existing files listed there are deliberately outside
+   structural replacement and merge paths. A listed path may be created only
+   by an explicit copy-if-missing adoption rule, which never overwrites an
+   existing user-owned file. The tuple must be empty unless a current template has a
+   documented exemption rationale in
+   [generated_file_ownership.md](./generated_file_ownership.md). A
+   listed file may also receive fresh-first identity-only reconciliation when
+   it contains scaffold-derived slug, package, database-role, or frontend
+   package values; that bounded rewrite does not transfer file ownership. No
+   implicit fallback — every emitted file must be explicitly accounted for.
 
 4. **The conformance gate fails on unclassified files.**  When a new template
    is added or an existing template is renamed without updating the taxonomy,
@@ -1072,8 +1078,8 @@ and asserts every emitted file is classified.
 
 5. **Every ``INTENTIONALLY_UNMANAGED`` entry carries an explicit category and
    rationale.** No entry may be added without stating why that generated file is
-   deliberately outside all migration paths. The inventory itself (categories
-   U1–U15) is owned by
+   deliberately outside replacement and merge paths. The inventory itself
+   (categories U1–U12) is owned by
    [generated_file_ownership.md](./generated_file_ownership.md) — it is data the
    conformance gate cross-checks, not policy.
 
@@ -1081,25 +1087,47 @@ and asserts every emitted file is classified.
    (``_classify_emitted_path``) checks whether any parent directory of an
    emitted path appears in the classified map as a directory entry (path
    ending in ``/``).  This allows grouping many files under a common
-   directory without enumerating every path individually.  The conflict
-   gate prevents the same path from appearing in both a managed tuple
-   and ``INTENTIONALLY_UNMANAGED``.
+   directory without enumerating every path individually. The conflict gate
+   derives replacement, merge, and copy-if-missing dispositions from the same
+   constants used by the executor. It prevents a path from being both
+   structurally replaced/merged and ``INTENTIONALLY_UNMANAGED``; identity-only
+   reconciliation and copy-if-missing adoption are the permitted overlaps
+   because neither overwrites user-owned contents.
 
-7. **``MODE_REQUIRED_SPECS`` entries are also managed classification sources.**
+7. **``MODE_REQUIRED_SPECS`` entries are classification sources, not mutation
+   authority.**
    The beta-migration preflight validation specs
    (``COMMON_REQUIRED_SPECS`` and ``MODE_REQUIRED_SPECS`` in
    ``beta_migration.py``) define files and directories that must exist
-   before a migration step can proceed.  Some of these specs (notably
-   ``frontend/src/App.tsx`` in the fresh-first recipient spec) are also
-   managed copy targets during the migration itself — they are produced
-   by the generator and then consumed by the fresh-first copy step.  The
+   before a migration step can proceed. Some of these specs (notably
+   ``frontend/src/App.tsx``) independently appear in an executor-owned
+   replacement or merge disposition, but merely being required does not make
+   a path structurally managed. The
    conformance test includes all ``MODE_REQUIRED_SPECS`` entries as
    classification sources so that a file like ``frontend/src/App.tsx`` is
    properly categorized as part of the fresh-first required recipient
-   surface rather than falling into a ``INTENTIONALLY_UNMANAGED``
-   category that would contradict its managed behavior.  The conflict
-   gate (rule 6) also checks ``MODE_REQUIRED_SPECS`` entries against
-   ``INTENTIONALLY_UNMANAGED``.
+   surface. The operation-derived disposition model, not this preflight list,
+   decides whether overlap with ``INTENTIONALLY_UNMANAGED`` is a conflict.
+
+8. **Fresh-first identity reconciliation covers the complete generated
+   identity seam.** The recipient is a throwaway, newly generated scaffold,
+   so changing its identity must reconcile every generated occurrence of the
+   old slug/package, including derived database role/password values and the
+   frontend package name. Reconciliation is field-aware when the source slug
+   and package share one token, token-boundary-aware for underscore-bearing
+   slugs, and non-cascading. A file can remain user-owned and structurally
+   unmanaged while participating in this one-time identity rewrite. In-place
+   migration does not rewrite user-owned recipient files because its recipient
+   identity stays authoritative.
+
+9. **Every structural executor path has an operation-derived disposition.**
+   The conformance gate models direct file replacement, directory replacement,
+   donor-authoritative merge, and copy-if-missing adoption from the executor's
+   constants and selectors. This includes fresh-first component and utility
+   directory replacement and in-place ``frontend/package.json`` merge; a path
+   cannot remain ``INTENTIONALLY_UNMANAGED`` merely because the mutation is
+   implemented by a directory walk or a dedicated merge helper rather than a
+   named copy tuple.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md) (generated-file ownership finding, if currently open)
 

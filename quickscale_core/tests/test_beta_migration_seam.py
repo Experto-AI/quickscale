@@ -67,3 +67,12 @@ class TestBetaMigrationSeamOwnership:
         assert use_modules_path in spec_paths, (
             f"{use_modules_path} must remain in MODE_REQUIRED_SPECS['in-place']['donor']"
         )
+
+    def test_start_sh_in_in_place_donor_preflight(self) -> None:
+        """The copied launcher must fail closed when absent from the donor."""
+        donor_specs = MODE_REQUIRED_SPECS["in-place"]["donor"]
+        spec_paths = [spec.relative_path for spec in donor_specs]
+        assert "start.sh" in spec_paths, (
+            "start.sh must be required during in-place donor preflight so the copy "
+            "cannot silently skip the effective runtime launcher"
+        )

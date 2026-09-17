@@ -416,12 +416,40 @@ jobs:
     - name: Run security static-analysis gate
       run: |
         make check-security-static-analysis
+
+  beta-migration-smoke-gate:
+    name: Beta Migration Smoke Gate (SA152)
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Run beta migration smoke gate
+      run: |
+        make check-beta-migration-smoke
   # END GENERATED: hosted-gate-jobs
 
   test:
     name: Run Tests (Unit + Integration)
     # BEGIN GENERATED: needs-test
-    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, org-context-primitives-gate, csrf-exempt-gate, commit-testimony-gate, check-gate-suites, dependency-vulnerabilities-gate, security-static-analysis-gate]
+    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, org-context-primitives-gate, csrf-exempt-gate, commit-testimony-gate, check-gate-suites, dependency-vulnerabilities-gate, security-static-analysis-gate, beta-migration-smoke-gate]
     # END GENERATED: needs-test
     runs-on: ubuntu-latest
     services:

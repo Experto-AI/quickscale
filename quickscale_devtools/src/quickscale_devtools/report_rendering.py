@@ -99,6 +99,16 @@ def render_report_summary(report: BetaMigrationReport) -> str:
         f"Donor: {report.donor_path}",
         f"Recipient: {report.recipient_path}",
         f"Identity reconciliation: {'required' if report.identity_reconciliation_required else 'not required'}",
+        (
+            "Runtime provenance: unavailable"
+            if report.runtime_provenance is None
+            else (
+                "Runtime provenance: "
+                f"settings/production.py={report.runtime_provenance.settings_production}, "
+                f"start.sh={report.runtime_provenance.start_sh}, "
+                f"Dockerfile={report.runtime_provenance.dockerfile}"
+            )
+        ),
         f"Module diff: {_render_diff_summary(report.module_diff)}",
         f"Path dependency diff: {_render_diff_summary(report.path_dependency_diff)}",
         f"Planned actions: {len(report.planned_actions)}",

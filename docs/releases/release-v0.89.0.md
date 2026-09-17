@@ -58,15 +58,23 @@ their existing rules; CRM page styling moved from an inline `<style>` block to
 `quickscale_modules_crm/crm.css`, so a project that copied those inline rules keeps its copy and
 takes no action.
 
+This maintenance release adds maintainer-only beta-migration compatibility validation and
+mode-specific runtime provenance to report output; incompatible launcher, settings, and package
+combinations now fail before recipient mutation, and fresh-first identity changes reconcile raw
+and derived slug/package values across the generated scaffold. It does not change
+generated-project output, public package APIs, or upgrade requirements.
+
 ## Validation
 
 The task-tier validation command for this prepared capability is:
 
 ```text
-make test-integration MODULE=orgs && make test-unit -- --core && poetry run pytest quickscale_core/tests/test_roadmap_consistency.py -q -o addopts= --no-cov
+make check QUIET=1
 ```
 
-This note does not claim release-tier validation, publication, or a v0.89.0 tag.
+This task-tier gate includes the registered beta-migration generated-project smoke check, its CLI
+regression suite, and repository gate-parity checks. This note does not claim release-tier
+validation, publication, or a v0.89.0 tag.
 
 ## Deferred scope
 

@@ -264,6 +264,23 @@
                 "quickscale_devtools/src/**",
                 "quickscale_modules/*/src/**"
             ]
+        },
+        {
+            "id": "check-beta-migration-smoke",
+            "description": "Both beta migration modes preserve runtime ownership and reject incompatible generated fixtures",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-beta-migration-smoke",
+                "ci_job": "beta-migration-smoke-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
         }
     ]
 }

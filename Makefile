@@ -74,7 +74,7 @@
         check-core-compat check-module-core-imports check-manifest-sync \
         check-module-app-declaration check-org-context-primitives \
          check-csrf-exempt check-commit-testimony check-gate-suites isolation-conformance \
-         check-dependency-vulnerabilities check-security-static-analysis security-negative-probes \
+         check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke security-negative-probes \
          check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
@@ -87,7 +87,7 @@ MAKEFILE_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 # Do not export caller-controlled Make syntax into subprocesses.  In
 # particular, GNU Make may expand command-line variable values while preparing
 # the environment even when the recipe uses ``value`` to preserve the text.
-unexport MODULE EXPECTED_REMOTE_SHA K ARGS ONLY FROM
+unexport MODULE EXPECTED_REMOTE_SHA K ARGS ONLY FROM DONOR RECIPIENT REPORT DRY_RUN CONTINUE
 # Keep command-line data in one shell argument.  ``value`` prevents recursive
 # Make expansion of hostile input such as ``$(shell ...)`` before the shell
 # quoting is applied.
@@ -337,6 +337,7 @@ help:
 	@echo "  make check-commit-testimony       - Behavioural commits carry a vNN or vN.NN.N roadmap reference"
 	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability scan"
 	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
+	@echo "  make check-beta-migration-smoke      - Exercise both beta migration modes on isolated generated fixtures"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
 	@echo "  make isolation-conformance         - Run the PostgreSQL isolation-conformance suite"
@@ -378,53 +379,62 @@ install:
 # Run beta-site migration using the fresh-first workflow on a throwaway recipient.
 beta-migrate-fresh:
 	@set -e; \
-	if [ -z "$(DONOR)" ] || [ -z "$(RECIPIENT)" ]; then \
+	donor=$(call shell_quote,$(call transport_value,DONOR)); \
+	recipient=$(call shell_quote,$(call transport_value,RECIPIENT)); \
+	report=$(call shell_quote,$(call transport_value,REPORT)); \
+	dry_run=$(call shell_quote,$(call transport_value,DRY_RUN)); \
+	if [ -z "$$donor" ] || [ -z "$$recipient" ]; then \
 		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 REPORT=/abs/path/report.json)."; \
 		exit 1; \
 	fi; \
 	dry_run_args=""; \
-	if [ "$(DRY_RUN)" = "1" ] || [ "$(DRY_RUN)" = "true" ] || [ "$(DRY_RUN)" = "yes" ]; then \
+	if [ "$$dry_run" = "1" ] || [ "$$dry_run" = "true" ] || [ "$$dry_run" = "yes" ]; then \
 		dry_run_args="--dry-run"; \
 	fi; \
-	if [ -n "$(REPORT)" ]; then \
+	if [ -n "$$report" ]; then \
 		poetry run python scripts/beta_migrate.py fresh-first \
-			--donor "$(DONOR)" \
-			--recipient "$(RECIPIENT)" \
+			--donor "$$donor" \
+			--recipient "$$recipient" \
 			$$dry_run_args \
-			--report-path "$(REPORT)"; \
+			--report-path "$$report"; \
 	else \
 		poetry run python scripts/beta_migrate.py fresh-first \
-			--donor "$(DONOR)" \
-			--recipient "$(RECIPIENT)" \
+			--donor "$$donor" \
+			--recipient "$$recipient" \
 			$$dry_run_args; \
 	fi
 
 # Emit the baseline in-place checkpoint report without copy/apply/verification execution.
 beta-migrate-in-place:
 	@set -e; \
-	if [ -z "$(DONOR)" ] || [ -z "$(RECIPIENT)" ]; then \
+	donor=$(call shell_quote,$(call transport_value,DONOR)); \
+	recipient=$(call shell_quote,$(call transport_value,RECIPIENT)); \
+	report=$(call shell_quote,$(call transport_value,REPORT)); \
+	dry_run=$(call shell_quote,$(call transport_value,DRY_RUN)); \
+	continue_run=$(call shell_quote,$(call transport_value,CONTINUE)); \
+	if [ -z "$$donor" ] || [ -z "$$recipient" ]; then \
 		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 CONTINUE=1 REPORT=/abs/path/report.json)."; \
 		exit 1; \
 	fi; \
 	dry_run_args=""; \
 	continue_args=""; \
-	if [ "$(DRY_RUN)" = "1" ] || [ "$(DRY_RUN)" = "true" ] || [ "$(DRY_RUN)" = "yes" ]; then \
+	if [ "$$dry_run" = "1" ] || [ "$$dry_run" = "true" ] || [ "$$dry_run" = "yes" ]; then \
 		dry_run_args="--dry-run"; \
 	fi; \
-	if [ "$(CONTINUE)" = "1" ] || [ "$(CONTINUE)" = "true" ] || [ "$(CONTINUE)" = "yes" ]; then \
+	if [ "$$continue_run" = "1" ] || [ "$$continue_run" = "true" ] || [ "$$continue_run" = "yes" ]; then \
 		continue_args="--continue-after-checkpoint"; \
 	fi; \
-	if [ -n "$(REPORT)" ]; then \
+	if [ -n "$$report" ]; then \
 		poetry run python scripts/beta_migrate.py in-place \
-			--donor "$(DONOR)" \
-			--recipient "$(RECIPIENT)" \
+			--donor "$$donor" \
+			--recipient "$$recipient" \
 			$$dry_run_args \
 			$$continue_args \
-			--report-path "$(REPORT)"; \
+			--report-path "$$report"; \
 	else \
 		poetry run python scripts/beta_migrate.py in-place \
-			--donor "$(DONOR)" \
-			--recipient "$(RECIPIENT)" \
+			--donor "$$donor" \
+			--recipient "$$recipient" \
 			$$dry_run_args \
 			$$continue_args; \
 	fi
@@ -1043,6 +1053,11 @@ check-dependency-vulnerabilities:
 
 check-security-static-analysis:
 	@$(PYTHON) scripts/check_security_gates.py security-static-analysis
+
+# Exercise fresh-first and in-place migration behavior against isolated
+# generated fixtures without touching a real project or database.
+check-beta-migration-smoke:
+	@$(PYTHON) scripts/check_beta_migration_smoke.py
 
 security-negative-probes:
 	@$(PYTHON) scripts/check_security_gates.py security-negative-probes

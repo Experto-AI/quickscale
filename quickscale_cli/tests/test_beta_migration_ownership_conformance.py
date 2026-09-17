@@ -15,26 +15,35 @@ Files whose emitted paths are not covered by *any* taxonomy tuple fail the
 test and are listed as a gap-inventory output so maintainers can add the
 missing classification.
 
-The ``INTENTIONALLY_UNMANAGED`` tuple provides the explicit escape hatch:
-files listed there are deliberately outside all migration paths and must
-have a documented exemption rationale in ``decisions.md``.
+The ``INTENTIONALLY_UNMANAGED`` tuple provides the explicit escape hatch for
+replacement/merge ownership: files listed there are not structurally replaced
+or merged and must have a documented exemption rationale in ``decisions.md``.
+They may participate in field-aware identity reconciliation or copy-if-missing
+adoption, neither of which overwrites an existing user-owned file.
 """
 
+from collections.abc import Collection
 from pathlib import Path
 
 import pytest
 
 from quickscale_core.generator import get_generator_emission_mapping
 from quickscale_devtools.beta_migration import (
+    FRESH_FIRST_COMPONENT_DIR_SKIP,
+    FRESH_FIRST_COPY_MISSING_DIRS,
     FRESH_FIRST_DONOR_DJANGO_FILES,
     FRESH_FIRST_IDENTITY_PACKAGE_FILES,
     FRESH_FIRST_IDENTITY_ROOT_FILES,
+    FRESH_FIRST_MERGED_ROOT_FILES,
     FRESH_FIRST_OPTIONAL_DONOR_PACKAGE_FILES,
     FRESH_FIRST_PROTECTED_PACKAGE_FILES,
     FRESH_FIRST_PROTECTED_ROOT_FILES,
+    FRESH_FIRST_REPLACED_ROOT_FILES,
     FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES,
     FRESH_FIRST_REQUIRED_RECIPIENT_PACKAGE_FILES,
+    FRESH_FIRST_UTILITY_DIRS,
     IN_PLACE_INFRASTRUCTURE_TARGETS,
+    IN_PLACE_MERGED_ROOT_FILES,
     IN_PLACE_MODULE_REACT_SURFACES,
     IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS,
     INTENTIONALLY_UNMANAGED,
@@ -76,7 +85,7 @@ def _template_emitted_paths() -> dict[str, str]:
     ``{package}``, meaning the exact package name is a variable.
     """
     if not _TEMPLATES_ROOT.is_dir():
-        pytest.skip(f"Template tree not found at {_TEMPLATES_ROOT}")
+        pytest.fail(f"Template tree not found at {_TEMPLATES_ROOT}")
 
     combined: dict[str, str] = {}
     for theme in ("showcase_react",):
@@ -99,7 +108,7 @@ def _template_emitted_paths() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 # All taxonomy tuple names for per-tuple disposition tracking
-_TUPLE_NAMES: tuple[tuple[str, tuple[str, ...]], ...] = (
+_TUPLE_NAMES: tuple[tuple[str, Collection[str]], ...] = (
     (
         "FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES",
         FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES,
@@ -219,6 +228,8 @@ def _classify_emitted_path(emitted: str, classified: dict[str, list[str]]) -> li
             if dir_entry in classified:
                 matches.extend(classified[dir_entry])
 
+    matches.extend(_structural_migration_classifications(emitted))
+
     # Deduplicate while preserving order
     seen: set[str] = set()
     deduped: list[str] = []
@@ -227,6 +238,52 @@ def _classify_emitted_path(emitted: str, classified: dict[str, list[str]]) -> li
             seen.add(match)
             deduped.append(match)
     return deduped
+
+
+def _structural_migration_classifications(emitted: str) -> list[str]:
+    """Return operation-derived structural dispositions for one emitted path."""
+    classifications: list[str] = []
+    package_relative = (
+        emitted.removeprefix("{package}/") if emitted.startswith("{package}/") else None
+    )
+    if emitted in FRESH_FIRST_REPLACED_ROOT_FILES:
+        classifications.append("FRESH_FIRST_REPLACED_ROOT_FILES")
+    if emitted in FRESH_FIRST_MERGED_ROOT_FILES:
+        classifications.append("FRESH_FIRST_MERGED_ROOT_FILES")
+    if package_relative in FRESH_FIRST_DONOR_DJANGO_FILES:
+        classifications.append("FRESH_FIRST_DONOR_DJANGO_FILES")
+
+    components_prefix = "frontend/src/components/"
+    if emitted.startswith(components_prefix):
+        component_dir = emitted.removeprefix(components_prefix).split("/", maxsplit=1)[
+            0
+        ]
+        if component_dir not in FRESH_FIRST_COMPONENT_DIR_SKIP:
+            classifications.append("FRESH_FIRST_COMPONENT_DIRECTORY_REPLACEMENT")
+
+    for utility_dir in FRESH_FIRST_UTILITY_DIRS:
+        if emitted.startswith(f"frontend/src/{utility_dir}/"):
+            classifications.append("FRESH_FIRST_UTILITY_DIRECTORY_REPLACEMENT")
+            break
+
+    if any(
+        emitted == directory or emitted.startswith(f"{directory}/")
+        for directory in FRESH_FIRST_COPY_MISSING_DIRS
+    ):
+        classifications.append("FRESH_FIRST_COPY_MISSING_DIRS")
+
+    if emitted in IN_PLACE_INFRASTRUCTURE_TARGETS:
+        classifications.append("IN_PLACE_INFRASTRUCTURE_TARGETS")
+    if emitted in IN_PLACE_MERGED_ROOT_FILES:
+        classifications.append("IN_PLACE_MERGED_ROOT_FILES")
+    for module_paths in IN_PLACE_MODULE_REACT_SURFACES.values():
+        if any(
+            emitted == path or emitted.startswith(f"{path.rstrip('/')}/")
+            for path in module_paths
+        ):
+            classifications.append("IN_PLACE_MODULE_REACT_SURFACES")
+            break
+    return classifications
 
 
 def _check_start_sh_classification(classified: dict[str, list[str]]) -> list[str]:
@@ -298,6 +355,14 @@ def test_start_sh_is_in_place_substituted() -> None:
     )
 
 
+def test_start_sh_is_fresh_first_identity_reconciled() -> None:
+    """Fresh-first launchers must follow the reconciled recipient identity."""
+    assert "start.sh" in FRESH_FIRST_IDENTITY_ROOT_FILES, (
+        "start.sh must be in FRESH_FIRST_IDENTITY_ROOT_FILES so its WSGI package "
+        "references follow fresh-first identity reconciliation"
+    )
+
+
 def test_production_py_is_donor_owned_by_policy() -> None:
     """SA66: settings/production.py must be in the fresh-first donor tuples.
 
@@ -320,11 +385,11 @@ def test_production_py_is_donor_owned_by_policy() -> None:
 def test_intentionally_unmanaged_entries_have_documented_rationale() -> None:
     """Every INTENTIONALLY_UNMANAGED entry must have a documented rationale.
 
-    Files listed in ``INTENTIONALLY_UNMANAGED`` are deliberately outside all
-    migration paths.  Each such entry requires a documented exemption
-    rationale in ``decisions.md`` § Generated-File Ownership (Beta-Migration
-    Taxonomy).  This test verifies the tuple is non-empty (we have
-    documented exemptions) and does not conflict with any managed tuple.
+    Files listed in ``INTENTIONALLY_UNMANAGED`` are deliberately outside
+    structural replacement/merge ownership. Each such entry requires a documented
+    exemption rationale in ``decisions.md`` § Generated-File Ownership
+    (Beta-Migration Taxonomy). Identity-only and copy-if-missing overlaps are
+    allowed because neither overwrites an existing user-owned file.
 
     If a new entry is added without updating ``decisions.md``, this test
     must be updated or the conformance gate expanded to cross-check the
@@ -344,13 +409,16 @@ def test_taxonomy_classifies_every_emitted_template() -> None:
     This is the core conformance gate: enumerate all ``.j2`` templates
     (plus non-Jinja theme files copied as-is), resolve each to its emitted
     project-relative path, and assert that the emitted path is covered by
-    at least one taxonomy tuple.
+    at least one tuple or operation-derived taxonomy disposition.
 
-    The ``INTENTIONALLY_UNMANAGED`` tuple is the only valid way to
-    suppress a classification failure — every file must be explicitly
-    accounted for.
+    Every file must be explicitly accounted for; operation-derived structural
+    dispositions cover paths selected by executor directory walks and merges.
     """
     emitted_paths = _template_emitted_paths()
+    assert len(emitted_paths) >= 50, (
+        "Generator emission inventory is unexpectedly small; the ownership gate "
+        f"would be vacuous or incomplete ({len(emitted_paths)} paths)."
+    )
     classified = _build_classified_map()
 
     unclassified: dict[str, str] = {}
@@ -364,8 +432,8 @@ def test_taxonomy_classifies_every_emitted_template() -> None:
         gap_lines = [f"  {ep}  (from: {tr})" for ep, tr in unclassified.items()]
         msg = (
             f"\n{len(unclassified)} emitted file(s) are not classified by any "
-            f"beta-migration taxonomy tuple.\n"
-            f"Add each path to the appropriate FRESH_FIRST_*, IN_PLACE_*, "
+            f"beta-migration taxonomy disposition.\n"
+            f"Add each path to the appropriate operation-derived disposition "
             f"or INTENTIONALLY_UNMANAGED tuple.\n"
             f"Unclassified paths:\n" + "\n".join(gap_lines)
         )
@@ -379,48 +447,45 @@ def test_classification_no_duplicate_conflicts() -> None:
     necessarily a conflict (e.g. ``Dockerfile`` is identity-reconciled in
     fresh-first AND in-place-copied).  This test checks for *meaningful*
     conflicts: a file listed in an intentionally-unmanaged tuple that also
-    appears in a managed tuple.
+    appears in a structural replacement/merge disposition. Fresh-first identity
+    reconciliation and copy-if-missing adoption may overlap because neither
+    overwrites existing user-owned contents.
     """
-    # Build sets of managed tuples (all except INTENTIONALLY_UNMANAGED)
-    managed_paths: dict[str, set[str]] = {}
-    for tup_name, tup in _TUPLE_NAMES:
-        if tup_name == "INTENTIONALLY_UNMANAGED":
+    classified = _build_classified_map()
+    conflicts: list[str] = []
+    for emitted_path in sorted(_template_emitted_paths()):
+        classifications = _classify_emitted_path(emitted_path, classified)
+        if "INTENTIONALLY_UNMANAGED" not in classifications:
             continue
-        for item in tup:
-            if item not in managed_paths:
-                managed_paths[item] = set()
-            managed_paths[item].add(tup_name)
+        structural = set(_structural_migration_classifications(emitted_path))
+        structural.discard("FRESH_FIRST_COPY_MISSING_DIRS")
+        if structural:
+            conflicts.append(f"{emitted_path}: {', '.join(sorted(structural))}")
+    assert not conflicts, (
+        "INTENTIONALLY_UNMANAGED emitted paths also participate in structural "
+        "replacement/merge operations:\n  " + "\n  ".join(conflicts)
+    )
 
-    # Also check IN_PLACE_MODULE_REACT_SURFACES
-    for paths in IN_PLACE_MODULE_REACT_SURFACES.values():
-        for item in paths:
-            if item not in managed_paths:
-                managed_paths[item] = set()
-            managed_paths[item].add("IN_PLACE_MODULE_REACT_SURFACES")
 
-    # Also check MODE_REQUIRED_SPECS (preflight specs that also serve as
-    # managed-file classification sources)
-    for mode, roles in MODE_REQUIRED_SPECS.items():
-        for role, specs in roles.items():
-            label = f"MODE_REQUIRED_SPECS_{mode}_{role}"
-            for spec in specs:
-                item = spec.relative_path
-                if item not in managed_paths:
-                    managed_paths[item] = set()
-                managed_paths[item].add(label)
-
-    for unmanaged_path in INTENTIONALLY_UNMANAGED:
-        if unmanaged_path in managed_paths:
-            # Only report as conflict if the managed classification is for
-            # a different migration concern (not merely a directory-level
-            # or partial overlap).
-            conflicting_tuples = managed_paths[unmanaged_path]
-            pytest.fail(
-                f"INTENTIONALLY_UNMANAGED path {unmanaged_path!r} is "
-                f"also classified by managed tuple(s): "
-                f"{', '.join(sorted(conflicting_tuples))} — remove it from "
-                f"one of the two classifications"
-            )
+def test_operation_derived_structural_paths_match_executor_contract() -> None:
+    """The conformance model must expose each non-tuple executor path."""
+    assert _structural_migration_classifications("frontend/src/App.tsx") == [
+        "FRESH_FIRST_REPLACED_ROOT_FILES"
+    ]
+    assert "FRESH_FIRST_COMPONENT_DIRECTORY_REPLACEMENT" in (
+        _structural_migration_classifications(
+            "frontend/src/components/layout/Header.tsx"
+        )
+    )
+    assert "FRESH_FIRST_COMPONENT_DIRECTORY_REPLACEMENT" not in (
+        _structural_migration_classifications("frontend/src/components/ui/button.tsx")
+    )
+    assert "IN_PLACE_MERGED_ROOT_FILES" in _structural_migration_classifications(
+        "frontend/package.json"
+    )
+    assert "FRESH_FIRST_MERGED_ROOT_FILES" in _structural_migration_classifications(
+        "pyproject.toml"
+    )
 
 
 # ---------------------------------------------------------------------------

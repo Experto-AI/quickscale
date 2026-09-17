@@ -650,6 +650,7 @@ class TestMakefileGateTargetDerivation:
         "check-gate-suites",
         "check-dependency-vulnerabilities",
         "check-security-static-analysis",
+        "check-beta-migration-smoke",
     )
 
     def _derive_targets(self, cwd: Path, *, registry: Path | None = None) -> str:
@@ -731,7 +732,8 @@ class TestRegisteredScriptGateTarget:
                         "check-module-app-declaration "
                         "check-org-context-primitives check-csrf-exempt "
                         "check-commit-testimony check-gate-suites "
-                        "check-dependency-vulnerabilities check-security-static-analysis"
+                        "check-dependency-vulnerabilities check-security-static-analysis "
+                        "check-beta-migration-smoke"
                     )
                     raise SystemExit(0)
                 if args[:2] != ["-m", "pytest"]:
@@ -1065,7 +1067,8 @@ class TestMakefileCoveragePipeline:
                         "check-commit-testimony "
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
-                        "check-security-static-analysis"
+                        "check-security-static-analysis "
+                        "check-beta-migration-smoke"
                     )
                     raise SystemExit(0)
 
@@ -1535,7 +1538,8 @@ class TestCheckQuietSectionDispatch:
                         "check-commit-testimony "
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
-                        "check-security-static-analysis"
+                        "check-security-static-analysis "
+                        "check-beta-migration-smoke"
                     )
                     raise SystemExit(0)
                 raise SystemExit(0)
@@ -2589,7 +2593,8 @@ class TestCheckNormalFrontendLint:
                         "check-commit-testimony "
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
-                        "check-security-static-analysis"
+                        "check-security-static-analysis "
+                        "check-beta-migration-smoke"
                     )
                     raise SystemExit(0)
                 raise SystemExit(0)

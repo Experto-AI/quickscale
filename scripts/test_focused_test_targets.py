@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -124,6 +125,80 @@ def test_full_ci_e2e_runs_privileged_lane_once_after_restricted_ci() -> None:
 )
 def test_partial_ci_e2e_does_not_run_privileged_lane(selector: str) -> None:
     assert "make test-bypassrls" not in _recipe("ci-e2e", selector)
+
+
+@pytest.mark.parametrize("target", ["beta-migrate-fresh", "beta-migrate-in-place"])
+def test_beta_migration_paths_preserve_literal_make_syntax(target: str) -> None:
+    """Documented migration entrypoints must transport path syntax as data."""
+    recipe = _recipe(
+        target,
+        "DONOR=/tmp/$(shell uname -s)",
+        "RECIPIENT=/tmp/recipient path",
+        "REPORT=/tmp/report's $(HOME).json",
+    )
+    assert "/tmp/$(shell uname -s)" in recipe
+    assert "/tmp/Linux" not in recipe
+    assert "/tmp/recipient path" in recipe
+    assert "/tmp/report'\\''s $(HOME).json" in recipe
+
+
+@pytest.mark.parametrize(
+    ("target", "mode"),
+    [
+        ("beta-migrate-fresh", "fresh-first"),
+        ("beta-migrate-in-place", "in-place"),
+    ],
+)
+def test_beta_migration_executes_with_literal_path_arguments(
+    tmp_path: Path, target: str, mode: str
+) -> None:
+    """Make and shell syntax in paths must reach the CLI without evaluation."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    capture_path = tmp_path / "captured-arguments"
+    fake_poetry = fake_bin / "poetry"
+    fake_poetry.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$BETA_MIGRATION_CAPTURE"\n')
+    fake_poetry.chmod(0o755)
+    donor = "/tmp/$(shell printf make-expanded)"
+    recipient = "/tmp/$(printf shell-expanded)"
+    report = "/tmp/report's $(HOME).json"
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"MAKEFLAGS", "MFLAGS", "MAKELEVEL"}
+    }
+    environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+    environment["BETA_MIGRATION_CAPTURE"] = str(capture_path)
+
+    result = subprocess.run(
+        [
+            "make",
+            target,
+            f"DONOR={donor}",
+            f"RECIPIENT={recipient}",
+            f"REPORT={report}",
+            f"PYTHON={sys.executable}",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert capture_path.read_text().splitlines() == [
+        "run",
+        "python",
+        "scripts/beta_migrate.py",
+        mode,
+        "--donor",
+        donor,
+        "--recipient",
+        recipient,
+        "--report-path",
+        report,
+    ]
 
 
 def test_release_gate_does_not_repeat_ci_e2e_privileged_lane() -> None:

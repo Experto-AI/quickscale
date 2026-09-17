@@ -68,6 +68,7 @@ HOSTED_GATE_ORDER = (
     "check-gate-suites",
     "check-dependency-vulnerabilities",
     "check-security-static-analysis",
+    "check-beta-migration-smoke",
 )
 UNOWNED_JOB_RATIONALES = {
     "bypassrls": (
@@ -168,6 +169,10 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     "check-security-static-analysis": HostedJobSpec(
         "Security Static Analysis Gate (SA123)",
         "Run security static-analysis gate",
+    ),
+    "check-beta-migration-smoke": HostedJobSpec(
+        "Beta Migration Smoke Gate (SA152)",
+        "Run beta migration smoke gate",
     ),
 }
 
@@ -333,7 +338,7 @@ def _locate_hosted_jobs(
     jobs: dict[str, Any], label: str, *, allow_missing: bool = False
 ) -> dict[str, str]:
     """
-    Locate the ten hosted jobs by their static catalog display names.
+    Locate the eleven hosted jobs by their static catalog display names.
 
     Display metadata is helper-owned and static, so the generated job IDs may
     be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
@@ -661,7 +666,7 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
 
 def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
     """
-    Locate the ten hosted job header lines by their display names.
+    Locate the eleven hosted job header lines by their display names.
 
     Use static display metadata to find the (possibly stale) hosted job IDs;
     this permits a registry ``ci_job`` (F-005) or Make-target edit while

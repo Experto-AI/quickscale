@@ -8,7 +8,7 @@
 `v88` is release-accepted (see [CHANGELOG.md](../../CHANGELOG.md)). The next goal is the first
 useful property portal (SA153) in a project-owned extension, generalizing capabilities only after
 that project proves their value. The portal is built on `bap-web`, the existing beta site, after
-the verified migration tools (SA152) move it onto current QuickScale (SA191).
+the verified migration tools move it onto current QuickScale (SA191).
 
 **Release status — v0.88.0 packaged, not published.** The v0.88.0 release commit carries a
 release-prepared public note; `v89` has since bumped the repository to `0.89.0`. No core tag,
@@ -30,8 +30,7 @@ context, scope, and acceptance;
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA152 | Verify maintainer migration modes and their runtime compatibility | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | — | Deferred |
@@ -41,17 +40,16 @@ context, scope, and acceptance;
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
+Track 1: SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
 Track 2: SA192
 Track 3: SA189 ──► SA190
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA152 → SA191 → SA153. The portal is built on the migrated `bap-web`, so the
-migration tools are verified first and then used for real. Project-owned tenant tables no longer add
-a dependency to the portal. SA154 is an inventory, not work. Every other ticket is off the critical
-path.
+**Critical path.** SA191 → SA153. The portal is built on the migrated `bap-web`, using the verified
+migration tools for real. Project-owned tenant tables no longer add a dependency to the portal.
+SA154 is an inventory, not work. Every other ticket is off the critical path.
 
 **Ordering.**
 
@@ -64,7 +62,8 @@ path.
   `deploy railway` path.
 - **SA192 uses the enforced vintage boundary.** The module pages extend the generated,
   project-owned `base.html`, which `quickscale update` never rewrites, so a design change there is
-  contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not an SA153 edge: the portal's
+  contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not
+  an SA153 edge: the portal's
   React pages do not need the restyled Django pages to ship.
 - **Independent.** SA152 shares no files with SA189, but both touch the privilege/runtime
   contract of generated `settings/production.py`
@@ -84,7 +83,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA152 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA192 | yes | yes | yes | **yes** | no |
 | 3 | SA189 | yes | yes | yes | **yes** | no |
 
@@ -128,37 +127,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA180 — Derive the gate-parity count oracles from the registry.**
 
-- [ ] **SA152 — Verify maintainer migration modes and their runtime compatibility.**
-
-  **Context:** The maintainer migration commands need a complete smoke exercise. Their flag and ownership
-  unit tests cannot establish that a donor project produces a working recipient. Reconcile the
-  workflow with the fresh-database upgrade contract, register the smoke in the gate layer, and
-  update the migration playbook to describe the actual `quickscale_devtools` implementation.
-  Missing template roots must fail the ownership conformance check instead of skipping it.
-
-  Launcher and settings compatibility is part of this exercise. `settings/production.py`,
-  `start.sh`, and `Dockerfile` participate in one privilege-selection contract, but the
-  `FRESH_FIRST_*` and `IN_PLACE_*` constants describe different migration modes. Comparing their
-  memberships as though they were one execution path does not prove incompatibility.
-
-  For each supported mode, trace which version of each file actually reaches the recipient and
-  define the resulting compatibility condition. Test that a compatible recipient works and that an
-  incompatible launcher/settings combination fails clearly. Preserve donor deployment settings
-  where the mode promises to preserve them; do not require identical file dispositions merely
-  because files participate in one contract. Ownership manifests and taxonomy redesign need
-  separate evidence of need.
-
-  **Acceptance:** for each migration mode (fresh-first, in-place), derive which version of
-  `settings/production.py`, `start.sh`, and `Dockerfile` reaches the recipient, preserving donor
-  precedence. In isolated fixtures on a generated donor/recipient pair, prove a compatible combination
-  works and an unsupported privileged-command/runtime combination fails for the intended reason; run
-  the fresh-first dry-run and in-place checkpoint-only workflows without touching a real project or
-  database. Make a missing template root fail instead of `pytest.skip()`. Register the smoke gate,
-  keep gate parity green, and correct the migration playbook's version/location claims.
-
-  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, CLI migration tests, gate registry and
-  parity wiring, Make/CI entrypoints as needed, the migration playbook. No public updater, typed
-  ownership framework, or changed file precedence.
+- [x] **SA152 — Verify maintainer migration modes and their runtime compatibility.**
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 

@@ -18,7 +18,7 @@ contracts are the CLI, `quickscale.yml` and the applied state, module manifests,
 trees, and upgrade semantics. Persistence in generated projects is PostgreSQL with dual-layer
 tenant isolation (`TenantManager` plus `FORCE RLS` under a restricted runtime role). The
 repository has one maintainer (3,654 reachable commits, one author across two emails) and a
-deliberate governance layer: 12 registered gates, a closed hosted-job universe, AST and
+deliberate governance layer: 13 registered gates, a closed hosted-job universe, AST and
 conformance gates, and monotonic quality baselines.
 
 **Commit delta** (`48e0a62a..b9e072f4`, 759 commits). This breaks down as:
@@ -51,8 +51,8 @@ conformance gates, and monotonic quality baselines.
 **Growth direction (planning surface, authoritative).** `v88` is release-accepted, and
 **v0.88.0 is packaged but not published**. Publication is recorded as owed (`roadmap.md:12-16`).
 The critical path is **SA153: the first production property portal
-(`buenosairesproperties.com`) built as a *project-owned extension*** on `bap-web`, after SA152
-verifies the migration tooling and SA191 migrates that site onto current QuickScale.
+(`buenosairesproperties.com`) built as a *project-owned extension*** on `bap-web`, after the
+verified migration tooling is used by SA191 to move that site onto current QuickScale.
 Its acceptance requires that "every new tenant-owned child table has its own `organization_id`,
 forced RLS, and boundary tests". SA177 (verify RLS policy predicates) is off the critical path. The standing decisions still stand: no `teams` work and no third
 generated-project updater. SA153 is not a teams trigger, so the teams tie-breaker
@@ -101,7 +101,7 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 | CSRF-exempt endpoints have alternate integrity checks | AST gate plus sanctioned endpoint bases | Structural and gated | unchanged |
 | Core/module dependency direction and lockstep pin | Import-compatibility and reverse-import gates; exact `>=X.Y.0,<X.(Y+1).0` pin derived from `VERSION` | Gated | strengthened (floor → exact, `74d18f48`) |
 | Module identity (the twelve-module universe) | `module_discovery.py --list-modules`, consumed fail-hard (`provision_ci_postgres.sh:81`, `check_sa117_scope.py:57`, `version_tool.sh:34`) | Structural and derived | unchanged (SA173 three-state presence added behind the same shim) |
-| CI runtime environment and closed hosted-job set | `provision_ci_postgres.sh` (five profiles); `sync_ci_gate_jobs.py:381-387` (`UNOWNED ∪ registry-bound` == 17 jobs) | Structural and gated | unchanged; parity extractors now also count reusable-workflow `uses:` jobs |
+| CI runtime environment and closed hosted-job set | `provision_ci_postgres.sh` (five profiles); `sync_ci_gate_jobs.py:386-392` (`UNOWNED ∪ registry-bound` == 18 jobs) | Structural and gated | strengthened by the registered migration smoke job; parity extractors also count reusable-workflow `uses:` jobs |
 | Behavioural-control commits carry testimony | `check_commit_testimony.py` — a `vNN` token in the message | Gated, token-shaped | **narrowed** (`2e2a932a`, labelled `docs:`, dropped the SA-ticket and CHANGELOG forms) |
 | Generated emission is byte-identical to the recorded manifest | SA90 fixture hash/mode comparison, `_HOST_DEPENDENT_PATHS` exception | Gated, one exception entry | unchanged (still 1 — monotonic) |
 | Complexity maxima never ratchet upward | Merge-base monotonicity gate plus waiver ledger | Gated | unchanged (baseline shrank by 24 lines) |
@@ -324,6 +324,7 @@ Phase A regression coverage; purge membership remains in vendored module source.
   and keeps the shipped literal as parity-only evidence.
 - **Purge derivation pairs with rank 2:** the remaining rank-1/SA190 purge half and rank 2's
   coordinator touch the same command, so design them together.
+- **SA152's completed maintainer verification** does not conflict with the two ranked findings.
 - **SA177 is independent of both findings,** but its "each enrolled table" scope inherits rank 1's
   closed universe. If rank 1 lands first, SA177 covers project tables for free.
 

@@ -146,6 +146,10 @@ jobs:
         run: |
           make check-security-static-analysis
 
+      - name: Run beta migration smoke gate
+        run: |
+          make check-beta-migration-smoke
+
       - name: Run rendered frontend proof
         run: |
           make frontend-proof

@@ -29,6 +29,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
 - `make check-dependency-vulnerabilities` - Run the blocking Trivy v0.74.0 scan of the committed root Poetry lockfile.
 - `make check-security-static-analysis` - Run the blocking focused Bandit 1.9.4 source scan.
+- `make check-beta-migration-smoke` - Exercise fresh-first and in-place beta migration compatibility on isolated generated fixtures.
 - `make security-negative-probes` - Prove scanner, checksum, archive-safety, and stale-database failures remain fail-closed.
 - `make isolation-conformance` - Run the PostgreSQL isolation-conformance suites through the repository-owned runner.
 - `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input. The ordered release sequence that invokes it, and the pre-publish quality gate, live in [publish_procedure.md](publish_procedure.md).
@@ -201,7 +202,7 @@ validated resources; preserve the runners' exact-scope cleanup contracts.
 
 ### Registered script-gate and isolation execution
 
-The registry-derived local and hosted conformance flow includes ten registered hosted
+The registry-derived local and hosted conformance flow includes eleven registered hosted
 gates, including the CSRF-exempt contract, behavioural-commit testimony, blocking Trivy
 dependency-vulnerability, and Bandit static-security gates. `make check-gate-suites` is the owning execution context for all current
 `scripts/test_*.py` suites and invokes exactly:
@@ -212,7 +213,8 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains seven
-separately justified unowned jobs, for seventeen jobs total. `isolation-conformance`
+separately justified unowned jobs, for eighteen jobs total. Ten registered gates run
+locally across stages 3–7. `isolation-conformance`
 and the reusable `bypassrls` suite are hosted-unowned jobs: Make exposes both runners for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by
 `scripts/provision_ci_postgres.sh`: Docker allocates a dynamic loopback endpoint and

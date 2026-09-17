@@ -11,6 +11,7 @@ import pytest
 ROOT = Path(__file__).parents[2]
 TICKET = r"SA\d+[a-z]?"
 RETAINED_CLOSED_TICKETS = {
+    "SA152",
     "SA160",
     "SA177",
     "SA180",
