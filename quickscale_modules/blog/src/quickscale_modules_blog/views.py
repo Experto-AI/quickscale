@@ -348,7 +348,9 @@ def authenticate_blog_api_request(
 
         user_model = get_user_model()
         for configured_token, username in _get_blog_api_tokens():
-            if not secrets.compare_digest(token, configured_token):
+            if not secrets.compare_digest(
+                token.encode("utf-8"), configured_token.encode("utf-8")
+            ):
                 continue
 
             user = user_model.objects.filter(username=username, is_active=True).first()

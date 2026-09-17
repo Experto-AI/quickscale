@@ -749,7 +749,9 @@ def _verify_webhook_signature(
         timestamp=timestamp_value,
     )
     expected_signature = expected_headers["X-QuickScale-Notifications-Signature"]
-    if not hmac.compare_digest(signature or "", expected_signature):
+    if not hmac.compare_digest(
+        (signature or "").encode("utf-8"), expected_signature.encode("utf-8")
+    ):
         raise NotificationWebhookSignatureError("Webhook signature is invalid.")
 
 

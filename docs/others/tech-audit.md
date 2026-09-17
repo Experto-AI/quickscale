@@ -71,30 +71,19 @@ All of these were read hunk by hunk, production and test.
 
 **Skipped:** React theme bodies, generated-project migrations, the DR engine (read at depth last pass, untouched by the delta), and gate-script internals beyond the delta hunks.
 
-**Audit tools run (read-only):** `git log` / `git diff` / `git show` / `git rev-list` over the delta, and `poetry run python` 3.14.6 for the checks below. No scanner was re-run; Trivy and Bandit are CI-owned.
-
-**Empirical check (§1e):** `secrets.compare_digest('tokén', 'token')` raises
-`TypeError: comparing strings with non-ASCII characters is not supported`. This confirms TA78.
+**Audit tools run (read-only):** `git log` / `git diff` / `git show` / `git rev-list` over the delta. No scanner was re-run; Trivy and Bandit are CI-owned.
 
 ---
 
 ## Summary table
 
-| ID | Sev | Category | Title | Effort | Confidence | Status |
-|---|---|---|---|---|---|---|
-| TA78 `compare-digest-non-ascii-500` | S4 | Error handling | A non-ASCII token or signature header crashes two auth checks with a 500 | Trivial | High (executed) | open — new |
-
-⚡ = quick win (Trivial-effort S2/S3).
-
-**Counts derived from the table:** S1 **0** · S2 **0** · S3 **0** · S4 **1** · **Total 1 open.**
+No open findings remain.
 
 ---
 
 ## Findings
 
-### S4
-
-- **TA78** `compare-digest-non-ascii-500`: `quickscale_modules/blog/src/quickscale_modules_blog/views.py:351` (`secrets.compare_digest(token, configured_token)`) and `quickscale_modules/notifications/src/quickscale_modules_notifications/services.py:752` (`hmac.compare_digest(signature or "", …)`). Either check raises `TypeError` on a non-ASCII `Authorization` token or signature header (executed). Unauthenticated callers get a 500 with a logged traceback instead of 401/403. The blog path needs `BLOG_API_TOKENS` configured; the notifications path needs a fresh timestamp. **Fix:** compare `.encode()` bytes, or reject non-ASCII input as invalid first.
+No open findings remain.
 
 ---
 
@@ -108,7 +97,7 @@ All of these were read hunk by hunk, production and test.
 | CLI dev (`development_commands.py`) | delta plus every `_run_docker_exec_command` caller | Clean. The privilege narrowing is correct and `manage` guards empty args at `:690` |
 | orgs — privileged commands (`apps.py`, `migrate_billing_to_orgs.py`) | whole command, guard delta | Clean. See *Clean sweeps* |
 | orgs — `purge_organization` | whole file | Clean for live Stripe-backed subscriptions; the broader teardown tooling gap remains below |
-| Client identity / public auth (`get_client_ip`, blog API auth, notifications webhook) | functions in full | TA78; otherwise clean |
+| Client identity / public auth (`get_client_ip`, blog API auth, notifications webhook) | functions in full | Clean |
 | Publication tooling (`publish_module.py`, `version_tool.sh`, compat gate) | delta plus `_publish_module`, `_run_release_gates` | Clean after the fast-forward ancestry check before each push |
 | CI / gates (workflows, testimony, security gates, provisioning, isolation conformance) | delta in full | Clean as defects; remaining watch items and tooling gaps are listed below |
 

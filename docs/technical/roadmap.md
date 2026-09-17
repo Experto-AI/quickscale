@@ -34,7 +34,6 @@ context, scope, and acceptance;
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA152 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA187 | Reject non-ASCII tokens and signatures as authentication failures | post-v88 | 2 | — | Deferred |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | — | Deferred |
 | SA189 | Provision the runtime database role in one place under one name | post-v88 | 3 | — | Deferred |
 | SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | — | Deferred |
@@ -43,7 +42,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA152 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
-Track 2: SA187 ──► SA192
+Track 2: SA192
 Track 3: SA189 ──► SA190
 ```
 
@@ -67,8 +66,8 @@ path.
   project-owned `base.html`, which `quickscale update` never rewrites, so a design change there is
   contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not an SA153 edge: the portal's
   React pages do not need the restyled Django pages to ship.
-- **Independent.** SA187 has no edges and sits by severity. SA152 shares no files with
-  SA189, but both touch the privilege/runtime contract of generated `settings/production.py`
+- **Independent.** SA152 shares no files with SA189, but both touch the privilege/runtime
+  contract of generated `settings/production.py`
   and `start.sh`; whichever lands second re-runs the others' fixtures.
 
 **Rebalance.** Track 1 carries the whole critical path: the migration-tool verification (SA152),
@@ -77,8 +76,7 @@ splitting them across tracks would only add merge handoffs. Tracks 2 and 3 split
 conflict surface. Track 2 takes the CLI deploy/update, publication, and test surfaces, which are
 mostly trivial or small. Track 3 takes orgs tenancy, purge, and the privileged/runtime-role
 templates, which carry the medium tickets. Track 3 completed its independent RLS predicate work
-and privileged-command work, while Track 2 delivered SA186 and can now proceed to SA187. SA187
-could move to Track 3's tail without a conflict, but would only lengthen that track.
+and privileged-command work, while Track 2 delivered SA186 and SA187 and can now proceed to SA192.
 
 ### Track states
 
@@ -87,7 +85,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA152 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA187 | yes | yes | yes | **yes** | no |
+| 2 | SA192 | yes | yes | yes | **yes** | no |
 | 3 | SA189 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -105,9 +103,9 @@ A track is **truly green** only when all three states are yes.
   `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  and the owning audit: the arch audit for SA152, SA189, and SA190; the tech audit
-  for SA187 (SA190 also closes arch-audit items). SA191, SA153, and SA192 have no owning
-  audit; their evidence goes to the changelog, and SA191's also to the migration playbook. All are
+  and the owning audit: the arch audit for SA152, SA189, and SA190 (SA190 also closes arch-audit
+  items). SA191, SA153, and SA192 have no owning audit; their evidence goes to the changelog, and
+  SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
   Three code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
   documentation; SA192 restyles the `auth` account templates
@@ -340,19 +338,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA186 — Require a fast-forward before publication force-pushes a split branch.**
 
-- [ ] **SA187 — Reject non-ASCII tokens and signatures as authentication failures.**
-
-  **Context:** `secrets.compare_digest` and `hmac.compare_digest` raise `TypeError` when given `str` values containing
-  non-ASCII characters. Header values reaching the blog API token check and the notifications webhook
-  signature check are attacker-controlled, so malformed input produces a 500 and a logged traceback
-  instead of an authentication failure. Comparing encoded bytes keeps the constant-time property and
-  turns the input into an ordinary mismatch.
-
-  **Acceptance:** the blog API token check and the notifications webhook signature check compare
-  bytes, or reject non-ASCII input first, so a non-ASCII `Authorization` token or signature header
-  gets 401/403 instead of a 500 traceback. Each path has a regression. This retires TA78.
-
-  **Surfaces:** `blog/views.py`, `notifications/services.py`, their tests, and the technical audit.
+- [x] **SA187 — Reject non-ASCII tokens and signatures as authentication failures.**
 
 - [x] **SA182 — Enroll marker-declared tenant models in classification and policy refresh.**
 

@@ -237,6 +237,20 @@ class TestPublishPostApi:
         assert response.status_code == 401
         assert response.json()["error"] == "Authentication required"
 
+    def test_publish_post_api_non_ascii_token_returns_401(self, client, settings):
+        """Non-ASCII bearer tokens should fail authentication without raising."""
+        settings.BLOG_API_TOKENS = [{"token": "publish-token", "username": "unused"}]
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Post", "content": "Content"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer tokén",
+        )
+
+        assert response.status_code == 401
+        assert response.json()["error"] == "Invalid API token"
+
     def test_publish_post_api_non_staff_returns_403(self, client, user):
         """Test API requires staff permissions"""
         _login_with_org(client, user)
