@@ -2131,6 +2131,57 @@ def test_dockerfile_requires_effective_final_stage_production_settings(
 
 
 @pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
+def test_required_collectstatic_must_be_in_effective_final_stage(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """An unused Docker stage cannot satisfy final-image collection requirements."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    launcher_root = recipient if mode == "fresh-first" else donor
+    dockerfile = launcher_root / "Dockerfile"
+    collectstatic_line = (
+        "RUN QUICKSCALE_NON_DB_COMMAND=collectstatic "
+        "python manage.py collectstatic --noinput\n"
+    )
+    docker_text = dockerfile.read_text()
+    assert collectstatic_line in docker_text
+    dockerfile.write_text(
+        "FROM python:3.14-slim-bookworm AS unused\n"
+        + collectstatic_line
+        + docker_text.replace(collectstatic_line, "")
+    )
+    if mode == "in-place":
+        _init_clean_git_repo(recipient)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode=mode,
+            donor=donor,
+            recipient=recipient,
+            dry_run=mode == "fresh-first",
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "required QUICKSCALE_NON_DB_COMMAND=collectstatic" in blocker
+        for blocker in report.blockers
+    )
+
+
+@pytest.mark.parametrize("mode", ["fresh-first", "in-place"])
 @pytest.mark.parametrize(
     "shadow_source",
     [
