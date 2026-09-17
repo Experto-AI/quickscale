@@ -16,9 +16,12 @@ split-branch republication, seal, or PyPI upload has happened. Outstanding befor
 release-tier validation on the packaged bytes, the ordered phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. SA185 now declares
 the `orgs` contract vintage that the 0.88 templates introduced; SA186 now requires a fast-forward
-before the split-branch force-push that publication runs. Including either fix in 0.88.0 means repackaging;
-publishing bytes without a fix ships its recorded issue. Publication itself stays a maintainer
-decision; this planner tracks only that it is owed.
+before the split-branch force-push that publication runs. The audits add a third recorded issue:
+the packaged CLI generates an `.env.example` with no placeholder for the credential variables that
+`storage` and `backups` declare (SA193), so a project generated from the published bytes with
+either module enabled meets a configuration error naming a variable it was never shown. Including
+any of these fixes in 0.88.0 means repackaging; publishing bytes without one ships its recorded
+issue. Publication itself stays a maintainer decision; this planner tracks only that it is owed.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance;
@@ -30,51 +33,76 @@ context, scope, and acceptance;
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
+| SA194 | Unblock in-place beta migration at the contract-vintage gate | post-v88 | 1 | — | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA194 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | — | Deferred |
+| SA193 | Derive the generated `.env.example` credential contract from module manifests | post-v88 | 2 | — | Deferred |
+| SA195 | Share one module test-settings stub instead of copying it per module | post-v88 | 2 | — | Deferred |
+| SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | SA195 | Deferred |
+| SA196 | Fail hard on undefined generator template context | post-v88 | 3 | — | Deferred |
 | SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
-Track 2: SA192
-Track 3: SA190
+Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
+Track 2: SA193 ──► SA195 ──► SA192
+Track 3: SA196 ──► SA190
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA191 → SA153. The portal is built on the migrated `bap-web`, using the verified
-migration tools for real. Project-owned tenant tables no longer add a dependency to the portal.
-SA154 is an inventory, not work. Every other ticket is off the critical path.
+**Critical path.** SA194 → SA191 → SA153. The portal is built on the migrated `bap-web`, using the
+verified migration tools for real, once the tool's in-place halt and its blind smoke gate are
+cleared. Project-owned tenant tables no longer add a dependency to the portal. SA154 is an
+inventory, not work. Every other ticket is off the critical path.
 
 **Ordering.**
 
 - **Derived tenant tables support SA153 and SA177.** Project-owned tenant tables pass the generated
   project's `check_tenant_isolation` without module-source edits, and predicate verification covers
   them through the same derived tenant-model set.
-- **SA152 precedes SA191, and SA191 precedes SA153.** `bap-web` is migrated with the maintainer
-  tools only after SA152 has proven them on isolated fixtures, and the portal is built on the
-  migrated project rather than on a fresh one. SA191 redeploys through the fail-hard
-  `deploy railway` path.
+- **SA194 precedes SA191, and SA191 precedes SA153.** `bap-web` is migrated with the maintainer
+  tools only after SA152 proved them on isolated fixtures, and the portal is built on the migrated
+  project rather than on a fresh one. SA194 is the new edge: the tool's in-place mode aborts
+  mid-run at `quickscale apply` on exactly the recipients it was built for, and the smoke gate that
+  claims to cover that path shims the CLI so it always exits 0. The `bap-web` migration uses
+  fresh-first mode, which the halt does not reach, but it uses a tool whose gate is currently blind
+  to the CLI it invokes; SA194 makes the gate observe it before the tool is trusted with the real
+  site. SA191 redeploys through the fail-hard `deploy railway` path.
+- **SA195 precedes SA192.** The SA192 precursor already minted three byte-identical test-settings
+  stubs for the modules it restyled, while a sanctioned shared commons is imported by those same
+  three suites. SA192 restyles five module surfaces on that pattern and SA154's inventory queues
+  more, so the copy multiplies before it is removed unless the stub is shared first.
+- **SA193 is independent of the orgs work.** It touches generation-time wiring in `quickscale_cli`
+  and `quickscale_core`; SA190's findings live in the `orgs` module, so the two run on different
+  tracks with no shared file. One interaction to watch: giving the `backups` remote-credential
+  variables placeholders makes that path more exercised, which makes the DR `pg_dump`/`pg_restore`
+  watch item's trigger more likely to fire.
+- **SA196 is queued early on track 3 but gates nothing.** Making the generator raise on an
+  undefined context key protects the fresh recipient scaffold SA191 generates and the `base.html`
+  rewrite SA192 performs, which is why it precedes SA190 in the queue. Neither ticket depends on
+  it and both are correct without it, so it carries no dependency edge.
+- **SA153 decides whether SA190's purge half stays real.** If the property tables ship as
+  project-owned extension models, purge membership stays closed against them and the finding keeps
+  its horizon; if they ship inside a first-party module, that half retires. SA190 is scheduled
+  either way for the obligations half.
 - **SA192 uses the enforced vintage boundary.** The module pages extend the generated,
   project-owned `base.html`, which `quickscale update` never rewrites, so a design change there is
   contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not
   an SA153 edge: the portal's
   React pages do not need the restyled Django pages to ship.
-- **Independent.** SA152 shares no files with SA189, but both touch the privilege/runtime
-  contract of generated `settings/production.py`
-  and `start.sh`; whichever lands second re-runs the others' fixtures.
 
-**Rebalance.** Track 1 carries the whole critical path: the migration-tool verification (SA152),
-the `bap-web` migration (SA191), and the portal (SA153), because each feeds the next and
-splitting them across tracks would only add merge handoffs. Tracks 2 and 3 split the audit work by
-conflict surface. Track 2 takes the CLI deploy/update, publication, and test surfaces, which are
-mostly trivial or small. Track 3 takes orgs tenancy, purge, and the privileged/runtime-role
-templates, which carry the medium tickets. Track 3 completed its independent RLS predicate work
-and privileged-command work, while Track 2 delivered SA186 and SA187 and can now proceed to SA192.
+**Rebalance.** Track 1 carries the whole critical path: the migration-tool fixes (SA194), the
+`bap-web` migration (SA191), and the portal (SA153), because each feeds the next and splitting them
+across tracks would only add merge handoffs. Tracks 2 and 3 split the audit work by conflict surface.
+Track 2 takes the CLI apply/deploy/update, publication, module template and module test surfaces:
+the `.env.example` derivation (SA193), the shared test stub (SA195), and the restyle (SA192) — no
+longer mostly trivial, since SA193 is the one finding with a live defect today. Track 3 takes orgs
+tenancy, purge, the privileged/runtime-role templates, and the generator's rendering strictness
+(SA196, SA190), which carry the remaining medium ticket. Track 3 completed its independent RLS
+predicate work and privileged-command work, while Track 2 delivered SA186 and SA187.
 
 ### Track states
 
@@ -82,34 +110,38 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA192 | yes | yes | yes | **yes** | no |
-| 3 | SA190 | yes | yes | yes | **yes** | no |
+| 1 | SA194 | yes | yes | yes | **yes** | **yes** |
+| 2 | SA193 | yes | yes | yes | **yes** | no |
+| 3 | SA196 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
-- Track 1 owns gate documentation, `scripts/gate_registry.json`, the parity oracles, the maintainer
-  migration tools and playbook, the `bap-web` migration, the property extension, public templates,
-  and the portal's extension documentation.
+- Track 1 owns gate documentation, `scripts/gate_registry.json`, the parity oracles, the hosted
+  workflow triggers, the maintainer migration tools with their smoke gate and playbook, the
+  `bap-web` migration, the property extension, public templates, and the portal's extension
+  documentation.
 - Track 2 owns `scripts/publish_module.py`, the module-shipped page templates and stylesheets, the
-  generated `base.html`, the CLI deploy and update commands
-  (`deployment_commands.py`, `railway_utils.py`, `module_commands.py`, the vintage check), version
+  module test-settings stubs and the shared test commons, the generated `base.html`, the CLI apply,
+  deploy and update commands (`apply_command.py` with its env-sync steps, `deployment_commands.py`,
+  `railway_utils.py`, `module_commands.py`, the vintage check), `contracts/module_options.py` with
+  the `*_env_var` declarations in `module.yml` and the `.env.example` template, version
   expectations in tests, and the blog/notifications credential comparisons.
 - Track 3 owns the isolation-conformance runner, `orgs/tenancy.py` and its checks, the orgs policy
-  template/tests, `purge_organization.py` and the account-delete obligations, and the privileged
+  template/tests, `purge_organization.py` and the account-delete obligations, the privileged
   command and runtime-role stations (`orgs/apps.py`, `production.py.j2`, `start.sh.j2`,
-  `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture).
+  `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture), and the generator's
+  Jinja environment.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  and the owning audit: the arch audit for SA152, SA189, and SA190 (SA190 also closes arch-audit
-  items). SA191, SA153, and SA192 have no owning audit; their evidence goes to the changelog, and
-  SA191's also to the migration playbook. All are
-  Markdown with no generated consumer.
+  and the owning audit: the arch audit for SA193 and SA190, the tech audit for SA194 and SA196.
+  SA191, SA153, SA192, and SA195 have no owning audit; their evidence goes to the changelog,
+  and SA191's also to the migration playbook. All are Markdown with no generated consumer.
   Three code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
-  documentation; SA192 restyles the `auth` account templates
-  while SA190 edits the account-delete view, so whichever lands second re-runs the auth tests; and
-  SA189 edits `deployment_commands.py` after Track 2's deploy work has merged through its
-  dependency chain. The serialized queue covers them:
+  documentation; SA192 restyles the `auth` account templates while SA190 edits the account-delete
+  view, so whichever lands second re-runs the auth tests; and SA196 turns strict rendering on for
+  every generator template, including the `.env.example` template SA193 rewrites and the generated
+  `base.html` SA192 restyles, so its fixes may reach Track 2's files and whichever lands second
+  re-runs the generator tests and the SA90 emission fixture. The serialized queue covers them:
   each track resolves the shared set at its own merge, after the previous merge lands, then runs the
   consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
@@ -128,6 +160,46 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA152 — Verify maintainer migration modes and their runtime compatibility.**
 
+- [ ] **SA194 — Unblock in-place beta migration at the contract-vintage gate.**
+
+  **Context:** SA185 made `quickscale apply` refuse a project whose recorded `project_contract` is
+  below every installed module's declared minimum — now `0.89.0` for `orgs` — unless the
+  acknowledgement flag is passed. The in-place beta migration shells out to a bare
+  `quickscale apply` and nowhere mentions the contract vintage, so a beta site generated at 0.88.0
+  or earlier, which is the only kind of recipient the mode exists for, halts at that step. By then
+  four steps have already rewritten the recipient's working tree — managed infrastructure files,
+  `pyproject.toml`, `frontend/package.json`, and `quickscale.yml` — and the run ends
+  `in-place-partial` and `blocked`, skipping the React-surface copy and the verification stack. A
+  stateless recipient does not escape it: an absent `project_contract` resolves as behind, and the
+  only pre-apply step that touches recipient state never writes that key.
+
+  The gap is invisible to CI because the beta-migration smoke gate shims `quickscale` so `apply`
+  exits 0 unconditionally. The gate exercises the in-place path without ever observing the CLI that
+  path invokes, so it is green today and would stay green through any refusal, gate, or regression
+  in the real command. That blindness also explains why the fifth declaration of the privileged
+  command set, the copy inside the migration tool that the cross-station contract test does not
+  cover, is currently only assumed to be held honest by this gate.
+
+  Fix the policy at the one callsite. A preflight that reads the recipient's recorded contract
+  against the shipped manifests and refuses before any mutating step is the better shape than
+  passing the acknowledgement, because it moves the refusal ahead of the damage; passing the
+  acknowledgement is defensible only if the infrastructure-copy step genuinely performs all three
+  `orgs` adoption steps, which must be checked against the manifest before choosing it.
+
+  **Acceptance:** an in-place continuation against a recipient whose recorded contract is behind
+  the shipped manifests either completes or refuses before the first mutating step, never aborts
+  between them, and the refusal names the adoption steps; the chosen policy is recorded in the
+  migration playbook, which currently documents the continuation order without mentioning the gate
+  at all. The smoke gate runs the real `quickscale apply` on the in-place path instead of a shim
+  that always succeeds, with the recipient fixture carrying a pre-`0.89.0` contract, and fails if
+  the path regresses. With the real CLI in the loop, confirm the gate reaches the migration tool's
+  own required-runtime-command validator, so the fifth privileged-command station is held honest by
+  something observed rather than assumed. Fresh-first mode's behavior is unchanged. This closes the
+  tech audit's single open finding and its smoke-gate tooling gap.
+
+  **Surfaces:** `quickscale_devtools/.../beta_migration.py` at its apply and in-place execution
+  sites, `scripts/check_beta_migration_smoke.py`, the migration playbook, and the tech audit.
+
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 
   Use `make beta-migrate-fresh` with `bap-web` as donor and a fresh scaffold generated with the same
@@ -140,8 +212,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   The fresh-first mode is the documented primary path: a fresh scaffold with the same slug receives
   the donor's custom content, so infrastructure files start correct instead of being merged. The
-  migration is the first real run of the tools that SA152 verifies on fixtures, which is why it waits
-  for that verification. Manual continuation is expected where the tool stops safely; the value of
+  migration is the first real run of the tools that SA152 verified on fixtures, which is why it
+  waits for that verification and for SA194 — the tool's in-place mode aborts mid-run at the
+  contract-vintage gate, and its smoke gate shims the CLI so it cannot observe that or any other
+  real refusal. Manual continuation is expected where the tool stops safely; the value of
   this ticket is that every such stop becomes either a playbook step or a deterministic tool fix.
 
   The migration preserves behavior, including the existing React and JSON API property surface that
@@ -229,6 +303,75 @@ suite, and merge only the reviewed delivery through the serialized queue.
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
   extension documentation.
 
+- [ ] **SA193 — Derive the generated `.env.example` credential contract from module manifests.**
+
+  **Context:** `module.yml` already declares every credential variable a module needs, by name,
+  with a type, default, Django setting, and description — and the manifest layer already projects
+  declarations like these into generated wiring. `.env.example` escaped that. Its content is
+  hand-written Python per module: a render function, a marker-splice implementation, and a wrapper
+  in the apply command, plus a named core step re-exported through two `__init__` stations. Three
+  modules have that treatment. `storage` and `backups` each declare two object-storage credential
+  variables and have none, so a user enabling private-remote backups meets a configuration error
+  naming a variable their generated `.env.example` never mentioned. The notifications variables
+  appear a fourth time, hardcoded in the `.env.example` template under the same markers the apply
+  step splices on.
+
+  The cost is measured, not projected: adding one credential-bearing module option is an
+  eight-station edit across two packages with no gate detecting omission, and the omission has
+  already happened twice, silently, in shipped modules. The three splice implementations are the
+  same algorithm copied verbatim, varying only in marker text, resolver, and log message, so any
+  correctness fix to it — encoding, idempotency, a missing trailing newline — must be applied three
+  times and will be applied to two.
+
+  The steelman is real and shapes the fix rather than blocking it: the three implemented blocks
+  carry bespoke prose that a type and a default cannot produce, and that guidance should not be
+  lost or pushed into a config schema. Prose can hang off a derived set; it does not have to
+  replace one.
+
+  **Acceptance:** a conformance check fails when any `*_env_var` option declared in any `module.yml`
+  has no placeholder in the generated `.env.example`, and it lands first, failing for `storage` and
+  `backups` — that failing check is the specification for the rest. The managed blocks are then
+  rendered from the declared option set in one place for every enabled module, under the existing
+  marker convention, retiring the three hand-written triples and the static template copy;
+  module-specific prose survives as manifest-hung text or one optional hook. Output is
+  byte-identical to today's for the three covered modules, so existing projects see no spurious
+  diff on their next `apply`, while `storage` and `backups` gain placeholders — a deliberate
+  behavior change for existing projects, recorded as one. If the settled position is instead that
+  `.env.example` is curated documentation rather than a derived contract, the ticket closes by
+  recording that in `decisions.md` and the generated-file ownership doc with an explicit rationale
+  for excluding `storage` and `backups`; silence is not an outcome. This closes the arch audit's
+  highest-ranked finding, the only one with a live defect rather than a scheduled trigger.
+
+  **Surfaces:** the apply command's env-sync render and splice functions, the named core env-sync
+  step and its two re-export stations, `contracts/module_options.py`, the `.env.example` template,
+  the five declaring `module.yml` files, the apply and env-sync tests, the generated-file ownership
+  doc, and the arch audit.
+
+- [ ] **SA195 — Share one module test-settings stub instead of copying it per module.**
+
+  **Context:** The commit that restyled the blog, CRM, and listings Django pages also minted three
+  byte-identical `tests/templates/base.html` stubs and three near-identical template-rendering
+  suites. The argument that would justify per-module copies is that publication splits each module
+  with its own prefix, so a module must stay self-contained — but those same three suites already
+  import a repo-root shared test commons, so the modules' own imports contradict it. Whatever
+  contract governs that commons today governs the stub too. SA192 restyles two further modules that
+  carry their own divergent stubs, and the promotion inventory queues more behind them.
+
+  The remaining three module stubs are not identical and predate the restyle; they are a separate
+  question. This is presentation-free cleanup: no template output changes.
+
+  **Acceptance:** the three byte-identical stubs resolve to one shared definition on the same terms
+  as the existing shared test commons, or the copies are kept and a check asserts they stay
+  identical, with the split constraint that forced them written down. Converge the three
+  non-identical stubs only if the shared one renders their suites unchanged; otherwise leave them
+  and record why. Module test suites pass unchanged, the publication split scope is unchanged, and
+  the shared commons' portability contract is neither weakened nor newly claimed — if module tests
+  are not in fact split-portable today, record that rather than fix it here. No styling, template,
+  or rendering change; those belong to SA192.
+
+  **Surfaces:** the blog, CRM, and listings test settings and template stubs, the shared test
+  commons, and the affected module test suites.
+
 - [ ] **SA192 — Style the module-shipped Django pages with the shared design.**
 
   **Context:** After the frontend direction, a user moves between React screens and Django-rendered module pages:
@@ -270,8 +413,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   project's frontend build does not emit, since that build scans only `frontend/src`. Flow logic,
   URLs, forms, CSRF and session handling, allauth behavior, and the Stripe hosted checkout hand-off
   are unchanged, and existing module tests pass without behavior edits. A generated-project check
-  fails when a module page stops extending `base.html` or loses its module stylesheet. Django admin
-  and notification emails are out of scope.
+  fails when a module page stops extending `base.html` or loses its module stylesheet. Each
+  restyled module carries its own stylesheet, but its test-settings stub comes from the shared
+  definition SA195 establishes rather than a new per-module copy. Django admin and notification
+  emails are out of scope.
 
   **Surfaces:** `auth`, `billing`, `blog`, `listings`, and `crm` templates and static styles; the
   generated `base.html` template; the module vintage declarations; generator tests; the theme
@@ -297,6 +442,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Promote a capability only with a concrete consumer, bounded acceptance criteria, and evidence
   that it improves the working portal. Public API design and generic extension work should follow
   the actual project contracts they need to support.
+
+- [x] **SA197 — Run the hosted gate set on integration branches.**
 
 - [x] **SA181 — Derive expected versions in tests from the repository version.**
 
@@ -350,12 +497,38 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `purge_organization.py`, `auth/views.py` account deletion, the billing cancellation
   seam, orgs and auth tests, `organizations.md`, and both audits.
 
+- [ ] **SA196 — Fail hard on undefined generator template context.**
+
+  **Context:** The generator's Jinja environment uses the default undefined behavior, so a missing
+  or renamed context key renders as empty text with no error — confirmed for plain substitution,
+  loops, and filters alike. SA189 moved the runtime role's attributes and grant statements out of
+  template literals and into context variables, which means a rename now silently emits a role
+  creation statement with no `NOSUPERUSER`, no `NOBYPASSRLS`, and no grants. The only thing
+  standing between that and a generated project is a content assertion in one test file.
+
+  The rest of the system applies the fail-hard principle to every configuration error, missing
+  dependency, and invalid runtime state. The generator's own rendering is the station where it was
+  never applied, and SA189 made that station load-bearing for the privilege contract.
+
+  **Acceptance:** the generator's Jinja environment raises on an undefined context key instead of
+  emitting empty text, and a regression test renders a template with a missing key and asserts the
+  failure. Generation still succeeds for every shipped template and module combination, and the
+  emission fixture stays byte-identical; any template that relied on undefined-renders-empty is
+  fixed by supplying or removing the key, never by restoring a permissive default. Fixes may reach
+  templates other tracks own, and they are in scope here. This closes the tech audit's generator
+  tooling gap.
+
+  **Surfaces:** the generator's Jinja environment, any template rendering an undefined key,
+  generator and emission-fixture tests, and the tech audit.
+
 ## Deferred constraints and references
 
 The [architecture audit](../others/arch-audit.md) and [technical audit](../others/tech-audit.md) own
 deferred findings and their growth triggers. Items they record without scheduling — the watchlists
-and watch notes, the generated-project dependency-scan tooling gap, and the later
-deletion-coordinator options — stay there until a trigger fires. The standing
+and watch notes, the generated-project dependency-scan tooling gap, the beta-migration ownership
+taxonomy whose derivation `decisions.md` § Release scope safeguards explicitly withholds
+authorization for, and the later deletion-coordinator options — stay there until a trigger fires.
+The external-provider conformance gap is not among them: SA190's acceptance carries it. The standing
 no-`teams`/no-third-updater scope, internal-only devtools, presence contracts, and resource
 safeguards live in
 [decisions](decisions.md) and [validation policy](validation_policy.md#candidate-review-and-integration).
