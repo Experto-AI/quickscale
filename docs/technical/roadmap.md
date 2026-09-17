@@ -34,7 +34,6 @@ context, scope, and acceptance;
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | — | Deferred |
-| SA189 | Provision the runtime database role in one place under one name | post-v88 | 3 | — | Deferred |
 | SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -42,7 +41,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
 Track 2: SA192
-Track 3: SA189 ──► SA190
+Track 3: SA190
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -85,7 +84,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA192 | yes | yes | yes | **yes** | no |
-| 3 | SA189 | yes | yes | yes | **yes** | no |
+| 3 | SA190 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -317,24 +316,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA188 — Settle the privileged-command set behind one declaration.**
 
-- [ ] **SA189 — Provision the runtime database role in one place under one name.**
-
-  **Context:** The same release that introduced runtime-role provisioning left three implementations with two
-  role names. Local `init.sql` creates `<package>_app` without `GRANT CONNECT`, while `start.sh` creates
-  `quickscale_runtime` with it and duplicates the CLI's default name; the operations guide gives
-  manual SQL. A role-name mix-up surfaces as password-authentication failures. Choose one naming rule
-  and one statement set, and have the other paths render or delegate to it. The DDL-password logging
-  and concurrent `CREATE ROLE` notes in the technical audit are not promoted and stay out of scope.
-
-  **Acceptance:** `db/init.sql.j2`, the `start.sh.j2` provisioning step, the `deploy railway` default
-  role, and `OPERATIONS.md.j2` share one role-naming rule and one provisioning statement set,
-  including `GRANT CONNECT`. A generated project's local and Railway paths produce the same role name
-  and grants, and a regression fails when they diverge. The template change moves the `orgs`
-  vintage through SA185. The boot guard and the privileged-command set are unchanged.
-
-  **Surfaces:** `db/init.sql.j2`, `start.sh.j2`, the generator's role-name context,
-  `deployment_commands.py`, `OPERATIONS.md.j2`, generator tests, the SA90 fixture, and the
-  architecture audit.
+- [x] **SA189 — Provision the runtime database role in one place under one name.**
 
 - [ ] **SA190 — Derive the purge plan and share organization-removal obligations.**
 

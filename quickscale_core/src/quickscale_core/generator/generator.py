@@ -8,6 +8,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
+from quickscale_core.generator.runtime_database import runtime_db_template_context
 from quickscale_core.generator.runtime_pins import (
     DJANGO_CONSTRAINT,
     DJANGO_CI_MATRIX_VERSION,
@@ -502,11 +503,6 @@ class ProjectGenerator:
         output_path: Path,
     ) -> None:
         """Generate project structure in specified directory"""
-        # Default runtime DB role name derived from the Python package name.
-        # Used for the NOSUPERUSER/NOBYPASSRLS role created by the init SQL.
-        _runtime_db_role = f"{package_name}_app"
-        _runtime_db_default_password = f"{_runtime_db_role}_password"
-
         # Context for template rendering
         context = {
             "project_name": project_slug,
@@ -526,8 +522,7 @@ class ProjectGenerator:
             "postgres_version": POSTGRES_VERSION,
             "postgres_docker_tag": POSTGRES_DOCKER_TAG,
             # Runtime DB role (RLS enforcement — NOSUPERUSER, NOBYPASSRLS)
-            "runtime_db_role": _runtime_db_role,
-            "runtime_db_password": _runtime_db_default_password,
+            **runtime_db_template_context(package_name),
         }
 
         # Known executable files (emitted paths that should be executable)

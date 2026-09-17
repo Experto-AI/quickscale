@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from quickscale_core.generator.runtime_database import runtime_db_template_context
 from quickscale_core.generator.runtime_pins import (
     DJANGO_CI_MATRIX_VERSION,
     DJANGO_CONSTRAINT,
@@ -16,7 +17,7 @@ from quickscale_core.generator.runtime_pins import (
 
 
 @pytest.fixture
-def prod_test_context() -> dict[str, str]:
+def prod_test_context() -> dict[str, object]:
     """Minimal context for production settings template rendering."""
     return {
         "project_name": "testproject",
@@ -29,8 +30,7 @@ def prod_test_context() -> dict[str, str]:
         "postgres_docker_tag": POSTGRES_DOCKER_TAG,
         "django_constraint": DJANGO_CONSTRAINT,
         "django_ci_version": DJANGO_CI_MATRIX_VERSION,
-        "runtime_db_role": "testproject_app",
-        "runtime_db_password": "testproject_app_password",
+        **runtime_db_template_context("testproject"),
     }
 
 

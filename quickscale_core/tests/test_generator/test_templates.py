@@ -10,6 +10,13 @@ from collections.abc import Callable
 import pytest
 from jinja2 import Environment, FileSystemLoader
 
+from quickscale_core.generator.runtime_database import (
+    RUNTIME_DB_GRANT_STATEMENTS,
+    RUNTIME_DB_ROLE,
+    RUNTIME_DB_ROLE_ATTRIBUTES,
+    render_runtime_db_grant_statements,
+    runtime_db_template_context,
+)
 from quickscale_core.generator.runtime_pins import (
     DJANGO_CI_MATRIX_VERSION,
     DJANGO_CONSTRAINT,
@@ -39,7 +46,7 @@ def jinja_env(template_dir: Path) -> Environment:
 
 
 @pytest.fixture
-def test_context() -> dict[str, str | list[str] | None]:
+def test_context() -> dict[str, object]:
     """Provide sample context data for template rendering tests.
 
     Includes generated-project runtime pins imported from the
@@ -57,8 +64,7 @@ def test_context() -> dict[str, str | list[str] | None]:
         "django_ci_version": DJANGO_CI_MATRIX_VERSION,
         "postgres_version": POSTGRES_VERSION,
         "postgres_docker_tag": POSTGRES_DOCKER_TAG,
-        "runtime_db_role": "testproject_app",
-        "runtime_db_password": "testproject_app_password",
+        **runtime_db_template_context("testproject"),
         "selected_modules": None,
     }
 
@@ -301,6 +307,54 @@ class TestRuntimePins:
         assert DJANGO_CI_MATRIX_VERSION is not None
         assert POSTGRES_VERSION is not None
         assert POSTGRES_DOCKER_TAG is not None
+
+
+class TestRuntimeDatabaseProvisioningContract:
+    """Verify every generated provisioning path consumes one role contract."""
+
+    def test_templates_share_role_attributes_and_grants(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, object],
+    ) -> None:
+        """Local init, Railway startup, and manual SQL must not diverge."""
+        init_sql = _render_template(jinja_env, "db/init.sql.j2", test_context)
+        start_sh = _render_template(jinja_env, "start.sh.j2", test_context)
+        operations = _render_template(jinja_env, "OPERATIONS.md.j2", test_context)
+
+        for rendered in (init_sql, start_sh, operations):
+            assert RUNTIME_DB_ROLE in rendered
+            assert "testproject_app" not in rendered
+            for attribute in RUNTIME_DB_ROLE_ATTRIBUTES:
+                assert attribute in rendered
+
+        statement_block = start_sh.split("for statement in (", 1)[1].split("    ):", 1)[
+            0
+        ]
+        assert ast.literal_eval(f"({statement_block})") == RUNTIME_DB_GRANT_STATEMENTS
+
+        def literal_grants(rendered: str) -> tuple[str, ...]:
+            return tuple(
+                line.strip().removesuffix(";")
+                for line in rendered.splitlines()
+                if line.strip().startswith(("GRANT ", "ALTER DEFAULT PRIVILEGES "))
+            )
+
+        assert literal_grants(init_sql) == render_runtime_db_grant_statements(
+            role=RUNTIME_DB_ROLE,
+            database="testproject",
+        )
+        assert literal_grants(operations) == render_runtime_db_grant_statements(
+            role=RUNTIME_DB_ROLE,
+            database="<database>",
+        )
+        assert (
+            "Replace `<password>` with a strong, unique password and `<database>` with the"
+            in operations
+        )
+        assert (
+            "database name from `DATABASE_URL` before running the block" in operations
+        )
 
 
 # ── Expected constraint values for drift detection ────────────────────
@@ -2520,7 +2574,7 @@ class TestLocalSettingsRuntimeDatabaseUrl:
         local_output = _render_template(
             jinja_env, "project_name/settings/local.py.j2", test_context
         )
-        runtime_url = "postgresql://testproject_app:password@db:5432/testproject"
+        runtime_url = "postgresql://quickscale_runtime:password@db:5432/testproject"
         superuser_url = "postgresql://postgres:postgres@db:5432/testproject"
 
         namespace = _execute_rendered_settings(
@@ -2564,7 +2618,7 @@ class TestLocalSettingsRuntimeDatabaseUrl:
         local_output = _render_template(
             jinja_env, "project_name/settings/local.py.j2", test_context
         )
-        runtime_url = "postgresql://testproject_app:password@db:5432/testproject"
+        runtime_url = "postgresql://quickscale_runtime:password@db:5432/testproject"
         superuser_url = "postgresql://postgres:postgres@db:5432/testproject"
 
         monkeypatch.setattr(sys, "argv", ["manage.py", "migrate"])
@@ -3160,7 +3214,8 @@ class TestDevOpsTemplateRendering:
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
-        assert "testproject_app" in output
+        assert RUNTIME_DB_ROLE in output
+        assert "GRANT CONNECT ON DATABASE" in output
         assert "NOSUPERUSER" in output
         assert "NOBYPASSRLS" in output
         assert "NOCREATEDB" in output
@@ -3186,7 +3241,8 @@ class TestDevOpsTemplateRendering:
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
-        assert "testproject_app" in output
+        assert RUNTIME_DB_ROLE in output
+        assert "GRANT CONNECT ON DATABASE" in output
         assert "RUNTIME_DATABASE_URL" in output
         assert "NOSUPERUSER" in output
         assert "NOBYPASSRLS" in output

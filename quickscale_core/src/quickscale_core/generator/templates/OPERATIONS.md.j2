@@ -52,7 +52,7 @@ prefix, so the superuser ``DATABASE_URL`` is used for schema changes.
 On Railway, the platform auto-injects `DATABASE_URL` with a superuser connection.
 
 **With `quickscale deploy railway` (automatic):** the deploy sets `RUNTIME_DB_ROLE`
-(`quickscale_runtime`), a generated `RUNTIME_DB_PASSWORD`, and `RUNTIME_DATABASE_URL`. On every boot,
+(`{{ runtime_db_role }}`), a generated `RUNTIME_DB_PASSWORD`, and `RUNTIME_DATABASE_URL`. On every boot,
 `start.sh` connects with `DATABASE_URL` and creates or updates that `NOSUPERUSER`/`NOBYPASSRLS` role
 before migrating. No manual step is needed.
 
@@ -66,23 +66,18 @@ enable RLS enforcement yourself:
    Or use the Railway dashboard's "Connect" tab to get the `psql` connection string.
 
 2. Create the runtime role (one-time setup):
+   Replace `<password>` with a strong, unique password and `<database>` with the
+   database name from `DATABASE_URL` before running the block.
    ```sql
-   -- Replace '<password>' with a strong, unique password
-   CREATE ROLE {{ runtime_db_role }} WITH
-     LOGIN
-     NOSUPERUSER
-     NOBYPASSRLS
-     NOCREATEDB
-     NOCREATEROLE
+   CREATE ROLE "{{ runtime_db_role }}" WITH
+{% for attribute in runtime_db_role_attributes %}
+     {{ attribute }}
+{% endfor %}
      PASSWORD '<password>';
 
-   GRANT USAGE ON SCHEMA public TO {{ runtime_db_role }};
-   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {{ runtime_db_role }};
-   GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO {{ runtime_db_role }};
-   ALTER DEFAULT PRIVILEGES IN SCHEMA public
-     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ runtime_db_role }};
-   ALTER DEFAULT PRIVILEGES IN SCHEMA public
-     GRANT USAGE ON SEQUENCES TO {{ runtime_db_role }};
+{% for statement in runtime_db_manual_grant_statements %}
+   {{ statement }};
+{% endfor %}
    ```
 
 3. Set `RUNTIME_DATABASE_URL` in your Railway environment:

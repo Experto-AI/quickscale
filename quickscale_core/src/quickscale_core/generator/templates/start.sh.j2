@@ -63,10 +63,10 @@ import os
 import psycopg2
 from psycopg2 import sql
 
-role = os.environ.get("RUNTIME_DB_ROLE") or "quickscale_runtime"
+role = os.environ.get("RUNTIME_DB_ROLE") or "{{ runtime_db_role }}"
 password = os.environ["RUNTIME_DB_PASSWORD"]
 ident = sql.Identifier(role)
-attributes = sql.SQL("LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD {}").format(
+attributes = sql.SQL("{{ runtime_db_role_attributes | join(' ') }} PASSWORD {}").format(
     sql.Literal(password)
 )
 
@@ -87,12 +87,9 @@ with connection.cursor() as cursor:
     cursor.execute("SELECT current_database()")
     database = sql.Identifier(cursor.fetchone()[0])
     for statement in (
-        "GRANT CONNECT ON DATABASE {database} TO {role}",
-        "GRANT USAGE ON SCHEMA public TO {role}",
-        "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {role}",
-        "GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO {role}",
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {role}",
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO {role}",
+{% for statement in runtime_db_grant_statement_templates %}
+        {{ statement | tojson }},
+{% endfor %}
     ):
         cursor.execute(sql.SQL(statement).format(database=database, role=ident))
 connection.close()

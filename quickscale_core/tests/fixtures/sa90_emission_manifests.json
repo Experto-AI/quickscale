@@ -37,7 +37,8 @@
       "v88-privileged-command": "Regenerated 2026-09-13 — the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-runtime-role": "Regenerated 2026-09-14 — Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 — Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa188": "Regenerated 2026-09-16 — start.sh removes the retired migrate_billing_to_orgs argv mode and rejects every supplied argv with exit 2; production.py returns the privileged-command contract to migrate/createcachetable. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
+      "sa188": "Regenerated 2026-09-16 — start.sh removes the retired migrate_billing_to_orgs argv mode and rejects every supplied argv with exit 2; production.py returns the privileged-command contract to migrate/createcachetable. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa189": "Regenerated 2026-09-17 — the generator and Railway deploy share the quickscale_runtime role name, while db/init.sql, start.sh, and OPERATIONS.md render one canonical grant set including database CONNECT. The role-name context also updates .env.example, docker-compose.yml, and settings/base.py. Only these six generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -63,7 +64,7 @@
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "d483010199957d719c5e32d51b6c0688087835295abb27570b47ebff507e9481"
+      "sha256": "595e71c1fd1b44a9ba10263ea09eee7cba230ef132edb93a7a6ca38b9d20f3e3"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
@@ -87,7 +88,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-      "sha256": "8eccd52a8ddcc5d3e4bc1dc20b2331c6932786ef2f1f680847b812061948bd0b"
+        "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
       "mode": "664",
@@ -95,11 +96,11 @@
     },
     "db/init.sql": {
       "mode": "664",
-      "sha256": "34c142c65675abf1dae878e20f0708f500d76a08287c27bba7315c411b081628"
+      "sha256": "9132cda77fd48562637a6dd30b1f868127b2fcbd1cfdf7ed3b17edce3579f220"
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "6f78a4bb546e05c0e789905e228b6e051fb68b3240951a3a115e8a83d99aa546"
+      "sha256": "ff9180ec4a58d140e238492fa8282b52899d1ae54135ac3c78b74fc0f08becbf"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -419,7 +420,7 @@
     },
     "start.sh": {
       "mode": "664",
-      "sha256": "269adb7a8a81644773a8533ffafbe36c656afc4c74e33999e98543f2d15a5a09"
+      "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
     },
     "templates/404.html": {
       "mode": "664",
@@ -471,7 +472,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "920a07d21b9bb73244144fbb5973ce99c01d1d9b05bfc8fe9eacd0da818e7eeb"
+      "sha256": "9ec01ce1be5886233a524c9cbcba8f3d70b8db66545c565de50fcd433c7acdcd"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -529,7 +530,7 @@
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "d483010199957d719c5e32d51b6c0688087835295abb27570b47ebff507e9481"
+      "sha256": "595e71c1fd1b44a9ba10263ea09eee7cba230ef132edb93a7a6ca38b9d20f3e3"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
@@ -553,7 +554,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-      "sha256": "8eccd52a8ddcc5d3e4bc1dc20b2331c6932786ef2f1f680847b812061948bd0b"
+        "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
       "mode": "664",
@@ -561,11 +562,11 @@
     },
     "db/init.sql": {
       "mode": "664",
-      "sha256": "34c142c65675abf1dae878e20f0708f500d76a08287c27bba7315c411b081628"
+      "sha256": "9132cda77fd48562637a6dd30b1f868127b2fcbd1cfdf7ed3b17edce3579f220"
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "6f78a4bb546e05c0e789905e228b6e051fb68b3240951a3a115e8a83d99aa546"
+      "sha256": "ff9180ec4a58d140e238492fa8282b52899d1ae54135ac3c78b74fc0f08becbf"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -885,7 +886,7 @@
     },
     "start.sh": {
       "mode": "664",
-      "sha256": "269adb7a8a81644773a8533ffafbe36c656afc4c74e33999e98543f2d15a5a09"
+      "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
     },
     "templates/404.html": {
       "mode": "664",
@@ -937,7 +938,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "920a07d21b9bb73244144fbb5973ce99c01d1d9b05bfc8fe9eacd0da818e7eeb"
+      "sha256": "9ec01ce1be5886233a524c9cbcba8f3d70b8db66545c565de50fcd433c7acdcd"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -995,7 +996,7 @@
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "d483010199957d719c5e32d51b6c0688087835295abb27570b47ebff507e9481"
+      "sha256": "595e71c1fd1b44a9ba10263ea09eee7cba230ef132edb93a7a6ca38b9d20f3e3"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
@@ -1019,7 +1020,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-      "sha256": "8eccd52a8ddcc5d3e4bc1dc20b2331c6932786ef2f1f680847b812061948bd0b"
+        "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
       "mode": "664",
@@ -1027,11 +1028,11 @@
     },
     "db/init.sql": {
       "mode": "664",
-      "sha256": "34c142c65675abf1dae878e20f0708f500d76a08287c27bba7315c411b081628"
+      "sha256": "9132cda77fd48562637a6dd30b1f868127b2fcbd1cfdf7ed3b17edce3579f220"
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "6f78a4bb546e05c0e789905e228b6e051fb68b3240951a3a115e8a83d99aa546"
+      "sha256": "ff9180ec4a58d140e238492fa8282b52899d1ae54135ac3c78b74fc0f08becbf"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -1351,7 +1352,7 @@
     },
     "start.sh": {
       "mode": "664",
-      "sha256": "269adb7a8a81644773a8533ffafbe36c656afc4c74e33999e98543f2d15a5a09"
+      "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
     },
     "templates/404.html": {
       "mode": "664",
@@ -1403,7 +1404,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "920a07d21b9bb73244144fbb5973ce99c01d1d9b05bfc8fe9eacd0da818e7eeb"
+      "sha256": "9ec01ce1be5886233a524c9cbcba8f3d70b8db66545c565de50fcd433c7acdcd"
     },
     "testproject/settings/local.py": {
       "mode": "664",

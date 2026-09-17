@@ -5,6 +5,8 @@ from unittest.mock import Mock, patch
 import click
 import pytest
 
+from quickscale_core.generator.runtime_database import RUNTIME_DB_ROLE
+
 from quickscale_cli.commands.deployment_commands import (
     _check_and_upgrade_railway_cli,
     _check_poetry_lock_step,
@@ -655,10 +657,10 @@ class TestRemainingHelpers:
 
         batch_vars = mock_batch.call_args[0][0]
         password = batch_vars["RUNTIME_DB_PASSWORD"]
-        assert batch_vars["RUNTIME_DB_ROLE"] == "quickscale_runtime"
+        assert batch_vars["RUNTIME_DB_ROLE"] == RUNTIME_DB_ROLE
         assert len(password) == 48 and all(c in "0123456789abcdef" for c in password)
         assert batch_vars["RUNTIME_DATABASE_URL"] == (
-            f"postgresql://quickscale_runtime:{password}"
+            f"postgresql://{RUNTIME_DB_ROLE}:{password}"
             "@${{PostgreSQL.PGHOST}}:${{PostgreSQL.PGPORT}}/${{PostgreSQL.PGDATABASE}}"
         )
         assert password not in capsys.readouterr().out
@@ -689,7 +691,7 @@ class TestRemainingHelpers:
 
         batch_vars = mock_batch.call_args[0][0]
         assert batch_vars["RUNTIME_DB_PASSWORD"] == "f" * 48
-        assert f"quickscale_runtime:{'f' * 48}@" in batch_vars["RUNTIME_DATABASE_URL"]
+        assert f"{RUNTIME_DB_ROLE}:{'f' * 48}@" in batch_vars["RUNTIME_DATABASE_URL"]
 
     @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
     @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")

@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 
 from quickscale_cli.commands.contract_vintage import enforce_contract_vintage
+from quickscale_core.generator.runtime_database import RUNTIME_DB_ROLE
 from quickscale_core.manifest import ContractVintage
 from quickscale_core.project_state import ProjectStateManager
 from quickscale_core.schema.state_schema import StateError
@@ -39,13 +40,12 @@ from quickscale_cli.utils.railway_utils import (
 )
 
 
-RUNTIME_DB_ROLE = "quickscale_runtime"
 RAILWAY_CONTRACT_VINTAGE = ContractVintage(
     minimum="0.89.0",
     manual_adoption_steps=[
-        "Compare and manually adopt the current settings/production.py runtime-role contract and the migrate/createcachetable privileged-command set.",
-        "Compare and manually adopt the current start.sh runtime-role provisioning, migrate/createcachetable launch prefixes, and unsupported-argv refusal.",
-        "Compare and manually adopt the current Dockerfile startup contract.",
+        "Compare and manually adopt the current settings/production.py runtime-role contract and settings/base.py RUNTIME_DB_ROLE default.",
+        "Compare and manually adopt the canonical quickscale_runtime role name and grants, including GRANT CONNECT, in db/init.sql and start.sh, plus the matching runtime-role URL in .env.example and docker-compose.yml; for an existing local database, run the role/grant SQL from OPERATIONS.md with <password> set to the password in the adopted local RUNTIME_DATABASE_URL, or reset the disposable Compose database volume before starting services; keep the migrate/createcachetable privileged-command set and unsupported-argv refusal unchanged.",
+        "Compare and manually adopt the current Dockerfile startup contract and OPERATIONS.md runtime-role guidance.",
     ],
 )
 

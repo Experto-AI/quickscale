@@ -5,6 +5,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 import quickscale_core
+from quickscale_core.generator.runtime_database import runtime_db_template_context
 
 
 def _render_start_sh() -> str:
@@ -12,7 +13,12 @@ def _render_start_sh() -> str:
     core_dir = Path(quickscale_core.__file__).resolve().parent
     template_dir = core_dir / "generator" / "templates"
     env = Environment(loader=FileSystemLoader(str(template_dir)))
-    return env.get_template("start.sh.j2").render({"package_name": "testproject"})
+    return env.get_template("start.sh.j2").render(
+        {
+            "package_name": "testproject",
+            **runtime_db_template_context("testproject"),
+        }
+    )
 
 
 def test_start_sh_logs_env_status_without_values() -> None:

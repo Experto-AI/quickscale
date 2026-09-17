@@ -101,9 +101,13 @@ quickscale deploy railway --help
 
 For an existing generated project, deploy checks the recorded `project_contract` before any
 Railway preflight or remote operation. Projects older than the CLI's runtime-role contract stop and
-name the required `settings/production.py`, `start.sh`, and `Dockerfile` adoption work. After
-manually adopting all three, use `--acknowledge-contract-vintage` for that invocation. The flag
-does not update those files or advance the recorded contract.
+name the required `settings/production.py`, `settings/base.py`, `db/init.sql`, `.env.example`,
+`docker-compose.yml`, `start.sh`, `Dockerfile`, and `OPERATIONS.md` adoption work. For an existing
+local database, run the role/grant SQL from `OPERATIONS.md` with `<password>` set to the password in
+the adopted local `RUNTIME_DATABASE_URL`, or reset the disposable Compose database volume before
+starting services. After manually adopting every named surface, use
+`--acknowledge-contract-vintage` for that invocation. The flag does not update those files or
+advance the recorded contract.
 
 ## Manual Deployment (Alternative)
 

@@ -23,31 +23,19 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ runtime_db_role }}') THEN
-    CREATE ROLE {{ runtime_db_role }} WITH
-      LOGIN
-      NOSUPERUSER
-      NOBYPASSRLS
-      NOCREATEDB
-      NOCREATEROLE
+    CREATE ROLE "{{ runtime_db_role }}" WITH
+{% for attribute in runtime_db_role_attributes %}
+      {{ attribute }}
+{% endfor %}
       PASSWORD '{{ runtime_db_password }}';
   END IF;
 END
 $$;
 
--- Grant DML access to the public schema for all existing tables.
-GRANT USAGE ON SCHEMA public TO {{ runtime_db_role }};
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {{ runtime_db_role }};
-
--- Grant USAGE on all existing sequences (required for auto-increment primary keys).
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO {{ runtime_db_role }};
-
--- Ensure future tables also grant DML access automatically.
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ runtime_db_role }};
-
--- Ensure future sequences also grant USAGE automatically.
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE ON SEQUENCES TO {{ runtime_db_role }};
+-- Apply the canonical runtime grants to the current database and public schema.
+{% for statement in runtime_db_init_grant_statements %}
+{{ statement }};
+{% endfor %}
 
 -- Mark generated initialization complete only after every required statement succeeds.
 ALTER DATABASE "{{ package_name }}" SET quickscale.init_complete TO 'true';

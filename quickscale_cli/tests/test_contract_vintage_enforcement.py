@@ -78,16 +78,57 @@ def test_orgs_declares_the_089_generated_file_contract() -> None:
     assert manifest.contract_vintage.minimum == "0.89.0"
     steps = " ".join(manifest.contract_vintage.manual_adoption_steps)
     assert "settings/production.py" in steps
+    assert "settings/base.py" in steps
     assert "start.sh" in steps
+    assert "db/init.sql" in steps
+    assert ".env.example" in steps
+    assert "docker-compose.yml" in steps
     assert "Dockerfile" in steps
+    assert "OPERATIONS.md" in steps
+    assert "existing local database" in steps
+    assert "password in the adopted local RUNTIME_DATABASE_URL" in steps
+    assert "reset the disposable Compose database volume" in steps
+    assert manifest.contract_vintage == RAILWAY_CONTRACT_VINTAGE
 
 
 def test_railway_declares_the_same_089_generated_file_contract() -> None:
     assert RAILWAY_CONTRACT_VINTAGE.minimum == "0.89.0"
     steps = " ".join(RAILWAY_CONTRACT_VINTAGE.manual_adoption_steps)
     assert "settings/production.py" in steps
+    assert "settings/base.py" in steps
     assert "start.sh" in steps
+    assert "db/init.sql" in steps
+    assert ".env.example" in steps
+    assert "docker-compose.yml" in steps
     assert "Dockerfile" in steps
+    assert "OPERATIONS.md" in steps
+    assert "existing local database" in steps
+    assert "password in the adopted local RUNTIME_DATABASE_URL" in steps
+    assert "reset the disposable Compose database volume" in steps
+
+
+def test_railway_guide_lists_the_complete_089_adoption_path() -> None:
+    guide_path = Path(__file__).parents[2] / "docs/deployment/railway.md"
+    guide = guide_path.read_text()
+    adoption = guide.split("For an existing generated project", 1)[1].split(
+        "## Manual Deployment", 1
+    )[0]
+    normalized_adoption = " ".join(adoption.split())
+
+    for generated_path in (
+        "settings/production.py",
+        "settings/base.py",
+        "db/init.sql",
+        ".env.example",
+        "docker-compose.yml",
+        "start.sh",
+        "Dockerfile",
+        "OPERATIONS.md",
+    ):
+        assert f"`{generated_path}`" in normalized_adoption
+    assert "existing local database" in normalized_adoption
+    assert "password in the adopted local `RUNTIME_DATABASE_URL`" in normalized_adoption
+    assert "reset the disposable Compose database" in normalized_adoption
 
 
 @pytest.mark.parametrize("project_contract", [None, "0.87.0"])
