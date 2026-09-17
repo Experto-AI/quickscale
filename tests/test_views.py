@@ -56,6 +56,30 @@ def test_webhook_view_rejects_invalid_signature(
 
 
 @pytest.mark.django_db
+def test_webhook_view_rejects_non_ascii_signature(
+    client: Client,
+    delivery_for_webhook,
+) -> None:
+    payload = {
+        "id": "evt-non-ascii-signature",
+        "type": "email.delivered",
+        "provider_message_id": delivery_for_webhook.provider_message_id,
+        "recipient": delivery_for_webhook.recipient_email,
+    }
+
+    response = client.post(
+        reverse("quickscale_notifications:resend-webhook"),
+        data=json.dumps(payload),
+        content_type="application/json",
+        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE="sha256=inválid",
+        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=str(int(time.time())),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "Webhook signature is invalid."
+
+
+@pytest.mark.django_db
 def test_webhook_view_rejects_when_runtime_disabled(
     client: Client,
     delivery_for_webhook,
