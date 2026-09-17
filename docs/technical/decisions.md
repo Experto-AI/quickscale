@@ -1502,6 +1502,44 @@ exclusion to silence the check. Open gap status is tracked in
 
 ---
 
+### Integration-Branch CI Coverage {#integration-branch-ci-coverage}
+
+**Architectural Decision:** Hosted CI is **not** triggered on `vNN` integration branches.
+`.github/workflows/ci.yml` keeps its `main`/`develop` push and `main` pull-request triggers.
+Gate coverage during an integration window rests on the local run of the same registered gate
+set, and the accepted gap is recorded here rather than left unowned.
+
+**Why the trigger is not extended.** An integration branch takes many small commits, and three
+tracks merge into it through a serialized queue. Running the hosted set on every push there
+charges the full gate cost — including the BYPASSRLS lane, E2E, and the Docker-backed stations —
+against ordinary development turnaround, on a branch whose state is still editable. The friction
+is paid continuously; the coverage it buys is already obtainable locally on demand, and is
+re-obtained unconditionally before anything ships.
+
+**The compensating local step.** `make ci` runs the registered gate set locally with its own
+PostgreSQL lifecycle; `make ci-e2e` adds the E2E and privileged lanes. Parity between the local,
+hosted, and publish sets is machine-checked against `scripts/gate_registry.json`, so the local
+run is not a subset chosen by hand — it is the same set the hosted context would run. A partial
+run announces itself as `PARTIAL CI — NOT a full pass` and does not count.
+
+**Where coverage is mandatory rather than discretionary.** The publish quality check requires
+`QS_E2E_INTEGRATION_REF=<integration-branch> make ci-e2e` on the exact bytes being published
+([publish_procedure.md §1.2](publish_procedure.md#12-release-tier-validation)), and the tag push
+re-runs the full set hosted under the
+[publish-path full-coverage rule](#publish-path-gate-coverage). Merging the integration branch
+into `main` opens a pull request, which is a hosted trigger. So no release and no `main` history
+is reached without a hosted full-set run; what is accepted is the absence of hosted gating
+*between* those points.
+
+**Rule.** This acceptance covers the trigger surface only. It is **not** an exclusion: no gate
+may leave the registered set, and parity must stay green across registry, Makefile, workflow,
+and local script. The accepted residual is that a red gate on an integration branch can go
+unnoticed until the maintainer next runs `make ci`, the branch is proposed into `main`, or the
+publish gate runs. Revisit if the repository gains a second regular contributor, since the
+compensating step is one maintainer's discipline and does not generalize.
+
+---
+
 ### Quality Baseline Monotonicity Gate (SA121) {#quality-baseline-monotonicity}
 
 **Rule:** The shrink-only quality baseline (`scripts/quality_baseline.json`) is
