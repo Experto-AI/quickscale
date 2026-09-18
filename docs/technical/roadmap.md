@@ -58,8 +58,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
-Track 2: SA193 ──► SA198 ──► SA202 ──► SA195 ──► SA192
-Track 3: SA199 ──► SA200 ──► SA196 ──► SA201 ──► SA203
+Track 2: SA195 ──► SA192 ──► SA193 ──► SA198 ──► SA202   (SA195/SA192 in progress, interrupted)
+Track 3: SA199 (in progress, interrupted) ──► SA200 ──► SA196 ──► SA201 ──► SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -151,8 +151,31 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA193 | yes | yes | yes | **yes** | no |
-| 3 | SA199 | yes | yes | yes | **yes** | no |
+| 2 | SA195 + SA192 (resume) | yes | yes | yes | **yes** | no |
+| 3 | SA199 (resume) | yes | yes | yes | **yes** | no |
+
+### Interrupted work (2026-09-18)
+
+Tracks 2 and 3 were started and interrupted mid-ticket when the Codex agent ran out of credit. The
+next handoff on each track resumes the interrupted ticket rather than the head of the original
+queue.
+
+- **Track 2 — SA195 and SA192, uncommitted in `wt-track2`.** The agent picked up SA195 and SA192
+  instead of SA193, so the queue above is reordered to match. The worktree holds about 70 staged or
+  unstaged files and no WIP commit: the shared stub moved to `tests_shared/templates/base.html` and
+  the blog, CRM, and listings copies were deleted (SA195); module stylesheets and templates for
+  `auth`, `billing`, `blog`, `crm`, and `listings`, the theme `base.html.j2`, module vintage bumps,
+  and a new `test_module_page_style_contract.py` (SA192). Its roadmap edit already marks
+  both delivered and drops them from the schedule; that is unverified, so don't trust it. The
+  worktree is also two commits behind `v89` (missing `1270ed46`) and stages the deletion of
+  `docs/others/arch-audit.md` and `tech-audit.md`, which the delivery must not carry. There is a
+  related stash, `stash@{0}` "adaptive-mini SA192 sync". To resume, commit a reviewed WIP
+  checkpoint per *Resuming a track*, restore the two audits, merge `v89`, then finish and verify
+  SA195 and SA192 against their acceptance before SA193 starts.
+- **Track 3 — SA199, clean at `v89`.** `wt-track3` has no uncommitted changes and sits at `v89`'s
+  head. The only SA199 work is the part landed in `1270ed46` (see SA199 *Progress*). To resume,
+  start from the Stripe `search_customers` query hardening and the two-thread webhook concurrency
+  regression, then close SA199 with its acceptance evidence.
 
 ### Ownership and merge coordination
 
