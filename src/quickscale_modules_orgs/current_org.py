@@ -768,6 +768,25 @@ def _set_operator_access(value: str) -> None:
 
 
 @contextlib.contextmanager
+def _audited_cross_tenant_read(*, reason: str) -> Iterator[None]:
+    """Activate and audit the read-only cross-tenant RLS selector."""
+    prior = _get_operator_access()
+    _set_operator_access("on")
+    logger.info(
+        "operator_access activated",
+        extra={"reason": reason},
+    )
+    try:
+        yield
+    finally:
+        _set_operator_access(prior)
+        logger.info(
+            "operator_access deactivated",
+            extra={"reason": reason},
+        )
+
+
+@contextlib.contextmanager
 def operator_access(*, reason: str) -> Iterator[None]:
     """Superuser-gated, audit-logged context manager for cross-tenant reads.
 
@@ -811,24 +830,75 @@ def operator_access(*, reason: str) -> Iterator[None]:
     Yields:
         None
     """
-    # Save the prior GUC value so nesting is safe (CR-SA14.5-002).
-    prior = _get_operator_access()
-    _set_operator_access("on")
-    logger.info(
-        "operator_access activated",
-        extra={"reason": reason},
-    )
-    try:
+    with _audited_cross_tenant_read(reason=reason):
         yield
-    finally:
-        # Restore prior GUC value instead of unconditionally clearing
-        # to ``''``, so nested operator_access() use correctly restores
-        # the outer scope (CR-SA14.5-002).
-        _set_operator_access(prior)
-        logger.info(
-            "operator_access deactivated",
-            extra={"reason": reason},
-        )
+
+
+def account_deletion_user_reference_organization_ids(
+    user_id: Any,
+    *,
+    included_app_labels: frozenset[str] | None = None,
+    excluded_app_labels: frozenset[str] = frozenset(),
+) -> set[Any]:
+    """Return tenant orgs that retain nullable provenance for one user.
+
+    The generic ``operator_access`` context is reserved for explicitly
+    authorized operator callers because it yields an unrestricted read scope.
+    Account deletion also needs a cross-tenant read, including organizations
+    the user has already left, but must not expose that scope to the request.
+    This narrow seam validates the installed tenant/user relation shape and
+    returns only matching ``organization_id`` values.
+
+    Discovery executes one indexed query per matching tenant model, rather
+    than one query per model for every organization in the deployment. Its
+    query count is therefore independent of the total tenant count. Writes
+    remain outside operator access and must still run under ``org_scope`` so
+    the FORCE-RLS ``FOR ALL`` policy continues to fail closed.
+    """
+    if included_app_labels is not None and included_app_labels & excluded_app_labels:
+        raise ValueError("Included and excluded app labels must not overlap.")
+
+    from django.contrib.auth import get_user_model
+    from django.db import transaction
+    from django.db.models import Q
+
+    from .tenancy import get_tenant_models
+
+    user_model = get_user_model()
+    organization_ids: set[Any] = set()
+    with transaction.atomic():
+        with _audited_cross_tenant_read(reason="account deletion provenance discovery"):
+            for model in get_tenant_models():
+                app_label = model._meta.app_label
+                if (
+                    included_app_labels is not None
+                    and app_label not in included_app_labels
+                ):
+                    continue
+                if app_label in excluded_app_labels:
+                    continue
+
+                field_attnames = tuple(
+                    field.attname
+                    for field in model._meta.concrete_fields
+                    if field.is_relation
+                    and field.null
+                    and field.related_model is user_model
+                )
+                if not field_attnames:
+                    continue
+
+                reference_filter = Q(**{field_attnames[0]: user_id})
+                for field_attname in field_attnames[1:]:
+                    reference_filter |= Q(**{field_attname: user_id})
+                organization_ids.update(
+                    model.all_objects.filter(  # type: ignore[attr-defined]
+                        reference_filter
+                    )
+                    .values_list("organization_id", flat=True)
+                    .distinct()
+                )
+    return organization_ids
 
 
 # ---------------------------------------------------------------------------
