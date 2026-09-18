@@ -599,25 +599,14 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
     def _tenant_user_reference_organization_ids(self, user: Any) -> set[Any]:
         """Discover retained tenant provenance independently of memberships."""
-        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.current_org import (
+            account_deletion_user_reference_organization_ids,
+        )
 
-        organization_ids: set[Any] = set()
-        specs = self._tenant_user_reference_specs()
-        if not specs:
-            return organization_ids
-        for organization in Organization.objects.order_by("pk").iterator():
-            with org_scope(organization):
-                has_reference = any(
-                    model.all_objects.filter(  # type: ignore[attr-defined]
-                        organization=organization,
-                        **{field_attname: user.pk},
-                    ).exists()
-                    for model, field_attnames in specs
-                    for field_attname in field_attnames
-                )
-            if has_reference:
-                organization_ids.add(organization.pk)
-        return organization_ids
+        return account_deletion_user_reference_organization_ids(
+            user.pk,
+            excluded_app_labels=frozenset({"quickscale_modules_billing"}),
+        )
 
     def _detach_tenant_user_references(
         self,

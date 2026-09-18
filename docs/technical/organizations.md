@@ -329,7 +329,7 @@ The billing module binds subscriptions and credit balances to individual users:
 
 ```
 Subscription.user  → FK → User
-CreditBalance.user → FK → User (OneToOne)
+CreditBalance.user → FK → User
 ```
 
 This is wrong for a team SaaS. Clients pay for their organization; individual members consume credits on behalf of the organization. The billing contact is the Org Owner, not an arbitrary user account.
@@ -344,13 +344,15 @@ Subscription.user          → nullable FK → User (provenance / compatibility 
 PurchaseCheckout.organization → FK → Organization (authoritative owner)
 PurchaseCheckout.user      → nullable FK → User (purchase provenance only)
 CreditBalance.organization → OneToOneField → Organization (authoritative balance owner)
-CreditBalance.user         → nullable OneToOneField → User (provenance / compatibility only)
+CreditBalance.user         → nullable ForeignKey → User (provenance / compatibility only)
 CreditTransaction.organization → FK → Organization (authoritative ledger scope)
 CreditTransaction.user     → nullable FK → User (acting org member provenance / audit actor)
 Plan.features             → JSONField(default=list) (sole entitlement source)
 ```
 
 `Organization.stripe_customer_id` is the Stripe customer identifier. Every populated Stripe customer id is globally unique across organizations, with a database constraint as the final concurrency backstop; runtime and recovery writers reject cross-org reuse before assignment. The Org Owner's email is the Stripe billing email. When the Owner transfers ownership, the Stripe customer record stays with the organization (not the departing user).
+
+Account deletion discovers nullable user-provenance rows through a narrow, read-only cross-tenant seam that returns only matching organization IDs. Discovery issues one indexed query per user-reference-bearing tenant model, so unrelated organizations do not increase request query count or provider-lock duration. The request then nulls those references under each matching organization's ordinary `org_scope`; cross-tenant write access is never elevated.
 
 Credit transactions stay attributed to the acting user (`CreditTransaction.user`) while debiting the authoritative organization balance, and that user link now nulls cleanly on deletion so the org ledger row remains intact.
 

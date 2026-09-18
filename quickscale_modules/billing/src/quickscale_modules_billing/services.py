@@ -1055,28 +1055,15 @@ def detach_account_deletion_user_references(
 
 def account_deletion_user_reference_organization_ids(user_id: Any) -> list[Any]:
     """Discover every organization retaining billing provenance for one user."""
-    organization_model = apps.get_model(
-        "quickscale_modules_orgs",
-        "Organization",
+    from quickscale_modules_orgs.current_org import (
+        account_deletion_user_reference_organization_ids as discover_organization_ids,
     )
-    organization_ids: list[Any] = []
-    for organization in organization_model._default_manager.order_by("pk").iterator():
-        with org_scope(organization):
-            has_reference = any(
-                model.all_objects.filter(
-                    organization=organization,
-                    user_id=user_id,
-                ).exists()
-                for model in (
-                    CreditBalance,
-                    CreditTransaction,
-                    PurchaseCheckout,
-                    Subscription,
-                )
-            )
-        if has_reference:
-            organization_ids.append(organization.pk)
-    return organization_ids
+
+    organization_ids = discover_organization_ids(
+        user_id,
+        included_app_labels=frozenset({"quickscale_modules_billing"}),
+    )
+    return sorted(organization_ids, key=str)
 
 
 def _reconcile_subscription_checkout(

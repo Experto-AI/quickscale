@@ -942,7 +942,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - Project-owned tenant extensions: a concrete model in an installed project app may join the runtime tenant set through the same marker/dual-manager contract without a shipped-registry entry or vendored-module edit. Its initial migration owns the table and calls ``apply_force_rls`` to install exactly one tenant-only ``FOR ALL`` base policy plus its ``<base>_select`` operator-read ``FOR SELECT`` policy. Both policies are permissive and apply to ``PUBLIC``; the base policy has identical current-organization ``USING`` and ``WITH CHECK`` predicates, while the select policy has the rendered current-organization-or-operator ``USING`` predicate and no ``WITH CHECK``. Runtime refresh resolves each existing table's unique base policy from ``pg_policies`` before any DDL; missing or ambiguous policy metadata fails before mutation. The base name remains migration-owned rather than inferred from model metadata, but the companion must be named ``<base>_select``. The isolation checks reject a missing, extra, misnamed companion, restrictive, role-limited, or predicate-weakened policy.
 - Child tables: every tenant-owned child/detail table must denormalize `organization_id` directly onto the row and use a direct FORCE-RLS policy referencing that column; parent-join RLS policies are not used. This is the project default for all future tables.
 - Ambient scoping: request-scoped tenant reads flow through `request.org` → ContextVar (`app.current_org_id`) → `TenantManager`; the authoritative tenant-facing API is ambient manager scoping, not `.for_org(...)` query chaining.
-- Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract.
+- Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract. Self-service account deletion does not receive or yield that context: the orgs-owned `account_deletion_user_reference_organization_ids()` seam validates nullable user relations and returns only matching organization IDs, using one indexed query per matching tenant model; all subsequent nulling remains under each organization's ordinary write scope.
 - Org ownership: System org owns all published-public content (blog feed, public listings, social links). Anonymous visitors see System-org rows; solo authenticated = personal org; saas authenticated = active org.
 - Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
 - **Composite-FK deferability policy:** every Option C composite FK (the child-table `organization_id` + local-key pair added by the `_ADD_COMPOSITE_FK_SQL` helper in `orgs/tenancy.py`) is `NOT DEFERRABLE`. On PostgreSQL 18, `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so the constraint is already effectively immediate — `NOT DEFERRABLE` is the fail-fast choice consistent with the [fail-hard principle](#fail-hard-principle) and requires no `SET CONSTRAINTS ALL DEFERRED` carve-out for fixture/loaddata restores. A conformance test validates that every Option C composite FK is `NOT DEFERRABLE`.
@@ -1499,6 +1499,44 @@ redundancy or cost — those are exactly the reasons that produce a false-green 
 reporting a real defect. Close the gap by adding the gate — never by declaring an
 exclusion to silence the check. Open gap status is tracked in
 [roadmap.md](./roadmap.md).
+
+---
+
+### Integration-Branch CI Coverage {#integration-branch-ci-coverage}
+
+**Architectural Decision:** Hosted CI is **not** triggered on `vNN` integration branches.
+`.github/workflows/ci.yml` keeps its `main`/`develop` push and `main` pull-request triggers.
+Gate coverage during an integration window rests on the local run of the same registered gate
+set, and the accepted gap is recorded here rather than left unowned.
+
+**Why the trigger is not extended.** An integration branch takes many small commits, and three
+tracks merge into it through a serialized queue. Running the hosted set on every push there
+charges the full gate cost — including the BYPASSRLS lane, E2E, and the Docker-backed stations —
+against ordinary development turnaround, on a branch whose state is still editable. The friction
+is paid continuously; the coverage it buys is already obtainable locally on demand, and is
+re-obtained unconditionally before anything ships.
+
+**The compensating local step.** `make ci` runs the registered gate set locally with its own
+PostgreSQL lifecycle; `make ci-e2e` adds the E2E and privileged lanes. Parity between the local,
+hosted, and publish sets is machine-checked against `scripts/gate_registry.json`, so the local
+run is not a subset chosen by hand — it is the same set the hosted context would run. A partial
+run announces itself as `PARTIAL CI — NOT a full pass` and does not count.
+
+**Where coverage is mandatory rather than discretionary.** The publish quality check requires
+`QS_E2E_INTEGRATION_REF=<integration-branch> make ci-e2e` on the exact bytes being published
+([publish_procedure.md §1.2](publish_procedure.md#12-release-tier-validation)), and the tag push
+re-runs the full set hosted under the
+[publish-path full-coverage rule](#publish-path-gate-coverage). Merging the integration branch
+into `main` opens a pull request, which is a hosted trigger. So no release and no `main` history
+is reached without a hosted full-set run; what is accepted is the absence of hosted gating
+*between* those points.
+
+**Rule.** This acceptance covers the trigger surface only. It is **not** an exclusion: no gate
+may leave the registered set, and parity must stay green across registry, Makefile, workflow,
+and local script. The accepted residual is that a red gate on an integration branch can go
+unnoticed until the maintainer next runs `make ci`, the branch is proposed into `main`, or the
+publish gate runs. Revisit if the repository gains a second regular contributor, since the
+compensating step is one maintainer's discipline and does not generalize.
 
 ---
 
