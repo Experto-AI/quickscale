@@ -7,8 +7,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 
 from quickscale_modules_billing.models import (
     CreditBalance,
@@ -1447,9 +1448,23 @@ def test_account_deletion_discovers_and_detaches_every_billing_user_reference(
         status=Subscription.Status.CANCELED,
     )
 
-    organization_ids = (
-        billing_services.account_deletion_user_reference_organization_ids(user.pk)
+    with CaptureQueriesContext(connection) as baseline_queries:
+        organization_ids = (
+            billing_services.account_deletion_user_reference_organization_ids(user.pk)
+        )
+    Organization.objects.bulk_create(
+        [
+            Organization(
+                name=f"Unrelated account deletion org {index}",
+                slug=f"unrelated-account-deletion-org-{index}",
+            )
+            for index in range(50)
+        ]
     )
+    with CaptureQueriesContext(connection) as expanded_queries:
+        expanded_organization_ids = (
+            billing_services.account_deletion_user_reference_organization_ids(user.pk)
+        )
     detached_count = billing_services.detach_account_deletion_user_references(
         user.pk,
         organization_ids,
@@ -1460,6 +1475,8 @@ def test_account_deletion_discovers_and_detaches_every_billing_user_reference(
     purchase_checkout.refresh_from_db()
     subscription.refresh_from_db()
     assert organization_ids == [organization.pk]
+    assert expanded_organization_ids == organization_ids
+    assert len(expanded_queries) == len(baseline_queries)
     assert detached_count == 4
     assert balance.user_id is None
     assert transaction_row.user_id is None
