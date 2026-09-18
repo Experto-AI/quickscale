@@ -104,9 +104,16 @@ def reset_current_org_id() -> None:
 
     Called at the start of each new request in
     :class:`~.middleware.TenantMiddleware` to ensure stale context from a
-    prior request is not leaked.
+    prior request is not leaked.  Clearing the connection priming memo is
+    equally important: a nested transaction can roll back the ``SET LOCAL``
+    that established the prior organization while leaving Python connection
+    attributes untouched.  A later scope for the same organization must then
+    re-prime the database instead of trusting that stale memo.
     """
     _current_org_id_var.set(None)
+    from django.db import connection
+
+    _clear_priming_memo(connection)
 
 
 # ---------------------------------------------------------------------------

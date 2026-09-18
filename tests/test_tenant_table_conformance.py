@@ -1144,6 +1144,7 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
         CreditBalance,
         CreditTransaction,
         Plan,
+        PurchaseCheckout,
         Subscription,
     )
     from quickscale_modules_blog.models import (
@@ -1183,8 +1184,8 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
                 (entry.app_label, entry.model_name, model._meta.db_table)
             )
 
-    assert len(enrolled_tables) == 21, (
-        f"Expected 21 enrolled policy tables for AF11 proof, "
+    assert len(enrolled_tables) == 22, (
+        f"Expected 22 enrolled policy tables for AF11 proof, "
         f"got {len(enrolled_tables)}. Has the registry changed?"
     )
 
@@ -1259,6 +1260,11 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
         transaction_type=CreditTransaction.TransactionType.ADJUSTMENT,
         balance_after=0,
         description="AF11 proof",
+    )
+    PurchaseCheckout.all_objects.create(
+        organization=org,
+        plan=plan,
+        status=PurchaseCheckout.Status.EXPIRED,
     )
     Subscription.all_objects.create(
         organization=org,

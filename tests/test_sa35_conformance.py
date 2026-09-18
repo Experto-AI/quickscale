@@ -19,11 +19,12 @@ from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_id,
 )
+from quickscale_modules_orgs.tenancy import is_project_app
 
 
 @pytest.mark.django_db
 class TestUserFkDeleteRuleConformance:
-    """Verify every user-FK in quickscale_modules_* is SET_NULL or
+    """Verify every user-FK in project-owned apps is SET_NULL or
     PROTECT, unless explicitly allowlisted.
 
     This is a conformance / regression gate for SA35: FK referential
@@ -99,8 +100,8 @@ class TestUserFkDeleteRuleConformance:
             meta = model._meta
             app_label = meta.app_label
 
-            # Only check models in our module workspace.
-            if not app_label.startswith("quickscale_modules_"):
+            # Check shipped modules and project-owned tenant extensions alike.
+            if not is_project_app(app_label):
                 continue
 
             for field in meta.local_fields:
@@ -277,6 +278,20 @@ class TestAccountDeleteViewSurvivorRegression:
         finally:
             reset_current_org_id()
 
+    def _create_project_listing(self, user: object, org: object) -> object:
+        """Create project-owned tenant content with protected user provenance."""
+        from tests.sa182_project_app.models import ProjectListing
+
+        set_current_org_id(org.pk)
+        try:
+            return ProjectListing.objects.create(
+                title="SA35 Project Listing",
+                organization=org,
+                created_by=user,
+            )
+        finally:
+            reset_current_org_id()
+
     def _create_crm_contact_note(self, user: object, org: object) -> object:
         """Create a CRM ContactNote whose created_by points to *user*."""
         from quickscale_modules_crm.models import (
@@ -364,6 +379,11 @@ class TestAccountDeleteViewSurvivorRegression:
         user = _sa35_user
         client = _sa35_authenticated_client
         from django.contrib.auth import get_user_model
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
 
         User = get_user_model()
 
@@ -372,6 +392,27 @@ class TestAccountDeleteViewSurvivorRegression:
         post = self._create_blog_post(user, org)
         contact_note = self._create_crm_contact_note(user, org)
         deal_note = self._create_crm_deal_note(user, org)
+        project_org = Organization.objects.create(
+            name="SA35 Former Member Project Org",
+            slug="sa35-former-member-project-org",
+        )
+        project_owner = User.objects.create_user(
+            username="sa35_project_owner",
+            email="sa35_project_owner@example.com",
+            password="Sa35ProjectOwner1!",
+        )
+        OrganizationMembership.objects.create(
+            user=project_owner,
+            organization=project_org,
+            role=OrgRole.OWNER,
+        )
+        former_membership = OrganizationMembership.objects.create(
+            user=user,
+            organization=project_org,
+            role=OrgRole.MEMBER,
+        )
+        project_listing = self._create_project_listing(user, project_org)
+        former_membership.delete()
 
         post_id = post.pk
         user_id = user.pk
@@ -390,25 +431,39 @@ class TestAccountDeleteViewSurvivorRegression:
         # ---- Assert: blog Post survives with author=NULL ----
         from quickscale_modules_blog.models import Post
 
-        post.refresh_from_db()
-        assert post.author is None, (
-            "Blog Post.author should be NULL after user deletion"
-        )
-        assert Post.all_objects.filter(pk=post_id).exists(), (
-            "Blog Post record should still exist"
-        )
+        set_current_org_id(org.pk)
+        try:
+            post.refresh_from_db()
+            assert post.author is None, (
+                "Blog Post.author should be NULL after user deletion"
+            )
+            assert Post.all_objects.filter(pk=post_id).exists(), (
+                "Blog Post record should still exist"
+            )
 
-        # ---- Assert: CRM ContactNote survives with created_by=NULL ----
-        contact_note.refresh_from_db()
-        assert contact_note.created_by is None, (
-            "CRM ContactNote.created_by should be NULL after user deletion"
-        )
+            # ---- Assert: CRM ContactNote survives with created_by=NULL ----
+            contact_note.refresh_from_db()
+            assert contact_note.created_by is None, (
+                "CRM ContactNote.created_by should be NULL after user deletion"
+            )
 
-        # ---- Assert: CRM DealNote survives with created_by=NULL ----
-        deal_note.refresh_from_db()
-        assert deal_note.created_by is None, (
-            "CRM DealNote.created_by should be NULL after user deletion"
-        )
+            # ---- Assert: CRM DealNote survives with created_by=NULL ----
+            deal_note.refresh_from_db()
+            assert deal_note.created_by is None, (
+                "CRM DealNote.created_by should be NULL after user deletion"
+            )
+        finally:
+            reset_current_org_id()
+
+        # ---- Assert: former-member project provenance is detached ----
+        set_current_org_id(project_org.pk)
+        try:
+            project_listing.refresh_from_db()
+            assert project_listing.created_by is None, (
+                "ProjectListing.created_by should be NULL after user deletion"
+            )
+        finally:
+            reset_current_org_id()
 
 
 # ---------------------------------------------------------------------------

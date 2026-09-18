@@ -14,12 +14,12 @@ Contract rules enforced by this command:
 * Missing live UUID with tombstone → no-op success with already-gone message.
 * Rerun after successful purge → no-op success with clear message.
 * System and personal orgs are guarded by default; ``--force`` overrides.
-* Current Stripe-backed subscriptions must be cancelled before any purge.
+* Current Stripe-backed subscriptions must be cancelled and hosted checkouts
+  must be provider-terminal before any purge.
 * Ownership/count map always includes ``OrganizationInvitation`` rows.
 * Tombstone is created in the same transaction as the purge.
-* Cross-module owned rows (social, forms, listings, blog, crm, billing) are
-  deleted in FK-safe order.  Modules not installed in the current environment
-  are skipped gracefully.
+* Every marker-derived tenant model, including project-owned models, is
+  deleted in an FK-derived child-before-parent order.
 * The shared ``set_current_org_for_context()`` helper establishes consistent
   ContextVar + ``SET LOCAL app.current_org_id`` before touching RLS-protected
   tables.
@@ -28,10 +28,13 @@ Contract rules enforced by this command:
 from __future__ import annotations
 
 import uuid
+from collections import Counter
+from contextlib import nullcontext
+from heapq import heappop, heappush
 
 from django.apps import apps
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import models, transaction
 
 from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
@@ -43,206 +46,188 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
     OrganizationTombstone,
 )
+from quickscale_modules_orgs.removal import (
+    BILLING_PROVIDER_STATE,
+    OWNED_TENANT_ROWS,
+    PURGE_TOMBSTONE,
+    SOCIAL_CACHE_STATE,
+    RemovalAction,
+    RemovalBoundary,
+    require_removal_action,
+)
+from quickscale_modules_orgs.tenancy import (
+    get_tenant_models,
+    has_organization_id_field,
+)
 
-# ---------------------------------------------------------------------------
-# Cross-module delete registry
-#
-# Each entry is a dict:
-#   app_label  - Django app label
-#   model_name - Model class name
-#   filter     - Query filter kwargs (e.g. {"organization": org} or
-#                {"form__organization": org} for descendant models)
-#   label      - Human-readable label for output
-#
-# Models that PROTECT the org FK must be deleted before the org row.
-# Models that PROTECT a parent FK (e.g. FormSubmission → Form) must be
-# deleted before their parent.
-#
-# Priority within a module is determined by entry order: models listed
-# first are deleted first.
-# ---------------------------------------------------------------------------
+# Additional child-before-parent constraints belong here only when installed FK
+# metadata cannot represent them. Each pair is ``(before_label, after_label)``.
+_PURGE_ORDER_OVERRIDES: tuple[tuple[str, str], ...] = ()
 
-_DELETE_SPECS: list[dict[str, object]] = [
-    # -- social (all have direct organization FK, PROTECT) --
-    {
-        "app_label": "quickscale_modules_social",
-        "model_name": "SocialLink",
-        "filter_key": "organization",
-        "label": "Social links",
-    },
-    {
-        "app_label": "quickscale_modules_social",
-        "model_name": "SocialEmbed",
-        "filter_key": "organization",
-        "label": "Social embeds",
-    },
-    # -- forms --
-    # FormFieldValue has org FK (PROTECT) and submission FK (CASCADE);
-    # must delete before FormSubmission.
-    {
-        "app_label": "quickscale_modules_forms",
-        "model_name": "FormFieldValue",
-        "filter_key": "organization",
-        "label": "Form field values",
-    },
-    # FormField has org FK (PROTECT); must delete before Form.
-    {
-        "app_label": "quickscale_modules_forms",
-        "model_name": "FormField",
-        "filter_key": "organization",
-        "label": "Form fields",
-    },
-    # FormSubmission has org FK (PROTECT) and form FK (PROTECT);
-    # must delete before Form.
-    {
-        "app_label": "quickscale_modules_forms",
-        "model_name": "FormSubmission",
-        "filter_key": "organization",
-        "label": "Form submissions",
-    },
-    # Form has org FK (PROTECT).
-    {
-        "app_label": "quickscale_modules_forms",
-        "model_name": "Form",
-        "filter_key": "organization",
-        "label": "Forms",
-    },
-    # -- listings (direct org FK, PROTECT) --
-    {
-        "app_label": "quickscale_modules_listings",
-        "model_name": "Listing",
-        "filter_key": "organization",
-        "label": "Listings",
-    },
-    # -- blog (all direct org FK, PROTECT) --
-    {
-        "app_label": "quickscale_modules_blog",
-        "model_name": "Post",
-        "filter_key": "organization",
-        "label": "Blog posts",
-    },
-    {
-        "app_label": "quickscale_modules_blog",
-        "model_name": "Category",
-        "filter_key": "organization",
-        "label": "Blog categories",
-    },
-    {
-        "app_label": "quickscale_modules_blog",
-        "model_name": "Tag",
-        "filter_key": "organization",
-        "label": "Blog tags",
-    },
-    {
-        "app_label": "quickscale_modules_blog",
-        "model_name": "BlogMediaAsset",
-        "filter_key": "organization",
-        "label": "Blog media assets",
-    },
-    # -- crm --
-    # DealNote has direct org FK (PROTECT); delete before Deal because
-    # Deal CASCADE would also remove DealNote.
-    {
-        "app_label": "quickscale_modules_crm",
-        "model_name": "DealNote",
-        "filter_key": "organization",
-        "label": "CRM deal notes",
-    },
-    # ContactNote has direct org FK (PROTECT); delete before Contact because
-    # Contact CASCADE would also remove ContactNote.
-    {
-        "app_label": "quickscale_modules_crm",
-        "model_name": "ContactNote",
-        "filter_key": "organization",
-        "label": "CRM contact notes",
-    },
-    # Deal has org FK (PROTECT); must delete before Stage (PROTECT on deal FK).
-    {
-        "app_label": "quickscale_modules_crm",
-        "model_name": "Deal",
-        "filter_key": "organization",
-        "label": "CRM deals",
-    },
-    # Contact has org FK (PROTECT) and company FK (CASCADE).
-    {
-        "app_label": "quickscale_modules_crm",
-        "model_name": "Contact",
-        "filter_key": "organization",
-        "label": "CRM contacts",
-    },
-    # Company has org FK (PROTECT).
-    {
-        "app_label": "quickscale_modules_crm",
-        "model_name": "Company",
-        "filter_key": "organization",
-        "label": "CRM companies",
-    },
-    # Stage has org FK (PROTECT); no remaining deals reference it.
-    {
-        "app_label": "quickscale_modules_crm",
-        "model_name": "Stage",
-        "filter_key": "organization",
-        "label": "CRM stages",
-    },
-    # Tag has org FK (PROTECT).
-    {
-        "app_label": "quickscale_modules_crm",
-        "model_name": "Tag",
-        "filter_key": "organization",
-        "label": "CRM tags",
-    },
-    # -- billing (all have direct org FK via tenant_org_fk, PROTECT) --
-    {
-        "app_label": "quickscale_modules_billing",
-        "model_name": "CreditTransaction",
-        "filter_key": "organization",
-        "label": "Credit transactions",
-    },
-    {
-        "app_label": "quickscale_modules_billing",
-        "model_name": "Subscription",
-        "filter_key": "organization",
-        "label": "Subscriptions",
-    },
-    {
-        "app_label": "quickscale_modules_billing",
-        "model_name": "CreditBalance",
-        "filter_key": "organization",
-        "label": "Credit balances",
-    },
-]
+_LABEL_PREFIXES = {
+    "quickscale_modules_blog": "Blog",
+    "quickscale_modules_crm": "CRM",
+}
+
+
+def _model_key(model: type[models.Model]) -> str:
+    return model._meta.label_lower
+
+
+def _self_blocking_foreign_keys(
+    model: type[models.Model],
+) -> tuple[models.ForeignKey, ...]:
+    """Return self-FKs that Django's collector would treat as blockers."""
+    return tuple(
+        field
+        for field in model._meta.fields
+        if isinstance(field, models.ForeignKey)
+        and field.remote_field.model is model
+        and field.remote_field.on_delete
+        in {
+            models.DO_NOTHING,
+            models.PROTECT,
+            models.RESTRICT,
+        }
+    )
+
+
+def _topologically_order_models(
+    tenant_models: list[type[models.Model]],
+    order_overrides: tuple[tuple[str, str], ...] = _PURGE_ORDER_OVERRIDES,
+) -> list[type[models.Model]]:
+    """Order models before every deletion that could collect or block them."""
+    models_by_key = {_model_key(model): model for model in tenant_models}
+    outgoing: dict[str, set[str]] = {key: set() for key in models_by_key}
+    incoming_count = dict.fromkeys(models_by_key, 0)
+    hard_orderings: set[tuple[str, str]] = set()
+
+    def add_ordering(before: str, after: str) -> None:
+        if before == after:
+            return
+        if before not in models_by_key or after not in models_by_key:
+            raise CommandError(
+                "Organization purge order references an unknown model: "
+                f"{before} -> {after}."
+            )
+        if after not in outgoing[before]:
+            outgoing[before].add(after)
+            incoming_count[after] += 1
+
+    for model in tenant_models:
+        child_key = _model_key(model)
+        for field in model._meta.fields:
+            if not isinstance(field, models.ForeignKey):
+                continue
+            parent_key = _model_key(field.remote_field.model)
+            if parent_key not in models_by_key or parent_key == child_key:
+                continue
+            if field.remote_field.on_delete is models.CASCADE:
+                hard_orderings.add((child_key, parent_key))
+            elif field.remote_field.on_delete in {
+                models.DO_NOTHING,
+                models.PROTECT,
+                models.RESTRICT,
+            }:
+                hard_orderings.add((child_key, parent_key))
+
+    for before, after in order_overrides:
+        normalized_ordering = (before.lower(), after.lower())
+        if any(key not in models_by_key for key in normalized_ordering):
+            raise CommandError(
+                "Organization purge order override references an unknown model: "
+                f"{normalized_ordering[0]} -> {normalized_ordering[1]}."
+            )
+        hard_orderings.add(normalized_ordering)
+
+    for before, after in sorted(hard_orderings):
+        add_ordering(before, after)
+
+    ready: list[str] = []
+    for key, count in incoming_count.items():
+        if count == 0:
+            heappush(ready, key)
+
+    ordered_keys: list[str] = []
+    while ready:
+        key = heappop(ready)
+        ordered_keys.append(key)
+        for dependent in sorted(outgoing[key]):
+            incoming_count[dependent] -= 1
+            if incoming_count[dependent] == 0:
+                heappush(ready, dependent)
+
+    if len(ordered_keys) != len(models_by_key):
+        cyclic = sorted(key for key, count in incoming_count.items() if count)
+        raise CommandError(
+            "Cannot derive an FK-safe organization purge order; resolve the "
+            f"blocking cycle involving: {', '.join(cyclic)}"
+        )
+    return [models_by_key[key] for key in ordered_keys]
+
+
+def _model_label(model: type[models.Model]) -> str:
+    plural = str(model._meta.verbose_name_plural)
+    prefix = _LABEL_PREFIXES.get(model._meta.app_label)
+    if prefix:
+        return f"{prefix} {plural[:1].lower()}{plural[1:]}"
+    return f"{plural[:1].upper()}{plural[1:]}"
+
+
+def _disambiguated_model_labels(
+    tenant_models: list[type[models.Model]],
+) -> list[str]:
+    """Keep legacy labels when unique and qualify project label collisions."""
+    base_labels = [_model_label(model) for model in tenant_models]
+    label_counts = Counter(base_labels)
+    return [
+        label if label_counts[label] == 1 else f"{label} ({_model_key(model)})"
+        for model, label in zip(tenant_models, base_labels, strict=True)
+    ]
 
 
 def _resolve_models() -> list[dict[str, object]]:
-    """Resolve cross-module model classes, skipping uninstalled apps.
-
-    Returns a list of dicts with keys ``model`` (the resolved model class
-    or ``None``), ``filter_key``, and ``label``.
-    """
-    resolved: list[dict[str, object]] = []
-    for spec in _DELETE_SPECS:
-        try:
-            model = apps.get_model(
-                str(spec["app_label"]),
-                str(spec["model_name"]),
-            )
-        except LookupError:
-            model = None
-        resolved.append(
-            {
-                "model": model,
-                "filter_key": spec["filter_key"],
-                "label": spec["label"],
-            }
+    """Derive the installed purge plan from marker-enrolled tenant models."""
+    tenant_models = get_tenant_models()
+    missing_organization_id = sorted(
+        _model_key(model)
+        for model in tenant_models
+        if not has_organization_id_field(model)
+    )
+    if missing_organization_id:
+        raise CommandError(
+            "Marker-enrolled tenant models cannot be purged without an "
+            "organization_id field: " + ", ".join(missing_organization_id)
         )
-    return resolved
+    unsupported_self_fields = sorted(
+        f"{_model_key(model)}.{field.name}"
+        for model in tenant_models
+        for field in _self_blocking_foreign_keys(model)
+        if not field.null
+    )
+    if unsupported_self_fields:
+        raise CommandError(
+            "Marker-enrolled tenant models cannot be purged with non-nullable "
+            "self-blocking fields: " + ", ".join(unsupported_self_fields)
+        )
+    ordered_models = _topologically_order_models(tenant_models)
+    labels = _disambiguated_model_labels(ordered_models)
+    return [
+        {
+            "model": model,
+            "filter_key": "organization_id",
+            "label": label,
+        }
+        for model, label in zip(ordered_models, labels, strict=True)
+    ]
 
 
 def _get_filter_for_org(
     filter_key: str, organization: Organization
 ) -> dict[str, object]:
     """Build a filter dict for a given filter_key and organization."""
-    return {filter_key: organization}
+    value: object = organization.pk if filter_key.endswith("_id") else organization
+    return {filter_key: value}
 
 
 def _get_qs(model: object, filter_kwargs: dict[str, object]) -> object:
@@ -260,7 +245,8 @@ def _get_qs(model: object, filter_kwargs: dict[str, object]) -> object:
 class Command(BaseCommand):
     help = (
         "Purge an organization and all owned rows across all modules. "
-        "Current Stripe-backed subscriptions must be cancelled first. "
+        "Current Stripe-backed subscriptions must be cancelled and pending "
+        "hosted checkouts must be completed or expired first. "
         "Use --organization-id <uuid> for destructive execution; "
         "--slug <slug> for non-destructive preflight only."
     )
@@ -342,9 +328,19 @@ class Command(BaseCommand):
                 "Must be a valid UUID."
             )
 
-        if dry_run:
-            return self._dry_run_by_uuid(org_id)
-        return self._purge_by_uuid(org_id)
+        self._guard_provider_reconciliation_target(org_id)
+        with self._billing_provider_mutation_lock(org_id):
+            if dry_run:
+                provider_expired_checkout_id = self._reconcile_billing_provider_state(
+                    org_id,
+                    persist=False,
+                )
+                return self._dry_run_by_uuid(
+                    org_id,
+                    provider_expired_checkout_id=provider_expired_checkout_id,
+                )
+            self._reconcile_billing_provider_state(org_id, persist=True)
+            return self._purge_by_uuid(org_id)
 
     # ------------------------------------------------------------------
     # Slug preflight
@@ -376,22 +372,39 @@ class Command(BaseCommand):
     # Dry run by UUID
     # ------------------------------------------------------------------
 
-    def _dry_run_by_uuid(self, org_id: uuid.UUID) -> str | None:
+    def _dry_run_by_uuid(
+        self,
+        org_id: uuid.UUID,
+        *,
+        provider_expired_checkout_id: str = "",
+    ) -> str | None:
         """Show ownership counts for an organization without deleting."""
         try:
-            organization = Organization.objects.get(pk=org_id)
+            with transaction.atomic():
+                organization = self._lock_organization(org_id)
+                self._guard_reserved_org(organization)
+                require_removal_action(
+                    BILLING_PROVIDER_STATE,
+                    boundary=RemovalBoundary.PURGE,
+                    action=RemovalAction.REFUSE,
+                )
+                set_current_org_for_context(org_id=organization.pk)
+                try:
+                    self._guard_live_stripe_subscriptions(
+                        organization,
+                        provider_expired_checkout_id=provider_expired_checkout_id,
+                    )
+                    ownership_map = self._build_ownership_map(organization)
+                finally:
+                    reset_current_org_id()
         except Organization.DoesNotExist:
-            self._check_tombstone(org_id)
+            self._check_tombstone(org_id, heal_social_cache=False)
             raise CommandError(
                 f"No organization found with UUID {org_id}. "
                 "No tombstone exists for this UUID either."
             )
 
-        self._guard_reserved_org(organization)
-        self._guard_live_stripe_subscriptions(organization)
-        self._print_ownership_summary(
-            organization, self._build_ownership_map_guarded(organization)
-        )
+        self._print_ownership_summary(organization, ownership_map)
         self.stdout.write(
             self.style.WARNING(
                 "Dry run — no changes were made. "
@@ -406,59 +419,79 @@ class Command(BaseCommand):
 
     def _purge_by_uuid(self, org_id: uuid.UUID) -> str | None:
         """Irrevocably delete the organization and all owned rows."""
+        ownership_map: dict[str, int] = {}
         try:
-            organization = Organization.objects.get(pk=org_id)
+            with transaction.atomic():
+                # This row is the per-organization billing mutation mutex.
+                # Lock it before checking provider state and keep the lock
+                # through deletion so a concurrent billing writer either
+                # commits first and is observed or waits and then fails closed.
+                organization = self._lock_organization(org_id)
+                self._guard_reserved_org(organization)
+                require_removal_action(
+                    BILLING_PROVIDER_STATE,
+                    boundary=RemovalBoundary.PURGE,
+                    action=RemovalAction.REFUSE,
+                )
+
+                # Establish consistent org context for RLS-protected tables
+                # BEFORE checking, counting, or deleting. Under PostgreSQL
+                # FORCE-RLS the runtime role cannot see rows without
+                # app.current_org_id set.
+                set_current_org_for_context(org_id=organization.pk)
+                try:
+                    self._guard_live_stripe_subscriptions(organization)
+
+                    # Build the map inside the atomic block so counts match
+                    # the pre-delete snapshot with org context already active.
+                    ownership_map = self._build_ownership_map(organization)
+
+                    # Cross-module owned rows (FK-safe delete order).
+                    require_removal_action(
+                        OWNED_TENANT_ROWS,
+                        boundary=RemovalBoundary.PURGE,
+                        action=RemovalAction.DELETE,
+                    )
+                    self._delete_owned_rows(organization)
+
+                    # Org-level rows — use _raw_delete to bypass model delete()
+                    # and signal receivers (notably the SA70 pre_delete backstop
+                    # on OrganizationMembership). The purge is intentionally
+                    # destroying the org and all its rows; individual row-level
+                    # protections are irrelevant here.
+                    OrganizationInvitation.objects.filter(
+                        organization=organization
+                    )._raw_delete(OrganizationInvitation.objects.db)
+                    OrganizationMembership.objects.filter(
+                        organization=organization
+                    )._raw_delete(OrganizationMembership.objects.db)
+
+                    # All known FK-referencing rows are already deleted, so
+                    # bypass Django's cascade collector for the org row too.
+                    Organization.objects.filter(pk=organization.pk)._raw_delete(
+                        Organization.objects.db
+                    )
+
+                    require_removal_action(
+                        PURGE_TOMBSTONE,
+                        boundary=RemovalBoundary.PURGE,
+                        action=RemovalAction.RECORD,
+                    )
+                    OrganizationTombstone.objects.create(
+                        organization_id=org_id,
+                    )
+                finally:
+                    reset_current_org_id()
         except Organization.DoesNotExist:
-            self._check_tombstone(org_id)
+            self._check_tombstone(org_id, heal_social_cache=True)
             raise CommandError(
                 f"No organization found with UUID {org_id}. "
                 "No tombstone exists for this UUID either."
             )
 
-        self._guard_reserved_org(organization)
-        self._guard_live_stripe_subscriptions(organization)
-
-        ownership_map: dict[str, int] = {}
-        with transaction.atomic():
-            # Establish consistent org context for RLS-protected tables
-            # BEFORE counting or deleting.  Under PostgreSQL FORCE-RLS the
-            # runtime role cannot see rows without app.current_org_id set.
-            set_current_org_for_context(org_id=organization.pk)
-            try:
-                # Build the map inside the atomic block so counts match
-                # the pre-delete snapshot with org context already active.
-                ownership_map = self._build_ownership_map(organization)
-
-                # Cross-module owned rows (FK-safe delete order).
-                self._delete_owned_rows(organization)
-
-                # Org-level rows — use _raw_delete to bypass model delete()
-                # and signal receivers (notably the SA70 pre_delete backstop
-                # on OrganizationMembership).  The purge is intentionally
-                # destroying the org and all its rows; individual row-level
-                # protections are irrelevant here.  This is consistent with
-                # how the Organization row itself is deleted below.
-                OrganizationInvitation.objects.filter(
-                    organization=organization
-                )._raw_delete(OrganizationInvitation.objects.db)
-                OrganizationMembership.objects.filter(
-                    organization=organization
-                )._raw_delete(OrganizationMembership.objects.db)
-
-                # Org row — use _raw_delete to bypass Django's cascade
-                # collector, which queries all FK-referencing model tables
-                # (including test-only models whose backing tables may not
-                # exist).  All known FK-referencing rows are already deleted.
-                Organization.objects.filter(pk=organization.pk)._raw_delete(
-                    Organization.objects.db
-                )
-
-                OrganizationTombstone.objects.create(
-                    organization_id=org_id,
-                )
-            finally:
-                reset_current_org_id()
-
+        # Cache backends may be remote. Keep this network effect outside the
+        # database transaction; a tombstone retry heals any failure here.
+        self._invalidate_social_cache(organization.pk)
         self._print_purge_summary(organization, ownership_map)
         return None
 
@@ -499,8 +532,6 @@ class Command(BaseCommand):
         for entry in _resolve_models():
             model = entry["model"]
             label = str(entry["label"])
-            if model is None:
-                continue
             filter_kwargs = _get_filter_for_org(str(entry["filter_key"]), organization)
             qs = _get_qs(model, filter_kwargs)
             counts[label] = qs.count()
@@ -518,26 +549,31 @@ class Command(BaseCommand):
     def _delete_owned_rows(self, organization: Organization) -> None:
         """Delete all cross-module owned rows for *organization*.
 
-        Uses the priority-ordered ``_resolve_models()`` list.  Models whose
-        app is not installed are skipped.  Complex cascades (forms, crm) are
-        handled by deleting parent rows before children that PROTECT them.
+        Uses the FK-derived ``_resolve_models()`` plan. Complex relationships
+        are handled by deleting children before the parents they reference.
+        Nullable self-blocking links are detached inside the purge transaction
+        so Django's collector cannot reject references that disappear together.
         """
         for entry in _resolve_models():
             model = entry["model"]
             label = str(entry["label"])
-            if model is None:
-                continue
             filter_kwargs = _get_filter_for_org(str(entry["filter_key"]), organization)
             qs = _get_qs(model, filter_kwargs)
+            self_blocking_fields = _self_blocking_foreign_keys(model)
+            non_nullable_fields = [
+                field.name for field in self_blocking_fields if not field.null
+            ]
+            if non_nullable_fields:
+                raise CommandError(
+                    "Organization purge cannot safely detach non-nullable "
+                    f"self-blocking fields on {_model_key(model)}: "
+                    f"{', '.join(sorted(non_nullable_fields))}."
+                )
+            if self_blocking_fields:
+                qs.update(**{field.attname: None for field in self_blocking_fields})
             deleted_count, _ = qs.delete()
             if deleted_count:
                 self.stdout.write(f"  Deleted {deleted_count} {label.lower()}.")
-
-        # Clear social cache entries for the purged org.  QuerySet.delete()
-        # bypasses BaseSocialItem.delete() which normally invalidates
-        # org-partitioned cache keys (CR-T117-R2).
-        if apps.is_installed("quickscale_modules_social"):
-            self._clear_social_cache(organization.pk)
 
     def _clear_social_cache(self, org_id: uuid.UUID) -> None:
         """Invalidate social cache keys for a purged organization.
@@ -563,12 +599,87 @@ class Command(BaseCommand):
             ]
         )
 
+    def _invalidate_social_cache(self, org_id: uuid.UUID) -> None:
+        """Run the declared social-cache obligation outside DB transactions."""
+        require_removal_action(
+            SOCIAL_CACHE_STATE,
+            boundary=RemovalBoundary.PURGE,
+            action=RemovalAction.INVALIDATE,
+        )
+        if apps.is_installed("quickscale_modules_social"):
+            self._clear_social_cache(org_id)
+
     # ------------------------------------------------------------------
     # Shared helpers
     # ------------------------------------------------------------------
 
-    def _guard_live_stripe_subscriptions(self, organization: Organization) -> None:
-        """Refuse when Stripe still has a current subscription for the org."""
+    def _guard_provider_reconciliation_target(self, org_id: object) -> None:
+        """Apply non-mutating command guards before any provider request."""
+        _resolve_models()
+        organization = Organization.objects.filter(pk=org_id).first()
+        if organization is not None:
+            self._guard_reserved_org(organization)
+
+    def _reconcile_billing_provider_state(
+        self,
+        org_id: object,
+        *,
+        persist: bool,
+    ) -> str:
+        """Run billing's provider adapter before opening the purge transaction."""
+        if not apps.is_installed("quickscale_modules_billing"):
+            return ""
+        app_config = apps.get_app_config("quickscale_modules_billing")
+        reconcile = getattr(
+            app_config,
+            "reconcile_organization_removal_provider_state",
+            None,
+        )
+        if not callable(reconcile):
+            raise CommandError(
+                "Billing is installed without its organization-removal provider "
+                "adapter; purge was refused."
+            )
+        try:
+            return str(reconcile(org_id, persist=persist) or "").strip()
+        except Exception as exc:
+            raise CommandError(
+                "Could not establish terminal Stripe checkout state before "
+                f"organization removal: {exc}"
+            ) from exc
+
+    def _billing_provider_mutation_lock(self, org_id: object):
+        """Hold billing's provider mutex through reconciliation and purge."""
+        if not apps.is_installed("quickscale_modules_billing"):
+            return nullcontext()
+        app_config = apps.get_app_config("quickscale_modules_billing")
+        lock_factory = getattr(
+            app_config,
+            "organization_removal_provider_mutation_lock",
+            None,
+        )
+        if not callable(lock_factory):
+            raise CommandError(
+                "Billing is installed without its organization-removal provider "
+                "mutex; purge was refused."
+            )
+        return lock_factory(org_id)
+
+    def _lock_organization(self, org_id: object) -> Organization:
+        """Acquire the organization-first mutex shared with billing writers."""
+        return Organization.objects.select_for_update().get(pk=org_id)
+
+    def _guard_live_stripe_subscriptions(
+        self,
+        organization: Organization,
+        *,
+        provider_expired_checkout_id: str = "",
+    ) -> None:
+        """Refuse live subscriptions or an in-progress checkout reservation.
+
+        The caller holds the organization row lock and has established the
+        RLS context for the surrounding transaction.
+        """
         try:
             subscription_model = apps.get_model(
                 "quickscale_modules_billing", "Subscription"
@@ -576,22 +687,45 @@ class Command(BaseCommand):
         except LookupError:
             return
 
-        with transaction.atomic():
-            set_current_org_for_context(org_id=organization.pk)
-            try:
-                current_statuses = subscription_model.current_statuses()  # type: ignore[attr-defined]
-                queryset = _get_qs(subscription_model, {"organization": organization})
-                stripe_subscription_ids = sorted(
-                    str(subscription_id)
-                    for subscription_id in queryset.filter(  # type: ignore[attr-defined]
-                        status__in=current_statuses,
-                        stripe_subscription_id__isnull=False,
-                    )
-                    .exclude(stripe_subscription_id="")
-                    .values_list("stripe_subscription_id", flat=True)
-                )
-            finally:
-                reset_current_org_id()
+        current_statuses = subscription_model.current_statuses()  # type: ignore[attr-defined]
+        queryset = _get_qs(subscription_model, {"organization": organization})
+        stripe_subscription_ids = sorted(
+            str(subscription_id)
+            for subscription_id in queryset.filter(  # type: ignore[attr-defined]
+                status__in=current_statuses,
+                stripe_subscription_id__isnull=False,
+            )
+            .exclude(stripe_subscription_id="")
+            .values_list("stripe_subscription_id", flat=True)
+        )
+        ambiguous_current_subscription = (
+            queryset.filter(status__in=current_statuses)
+            .exclude(status=subscription_model.Status.INCOMPLETE)  # type: ignore[attr-defined]
+            .filter(
+                models.Q(stripe_subscription_id__isnull=True)
+                | models.Q(stripe_subscription_id="")
+            )
+            .exists()
+        )
+        pending_checkout_queryset = queryset.filter(  # type: ignore[attr-defined]
+            status=subscription_model.Status.INCOMPLETE,  # type: ignore[attr-defined]
+        )
+        pending_checkout_queryset = pending_checkout_queryset.filter(
+            models.Q(stripe_subscription_id__isnull=True)
+            | models.Q(stripe_subscription_id="")
+        )
+        if provider_expired_checkout_id:
+            pending_checkout_queryset = pending_checkout_queryset.exclude(
+                stripe_checkout_session_id=provider_expired_checkout_id
+            )
+        pending_checkout = pending_checkout_queryset.exists()
+
+        if ambiguous_current_subscription:
+            raise CommandError(
+                f"Cannot purge organization {organization.pk} while it has a current "
+                "Stripe subscription with no provider id. Reconcile the subscription "
+                "before retrying."
+            )
 
         if stripe_subscription_ids:
             joined_ids = ", ".join(stripe_subscription_ids)
@@ -601,12 +735,27 @@ class Command(BaseCommand):
                 "in Stripe before retrying."
             )
 
-    def _check_tombstone(self, org_id: uuid.UUID) -> None:
+        if pending_checkout:
+            raise CommandError(
+                f"Cannot purge organization {organization.pk} while a Stripe "
+                "subscription checkout is pending. Complete or expire the "
+                "checkout before retrying."
+            )
+
+    def _check_tombstone(
+        self,
+        org_id: uuid.UUID,
+        *,
+        heal_social_cache: bool,
+    ) -> None:
         """Check for a tombstone when the org does not exist."""
         try:
             tombstone = OrganizationTombstone.objects.get(organization_id=org_id)
         except OrganizationTombstone.DoesNotExist:
             return
+
+        if heal_social_cache:
+            self._invalidate_social_cache(org_id)
 
         self.stdout.write(
             f"Organization {org_id} was already purged "

@@ -603,6 +603,40 @@ def test_reset_clears_memo() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
+def test_context_reset_clears_memo_after_savepoint_rollback() -> None:
+    """Resetting Python context prevents a rolled-back SET LOCAL memo leak."""
+    from django.test.utils import CaptureQueriesContext
+
+    org_id = uuid.uuid4()
+
+    with transaction.atomic():
+        try:
+            with transaction.atomic():
+                set_current_org_id(org_id)
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                reset_current_org_id()
+                raise RuntimeError("roll back tenant savepoint")
+        except RuntimeError:
+            pass
+
+        set_current_org_id(org_id)
+        try:
+            with CaptureQueriesContext(connection) as captured:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                    (raw,) = cursor.fetchone()
+
+            assert raw == str(org_id)
+            set_local_count = sum(
+                1 for query in captured.captured_queries if "SET LOCAL" in query["sql"]
+            )
+            assert set_local_count == 1
+        finally:
+            reset_current_org_id()
+
+
+@pytest.mark.django_db(transaction=True)
 def test_restore_b_clears_memo() -> None:
     """Direct _restore_current_org_id(B) with a non-None prior clears
     the priming memo so the next wrapped query re-primes from the

@@ -88,6 +88,27 @@ def test_duplicate_membership_hits_database_constraint() -> None:
 
 
 @pytest.mark.django_db
+def test_stripe_customer_id_is_unique_across_organizations_when_populated() -> None:
+    """One Stripe customer cannot become authoritative for two organizations."""
+    Organization.objects.create(
+        name="Stripe Customer Owner",
+        slug="stripe-customer-owner",
+        stripe_customer_id="cus_unique_org_owner",
+    )
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            Organization.objects.create(
+                name="Stripe Customer Conflict",
+                slug="stripe-customer-conflict",
+                stripe_customer_id="cus_unique_org_owner",
+            )
+
+    Organization.objects.create(name="Blank Stripe Customer A", slug="blank-stripe-a")
+    Organization.objects.create(name="Blank Stripe Customer B", slug="blank-stripe-b")
+
+
+@pytest.mark.django_db
 def test_last_owner_cannot_be_demoted_via_model_save() -> None:
     """Direct ORM role changes should not allow an org to lose its last owner."""
 

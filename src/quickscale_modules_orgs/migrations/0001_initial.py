@@ -86,7 +86,12 @@ class Migration(migrations.Migration):
                         condition=models.Q(("is_system", True)),
                         fields=("is_system",),
                         name="unique_system_org",
-                    )
+                    ),
+                    models.UniqueConstraint(
+                        condition=models.Q(("stripe_customer_id", ""), _negated=True),
+                        fields=("stripe_customer_id",),
+                        name="unique_nonempty_org_stripe_customer",
+                    ),
                 ],
             },
         ),
