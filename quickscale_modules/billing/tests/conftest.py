@@ -16,7 +16,11 @@ from django.test import Client
 # conftest runs, so the boot guard already passed — this env var only affects
 # the collection hook.
 
-from quickscale_modules_orgs.models import Organization
+from quickscale_modules_orgs.models import (
+    Organization,
+    OrganizationMembership,
+    OrgRole,
+)
 
 
 @pytest.fixture
@@ -32,10 +36,16 @@ def user(db):
 
 
 @pytest.fixture
-def organization(db):
-    """Return a default organization for billing model tests."""
+def organization(db, user):
+    """Return a default organization owned by the billing test user."""
 
-    return Organization.objects.create(name="TestOrg", slug="test-org")
+    organization = Organization.objects.create(name="TestOrg", slug="test-org")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    return organization
 
 
 @pytest.fixture

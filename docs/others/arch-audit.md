@@ -49,7 +49,7 @@ conformance gates, and monotonic quality baselines.
       (55 files each).
 
 **Growth direction (planning surface, authoritative).** `v88` is release-accepted, and
-**v0.88.0 is packaged but not published**. Publication is recorded as owed (`roadmap.md:12-16`).
+**v0.88.0 is packaged but not published**. Publication is recorded as owed (`roadmap.md:13-20`).
 The critical path is **SA153: the first production property portal
 (`buenosairesproperties.com`) built as a *project-owned extension*** on `bap-web`, after the
 verified migration tooling is used by SA191 to move that site onto current QuickScale.
@@ -68,7 +68,7 @@ generated-project updater. SA153 is not a teams trigger, so the teams tie-breake
 
 **Read fully:**
 - The 18 unlabeled-behavioral diffs.
-- `orgs/tenancy.py` classification (`:1160-1460`) and policy refresh (`:587-640`).
+- `orgs/tenancy.py` classification (`:1357-1740`) and policy refresh (`:713`).
 - `orgs/checks.py`, `purge_organization.py`, and the head of `check_tenant_isolation.py`.
 - The generated `start.sh.j2` (`:1-130`), the privilege section of `production.py.j2`, and
   `db/init.sql.j2`.
@@ -92,12 +92,12 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 | Invariant | Enforcement | Posture | Trend since last pass |
 |---|---|---|---|
 | Tenant reads/writes stay organization-scoped | `TenantManager`, `FORCE RLS`, restricted-role boot guard | Structural | unchanged |
-| **Tenant-model universe is classified (and refreshed, and purged)** | Marker-derived tenant classification and FORCE-RLS refresh; 21-entry `_DELETE_SPECS` remains the purge membership list. The shipped `TENANT_TABLE_REGISTRY` is a parity oracle only | **Classification and refresh are marker-derived; purge remains closed to project-owned tenant models** | **narrowed to SA190 purge membership** — rank 1 |
+| **Tenant-model universe is classified (and refreshed, and purged)** | Marker-derived tenant classification, FORCE-RLS refresh, and FK-ordered purge membership; the shipped `TENANT_TABLE_REGISTRY` is a parity oracle only | **Structural and open to installed project-owned tenant models** | **strengthened** — purge no longer hand-enumerates the model universe |
 | Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard; exemption set declared in four places and checked by exact-member station regressions | Guard structural; **two-member set duplicated across four fail-closed stations and cross-checked** | **strengthened** — recovery backfill excluded and declaration drift gated |
 | **Restricted runtime role exists with the right grants** | `runtime_database.py` declares `quickscale_runtime`, its attributes, and the canonical grants; generator context renders that contract into `db/init.sql.j2`, `start.sh.j2`, and `OPERATIONS.md.j2`, while Railway deploy imports the same role name | **Structural: one role name and one statement set feed local, Railway, and manual paths** | **strengthened** — naming and `GRANT CONNECT` drift gated |
 | **Template ↔ upgradable-code contract compatibility across versions** | `project_contract` in state plus declared module/CLI vintages; `status` reports gaps and existing-project `update`, `apply`, and Railway deploy enforce them | **Structural at mutation boundaries, with explicit per-invocation acknowledgement** | **strengthened** — compatibility boundary enforced |
 | Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy | Membership gated; ownership hand-authored | unchanged; paid again for two new emitted paths (`31a93768`) |
-| Cross-domain deletion obligations are discharged | Last-owner: one predicate, locked model delete, `pre_delete` receiver. Billing cancellation: account-delete view; live-subscription refusal plus row purge, cache invalidation, and tombstone: `purge_organization` | Last-owner and live-subscription refusal are structural; **remaining obligations convention, split across two boundaries** | **re-characterized** — rank 2 |
+| Cross-domain deletion obligations are discharged | Last-owner: one predicate, locked model delete, `pre_delete` receiver. One named obligation contract classifies billing reconciliation, row purge, cache invalidation, and tombstone handling across account deletion and `purge_organization` | Last-owner, live-subscription refusal, and obligation classification are structural; **execution remains split across two boundaries** | **strengthened** — shared contract added; durable coordinator remains deferred — rank 1 |
 | CSRF-exempt endpoints have alternate integrity checks | AST gate plus sanctioned endpoint bases | Structural and gated | unchanged |
 | Core/module dependency direction and lockstep pin | Import-compatibility and reverse-import gates; exact `>=X.Y.0,<X.(Y+1).0` pin derived from `VERSION` | Gated | strengthened (floor → exact, `74d18f48`) |
 | Module identity (the twelve-module universe) | `module_discovery.py --list-modules`, consumed fail-hard (`provision_ci_postgres.sh:81`, `check_sa117_scope.py:57`, `version_tool.sh:34`) | Structural and derived | unchanged (SA173 three-state presence added behind the same shim) |
@@ -111,113 +111,10 @@ drain, frontend theme internals, and dr_engine internals beyond the lock files.
 
 | Rank | ID | Horizon | Confidence | Size | Problem in one line |
 |---:|---|---|---|---|---|
-| 1 | `org-model-universe-hand-enumerated` | now (SA190) | High | S | Purge membership remains a literal `_DELETE_SPECS` list inside the orgs module, closed to project-owned tenant tables even though classification and policy refresh are marker-derived. |
-| 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | Two org-deletion boundaries already exist, and each discharges a different subset of cross-domain obligations. |
+| 1 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | Two org-deletion boundaries share one obligation contract but still execute different subsets without a durable coordinator. |
 
-Rank 1 is the still-open SA190 purge-membership half; classification and policy refresh are
-marker-derived, while SA190 still owns purge derivation. The permanent two-command contract is
-cross-checked across all four enforcing stations, whose duplication remains a watch item. Rank 2
-is scheduled at the 6–18 month horizon.
-
----
-
-## Finding — Purge membership remains closed to project-owned tables
-
-**ID:** `org-model-universe-hand-enumerated` · **Horizon:** now · **Confidence:** High ·
-**Size:** S · **Context dependence:** `wrong-for-now` (new domain — first project-owned tenant tables)
-
-**Rank rationale:** the remaining blast radius is org teardown for the first production portal.
-Classification and policy refresh now accept project-owned tenant models; purge remains the
-unresolved SA190 half. The trigger is certain because SA153 is the next ticket on the critical path.
-
-**Trigger:** a project-owned or module tenant model is scheduled. **Fired** — SA153's
-acceptance requires new tenant-owned child tables with their own `organization_id` and forced RLS
-(`roadmap.md`, SA153).
-
-**Problem:** The organization purge plan still treats the set of tenant models as a literal list
-inside the orgs module's source and has no project-side extension seam. The documented extension
-model forbids editing module source, and SA153 is required to ship exactly the kind of table this
-list cannot see.
-
-**Evidence** (all anchors established or re-verified this pass):
-
-- **Classification and policy refresh are now marker-derived.** `is_tenant_model()` and
-  `get_tenant_models()` identify installed concrete project models, while
-  `is_classified_in_registry()` uses the marker-only classifier. W003/W004 and
-  `check_tenant_isolation` therefore cover project-owned models without a literal registry entry.
-  `refresh_force_rls_policies()` binds each existing table to its unique live `FOR ALL` policy
-  from `pg_policies` before performing the revert/apply cycle. The shipped literal remains only a
-  parity oracle.
-- **SA153's model is a tenant model by construction.** `AbstractListing` carries `tenant_org_fk()`
-  and `objects = TenantManager()` (`listings/models.py:12,22,124-125`), so any property subclass
-  with the dual-manager contract is one. The Phase A project fixture proves classification,
-  command output, live policy refresh, and missing-policy fail-closed behavior without a literal
-  registry entry.
-- **Purge is closed and order-dependent.**
-  - `_DELETE_SPECS` (`purge_organization.py:64`, **21 entries**, re-derived by AST) is the whole
-    purge universe (`_resolve_models`, `:215`).
-  - The organization row is removed with `_raw_delete` (`:448`), and `tenant_org_fk` is `PROTECT`
-    (`tenancy.py:450-476`).
-  - Purging any org that owns a project-owned tenant row therefore fails on the database FK.
-- **The remaining fix belongs to SA190.** `implementation_contract.md:355` requires projects to
-  extend modules "through a project-owned extension app … never by editing module source
-  directly." Adding project-owned purge membership to `_DELETE_SPECS` would violate that
-  boundary and would have to survive every later `quickscale update` subtree pull.
-
-**Counter-evidence:**
-
-- **The project-side marker hook now exists.** The module extension and organizations contracts
-  document the dual-manager/marker path; the shipped parity literal remains separate.
-- **Isolation stays guarded without the literal.** W003/W004 and `check_tenant_isolation` require
-  `organization_id` and FORCE RLS for every marker-derived `TenantManager` model.
-- **Purge fails loud.** No silent partial teardown is possible.
-
-Those last two points are what keep this a registration/extension problem rather than an
-isolation leak.
-
-Runtime confirmation: generate a project with `listings`, add an extension model subclassing
-`AbstractListing`, and run `manage.py check_tenant_isolation --format json`. Classification and
-policy refresh should include the model; purging an organization that owns its row still fails
-until SA190 derives purge membership.
-
-**Why it compounds:**
-
-- Every project-owned tenant table still needs a purge-membership seam, currently a hand-chosen
-  `_DELETE_SPECS` position in module source.
-- That edit must be carried through every later module update.
-- Purge ordering remains manual, while classification and policy refresh now see the table.
-- SA154's inventory (saved searches, favorites, agent/office profiles, tours) is a list of more
-  tenant tables built on the same pattern.
-
-**Detection signal:** a generated project's `purge_organization` raising `IntegrityError` or
-`ProtectedError` while a project-owned tenant row exists. Hand edits appearing under
-`quickscale_modules_orgs/` in a generated project's git history remain evidence of the wrong
-extension shape, not a requirement for classification or policy refresh.
-
-**Steelman:** a closed purge list is default-deny. Nothing is deleted unless a maintainer reviewed
-its ordering, and `_DELETE_SPECS` protects against accidental cross-domain deletion. Do not fix if
-SA153 is re-scoped to ship its tables inside a first-party module.
-
-**Correct shape:** purge membership is derived from the same marker-derived tenant-model set used
-by classification and policy refresh, with explicit ordering from installed FK metadata and
-documented overrides where needed. Any literal list is a monorepo-side cross-check over shipped
-modules, never the runtime authority in a generated project.
-
-**Options:**
-
-1. **Open `_DELETE_SPECS`.** Merge a project-declared list (a setting or AppConfig hook) into the
-   purge plan. This is small and keeps default-deny, but adds another hand-maintained station per
-   table and leaves purge ordering manual.
-2. **Derive purge membership from markers.** Drive purge membership from `get_tenant_models()` and
-   order it topologically from installed FK metadata with explicit overrides. Keep the shipped
-   literal only as a monorepo parity test. This removes the remaining compounding.
-3. **Keep purge closed and require first-party modules for tenant tables.** This contradicts
-   SA153's scope and the extension contract.
-
-**Recommendation:** Option 2. SA182 has aligned classification and policy refresh with the
-marker-derived set. SA190 should now derive purge membership from `get_tenant_models()`, preserving
-the existing ordered deletion and last-owner safeguards while proving a non-module tenant row can
-be purged safely.
+The remaining finding is scheduled at the 6–18 month horizon. The permanent two-command privilege
+contract is cross-checked across all four enforcing stations, whose duplication remains a watch item.
 
 ---
 
@@ -235,44 +132,47 @@ production volume does not yet.
 the second boundary, and SA153's production launch makes the split obligations operationally
 relevant.
 
-**Problem:** Last-owner safety is structural, but the other cross-domain obligations of removing
-an organization — cancelling billing, deleting tenant rows, invalidating caches, writing a
-tombstone — are orchestrated inline by whichever boundary happens to run. The two existing
-boundaries discharge disjoint subsets.
+**Problem:** Last-owner safety and the cross-domain obligation inventory are structural, but the
+actions for removing an organization — reconciling billing, deleting tenant rows, invalidating
+caches, and writing a tombstone — are still orchestrated by whichever boundary runs. The two
+existing boundaries intentionally discharge different subsets without a durable coordinator.
 
 **Evidence (census of org-lifecycle deletion boundaries):**
 
-| Obligation | Account-delete view (`AccountDeleteView`, `auth/views.py:56-240`) | `purge_organization` |
+| Obligation | Account-delete view (`auth/views.py::AccountDeleteView`) | `purge_organization` |
 |---|---|---|
-| Last-owner guard | ✅ `:164` via the one predicate | n/a (whole org) |
-| Cancel Stripe subscription | ✅ `_cancel_personal_org_subscriptions`, `:172-240` | Refuses current Stripe-backed subscriptions before deletion; cancellation remains out of band |
-| Delete tenant rows | ❌ personal org and its rows survive (membership `CASCADE`, `orgs/models.py:116-120`) | ✅ `_delete_owned_rows`, `:514` |
-| Invalidate social caches | ❌ | ✅ `_clear_social_cache`, `:538` |
-| Tombstone | ❌ | ✅ `:452` |
+| Last-owner guard | ✅ `AccountDeleteView._get_blocking_orgs_for_deletion` via the one predicate | n/a (whole org) |
+| Reconcile Stripe subscription | ✅ outside the deletion transaction | Refuses current Stripe-backed subscriptions and active checkout reservations under the organization-keyed provider advisory mutex; elapsed reservations are reconciled with Stripe before the transaction, local finalization uses the organization-row lock, and only provider-confirmed expiry is purgeable |
+| Delete tenant rows | Deliberate skip recorded because the organization survives | ✅ marker-derived `_delete_owned_rows` |
+| Invalidate social caches | Deliberate skip recorded because the organization survives | ✅ `_clear_social_cache` |
+| Tombstone | Deliberate skip recorded because the organization survives | ✅ after the organization row is removed |
 
-`cancel_current_subscription` has exactly two callers: `billing/views.py:311` and
-`auth/views.py:225`. The six last-owner callsites were re-verified (`orgs/models.py:165,329`;
-`signals.py:66`; `orgs/views.py:808,1161`; `auth/views.py:164`).
+`cancel_current_subscription` has exactly two callers:
+`billing/views.py::CancelSubscriptionView.post` and
+`auth/views.py::AccountDeleteView._cancel_personal_org_subscriptions`. The six last-owner
+callsites were re-verified (`orgs/models.py:165,329`; `signals.py:66`;
+`orgs/views.py:808,1161`; `auth/views.py::AccountDeleteView._get_blocking_orgs_for_deletion`).
 
 **Counter-evidence:**
 
 - **No billing delete hooks.** Searched billing for `pre_delete`/`post_delete` receivers or
   model-level `delete()` hooks; found none.
-- **The live-subscription precondition is now enforced and documented.** The purge and dry-run
-  paths list current Stripe subscription IDs and refuse before deletion. This closes the money-path
-  red flag without unifying the remaining cross-domain obligations.
+- **The live-subscription precondition is enforced and documented.** The purge and dry-run paths
+  list current Stripe subscription IDs and refuse before deletion.
+- **The obligation inventory is now shared.** `ORGANIZATION_REMOVAL_OBLIGATIONS` classifies all four
+  actions, both boundaries consume it, and account deletion records its deliberate retention skips.
+  Provider-ID conformance rejects a purged external ID with no refusal/reconciliation rule.
 - **Last-owner safety is sound**, so this finding is scoped to cross-domain obligations.
 
 **Why it compounds:**
 
-- **Each new domain obligation** (SA153's property galleries in media storage, CRM inquiries,
-  SA154's saved searches and alerts) must be added to whichever boundaries its author remembers.
-- **Each new boundary** — bulk admin, GDPR erasure, or `teams` — copies a subset.
-- **The subsets have already diverged.**
+- **Each new domain obligation** must extend the shared declaration and each boundary's handler.
+- **Each new boundary** — bulk admin, GDPR erasure, or `teams` — still needs orchestration code.
+- **The subsets intentionally differ**, but the shared contract now makes those differences visible.
 
-**Detection signal:** a new organization-deletion boundary that omits the live-subscription
-refusal, memberless personal organizations still holding tenant rows, or stale `social` cache
-entries after account deletion.
+**Detection signal:** a new organization-deletion boundary that does not consume the shared
+obligation contract, a provider ID without a refusal/reconciliation declaration, or a durable
+erasure requirement that cannot tolerate boundary-local execution.
 
 **Steelman:** the two boundaries have different intents. Account deletion removes a *person* and
 deliberately retains organization data. Purge is an operator's hard teardown. Network calls
@@ -291,57 +191,53 @@ set, idempotently.
    record reconciles. Stronger against bypass, but network effects complicate transactions.
 3. **Deletion as a durable job.** Strongest recovery; excessive before multi-store erasure exists.
 
-**Recommendation:** Option 1. Design it together with rank 1's purge derivation, so that purge
-membership and obligations come from one place. Preserve the last-owner model/signal backstop.
-· **First step:** fold the shipped live-subscription refusal and the remaining purge obligations
-into a named list shared with the account view; the purge-plan work owns that consolidation.
+**Recommendation:** Keep the completed shared obligation contract and last-owner model/signal
+backstop. Adopt option 1 when another destructive boundary or durable-erasure requirement fires the
+coordinator trigger; use option 3 only when recovery across multiple external stores is required.
 
 ---
 
 ## Change-cost probe
 
 **Probe — SA153: add one project-owned tenant child table** (for example, a property gallery
-image). SA182 now covers the classification and policy-refresh stations. The remaining SA190
-purge-membership probe is:
+image). Marker-derived classification, policy refresh, and purge membership now cover the runtime
+stations:
 
 1. The project model: `tenant_org_fk()` plus `TenantManager()` and `TenantManager(super_scope=True)`.
 2. A project migration calling `apply_force_rls()`, plus `add_composite_child_fk()` for the parent
    equality.
 3. A child boundary test on the `test_rls_boundary.py` pattern.
-4. **Module source:** a `_DELETE_SPECS` entry at a hand-chosen FK position. Without it, purging any
-   org that owns the row fails on `PROTECT`.
-5. Carry the purge-membership change through every later `quickscale update` of `orgs`.
+4. Purge discovers the model automatically and orders it before its protected parent from installed
+   FK metadata; no module-source edit is required.
 
-**Verdict: finding evidence** (rank 1): 5 stations remain in the SA190 half. The project model,
-migration, child-boundary, classification, and refresh behaviours now have an extension path and
-Phase A regression coverage; purge membership remains in vendored module source.
+**Verdict: resolved:** the project model, migration, boundary test, classification, policy refresh,
+and purge all have an extension path without vendored module edits.
 
 ---
 
 ## Fix order and interactions
 
-- **SA182's rank-1 classification/refresh half is complete:** it unblocks SA153's first migration
-  and keeps the shipped literal as parity-only evidence.
-- **Purge derivation pairs with rank 2:** the remaining rank-1/SA190 purge half and rank 2's
-  coordinator touch the same command, so design them together.
-- **SA152's completed maintainer verification** does not conflict with the two ranked findings.
-- **SA177 is independent of both findings,** but its "each enrolled table" scope inherits rank 1's
-  closed universe. If rank 1 lands first, SA177 covers project tables for free.
+- **Marker-derived classification, refresh, and purge are complete:** SA153 can add project-owned
+  child tables without a vendored module edit.
+- **The remaining deletion-coordinator finding is deferred:** its first step, the shared obligation
+  inventory, is complete; preserve that contract if a later trigger justifies a coordinator.
+- **SA152's completed maintainer verification** does not conflict with the remaining finding.
+- **SA177 is independent:** its "each enrolled table" scope already covers project tables.
 
 ## Sound load-bearing decisions
 
 - **Tenant isolation is dual-layer and fails closed.** Ambient `TenantManager` scoping plus
   restricted-role `FORCE RLS`. A boot guard rejects a `rolbypassrls`/`rolsuper` runtime role, and
   `_check_quickscale_mode()` runs before the privileged exemption. Marker-derived membership and
-  the W003/W004 isolation checks are what make SA182's runtime shape safe; keep them while SA190
-  derives purge membership.
+  the W003/W004 isolation checks and marker-derived purge are what keep project-owned tables safe.
 - **Last-owner safety is a model/signal backstop, not a view check.** One predicate serves six
   callsites, plus a `pre_delete` receiver that catches direct ORM deletes. Rank 2's coordinator
   must not replace it.
-- **Single-declaration derivation seams work where they are used.** Module identity is shelled out
+- **Single-declaration derivation seams work where they are used.** Tenant classification, policy
+  refresh, and purge share the installed marker-derived model set. Module identity is shelled out
   to `module_discovery.py --list-modules` by every consumer. `runtime_pins.py` renders Python,
   Django, and PostgreSQL pins into templates. The lockstep pin is now derived exactly from
-  `VERSION` (`74d18f48`). These are the precedent for ranks 1–2.
+  `VERSION` (`74d18f48`). These are the precedent for the remaining deletion-boundary work.
 - **The PostgreSQL CI environment is one contract with five profiles.** `provision_ci_postgres.sh`
   derives its module list and hard-fails on drift, and parity tests assert that the old
   hand-rolled shell is absent. `b29d9a29` also stopped the BYPASSRLS authorization leaking into

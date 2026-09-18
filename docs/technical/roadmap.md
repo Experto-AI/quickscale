@@ -34,14 +34,13 @@ context, scope, and acceptance;
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | — | Deferred |
-| SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA154 (inventory)   critical path: first property portal
 Track 2: SA192
-Track 3: SA190
+Track 3: complete
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -84,7 +83,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA192 | yes | yes | yes | **yes** | no |
-| 3 | SA190 | yes | yes | yes | **yes** | no |
+| 3 | — | — | — | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -101,15 +100,13 @@ A track is **truly green** only when all three states are yes.
   `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  and the owning audit: the arch audit for SA152, SA189, and SA190 (SA190 also closes arch-audit
-  items). SA191, SA153, and SA192 have no owning audit; their evidence goes to the changelog, and
+  and the owning audit for completed structural work. SA191, SA153, and SA192 have no owning audit;
+  their evidence goes to the changelog, and
   SA191's also to the migration playbook. All are
   Markdown with no generated consumer.
-  Three code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
-  documentation; SA192 restyles the `auth` account templates
-  while SA190 edits the account-delete view, so whichever lands second re-runs the auth tests; and
-  SA189 edits `deployment_commands.py` after Track 2's deploy work has merged through its
-  dependency chain. The serialized queue covers them:
+  Two code-adjacent overlaps cross tracks: SA153 edits the extension and organizations
+  documentation, and SA192 restyles the `auth` account templates after the completed account-delete
+  obligation work. The serialized queue covers them:
   each track resolves the shared set at its own merge, after the previous merge lands, then runs the
   consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
@@ -222,8 +219,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   edit under vendored module source. Prove the search → detail → inquiry journey and isolation
   between organizations through both the API and the rendered pages. Correct reusable-module feature
   claims that the module does not provide. Adding a frontend dependency for prerendering follows the
-  decisions rule for the approved frontend stack. Purging an organization that owns property rows
-  is SA190's.
+  decisions rule for the approved frontend stack. The marker-derived purge plan covers property
+  rows without a vendored module edit.
 
   **Surfaces:** the project-owned property extension, its API and React pages, and the project's
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
@@ -285,7 +282,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   searches, favorites, and alerts; agent/office profiles; syndication; tours/video; paid
   placement; blog/listing cross-links; and PostgreSQL full-text search. Promote an item only with a concrete consumer, bounded acceptance, and
   a fresh dependency and track. Items that add tenant tables (saved searches, favorites, profiles,
-  tours) build on marker-derived enrollment and SA190's purge derivation, not on module-source edits. Close
+  tours) build on marker-derived enrollment and purge, not on module-source edits. Close
   when every item is promoted or dropped with rationale.
 
   **Context:** The inventory includes reusable generalization of the proven property API, React pages, and
@@ -318,37 +315,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA189 — Provision the runtime database role in one place under one name.**
 
-- [ ] **SA190 — Derive the purge plan and share organization-removal obligations.**
-
-  **Context:** Marker-derived tenant discovery classifies and refreshes project-owned tenant tables,
-  but purge still enumerates its own literal `_DELETE_SPECS`. Because tenant foreign keys are
-  `PROTECT`, an organization that owns an unlisted row cannot be purged at all. Derive membership
-  from the same tenant set, and order it topologically from installed foreign keys, with overrides
-  where the graph is not enough.
-
-  Organization removal also has two boundaries that discharge disjoint obligations. The account-delete
-  view cancels Stripe but leaves the personal organization's rows; purge deletes rows, clears caches,
-  and writes a tombstone, but does not touch Stripe. Account deletion removes a person and may keep
-  organization data on purpose, so the goal is not identical behavior. It is one named list of
-  obligations, where each boundary either discharges an item or states that it deliberately skips it.
-  Design the list together with the derived purge plan, keep network effects out of transactions, and
-  leave the last-owner model/signal backstop in place.
-
-  **Acceptance:** `purge_organization` takes its membership from the derived tenant-model set and
-  its deletion order from installed FK metadata, with explicit overrides, so purging an organization
-  that owns project-owned tenant rows succeeds without a `_DELETE_SPECS` edit. The obligations of
-  removing an organization — the SA183 billing refusal, owned-row purge, social cache invalidation,
-  and tombstone — are one named list that both `purge_organization` and the account-delete view
-  consume; the view records which obligations it deliberately skips (retained organization data)
-  instead of omitting them. The last-owner model/signal backstop is unchanged. Regressions purge a
-  non-module tenant model with a child row cleanly, and a conformance test fails when a purged model
-  carries an external provider id with no refuse-or-reconcile obligation. This retires the purge
-  half of `org-model-universe-hand-enumerated`, the first step of
-  `deletion-invariants-per-boundary-reimplementation`, and the tech audit's teardown tooling gap. No
-  durable deletion job or outbox.
-
-  **Surfaces:** `purge_organization.py`, `auth/views.py` account deletion, the billing cancellation
-  seam, orgs and auth tests, `organizations.md`, and both audits.
+- [x] **SA190 — Derive the purge plan and share organization-removal obligations.**
 
 ## Deferred constraints and references
 

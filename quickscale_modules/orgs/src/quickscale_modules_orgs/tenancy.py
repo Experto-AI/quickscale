@@ -216,6 +216,12 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
     ),
     TenantTableEntry(
         app_label="quickscale_modules_billing",
+        model_name="PurchaseCheckout",
+        status=TenantTableStatus.ENROLLED,
+        policy_name="billing_purchase_checkout_org_isolation",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_billing",
         model_name="Subscription",
         status=TenantTableStatus.ENROLLED,
         policy_name="billing_subscription_org_isolation",

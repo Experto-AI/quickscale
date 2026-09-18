@@ -2,13 +2,13 @@
 
 **Status**: Billing ships in v0.85.0 through the standard QuickScale module workflow. `quickscale.yml` plus env-var-backed runtime settings are authoritative, Stripe keys plus webhook secrets stay environment-only, and billing now depends on the `orgs` module for its org-authoritative ledger/runtime contract.
 
-QuickScale billing is a credits-first org-backed module. Django owns plans, balances, transactions, subscription snapshots, and webhook idempotency records. Stripe is the payment trigger through the direct `stripe` Python SDK; the Django ledger remains the source of truth for credit accounting, and billing requires the `orgs` plus `auth` modules at plan/apply/runtime.
+QuickScale billing is a credits-first org-backed module. Django owns plans, balances, transactions, purchase Checkout lifecycle reservations, subscription snapshots, and webhook idempotency records. Stripe is the payment trigger through the direct `stripe` Python SDK; the Django ledger remains the source of truth for credit accounting, and billing requires the `orgs` plus `auth` modules at plan/apply/runtime.
 
 ## Current Shipped Surface
 
 - Independently packaged Django module metadata under `quickscale_modules/billing/`
-- Five core models: `Plan`, `CreditBalance`, `CreditTransaction`, `Subscription`, and `WebhookEvent`
-- Django admin registration for plans, balances, transactions, subscriptions, and webhook events
+- Six core models: `Plan`, `CreditBalance`, `CreditTransaction`, `PurchaseCheckout`, `Subscription`, and `WebhookEvent`
+- Django admin registration for plans, balances, transactions, purchase Checkout reservations, subscriptions, and webhook events
 - Stripe webhook handling for purchases and recurring subscription lifecycle events
 - Authenticated JSON APIs for balance, transactions, purchase checkout, subscription checkout, subscription status, subscription cancel, billing portal, and publishable-key discovery
 - Module-owned Django pages for flat dashboard/pricing routes in both Solo and SaaS modes, purchase return routes, subscription return routes, and the billing portal return route
@@ -28,7 +28,8 @@ QuickScale billing is a credits-first org-backed module. Django owns plans, bala
 - `Plan` stores QuickScale-owned display metadata plus the authoritative Stripe Price reference used for checkout validation
 - `CreditBalance` tracks the current authoritative per-organization credit balance; nullable user links remain provenance / compatibility only
 - `CreditTransaction` records each credit mutation with balance snapshots and optional Stripe reference metadata
-- `Subscription` stores the local snapshot of recurring billing state keyed authoritatively to the organization; nullable user links remain provenance / compatibility only
+- `PurchaseCheckout` records one-time Checkout lifecycle state so account deletion and organization purge can reconcile or refuse live provider sessions; Stripe metadata and idempotency keys correlate completed or expired sessions even when the provider-create response is lost
+- `Subscription` stores the local snapshot of recurring billing state keyed authoritatively to the organization; recurring Checkout uses the same reservation-reference and response-loss recovery contract, while nullable user links remain provenance / compatibility only
 - `WebhookEvent` is the transport-level idempotency gate for Stripe webhook processing
 - `debit_user` is the approved service API for credit consumption
 
@@ -59,7 +60,7 @@ All billing API routes are flat (`/api/billing/...`) and used in both Solo and S
 | --- | --- | --- | --- | --- | --- |
 | `/api/billing/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": "Stripe publishable key is not configured in the runtime environment."}` when missing. |
 | `/api/billing/plans/` | `GET` | Public | None | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. |
-| `/api/billing/balance/` | `GET` | Session auth | None | `{"balance": 125, "updated_at": "2026-05-16T12:00:00Z"}` | Creates a zero-balance row on first read. |
+| `/api/billing/balance/` | `GET` | Session auth | None | `{"balance": 0, "updated_at": null}` | A missing balance is returned as a read-only zero snapshot without creating a row. Persisted balances include their `updated_at` timestamp. |
 | `/api/billing/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Fixed page size of `25`; client `page_size` overrides are ignored. |
 | `/api/billing/purchase/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "credits-pack"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. |
 | `/api/billing/subscription/` | `GET` | Session auth | None | `{"plan": {"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}, "status": "active", "checkout_expires_at": null, "current_period_start": "2026-05-16T12:00:00Z", "current_period_end": "2026-06-15T12:00:00Z"}` | Returns `404` with `{"error": "Current subscription not found."}` when no current recurring row exists. |

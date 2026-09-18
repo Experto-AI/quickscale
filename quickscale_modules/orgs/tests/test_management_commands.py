@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json as json_lib
+import threading
 import uuid as uuid_lib
 from collections.abc import Iterator
 from io import StringIO
@@ -17,6 +19,7 @@ from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
     Plan,
+    PurchaseCheckout,
     Subscription,
 )
 from quickscale_modules_orgs.current_org import (
@@ -221,6 +224,208 @@ def test_migrate_billing_to_orgs_reuses_sole_existing_membership() -> None:
         == 0
     )
     assert "created_personal_org=no" in stdout.getvalue()
+
+
+@pytest.mark.bypass_rls
+@pytest.mark.usefixtures(
+    "nullable_billing_organization_ownership", "explicit_billing_recovery"
+)
+@pytest.mark.django_db(transaction=True)
+def test_migrate_billing_to_orgs_serializes_with_organization_purge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Recovery commits first and purge then observes the migrated live row."""
+    from django.db import close_old_connections
+
+    from quickscale_modules_orgs.management.commands import (
+        migrate_billing_to_orgs as recovery_module,
+    )
+
+    user = get_user_model().objects.create_user(
+        username="recovery-purge-race",
+        email="recovery-purge-race@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Recovery Purge Race",
+        slug="recovery-purge-race",
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    plan = _create_plan(
+        slug="growth-recovery-purge-race",
+        price_id="price_growth_recovery_purge_race",
+    )
+    subscription = Subscription.all_objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id="sub_recovery_purge_race",
+        stripe_customer_id="cus_recovery_purge_race",
+        status=Subscription.Status.ACTIVE,
+    )
+
+    recovery_has_lock = threading.Event()
+    allow_recovery_to_finish = threading.Event()
+    purge_attempted_lock = threading.Event()
+    original_recovery_lock = recovery_module._lock_target_organizations
+    original_purge_lock = Command._lock_organization
+
+    def pause_after_recovery_lock(
+        organization_ids: set[object],
+    ) -> dict[object, Organization]:
+        locked = original_recovery_lock(organization_ids)
+        recovery_has_lock.set()
+        if not allow_recovery_to_finish.wait(timeout=10):
+            raise AssertionError("timed out waiting to release recovery command")
+        return locked
+
+    def signal_purge_lock_attempt(
+        command: Command, organization_id: object
+    ) -> Organization:
+        purge_attempted_lock.set()
+        return original_purge_lock(command, organization_id)
+
+    monkeypatch.setattr(
+        recovery_module,
+        "_lock_target_organizations",
+        pause_after_recovery_lock,
+    )
+    monkeypatch.setattr(Command, "_lock_organization", signal_purge_lock_attempt)
+
+    def run_recovery() -> None:
+        close_old_connections()
+        try:
+            call_command(
+                "migrate_billing_to_orgs",
+                stdout=StringIO(),
+                stderr=StringIO(),
+                verbosity=0,
+            )
+        finally:
+            close_old_connections()
+
+    def run_purge() -> str:
+        close_old_connections()
+        try:
+            with pytest.raises(CommandError) as exc_info:
+                call_command(
+                    "purge_organization",
+                    organization_id=str(organization.pk),
+                    stdout=StringIO(),
+                    stderr=StringIO(),
+                    verbosity=0,
+                )
+            return str(exc_info.value)
+        finally:
+            close_old_connections()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        recovery_future = executor.submit(run_recovery)
+        assert recovery_has_lock.wait(timeout=10)
+        purge_future = executor.submit(run_purge)
+        assert purge_attempted_lock.wait(timeout=10)
+        allow_recovery_to_finish.set()
+        recovery_future.result(timeout=10)
+        purge_error = purge_future.result(timeout=10)
+
+    subscription.refresh_from_db()
+    assert subscription.organization_id == organization.pk
+    assert Organization.objects.filter(pk=organization.pk).exists()
+    assert "sub_recovery_purge_race" in purge_error
+
+
+@pytest.mark.django_db(transaction=True)
+def test_credit_mutation_serializes_with_organization_purge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A credit commits under the organization mutex before purge proceeds."""
+    from django.db import close_old_connections
+
+    from quickscale_modules_billing import services as billing_services
+
+    user = get_user_model().objects.create_user(
+        username="credit-purge-race",
+        email="credit-purge-race@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Credit Purge Race",
+        slug="credit-purge-race",
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    credit_has_lock = threading.Event()
+    allow_credit_to_finish = threading.Event()
+    purge_attempted_lock = threading.Event()
+    original_billing_lock = billing_services._lock_organization_for_billing_mutation
+    original_purge_lock = Command._lock_organization
+
+    def pause_after_credit_lock(organization_arg):
+        locked = original_billing_lock(organization_arg)
+        credit_has_lock.set()
+        if not allow_credit_to_finish.wait(timeout=10):
+            raise AssertionError("timed out waiting to release credit mutation")
+        return locked
+
+    def signal_purge_lock_attempt(command: Command, organization_id: object):
+        purge_attempted_lock.set()
+        return original_purge_lock(command, organization_id)
+
+    monkeypatch.setattr(
+        billing_services,
+        "_lock_organization_for_billing_mutation",
+        pause_after_credit_lock,
+    )
+    monkeypatch.setattr(Command, "_lock_organization", signal_purge_lock_attempt)
+
+    def run_credit() -> None:
+        close_old_connections()
+        set_current_org_id(organization.pk)
+        try:
+            billing_services.credit_user(
+                user,
+                organization=organization,
+                amount=25,
+                transaction_type=CreditTransaction.TransactionType.PURCHASE,
+                stripe_event_id="evt_credit_purge_race",
+            )
+        finally:
+            reset_current_org_id()
+            close_old_connections()
+
+    def run_purge() -> None:
+        close_old_connections()
+        try:
+            call_command(
+                "purge_organization",
+                organization_id=str(organization.pk),
+                stdout=StringIO(),
+                stderr=StringIO(),
+                verbosity=0,
+            )
+        finally:
+            close_old_connections()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        credit_future = executor.submit(run_credit)
+        assert credit_has_lock.wait(timeout=10)
+        purge_future = executor.submit(run_purge)
+        assert purge_attempted_lock.wait(timeout=10)
+        allow_credit_to_finish.set()
+        credit_future.result(timeout=10)
+        purge_future.result(timeout=10)
+
+    assert not Organization.objects.filter(pk=organization.pk).exists()
+    assert OrganizationTombstone.objects.filter(
+        organization_id=organization.pk
+    ).exists()
 
 
 @pytest.mark.bypass_rls
@@ -1316,18 +1521,8 @@ def test_purge_organization_refuses_live_stripe_subscription(
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize(
-    ("status", "stripe_subscription_id"),
-    [
-        (Subscription.Status.CANCELED, "sub_billing_purge"),
-        (Subscription.Status.ACTIVE, None),
-    ],
-    ids=["cancelled", "current-without-stripe-id"],
-)
-def test_purge_organization_with_billing_rows(
-    status: str, stripe_subscription_id: str | None
-) -> None:
-    """Cancelled or non-Stripe billing rows must still purge successfully."""
+def test_purge_organization_with_terminal_billing_rows() -> None:
+    """Terminal billing rows purge successfully."""
     from quickscale_modules_billing.models import (
         CreditBalance,
         CreditTransaction,
@@ -1363,9 +1558,9 @@ def test_purge_organization_with_billing_rows(
             organization=organization,
             user=owner,
             plan=plan,
-            stripe_subscription_id=stripe_subscription_id,
+            stripe_subscription_id="sub_billing_purge",
             stripe_customer_id="cus_billing_purge",
-            status=status,
+            status=Subscription.Status.CANCELED,
         )
         CreditBalance.objects.create(
             organization=organization,
@@ -1379,6 +1574,12 @@ def test_purge_organization_with_billing_rows(
             transaction_type=CreditTransaction.TransactionType.PURCHASE,
             description="Billing purge test",
             balance_after=100,
+        )
+        PurchaseCheckout.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            status=PurchaseCheckout.Status.EXPIRED,
         )
     finally:
         reset_current_org_id()
@@ -1398,10 +1599,358 @@ def test_purge_organization_with_billing_rows(
     assert not Organization.objects.filter(pk=org_id).exists()
     # Verify billing rows are deleted.
     assert CreditBalance.objects.filter(organization_id=org_id).count() == 0
+    assert PurchaseCheckout.objects.filter(organization_id=org_id).count() == 0
     assert Subscription.objects.filter(organization_id=org_id).count() == 0
     assert CreditTransaction.objects.filter(organization_id=org_id).count() == 0
     # Verify tombstone.
     assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("dry_run", [False, True], ids=["purge", "dry-run"])
+def test_purge_organization_refuses_current_subscription_without_provider_id(
+    dry_run: bool,
+) -> None:
+    """Ambiguous current subscription state refuses both purge and dry run."""
+    owner = get_user_model().objects.create_user(
+        username=f"ambiguous-subscription-owner-{dry_run}",
+        email=f"ambiguous-subscription-owner-{dry_run}@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name=f"Ambiguous Subscription {dry_run}",
+        slug=f"ambiguous-subscription-{dry_run}",
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    plan = _create_plan(
+        slug=f"growth-ambiguous-subscription-{dry_run}",
+        price_id=f"price_growth_ambiguous_subscription_{dry_run}",
+    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            stripe_customer_id=f"cus_ambiguous_subscription_{dry_run}",
+            status=Subscription.Status.ACTIVE,
+        )
+    finally:
+        reset_current_org_id()
+
+    with pytest.raises(CommandError, match="no provider id"):
+        call_command(
+            "purge_organization",
+            organization_id=str(organization.pk),
+            dry_run=dry_run,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    assert Organization.objects.filter(pk=organization.pk).exists()
+    set_current_org_id(organization.pk)
+    try:
+        assert Subscription.all_objects.filter(organization=organization).exists()
+    finally:
+        reset_current_org_id()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("dry_run", [False, True], ids=["purge", "dry-run"])
+@pytest.mark.parametrize(
+    "future_expiry", [False, True], ids=["unknown-expiry", "future-expiry"]
+)
+def test_purge_organization_refuses_pending_subscription_checkout(
+    dry_run: bool,
+    future_expiry: bool,
+) -> None:
+    """A pending reservation prevents purge from racing checkout creation."""
+    owner = get_user_model().objects.create_user(
+        username="pending-checkout-owner",
+        email="pending-checkout-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Pending Checkout",
+        slug="pending-checkout",
+    )
+    plan = _create_plan(
+        slug="growth-pending-checkout",
+        price_id="price_growth_pending_checkout",
+    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            status=Subscription.Status.INCOMPLETE,
+            checkout_expires_at=(
+                timezone.now() + timezone.timedelta(minutes=10)
+                if future_expiry
+                else None
+            ),
+        )
+    finally:
+        reset_current_org_id()
+
+    with pytest.raises(CommandError, match="checkout is pending"):
+        call_command(
+            "purge_organization",
+            organization_id=str(organization.pk),
+            dry_run=dry_run,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    assert Organization.objects.filter(pk=organization.pk).exists()
+    assert not OrganizationTombstone.objects.filter(
+        organization_id=organization.pk
+    ).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("dry_run", [False, True], ids=["purge", "dry-run"])
+def test_purge_organization_refuses_open_purchase_checkout(dry_run: bool) -> None:
+    """A provider-open one-time Checkout blocks both purge and dry run."""
+    owner = get_user_model().objects.create_user(
+        username=f"open-purchase-checkout-owner-{dry_run}",
+        email=f"open-purchase-checkout-owner-{dry_run}@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name=f"Open Purchase Checkout {dry_run}",
+        slug=f"open-purchase-checkout-{dry_run}",
+    )
+    plan = Plan.objects.create(
+        name=f"Open Purchase Plan {dry_run}",
+        slug=f"open-purchase-plan-{dry_run}",
+        stripe_price_id=f"price_open_purchase_checkout_{dry_run}",
+        credits_per_period=250,
+        price_cents=4900,
+        currency="usd",
+        billing_interval=Plan.BillingInterval.ONE_TIME,
+    )
+    set_current_org_id(organization.pk)
+    try:
+        PurchaseCheckout.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            stripe_checkout_session_id=f"cs_open_purchase_checkout_{dry_run}",
+            status=PurchaseCheckout.Status.OPEN,
+        )
+    finally:
+        reset_current_org_id()
+    stripe_client = MagicMock()
+    stripe_client.retrieve_checkout_session.return_value = {
+        "id": f"cs_open_purchase_checkout_{dry_run}",
+        "status": "open",
+    }
+
+    with (
+        patch(
+            "quickscale_modules_billing.services.get_stripe_client",
+            return_value=stripe_client,
+        ),
+        pytest.raises(CommandError, match="purchase checkout session.*still open"),
+    ):
+        call_command(
+            "purge_organization",
+            organization_id=str(organization.pk),
+            dry_run=dry_run,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    assert Organization.objects.filter(pk=organization.pk).exists()
+    assert not OrganizationTombstone.objects.filter(
+        organization_id=organization.pk
+    ).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("dry_run", [False, True], ids=["purge", "dry-run"])
+def test_purge_organization_allows_expired_subscription_checkout(
+    dry_run: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A provider-confirmed expired reservation is no longer pending."""
+    from django.apps import apps
+    from django.db import connection
+
+    from quickscale_modules_billing.services import (
+        reconcile_organization_removal_subscription_checkout,
+    )
+
+    owner = get_user_model().objects.create_user(
+        username=f"expired-checkout-owner-{dry_run}",
+        email=f"expired-checkout-owner-{dry_run}@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name=f"Expired Checkout {dry_run}",
+        slug=f"expired-checkout-{dry_run}",
+    )
+    plan = _create_plan(
+        slug=f"growth-expired-checkout-{dry_run}",
+        price_id=f"price_growth_expired_checkout_{dry_run}",
+    )
+    set_current_org_id(organization.pk)
+    try:
+        reservation = Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            status=Subscription.Status.INCOMPLETE,
+            stripe_checkout_session_id=f"cs_expired_checkout_{dry_run}",
+            checkout_expires_at=timezone.now() - timezone.timedelta(minutes=1),
+        )
+    finally:
+        reset_current_org_id()
+    org_id = organization.pk
+    stripe_client = MagicMock()
+
+    def retrieve_checkout_session(*, checkout_session_id: str):
+        assert checkout_session_id == f"cs_expired_checkout_{dry_run}"
+        assert len(connection.atomic_blocks) == 0
+        return {"id": checkout_session_id, "status": "expired"}
+
+    stripe_client.retrieve_checkout_session.side_effect = retrieve_checkout_session
+    billing_config = apps.get_app_config("quickscale_modules_billing")
+    monkeypatch.setattr(
+        billing_config,
+        "reconcile_organization_removal_provider_state",
+        lambda organization_id, *, persist: (
+            reconcile_organization_removal_subscription_checkout(
+                organization_id,
+                persist=persist,
+                stripe_client=stripe_client,
+            ).checkout_session_id
+        ),
+    )
+
+    call_command(
+        "purge_organization",
+        organization_id=str(org_id),
+        dry_run=dry_run,
+        stdout=StringIO(),
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    assert Organization.objects.filter(pk=org_id).exists() is dry_run
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).exists() is (
+        not dry_run
+    )
+    stripe_client.retrieve_checkout_session.assert_called_once_with(
+        checkout_session_id=f"cs_expired_checkout_{dry_run}"
+    )
+    if dry_run:
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(organization):
+            reservation.refresh_from_db()
+        assert reservation.status == Subscription.Status.INCOMPLETE
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("dry_run", [False, True], ids=["purge", "dry-run"])
+def test_purge_organization_refuses_completed_checkout_past_local_expiry(
+    dry_run: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Completed Checkout blocks purge before its subscription webhook arrives."""
+    from django.apps import apps
+    from django.db import connection
+
+    from quickscale_modules_billing.services import (
+        reconcile_organization_removal_subscription_checkout,
+    )
+    from quickscale_modules_orgs.current_org import org_scope
+
+    owner = get_user_model().objects.create_user(
+        username=f"completed-checkout-owner-{dry_run}",
+        email=f"completed-checkout-owner-{dry_run}@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name=f"Completed Checkout {dry_run}",
+        slug=f"completed-checkout-{dry_run}",
+    )
+    plan = _create_plan(
+        slug=f"growth-completed-checkout-{dry_run}",
+        price_id=f"price_growth_completed_checkout_{dry_run}",
+    )
+    set_current_org_id(organization.pk)
+    try:
+        reservation = Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            status=Subscription.Status.INCOMPLETE,
+            stripe_checkout_session_id=f"cs_completed_checkout_{dry_run}",
+            checkout_expires_at=timezone.now() - timezone.timedelta(minutes=1),
+        )
+    finally:
+        reset_current_org_id()
+
+    stripe_client = MagicMock()
+
+    def retrieve_checkout_session(*, checkout_session_id: str):
+        assert checkout_session_id == f"cs_completed_checkout_{dry_run}"
+        assert len(connection.atomic_blocks) == 0
+        return {
+            "id": checkout_session_id,
+            "status": "complete",
+            "subscription": f"sub_completed_checkout_{dry_run}",
+        }
+
+    stripe_client.retrieve_checkout_session.side_effect = retrieve_checkout_session
+    billing_config = apps.get_app_config("quickscale_modules_billing")
+    monkeypatch.setattr(
+        billing_config,
+        "reconcile_organization_removal_provider_state",
+        lambda organization_id, *, persist: (
+            reconcile_organization_removal_subscription_checkout(
+                organization_id,
+                persist=persist,
+                stripe_client=stripe_client,
+            ).checkout_session_id
+        ),
+    )
+
+    with pytest.raises(CommandError, match="checkout completed"):
+        call_command(
+            "purge_organization",
+            organization_id=str(organization.pk),
+            dry_run=dry_run,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    with org_scope(organization):
+        reservation.refresh_from_db()
+    if dry_run:
+        assert not reservation.stripe_subscription_id
+        assert reservation.checkout_expires_at is not None
+    else:
+        assert reservation.stripe_subscription_id == (
+            f"sub_completed_checkout_{dry_run}"
+        )
+        assert reservation.checkout_expires_at is None
+    assert Organization.objects.filter(pk=organization.pk).exists()
+    assert not OrganizationTombstone.objects.filter(
+        organization_id=organization.pk
+    ).exists()
 
 
 @pytest.mark.django_db
@@ -1651,8 +2200,12 @@ def test_purge_organization_slug_preflight_refuses_system_org() -> None:
 
 
 @pytest.mark.django_db
-def test_purge_organization_refuses_personal_org_by_default() -> None:
+def test_purge_organization_refuses_personal_org_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """purge_organization must refuse a personal org without --force."""
+    from django.apps import apps
+
     owner = get_user_model().objects.create_user(
         username="personal-guard-owner",
         email="personal-guard-owner@example.com",
@@ -1668,6 +2221,12 @@ def test_purge_organization_refuses_personal_org_by_default() -> None:
         organization=organization,
         role=OrgRole.OWNER,
     )
+    reconcile = MagicMock()
+    monkeypatch.setattr(
+        apps.get_app_config("quickscale_modules_billing"),
+        "reconcile_organization_removal_provider_state",
+        reconcile,
+    )
 
     stdout = StringIO()
     stderr = StringIO()
@@ -1681,6 +2240,7 @@ def test_purge_organization_refuses_personal_org_by_default() -> None:
         )
 
     assert Organization.objects.filter(pk=organization.pk).exists()
+    reconcile.assert_not_called()
 
 
 @pytest.mark.django_db
@@ -1921,103 +2481,211 @@ def test_purge_organization_guarded_context_counts_billing_rows() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T1.17 — Multi-module delete spec verification (CR-T117-REVIEW-001)
+# T1.17 — Marker-derived purge-plan verification (CR-T117-REVIEW-001)
 #
-# The purge command uses apps.get_model() to resolve cross-module models,
-# so full integration coverage requires the target modules to be installed.
-# The orgs test environment installs only orgs + billing.  This test
-# validates the delete specs structure directly — each entry's app_label,
-# model_name, filter_key, and label — and proves _resolve_models() and
-# _get_qs() handle uninstalled modules gracefully.
+# The orgs integration settings install all module and project-fixture models;
+# these tests verify runtime discovery, hard FK ordering, explicit overrides,
+# and stable ownership-map identities across that installed set.
 # ---------------------------------------------------------------------------
 
 
-def test_purge_delete_specs_are_complete() -> None:
-    """_DELETE_SPECS must contain entries for every owned module.
+def test_purge_plan_is_marker_derived_and_fk_ordered() -> None:
+    """The runtime purge plan covers every installed marker-enrolled model."""
+    from django.db import models
 
-    This is a structure-level test that does not require those modules to
-    be installed — it validates the spec metadata directly.
-    """
     from quickscale_modules_orgs.management.commands.purge_organization import (
-        _DELETE_SPECS,
+        _resolve_models,
     )
     from quickscale_modules_orgs.tenancy import (
         get_tenant_models,
         has_organization_id_field,
     )
 
-    actual_specs = {
-        (str(spec["app_label"]), str(spec["model_name"])) for spec in _DELETE_SPECS
-    }
+    plan = _resolve_models()
+    planned_models = [entry["model"] for entry in plan]
+    expected_models = [
+        model for model in get_tenant_models() if has_organization_id_field(model)
+    ]
+    assert set(planned_models) == set(expected_models)
 
-    expected_models = {
-        (model._meta.app_label, model.__name__)
-        for model in get_tenant_models()
-        if model._meta.app_label != "quickscale_modules_orgs"
-        if model._meta.app_label.startswith("quickscale_modules_")
-        and not model._meta.abstract
-        and has_organization_id_field(model)
-    }
+    order = {model: index for index, model in enumerate(planned_models)}
+    for child_model in planned_models:
+        for field in child_model._meta.fields:
+            parent_model = getattr(field.remote_field, "model", None)
+            if (
+                parent_model in order
+                and parent_model is not child_model
+                and field.remote_field.on_delete
+                in {
+                    models.CASCADE,
+                    models.DO_NOTHING,
+                    models.PROTECT,
+                    models.RESTRICT,
+                }
+            ):
+                assert order[child_model] < order[parent_model], (
+                    f"{child_model._meta.label} must precede "
+                    f"{parent_model._meta.label} in the purge plan"
+                )
 
-    # Verify every owned module model with an organization FK is represented.
-    for expected_app in [
-        "quickscale_modules_social",
-        "quickscale_modules_forms",
-        "quickscale_modules_listings",
-        "quickscale_modules_blog",
-        "quickscale_modules_crm",
-        "quickscale_modules_billing",
-    ]:
-        assert expected_app in {a for a, _ in actual_specs}, (
-            f"Missing delete spec app-label entry for {expected_app}"
+    from tests.sa182_project_app.models import ProjectListing, ProjectListingImage
+
+    assert order[ProjectListingImage] < order[ProjectListing]
+
+    from quickscale_modules_crm.models import (
+        Company,
+        Contact,
+        ContactNote,
+        Deal,
+        DealNote,
+    )
+
+    assert order[ContactNote] < order[Contact] < order[Company]
+    assert order[DealNote] < order[Deal] < order[Contact]
+
+
+def test_purge_plan_supports_explicit_order_overrides() -> None:
+    """An explicit override orders models whose FK metadata is insufficient."""
+    from quickscale_modules_orgs.management.commands.purge_organization import (
+        _topologically_order_models,
+    )
+    from quickscale_modules_social.models import SocialLink
+    from tests.sa182_project_app.models import ProjectListing
+
+    ordered = _topologically_order_models(
+        [SocialLink, ProjectListing],
+        ((ProjectListing._meta.label_lower, SocialLink._meta.label_lower),),
+    )
+    assert ordered == [ProjectListing, SocialLink]
+
+
+def test_purge_plan_rejects_unknown_order_override_models() -> None:
+    """A misspelled override cannot silently leave the plan unordered."""
+    from quickscale_modules_orgs.management.commands.purge_organization import (
+        _topologically_order_models,
+    )
+    from quickscale_modules_social.models import SocialLink
+
+    with pytest.raises(CommandError, match="unknown model"):
+        _topologically_order_models(
+            [SocialLink],
+            (("missing.model", SocialLink._meta.label_lower),),
         )
 
-    for expected_model in expected_models:
-        assert expected_model in actual_specs, (
-            f"Missing delete spec entry for {expected_model[0]}.{expected_model[1]}"
+
+def test_purge_plan_ignores_nonblocking_fk_cycle_edges() -> None:
+    """SET_NULL back-references do not create false purge-order cycles."""
+    from django.db import models
+    from django.test.utils import isolate_apps
+
+    from quickscale_modules_orgs.management.commands.purge_organization import (
+        _topologically_order_models,
+    )
+
+    with isolate_apps():
+
+        class Parent(models.Model):
+            class Meta:
+                app_label = "purge_cycle"
+
+        class Child(models.Model):
+            parent = models.ForeignKey(Parent, on_delete=models.PROTECT)
+
+            class Meta:
+                app_label = "purge_cycle"
+
+        Parent.add_to_class(
+            "featured_child",
+            models.ForeignKey(Child, null=True, on_delete=models.SET_NULL),
         )
 
-    # Keep the spec set aligned with the same tenant-typing universe.
-    assert actual_specs == expected_models, (
-        "Delete spec set must match tenant-classification-derived org models "
-        "with direct organization FK"
+        ordered = _topologically_order_models([Parent, Child])
+
+    assert ordered == [Child, Parent]
+
+
+def test_purge_plan_propagates_protection_through_cascade_ancestors() -> None:
+    """A protected grandchild precedes an ancestor that would collect its parent."""
+    from django.db import models
+    from django.test.utils import isolate_apps
+
+    from quickscale_modules_orgs.management.commands.purge_organization import (
+        _topologically_order_models,
     )
 
-    # Verify CRM delete ordering: DealNote before Deal before Stage.
-    deal_note_idx = next(
-        i
-        for i, s in enumerate(_DELETE_SPECS)
-        if s["app_label"] == "quickscale_modules_crm" and s["model_name"] == "DealNote"
+    with isolate_apps():
+
+        class Ancestor(models.Model):
+            class Meta:
+                app_label = "purge_transitive"
+
+        class CascadeChild(models.Model):
+            ancestor = models.ForeignKey(Ancestor, on_delete=models.CASCADE)
+
+            class Meta:
+                app_label = "purge_transitive"
+
+        class ProtectedGrandchild(models.Model):
+            child = models.ForeignKey(CascadeChild, on_delete=models.PROTECT)
+
+            class Meta:
+                app_label = "purge_transitive"
+
+        ordered = _topologically_order_models(
+            [Ancestor, CascadeChild, ProtectedGrandchild]
+        )
+
+    order = {model: index for index, model in enumerate(ordered)}
+    assert order[ProtectedGrandchild] < order[CascadeChild]
+    assert order[ProtectedGrandchild] < order[Ancestor]
+
+
+def test_purge_plan_disambiguates_duplicate_display_labels(monkeypatch) -> None:
+    """Project models with the same plural keep distinct ownership-map keys."""
+    from quickscale_modules_social.models import SocialEmbed, SocialLink
+    from quickscale_modules_orgs.management.commands import purge_organization
+
+    monkeypatch.setattr(
+        purge_organization,
+        "get_tenant_models",
+        lambda: [SocialLink, SocialEmbed],
     )
-    deal_idx = next(
-        i
-        for i, s in enumerate(_DELETE_SPECS)
-        if s["app_label"] == "quickscale_modules_crm" and s["model_name"] == "Deal"
+    monkeypatch.setattr(
+        purge_organization,
+        "_model_label",
+        lambda _: "Rows",
     )
-    stage_idx = next(
-        i
-        for i, s in enumerate(_DELETE_SPECS)
-        if s["app_label"] == "quickscale_modules_crm" and s["model_name"] == "Stage"
-    )
-    assert deal_note_idx < deal_idx, "DealNote must be deleted before Deal (CASCADE)"
-    assert deal_idx < stage_idx, (
-        "Deal must be deleted before Stage (PROTECT on deal FK)"
-    )
+
+    labels = [entry["label"] for entry in purge_organization._resolve_models()]
+
+    assert labels == [
+        "Rows (quickscale_modules_social.socialembed)",
+        "Rows (quickscale_modules_social.sociallink)",
+    ]
+
+
+def test_purge_plan_rejects_marker_model_without_organization_id(monkeypatch) -> None:
+    """Marker discovery fails closed instead of silently dropping a model."""
+    from quickscale_modules_billing.models import Plan
+    from quickscale_modules_orgs.management.commands import purge_organization
+
+    monkeypatch.setattr(purge_organization, "get_tenant_models", lambda: [Plan])
+
+    with pytest.raises(CommandError, match="without an organization_id"):
+        purge_organization._resolve_models()
 
 
 def test_resolve_models_skips_uninstalled_apps() -> None:
-    """_resolve_models() returns resolved models for installed apps (not None)."""
+    """_resolve_models() returns only installed marker-derived models."""
     from quickscale_modules_orgs.management.commands.purge_organization import (
         _resolve_models,
     )
 
     resolved = _resolve_models()
-    # All modules are installed in the orgs test environment, so every
-    # entry must have a resolved model (not None).
+    assert resolved
     for entry in resolved:
-        assert entry["model"] is not None, (
-            f"Model for '{entry['label']}' must be resolved (module is installed)"
-        )
+        assert entry["model"] is not None
+        assert entry["filter_key"] == "organization_id"
 
 
 # ---------------------------------------------------------------------------
@@ -2122,6 +2790,79 @@ def test_purge_organization_deletes_listings_rows() -> None:
 
 
 @pytest.mark.django_db
+def test_purge_organization_deletes_project_owned_child_rows() -> None:
+    """A project-owned protected child purges without a command registry edit."""
+    from tests.sa182_project_app.models import ProjectListing, ProjectListingImage
+
+    org = Organization.objects.create(name="Project Purge", slug="project-purge")
+    set_current_org_id(org.pk)
+    try:
+        listing = ProjectListing.all_objects.create(
+            organization=org,
+            title="Project listing",
+            slug="project-listing",
+        )
+        ProjectListingImage.all_objects.create(
+            organization=org,
+            listing=listing,
+            image_url="https://example.com/listing.jpg",
+        )
+    finally:
+        reset_current_org_id()
+    org_id = org.pk
+
+    call_command(
+        "purge_organization",
+        organization_id=str(org_id),
+        stdout=StringIO(),
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    assert not Organization.objects.filter(pk=org_id).exists()
+    assert ProjectListing.all_objects.filter(organization_id=org_id).count() == 0
+    assert ProjectListingImage.all_objects.filter(organization_id=org_id).count() == 0
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+
+@pytest.mark.django_db
+def test_purge_organization_deletes_project_owned_self_protected_rows() -> None:
+    """A project-owned self-PROTECT tree purges in one organization-wide delete."""
+    from tests.sa182_project_app.models import ProjectFolder
+
+    org = Organization.objects.create(
+        name="Project Folder Purge",
+        slug="project-folder-purge",
+    )
+    set_current_org_id(org.pk)
+    try:
+        parent = ProjectFolder.all_objects.create(
+            organization=org,
+            name="Parent",
+        )
+        ProjectFolder.all_objects.create(
+            organization=org,
+            parent=parent,
+            name="Child",
+        )
+    finally:
+        reset_current_org_id()
+    org_id = org.pk
+
+    call_command(
+        "purge_organization",
+        organization_id=str(org_id),
+        stdout=StringIO(),
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    assert not Organization.objects.filter(pk=org_id).exists()
+    assert ProjectFolder.all_objects.filter(organization_id=org_id).count() == 0
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+
+@pytest.mark.django_db
 def test_purge_organization_deletes_blog_rows() -> None:
     """purge_organization must delete Post, Category, and Tag rows."""
     from quickscale_modules_blog.models import Category, Post, Tag
@@ -2164,7 +2905,9 @@ def test_purge_organization_deletes_crm_rows() -> None:
     from quickscale_modules_crm.models import (
         Company,
         Contact,
+        ContactNote,
         Deal,
+        DealNote,
         Stage,
         Tag,
     )
@@ -2181,21 +2924,32 @@ def test_purge_organization_deletes_crm_rows() -> None:
             email="a@b.com",
             company=company,
         )
-        Deal.objects.create(
+        deal = Deal.objects.create(
             organization=org,
             title="Test Deal",
             contact=contact,
             stage=stage,
+        )
+        ContactNote.objects.create(
+            organization=org,
+            contact=contact,
+            text="Contact note",
+        )
+        DealNote.objects.create(
+            organization=org,
+            deal=deal,
+            text="Deal note",
         )
         Tag.objects.create(organization=org, name="Test Tag")
     finally:
         reset_current_org_id()
     org_id = org.pk
 
+    stdout = StringIO()
     call_command(
         "purge_organization",
         organization_id=str(org_id),
-        stdout=StringIO(),
+        stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
     )
@@ -2206,6 +2960,12 @@ def test_purge_organization_deletes_crm_rows() -> None:
     assert Stage.all_objects.filter(organization_id=org_id).count() == 0
     assert Tag.all_objects.filter(organization_id=org_id).count() == 0
     assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+    output = stdout.getvalue().lower()
+    assert "crm contact notes" in output
+    assert "crm contacts" in output
+    assert "crm companies" in output
+    assert "crm deal notes" in output
+    assert "crm deals" in output
 
 
 @pytest.mark.django_db
@@ -2317,6 +3077,79 @@ def test_purge_organization_clears_social_cache() -> None:
     assert cache.get(embed_key) is None
 
 
+@pytest.mark.django_db(transaction=True)
+def test_purge_cache_failure_happens_after_database_commit() -> None:
+    """Remote cache failure is loud but cannot roll back the completed purge."""
+    from django.db import connection
+
+    organization = Organization.objects.create(
+        name="Post Commit Cache",
+        slug="post-commit-cache",
+    )
+    org_id = organization.pk
+    atomic_depths: list[int] = []
+
+    def fail_cache_clear(self, cache_org_id):
+        del self
+        assert cache_org_id == org_id
+        atomic_depths.append(len(connection.atomic_blocks))
+        raise RuntimeError("cache unavailable")
+
+    with (
+        patch.object(Command, "_clear_social_cache", new=fail_cache_clear),
+        pytest.raises(RuntimeError, match="cache unavailable"),
+    ):
+        call_command(
+            "purge_organization",
+            organization_id=str(org_id),
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    assert atomic_depths == [0]
+    assert not Organization.objects.filter(pk=org_id).exists()
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+
+@pytest.mark.django_db
+def test_purge_tombstone_retry_heals_social_cache() -> None:
+    """A rerun after post-commit cache failure retries invalidation."""
+    from django.core.cache import cache
+
+    from quickscale_modules_social.contracts import (
+        SOCIAL_EMBEDS_CACHE_KEY,
+        SOCIAL_LINKS_CACHE_KEY,
+    )
+
+    org_id = uuid_lib.uuid4()
+    OrganizationTombstone.objects.create(organization_id=org_id)
+    link_key = f"{SOCIAL_LINKS_CACHE_KEY}:org:{org_id}"
+    embed_key = f"{SOCIAL_EMBEDS_CACHE_KEY}:org:{org_id}"
+    for key in (
+        SOCIAL_LINKS_CACHE_KEY,
+        link_key,
+        SOCIAL_EMBEDS_CACHE_KEY,
+        embed_key,
+    ):
+        cache.set(key, "stale")
+
+    with pytest.raises(CommandError, match="No-op") as exc_info:
+        call_command(
+            "purge_organization",
+            organization_id=str(org_id),
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    assert exc_info.value.returncode == 0
+    assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
+    assert cache.get(link_key) is None
+    assert cache.get(SOCIAL_EMBEDS_CACHE_KEY) is None
+    assert cache.get(embed_key) is None
+
+
 # ---------------------------------------------------------------------------
 # SA1.3 — check_tenant_isolation command tests
 # ---------------------------------------------------------------------------
@@ -2331,14 +3164,16 @@ def _sa182_expected_tenant_model_keys() -> set[tuple[str, str]]:
         TenantTableStatus,
     )
 
-    project_listing = apps.get_model("sa182_project_app", "ProjectListing")
-    assert project_listing is not None
+    project_models = {
+        (model._meta.app_label, model.__name__)
+        for model in apps.get_app_config("sa182_project_app").get_models()
+    }
     shipped_keys = {
         (entry.app_label, entry.model_name)
         for entry in TENANT_TABLE_REGISTRY
         if entry.status == TenantTableStatus.ENROLLED
     }
-    return shipped_keys | {(project_listing._meta.app_label, project_listing.__name__)}
+    return shipped_keys | project_models
 
 
 @pytest.mark.django_db

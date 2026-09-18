@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.apps import apps
 from django.conf import settings
 from django.db import models, transaction
 
@@ -18,6 +19,25 @@ CURRENT_SUBSCRIPTION_STATUSES = (
     "past_due",
     "unpaid",
     "paused",
+)
+
+CREDIT_TRANSACTION_PROVIDER_REFERENCE_KEYS = (
+    "charge_id",
+    "checkout_session_id",
+    "credit_grant_id",
+    "invoice_id",
+    "payment_intent_id",
+    "stripe_customer_id",
+    "stripe_price_id",
+    "stripe_subscription_id",
+)
+
+CREDIT_TRANSACTION_BUSINESS_REFERENCE_KEYS = (
+    "checkout_session_id",
+    "payment_intent_id",
+    "charge_id",
+    "credit_grant_id",
+    "stripe_subscription_id",
 )
 
 
@@ -91,15 +111,21 @@ class CreditBalance(models.Model):
 
     @classmethod
     def get_or_create_for_org(cls, organization: Any) -> tuple["CreditBalance", bool]:
-        balance, created = cls.objects.get_or_create(
-            organization=organization,
-            defaults={"balance": 0},
+        organization_model = apps.get_model(
+            "quickscale_modules_orgs",
+            "Organization",
         )
-
-        if transaction.get_connection().in_atomic_block:
-            return cls.objects.select_for_update().get(pk=balance.pk), created
-
-        return cls.objects.get(pk=balance.pk), created
+        with transaction.atomic():
+            locked_organization = (
+                organization_model._default_manager.select_for_update().get(
+                    pk=organization.pk
+                )
+            )
+            balance, created = cls.all_objects.get_or_create(
+                organization=locked_organization,
+                defaults={"balance": 0},
+            )
+            return cls.all_objects.select_for_update().get(pk=balance.pk), created
 
     def __str__(self) -> str:
         return f"{self.organization} ({self.balance} credits)"
@@ -107,6 +133,10 @@ class CreditBalance(models.Model):
 
 class CreditTransaction(models.Model):
     """Immutable audit log entry for a credit balance mutation."""
+
+    external_provider_reference_fields = {
+        "stripe_reference_data": CREDIT_TRANSACTION_PROVIDER_REFERENCE_KEYS,
+    }
 
     class TransactionType(models.TextChoices):
         PLAN = "plan", "Plan"
@@ -152,6 +182,57 @@ class CreditTransaction(models.Model):
     def __str__(self) -> str:
         actor = self.user or self.organization or "Unknown actor"
         return f"{actor} {self.transaction_type} {self.amount}"
+
+
+class PurchaseCheckout(models.Model):
+    """Local lifecycle reservation for one Stripe one-time Checkout Session."""
+
+    class Status(models.TextChoices):
+        PREPARING = "preparing", "Preparing"
+        OPEN = "open", "Open"
+        COMPLETED = "completed", "Completed"
+        EXPIRED = "expired", "Expired"
+
+    organization = tenant_org_fk(
+        related_name="purchase_checkouts",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="billing_purchase_checkouts",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    plan = models.ForeignKey(
+        Plan,
+        related_name="purchase_checkouts",
+        on_delete=models.PROTECT,
+    )
+    stripe_checkout_session_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        unique=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PREPARING,
+    )
+    checkout_expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
+
+    class Meta:
+        app_label = "quickscale_modules_billing"
+        base_manager_name = "all_objects"
+        ordering = ["-id"]
+
+    def __str__(self) -> str:
+        checkout_id = self.stripe_checkout_session_id or "preparing"
+        return f"{self.organization} / {checkout_id} ({self.status})"
 
 
 class SubscriptionQuerySet(models.QuerySet["Subscription"]):

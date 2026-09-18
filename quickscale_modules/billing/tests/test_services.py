@@ -14,6 +14,7 @@ from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
     Plan,
+    PurchaseCheckout,
     Subscription,
     WebhookEvent,
 )
@@ -28,12 +29,14 @@ from quickscale_modules_billing.services import (
     BillingWebhookError,
     BillingWebhookSignatureError,
     StripeClient,
+    SubscriptionCancellationTransition,
     cancel_current_subscription,
     create_billing_portal_session,
     credit_user,
     get_or_create_stripe_customer,
     get_stripe_client,
     handle_stripe_event,
+    resume_current_subscription,
 )
 from quickscale_modules_orgs.models import Organization
 
@@ -64,6 +67,7 @@ def _invoice_paid_event(
     invoice_id: str,
     customer_id: str,
     price_id: str,
+    subscription_id: str = "sub_123",
     billing_reason: str | None = "subscription_cycle",
     user_reference: str | None = None,
 ) -> dict[str, Any]:
@@ -73,7 +77,7 @@ def _invoice_paid_event(
     invoice_object: dict[str, Any] = {
         "id": invoice_id,
         "customer": customer_id,
-        "subscription": "sub_123",
+        "subscription": subscription_id,
         "metadata": metadata,
         "lines": {
             "data": [
@@ -116,6 +120,8 @@ class FakeStripeClient:
     portal_session_calls: list[dict[str, Any]] = field(default_factory=list)
     canceled_subscription: dict[str, Any] | None = None
     canceled_subscription_calls: list[str] = field(default_factory=list)
+    resumed_subscription: dict[str, Any] | None = None
+    resumed_subscription_calls: list[str] = field(default_factory=list)
     subscriptions: dict[str, dict[str, Any]] = field(default_factory=dict)
     retrieved_subscription_ids: list[str] = field(default_factory=list)
 
@@ -241,6 +247,20 @@ class FakeStripeClient:
             "id": stripe_subscription_id,
             "status": Subscription.Status.ACTIVE,
             "cancel_at_period_end": True,
+        }
+
+    def resume_subscription(
+        self,
+        *,
+        stripe_subscription_id: str,
+    ) -> dict[str, Any]:
+        self.resumed_subscription_calls.append(stripe_subscription_id)
+        if self.resumed_subscription is not None:
+            return dict(self.resumed_subscription)
+        return {
+            "id": stripe_subscription_id,
+            "status": Subscription.Status.ACTIVE,
+            "cancel_at_period_end": False,
         }
 
     def retrieve_subscription(
@@ -388,6 +408,74 @@ def test_get_or_create_stripe_customer_prefers_authoritative_org_customer(user) 
 
     assert customer_id == "cus_org_authoritative"
     assert created is False
+    assert fake_client.searched_references == []
+    assert fake_client.created_payloads == []
+
+
+@pytest.mark.django_db
+def test_get_or_create_stripe_customer_rejects_ambiguous_historical_customers(
+    user,
+    organization,
+    org_context,
+) -> None:
+    plan = _create_plan(price_id="price_ambiguous_historical_customers")
+    for index, customer_id in enumerate(("cus_historical_a", "cus_historical_b")):
+        Subscription.all_objects.create(
+            user=user,
+            organization=organization,
+            plan=plan,
+            stripe_subscription_id=f"sub_historical_{index}",
+            stripe_customer_id=customer_id,
+            status=Subscription.Status.CANCELED,
+        )
+    fake_client = FakeStripeClient()
+
+    with pytest.raises(BillingWebhookError, match="multiple Stripe customers"):
+        get_or_create_stripe_customer(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    organization.refresh_from_db()
+    assert organization.stripe_customer_id == ""
+    assert fake_client.searched_references == []
+    assert fake_client.created_payloads == []
+
+
+@pytest.mark.django_db
+def test_get_or_create_stripe_customer_rejects_customer_owned_by_another_org(
+    user,
+    organization,
+    org_context,
+) -> None:
+    plan = _create_plan(price_id="price_cross_org_historical_customer")
+    owning_organization = Organization.objects.create(
+        name="Existing Stripe Customer Owner",
+        slug="existing-stripe-customer-owner",
+        stripe_customer_id="cus_cross_org_historical",
+    )
+    Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_cross_org_historical",
+        stripe_customer_id="cus_cross_org_historical",
+        status=Subscription.Status.CANCELED,
+    )
+    fake_client = FakeStripeClient()
+
+    with pytest.raises(BillingWebhookError, match="already owned by another"):
+        get_or_create_stripe_customer(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    organization.refresh_from_db()
+    owning_organization.refresh_from_db()
+    assert organization.stripe_customer_id == ""
+    assert owning_organization.stripe_customer_id == "cus_cross_org_historical"
     assert fake_client.searched_references == []
     assert fake_client.created_payloads == []
 
@@ -591,8 +679,13 @@ def test_get_or_create_stripe_customer_rejects_created_customer_without_id(
 
 @pytest.mark.django_db
 def test_create_billing_portal_session_returns_stripe_url(
-    user, organization, org_context
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from contextlib import contextmanager
+
     plan = _create_plan()
     Subscription.all_objects.create(
         user=user,
@@ -605,6 +698,26 @@ def test_create_billing_portal_session_returns_stripe_url(
     fake_client = FakeStripeClient(
         portal_session={"url": "https://billing.example.com/portal-session"}
     )
+    events: list[tuple[str, Any]] = []
+
+    @contextmanager
+    def record_provider_lock(organization_id: Any):
+        events.append(("lock-enter", organization_id.pk))
+        yield
+        events.append(("lock-exit", organization_id.pk))
+
+    original_create_portal = fake_client.create_billing_portal_session
+
+    def record_portal_creation(**kwargs: Any) -> dict[str, Any]:
+        events.append(("portal-create", kwargs["customer_id"]))
+        return original_create_portal(**kwargs)
+
+    monkeypatch.setattr(
+        billing_services,
+        "subscription_provider_mutation_lock",
+        record_provider_lock,
+    )
+    fake_client.create_billing_portal_session = record_portal_creation  # type: ignore[method-assign]
 
     portal_url = create_billing_portal_session(
         user,
@@ -621,6 +734,11 @@ def test_create_billing_portal_session_returns_stripe_url(
         }
     ]
     assert fake_client.searched_references == []
+    assert events == [
+        ("lock-enter", organization.pk),
+        ("portal-create", "cus_portal"),
+        ("lock-exit", organization.pk),
+    ]
 
 
 @pytest.mark.django_db
@@ -657,6 +775,125 @@ def test_create_billing_portal_session_rejects_missing_hosted_url(
             organization=organization,
             stripe_client=FakeStripeClient(portal_session={}),
         )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_subscription_checkout_creation_holds_provider_mutation_lock(
+    user,
+    organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two recurring Checkout attempts for one org cannot overlap."""
+    import concurrent.futures
+    import threading
+
+    from django.db import close_old_connections
+
+    plan = _create_plan(price_id="price_checkout_provider_lock")
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    second_entered = threading.Event()
+    call_count = 0
+    call_count_lock = threading.Lock()
+
+    def fake_create(*args, **kwargs) -> str:
+        del args, kwargs
+        nonlocal call_count
+        with call_count_lock:
+            call_count += 1
+            call_number = call_count
+        if call_number == 1:
+            first_entered.set()
+            if not release_first.wait(timeout=10):
+                raise AssertionError("timed out waiting to release first checkout")
+        else:
+            second_entered.set()
+        return f"https://checkout.example.com/{call_number}"
+
+    monkeypatch.setattr(
+        billing_services,
+        "_create_subscription_checkout_session",
+        fake_create,
+    )
+
+    def create_checkout() -> str:
+        close_old_connections()
+        try:
+            return billing_services.create_subscription_checkout_session(
+                user,
+                plan,
+                "https://app.example.com/success",
+                "https://app.example.com/cancel",
+                organization=organization,
+            )
+        finally:
+            close_old_connections()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(create_checkout)
+        assert first_entered.wait(timeout=10)
+        second_future = executor.submit(create_checkout)
+        assert not second_entered.wait(timeout=0.5)
+        release_first.set()
+        assert first_future.result(timeout=10).endswith("/1")
+        assert second_future.result(timeout=10).endswith("/2")
+
+    assert second_entered.is_set()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_queued_cancellation_revalidates_owner_after_provider_lock(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A queued user mutation fails closed after its ownership is removed."""
+    import concurrent.futures
+    import threading
+
+    from django.db import close_old_connections
+    from quickscale_modules_orgs.models import OrganizationMembership
+
+    plan = _create_plan(price_id="price_queued_authorization")
+    Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_queued_authorization",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient()
+    cancellation_started = threading.Event()
+
+    def cancel_subscription() -> None:
+        close_old_connections()
+        cancellation_started.set()
+        try:
+            cancel_current_subscription(
+                user,
+                organization=organization,
+                stripe_client=fake_client,
+            )
+        finally:
+            close_old_connections()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with billing_services.subscription_provider_mutation_lock(organization):
+            cancellation_future = executor.submit(cancel_subscription)
+            assert cancellation_started.wait(timeout=10)
+            assert not cancellation_future.done()
+            OrganizationMembership.objects.filter(
+                user=user,
+                organization=organization,
+            ).delete()
+
+        with pytest.raises(
+            BillingValidationError,
+            match="authorization changed",
+        ):
+            cancellation_future.result(timeout=10)
+
+    assert fake_client.canceled_subscription_calls == []
 
 
 @pytest.mark.django_db
@@ -711,6 +948,54 @@ def test_cancel_current_subscription_schedules_period_end_cancel_and_updates_loc
 
 
 @pytest.mark.django_db
+def test_cancel_current_subscription_preserves_replacement_provider_mapping(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ordinary cancellation fails loud instead of overwriting a newer mapping."""
+    plan = _create_plan(price_id="price_cancel_identity")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_cancel_identity_a",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient()
+    original_cancel = fake_client.cancel_subscription
+
+    def cancel_then_replace_local_identity(
+        *, stripe_subscription_id: str
+    ) -> dict[str, Any]:
+        updated_subscription = original_cancel(
+            stripe_subscription_id=stripe_subscription_id
+        )
+        Subscription.all_objects.filter(pk=subscription.pk).update(
+            stripe_subscription_id="sub_cancel_identity_b"
+        )
+        return updated_subscription
+
+    monkeypatch.setattr(
+        fake_client,
+        "cancel_subscription",
+        cancel_then_replace_local_identity,
+    )
+
+    with pytest.raises(BillingError, match="captured subscription changed"):
+        cancel_current_subscription(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    subscription.refresh_from_db()
+    assert subscription.stripe_subscription_id == "sub_cancel_identity_b"
+    assert fake_client.canceled_subscription_calls == ["sub_cancel_identity_a"]
+
+
+@pytest.mark.django_db
 def test_cancel_current_subscription_rejects_missing_current_subscription(
     user, organization, org_context
 ) -> None:
@@ -739,6 +1024,361 @@ def test_cancel_current_subscription_rejects_missing_stripe_subscription_id(
         cancel_current_subscription(
             user, organization=organization, stripe_client=FakeStripeClient()
         )
+
+
+@pytest.mark.django_db
+def test_resume_current_subscription_clears_period_end_cancel(
+    user,
+    organization,
+    org_context,
+) -> None:
+    plan = _create_plan(price_id="price_resume")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_resume",
+        stripe_customer_id="cus_resume",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient(
+        resumed_subscription={
+            "id": "sub_resume",
+            "status": Subscription.Status.ACTIVE,
+            "customer": "cus_resume",
+            "cancel_at_period_end": False,
+        }
+    )
+
+    updated_subscription = resume_current_subscription(
+        user,
+        organization=organization,
+        stripe_client=fake_client,
+    )
+
+    assert updated_subscription.pk == subscription.pk
+    assert fake_client.resumed_subscription_calls == ["sub_resume"]
+
+
+@pytest.mark.django_db
+def test_cancellation_transition_preserves_preexisting_remote_schedule(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """Transition capture leaves a pre-existing cancellation unchanged."""
+    plan = _create_plan(price_id="price_existing_cancel")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_existing_cancel",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient(
+        subscriptions={
+            "sub_existing_cancel": {
+                "id": "sub_existing_cancel",
+                "status": Subscription.Status.ACTIVE,
+                "cancel_at_period_end": True,
+            }
+        }
+    )
+
+    transition = cancel_current_subscription(
+        user,
+        organization=organization,
+        stripe_client=fake_client,
+        capture_transition=True,
+    )
+
+    assert isinstance(transition, SubscriptionCancellationTransition)
+    assert transition.subscription_pk == subscription.pk
+    assert transition.previous_cancel_at_period_end is True
+    assert transition.changed is False
+    assert fake_client.canceled_subscription_calls == []
+    assert fake_client.resumed_subscription_calls == []
+
+
+@pytest.mark.django_db
+def test_cancellation_transition_restores_exact_changed_subscription(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """Compensation restores only the exact false-to-true transition."""
+    plan = _create_plan(price_id="price_transition")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_transition",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient(
+        subscriptions={
+            "sub_transition": {
+                "id": "sub_transition",
+                "status": Subscription.Status.ACTIVE,
+                "cancel_at_period_end": False,
+            }
+        }
+    )
+
+    transition = cancel_current_subscription(
+        user,
+        organization=organization,
+        stripe_client=fake_client,
+        capture_transition=True,
+    )
+    assert isinstance(transition, SubscriptionCancellationTransition)
+    restored = resume_current_subscription(
+        user,
+        organization=organization,
+        stripe_client=fake_client,
+        transition=transition,
+    )
+
+    assert transition.subscription_pk == subscription.pk
+    assert transition.changed is True
+    assert restored.pk == subscription.pk
+    assert fake_client.canceled_subscription_calls == ["sub_transition"]
+    assert fake_client.resumed_subscription_calls == ["sub_transition"]
+
+
+@pytest.mark.django_db
+def test_cancellation_transition_rejects_different_organization(
+    user,
+    organization,
+    org_context,
+) -> None:
+    other_organization = Organization.objects.create(
+        name="Transition Other Org",
+        slug="transition-other-org",
+    )
+    transition = SubscriptionCancellationTransition(
+        subscription_pk=999_999,
+        organization_id=other_organization.pk,
+        stripe_subscription_id="sub_wrong_organization",
+        previous_cancel_at_period_end=False,
+    )
+    fake_client = FakeStripeClient()
+
+    with pytest.raises(BillingValidationError, match="does not belong"):
+        resume_current_subscription(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+            transition=transition,
+        )
+
+    assert fake_client.resumed_subscription_calls == []
+
+
+@pytest.mark.django_db
+def test_cancellation_transition_does_not_reresolve_subscription(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Capture and cancellation operate on one immutable subscription identity."""
+    plan = _create_plan(price_id="price_transition_identity")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_transition_identity",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient(
+        subscriptions={
+            "sub_transition_identity": {
+                "id": "sub_transition_identity",
+                "status": Subscription.Status.ACTIVE,
+                "cancel_at_period_end": False,
+            }
+        }
+    )
+    original_resolver = billing_services._resolve_authoritative_subscription_reservation
+    resolved_ids: list[object] = []
+
+    def resolve_once(**kwargs):
+        resolved = original_resolver(**kwargs)
+        resolved_ids.append(resolved.pk if resolved is not None else None)
+        if len(resolved_ids) > 1:
+            raise AssertionError("cancellation re-resolved the current subscription")
+        return resolved
+
+    monkeypatch.setattr(
+        billing_services,
+        "_resolve_authoritative_subscription_reservation",
+        resolve_once,
+    )
+
+    transition = cancel_current_subscription(
+        user,
+        organization=organization,
+        stripe_client=fake_client,
+        capture_transition=True,
+    )
+
+    assert isinstance(transition, SubscriptionCancellationTransition)
+    assert resolved_ids == [subscription.pk]
+    assert transition.stripe_subscription_id == "sub_transition_identity"
+    assert fake_client.canceled_subscription_calls == ["sub_transition_identity"]
+
+
+@pytest.mark.django_db
+def test_cancellation_transition_restores_provider_after_local_identity_drift(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compensation resumes captured Stripe state without overwriting a new mapping."""
+    plan = _create_plan(price_id="price_transition_drift")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_transition_drift_a",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient(
+        subscriptions={
+            "sub_transition_drift_a": {
+                "id": "sub_transition_drift_a",
+                "status": Subscription.Status.ACTIVE,
+                "cancel_at_period_end": False,
+            }
+        }
+    )
+    original_cancel = fake_client.cancel_subscription
+
+    def cancel_then_replace_local_identity(
+        *, stripe_subscription_id: str
+    ) -> dict[str, Any]:
+        updated_subscription = original_cancel(
+            stripe_subscription_id=stripe_subscription_id
+        )
+        Subscription.all_objects.filter(pk=subscription.pk).update(
+            stripe_subscription_id="sub_transition_drift_b"
+        )
+        return updated_subscription
+
+    monkeypatch.setattr(
+        fake_client,
+        "cancel_subscription",
+        cancel_then_replace_local_identity,
+    )
+
+    with pytest.raises(BillingError, match="captured subscription changed"):
+        cancel_current_subscription(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+            capture_transition=True,
+        )
+
+    subscription.refresh_from_db()
+    assert subscription.stripe_subscription_id == "sub_transition_drift_b"
+    assert fake_client.canceled_subscription_calls == ["sub_transition_drift_a"]
+    assert fake_client.resumed_subscription_calls == ["sub_transition_drift_a"]
+
+
+@pytest.mark.django_db
+def test_cancellation_transition_compensates_internal_failure(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An uncertain failure after transition capture triggers exact restoration."""
+    plan = _create_plan(price_id="price_transition_failure")
+    Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_transition_failure",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient(
+        subscriptions={
+            "sub_transition_failure": {
+                "id": "sub_transition_failure",
+                "status": Subscription.Status.ACTIVE,
+                "cancel_at_period_end": False,
+            }
+        }
+    )
+    monkeypatch.setattr(
+        billing_services,
+        "_persist_subscription_provider_snapshot",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("local sync failed")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="local sync failed"):
+        cancel_current_subscription(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+            capture_transition=True,
+        )
+
+    assert fake_client.canceled_subscription_calls == ["sub_transition_failure"]
+    assert fake_client.resumed_subscription_calls == ["sub_transition_failure"]
+
+
+@pytest.mark.django_db
+def test_subscription_upsert_locks_organization_before_subscription_row(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Webhook subscription writes obey the org-before-child lock order."""
+    plan = _create_plan(price_id="price_lock_order")
+    events: list[str] = []
+    original_lock = billing_services._lock_organization_for_billing_mutation
+    original_resolve = billing_services._resolve_subscription_for_runtime_event
+
+    def record_org_lock(organization_arg):
+        events.append("organization")
+        return original_lock(organization_arg)
+
+    def record_subscription_lock(**kwargs):
+        events.append("subscription")
+        return original_resolve(**kwargs)
+
+    monkeypatch.setattr(
+        billing_services,
+        "_lock_organization_for_billing_mutation",
+        record_org_lock,
+    )
+    monkeypatch.setattr(
+        billing_services,
+        "_resolve_subscription_for_runtime_event",
+        record_subscription_lock,
+    )
+
+    billing_services._upsert_subscription_from_payload(
+        {
+            "id": "sub_lock_order",
+            "customer": "cus_lock_order",
+            "status": "active",
+            "metadata": {
+                "quickscale_org_reference": _organization_reference(organization),
+                "quickscale_user_reference": _user_reference(user),
+                "stripe_price_id": plan.stripe_price_id,
+            },
+            "items": {"data": [{"price": {"id": plan.stripe_price_id}}]},
+        }
+    )
+
+    assert events[:2] == ["organization", "subscription"]
 
 
 @pytest.mark.django_db
@@ -773,6 +1413,58 @@ def test_credit_user_updates_balance_and_suppresses_duplicate_business_object(
     assert duplicate_transaction.pk == first_transaction.pk
     assert balance.balance == 100
     assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
+
+
+@pytest.mark.django_db
+def test_account_deletion_discovers_and_detaches_every_billing_user_reference(
+    user,
+    organization,
+    org_context,
+) -> None:
+    plan = _create_plan(price_id="price_account_reference_detachment")
+    balance = CreditBalance.all_objects.create(
+        user=user,
+        organization=organization,
+        balance=25,
+    )
+    transaction_row = CreditTransaction.all_objects.create(
+        user=user,
+        organization=organization,
+        amount=25,
+        transaction_type=CreditTransaction.TransactionType.PURCHASE,
+        balance_after=25,
+    )
+    purchase_checkout = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.EXPIRED,
+    )
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=Subscription.Status.CANCELED,
+    )
+
+    organization_ids = (
+        billing_services.account_deletion_user_reference_organization_ids(user.pk)
+    )
+    detached_count = billing_services.detach_account_deletion_user_references(
+        user.pk,
+        organization_ids,
+    )
+
+    balance.refresh_from_db()
+    transaction_row.refresh_from_db()
+    purchase_checkout.refresh_from_db()
+    subscription.refresh_from_db()
+    assert organization_ids == [organization.pk]
+    assert detached_count == 4
+    assert balance.user_id is None
+    assert transaction_row.user_id is None
+    assert purchase_checkout.user_id is None
+    assert subscription.user_id is None
 
 
 @pytest.mark.django_db
@@ -1333,6 +2025,83 @@ def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
 
 
 @pytest.mark.django_db
+def test_invoice_paid_unresolved_org_holds_one_lock_through_backfill_and_credit(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Remote org discovery acquires one mutex through local finalization."""
+    from contextlib import contextmanager
+
+    plan = _create_plan(price_id="price_remote_org_lock")
+    event = _invoice_paid_event(
+        event_id="evt_remote_org_lock",
+        invoice_id="in_remote_org_lock",
+        customer_id="cus_remote_org_lock",
+        price_id=plan.stripe_price_id,
+        user_reference=_user_reference(user),
+    )
+    fake_client = FakeStripeClient(
+        event=event,
+        subscriptions={
+            "sub_123": {
+                "id": "sub_123",
+                "customer": "cus_remote_org_lock",
+                "status": "active",
+                "metadata": {
+                    "quickscale_org_reference": _organization_reference(organization),
+                    "quickscale_user_reference": _user_reference(user),
+                    "stripe_price_id": plan.stripe_price_id,
+                },
+                "items": {"data": [{"price": {"id": plan.stripe_price_id}}]},
+            }
+        },
+    )
+    events: list[tuple[str, Any]] = []
+    original_retrieve = fake_client.retrieve_subscription
+
+    def record_retrieve(*, stripe_subscription_id: str) -> dict[str, Any]:
+        events.append(("retrieve", stripe_subscription_id))
+        return original_retrieve(stripe_subscription_id=stripe_subscription_id)
+
+    @contextmanager
+    def record_provider_lock(locked_organization: Any):
+        events.append(("lock-enter", locked_organization.pk))
+        yield
+        events.append(("lock-exit", locked_organization.pk))
+
+    fake_client.retrieve_subscription = record_retrieve  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        billing_services,
+        "subscription_provider_mutation_lock",
+        record_provider_lock,
+    )
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_remote_org_lock",
+    )
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_remote_org_lock"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    assert result.status == "processed"
+    assert events == [
+        ("retrieve", "sub_123"),
+        ("lock-enter", organization.pk),
+        ("lock-exit", organization.pk),
+    ]
+    assert (
+        Subscription.all_objects.get(organization=organization).stripe_subscription_id
+        == "sub_123"
+    )
+    assert CreditBalance.all_objects.get(organization=organization).balance == 100
+
+
+@pytest.mark.django_db
 def test_handle_stripe_event_returns_duplicate_without_second_credit(
     user,
     organization,
@@ -1354,6 +2123,7 @@ def test_handle_stripe_event_returns_duplicate_without_second_credit(
             invoice_id="in_duplicate",
             customer_id="cus_duplicate",
             price_id=plan.stripe_price_id,
+            subscription_id="sub_duplicate",
         )
     )
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_duplicate")
@@ -1374,6 +2144,327 @@ def test_handle_stripe_event_returns_duplicate_without_second_credit(
     assert second_result.status == "duplicate"
     assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
     assert CreditBalance.all_objects.get(organization=organization).balance == 100
+
+
+@pytest.mark.django_db(transaction=True)
+def test_handle_stripe_event_serializes_concurrent_duplicate_deliveries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only one concurrent delivery may enter a Stripe event handler."""
+    import concurrent.futures
+    import threading
+
+    from django.db import close_old_connections
+
+    event = {
+        "id": "evt_concurrent_duplicate",
+        "type": "invoice.paid",
+        "data": {"object": {"id": "in_concurrent_duplicate"}},
+    }
+    fake_client = FakeStripeClient(event=event)
+    first_handler_entered = threading.Event()
+    release_first_handler = threading.Event()
+    second_event_verified = threading.Event()
+    second_handler_entered = threading.Event()
+    call_count = 0
+    call_count_lock = threading.Lock()
+    construct_count = 0
+    construct_count_lock = threading.Lock()
+    original_construct_event = fake_client.construct_event
+
+    def record_construct_event(**kwargs: Any) -> dict[str, Any]:
+        nonlocal construct_count
+        constructed_event = original_construct_event(**kwargs)
+        with construct_count_lock:
+            construct_count += 1
+            if construct_count == 2:
+                second_event_verified.set()
+        return constructed_event
+
+    def record_handler(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        nonlocal call_count
+        with call_count_lock:
+            call_count += 1
+            current_call = call_count
+        if current_call == 1:
+            first_handler_entered.set()
+            if not release_first_handler.wait(timeout=10):
+                raise AssertionError("timed out waiting to release first webhook")
+        else:
+            second_handler_entered.set()
+
+    fake_client.construct_event = record_construct_event  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        billing_services,
+        "_handle_invoice_paid_event",
+        record_handler,
+    )
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_concurrent_duplicate",
+    )
+
+    def deliver_event() -> billing_services.StripeWebhookResult:
+        close_old_connections()
+        try:
+            return handle_stripe_event(
+                body=b'{"id":"evt_concurrent_duplicate"}',
+                signature="t=1,v1=test-signature",
+                stripe_client=fake_client,
+            )
+        finally:
+            close_old_connections()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(deliver_event)
+        assert first_handler_entered.wait(timeout=10)
+        second_future = executor.submit(deliver_event)
+        assert second_event_verified.wait(timeout=10)
+        assert not second_handler_entered.wait(timeout=0.5)
+        release_first_handler.set()
+        first_result = first_future.result(timeout=10)
+        second_result = second_future.result(timeout=10)
+
+    assert first_result.duplicate is False
+    assert second_result.duplicate is True
+    assert call_count == 1
+    assert (
+        WebhookEvent.objects.get(stripe_event_id="evt_concurrent_duplicate").processed
+        is True
+    )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("event_type", "handler_name", "resolver_name"),
+    [
+        (
+            billing_services.STRIPE_EVENT_TYPE_INVOICE_PAID,
+            "_process_invoice_paid_event",
+            "_resolve_organization_for_invoice",
+        ),
+        (
+            billing_services.STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED,
+            "_apply_invoice_payment_failed_event",
+            "_resolve_organization_for_invoice",
+        ),
+        (
+            billing_services.STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_UPDATED,
+            "_apply_subscription_payload",
+            "_resolve_organization_for_subscription",
+        ),
+    ],
+)
+def test_subscription_affecting_webhooks_hold_provider_mutation_lock(
+    event_type: str,
+    handler_name: str,
+    resolver_name: str,
+    organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+
+    events: list[tuple[str, Any]] = []
+
+    @contextmanager
+    def record_provider_lock(locked_organization: Any):
+        events.append(("lock-enter", locked_organization.pk))
+        yield
+        events.append(("lock-exit", locked_organization.pk))
+
+    def record_handler(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        events.append(("handler", event_type))
+
+    monkeypatch.setattr(
+        billing_services,
+        resolver_name,
+        lambda **kwargs: organization,
+    )
+    monkeypatch.setattr(billing_services, handler_name, record_handler)
+    monkeypatch.setattr(
+        billing_services,
+        "subscription_provider_mutation_lock",
+        record_provider_lock,
+    )
+
+    plan = _create_plan(price_id="price_webhook_lock")
+    if event_type == billing_services.STRIPE_EVENT_TYPE_INVOICE_PAID:
+        billing_services._handle_invoice_paid_event(
+            _invoice_paid_event(
+                event_id="evt_invoice_lock",
+                invoice_id="in_invoice_lock",
+                customer_id="cus_invoice_lock",
+                price_id=plan.stripe_price_id,
+            ),
+            stripe_client=FakeStripeClient(),
+        )
+    elif event_type == billing_services.STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
+        event = _invoice_paid_event(
+            event_id="evt_invoice_failed_lock",
+            invoice_id="in_invoice_failed_lock",
+            customer_id="cus_invoice_failed_lock",
+            price_id=plan.stripe_price_id,
+        )
+        event["type"] = event_type
+        billing_services._handle_invoice_payment_failed_event(event)
+    else:
+        monkeypatch.setattr(
+            billing_services,
+            "_resolve_plan_for_subscription_payload",
+            lambda payload: plan,
+        )
+        billing_services._upsert_subscription_from_payload(
+            {
+                "id": "sub_webhook_lock",
+                "status": "active",
+            }
+        )
+
+    assert events == [
+        ("lock-enter", organization.pk),
+        ("handler", event_type),
+        ("lock-exit", organization.pk),
+    ]
+
+
+@pytest.mark.django_db
+def test_invoice_paid_reloads_subscription_after_organization_lock(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import nullcontext
+
+    plan = _create_plan(price_id="price_invoice_reload")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_123",
+        stripe_customer_id="cus_invoice_reload",
+        status=Subscription.Status.PAST_DUE,
+    )
+    fake_client = FakeStripeClient(
+        event=_invoice_paid_event(
+            event_id="evt_invoice_reload",
+            invoice_id="in_invoice_reload",
+            customer_id="cus_invoice_reload",
+            price_id=plan.stripe_price_id,
+        )
+    )
+    original_lock = billing_services._lock_organization_for_billing_mutation
+    state_changed = False
+
+    def change_subscription_before_lock(locked_organization: Any) -> Any:
+        nonlocal state_changed
+        if not state_changed:
+            Subscription.all_objects.filter(pk=subscription.pk).update(
+                status=Subscription.Status.CANCELED
+            )
+            state_changed = True
+        return original_lock(locked_organization)
+
+    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_invoice_reload")
+    monkeypatch.setattr(
+        billing_services,
+        "_lock_organization_for_billing_mutation",
+        change_subscription_before_lock,
+    )
+    monkeypatch.setattr(
+        billing_services,
+        "subscription_provider_mutation_lock",
+        lambda _organization: nullcontext(),
+    )
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_invoice_reload"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    subscription.refresh_from_db()
+    assert result.status == "processed"
+    assert subscription.status == Subscription.Status.CANCELED
+    assert CreditBalance.all_objects.get(organization=organization).balance == 100
+
+
+@pytest.mark.django_db(transaction=True)
+def test_invoice_paid_refuses_provider_identity_drift_before_finalization(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invoice processing never overwrites a newer local provider identity."""
+    plan = _create_plan(price_id="price_invoice_identity_drift")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_123",
+        stripe_customer_id="cus_invoice_identity_drift",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient(
+        event=_invoice_paid_event(
+            event_id="evt_invoice_identity_drift",
+            invoice_id="in_invoice_identity_drift",
+            customer_id="cus_invoice_identity_drift",
+            price_id=plan.stripe_price_id,
+        )
+    )
+    original_lock = billing_services._lock_organization_for_billing_mutation
+
+    def replace_identity_before_lock(locked_organization: Any) -> Any:
+        import concurrent.futures
+
+        from django.db import close_old_connections
+        from quickscale_modules_orgs.current_org import org_scope
+
+        assert locked_organization.pk == organization.pk
+
+        def replace_identity() -> None:
+            close_old_connections()
+            try:
+                with org_scope(organization):
+                    Subscription.all_objects.filter(pk=subscription.pk).update(
+                        stripe_subscription_id="sub_replacement"
+                    )
+            finally:
+                close_old_connections()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(replace_identity).result(timeout=10)
+        return original_lock(locked_organization)
+
+    monkeypatch.setattr(
+        billing_services,
+        "_lock_organization_for_billing_mutation",
+        replace_identity_before_lock,
+    )
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_invoice_identity_drift",
+    )
+
+    with pytest.raises(BillingWebhookError, match="changed provider identity"):
+        handle_stripe_event(
+            body=b'{"id":"evt_invoice_identity_drift"}',
+            signature="t=1,v1=test-signature",
+            stripe_client=fake_client,
+        )
+
+    subscription.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_invoice_identity_drift"
+    )
+    assert subscription.stripe_subscription_id == "sub_replacement"
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 0
+    assert webhook_event.processed is False
+    assert "changed provider identity" in webhook_event.processing_error
 
 
 @pytest.mark.django_db
@@ -1723,66 +2814,66 @@ def test_handle_stripe_event_rejects_multiple_price_ids(
 
 
 @pytest.mark.django_db
-def test_handle_stripe_event_rejects_unresolvable_user_reference(
+def test_handle_invoice_paid_credits_organization_after_provenance_user_deleted(
+    user,
     organization,
     org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _create_plan(price_id="price_unresolvable")
+    plan = _create_plan(price_id="price_unresolvable")
+    Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_123",
+        stripe_customer_id="cus_unresolvable",
+        status=Subscription.Status.ACTIVE,
+    )
+    deleted_user_reference = _user_reference(user)
+    user.delete()
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unresolvable")
-    fake_client = FakeStripeClient(
-        event=_invoice_paid_event(
-            event_id="evt_unresolvable",
-            invoice_id="in_unresolvable",
-            customer_id="cus_unresolvable",
-            price_id="price_unresolvable",
-            user_reference="bad-reference",
-        ),
-        subscriptions={
-            "sub_123": {
-                "id": "sub_123",
-                "customer": "cus_unresolvable",
-                "status": "active",
-                "metadata": {
-                    "stripe_price_id": "price_unresolvable",
-                },
-                "items": {
-                    "data": [
-                        {
-                            "price": {
-                                "id": "price_unresolvable",
-                            }
-                        }
-                    ]
-                },
-            }
-        },
+    event = _invoice_paid_event(
+        event_id="evt_unresolvable",
+        invoice_id="in_unresolvable",
+        customer_id="cus_unresolvable",
+        price_id="price_unresolvable",
+        user_reference=deleted_user_reference,
+    )
+    event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    result = handle_stripe_event(
+        body=b'{"id":"evt_unresolvable"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=FakeStripeClient(event=event),
     )
 
-    with pytest.raises(BillingWebhookError, match="Could not resolve a local user"):
-        handle_stripe_event(
-            body=b'{"id":"evt_unresolvable"}',
-            signature="t=1,v1=test-signature",
-            stripe_client=fake_client,
-        )
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
+    assert result.status == "processed"
+    assert transaction_row.user_id is None
+    assert transaction_row.amount == plan.credits_per_period
 
 
 @pytest.mark.django_db
-def test_handle_stripe_event_rejects_unknown_model_user_reference(
+def test_handle_invoice_paid_treats_unknown_user_model_as_nullable_provenance(
     organization,
     org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _create_plan(price_id="price_unknown_model")
+    plan = _create_plan(price_id="price_unknown_model")
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unknown_model")
+    event = _invoice_paid_event(
+        event_id="evt_unknown_model",
+        invoice_id="in_unknown_model",
+        customer_id="",
+        price_id="price_unknown_model",
+        user_reference="missing.user:1",
+    )
+    event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
     fake_client = FakeStripeClient(
-        event=_invoice_paid_event(
-            event_id="evt_unknown_model",
-            invoice_id="in_unknown_model",
-            customer_id="",
-            price_id="price_unknown_model",
-            user_reference="missing.user:1",
-        ),
+        event=event,
         subscriptions={
             "sub_123": {
                 "id": "sub_123",
@@ -1804,9 +2895,58 @@ def test_handle_stripe_event_rejects_unknown_model_user_reference(
         },
     )
 
-    with pytest.raises(BillingWebhookError, match="Could not resolve a local user"):
+    result = handle_stripe_event(
+        body=b'{"id":"evt_unknown_model"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
+    assert result.status == "processed"
+    assert transaction_row.user_id is None
+    assert transaction_row.amount == plan.credits_per_period
+
+
+@pytest.mark.django_db
+def test_handle_stripe_event_rejects_unresolvable_organization_before_backfill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _create_plan(price_id="price_unresolvable_org")
+    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unresolvable_org")
+    fake_client = FakeStripeClient(
+        event=_invoice_paid_event(
+            event_id="evt_unresolvable_org",
+            invoice_id="in_unresolvable_org",
+            customer_id="cus_unresolvable_org",
+            price_id="price_unresolvable_org",
+        ),
+        subscriptions={
+            "sub_123": {
+                "id": "sub_123",
+                "customer": "cus_unresolvable_org",
+                "status": "active",
+                "metadata": {
+                    "stripe_price_id": "price_unresolvable_org",
+                },
+                "items": {
+                    "data": [
+                        {
+                            "price": {
+                                "id": "price_unresolvable_org",
+                            }
+                        }
+                    ]
+                },
+            }
+        },
+    )
+
+    with pytest.raises(
+        BillingWebhookError,
+        match="Could not resolve a local organization for the Stripe subscription",
+    ):
         handle_stripe_event(
-            body=b'{"id":"evt_unknown_model"}',
+            body=b'{"id":"evt_unresolvable_org"}',
             signature="t=1,v1=test-signature",
             stripe_client=fake_client,
         )
@@ -1980,6 +3120,36 @@ def test_stripe_client_cancel_subscription_uses_subscription_api() -> None:
     assert captured_call == {
         "subscription_id": "sub_cancel",
         "kwargs": {"cancel_at_period_end": True},
+    }
+    assert stripe_module.api_key == "sk_test"
+
+
+def test_stripe_client_resume_subscription_uses_subscription_api() -> None:
+    captured_call: dict[str, Any] = {}
+
+    def fake_modify(subscription_id: str, **kwargs: Any) -> dict[str, Any]:
+        captured_call["subscription_id"] = subscription_id
+        captured_call["kwargs"] = dict(kwargs)
+        return {"id": subscription_id, "status": "active", **kwargs}
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        Subscription=SimpleNamespace(modify=fake_modify),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key="sk_test")
+
+    resumed_subscription = stripe_client.resume_subscription(
+        stripe_subscription_id="sub_resume"
+    )
+
+    assert resumed_subscription == {
+        "id": "sub_resume",
+        "status": "active",
+        "cancel_at_period_end": False,
+    }
+    assert captured_call == {
+        "subscription_id": "sub_resume",
+        "kwargs": {"cancel_at_period_end": False},
     }
     assert stripe_module.api_key == "sk_test"
 

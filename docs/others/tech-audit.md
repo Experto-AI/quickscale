@@ -36,7 +36,7 @@ QuickScale is a Python 3.14 / Poetry **code generator and scaffolding platform**
 - **Launcher one-shot command-env contract.** `QUICKSCALE_PRIVILEGED_COMMAND` / `RUNTIME_DATABASE_URL=""` are inline prefixes, never persistent configuration.
 - **Raw credential values are never persisted** in `quickscale.yml`, state, or `BackupArtifact` rows. Stripe keys stay environment-only.
 - **Force-with-lease publication.** `EXPECTED_REMOTE_SHA` must come from a real observation, and `--publish-outdated` stays disabled because it pushed with bare `--force` (SA117 Phase 4).
-- **Teardown policy** (`decisions.md:921`): `on_delete=PROTECT` plus an explicit, GDPR-capable `purge_organization`.
+- **Teardown policy** (`decisions.md:947`): `on_delete=PROTECT` plus an explicit, GDPR-capable `purge_organization`.
 - **Quality-baseline monotonicity**; **CSRF-exempt endpoints carry an alternate integrity check**.
 
 **Delta classification (re-run mode, §2f).** Almost every behavioural commit in the window is **side-channel**. None carries a descriptive trail:
@@ -96,7 +96,7 @@ No open findings remain.
 | CLI deploy (`deployment_commands.py`, `railway_utils.py` variable helpers) | delta in full plus read/set helpers | Clean after live-state reconciliation and exact database-service selection |
 | CLI dev (`development_commands.py`) | delta plus every `_run_docker_exec_command` caller | Clean. The privilege narrowing is correct and `manage` guards empty args at `:690` |
 | orgs — privileged commands (`apps.py`, `migrate_billing_to_orgs.py`) | whole command, guard delta | Clean. See *Clean sweeps* |
-| orgs — `purge_organization` | whole file | Clean for live Stripe-backed subscriptions; the broader teardown tooling gap remains below |
+| orgs — `purge_organization` | whole file | Clean; membership and FK order are marker-derived, and provider-ID teardown obligations are checked exhaustively |
 | Client identity / public auth (`get_client_ip`, blog API auth, notifications webhook) | functions in full | Clean |
 | Publication tooling (`publish_module.py`, `version_tool.sh`, compat gate) | delta plus `_publish_module`, `_run_release_gates` | Clean after the fast-forward ancestry check before each push |
 | CI / gates (workflows, testimony, security gates, provisioning, isolation conformance) | delta in full | Clean as defects; remaining watch items and tooling gaps are listed below |
@@ -133,7 +133,6 @@ No open findings remain.
 | Gap | Would have caught | Recommendation |
 |---|---|---|
 | Dependency gate never sees the generated project's runtime dependencies | Future CVEs in `gunicorn`, `whitenoise`, `dj-database-url` (none in root `poetry.lock`) | Add a Trivy pass over the hermetic generated-project lock the E2E lane already produces, or add those pins to a scanned dev group |
-| No exhaustive external-provider conformance check for destructive org teardown | Future provider-ID obligations beyond the shipped Stripe-subscription refusal | For every `_DELETE_SPECS` model that carries an external provider id, verify that purge refuses or reconciles it |
 
 ---
 
