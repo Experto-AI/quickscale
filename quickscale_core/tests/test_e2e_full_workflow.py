@@ -615,6 +615,8 @@ class TestFullE2EWorkflow:
             **os.environ,
             "QUICKSCALE_BACKEND_IMAGE": "quickscale-backend:sha256-bound",
             "QUICKSCALE_BACKEND_IMAGE_DIGEST": "bound-digest",
+            "QUICKSCALE_FRONTEND_HOST_PORT": "45173",
+            "QUICKSCALE_FRONTEND_ORIGIN": "https://vite.example.test",
             "QUICKSCALE_RESOURCE_PREFIX": "run-bound",
         }
         injected = subprocess.run(
@@ -642,6 +644,14 @@ class TestFullE2EWorkflow:
         assert (
             injected_services["backend"]["labels"]["com.quickscale.scope"]
             == "run-bound"
+        )
+        assert any(
+            port["target"] == 5173 and port["published"] == "45173"
+            for port in injected_services["frontend"]["ports"]
+        )
+        assert (
+            injected_services["backend"]["environment"]["QUICKSCALE_FRONTEND_ORIGIN"]
+            == "https://vite.example.test"
         )
 
         db_service = services["db"]
@@ -2263,12 +2273,18 @@ class TestDockerIntegration:
 
         scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "sa142-warm-build")
         port = int(os.environ.get("QS_E2E_APP_PORT", str(helper._find_free_port())))
+        frontend_port = int(
+            os.environ.get("QS_E2E_FRONTEND_PORT", str(helper._find_free_port()))
+        )
+        if os.environ.get("PYTEST_XDIST_WORKER"):
+            frontend_port = helper._find_free_port()
         env = {
             **os.environ,
             "COMPOSE_PROJECT_NAME": scope,
             "QUICKSCALE_RESOURCE_PREFIX": scope,
             "QS_E2E_RESOURCE_SCOPE": scope,
             "PORT": str(port),
+            "QUICKSCALE_FRONTEND_HOST_PORT": str(frontend_port),
         }
 
         def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -2322,12 +2338,18 @@ class TestDockerIntegration:
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
         scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "sa142-no-cleanup")
         port = int(os.environ.get("QS_E2E_APP_PORT", str(helper._find_free_port())))
+        frontend_port = int(
+            os.environ.get("QS_E2E_FRONTEND_PORT", str(helper._find_free_port()))
+        )
+        if os.environ.get("PYTEST_XDIST_WORKER"):
+            frontend_port = helper._find_free_port()
         env = {
             **os.environ,
             "COMPOSE_PROJECT_NAME": scope,
             "QUICKSCALE_RESOURCE_PREFIX": scope,
             "QS_E2E_RESOURCE_SCOPE": scope,
             "PORT": str(port),
+            "QUICKSCALE_FRONTEND_HOST_PORT": str(frontend_port),
         }
         up = subprocess.run(
             ["poetry", "run", "quickscale", "up"],

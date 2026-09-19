@@ -74,18 +74,16 @@ function updatePasswordStrength(field, strength) {
     if (field.value.length > 0) {
         indicator = document.createElement('div');
         indicator.className = 'password-strength';
-        indicator.style.marginTop = '0.5rem';
-        indicator.style.fontSize = '0.875rem';
 
         if (strength < 2) {
             indicator.textContent = '⚠️ Weak password';
-            indicator.style.color = '#dc3545';
+            indicator.classList.add('password-strength--weak');
         } else if (strength < 4) {
             indicator.textContent = '✓ Moderate password';
-            indicator.style.color = '#ffc107';
+            indicator.classList.add('password-strength--moderate');
         } else {
             indicator.textContent = '✓ Strong password';
-            indicator.style.color = '#28a745';
+            indicator.classList.add('password-strength--strong');
         }
 
         field.parentElement.appendChild(indicator);

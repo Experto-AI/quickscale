@@ -2223,7 +2223,10 @@ class TestUpdateCommand:
             prefix="modules/billing",
             branch="splits/billing-module",
         )
-        state = Mock(modules={"billing": module_state})
+        state = Mock(
+            project=Mock(project_contract=CORE_VERSION),
+            modules={"billing": module_state},
+        )
         mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
@@ -2252,7 +2255,10 @@ class TestUpdateCommand:
             prefix="modules/auth",
             branch="splits/auth-module",
         )
-        state = Mock(modules={"auth": module_state})
+        state = Mock(
+            project=Mock(project_contract=CORE_VERSION),
+            modules={"auth": module_state},
+        )
         mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
@@ -2281,7 +2287,10 @@ class TestUpdateCommand:
             prefix="modules/listings",
             branch="splits/listings-module",
         )
-        state = Mock(modules={"auth": auth_state, "listings": listings_state})
+        state = Mock(
+            project=Mock(project_contract=CORE_VERSION),
+            modules={"auth": auth_state, "listings": listings_state},
+        )
         mock_manager_cls.return_value.load_state.return_value = state
         mock_update.side_effect = [True, False]
 
@@ -2318,7 +2327,10 @@ class TestUpdateCommand:
         module_state = Mock(
             version="v0.70.0", prefix="modules/auth", branch="splits/auth-module"
         )
-        state = Mock(modules={"auth": module_state})
+        state = Mock(
+            project=Mock(project_contract=CORE_VERSION),
+            modules={"auth": module_state},
+        )
         mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
@@ -2438,7 +2450,10 @@ class TestUpdateVersionDriftWarning:
             prefix="modules/auth",
             branch="splits/auth-module",
         )
-        state = Mock(modules={"auth": module_state})
+        state = Mock(
+            project=Mock(project_contract=CORE_VERSION),
+            modules={"auth": module_state},
+        )
         mock_manager_cls.return_value.load_state.return_value = state
         mock_update.return_value = True
 

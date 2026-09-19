@@ -1318,7 +1318,7 @@ class TestReactThemeModuleActivationMatrix:
             "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or "
             "settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
         ) in link_tree_template
-        assert "frontend/assets/index.css" in link_tree_template
+        assert "frontend/assets/index.css" not in link_tree_template
         assert "frontend/assets/index.js" in link_tree_template
         assert "surface: 'link_tree'" in link_tree_template
         assert "endpoint: '/_quickscale/social/'" in link_tree_template
@@ -1329,7 +1329,7 @@ class TestReactThemeModuleActivationMatrix:
             "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or "
             "settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
         ) in embeds_template
-        assert "frontend/assets/index.css" in embeds_template
+        assert "frontend/assets/index.css" not in embeds_template
         assert "frontend/assets/index.js" in embeds_template
         assert "surface: 'embeds'" in embeds_template
         assert "endpoint: '/_quickscale/social/embeds/'" in embeds_template

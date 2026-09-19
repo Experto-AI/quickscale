@@ -8,6 +8,17 @@
 
 .crm-nav {
     margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid hsl(var(--border));
+}
+
+.crm-nav a {
+    display: inline-flex;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    font-weight: 600;
 }
 
 .crm-content h1 {
@@ -29,11 +40,13 @@
 }
 
 .crm-content .card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.5rem;
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) + 0.25rem);
     padding: 1.5rem;
     margin-bottom: 1rem;
+    box-shadow: 0 0.75rem 2rem hsl(var(--foreground) / 0.06);
 }
 
 .crm-content .stats-grid {
@@ -49,13 +62,28 @@
 
 .crm-content .stat-card h3 {
     font-size: 2rem;
-    color: #2563eb;
+    color: hsl(var(--primary));
     margin-bottom: 0.25rem;
 }
 
 .crm-content .stat-card p {
-    color: #64748b;
+    color: hsl(var(--muted-foreground));
     margin-bottom: 0;
+}
+
+.crm-content .recent-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.crm-content .api-card {
+    margin-top: 1rem;
+}
+
+.crm-content .api-list {
+    margin: 1rem 0;
+    padding-left: 2rem;
 }
 
 .crm-content table {
@@ -67,10 +95,20 @@
 .crm-content td {
     padding: 0.75rem;
     text-align: left;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid hsl(var(--border));
 }
 
 .crm-content th {
-    background: #f8fafc;
+    background: hsl(var(--muted));
     font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .crm-content .recent-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .crm-content .card {
+        overflow-x: auto;
+    }
 }

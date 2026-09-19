@@ -91,6 +91,30 @@ def test_orgs_declares_the_089_generated_file_contract() -> None:
     assert manifest.contract_vintage == RAILWAY_CONTRACT_VINTAGE
 
 
+@pytest.mark.parametrize("module_name", ["auth", "billing", "blog", "listings", "crm"])
+def test_styled_modules_declare_the_089_design_contract(module_name: str) -> None:
+    manifest_path = (
+        Path(__file__).parents[2] / f"quickscale_modules/{module_name}/module.yml"
+    )
+    manifest = load_manifest_from_path(manifest_path)
+
+    assert manifest.contract_vintage is not None
+    assert manifest.contract_vintage.minimum == "0.89.0"
+    steps = " ".join(manifest.contract_vintage.manual_adoption_steps)
+    assert "templates/base.html" in steps
+    assert "templates/index.html" in steps
+    assert "templates/social/*.html" in steps
+    assert "frontend/assets/index.css" in steps
+    assert "frontend/vite.config.ts" in steps
+    assert "/static/frontend/" in steps
+    assert "settings/local.py" in steps
+    assert "QUICKSCALE_FRONTEND_HOST_PORT" in steps
+    assert "QUICKSCALE_FRONTEND_ORIGIN" in steps
+    assert "docker-compose.yml" in steps
+    assert "${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173" in steps
+    assert "pnpm build" in steps
+
+
 def test_railway_declares_the_same_089_generated_file_contract() -> None:
     assert RAILWAY_CONTRACT_VINTAGE.minimum == "0.89.0"
     steps = " ".join(RAILWAY_CONTRACT_VINTAGE.manual_adoption_steps)

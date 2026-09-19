@@ -1106,7 +1106,11 @@ def test_update_after_removal_only_targets_remaining_modules(
             return_value=True,
         ) as mock_update_single_module,
     ):
-        result = runner.invoke(update, ["--no-preview"], catch_exceptions=False)
+        result = runner.invoke(
+            update,
+            ["--no-preview", "--acknowledge-contract-vintage"],
+            catch_exceptions=False,
+        )
 
     assert result.exit_code == 0
     mock_update_single_module.assert_called_once()
@@ -1331,7 +1335,11 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
             return_value=True,
         ) as mock_update_single_module,
     ):
-        result = runner.invoke(update, ["--no-preview"], catch_exceptions=False)
+        result = runner.invoke(
+            update,
+            ["--no-preview", "--acknowledge-contract-vintage"],
+            catch_exceptions=False,
+        )
 
     assert result.exit_code == 0
     mock_update_single_module.assert_called_once()
@@ -1399,6 +1407,7 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
                     "slug": "testproject",
                     "package": "testproject",
                     "theme": "showcase_react",
+                    "project_contract": _core_version,
                 },
                 "modules": {
                     "auth": {

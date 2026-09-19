@@ -1,4 +1,4 @@
-import path from "path"
+import path from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -28,22 +28,39 @@ function quickscaleManualChunks(id: string): string | undefined {
     return 'ui'
   }
 
-  if (
-    normalizedId.includes('/@tanstack/') ||
-    normalizedId.includes('/zustand/')
-  ) {
+  if (normalizedId.includes('/@tanstack/') || normalizedId.includes('/zustand/')) {
     return 'data'
   }
 
-  if (
-    normalizedId.includes('/react-dom/') ||
-    normalizedId.includes('/react/')
-  ) {
+  if (normalizedId.includes('/react-dom/') || normalizedId.includes('/react/')) {
     return 'react-vendor'
   }
 
   return 'vendor'
 }
+
+function quickscaleFrontendAllowedHosts(): string[] | undefined {
+  const configuredOrigin = process.env.QUICKSCALE_FRONTEND_ORIGIN?.trim()
+  if (!configuredOrigin) {
+    return undefined
+  }
+
+  const origin = new URL(configuredOrigin)
+  if (
+    !['http:', 'https:'].includes(origin.protocol) ||
+    origin.username ||
+    origin.password ||
+    origin.pathname !== '/' ||
+    origin.search ||
+    origin.hash
+  ) {
+    throw new Error('QUICKSCALE_FRONTEND_ORIGIN must be an HTTP(S) origin')
+  }
+
+  return [origin.hostname]
+}
+
+const frontendAllowedHosts = quickscaleFrontendAllowedHosts()
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -51,11 +68,13 @@ export default defineConfig({
   base: '/static/frontend/',
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
     port: 5173,
+    strictPort: true,
+    ...(frontendAllowedHosts ? { allowedHosts: frontendAllowedHosts } : {}),
     proxy: {
       '/_quickscale': { target: 'http://localhost:8000', changeOrigin: true },
       '/admin': { target: 'http://localhost:8000', changeOrigin: true },
@@ -64,7 +83,10 @@ export default defineConfig({
       '/listings': { target: 'http://localhost:8000', changeOrigin: true },
       '/crm': { target: 'http://localhost:8000', changeOrigin: true },
       '/healthcheck': { target: 'http://localhost:8000', changeOrigin: true },
-      '/static': { target: 'http://localhost:8000', changeOrigin: true },
+      '^/static(?:$|/(?!frontend(?:/|$)))': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
       '/markdownx': { target: 'http://localhost:8000', changeOrigin: true },
       '/social': { target: 'http://localhost:8000', changeOrigin: true },
     },

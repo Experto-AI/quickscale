@@ -20,6 +20,8 @@ import re
 import socket
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from unittest.mock import Mock, call
 
 import pytest
@@ -525,6 +527,24 @@ class TestDevelopmentCommandsE2E:
         return False
 
     @staticmethod
+    def _wait_for_http_text(
+        url: str, timeout: float = 30.0, interval: float = 1.0
+    ) -> str:
+        """Return one generated-project response after a bounded readiness poll."""
+        elapsed = 0.0
+        last_error: Exception | None = None
+        while elapsed < timeout:
+            try:
+                with urllib.request.urlopen(url, timeout=5.0) as response:
+                    assert response.status == 200
+                    return response.read().decode()
+            except (AssertionError, OSError, urllib.error.URLError) as error:
+                last_error = error
+            time.sleep(interval)
+            elapsed += interval
+        raise RuntimeError(f"{url} did not return HTTP 200: {last_error}")
+
+    @staticmethod
     def _container_prefix() -> str:
         """Return the per-lane resource prefix for this E2E run."""
         return _worker_resource_scope()
@@ -642,13 +662,20 @@ class TestDevelopmentCommandsE2E:
     @pytest.fixture
     def docker_env(self) -> dict[str, str]:
         """Provide isolated environment for Docker e2e commands"""
+        app_port = (
+            os.environ.get("QS_E2E_APP_PORT")
+            if not os.environ.get("PYTEST_XDIST_WORKER")
+            else str(self._get_free_port())
+        ) or str(self._get_free_port())
+        frontend_port = (
+            os.environ.get("QS_E2E_FRONTEND_PORT")
+            if not os.environ.get("PYTEST_XDIST_WORKER")
+            else str(self._get_free_port())
+        ) or str(self._get_free_port())
         return {
-            "PORT": (
-                os.environ.get("QS_E2E_APP_PORT")
-                if not os.environ.get("PYTEST_XDIST_WORKER")
-                else str(self._get_free_port())
-            )
-            or str(self._get_free_port()),
+            "PORT": app_port,
+            "QUICKSCALE_FRONTEND_HOST_PORT": frontend_port,
+            "QUICKSCALE_FRONTEND_ORIGIN": f"http://127.0.0.1:{frontend_port}",
             "QS_E2E_CONTAINER_PREFIX": self._container_prefix(),
             "QS_E2E_RESOURCE_SCOPE": self._container_prefix(),
             "QUICKSCALE_RESOURCE_PREFIX": self._container_prefix(),
@@ -709,6 +736,52 @@ class TestDevelopmentCommandsE2E:
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container did not become running within 40s"
 
+            # The frontend service must build the SPA JavaScript before it starts Vite.
+            # Prove the Django entrypoint uses the live token source and both compiled
+            # assets remain available for production.
+            app_url = f"http://127.0.0.1:{docker_env['PORT']}"
+            root_html = self._wait_for_http_text(f"{app_url}/")
+            assert 'id="root"' in root_html
+            assert "frontend/assets/index.js" in root_html
+            assert self._wait_for_http_text(
+                f"{app_url}/static/frontend/assets/index.css"
+            )
+            assert self._wait_for_http_text(
+                f"{app_url}/static/frontend/assets/index.js"
+            )
+
+            live_token_url = (
+                f"{docker_env['QUICKSCALE_FRONTEND_ORIGIN']}"
+                "/static/frontend/src/index.css"
+            )
+            assert live_token_url in root_html
+            token_css = self._wait_for_http_text(live_token_url)
+            assert "--primary:" in token_css
+
+            token_probe = "--quickscale-live-token-probe: 192 100% 50%;"
+            token_source = project_path / "frontend" / "src" / "index.css"
+            token_source.write_text(
+                f"{token_source.read_text()}\n:root {{ {token_probe} }}\n"
+            )
+            assert token_probe in self._wait_for_http_text(live_token_url)
+
+            rendered_shell = runner.invoke(
+                cli,
+                [
+                    "manage",
+                    "shell",
+                    "-c",
+                    (
+                        "from django.conf import settings; "
+                        "from django.template.loader import render_to_string; "
+                        "print(render_to_string('base.html', {'settings': settings}))"
+                    ),
+                ],
+                env=docker_env,
+            )
+            assert rendered_shell.exit_code == 0, rendered_shell.output
+            assert live_token_url in rendered_shell.output
+
             # Step 2: Check service status
             result = runner.invoke(cli, ["ps"], env=docker_env)
             assert result.exit_code == 0, f"ps failed: {result.output}"
@@ -758,11 +831,17 @@ class TestDevelopmentCommandsE2E:
         resource_scope = self._container_prefix()
         env = {
             "PORT": str(port),
+            "QUICKSCALE_FRONTEND_HOST_PORT": (
+                os.environ.get("QS_E2E_FRONTEND_PORT") or str(self._get_free_port())
+            ),
             "QS_E2E_CONTAINER_PREFIX": resource_scope,
             "QS_E2E_RESOURCE_SCOPE": resource_scope,
             "QUICKSCALE_RESOURCE_PREFIX": resource_scope,
             "COMPOSE_PROJECT_NAME": resource_scope,
         }
+        env["QUICKSCALE_FRONTEND_ORIGIN"] = (
+            f"http://127.0.0.1:{env['QUICKSCALE_FRONTEND_HOST_PORT']}"
+        )
 
         with runner.isolated_filesystem(temp_dir=tmp_path):
             # package(default) -> theme=1(showcase_react) -> modules(skip)
@@ -770,8 +849,6 @@ class TestDevelopmentCommandsE2E:
             plan_input = "\n1\n\nY\nY\nY\nY\n"
             result = runner.invoke(cli, ["plan", project_name], input=plan_input)
             assert result.exit_code == 0, f"plan failed: {result.output}"
-
-            import os
 
             original_cwd = os.getcwd()
             os.chdir(project_name)

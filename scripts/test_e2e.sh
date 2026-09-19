@@ -29,6 +29,7 @@
 #   QS_E2E_MIN_SWAP_MB=N       Fall back to serial below N MB free swap, checked only
 #                              when available RAM is under QS_E2E_COMFORT_AVAIL_MB (default: 3072)
 #   QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between "still running" progress lines (default: 60)
+#   QS_E2E_FRONTEND_PORT=N       Reserve the browser-facing Vite port for the Core lane
 #
 
 set -euo pipefail
@@ -90,6 +91,7 @@ while [[ $# -gt 0 ]]; do
             echo "  QS_E2E_MIN_SWAP_MB=N         Serial fallback below N MB free swap, only when"
             echo "                               available RAM is under the comfort threshold (default 3072)"
             echo "  QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between progress lines (default 60)"
+            echo "  QS_E2E_FRONTEND_PORT=N       Reserve the browser-facing Vite port for the Core lane"
             exit 0
             ;;
         *)
@@ -129,22 +131,25 @@ find_free_port() {
     python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
 }
 
-validate_app_port() {
-    local port="$1"
+validate_host_port() {
+    local name="$1" port="$2"
     case "$port" in
         *[!0-9]*|"")
-            echo -e "${RED}Error: QS_E2E_APP_PORT must be a numeric host port${NC}" >&2
+            echo -e "${RED}Error: $name must be a numeric host port${NC}" >&2
             return 1
             ;;
     esac
     if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-        echo -e "${RED}Error: QS_E2E_APP_PORT must be between 1 and 65535${NC}" >&2
+        echo -e "${RED}Error: $name must be between 1 and 65535${NC}" >&2
         return 1
     fi
 }
 
 if [ -n "${QS_E2E_APP_PORT:-}" ]; then
-    validate_app_port "$QS_E2E_APP_PORT"
+    validate_host_port QS_E2E_APP_PORT "$QS_E2E_APP_PORT"
+fi
+if [ -n "${QS_E2E_FRONTEND_PORT:-}" ]; then
+    validate_host_port QS_E2E_FRONTEND_PORT "$QS_E2E_FRONTEND_PORT"
 fi
 
 if [ "${QS_E2E_PARALLEL:-1}" = "0" ]; then
@@ -338,6 +343,8 @@ WORKER_TEMP_DIR=""
 RUN_SCOPE=""
 CORE_APP_PORT=""
 CLI_APP_PORT=""
+CORE_FRONTEND_PORT=""
+CLI_FRONTEND_PORT=""
 declare -a WORKER_PIDS=()
 declare -a WORKER_ORDER=()
 
@@ -584,8 +591,35 @@ else
         CLI_APP_PORT="$(find_free_port)"
     done
 fi
-validate_app_port "$CORE_APP_PORT"
-validate_app_port "$CLI_APP_PORT"
+validate_host_port CORE_APP_PORT "$CORE_APP_PORT"
+validate_host_port CLI_APP_PORT "$CLI_APP_PORT"
+
+if [ -n "${QS_E2E_FRONTEND_PORT:-}" ]; then
+    CORE_FRONTEND_PORT="$QS_E2E_FRONTEND_PORT"
+else
+    CORE_FRONTEND_PORT="$(find_free_port)"
+    while [ "$CORE_FRONTEND_PORT" = "$CORE_APP_PORT" ] \
+        || [ "$CORE_FRONTEND_PORT" = "$CLI_APP_PORT" ]; do
+        CORE_FRONTEND_PORT="$(find_free_port)"
+    done
+fi
+if [ "$E2E_PARALLEL" = false ] && [ -n "${QS_E2E_FRONTEND_PORT:-}" ]; then
+    CLI_FRONTEND_PORT="$QS_E2E_FRONTEND_PORT"
+else
+    CLI_FRONTEND_PORT="$(find_free_port)"
+    while [ "$CLI_FRONTEND_PORT" = "$CORE_FRONTEND_PORT" ] \
+        || [ "$CLI_FRONTEND_PORT" = "$CORE_APP_PORT" ] \
+        || [ "$CLI_FRONTEND_PORT" = "$CLI_APP_PORT" ]; do
+        CLI_FRONTEND_PORT="$(find_free_port)"
+    done
+fi
+validate_host_port CORE_FRONTEND_PORT "$CORE_FRONTEND_PORT"
+validate_host_port CLI_FRONTEND_PORT "$CLI_FRONTEND_PORT"
+if [ "$CORE_FRONTEND_PORT" = "$CORE_APP_PORT" ] \
+    || [ "$CORE_FRONTEND_PORT" = "$CLI_APP_PORT" ]; then
+    echo -e "${RED}Error: QS_E2E_FRONTEND_PORT must differ from both app ports${NC}" >&2
+    exit 1
+fi
 
 run_e2e_lane() {
     local lane="$1"
@@ -600,6 +634,7 @@ run_e2e_lane() {
     local lane_resource_scope
     local lane_pid
     local lane_app_port
+    local lane_frontend_port
     local lane_image_digest
     local lane_cleanup_done=false
     local lane_tests_passed=false
@@ -637,8 +672,10 @@ run_e2e_lane() {
 
     if [ "$lane" = "core" ]; then
         lane_app_port="$CORE_APP_PORT"
+        lane_frontend_port="$CORE_FRONTEND_PORT"
     else
         lane_app_port="$CLI_APP_PORT"
+        lane_frontend_port="$CLI_FRONTEND_PORT"
     fi
 
     export QS_E2E_LANE="$lane"
@@ -654,6 +691,7 @@ run_e2e_lane() {
     fi
     export QUICKSCALE_RESOURCE_PREFIX="$lane_resource_scope"
     export QS_E2E_APP_PORT="$lane_app_port"
+    export QS_E2E_FRONTEND_PORT="$lane_frontend_port"
     export COMPOSE_PROJECT_NAME="$lane_compose_project"
 
     lane_exact_scopes() {
@@ -703,6 +741,7 @@ run_e2e_lane() {
 
     echo -e "${BLUE}[$lane_label] Lane: $QS_E2E_LANE${NC}"
     echo "[$lane_label] App host port: $QS_E2E_APP_PORT"
+    echo "[$lane_label] Frontend host port: $QS_E2E_FRONTEND_PORT"
     echo "[$lane_label] Docker scope: $QS_E2E_RESOURCE_SCOPE"
     echo ""
 

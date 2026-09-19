@@ -17,6 +17,8 @@
 
 .blog-markdown-content code {
     font-family: monospace;
+    border-radius: calc(var(--radius) - 0.125rem);
+    background: hsl(var(--muted));
 }
 
 .blog-markdown-content pre {
@@ -30,6 +32,17 @@
 
 .blog-nav {
     margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid hsl(var(--border));
+}
+
+.blog-nav a {
+    display: inline-flex;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    font-weight: 600;
 }
 
 .blog-content h1 {
@@ -61,17 +74,26 @@
 .blog-content article + article {
     margin-top: 2rem;
     padding-top: 2rem;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid hsl(var(--border));
 }
 
 .blog-content article > footer {
-    color: #64748b;
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
 }
 
 .blog-content img {
     max-width: 100%;
     height: auto;
-    border-radius: 0.5rem;
+    border-radius: var(--radius);
     margin-bottom: 1rem;
+}
+
+.blog-content article {
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) + 0.25rem);
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    box-shadow: 0 0.75rem 2rem hsl(var(--foreground) / 0.06);
 }

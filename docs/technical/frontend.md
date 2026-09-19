@@ -118,23 +118,25 @@ Consequences worth internalising:
 This chain is load-bearing and is currently held together by convention:
 
 ```
-frontend/  ──vite build──▶  static/frontend/assets/{index.js,index.css}
-                                   │
-                         STATICFILES_DIRS = [BASE_DIR / "static"]
-                                   │
-                            collectstatic ──▶ staticfiles/
-                                   │
-                    {% static 'frontend/assets/index.js' %}  in index.html.j2
+development: frontend/src/index.css ──Vite :5173──▶ /static/frontend/src/index.css
+
+production:  frontend/ ──vite build──▶ static/frontend/assets/{index.js,index.css}
+                                           │
+                                 STATICFILES_DIRS = [BASE_DIR / "static"]
+                                           │
+                                    collectstatic ──▶ staticfiles/
+                                           │
+                      {% static 'frontend/assets/index.{js,css}' %} in templates
 ```
 
 Contract points, all of which must move together:
 
 - `vite.config.ts` sets `base: '/static/frontend/'` and `outDir: '../static/frontend'` — matching `STATIC_URL = "/static/"` and `STATICFILES_DIRS = [BASE_DIR / "static"]` in the generated `settings/base.py`.
-- `entryFileNames` / `chunkFileNames` / `assetFileNames` are pinned to **unhashed, stable names** (`assets/[name].js`) specifically so the Django template can hard-reference them. `manifest: true` is emitted but **not currently consumed by Django**; the templates reference filenames directly.
+- `entryFileNames` / `chunkFileNames` / `assetFileNames` are pinned to **unhashed, stable names** (`assets/[name].js`) specifically so Django templates can hard-reference them. In non-DEBUG deployments, the React host and `base.html` load compiled `index.css`; in DEBUG both load `/static/frontend/src/index.css` directly from Vite so one token edit reaches both rendering systems. `index.html` continues to load the compiled JavaScript entry in both modes. `manifest: true` is emitted but **not currently consumed by Django**; the production templates reference filenames directly.
 - **Therefore: do not enable content hashing in the Vite output without first switching the templates to a manifest-driven tag.** Hashed filenames silently break `{% static %}` references.
 - `manualChunks` splits vendor code into `analytics` / `router` / `ui` / `data` / `react-vendor` / `vendor`. Chunks are lazily fetched by the browser; only the entry names are referenced from Django.
 
-In development, Vite runs on `:5173` and proxies the Django-owned prefixes (`/admin`, `/accounts`, `/blog`, `/listings`, `/crm`, `/social`, `/static`, `/healthcheck`, `/markdownx`, `/_quickscale`) to `:8000`. **This proxy list is a duplicate of the URL-ownership table above** — a new server-rendered module prefix must be added here too, or it will 404 under `pnpm dev` while working in production.
+In development, Vite listens on `:5173`, serves the shared token source at `/static/frontend/src/index.css` under its configured base path, and proxies the Django-owned prefixes (`/admin`, `/accounts`, `/blog`, `/listings`, `/crm`, `/social`, Django-owned `/static` paths outside `/static/frontend/`, `/healthcheck`, `/markdownx`, `/_quickscale`) to `:8000`. Native Vite startup uses `strictPort`, so an occupied port 5173 fails explicitly rather than silently moving away from Django's stylesheet URL. Compose can publish that internal Vite port on a different browser-facing port through `QUICKSCALE_FRONTEND_HOST_PORT`; `QUICKSCALE_FRONTEND_ORIGIN` supplies a full browser-visible origin for remote hosts or HTTPS tunnels. Compose passes that origin to Vite's exact-host allowlist and passes both values into Django's local settings so every DEBUG host renders the same URL. Run `pnpm dev` alongside the DEBUG Django server; open the application through Django because the standalone Vite HTML does not carry the Django-injected runtime seam. A built stylesheet is not used in DEBUG. **This proxy list is a duplicate of the URL-ownership table above** — a new server-rendered module prefix must be added here too, or it will 404 under `pnpm dev` while working in production.
 
 ---
 
@@ -145,7 +147,7 @@ In development, Vite runs on `:5173` and proxies the Django-owned prefixes (`/ad
 | # | Job | Source | Notes |
 | --- | --- | --- | --- |
 | 1 | **SPA host** | theme `templates/index.html.j2` → `templates/index.html` | Injects the seam; serves `#root`. Contains no application markup. |
-| 2 | **Server-rendered shell** | theme `templates/base.html.j2` → `templates/base.html` | A full standalone page shell with inlined `.qs-*` CSS. Used by modules that extend it. Not used by the SPA. |
+| 2 | **Server-rendered shell** | theme `templates/base.html.j2` → `templates/base.html` | A full standalone page shell whose `.qs-*` CSS consumes the Vite-served token source in DEBUG and compiled React tokens otherwise. Used by modules that extend it. Not used by the SPA. |
 | 3 | **Project chrome** | generator `templates/`, `common/templates/` | `404.html`, `500.html`, Django admin overrides. |
 | 4 | **Module surfaces** | `quickscale_modules/<name>/.../templates/` | Server-rendered module UI and notification email bodies. Found via `APP_DIRS: True`. |
 
@@ -157,19 +159,18 @@ Context processors `project_settings` and `installed_modules` expose `settings` 
 
 ## Styling ownership
 
-There are **two independent styling systems**, and they do not currently share tokens.
+There is one project-owned token source with two rendering systems. Tailwind plus shadcn/ui conventions define HSL custom properties on `:root` in `frontend/src/index.css` (`--background`, `--primary`, `--border`, `--radius`, chart and sidebar ramps). The generated React host and `base.html` both load that source from Vite while DEBUG is enabled and load compiled `static/frontend/assets/index.css` otherwise. React consumes the properties through `tailwind.config.js`; shell CSS plus module styles consume them through `hsl(var(--token))`. Dark mode remains class-based, with `base.html` restoring React's persisted light/dark class before either stylesheet loads. React primitives live in `src/components/ui/`; Django modules provide ordinary CSS components without assuming Tailwind utility classes are emitted for module templates.
 
-**SPA side** — Tailwind plus shadcn/ui conventions. Design tokens are HSL custom properties on `:root` in `frontend/src/index.css` (`--background`, `--primary`, `--border`, `--radius`, chart and sidebar ramps), consumed by `tailwind.config.js` via `hsl(var(--token))`. Dark mode is class-based. Primitives live in `src/components/ui/` and are shared across all SPA pages. **This is the system of record for SPA styling; new SPA UI uses these tokens and primitives rather than ad-hoc CSS.**
-
-**Server-rendered side** — no shared system. Current state:
+Current server-rendered surfaces:
 
 | Surface | Styling |
 | --- | --- |
-| `auth` | Extends `base.html`, adds `quickscale_modules_auth/css/auth.css` via `{{ block.super }}` — **the reference pattern** |
+| `auth` | Extends `base.html`, adds token-based `quickscale_modules_auth/css/auth.css` via `{{ block.super }}` — **the reference pattern** |
+| `billing` | Extends `base.html`; all pricing, dashboard, checkout-return, and portal-return pages use token-based `billing.css` |
 | `blog` | Extends `base.html`; content-only `blog.css`; children fill `{% block blog_content %}` |
 | `listings` | Extends `base.html`; content-only `listings.css`; children fill `{% block listings_content %}` |
 | `crm` | Extends `base.html`; content-only `crm.css`; children fill `{% block crm_content %}` |
-| `orgs`, `billing`, `backups` | Module templates under the project/admin shells |
+| `orgs`, `backups` | Module templates under the project/admin shells |
 | `notifications` | Email bodies — intentionally self-contained; email clients require inlined styles |
 
 **Every server-rendered module surface extends `base.html`.** The shell — reset, `body`, topbar, `<main>`, messages, footer, link colour — is defined once in `base.html` and never restated by a module.
@@ -197,11 +198,11 @@ The pattern, established by `auth` and now used by `blog`, `listings`, and `crm`
 
 Two constraints make this work:
 
-1. **The module base occupies `{% block content %}`, so child templates fill a module-specific block** (`blog_content`, `listings_content`, `crm_content`, `auth_content`) rather than `content`.
+1. **The module base occupies `{% block content %}`, so child templates fill a module-specific block** (`auth_content`, `billing_content`, `blog_content`, `listings_content`, `crm_content`) rather than `content`.
 2. **Only blocks that `base.html` already defines may be used** — `title`, `extra_css`, `content`, `extra_js`. `templates/base.html` is user-owned **category U3** ([generated_file_ownership.md](generated_file_ownership.md)) and is never rewritten by `quickscale update` ([user_manual.md](user_manual.md#what-quickscale-update-changes-and-what-stays-yours)), so a module template that depends on a *new* block would silently render nothing on any already-generated project — Django ignores a child block the parent does not define. This is the [arch-audit.md](../others/arch-audit.md) frozen-emitted-file hazard in miniature; the rule avoids it entirely.
 3. **The module base wraps the child block in a `<div class="<name>-content">`.** `base.html` applies a `*, *::before, *::after { margin: 0; padding: 0 }` reset, so module content written as plain semantic HTML (`<article>`, `<h1>`, `<p>`) has **no default spacing**. The wrapper gives the module stylesheet a scope to restore its own vertical rhythm without leaking rules into the shell or other modules. `auth` uses `.auth-container` / `.auth-main` for the same purpose.
 
-A module stylesheet therefore contains **content styling only**. If a rule would style the page shell, it belongs in `base.html`, not in the module. This is the split [user_manual.md](user_manual.md#what-quickscale-update-changes-and-what-stays-yours) already promises project owners: *change the look — colors, fonts, header — in your `base.html`, and leave each page's own styling to the module so updates keep delivering it.*
+A module stylesheet therefore contains **content styling only** and reads the project tokens instead of declaring colors or radii. If a rule would style the page shell, it belongs in `base.html`, not in the module. This is the split [user_manual.md](user_manual.md#what-quickscale-update-changes-and-what-stays-yours) already promises project owners: *change the look — colors, fonts, header — through the project token source and `base.html`, and leave each page's own styling to the module so updates keep delivering it.*
 
 The authoritative statement of both rules is [decisions.md § Module Implementation Requirements](decisions.md#module-implementation-checklist).
 
@@ -223,7 +224,7 @@ Each module surface is in one of three states, and **this is the most important 
 | **Launcher** | React page is a description and a set of links out to the server-rendered surface and Django admin | `blog`, `listings` |
 | **Server-only** | No SPA page; Django templates are the whole UI | `billing`, `auth`, `orgs` (solo mode), `backups` |
 
-`blog` and `listings` consequently have two user-facing presentations in two different visual languages. This is a known inconsistency, recorded here rather than resolved.
+`blog` and `listings` consequently have two user-facing presentations for different jobs, while both now read the same project design tokens.
 
 ### Public non-SPA React surfaces
 
@@ -261,8 +262,7 @@ Each module surface is in one of three states, and **this is the most important 
 
 Recorded so they are not rediscovered as surprises. None of these are settled decisions; they are the current state.
 
-- **Two presentations for one module.** `blog` and `listings` have both a React launcher page and a server-rendered UI, styled differently.
-- **SPA and server-rendered surfaces are styled by two independent systems.** Server pages now share one shell, but its palette is hardcoded in `base.html.j2`, while the SPA has a full token set in `index.css`. The two are not connected, so the same product has two visual languages. Unifying them is a product decision, not a cleanup.
+- **Two presentations for one module.** `blog` and `listings` have both a React launcher page and a server-rendered UI, even though they now share design tokens.
 - **Module name list duplicated in three files** (`index.html.j2`, `useModules.ts`, `validateQuickScaleSeam.ts`), with no gate binding them together.
 - **Vite dev proxy duplicates the URL-ownership table** with no gate binding them together.
 - **`manifest: true` is emitted but unused**, leaving the unhashed-filename convention as the only thing keeping `{% static %}` references valid.

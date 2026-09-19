@@ -353,7 +353,7 @@ project.
 | `modules/<name>/` — module code, including its Django templates and static files | Yes | Local edits here are unsupported and must be reconciled by hand on every update. |
 | Managed wiring — `<package>/settings/modules.py` and `<package>/urls_modules.py` | Yes | QuickScale-owned; never edit them. |
 | `frontend/` — the React app | Never | Copied once at generation. New theme features reach existing projects only by manual adoption or migration. |
-| `templates/` — generated `base.html`, error pages, and any overrides of module templates | Never | Module pages extend your `base.html`, so shell changes in new releases arrive as manual adoption steps. An override hides every later change to the module template it replaces. |
+| `templates/` — generated `base.html`, error pages, and any overrides of module templates | Never | Module pages extend your `base.html`, which loads the token source from Vite in DEBUG and the compiled React stylesheet otherwise; shell changes in new releases arrive as manual adoption steps. An override hides every later change to the module template it replaces. |
 | Other generated files (`settings/base.py`, `Dockerfile`, `start.sh`, CI) | Never | Changes arrive as documented adoption steps; `quickscale status` reports contract-vintage gaps. |
 | Project-owned apps (for example a `properties` app) | Never | Yours entirely. |
 
@@ -368,6 +368,34 @@ After completing every named adoption step, repeat the command with
 `--acknowledge-contract-vintage`. The acknowledgement applies only to that invocation; it neither
 rewrites generated files nor advances `project_contract`. Review the steps again after a later
 vintage increase.
+
+For the shared-design vintage used by auth, billing, blog, CRM, and listings, adopt all of the
+following project-owned generated-file changes before using
+`--acknowledge-contract-vintage`:
+
+1. Compare and adopt the current `templates/base.html`, `templates/index.html`, and generated
+   `templates/social/*.html` files. Together they select the live DEBUG Vite token source or the
+   production `frontend/assets/index.css` build without letting a child host override the shell's
+   choice; `base.html` also restores the persisted theme before paint.
+2. Compare and adopt the current `frontend/vite.config.ts` static proxy rule. Vite must serve
+   `/static/frontend/` itself while forwarding other Django-owned `/static` paths to Django.
+3. Compare and adopt the current `<package>/settings/local.py` definitions of
+   `QUICKSCALE_FRONTEND_HOST_PORT` and `QUICKSCALE_FRONTEND_ORIGIN`. Django uses the full
+   browser-visible Vite origin when it renders the DEBUG stylesheet URL for both React and module
+   pages.
+4. Compare and adopt the current `docker-compose.yml` frontend workflow. It runs `pnpm build`
+   before `pnpm dev`, publishes `${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173`, passes the port and
+   optional full origin to Django, and waits for the Vite-served stylesheet before the backend
+   starts.
+5. With DEBUG enabled, run `pnpm dev` in `frontend/`. For non-DEBUG deployments, run `pnpm build`
+   so `static/frontend/assets/index.css` exists.
+
+Both stylesheet paths originate from the project-owned `frontend/src/index.css`: change colors and
+radii there once, then keep Vite running for local development or rebuild for deployment. Module
+styles consume those variables and do not require Tailwind to scan module templates. The default
+browser-facing Vite port remains 5173; set `QUICKSCALE_FRONTEND_HOST_PORT` when Docker must publish
+a different host port. Set `QUICKSCALE_FRONTEND_ORIGIN` to the full origin when the browser reaches
+Vite through another hostname or an HTTPS development tunnel.
 
 **Keeping the frontend separate from updates.** It already is: `frontend/` is your code and no
 QuickScale command rewrites it. What can still change under it is the backend it calls — module API
@@ -385,14 +413,15 @@ module template into the project's `templates/` directory at the same relative p
 searches `templates/` before module templates, so your copy wins. The cost is drift: your copy no
 longer receives the module's fixes to that template, including security and accessibility fixes,
 and nothing warns you. Override as few templates as possible, keep a list of them, and do not
-override a template only to restyle it. Module pages extend your `base.html`, so change the look —
-colors, fonts, header — there, and leave each page's own styling to the module so updates keep
-delivering it.
+override a template only to restyle it. Module pages extend your `base.html`, so change shared
+colors and radii in `frontend/src/index.css`, change shell structure in `base.html`, run `pnpm dev`
+for DEBUG development or rebuild for deployment, and leave each page's own styling to the module
+so updates keep delivering it.
 
 When you override a module *page* template, copy its block structure exactly. A module page fills a
-module-named block — `blog_content`, `listings_content`, `crm_content`, `auth_content` — not
-`content`, which the module's own base template occupies. An override left on `{% block content %}`
-parses without error and renders nothing.
+module-named block — `auth_content`, `billing_content`, `blog_content`, `listings_content`, or
+`crm_content` — not `content`, which the module's own base template occupies. An override left on
+`{% block content %}` parses without error and renders nothing.
 
 **After every update:**
 

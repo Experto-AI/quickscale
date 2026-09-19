@@ -1,0 +1,399 @@
+/* Billing content styling. The project shell and design tokens come from base.html. */
+
+.billing-content,
+.billing-content *,
+.billing-content *::before,
+.billing-content *::after {
+    box-sizing: border-box;
+}
+
+.billing-content {
+    color: hsl(var(--foreground));
+}
+
+.billing-content a {
+    color: inherit;
+}
+
+.billing-content button {
+    font: inherit;
+}
+
+.billing-pricing,
+.billing-content .page-shell {
+    width: min(100%, 1120px);
+    margin: 0 auto;
+}
+
+.billing-pricing__hero,
+.billing-content .summary-card,
+.billing-content .detail-card,
+.billing-pricing__group,
+.billing-pricing__empty-state,
+.billing-content .status-card {
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) + 0.75rem);
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    box-shadow: 0 1.5rem 3.75rem hsl(var(--foreground) / 0.1);
+}
+
+.billing-pricing__hero {
+    display: grid;
+    gap: 1rem;
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    margin-bottom: 2rem;
+    background: hsl(var(--secondary));
+}
+
+.billing-pricing__eyebrow,
+.billing-content .eyebrow {
+    margin: 0;
+    color: hsl(var(--primary));
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.billing-pricing__title,
+.billing-content .hero h1 {
+    margin: 0;
+    font-size: clamp(2.3rem, 4vw, 4rem);
+    line-height: 1;
+}
+
+.billing-pricing__copy,
+.billing-pricing__note,
+.billing-pricing__footer-copy,
+.billing-pricing__plan-meta,
+.billing-pricing__plan-copy,
+.billing-pricing__empty-state p,
+.billing-content .hero p,
+.billing-content .summary-copy,
+.billing-content .detail-copy,
+.billing-content .inline-note,
+.billing-content .transaction-description,
+.billing-content .status-card p {
+    margin: 0;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.65;
+}
+
+.billing-pricing__copy {
+    max-width: 44rem;
+    font-size: 1.05rem;
+    line-height: 1.7;
+}
+
+.billing-pricing__note,
+.billing-content .hero-note {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    background: hsl(var(--primary) / 0.12);
+    color: hsl(var(--primary));
+    font-weight: 600;
+}
+
+.billing-pricing__groups {
+    display: grid;
+    gap: 1.75rem;
+}
+
+.billing-pricing__group {
+    padding: 1.6rem;
+}
+
+.billing-pricing__empty-state {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1.35rem;
+}
+
+.billing-pricing__group-header,
+.billing-content .section-header {
+    display: grid;
+    gap: 0.4rem;
+    margin-bottom: 1.4rem;
+}
+
+.billing-pricing__group-title,
+.billing-pricing__empty-state h2,
+.billing-content .summary-card h2,
+.billing-content .detail-card h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.billing-pricing__grid,
+.billing-content .overview-grid,
+.billing-content .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.billing-content .overview-grid {
+    margin-bottom: 1rem;
+}
+
+.billing-pricing__card,
+.billing-content .detail-item {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1.35rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) + 0.25rem);
+    background: hsl(var(--background));
+}
+
+.billing-pricing__card h3 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.billing-pricing__price,
+.billing-content .balance-value {
+    margin: 0;
+    font-size: clamp(2rem, 5vw, 4rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+}
+
+.billing-pricing__actions,
+.billing-content .button-row,
+.billing-content .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.billing-pricing__actions {
+    margin-top: 0.25rem;
+}
+
+.billing-pricing__button,
+.billing-content .button {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 2.9rem;
+    padding: 0.85rem 1.2rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    transition: filter 0.2s ease;
+}
+
+.billing-pricing__button--primary,
+.billing-content .button-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.billing-content .button-secondary {
+    border-color: hsl(var(--border));
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+}
+
+.billing-pricing__button:hover,
+.billing-pricing__button:focus-visible,
+.billing-content .button:hover,
+.billing-content .button:focus-visible {
+    filter: brightness(0.92);
+    text-decoration: none;
+}
+
+.billing-pricing__footer {
+    margin-top: 1.75rem;
+    padding: 1.2rem 1.35rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) + 0.25rem);
+    background: hsl(var(--muted));
+}
+
+.billing-pricing__footer a,
+.billing-content .inline-link,
+.billing-content .balance-caption {
+    color: hsl(var(--primary));
+    font-weight: 700;
+}
+
+.billing-content .hero {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.billing-content .summary-card,
+.billing-content .detail-card {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.billing-content .balance-caption,
+.billing-content .detail-label,
+.billing-content .detail-value {
+    margin: 0;
+}
+
+.billing-content .status-badge,
+.billing-content .type-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    min-height: 2rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.billing-content .status-badge-active,
+.billing-content .status-badge-trialing,
+.billing-content .type-plan,
+.billing-content .type-purchase {
+    background: hsl(var(--primary) / 0.12);
+    color: hsl(var(--primary));
+}
+
+.billing-content .status-badge-past_due,
+.billing-content .status-badge-unpaid,
+.billing-content .status-badge-paused,
+.billing-content .type-usage,
+.billing-content .type-adjustment {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+}
+
+.billing-content .status-badge-canceled,
+.billing-content .status-badge-incomplete,
+.billing-content .status-badge-incomplete_expired,
+.billing-content .type-refund {
+    background: hsl(var(--destructive) / 0.12);
+    color: hsl(var(--destructive));
+}
+
+.billing-content .status-badge-none {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+}
+
+.billing-content .detail-label {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.billing-content .detail-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.billing-content .table-shell {
+    overflow-x: auto;
+}
+
+.billing-content table {
+    width: 100%;
+    min-width: 620px;
+    border-collapse: collapse;
+}
+
+.billing-content th,
+.billing-content td {
+    padding: 0.95rem 0.85rem;
+    border-top: 1px solid hsl(var(--border));
+    text-align: left;
+    vertical-align: top;
+}
+
+.billing-content th {
+    border-top: none;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.billing-content .amount-cell,
+.billing-content .balance-cell {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.billing-content .empty-row {
+    color: hsl(var(--muted-foreground));
+    text-align: center;
+}
+
+.billing-content .status-page {
+    display: grid;
+    place-items: center;
+    min-height: 30rem;
+}
+
+.billing-content .status-card {
+    width: min(100%, 34rem);
+    padding: 2.2rem;
+    text-align: center;
+}
+
+.billing-content .status-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 4rem;
+    height: 4rem;
+    margin-bottom: 1rem;
+    border-radius: 999px;
+    background: hsl(var(--primary) / 0.12);
+    color: hsl(var(--primary));
+    font-weight: 800;
+}
+
+.billing-content [data-subscription-status="cancel"] .status-icon,
+.billing-content [data-purchase-status="cancel"] .status-icon {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+}
+
+.billing-content .status-card h1 {
+    margin: 0 0 0.85rem;
+    font-size: clamp(2rem, 4vw, 2.8rem);
+}
+
+.billing-content .status-note {
+    margin-top: 0.75rem;
+}
+
+.billing-content .actions {
+    justify-content: center;
+    margin-top: 1.6rem;
+}
+
+@media (max-width: 640px) {
+    .billing-pricing__hero,
+    .billing-pricing__group,
+    .billing-pricing__empty-state,
+    .billing-content .summary-card,
+    .billing-content .detail-card,
+    .billing-content .status-card {
+        padding: 1.15rem;
+    }
+
+    .billing-content table {
+        min-width: 540px;
+    }
+}

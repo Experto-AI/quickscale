@@ -20,6 +20,22 @@ from .base import *  # noqa: F403, F405
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+# Browser-facing Vite port. Docker/E2E can remap the host publication while
+# Vite continues to listen on its container-internal port.
+QUICKSCALE_FRONTEND_HOST_PORT = config(
+    "QUICKSCALE_FRONTEND_HOST_PORT",
+    default=5173,
+    cast=int,
+)
+
+# Full browser-visible Vite origin. Override this for remote development or an
+# HTTPS tunnel; an empty value keeps the localhost origin derived from the
+# published host port above.
+_quickscale_frontend_origin = config("QUICKSCALE_FRONTEND_ORIGIN", default="").strip()
+QUICKSCALE_FRONTEND_ORIGIN = (
+    _quickscale_frontend_origin or f"http://localhost:{QUICKSCALE_FRONTEND_HOST_PORT}"
+).rstrip("/")
+
 # Allow all hosts in development (including Docker containers running on 0.0.0.0)
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "*"]
 

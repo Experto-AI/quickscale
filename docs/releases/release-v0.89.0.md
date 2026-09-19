@@ -18,12 +18,13 @@ Organization purge now refuses to remove local data while a current Stripe-backe
 still exists. The command and its dry run list the live Stripe subscription IDs so the operator can
 cancel them before retrying.
 
-Server-rendered module pages share one page shell. The blog, listings, and CRM base templates
-extend the project's `base.html` rather than emitting their own HTML document, so those pages
-inherit the site topbar, messages, and footer instead of restating a shell each. The frontend
-architecture this depends on — the `window.__QUICKSCALE__` seam, URL ownership between the React
-shell and module routes, the static pipeline, and the template-inheritance rule — is now written
-down in `docs/technical/frontend.md`.
+Server-rendered auth, billing, blog, listings, and CRM pages now share the generated React theme's
+design tokens and page shell. Their templates preserve Django-owned forms, URLs, sessions, and
+module behavior while using the same colors, radii, controls, and light/dark state as the React
+surface. DEBUG pages load `frontend/src/index.css` from Vite; non-DEBUG pages load the compiled
+`static/frontend/assets/index.css`. The frontend architecture this depends on — the
+`window.__QUICKSCALE__` seam, URL ownership between the React shell and module routes, the static
+pipeline, and the template-inheritance rule — is documented in `docs/technical/frontend.md`.
 
 ## Adoption
 
@@ -32,18 +33,21 @@ initial migration to install the exact pair required by isolation checks: one te
 policy and its `<base>_select` operator-read `FOR SELECT` policy. A project-owned `AbstractListing`
 subclass declares both the tenant-scoped and super-scope managers before running those checks.
 
-A project that has **overridden** `quickscale_modules_blog/blog/*.html`,
-`quickscale_modules_listings/listings/*.html`, or `quickscale_modules_crm/crm/*.html` renames the
-content block in its override to the module block — `blog_content`, `listings_content`, or
-`crm_content`. An override left on `{% block content %}` renders empty, because the module base
-template now occupies that block itself. A project that overrode a module *base* template keeps
-its standalone document and is unaffected until it adopts the new base.
+Existing projects that install or update auth, billing, blog, listings, or CRM must manually adopt
+the current generated `templates/base.html`, `templates/index.html`, generated
+`templates/social/*.html` files, `frontend/vite.config.ts`, `<package>/settings/local.py`, and
+`docker-compose.yml` before acknowledging the v0.89.0 contract vintage. Together those files load
+the canonical token stylesheet, keep Django-owned static paths on Django, expose the browser-facing
+Vite port and optional full origin to Django, make React and module pages use the same live DEBUG
+stylesheet, build assets before starting Vite, and wait for the stylesheet before starting the
+backend. Run `pnpm dev` for DEBUG pages and run
+`pnpm build` before serving non-DEBUG pages. `quickscale update` and existing-project
+`quickscale apply` do not rewrite these project-owned files.
 
-New server-rendered module surfaces extend `base.html` and use only the blocks it already defines
-(`title`, `extra_css`, `content`, `extra_js`), so they render correctly in projects generated
-before this release. They wrap their page content in a `<div class="<module>-content">` and scope
-the module stylesheet's spacing rules to it, because `base.html` applies a reset that zeroes
-default margins.
+A project that has overridden module page templates must also retain the current module block
+structure — including `auth_content`, `billing_content`, `blog_content`, `listings_content`, or
+`crm_content` where applicable — and compare each override with the current module template. An
+override left on the wrong block can parse without error and render no page content.
 
 ## Compatibility
 
@@ -52,11 +56,13 @@ existing organization ownership and FORCE RLS requirements in place without chan
 or upgrade requirements. Organization purge adds a fail-closed precondition but no new command-line
 option; cancelled subscriptions and current rows without a Stripe subscription ID remain purgeable.
 
-The shared-shell change is **breaking for template overrides only**, in the way described under
-Adoption; module Python APIs, URLs, and settings are unchanged. Blog and listings stylesheets keep
-their existing rules; CRM page styling moved from an inline `<style>` block to
-`quickscale_modules_crm/crm.css`, so a project that copied those inline rules keeps its copy and
-takes no action.
+The shared-design change is an existing-project generated-file compatibility boundary, not only a
+template-override change. Module Python APIs, URLs, form fields, sessions, and settings consumed by
+the modules are unchanged, but DEBUG pages now require the generated shell, local Vite port/origin
+settings, Vite static routing, and Compose frontend workflow described under Adoption. Contract
+vintage enforcement blocks old or unknown projects before mutation; passing
+`--acknowledge-contract-vintage` confirms that the operator completed every listed manual step and
+does not update those files automatically.
 
 This maintenance release adds maintainer-only beta-migration compatibility validation and
 mode-specific runtime provenance to report output; incompatible launcher, settings, and package
@@ -66,15 +72,17 @@ generated-project output, public package APIs, or upgrade requirements.
 
 ## Validation
 
-The task-tier validation command for this prepared capability is:
+The task-tier and release-tier validation commands for this prepared capability are:
 
 ```text
 make check QUIET=1
+make ci-e2e
+make release-gate
 ```
 
-This task-tier gate includes the registered beta-migration generated-project smoke check, its CLI
-regression suite, and repository gate-parity checks. This note does not claim release-tier
-validation, publication, or a v0.89.0 tag.
+The task-tier gate includes the registered beta-migration generated-project smoke check, its CLI
+regression suite, and repository gate-parity checks. This note does not claim completed
+release-tier validation, publication, or a v0.89.0 tag.
 
 ## Deferred scope
 

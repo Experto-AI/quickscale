@@ -39,13 +39,32 @@ RUNTIME_DATABASE_URL= poetry run python manage.py migrate
 # 4. Create a superuser (optional)
 poetry run python manage.py createsuperuser
 
-# 5. Run the development server
+# 5. Build the Django-served SPA JavaScript, then keep Vite running for live styles
+pnpm --dir frontend build && pnpm --dir frontend dev
+```
+
+In a second terminal, from the project root:
+
+```bash
+# 6. Run the Django development server
 poetry run python manage.py runserver
 ```
 
-`make setup` installs frontend dependencies only when `frontend/package.json` exists.
+`make setup` installs frontend dependencies only when `frontend/package.json` exists. The initial
+build materializes the React JavaScript that Django serves on port 8000; keep both development
+servers running so the React shell and Django-rendered pages load the same live token stylesheet
+from Vite on browser-facing port 5173 by default. Native Vite startup fails explicitly if port 5173
+is occupied instead of silently selecting a port that Django does not use.
 
 Visit http://127.0.0.1:8000 to see your application.
+
+The Compose frontend service builds the Django-served React JavaScript, then keeps Vite running and
+exposes port 5173 so every DEBUG page can load the shared token stylesheet. To use another host
+port, set `QUICKSCALE_FRONTEND_HOST_PORT` before starting Compose. When opening Django through
+another hostname or an HTTPS tunnel, also set `QUICKSCALE_FRONTEND_ORIGIN` to the full
+browser-visible Vite origin, such as `http://192.168.1.20:5173` or an HTTPS Vite tunnel URL. Compose
+passes the configured origin to Vite's exact-host allowlist and passes both values to Django; the
+backend waits until the Vite stylesheet is healthy before it starts.
 
 ### ⚠️ Auth Module Timing
 
@@ -402,7 +421,9 @@ python manage.py <command>
 # Collect static files
 poetry run python manage.py collectstatic --noinput
 
-# In development, Django serves static files automatically
+# In development, Django serves backend static files automatically
+# Build the Django-served React JavaScript, then keep Vite running for shared tokens
+pnpm --dir frontend build && pnpm --dir frontend dev
 # In production, WhiteNoise handles static files
 ```
 

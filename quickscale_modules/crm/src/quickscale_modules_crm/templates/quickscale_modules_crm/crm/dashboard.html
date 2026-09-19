@@ -52,7 +52,7 @@
     {% endif %}
 </section>
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+<div class="recent-grid">
     <section class="card">
         <h2>Recent Contacts</h2>
         {% if recent_contacts %}
@@ -106,10 +106,10 @@
     </section>
 </div>
 
-<section class="card" style="margin-top: 1rem;">
+<section class="card api-card">
     <h2>API Endpoints</h2>
     <p>The CRM module provides a REST API for managing your CRM data:</p>
-    <ul style="margin: 1rem 0; padding-left: 2rem;">
+    <ul class="api-list">
         <li><code>GET/POST {{ crm_api_prefix }}contacts/</code> - List/Create contacts</li>
         <li><code>GET/POST {{ crm_api_prefix }}companies/</code> - List/Create companies</li>
         <li><code>GET/POST {{ crm_api_prefix }}deals/</code> - List/Create deals</li>

@@ -37,11 +37,22 @@ services:
     working_dir: /app/frontend
     environment:
       - HOME=/tmp
+      - QUICKSCALE_FRONTEND_ORIGIN=${QUICKSCALE_FRONTEND_ORIGIN:-}
     # Use corepack without `enable` because this container runs as non-root.
     # `corepack enable` writes to /usr/local/bin and fails with EACCES.
-    command: sh -c "corepack pnpm install --no-frozen-lockfile && corepack pnpm run build"
+    command: sh -c "corepack pnpm install --no-frozen-lockfile && corepack pnpm run build && corepack pnpm run dev --host 0.0.0.0"
     volumes:
       - .:/app
+    ports:
+      # Test lanes override only the host publication to avoid cross-run collisions.
+      - "${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5173/static/frontend/src/index.css').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 5s
+      timeout: 3s
+      # Cold dependency downloads can exceed two minutes on constrained links.
+      retries: 120
+      start_period: 10s
 {% endif %}
 
   backend:
@@ -72,12 +83,14 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ package_name }}
       - RUNTIME_DATABASE_URL=postgresql://{{ runtime_db_role }}:{{ runtime_db_password }}@db:5432/{{ package_name }}
       - PORT=${PORT:-8000}
+      - QUICKSCALE_FRONTEND_HOST_PORT=${QUICKSCALE_FRONTEND_HOST_PORT:-5173}
+      - QUICKSCALE_FRONTEND_ORIGIN=${QUICKSCALE_FRONTEND_ORIGIN:-}
     depends_on:
       db:
         condition: service_healthy
 {% if theme == 'showcase_react' %}
       frontend:
-        condition: service_completed_successfully
+        condition: service_healthy
 {% endif %}
 
 volumes:

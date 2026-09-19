@@ -240,6 +240,7 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "frontend/src/test/App.test.tsx",
     "frontend/src/test/csrf.test.tsx",
     "frontend/src/test/validateQuickScaleSeam.test.ts",
+    "frontend/src/test/viteAssetRouting.test.ts",
     "frontend/src/test/RootDispatch.test.tsx",
     "frontend/src/test/PublicSocialPages.test.tsx",
     "frontend/e2e/home.spec.ts",

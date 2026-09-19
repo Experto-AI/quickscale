@@ -1394,7 +1394,7 @@ applied = [
     if any(item["label"] == app for item in app_configs)
 ]
 migration_files = []
-for path in sorted(embedded_root.glob("*/**/migrations/0001_initial.py")):
+for path in sorted(embedded_root.glob("*/src/*/migrations/0001_initial.py")):
     migration_files.append(str(path.relative_to(project_root)))
 
 manifest_settings = {
