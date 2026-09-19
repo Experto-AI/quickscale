@@ -21,6 +21,17 @@
 
 .listings-nav {
     margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid hsl(var(--border));
+}
+
+.listings-nav a {
+    display: inline-flex;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    font-weight: 600;
 }
 
 .listings-content h1 {
@@ -53,12 +64,40 @@
 .listings-content section + section {
     margin-top: 2rem;
     padding-top: 2rem;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid hsl(var(--border));
 }
 
 .listings-content img {
     max-width: 100%;
     height: auto;
-    border-radius: 0.5rem;
+    border-radius: var(--radius);
     margin-bottom: 1rem;
+}
+
+.listings-content article,
+.listings-content form,
+.listings-content section {
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) + 0.25rem);
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+}
+
+.listings-content input,
+.listings-content select {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid hsl(var(--input));
+    border-radius: var(--radius);
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+}
+
+.listings-content button {
+    padding: 0.6rem 1rem;
+    border: 1px solid hsl(var(--primary));
+    border-radius: var(--radius);
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    cursor: pointer;
 }
