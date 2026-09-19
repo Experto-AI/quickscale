@@ -64,6 +64,18 @@ class TestTemplateCSSLoading:
         assert 'data-auth-view="login"' in content
         assert 'class="auth-login"' in content
         assert "auth-form-container--login" in content
+        assert 'type="checkbox"' in content
+
+        from pathlib import Path
+        import quickscale_modules_auth
+
+        module_path = Path(quickscale_modules_auth.__file__).parent
+        auth_css = (
+            module_path / "static" / "quickscale_modules_auth" / "css" / "auth.css"
+        ).read_text()
+        assert (
+            '.form-group input:not([type="checkbox"]):not([type="radio"])' in auth_css
+        )
 
     def test_css_loading_order_in_module_templates(self, authenticated_client):
         """Test that main CSS loads before auth CSS in our module templates"""
