@@ -41,6 +41,15 @@ dependencies:
   - djangorestframework>=3.17.2
   - django-filter>=26.1
 
+contract_vintage:
+  minimum: "0.89.0"
+  manual_adoption_steps:
+    - "Compare and manually adopt the current templates/base.html, templates/index.html, and generated templates/social/*.html files so every DEBUG host loads the Vite-served /static/frontend/src/index.css, production loads frontend/assets/index.css, and the shell restores the persisted theme."
+    - "Compare and manually adopt the current frontend/vite.config.ts static proxy rule so Vite serves /static/frontend/ directly instead of forwarding that path to Django."
+    - "Compare and manually adopt the current <package>/settings/local.py QUICKSCALE_FRONTEND_HOST_PORT and QUICKSCALE_FRONTEND_ORIGIN settings so DEBUG React and module pages use the same browser-visible Vite stylesheet URL."
+    - "Compare and manually adopt the current docker-compose.yml frontend workflow so it builds assets before starting Vite, publishes ${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173, passes the port and optional full origin to Django, and waits for the Vite-served stylesheet."
+    - "Run pnpm dev alongside Django for DEBUG module pages; run pnpm build so static/frontend/assets/index.css exists before serving non-DEBUG module pages."
+
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)
 # ---------------------------------------------------------------------------
