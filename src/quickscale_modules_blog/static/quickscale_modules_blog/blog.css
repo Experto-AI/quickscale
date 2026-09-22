@@ -71,6 +71,16 @@
     padding-left: 1.25rem;
 }
 
+.blog-markdown-content ul,
+.blog-content ul {
+    list-style: disc;
+}
+
+.blog-markdown-content ol,
+.blog-content ol {
+    list-style: decimal;
+}
+
 .blog-content article + article {
     margin-top: 2rem;
     padding-top: 2rem;

@@ -5,6 +5,9 @@ import tempfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+SHARED_TEST_TEMPLATES = (
+    Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
+)
 
 # SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
@@ -48,7 +51,7 @@ ROOT_URLCONF = "tests.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "tests" / "templates"],
+        "DIRS": [SHARED_TEST_TEMPLATES],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
