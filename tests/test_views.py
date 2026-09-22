@@ -1,6 +1,6 @@
 """Unit tests for CRM module API views"""
 
-import os
+from pathlib import Path
 
 import pytest
 from django.conf import settings
@@ -28,7 +28,7 @@ DASHBOARD_SAAS_TEST_MIDDLEWARE = [
 DASHBOARD_TEST_TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [os.path.join(os.path.dirname(__file__), "templates")],
+        "DIRS": [Path(__file__).resolve().parents[3] / "tests_shared" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
