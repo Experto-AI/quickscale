@@ -398,10 +398,9 @@ class CreditBalanceView(APIView):
         if access_denied:
             return Response(status=403)
 
-        balance, _ = CreditBalance.all_objects.get_or_create(
-            organization=organization,
-            defaults={"balance": 0},
-        )
+        balance = CreditBalance.all_objects.filter(organization=organization).first()
+        if balance is None:
+            balance = CreditBalance(organization=organization, balance=0)
         serializer = CreditBalanceSerializer(balance)
         return Response(serializer.data)
 
@@ -526,10 +525,9 @@ class BillingDashboardView(LoginRequiredMixin, TemplateView):
         if organization is None:
             return context
 
-        balance, _ = CreditBalance.all_objects.get_or_create(
-            organization=organization,
-            defaults={"balance": 0},
-        )
+        balance = CreditBalance.all_objects.filter(organization=organization).first()
+        if balance is None:
+            balance = CreditBalance(organization=organization, balance=0)
         recent_transactions = list(
             CreditTransaction.all_objects.filter(organization=organization).order_by(
                 "-created_at",

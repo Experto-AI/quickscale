@@ -14,6 +14,7 @@ from quickscale_modules_billing.admin import (
     CreditBalanceAdmin,
     CreditTransactionAdmin,
     PlanAdmin,
+    PurchaseCheckoutAdmin,
     SubscriptionAdmin,
     WebhookEventAdmin,
 )
@@ -21,6 +22,7 @@ from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
     Plan,
+    PurchaseCheckout,
     Subscription,
     WebhookEvent,
 )
@@ -58,12 +60,17 @@ def _webhook_event_admin() -> WebhookEventAdmin:
     return cast(WebhookEventAdmin, admin.site._registry[WebhookEvent])
 
 
+def _purchase_checkout_admin() -> PurchaseCheckoutAdmin:
+    return cast(PurchaseCheckoutAdmin, admin.site._registry[PurchaseCheckout])
+
+
 @pytest.mark.django_db
 class TestAdminRegistration:
     def test_models_are_registered(self) -> None:
         assert admin.site.is_registered(Plan)
         assert admin.site.is_registered(CreditBalance)
         assert admin.site.is_registered(CreditTransaction)
+        assert admin.site.is_registered(PurchaseCheckout)
         assert admin.site.is_registered(Subscription)
         assert admin.site.is_registered(WebhookEvent)
 
@@ -128,6 +135,18 @@ class TestReadOnlyAdminModels:
         model_field_names = [field.name for field in WebhookEvent._meta.fields]
 
         assert webhook_admin.has_add_permission(request) is False
+        assert set(model_field_names).issubset(set(readonly_fields))
+
+    def test_purchase_checkout_admin_is_read_only(self, superuser) -> None:
+        checkout_admin = _purchase_checkout_admin()
+        request = RequestFactory().get("/admin/")
+        request.user = superuser
+
+        readonly_fields = checkout_admin.get_readonly_fields(request)
+        model_field_names = [field.name for field in PurchaseCheckout._meta.fields]
+
+        assert checkout_admin.has_add_permission(request) is False
+        assert checkout_admin.has_delete_permission(request) is False
         assert set(model_field_names).issubset(set(readonly_fields))
 
 
@@ -222,3 +241,64 @@ class TestBillingAdminTenantScopedQueryset:
         qs = admin_instance.get_queryset(request)
         # With TenantManager, only the scoped org's subscription should appear
         assert qs.count() == 1
+
+    def test_subscription_admin_is_read_only(
+        self,
+        organization,
+        org_context,
+        superuser,
+    ) -> None:
+        """Provider state cannot be made terminal through local admin edits."""
+        from django.contrib.admin.sites import AdminSite
+
+        plan = Plan.objects.create(
+            name="Admin Lock Plan",
+            slug="admin-lock-plan",
+            stripe_price_id="price_admin_lock",
+            credits_per_period=100,
+            price_cents=1000,
+        )
+        subscription = Subscription.all_objects.create(
+            organization=organization,
+            plan=plan,
+            status=Subscription.Status.ACTIVE,
+        )
+        request = RequestFactory().get("/admin/")
+        request.user = superuser
+        admin_instance = SubscriptionAdmin(Subscription, AdminSite())
+        readonly_fields = admin_instance.get_readonly_fields(request, subscription)
+        model_field_names = [field.name for field in Subscription._meta.fields]
+
+        assert admin_instance.has_add_permission(request) is False
+        assert admin_instance.has_delete_permission(request, subscription) is False
+        assert set(model_field_names).issubset(set(readonly_fields))
+        assert "status" in readonly_fields
+        assert "stripe_subscription_id" in readonly_fields
+
+    def test_subscription_admin_forbids_delete_and_org_reassignment(
+        self,
+        organization,
+        org_context,
+        superuser,
+    ) -> None:
+        plan = Plan.objects.create(
+            name="Admin Immutable Org Plan",
+            slug="admin-immutable-org-plan",
+            stripe_price_id="price_admin_immutable_org",
+            credits_per_period=100,
+            price_cents=1000,
+        )
+        subscription = Subscription.all_objects.create(
+            organization=organization,
+            plan=plan,
+            status=Subscription.Status.ACTIVE,
+        )
+        request = RequestFactory().get("/admin/")
+        request.user = superuser
+        admin_instance = SubscriptionAdmin(Subscription, admin.site)
+
+        assert admin_instance.has_delete_permission(request, subscription) is False
+        assert "organization" in admin_instance.get_readonly_fields(
+            request,
+            subscription,
+        )

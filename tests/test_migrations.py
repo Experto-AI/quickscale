@@ -1,9 +1,9 @@
-"""Fresh-0001 contract tests for the Billing final-schema migration.
+"""Fresh-schema contract tests for the Billing migrations.
 
-Phase 3 SA92: verifies the consolidated 0001 migration applies cleanly,
+Verifies the current migration chain applies cleanly,
 produces the correct final unique constraints, and installs FORCE RLS
 on tenant-scoped billing tables (CreditBalance, CreditTransaction,
-Subscription) while system-wide tables (Plan, WebhookEvent) do not
+PurchaseCheckout, Subscription) while system-wide tables (Plan, WebhookEvent) do not
 receive RLS.
 """
 
@@ -20,7 +20,7 @@ pytestmark = [
 ]
 
 APP_LABEL = "quickscale_modules_billing"
-MIG_0001 = "0001_initial"
+MIG_LATEST = "0001_initial"
 
 # Dependencies for clean migration apply.
 ORGS_MIG_LATEST = ("quickscale_modules_orgs", "0001_initial")
@@ -133,9 +133,9 @@ _EXPECTED_PARTIAL_PREDICATES: dict[str, str] = {
 
 
 def test_initial_migration_applies_cleanly() -> None:
-    """The consolidated 0001 migration applies cleanly from a fresh state."""
+    """The current migration chain applies cleanly from a fresh state."""
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
     applied_migrations = executor.loader.applied_migrations
     billing_migrations = [m for m in applied_migrations if m[0] == APP_LABEL]
@@ -151,9 +151,9 @@ def test_subscription_unique_stripe_subscription_id_constraint() -> None:
     """The ``quickscale_billing_unique_stripe_subscription_id_when_populated``
     partial unique constraint exists on Subscription."""
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
-    apps = executor.loader.project_state([(APP_LABEL, MIG_0001)]).apps
+    apps = executor.loader.project_state([(APP_LABEL, MIG_LATEST)]).apps
     Subscription = apps.get_model(APP_LABEL, "Subscription")
     constraint_names = {c.name for c in Subscription._meta.constraints}
 
@@ -170,9 +170,9 @@ def test_subscription_unique_checkout_session_id_constraint() -> None:
     """The ``quickscale_billing_unique_stripe_checkout_session_id_present``
     partial unique constraint exists on Subscription."""
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
-    apps = executor.loader.project_state([(APP_LABEL, MIG_0001)]).apps
+    apps = executor.loader.project_state([(APP_LABEL, MIG_LATEST)]).apps
     Subscription = apps.get_model(APP_LABEL, "Subscription")
     constraint_names = {c.name for c in Subscription._meta.constraints}
 
@@ -189,9 +189,9 @@ def test_subscription_unique_current_per_org_constraint() -> None:
     """The ``quickscale_billing_unique_current_subscription_per_organization``
     partial unique constraint exists on Subscription."""
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
-    apps = executor.loader.project_state([(APP_LABEL, MIG_0001)]).apps
+    apps = executor.loader.project_state([(APP_LABEL, MIG_LATEST)]).apps
     Subscription = apps.get_model(APP_LABEL, "Subscription")
     constraint_names = {c.name for c in Subscription._meta.constraints}
 
@@ -208,9 +208,9 @@ def test_credittransaction_unique_stripe_event_per_type_constraint() -> None:
     """The ``quickscale_billing_unique_stripe_event_id_per_type`` partial
     unique constraint exists on CreditTransaction."""
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
-    apps = executor.loader.project_state([(APP_LABEL, MIG_0001)]).apps
+    apps = executor.loader.project_state([(APP_LABEL, MIG_LATEST)]).apps
     CreditTransaction = apps.get_model(APP_LABEL, "CreditTransaction")
     constraint_names = {c.name for c in CreditTransaction._meta.constraints}
 
@@ -224,9 +224,9 @@ def test_webhookevent_unique_stripe_event_id_constraint() -> None:
     """The ``quickscale_billing_unique_stripe_event_id`` unique constraint
     exists on WebhookEvent."""
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
-    apps = executor.loader.project_state([(APP_LABEL, MIG_0001)]).apps
+    apps = executor.loader.project_state([(APP_LABEL, MIG_LATEST)]).apps
     WebhookEvent = apps.get_model(APP_LABEL, "WebhookEvent")
     constraint_names = {c.name for c in WebhookEvent._meta.constraints}
 
@@ -255,11 +255,11 @@ except Exception:
 def test_force_rls_installed_on_tenant_scoped_billing_tables() -> None:
     """FORCE RLS policies exist for tenant-scoped billing tables only.
 
-    CreditBalance, CreditTransaction, and Subscription receive FORCE RLS.
+    CreditBalance, CreditTransaction, PurchaseCheckout, and Subscription receive FORCE RLS.
     Plan and WebhookEvent (system-wide) do not.
     """
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
     expected_policies = {
         (
@@ -269,6 +269,10 @@ def test_force_rls_installed_on_tenant_scoped_billing_tables() -> None:
         (
             "quickscale_modules_billing_credittransaction",
             "billing_credit_transaction_org_isolation",
+        ),
+        (
+            "quickscale_modules_billing_purchasecheckout",
+            "billing_purchase_checkout_org_isolation",
         ),
         (
             "quickscale_modules_billing_subscription",
@@ -320,7 +324,7 @@ def test_billing_partial_unique_constraints_have_correct_predicates() -> None:
     ``pg_get_expr``, not permissive fragment matching.
     """
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
     with connection.cursor() as cursor:
         for (
@@ -446,11 +450,12 @@ def test_billing_tenant_tables_have_force_rls_enabled() -> None:
     ``relforcerowsecurity`` in ``pg_class`` while system-wide tables
     do not."""
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
     tenant_tables = [
         "quickscale_modules_billing_creditbalance",
         "quickscale_modules_billing_credittransaction",
+        "quickscale_modules_billing_purchasecheckout",
         "quickscale_modules_billing_subscription",
     ]
     system_tables = [
@@ -519,11 +524,12 @@ def test_billing_rls_policy_has_org_predicate() -> None:
     ``_FORCE_RLS_FORWARD_SQL``, not merely contain permissive fragments.
     """
     executor = MigrationExecutor(connection)
-    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
     tables = [
         "quickscale_modules_billing_creditbalance",
         "quickscale_modules_billing_credittransaction",
+        "quickscale_modules_billing_purchasecheckout",
         "quickscale_modules_billing_subscription",
     ]
 

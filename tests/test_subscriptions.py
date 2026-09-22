@@ -26,6 +26,7 @@ from quickscale_modules_billing.services import (
     create_subscription_checkout_session,
     handle_stripe_event,
 )
+from quickscale_modules_orgs.current_org import org_scope
 
 
 def _create_recurring_plan(
@@ -141,6 +142,8 @@ def _subscription_checkout_completed_event(
     event_id: str,
     checkout_session_id: str,
     customer_id: str,
+    subscription_id: str = "",
+    metadata: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": event_id,
@@ -151,6 +154,8 @@ def _subscription_checkout_completed_event(
                 "mode": "subscription",
                 "payment_status": "paid",
                 "customer": customer_id,
+                "subscription": subscription_id,
+                "metadata": dict(metadata or {}),
             }
         },
     }
@@ -216,6 +221,7 @@ class FakeSubscriptionStripeClient:
         session_metadata: dict[str, str],
         subscription_metadata: dict[str, str],
         client_reference_id: str,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         self.created_subscription_checkout_payloads.append(
             {
@@ -226,6 +232,7 @@ class FakeSubscriptionStripeClient:
                 "session_metadata": dict(session_metadata),
                 "subscription_metadata": dict(subscription_metadata),
                 "client_reference_id": client_reference_id,
+                "idempotency_key": idempotency_key or "",
             }
         )
         if self.create_subscription_checkout_error is not None:
@@ -301,7 +308,7 @@ def _simulate_subscription_reservation_conflict(
 
 
 @pytest.mark.django_db
-def test_create_subscription_checkout_session_marks_failed_reservation_expired(
+def test_create_subscription_checkout_session_retries_blank_reservation_idempotently(
     user, organization, org_context
 ) -> None:
     plan = _create_recurring_plan()
@@ -332,9 +339,251 @@ def test_create_subscription_checkout_session_marks_failed_reservation_expired(
 
     reservation = Subscription.all_objects.get(organization=organization)
 
-    assert reservation.status == Subscription.Status.INCOMPLETE_EXPIRED
+    assert reservation.status == Subscription.Status.INCOMPLETE
     assert reservation.stripe_customer_id == "cus_created_1"
-    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 0
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 1
+
+    with pytest.raises(RuntimeError, match="session creation failed"):
+        create_subscription_checkout_session(
+            user,
+            plan,
+            "https://app.example.com/billing/subscription/success",
+            "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    assert len(fake_client.created_subscription_checkout_payloads) == 2
+    first_payload, second_payload = fake_client.created_subscription_checkout_payloads
+    reservation_reference = billing_services._subscription_checkout_reference(
+        reservation
+    )
+    assert first_payload["idempotency_key"] == second_payload["idempotency_key"]
+    assert first_payload["idempotency_key"]
+    assert (
+        first_payload["session_metadata"]["quickscale_subscription_checkout_reference"]
+        == reservation_reference
+    )
+    assert second_payload["session_metadata"] == first_payload["session_metadata"]
+
+
+@pytest.mark.django_db
+def test_subscription_checkout_retry_rejects_a_different_owner(
+    user,
+    organization,
+    org_context,
+) -> None:
+    from quickscale_modules_orgs.models import OrgRole, OrganizationMembership
+
+    plan = _create_recurring_plan(price_id="price_different_owner_retry")
+    fake_client = FakeSubscriptionStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "recurring",
+                "recurring": {"interval": "month"},
+            }
+        },
+        create_subscription_checkout_error=RuntimeError(
+            "Stripe session creation failed."
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="session creation failed"):
+        create_subscription_checkout_session(
+            user,
+            plan,
+            "https://app.example.com/billing/subscription/success",
+            "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    other_owner = type(user).objects.create_user(
+        username="subscription-retry-other-owner",
+        email="subscription-retry-other-owner@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=other_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    with pytest.raises(BillingValidationError, match="current recurring subscription"):
+        create_subscription_checkout_session(
+            other_owner,
+            plan,
+            "https://app.example.com/billing/subscription/success",
+            "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    reservation = Subscription.all_objects.get(organization=organization)
+    assert reservation.user_id == user.pk
+    assert len(fake_client.created_subscription_checkout_payloads) == 1
+
+
+@pytest.mark.django_db
+def test_create_subscription_checkout_session_retries_after_customer_lookup_failure(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(price_id="price_customer_lookup_retry")
+    fake_client = FakeSubscriptionStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "recurring",
+                "recurring": {"interval": "month"},
+            }
+        }
+    )
+    provider_search = fake_client.search_customers
+
+    def fail_customer_lookup(**kwargs: Any) -> list[dict[str, Any]]:
+        raise RuntimeError("Stripe customer lookup failed.")
+
+    monkeypatch.setattr(fake_client, "search_customers", fail_customer_lookup)
+
+    with pytest.raises(RuntimeError, match="customer lookup failed"):
+        create_subscription_checkout_session(
+            user,
+            plan,
+            "https://app.example.com/billing/subscription/success",
+            "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    reservation = Subscription.all_objects.get(organization=organization)
+    assert reservation.stripe_customer_id in {None, ""}
+    assert reservation.stripe_checkout_session_id in {None, ""}
+
+    monkeypatch.setattr(fake_client, "search_customers", provider_search)
+    checkout_url = create_subscription_checkout_session(
+        user,
+        plan,
+        "https://app.example.com/billing/subscription/success",
+        "https://app.example.com/billing/subscription/cancel",
+        organization=organization,
+        stripe_client=fake_client,
+    )
+
+    reservation.refresh_from_db()
+    assert checkout_url == "https://checkout.stripe.test/subscription/123"
+    assert reservation.stripe_customer_id == "cus_created_1"
+    assert reservation.stripe_checkout_session_id == "cs_sub_1"
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("event_type", "expected_status", "expected_subscription_id"),
+    [
+        (
+            "checkout.session.completed",
+            Subscription.Status.INCOMPLETE,
+            "sub_response_lost_completed",
+        ),
+        ("checkout.session.expired", Subscription.Status.INCOMPLETE_EXPIRED, ""),
+    ],
+    ids=["completed", "expired"],
+)
+def test_response_lost_subscription_checkout_reconciles_exact_reservation(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+    event_type: str,
+    expected_status: str,
+    expected_subscription_id: str,
+) -> None:
+    suffix = event_type.rsplit(".", maxsplit=1)[-1]
+    plan = _create_recurring_plan(
+        slug=f"response-lost-subscription-{suffix}",
+        price_id=f"price_response_lost_subscription_{suffix}",
+    )
+    fake_client = FakeSubscriptionStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "recurring",
+                "recurring": {"interval": "month"},
+            }
+        }
+    )
+    provider_create = fake_client.create_subscription_checkout_session
+
+    def create_then_lose_response(**kwargs: Any) -> dict[str, Any]:
+        provider_create(**kwargs)
+        raise RuntimeError("provider response lost")
+
+    fake_client.create_subscription_checkout_session = create_then_lose_response  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="response lost"):
+        create_subscription_checkout_session(
+            user,
+            plan,
+            "https://app.example.com/billing/subscription/success",
+            "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    reservation = Subscription.all_objects.get(organization=organization)
+    created_payload = fake_client.created_subscription_checkout_payloads[0]
+    reservation_reference = billing_services._subscription_checkout_reference(
+        reservation
+    )
+    assert reservation.status == Subscription.Status.INCOMPLETE
+    assert reservation.stripe_checkout_session_id in {None, ""}
+    assert created_payload["idempotency_key"]
+    assert (
+        created_payload["session_metadata"][
+            "quickscale_subscription_checkout_reference"
+        ]
+        == reservation_reference
+    )
+
+    event_id = f"evt_response_lost_subscription_{suffix}"
+    fake_client.event = _subscription_checkout_completed_event(
+        event_id=event_id,
+        checkout_session_id=f"cs_response_lost_subscription_{suffix}",
+        customer_id="cus_created_1",
+        subscription_id=expected_subscription_id,
+        metadata=created_payload["session_metadata"],
+    )
+    fake_client.event["type"] = event_type
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        f"whsec_response_lost_subscription_{suffix}",
+    )
+
+    result = handle_stripe_event(
+        body=f'{{"id":"{event_id}"}}'.encode(),
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    reservation.refresh_from_db()
+    assert result.status == "processed"
+    assert reservation.status == expected_status
+    assert str(reservation.stripe_subscription_id or "") == expected_subscription_id
+    assert (
+        reservation.stripe_checkout_session_id
+        == f"cs_response_lost_subscription_{suffix}"
+    )
+    assert CreditTransaction.all_objects.count() == 0
 
 
 @pytest.mark.django_db
@@ -410,7 +659,13 @@ def test_create_subscription_checkout_session_expires_stale_reservation_and_recr
                 "type": "recurring",
                 "recurring": {"interval": "month"},
             }
-        }
+        },
+        checkout_sessions={
+            "cs_stale": {
+                "id": "cs_stale",
+                "status": "expired",
+            }
+        },
     )
 
     checkout_url = create_subscription_checkout_session(
@@ -432,6 +687,7 @@ def test_create_subscription_checkout_session_expires_stale_reservation_and_recr
     assert current_reservation.pk != stale_reservation.pk
     assert current_reservation.stripe_customer_id == "cus_stale"
     assert current_reservation.stripe_checkout_session_id == "cs_sub_1"
+    assert fake_client.retrieved_checkout_session_ids == ["cs_stale"]
 
 
 @pytest.mark.django_db
@@ -522,7 +778,7 @@ def test_create_subscription_checkout_session_reuses_customer_on_recreated_reser
         organization=organization,
         plan=plan,
         stripe_customer_id="cus_survivor",
-        status=Subscription.Status.INCOMPLETE,
+        status=Subscription.Status.INCOMPLETE_EXPIRED,
     )
     fake_client = FakeSubscriptionStripeClient(
         prices={
@@ -680,30 +936,20 @@ def test_create_subscription_checkout_session_raises_validation_error_after_crea
 
 
 @pytest.mark.django_db
-def test_create_subscription_checkout_session_reuses_live_reservation_after_recreate_race(
+def test_create_subscription_checkout_session_blocks_completed_reservation(
     user,
     organization,
     org_context,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan()
-    stale_reservation = Subscription.all_objects.create(
+    completed_reservation = Subscription.all_objects.create(
         user=user,
         organization=organization,
         plan=plan,
-        stripe_customer_id="cus_stale",
-        stripe_checkout_session_id="cs_stale",
+        stripe_customer_id="cus_complete",
+        stripe_checkout_session_id="cs_complete",
         status=Subscription.Status.INCOMPLETE,
         checkout_expires_at=timezone.now() + timedelta(hours=1),
-    )
-    recovered_reservation = Subscription.all_objects.create(
-        user=user,
-        organization=organization,
-        plan=plan,
-        stripe_customer_id="cus_race",
-        stripe_checkout_session_id="cs_race_recreated",
-        status=Subscription.Status.CANCELED,
-        checkout_expires_at=timezone.now() + timedelta(hours=2),
     )
     fake_client = FakeSubscriptionStripeClient(
         prices={
@@ -716,52 +962,92 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_recr
             }
         },
         checkout_sessions={
-            "cs_stale": {
-                "id": "cs_stale",
-                "url": "https://checkout.stripe.test/subscription/stale",
+            "cs_complete": {
+                "id": "cs_complete",
+                "url": "https://checkout.stripe.test/subscription/complete",
                 "status": "complete",
+                "subscription": "sub_complete",
                 "expires_at": int((timezone.now() + timedelta(hours=1)).timestamp()),
-            },
-            "cs_race_recreated": {
-                "id": "cs_race_recreated",
-                "url": "https://checkout.stripe.test/subscription/race-recreated",
-                "status": "open",
-                "expires_at": int((timezone.now() + timedelta(hours=2)).timestamp()),
-            },
+            }
         },
     )
-    _simulate_subscription_reservation_conflict(
-        monkeypatch,
-        organization=organization,
-        recovered_reservation=recovered_reservation,
-    )
 
-    checkout_url = create_subscription_checkout_session(
-        user,
-        plan,
-        "https://app.example.com/billing/subscription/success",
-        "https://app.example.com/billing/subscription/cancel",
-        organization=organization,
-        stripe_client=fake_client,
-    )
+    with pytest.raises(BillingValidationError, match="checkout completed"):
+        create_subscription_checkout_session(
+            user,
+            plan,
+            "https://app.example.com/billing/subscription/success",
+            "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
 
-    stale_reservation.refresh_from_db()
-    recovered_reservation.refresh_from_db()
+    completed_reservation.refresh_from_db()
 
-    assert checkout_url == ("https://checkout.stripe.test/subscription/race-recreated")
-    assert stale_reservation.status == Subscription.Status.INCOMPLETE_EXPIRED
-    assert recovered_reservation.status == Subscription.Status.INCOMPLETE
-    assert (
-        Subscription.all_objects.filter(Subscription.current_status_q())
-        .get(organization=organization)
-        .pk
-        == recovered_reservation.pk
-    )
+    assert completed_reservation.status == Subscription.Status.INCOMPLETE
+    assert completed_reservation.stripe_subscription_id == "sub_complete"
+    assert completed_reservation.checkout_expires_at is None
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 1
     assert fake_client.created_subscription_checkout_payloads == []
-    assert fake_client.retrieved_checkout_session_ids == [
-        "cs_stale",
-        "cs_race_recreated",
-    ]
+    assert fake_client.retrieved_checkout_session_ids == ["cs_complete"]
+
+
+@pytest.mark.django_db
+def test_completed_checkout_retrieval_rejects_customer_identity_conflict(
+    user,
+    organization,
+    org_context,
+) -> None:
+    plan = _create_recurring_plan(price_id="price_complete_customer_conflict")
+    organization.stripe_customer_id = "cus_complete_expected"
+    organization.save(update_fields=["stripe_customer_id"])
+    original_expiry = timezone.now() + timedelta(hours=1)
+    reservation = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_complete_expected",
+        stripe_checkout_session_id="cs_complete_customer_conflict",
+        status=Subscription.Status.INCOMPLETE,
+        checkout_expires_at=original_expiry,
+    )
+    fake_client = FakeSubscriptionStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "recurring",
+                "recurring": {"interval": "month"},
+            }
+        },
+        checkout_sessions={
+            "cs_complete_customer_conflict": {
+                "id": "cs_complete_customer_conflict",
+                "status": "complete",
+                "customer": "cus_complete_conflict",
+                "subscription": "sub_complete_conflict",
+            }
+        },
+    )
+
+    with pytest.raises(BillingWebhookError, match="provider identity conflicts"):
+        create_subscription_checkout_session(
+            user,
+            plan,
+            "https://app.example.com/billing/subscription/success",
+            "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    organization.refresh_from_db()
+    assert reservation.stripe_subscription_id in {None, ""}
+    assert reservation.stripe_customer_id == "cus_complete_expected"
+    assert reservation.checkout_expires_at == original_expiry
+    assert organization.stripe_customer_id == "cus_complete_expected"
+    assert fake_client.created_subscription_checkout_payloads == []
 
 
 @pytest.mark.django_db
@@ -812,6 +1098,67 @@ def test_handle_stripe_event_updates_pending_row_on_subscription_created(
     assert pending_reservation.stripe_subscription_id == "sub_created"
     assert pending_reservation.current_period_start is not None
     assert pending_reservation.current_period_end is not None
+
+
+@pytest.mark.django_db
+def test_delayed_subscription_event_preserves_authoritative_customer_identity(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(price_id="price_delayed_customer")
+    organization.stripe_customer_id = "cus_current_customer"
+    organization.save(update_fields=["stripe_customer_id"])
+    Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_current_customer",
+        stripe_subscription_id="sub_current_customer",
+        status=Subscription.Status.ACTIVE,
+    )
+    historical_subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_historical_customer",
+        stripe_subscription_id="sub_historical_customer",
+        status=Subscription.Status.CANCELED,
+    )
+    event = _subscription_event(
+        event_id="evt_delayed_historical_subscription",
+        event_type="customer.subscription.deleted",
+        subscription_id="sub_historical_customer",
+        customer_id="cus_historical_customer",
+        price_id=plan.stripe_price_id,
+        status="canceled",
+    )
+    event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    fake_client = FakeSubscriptionStripeClient(event=event)
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_delayed_historical_subscription",
+    )
+
+    with pytest.raises(BillingWebhookError, match="organization's current"):
+        handle_stripe_event(
+            body=b'{"id":"evt_delayed_historical_subscription"}',
+            signature="t=1,v1=test-signature",
+            stripe_client=fake_client,
+        )
+
+    organization.refresh_from_db()
+    historical_subscription.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_delayed_historical_subscription"
+    )
+    assert organization.stripe_customer_id == "cus_current_customer"
+    assert historical_subscription.stripe_customer_id == "cus_historical_customer"
+    assert historical_subscription.stripe_subscription_id == "sub_historical_customer"
+    assert webhook_event.processed is False
 
 
 @pytest.mark.django_db
@@ -944,6 +1291,60 @@ def test_handle_stripe_event_marks_subscription_past_due_on_payment_failed(
 
     assert result.status == "processed"
     assert subscription.status == Subscription.Status.PAST_DUE
+
+
+@pytest.mark.django_db
+def test_invoice_payment_failed_rejects_conflicting_provider_identity(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(price_id="price_failed_identity_conflict")
+    organization.stripe_customer_id = "cus_current_identity"
+    organization.save(update_fields=["stripe_customer_id"])
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_current_identity",
+        stripe_subscription_id="sub_current_identity",
+        status=Subscription.Status.ACTIVE,
+    )
+    event = _invoice_event(
+        event_id="evt_failed_identity_conflict",
+        event_type="invoice.payment_failed",
+        invoice_id="in_failed_identity_conflict",
+        customer_id="cus_conflicting_identity",
+        price_id=plan.stripe_price_id,
+        subscription_id="sub_conflicting_identity",
+    )
+    event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    fake_client = FakeSubscriptionStripeClient(event=event)
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_failed_identity_conflict",
+    )
+
+    with pytest.raises(BillingWebhookError, match="failed invoice conflicts"):
+        handle_stripe_event(
+            body=b'{"id":"evt_failed_identity_conflict"}',
+            signature="t=1,v1=test-signature",
+            stripe_client=fake_client,
+        )
+
+    subscription.refresh_from_db()
+    organization.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_failed_identity_conflict"
+    )
+    assert subscription.status == Subscription.Status.ACTIVE
+    assert subscription.stripe_subscription_id == "sub_current_identity"
+    assert subscription.stripe_customer_id == "cus_current_identity"
+    assert organization.stripe_customer_id == "cus_current_identity"
+    assert webhook_event.processed is False
 
 
 @pytest.mark.django_db
@@ -1155,6 +1556,160 @@ def test_handle_stripe_event_does_not_credit_subscription_checkout_completion(
 
 
 @pytest.mark.django_db
+def test_subscription_checkout_completion_binds_provider_identity_before_webhook(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(price_id="price_checkout_completion_identity")
+    organization.stripe_customer_id = "cus_checkout_completion_identity"
+    organization.save(update_fields=["stripe_customer_id"])
+    reservation = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_checkout_completion_identity",
+        stripe_checkout_session_id="cs_checkout_completion_identity",
+        checkout_expires_at=timezone.now() - timedelta(minutes=5),
+        status=Subscription.Status.INCOMPLETE,
+    )
+    fake_client = FakeSubscriptionStripeClient(
+        event=_subscription_checkout_completed_event(
+            event_id="evt_checkout_completion_identity",
+            checkout_session_id="cs_checkout_completion_identity",
+            customer_id="cus_checkout_completion_identity",
+            subscription_id="sub_checkout_completion_identity",
+        )
+    )
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_checkout_completion_identity",
+    )
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_checkout_completion_identity"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    reservation.refresh_from_db()
+    assert result.status == "processed"
+    assert reservation.stripe_subscription_id == "sub_checkout_completion_identity"
+    assert CreditTransaction.all_objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_subscription_checkout_completion_rejects_customer_identity_conflict(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(price_id="price_checkout_customer_conflict")
+    organization.stripe_customer_id = "cus_checkout_expected"
+    organization.save(update_fields=["stripe_customer_id"])
+    reservation = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_checkout_expected",
+        stripe_checkout_session_id="cs_checkout_customer_conflict",
+        status=Subscription.Status.INCOMPLETE,
+    )
+    event = _subscription_checkout_completed_event(
+        event_id="evt_checkout_customer_conflict",
+        checkout_session_id="cs_checkout_customer_conflict",
+        customer_id="cus_checkout_conflict",
+        subscription_id="sub_checkout_conflict",
+    )
+    event["data"]["object"]["metadata"] = {
+        "quickscale_org_reference": _organization_reference(organization)
+    }
+    fake_client = FakeSubscriptionStripeClient(event=event)
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_checkout_customer_conflict",
+    )
+
+    with pytest.raises(BillingWebhookError, match="provider identity conflicts"):
+        handle_stripe_event(
+            body=b'{"id":"evt_checkout_customer_conflict"}',
+            signature="t=1,v1=test-signature",
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    organization.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_checkout_customer_conflict"
+    )
+    assert reservation.stripe_subscription_id in {None, ""}
+    assert reservation.stripe_customer_id == "cus_checkout_expected"
+    assert organization.stripe_customer_id == "cus_checkout_expected"
+    assert webhook_event.processed is False
+
+
+@pytest.mark.django_db
+def test_subscription_checkout_completion_rejects_conflicting_organizations(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(price_id="price_cross_org_subscription")
+    organization.stripe_customer_id = "cus_cross_org_subscription_expected"
+    organization.save(update_fields=["stripe_customer_id"])
+    conflicting_organization = type(organization).objects.create(
+        name="Conflicting Subscription Org",
+        slug="conflicting-subscription-org",
+        stripe_customer_id="cus_cross_org_subscription",
+    )
+    reservation = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_cross_org_subscription_expected",
+        stripe_checkout_session_id="cs_cross_org_subscription",
+        status=Subscription.Status.INCOMPLETE,
+    )
+    event = _subscription_checkout_completed_event(
+        event_id="evt_cross_org_subscription",
+        checkout_session_id="cs_cross_org_subscription",
+        customer_id="cus_cross_org_subscription",
+        subscription_id="sub_cross_org_subscription",
+    )
+    event["data"]["object"]["metadata"] = {
+        "quickscale_org_reference": _organization_reference(organization)
+    }
+    fake_client = FakeSubscriptionStripeClient(event=event)
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_cross_org_subscription",
+    )
+
+    with pytest.raises(BillingWebhookError, match="conflicting organizations"):
+        handle_stripe_event(
+            body=b'{"id":"evt_cross_org_subscription"}',
+            signature="t=1,v1=test-signature",
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_cross_org_subscription"
+    )
+    assert reservation.stripe_subscription_id in {None, ""}
+    assert reservation.stripe_customer_id == "cus_cross_org_subscription_expected"
+    assert reservation.status == Subscription.Status.INCOMPLETE
+    assert webhook_event.processed is False
+    with org_scope(organization):
+        assert CreditTransaction.all_objects.count() == 0
+    with org_scope(conflicting_organization):
+        assert CreditTransaction.all_objects.count() == 0
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("billing_reason", "event_id", "invoice_id"),
     [
@@ -1230,6 +1785,7 @@ def test_stripe_client_create_subscription_checkout_session_uses_checkout_api() 
         session_metadata={"quickscale_user_reference": "auth.user:1"},
         subscription_metadata={"quickscale_user_reference": "auth.user:1"},
         client_reference_id="auth.user:1",
+        idempotency_key="subscription-checkout-key",
     )
 
     assert checkout_session == {
@@ -1243,6 +1799,7 @@ def test_stripe_client_create_subscription_checkout_session_uses_checkout_api() 
         "client_reference_id": "auth.user:1",
         "metadata": {"quickscale_user_reference": "auth.user:1"},
         "subscription_data": {"metadata": {"quickscale_user_reference": "auth.user:1"}},
+        "idempotency_key": "subscription-checkout-key",
     }
     assert stripe_module.api_key == "sk_test"
 

@@ -27,6 +27,7 @@ from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
     Plan,
+    PurchaseCheckout,
     Subscription,
 )
 from quickscale_modules_billing.services import (
@@ -55,6 +56,10 @@ _BILLING_RLS_TARGETS = (
     (
         "quickscale_modules_billing_credittransaction",
         "billing_credit_transaction_org_isolation",
+    ),
+    (
+        "quickscale_modules_billing_purchasecheckout",
+        "billing_purchase_checkout_org_isolation",
     ),
     (
         "quickscale_modules_billing_subscription",
@@ -355,6 +360,7 @@ class TestBillingRlsBoundaryRestrictedRole:
         set_current_org_id(org.pk)
         try:
             CreditBalance.objects.get_or_create(organization=org)
+            PurchaseCheckout.objects.create(organization=org, plan=plan)
             Subscription.objects.create(organization=org, plan=plan)
         finally:
             set_current_org_id(None)
