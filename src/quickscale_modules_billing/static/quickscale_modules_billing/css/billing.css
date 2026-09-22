@@ -190,7 +190,7 @@
     transition: filter 0.2s ease;
 }
 
-.billing-pricing__button--primary,
+.billing-content .billing-pricing__button--primary,
 .billing-content .button-primary {
     background: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
