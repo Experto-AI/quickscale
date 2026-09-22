@@ -151,31 +151,58 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA195 + SA192 (resume) | yes | yes | yes | **yes** | no |
+| 2 | SA195 + SA192 (resume) | yes | yes | no | no | no |
 | 3 | SA199 (resume) | yes | yes | yes | **yes** | no |
 
-### Interrupted work (2026-09-18)
+Track 2 cannot merge until its uncommitted work is checkpointed and reconciled with `v89` (below).
+
+### Interrupted work (measured 2026-09-22)
 
 Tracks 2 and 3 were started and interrupted mid-ticket when the Codex agent ran out of credit. The
 next handoff on each track resumes the interrupted ticket rather than the head of the original
-queue.
+queue. On 2026-09-22 all three worktrees had lost their `.git/worktrees/` metadata; they were
+relinked to their branches without touching the working trees, so staged-vs-unstaged state from
+before that date is gone and everything uncommitted now shows as unstaged.
 
-- **Track 2 — SA195 and SA192, uncommitted in `wt-track2`.** The agent picked up SA195 and SA192
-  instead of SA193, so the queue above is reordered to match. The worktree holds about 70 staged or
-  unstaged files and no WIP commit: the shared stub moved to `tests_shared/templates/base.html` and
-  the blog, CRM, and listings copies were deleted (SA195); module stylesheets and templates for
-  `auth`, `billing`, `blog`, `crm`, and `listings`, the theme `base.html.j2`, module vintage bumps,
-  and a new `test_module_page_style_contract.py` (SA192). Its roadmap edit already marks
-  both delivered and drops them from the schedule; that is unverified, so don't trust it. The
-  worktree is also two commits behind `v89` (missing `1270ed46`) and stages the deletion of
-  `docs/others/arch-audit.md` and `tech-audit.md`, which the delivery must not carry. There is a
-  related stash, `stash@{0}` "adaptive-mini SA192 sync". To resume, commit a reviewed WIP
-  checkpoint per *Resuming a track*, restore the two audits, merge `v89`, then finish and verify
-  SA195 and SA192 against their acceptance before SA193 starts.
-- **Track 3 — SA199, clean at `v89`.** `wt-track3` has no uncommitted changes and sits at `v89`'s
-  head. The only SA199 work is the part landed in `1270ed46` (see SA199 *Progress*). To resume,
-  start from the Stripe `search_customers` query hardening and the two-thread webhook concurrency
-  regression, then close SA199 with its acceptance evidence.
+- **Track 1 — SA194, not started.** `wt-track1` is clean, has no commits of its own, and is five
+  commits behind `v89`. To resume: `git merge v89` in the worktree (fast-forward), then start SA194
+  from its ticket body; nothing is half-done. Old stash `stash@{2}` ("SA152 final resync
+  preservation") predates SA194 and is not part of it.
+- **Track 2 — SA195 and SA192, partly committed, partly on disk.** The agent picked up SA195 and
+  SA192 instead of SA193, so the queue above is reordered to match. Branch `wt-track2` carries
+  checkpoint `e12e9867` "WIP: SA195 & SA192 resumed checkpoint state" (51 files, SA192 module
+  stylesheets, templates, vintage bumps, and the style-contract test) and is three commits behind
+  `v89` (missing `1270ed46`). On top of that commit the worktree holds 48 more uncommitted changes
+  that are **ahead** of it, not stale:
+  - *SA195, not in any commit:* the new `tests_shared/templates/base.html` (untracked), the blog,
+    CRM, and listings `tests/settings.py` pointing `DIRS` at it, and the deletion of their three
+    `tests/templates/base.html` copies.
+  - *SA192 follow-ups, mostly additive:* `test_module_page_style_contract.py` (+157, frontend-origin
+    validation and billing CTA cascade tests), `vite.config.ts`, `viteAssetRouting.test.ts`,
+    `local.py.j2`, `.env.example.j2`, manifest vintage lines, module CSS, e2e tests and scripts.
+  - *Must not be carried:* the deletion of `docs/others/arch-audit.md` and `tech-audit.md`, and the
+    worktree's own `roadmap.md` and `test_roadmap_consistency.py` edits, which mark SA195/SA192
+    delivered and drop them from the schedule without verification. Treat the `CHANGELOG.md`,
+    `decisions.md`, release-note, and other doc edits as drafts to review, not evidence.
+
+  To resume: (1) leave the audit deletions out of every checkpoint and do not restore either audit
+  from the worktree or `v89` by hand; `v89` wins, so after step 3 both
+  `docs/others/arch-audit.md` and `docs/others/tech-audit.md` must be byte-identical to `v89`'s,
+  and discard the unverified roadmap edits with `git restore
+  docs/technical/roadmap.md quickscale_core/tests/test_roadmap_consistency.py`; (2) review the
+  remaining diff and commit it as a second labeled WIP checkpoint by explicit file list, including
+  `tests_shared/templates/base.html`; (3) `git merge v89` and resolve, re-running the auth tests
+  because `1270ed46` edited the account-delete view; (4) finish SA195 first (stub shared, three
+  non-identical stubs converged or recorded, module suites unchanged), then SA192 against its full
+  acceptance; (5) write the closeout in this roadmap and the changelog, then merge through the
+  serialized queue before SA193 starts.
+- **Track 3 — SA199, clean.** `wt-track3` has no uncommitted changes and sits one commit behind
+  `v89` (this roadmap only). The only SA199 work is the part landed in `1270ed46` (see SA199
+  *Progress*). To resume: `git merge v89`; confirm the `1270ed46` portions still meet their
+  acceptance lines (no network I/O inside `transaction.atomic()` on account deletion, with the
+  chosen compensation written down; webhook claim held across the handler); add the two-thread
+  `handle_stripe_event` regression against real PostgreSQL; harden `search_customers` against `'`,
+  `\`, and newline with a test; close SA199 in the tech audit's own entry and the changelog.
 
 ### Ownership and merge coordination
 
