@@ -179,7 +179,7 @@ Current server-rendered surfaces:
 defined once for those surfaces and never restated by them. The standalone orgs solo-mode pages and
 admin-owned backups pages are separate existing surfaces, not silent adopters of this contract.
 
-The pattern, established by `auth` and now used by `blog`, `listings`, and `crm`:
+The pattern, established by `auth` and now used by `billing`, `blog`, `listings`, and `crm`:
 
 ```django
 {% extends "base.html" %}

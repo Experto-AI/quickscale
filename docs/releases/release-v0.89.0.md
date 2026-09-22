@@ -108,7 +108,6 @@ The exact-emission hashes below apply identically to `react_default`, `react_emp
 
 | Generated path | SHA-256 |
 |---|---|
-| `.env` | `04da07b92d64dc5c800229b93b2dfc9904e0a529d9e403fafe4a00a25fe79d9b` |
 | `.env.example` | `e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1` |
 | `README.md` | `1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387` |
 | `docker-compose.yml` | `d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3` |
@@ -119,6 +118,9 @@ The exact-emission hashes below apply identically to `react_default`, `react_emp
 | `templates/social/embeds.html` | `72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82` |
 | `templates/social/link_tree.html` | `2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb` |
 | `testproject/settings/local.py` | `cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9` |
+
+`.env` is excluded from the hash table: it embeds the invoking host's `DOCKER_UID`/`DOCKER_GID`,
+so the emission fixture pins only its presence and mode.
 
 ## Validation
 

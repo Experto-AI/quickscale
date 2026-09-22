@@ -206,8 +206,8 @@ before that date is gone and everything uncommitted now shows as unstaged.
   six-ticket shared file across two tracks, so its closeouts are the hottest merge surface in this
   cycle — each ticket edits only its own finding's entry.
   Code-adjacent overlaps that cross tracks: SA153 edits the extension and organizations
-  documentation; SA192 restyles the `auth` account templates while SA199 edits the account-delete
-  view, so whichever lands second re-runs the auth tests; SA196 turns strict
+  documentation; the landed SA192 restyle touched the `auth` account templates while SA199 edits
+  the account-delete view, so SA199 re-runs the auth tests when it lands; SA196 turns strict
   rendering on for every generator template, including the `.env.example` template SA193 rewrites,
   the settings templates SA200 and SA201 edit, and the generated `base.html` SA192 restyles, so its
   fixes may reach both other tracks' files and whichever lands second re-runs the generator tests
