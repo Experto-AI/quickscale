@@ -132,14 +132,19 @@ find_free_port() {
 }
 
 validate_host_port() {
-    local name="$1" port="$2"
+    local name="$1" port="$2" normalized_port
     case "$port" in
         *[!0-9]*|"")
             echo -e "${RED}Error: $name must be a numeric host port${NC}" >&2
             return 1
             ;;
     esac
-    if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+    normalized_port="${port#"${port%%[!0]*}"}"
+    [ -n "$normalized_port" ] || normalized_port=0
+    if [ "$port" != "$normalized_port" ] \
+        || [ "${#normalized_port}" -gt 5 ] \
+        || [ "$normalized_port" = "0" ] \
+        || { [ "${#normalized_port}" -eq 5 ] && [[ "$normalized_port" > "65535" ]]; }; then
         echo -e "${RED}Error: $name must be between 1 and 65535${NC}" >&2
         return 1
     fi
@@ -652,9 +657,13 @@ run_e2e_lane() {
         lane_rootdir="$CLI_DIR"
     fi
 
-    # Every lane gets its own Compose project, container-name prefix, and host
-    # port.  In serial mode an explicitly requested port remains unchanged;
-    # in concurrent mode it is reserved for Core and CLI receives a free port.
+    # Every lane gets its own pytest-docker Compose project, resource-label
+    # scope, container-name prefix, and host port. The Compose project must
+    # stay distinct from the resource scope: E2E cases intentionally run
+    # `quickscale down` under the resource scope, and sharing that namespace
+    # would remove pytest-docker's session PostgreSQL container mid-suite.
+    # In serial mode an explicitly requested port remains unchanged; in
+    # concurrent mode it is reserved for Core and CLI receives a free port.
     # Capture the lane shell PID before command substitution. BASHPID changes
     # inside each $(...), which previously minted different resource and Compose
     # suffixes while the log presented them as one Docker scope.
@@ -665,9 +674,13 @@ run_e2e_lane() {
     lane_resource_scope="${lane_resource_scope:0:63}"
     lane_container_prefix="$lane_resource_scope"
     lane_compose_base="$(sanitize_scope "${QS_E2E_COMPOSE_PROJECT_NAME:-$lane_prefix_base}")"
-    lane_compose_base="${lane_compose_base:0:48}"
-    lane_compose_project="$(sanitize_scope "${lane_compose_base}-${lane_pid}")"
+    lane_compose_base="${lane_compose_base:0:40}"
+    lane_compose_project="$(sanitize_scope "${lane_compose_base}-pytest-${lane_pid}")"
     lane_compose_project="${lane_compose_project:0:63}"
+    if [ "$lane_compose_project" = "$lane_resource_scope" ]; then
+        echo -e "${RED}[$lane_label] Refusing to share pytest-docker's Compose project with the E2E resource scope${NC}" >&2
+        return 1
+    fi
     lane_image_digest="${QUICKSCALE_BACKEND_IMAGE_DIGEST:-}"
 
     if [ "$lane" = "core" ]; then
@@ -743,6 +756,7 @@ run_e2e_lane() {
     echo "[$lane_label] App host port: $QS_E2E_APP_PORT"
     echo "[$lane_label] Frontend host port: $QS_E2E_FRONTEND_PORT"
     echo "[$lane_label] Docker scope: $QS_E2E_RESOURCE_SCOPE"
+    echo "[$lane_label] Pytest Compose project: $QS_E2E_COMPOSE_PROJECT_NAME"
     echo ""
 
     echo -e "${BLUE}[$lane_label] Cleaning up any orphaned test containers...${NC}"

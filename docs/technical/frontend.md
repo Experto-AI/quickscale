@@ -136,7 +136,7 @@ Contract points, all of which must move together:
 - **Therefore: do not enable content hashing in the Vite output without first switching the templates to a manifest-driven tag.** Hashed filenames silently break `{% static %}` references.
 - `manualChunks` splits vendor code into `analytics` / `router` / `ui` / `data` / `react-vendor` / `vendor`. Chunks are lazily fetched by the browser; only the entry names are referenced from Django.
 
-In development, Vite listens on `:5173`, serves the shared token source at `/static/frontend/src/index.css` under its configured base path, and proxies the Django-owned prefixes (`/admin`, `/accounts`, `/blog`, `/listings`, `/crm`, `/social`, Django-owned `/static` paths outside `/static/frontend/`, `/healthcheck`, `/markdownx`, `/_quickscale`) to `:8000`. Native Vite startup uses `strictPort`, so an occupied port 5173 fails explicitly rather than silently moving away from Django's stylesheet URL. Compose can publish that internal Vite port on a different browser-facing port through `QUICKSCALE_FRONTEND_HOST_PORT`; `QUICKSCALE_FRONTEND_ORIGIN` supplies a full browser-visible origin for remote hosts or HTTPS tunnels. Compose passes that origin to Vite's exact-host allowlist and passes both values into Django's local settings so every DEBUG host renders the same URL. Run `pnpm dev` alongside the DEBUG Django server; open the application through Django because the standalone Vite HTML does not carry the Django-injected runtime seam. A built stylesheet is not used in DEBUG. **This proxy list is a duplicate of the URL-ownership table above** — a new server-rendered module prefix must be added here too, or it will 404 under `pnpm dev` while working in production.
+In development, Vite listens on `:5173`, serves the shared token source at `/static/frontend/src/index.css` under its configured base path, and proxies the Django-owned prefixes (`/admin`, `/accounts`, `/blog`, `/listings`, `/crm`, `/social`, Django-owned `/static` paths outside `/static/frontend/`, `/healthcheck`, `/markdownx`, `/_quickscale`) to `:8000`. Native Vite startup uses `strictPort`, so an occupied port 5173 fails explicitly rather than silently moving away from Django's stylesheet URL. Compose can publish that internal Vite port on a different browser-facing port through `QUICKSCALE_FRONTEND_HOST_PORT`, which must be a canonical decimal from 1 through 65535; `QUICKSCALE_FRONTEND_ORIGIN` supplies a canonical full browser-visible origin for remote hosts or HTTPS tunnels. When the full origin is blank, Django and Vite both derive `http://localhost:<QUICKSCALE_FRONTEND_HOST_PORT>`. The server always rejects a missing Host, and a pre-internal Vite guard rejects HTTP and WebSocket requests whose Host differs from that effective origin's exact host, including localhost and IP values that Vite otherwise permits automatically. Compose passes both values to Vite and Django and sends the effective Host in its health check so every DEBUG host renders and accepts the same URL. Run `pnpm dev` alongside the DEBUG Django server; open the application through Django because the standalone Vite HTML does not carry the Django-injected runtime seam. A built stylesheet is not used in DEBUG. **This proxy list is a duplicate of the URL-ownership table above** — a new server-rendered module prefix must be added here too, or it will 404 under `pnpm dev` while working in production.
 
 ---
 
@@ -170,10 +170,14 @@ Current server-rendered surfaces:
 | `blog` | Extends `base.html`; content-only `blog.css`; children fill `{% block blog_content %}` |
 | `listings` | Extends `base.html`; content-only `listings.css`; children fill `{% block listings_content %}` |
 | `crm` | Extends `base.html`; content-only `crm.css`; children fill `{% block crm_content %}` |
-| `orgs`, `backups` | Module templates under the project/admin shells |
+| `orgs` | SaaS mode uses the React shell; solo-mode Django pages remain standalone module documents and are outside SA192 |
+| `backups` | Operator pages use the Django admin shell and are outside SA192 |
 | `notifications` | Email bodies — intentionally self-contained; email clients require inlined styles |
 
-**Every server-rendered module surface extends `base.html`.** The shell — reset, `body`, topbar, `<main>`, messages, footer, link colour — is defined once in `base.html` and never restated by a module.
+**Every SA192 server-rendered surface — auth, billing, blog, listings, and CRM — extends
+`base.html`.** The shell — reset, `body`, topbar, `<main>`, messages, footer, link colour — is
+defined once for those surfaces and never restated by them. The standalone orgs solo-mode pages and
+admin-owned backups pages are separate existing surfaces, not silent adopters of this contract.
 
 The pattern, established by `auth` and now used by `blog`, `listings`, and `crm`:
 
@@ -199,7 +203,7 @@ The pattern, established by `auth` and now used by `blog`, `listings`, and `crm`
 Two constraints make this work:
 
 1. **The module base occupies `{% block content %}`, so child templates fill a module-specific block** (`auth_content`, `billing_content`, `blog_content`, `listings_content`, `crm_content`) rather than `content`.
-2. **Only blocks that `base.html` already defines may be used** — `title`, `extra_css`, `content`, `extra_js`. `templates/base.html` is user-owned **category U3** ([generated_file_ownership.md](generated_file_ownership.md)) and is never rewritten by `quickscale update` ([user_manual.md](user_manual.md#what-quickscale-update-changes-and-what-stays-yours)), so a module template that depends on a *new* block would silently render nothing on any already-generated project — Django ignores a child block the parent does not define. This is the [arch-audit.md](../others/arch-audit.md) frozen-emitted-file hazard in miniature; the rule avoids it entirely.
+2. **Only blocks that `base.html` already defines may be used** — `title`, `extra_css`, `content`, `extra_js`. `templates/base.html` is user-owned **category U3** ([generated_file_ownership.md](generated_file_ownership.md)) and is never rewritten by `quickscale update` ([user_manual.md](user_manual.md#what-quickscale-update-changes-and-what-stays-yours)), so a module template that depends on a *new* block would silently render nothing on any already-generated project — Django ignores a child block the parent does not define. The generated-file ownership rules therefore require the existing block contract rather than a new frozen project-file dependency.
 3. **The module base wraps the child block in a `<div class="<name>-content">`.** `base.html` applies a `*, *::before, *::after { margin: 0; padding: 0 }` reset, so module content written as plain semantic HTML (`<article>`, `<h1>`, `<p>`) has **no default spacing**. The wrapper gives the module stylesheet a scope to restore its own vertical rhythm without leaking rules into the shell or other modules. `auth` uses `.auth-container` / `.auth-main` for the same purpose.
 
 A module stylesheet therefore contains **content styling only** and reads the project tokens instead of declaring colors or radii. If a rule would style the page shell, it belongs in `base.html`, not in the module. This is the split [user_manual.md](user_manual.md#what-quickscale-update-changes-and-what-stays-yours) already promises project owners: *change the look — colors, fonts, header — through the project token source and `base.html`, and leave each page's own styling to the module so updates keep delivering it.*
@@ -251,7 +255,7 @@ Each module surface is in one of three states, and **this is the most important 
 1. **Django owns data and authorization. React owns presentation and navigation within the SPA.** No business rule lives only in TypeScript.
 2. **One seam.** New server state reaches React through `window.__QUICKSCALE__`, validated, or through a DRF endpoint. Nothing else.
 3. **A new URL prefix is a four-place change**: the module's URL wiring, the Vite dev proxy, the shell-pattern list if the SPA should own it, and this document.
-4. **A new server-rendered module surface extends `base.html`.** Do not emit a standalone `<html>` document.
+4. **A new server-rendered module surface extends `base.html`.** Do not copy the legacy standalone-document shape used by the existing orgs solo-mode pages.
 5. **New SPA UI uses `src/components/ui/` primitives and the `index.css` tokens.** Do not add ad-hoc CSS to the SPA.
 6. **Do not hash Vite output filenames** unless the Django templates are switched to the manifest first.
 7. **Module frontend pages live in the theme, not in the module**, and are marked `DORMANT` with a lazy import.

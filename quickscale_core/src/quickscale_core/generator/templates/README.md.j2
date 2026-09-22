@@ -60,11 +60,16 @@ Visit http://127.0.0.1:8000 to see your application.
 
 The Compose frontend service builds the Django-served React JavaScript, then keeps Vite running and
 exposes port 5173 so every DEBUG page can load the shared token stylesheet. To use another host
-port, set `QUICKSCALE_FRONTEND_HOST_PORT` before starting Compose. When opening Django through
-another hostname or an HTTPS tunnel, also set `QUICKSCALE_FRONTEND_ORIGIN` to the full
-browser-visible Vite origin, such as `http://192.168.1.20:5173` or an HTTPS Vite tunnel URL. Compose
-passes the configured origin to Vite's exact-host allowlist and passes both values to Django; the
-backend waits until the Vite stylesheet is healthy before it starts.
+port, set `QUICKSCALE_FRONTEND_HOST_PORT` to a canonical decimal from 1 through 65535 before
+starting Compose. With a blank
+`QUICKSCALE_FRONTEND_ORIGIN`, Vite and Django derive
+`http://localhost:<QUICKSCALE_FRONTEND_HOST_PORT>`. When opening Django through another hostname or
+an HTTPS tunnel, set the full browser-visible Vite origin, such as `http://192.168.1.20:5173` or an
+HTTPS Vite tunnel URL. Use a canonical HTTP(S) origin with no path, query, fragment, or user
+information. Vite rejects every request Host except the effective origin's exact host, including
+before its built-in localhost/IP exceptions; Compose sends that Host in its stylesheet health check
+and passes both values to Vite and Django. The backend waits until the Vite stylesheet is healthy
+before it starts.
 
 ### ⚠️ Auth Module Timing
 

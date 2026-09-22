@@ -107,11 +107,14 @@ def test_styled_modules_declare_the_089_design_contract(module_name: str) -> Non
     assert "frontend/assets/index.css" in steps
     assert "frontend/vite.config.ts" in steps
     assert "/static/frontend/" in steps
+    assert "exact HTTP/WebSocket Host enforcement" in steps
     assert "settings/local.py" in steps
     assert "QUICKSCALE_FRONTEND_HOST_PORT" in steps
     assert "QUICKSCALE_FRONTEND_ORIGIN" in steps
+    assert "malformed origins fail explicitly" in steps
     assert "docker-compose.yml" in steps
     assert "${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173" in steps
+    assert "probes Vite with the effective Host" in steps
     assert "pnpm build" in steps
 
 

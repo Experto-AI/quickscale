@@ -60,6 +60,16 @@
     padding-left: 1.25rem;
 }
 
+.listing-markdown-content ul,
+.listings-content ul {
+    list-style: disc;
+}
+
+.listing-markdown-content ol,
+.listings-content ol {
+    list-style: decimal;
+}
+
 .listings-content article + article,
 .listings-content section + section {
     margin-top: 2rem;

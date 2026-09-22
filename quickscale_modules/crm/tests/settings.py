@@ -1,6 +1,11 @@
 """Django settings for testing CRM module"""
 
 import os
+from pathlib import Path
+
+SHARED_TEST_TEMPLATES = (
+    Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
+)
 
 # SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
@@ -56,7 +61,7 @@ REST_FRAMEWORK = {
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [os.path.join(os.path.dirname(__file__), "templates")],
+        "DIRS": [SHARED_TEST_TEMPLATES],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

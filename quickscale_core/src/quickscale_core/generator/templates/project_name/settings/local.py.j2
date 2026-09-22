@@ -10,7 +10,10 @@ This file contains settings specific to local development:
 DO NOT use these settings in production!
 """
 
+import re
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlsplit
 
 import dj_database_url
 from decouple import config
@@ -20,21 +23,96 @@ from .base import *  # noqa: F403, F405
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+
 # Browser-facing Vite port. Docker/E2E can remap the host publication while
 # Vite continues to listen on its container-internal port.
-QUICKSCALE_FRONTEND_HOST_PORT = config(
-    "QUICKSCALE_FRONTEND_HOST_PORT",
-    default=5173,
-    cast=int,
+def _quickscale_validate_frontend_host_port(configured_port: str) -> int:
+    if re.fullmatch(r"[1-9][0-9]{0,4}", configured_port) is None:
+        raise ValueError("QUICKSCALE_FRONTEND_HOST_PORT must be between 1 and 65535")
+    host_port = int(configured_port)
+    if host_port > 65535:
+        raise ValueError("QUICKSCALE_FRONTEND_HOST_PORT must be between 1 and 65535")
+    return host_port
+
+
+QUICKSCALE_FRONTEND_HOST_PORT = _quickscale_validate_frontend_host_port(
+    config(
+        "QUICKSCALE_FRONTEND_HOST_PORT",
+        default="5173",
+    )
 )
+
 
 # Full browser-visible Vite origin. Override this for remote development or an
 # HTTPS tunnel; an empty value keeps the localhost origin derived from the
 # published host port above.
+def _quickscale_canonical_frontend_hostname(hostname: str) -> str | None:
+    try:
+        hostname.encode("ascii")
+    except UnicodeEncodeError:
+        return None
+    if "%" in hostname:
+        return None
+
+    try:
+        address = ip_address(hostname)
+    except ValueError:
+        last_label = hostname.rsplit(".", maxsplit=1)[-1]
+        if re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|[0-9]+)", last_label):
+            return None
+        labels = hostname.split(".")
+        if not all(
+            re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels
+        ):
+            return None
+        return hostname
+
+    canonical_address = address.compressed
+    if hostname.lower() != canonical_address:
+        return None
+    if address.version == 6:
+        return f"[{canonical_address}]"
+    return canonical_address
+
+
+def _quickscale_validate_frontend_origin(configured_origin: str) -> str:
+    try:
+        origin = urlsplit(configured_origin)
+        origin_port = origin.port
+    except ValueError as error:
+        raise ValueError("QUICKSCALE_FRONTEND_ORIGIN must be a canonical HTTP(S) origin") from error
+
+    hostname = origin.hostname
+    if (
+        origin.scheme not in {"http", "https"}
+        or hostname is None
+        or origin.username is not None
+        or origin.password is not None
+        or origin.path not in {"", "/"}
+        or origin.query
+        or origin.fragment
+        or origin_port == 0
+    ):
+        raise ValueError("QUICKSCALE_FRONTEND_ORIGIN must be a canonical HTTP(S) origin")
+
+    normalized_hostname = _quickscale_canonical_frontend_hostname(hostname)
+    if normalized_hostname is None:
+        raise ValueError("QUICKSCALE_FRONTEND_ORIGIN must be a canonical HTTP(S) origin")
+    default_port = 80 if origin.scheme == "http" else 443
+    normalized_port = "" if origin_port in {None, default_port} else f":{origin_port}"
+    canonical_origin = f"{origin.scheme}://{normalized_hostname}{normalized_port}"
+    if configured_origin not in {canonical_origin, f"{canonical_origin}/"}:
+        raise ValueError("QUICKSCALE_FRONTEND_ORIGIN must be a canonical HTTP(S) origin")
+
+    return canonical_origin
+
+
 _quickscale_frontend_origin = config("QUICKSCALE_FRONTEND_ORIGIN", default="").strip()
 QUICKSCALE_FRONTEND_ORIGIN = (
-    _quickscale_frontend_origin or f"http://localhost:{QUICKSCALE_FRONTEND_HOST_PORT}"
-).rstrip("/")
+    _quickscale_validate_frontend_origin(_quickscale_frontend_origin)
+    if _quickscale_frontend_origin
+    else f"http://localhost:{QUICKSCALE_FRONTEND_HOST_PORT}"
+)
 
 # Allow all hosts in development (including Docker containers running on 0.0.0.0)
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "*"]

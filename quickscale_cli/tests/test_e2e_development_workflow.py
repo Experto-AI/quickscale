@@ -14,6 +14,7 @@ Run with: pytest -m e2e
 Note: Requires Docker to be running
 """
 
+from collections.abc import Callable
 import json
 import os
 import re
@@ -66,6 +67,18 @@ def _worker_resource_scope() -> str:
     if worker:
         return f"{base}-{worker}"[:63]
     return base
+
+
+def _e2e_host_ports(find_free_port: Callable[[], int]) -> tuple[str, str]:
+    """Return distinct parent-reserved app/frontend ports for one E2E lane."""
+    app_port = os.environ.get("QS_E2E_APP_PORT") or str(find_free_port())
+    configured_frontend_port = os.environ.get("QS_E2E_FRONTEND_PORT")
+    frontend_port = configured_frontend_port or str(find_free_port())
+    if configured_frontend_port and frontend_port == app_port:
+        raise ValueError("QS_E2E_FRONTEND_PORT must differ from QS_E2E_APP_PORT")
+    while frontend_port == app_port:
+        frontend_port = str(find_free_port())
+    return app_port, frontend_port
 
 
 def _cleanup_labelled_resources(scope: str) -> None:
@@ -482,6 +495,27 @@ def test_retention_mode_still_precleans_prior_test_resources(
     wait.assert_called_once_with(43123, timeout=5.0)
 
 
+def test_e2e_host_ports_preserve_parent_reservations_under_xdist(monkeypatch):
+    """Workers must not discard the collision-free ports assigned by the runner."""
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw1")
+    monkeypatch.setenv("QS_E2E_APP_PORT", "41001")
+    monkeypatch.setenv("QS_E2E_FRONTEND_PORT", "41002")
+
+    def unexpected_allocation() -> int:
+        raise AssertionError("parent-reserved ports must not be replaced")
+
+    assert _e2e_host_ports(unexpected_allocation) == ("41001", "41002")
+
+
+def test_e2e_host_ports_retry_a_duplicate_fallback(monkeypatch):
+    """Direct pytest runs allocate distinct app and frontend ports."""
+    monkeypatch.delenv("QS_E2E_APP_PORT", raising=False)
+    monkeypatch.delenv("QS_E2E_FRONTEND_PORT", raising=False)
+    ports = iter((43123, 43123, 45173))
+
+    assert _e2e_host_ports(lambda: next(ports)) == ("43123", "45173")
+
+
 @pytest.mark.e2e
 class TestDevelopmentCommandsE2E:
     """End-to-end tests for development commands with real Docker containers."""
@@ -662,16 +696,7 @@ class TestDevelopmentCommandsE2E:
     @pytest.fixture
     def docker_env(self) -> dict[str, str]:
         """Provide isolated environment for Docker e2e commands"""
-        app_port = (
-            os.environ.get("QS_E2E_APP_PORT")
-            if not os.environ.get("PYTEST_XDIST_WORKER")
-            else str(self._get_free_port())
-        ) or str(self._get_free_port())
-        frontend_port = (
-            os.environ.get("QS_E2E_FRONTEND_PORT")
-            if not os.environ.get("PYTEST_XDIST_WORKER")
-            else str(self._get_free_port())
-        ) or str(self._get_free_port())
+        app_port, frontend_port = _e2e_host_ports(self._get_free_port)
         return {
             "PORT": app_port,
             "QUICKSCALE_FRONTEND_HOST_PORT": frontend_port,
@@ -827,13 +852,11 @@ class TestDevelopmentCommandsE2E:
         """Apply with Docker auto-start should run migrations via backend container."""
         runner = CliRunner()
         project_name = f"{self._container_prefix()}_apply_{int(time.time())}"
-        port = self._get_free_port()
+        port, frontend_port = _e2e_host_ports(self._get_free_port)
         resource_scope = self._container_prefix()
         env = {
-            "PORT": str(port),
-            "QUICKSCALE_FRONTEND_HOST_PORT": (
-                os.environ.get("QS_E2E_FRONTEND_PORT") or str(self._get_free_port())
-            ),
+            "PORT": port,
+            "QUICKSCALE_FRONTEND_HOST_PORT": frontend_port,
             "QS_E2E_CONTAINER_PREFIX": resource_scope,
             "QS_E2E_RESOURCE_SCOPE": resource_scope,
             "QUICKSCALE_RESOURCE_PREFIX": resource_scope,

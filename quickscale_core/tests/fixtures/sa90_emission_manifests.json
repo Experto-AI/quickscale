@@ -38,7 +38,8 @@
       "v88-runtime-role": "Regenerated 2026-09-14 — Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 — Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa188": "Regenerated 2026-09-16 — start.sh removes the retired migrate_billing_to_orgs argv mode and rejects every supplied argv with exit 2; production.py returns the privileged-command contract to migrate/createcachetable. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa189": "Regenerated 2026-09-17 — the generator and Railway deploy share the quickscale_runtime role name, while db/init.sql, start.sh, and OPERATIONS.md render one canonical grant set including database CONNECT. The role-name context also updates .env.example, docker-compose.yml, and settings/base.py. Only these six generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
+      "sa189": "Regenerated 2026-09-17 — the generator and Railway deploy share the quickscale_runtime role name, while db/init.sql, start.sh, and OPERATIONS.md render one canonical grant set including database CONNECT. The role-name context also updates .env.example, docker-compose.yml, and settings/base.py. Only these six generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa192": "Regenerated 2026-09-17 — templates/base.html and templates/index.html load one Vite-served live token stylesheet through the configurable browser-visible frontend origin in DEBUG and compiled React CSS in production; templates/social/{embeds,link_tree}.html inherit that shell choice without overriding it; frontend/vite.config.ts reserves /static/frontend/ for Vite while proxying other Django static paths, loads the generated root environment with process overrides, rejects non-canonical origins, and compares the raw configured Host before Vite's localhost/IP exceptions; frontend/src/test/viteAssetRouting.test.ts proves stylesheet routing, absent and preconfigured .env restoration, exact HTTP/WebSocket Host handling including normalized-alias rejection, and the canonical origin corpus shared with Django settings; docker-compose.yml builds the Django-served SPA JavaScript, probes Vite with the configured Host, and passes both frontend port and origin to Django; testproject/settings/local.py validates the configurable frontend port and full origin against that corpus; .env, .env.example, and README.md document the local defaults and remote/tunnel override. Only these eleven generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -60,11 +61,11 @@
     },
     ".env": {
       "mode": "664",
-      "sha256": "9ed31cf3b2f3051de42af2987978eefa8dba416e26e7c94777f846e27c396479"
+      "sha256": "04da07b92d64dc5c800229b93b2dfc9904e0a529d9e403fafe4a00a25fe79d9b"
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "595e71c1fd1b44a9ba10263ea09eee7cba230ef132edb93a7a6ca38b9d20f3e3"
+      "sha256": "e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
@@ -92,7 +93,7 @@
     },
     "README.md": {
       "mode": "664",
-      "sha256": "392bd6ed94789ab1603f0b3ac81a338c3f8624e59e2e6c0de065562f0e6fec06"
+      "sha256": "1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387"
     },
     "db/init.sql": {
       "mode": "664",
@@ -100,7 +101,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "ff9180ec4a58d140e238492fa8282b52899d1ae54135ac3c78b74fc0f08becbf"
+      "sha256": "d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -382,6 +383,10 @@
       "mode": "664",
       "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
+    "frontend/src/test/viteAssetRouting.test.ts": {
+      "mode": "664",
+      "sha256": "c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016"
+    },
     "frontend/src/vite-env.d.ts": {
       "mode": "664",
       "sha256": "ce69993800ff581ee24bca8cf09315cf46a3075de8bf78e653e4afcee3096ee3"
@@ -396,7 +401,7 @@
     },
     "frontend/vite.config.ts": {
       "mode": "664",
-      "sha256": "ed6c4012c06b93fc1752f1d47185144f50e51c1fcdf1b8be72ad8a6c724534a9"
+      "sha256": "f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e"
     },
     "frontend/vitest.config.ts": {
       "mode": "664",
@@ -440,19 +445,19 @@
     },
     "templates/base.html": {
       "mode": "664",
-      "sha256": "c5e5ed5418d506c7449e2df6500683d62387b55abc62075306794fd3621429a2"
+      "sha256": "dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668"
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "d5d12efe0a3936e34e28d6894de68d376bc5a7faf3f34f6a78fb10b1285c677f"
+      "sha256": "c1023de5db28e87a76cb48635f4f03a05332f946e5541a785134fb24a33a34f0"
     },
     "templates/social/embeds.html": {
       "mode": "664",
-      "sha256": "3ab2dfbb6039286ab713d0fb2b276e6700675b9a7e9b44e1563fc4ee75f04044"
+      "sha256": "72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82"
     },
     "templates/social/link_tree.html": {
       "mode": "664",
-      "sha256": "74f62f91aada8b4c77cf238428263ec33be27635108307e3fe5e217084faee45"
+      "sha256": "2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb"
     },
     "testproject/__init__.py": {
       "mode": "664",
@@ -476,7 +481,7 @@
     },
     "testproject/settings/local.py": {
       "mode": "664",
-      "sha256": "3cb8254542b994413dd7b39d3ea399b33c4be2c5116d0b1d739b72921eefb449"
+      "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
       "mode": "664",
@@ -526,11 +531,11 @@
     },
     ".env": {
       "mode": "664",
-      "sha256": "9ed31cf3b2f3051de42af2987978eefa8dba416e26e7c94777f846e27c396479"
+      "sha256": "04da07b92d64dc5c800229b93b2dfc9904e0a529d9e403fafe4a00a25fe79d9b"
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "595e71c1fd1b44a9ba10263ea09eee7cba230ef132edb93a7a6ca38b9d20f3e3"
+      "sha256": "e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
@@ -558,7 +563,7 @@
     },
     "README.md": {
       "mode": "664",
-      "sha256": "392bd6ed94789ab1603f0b3ac81a338c3f8624e59e2e6c0de065562f0e6fec06"
+      "sha256": "1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387"
     },
     "db/init.sql": {
       "mode": "664",
@@ -566,7 +571,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "ff9180ec4a58d140e238492fa8282b52899d1ae54135ac3c78b74fc0f08becbf"
+      "sha256": "d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -848,6 +853,10 @@
       "mode": "664",
       "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
+    "frontend/src/test/viteAssetRouting.test.ts": {
+      "mode": "664",
+      "sha256": "c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016"
+    },
     "frontend/src/vite-env.d.ts": {
       "mode": "664",
       "sha256": "ce69993800ff581ee24bca8cf09315cf46a3075de8bf78e653e4afcee3096ee3"
@@ -862,7 +871,7 @@
     },
     "frontend/vite.config.ts": {
       "mode": "664",
-      "sha256": "ed6c4012c06b93fc1752f1d47185144f50e51c1fcdf1b8be72ad8a6c724534a9"
+      "sha256": "f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e"
     },
     "frontend/vitest.config.ts": {
       "mode": "664",
@@ -906,19 +915,19 @@
     },
     "templates/base.html": {
       "mode": "664",
-      "sha256": "c5e5ed5418d506c7449e2df6500683d62387b55abc62075306794fd3621429a2"
+      "sha256": "dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668"
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "d5d12efe0a3936e34e28d6894de68d376bc5a7faf3f34f6a78fb10b1285c677f"
+      "sha256": "c1023de5db28e87a76cb48635f4f03a05332f946e5541a785134fb24a33a34f0"
     },
     "templates/social/embeds.html": {
       "mode": "664",
-      "sha256": "3ab2dfbb6039286ab713d0fb2b276e6700675b9a7e9b44e1563fc4ee75f04044"
+      "sha256": "72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82"
     },
     "templates/social/link_tree.html": {
       "mode": "664",
-      "sha256": "74f62f91aada8b4c77cf238428263ec33be27635108307e3fe5e217084faee45"
+      "sha256": "2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb"
     },
     "testproject/__init__.py": {
       "mode": "664",
@@ -942,7 +951,7 @@
     },
     "testproject/settings/local.py": {
       "mode": "664",
-      "sha256": "3cb8254542b994413dd7b39d3ea399b33c4be2c5116d0b1d739b72921eefb449"
+      "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
       "mode": "664",
@@ -992,11 +1001,11 @@
     },
     ".env": {
       "mode": "664",
-      "sha256": "9ed31cf3b2f3051de42af2987978eefa8dba416e26e7c94777f846e27c396479"
+      "sha256": "04da07b92d64dc5c800229b93b2dfc9904e0a529d9e403fafe4a00a25fe79d9b"
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "595e71c1fd1b44a9ba10263ea09eee7cba230ef132edb93a7a6ca38b9d20f3e3"
+      "sha256": "e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
@@ -1024,7 +1033,7 @@
     },
     "README.md": {
       "mode": "664",
-      "sha256": "392bd6ed94789ab1603f0b3ac81a338c3f8624e59e2e6c0de065562f0e6fec06"
+      "sha256": "1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387"
     },
     "db/init.sql": {
       "mode": "664",
@@ -1032,7 +1041,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "ff9180ec4a58d140e238492fa8282b52899d1ae54135ac3c78b74fc0f08becbf"
+      "sha256": "d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -1314,6 +1323,10 @@
       "mode": "664",
       "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
+    "frontend/src/test/viteAssetRouting.test.ts": {
+      "mode": "664",
+      "sha256": "c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016"
+    },
     "frontend/src/vite-env.d.ts": {
       "mode": "664",
       "sha256": "ce69993800ff581ee24bca8cf09315cf46a3075de8bf78e653e4afcee3096ee3"
@@ -1328,7 +1341,7 @@
     },
     "frontend/vite.config.ts": {
       "mode": "664",
-      "sha256": "ed6c4012c06b93fc1752f1d47185144f50e51c1fcdf1b8be72ad8a6c724534a9"
+      "sha256": "f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e"
     },
     "frontend/vitest.config.ts": {
       "mode": "664",
@@ -1372,19 +1385,19 @@
     },
     "templates/base.html": {
       "mode": "664",
-      "sha256": "c5e5ed5418d506c7449e2df6500683d62387b55abc62075306794fd3621429a2"
+      "sha256": "dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668"
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "d5d12efe0a3936e34e28d6894de68d376bc5a7faf3f34f6a78fb10b1285c677f"
+      "sha256": "c1023de5db28e87a76cb48635f4f03a05332f946e5541a785134fb24a33a34f0"
     },
     "templates/social/embeds.html": {
       "mode": "664",
-      "sha256": "3ab2dfbb6039286ab713d0fb2b276e6700675b9a7e9b44e1563fc4ee75f04044"
+      "sha256": "72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82"
     },
     "templates/social/link_tree.html": {
       "mode": "664",
-      "sha256": "74f62f91aada8b4c77cf238428263ec33be27635108307e3fe5e217084faee45"
+      "sha256": "2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb"
     },
     "testproject/__init__.py": {
       "mode": "664",
@@ -1408,7 +1421,7 @@
     },
     "testproject/settings/local.py": {
       "mode": "664",
-      "sha256": "3cb8254542b994413dd7b39d3ea399b33c4be2c5116d0b1d739b72921eefb449"
+      "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
       "mode": "664",

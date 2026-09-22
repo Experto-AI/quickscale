@@ -25,11 +25,24 @@ def _recipe(*make_args: str) -> str:
     # These suites run inside `make check-gate-suites`, so an outer `make ci
     # ONLY=...` would reach the nested make through MAKEFLAGS (which carries
     # command-line variable assignments to sub-makes regardless of `unexport`)
-    # and contaminate the recipe under test. Each invocation must stand alone.
+    # and contaminate the recipe under test. An outer worker-count override is
+    # equally irrelevant when a case is asserting the repository default.
+    # Each invocation must stand alone; tests for explicit overrides pass them
+    # directly in make_args below.
     environment = {
         key: value
         for key, value in os.environ.items()
-        if key not in {"MAKEFLAGS", "MFLAGS", "MAKELEVEL", "K", "ARGS", "ONLY", "FROM"}
+        if key
+        not in {
+            "MAKEFLAGS",
+            "MFLAGS",
+            "MAKELEVEL",
+            "K",
+            "ARGS",
+            "ONLY",
+            "FROM",
+            "PYTEST_XDIST_WORKERS",
+        }
     }
     result = subprocess.run(
         ["make", "-n", *make_args],

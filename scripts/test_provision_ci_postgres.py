@@ -105,6 +105,7 @@ elif [[ " $* " == *" -At "* && " $* " == *" role_name=quickscale_test_role "* ]]
 elif [[ " $* " == *" -At "* && " $* " == *" role_name=quickscale_bypassrls_test_role "* ]]; then
   echo "t|t|f|t|f|f"
 elif [[ " $* " == *" -At "* && " $* " == *" inner_role="* ]]; then
+  cat >/dev/null
   echo "f|f|f|f|f|f"
 elif [[ " $* " == *" current_setting("* ]]; then
   echo "180000"
@@ -364,7 +365,7 @@ exec /usr/bin/ps "$@"''',
         (
             'trap \'kill "$descendant" 2>/dev/null; '
             f'wait "$descendant" 2>/dev/null; exit {expected_status}\' {signal_name}; '
-            f"sleep 30 & descendant=$!; printf '%s\\n' \"$descendant\" > {descendant_pid_file!s}; "
+            f"sleep 120 & descendant=$!; printf '%s\\n' \"$descendant\" > {descendant_pid_file!s}; "
             'wait "$descendant"'
         ),
         env={
@@ -374,7 +375,10 @@ exec /usr/bin/ps "$@"''',
         },
     )
     try:
-        deadline = time.monotonic() + 10
+        # The registered script suite runs this under a saturated xdist pool.
+        # Keep the child alive and allow process-start scheduling headroom while
+        # retaining a hard bound for a genuinely missing ownership probe.
+        deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             if probe_started.exists() and descendant_pid_file.exists():
                 break
@@ -387,7 +391,7 @@ exec /usr/bin/ps "$@"''',
         process_group = os.getpgid(descendant_pid)
         process.send_signal(signal_number)
         release_probe.touch()
-        stdout, stderr = process.communicate(timeout=10)
+        stdout, stderr = process.communicate(timeout=30)
     finally:
         if process.poll() is None:
             process.kill()

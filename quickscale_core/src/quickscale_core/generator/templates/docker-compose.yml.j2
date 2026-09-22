@@ -37,6 +37,7 @@ services:
     working_dir: /app/frontend
     environment:
       - HOME=/tmp
+      - QUICKSCALE_FRONTEND_HOST_PORT=${QUICKSCALE_FRONTEND_HOST_PORT:-5173}
       - QUICKSCALE_FRONTEND_ORIGIN=${QUICKSCALE_FRONTEND_ORIGIN:-}
     # Use corepack without `enable` because this container runs as non-root.
     # `corepack enable` writes to /usr/local/bin and fails with EACCES.
@@ -47,7 +48,7 @@ services:
       # Test lanes override only the host publication to avoid cross-run collisions.
       - "${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173"
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5173/static/frontend/src/index.css').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      test: ["CMD-SHELL", "node -e \"const {request}=require('node:http');const port=process.env.QUICKSCALE_FRONTEND_HOST_PORT||'5173';const host=new URL(process.env.QUICKSCALE_FRONTEND_ORIGIN||('http://localhost:'+port)).host;const probe=request({hostname:'127.0.0.1',port:5173,path:'/static/frontend/src/index.css',headers:{Host:host}},response=>process.exit(response.statusCode===200?0:1));probe.on('error',()=>process.exit(1));probe.end()\""]
       interval: 5s
       timeout: 3s
       # Cold dependency downloads can exceed two minutes on constrained links.

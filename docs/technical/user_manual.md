@@ -377,25 +377,31 @@ following project-owned generated-file changes before using
    `templates/social/*.html` files. Together they select the live DEBUG Vite token source or the
    production `frontend/assets/index.css` build without letting a child host override the shell's
    choice; `base.html` also restores the persisted theme before paint.
-2. Compare and adopt the current `frontend/vite.config.ts` static proxy rule. Vite must serve
-   `/static/frontend/` itself while forwarding other Django-owned `/static` paths to Django.
+2. Compare and adopt the current `frontend/vite.config.ts` static proxy and exact-Host rules. Vite
+   must serve `/static/frontend/` itself while forwarding other Django-owned `/static` paths to
+   Django. It derives `http://localhost:<QUICKSCALE_FRONTEND_HOST_PORT>` when the full origin is
+   blank, rejects a missing Host, and rejects every differing HTTP/WebSocket Host, including Vite's
+   normal localhost and IP exceptions.
 3. Compare and adopt the current `<package>/settings/local.py` definitions of
    `QUICKSCALE_FRONTEND_HOST_PORT` and `QUICKSCALE_FRONTEND_ORIGIN`. Django uses the full
    browser-visible Vite origin when it renders the DEBUG stylesheet URL for both React and module
-   pages.
+   pages, and rejects a non-canonical value instead of rendering a broken URL.
 4. Compare and adopt the current `docker-compose.yml` frontend workflow. It runs `pnpm build`
    before `pnpm dev`, publishes `${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173`, passes the port and
-   optional full origin to Django, and waits for the Vite-served stylesheet before the backend
-   starts.
+   optional full origin to Vite and Django, probes Vite with the effective origin's Host, and waits
+   for the Vite-served stylesheet before the backend starts.
 5. With DEBUG enabled, run `pnpm dev` in `frontend/`. For non-DEBUG deployments, run `pnpm build`
    so `static/frontend/assets/index.css` exists.
 
 Both stylesheet paths originate from the project-owned `frontend/src/index.css`: change colors and
 radii there once, then keep Vite running for local development or rebuild for deployment. Module
 styles consume those variables and do not require Tailwind to scan module templates. The default
-browser-facing Vite port remains 5173; set `QUICKSCALE_FRONTEND_HOST_PORT` when Docker must publish
-a different host port. Set `QUICKSCALE_FRONTEND_ORIGIN` to the full origin when the browser reaches
-Vite through another hostname or an HTTPS development tunnel.
+browser-facing Vite port remains 5173; set `QUICKSCALE_FRONTEND_HOST_PORT` to a canonical decimal
+from 1 through 65535 when Docker must publish a different host port. With a blank
+`QUICKSCALE_FRONTEND_ORIGIN`, both servers derive
+`http://localhost:<QUICKSCALE_FRONTEND_HOST_PORT>` and accept only that exact Host. Set the full
+origin when the browser reaches Vite through another hostname or an HTTPS development tunnel. Use
+a canonical HTTP(S) origin with no path, query, fragment, or user information.
 
 **Keeping the frontend separate from updates.** It already is: `frontend/` is your code and no
 QuickScale command rewrites it. What can still change under it is the backend it calls — module API

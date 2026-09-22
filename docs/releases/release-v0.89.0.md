@@ -39,8 +39,10 @@ the current generated `templates/base.html`, `templates/index.html`, generated
 `docker-compose.yml` before acknowledging the v0.89.0 contract vintage. Together those files load
 the canonical token stylesheet, keep Django-owned static paths on Django, expose the browser-facing
 Vite port and optional full origin to Django, make React and module pages use the same live DEBUG
-stylesheet, build assets before starting Vite, and wait for the stylesheet before starting the
-backend. Run `pnpm dev` for DEBUG pages and run
+stylesheet, reject malformed origins and requests outside the exact Host derived from the host port
+or configured origin, build assets before starting Vite, and probe that Host before starting the
+backend. Run `pnpm dev` for DEBUG
+pages and run
 `pnpm build` before serving non-DEBUG pages. `quickscale update` and existing-project
 `quickscale apply` do not rewrite these project-owned files.
 
@@ -62,13 +64,44 @@ the modules are unchanged, but DEBUG pages now require the generated shell, loca
 settings, Vite static routing, and Compose frontend workflow described under Adoption. Contract
 vintage enforcement blocks old or unknown projects before mutation; passing
 `--acknowledge-contract-vintage` confirms that the operator completed every listed manual step and
-does not update those files automatically.
+does not update those files automatically. `QUICKSCALE_FRONTEND_HOST_PORT` must be a canonical
+decimal from 1 through 65535. A configured `QUICKSCALE_FRONTEND_ORIGIN` must be a
+canonical HTTP(S) origin; malformed values fail startup. When it is blank, Django and Vite derive
+`http://localhost:<QUICKSCALE_FRONTEND_HOST_PORT>`; Vite accepts only the effective origin's exact
+Host in either case.
 
-This maintenance release adds maintainer-only beta-migration compatibility validation and
+This maintenance release also adds maintainer-only beta-migration compatibility validation and
 mode-specific runtime provenance to report output; incompatible launcher, settings, and package
 combinations now fail before recipient mutation, and fresh-first identity changes reconcile raw
-and derived slug/package values across the generated scaffold. It does not change
-generated-project output, public package APIs, or upgrade requirements.
+and derived slug/package values across the generated scaffold. Those beta-migration-only additions
+do not themselves change generated-project output, public package APIs, or upgrade requirements;
+the shared-design generated-file boundary is described above.
+
+## Delivery provenance
+
+The SA195/SA192 delivery was synchronized with `v89` at
+`978676f3fbd5aadfff0205d7bdf1383d6c0ca795`. It changes the shared module-test shell; the auth,
+billing, blog, CRM, and listings templates and stylesheets; the generated React/Django shell,
+frontend-origin settings, Vite proxy, and Compose workflow; their source/embedded module manifests;
+the exact-emission fixture; focused contract and E2E coverage; and the corresponding changelog,
+roadmap, frontend architecture, and user-manual documentation. No dependency was added.
+
+The exact-emission hashes below apply identically to `react_default`, `react_empty`, and
+`react_selected`; all paths not listed remain unchanged in those manifests.
+
+| Generated path | SHA-256 |
+|---|---|
+| `.env` | `04da07b92d64dc5c800229b93b2dfc9904e0a529d9e403fafe4a00a25fe79d9b` |
+| `.env.example` | `e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1` |
+| `README.md` | `1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387` |
+| `docker-compose.yml` | `d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3` |
+| `frontend/src/test/viteAssetRouting.test.ts` | `c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016` |
+| `frontend/vite.config.ts` | `f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e` |
+| `templates/base.html` | `dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668` |
+| `templates/index.html` | `c1023de5db28e87a76cb48635f4f03a05332f946e5541a785134fb24a33a34f0` |
+| `templates/social/embeds.html` | `72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82` |
+| `templates/social/link_tree.html` | `2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb` |
+| `testproject/settings/local.py` | `cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9` |
 
 ## Validation
 

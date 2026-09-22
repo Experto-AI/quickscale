@@ -90,6 +90,8 @@ structure while preserving the recipient name, so it has an explicit
  ``frontend/src/test/csrf.test.tsx``,
  ``frontend/src/test/RootDispatch.test.tsx``,
  ``frontend/src/test/PublicSocialPages.test.tsx``,
+ ``frontend/src/test/validateQuickScaleSeam.test.ts``,
+ ``frontend/src/test/viteAssetRouting.test.ts``,
  ``frontend/e2e/home.spec.ts``.
  Rationale: User-editable application source, styles, type declarations,
  utility helpers, and test files. They are not structural migration targets;

@@ -38,11 +38,16 @@ Fresh `showcase_react` generations also include dormant PostHog starter support 
 # Install dependencies
 pnpm install
 
+# Materialize the JavaScript entry loaded by Django
+pnpm build
+
 # Start development server
 pnpm dev
 ```
 
-The frontend will be available at http://localhost:5173
+Vite serves the live token stylesheet at http://localhost:5173 while Django loads the compiled
+JavaScript entry produced by `pnpm build`. Open the application through Django at
+http://localhost:8000 so the required runtime configuration is present.
 
 ### Development
 

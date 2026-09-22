@@ -13,6 +13,7 @@ These tests verify the complete lifecycle:
 Run with: pytest -m e2e
 """
 
+from collections.abc import Callable
 import json
 import os
 import re
@@ -58,6 +59,18 @@ REPO_LOCAL_ARTIFACT_NAMES = frozenset(
     }
 )
 REPO_LOCAL_ARTIFACT_SUFFIXES = (".egg-info", ".pyc", ".pyo")
+
+
+def _e2e_host_ports(find_free_port: Callable[[], int]) -> tuple[int, int]:
+    """Return distinct parent-reserved app/frontend ports for one E2E lane."""
+    app_port = int(os.environ.get("QS_E2E_APP_PORT") or find_free_port())
+    configured_frontend_port = os.environ.get("QS_E2E_FRONTEND_PORT")
+    frontend_port = int(configured_frontend_port or find_free_port())
+    if configured_frontend_port and frontend_port == app_port:
+        raise ValueError("QS_E2E_FRONTEND_PORT must differ from QS_E2E_APP_PORT")
+    while frontend_port == app_port:
+        frontend_port = find_free_port()
+    return app_port, frontend_port
 
 
 def _is_repo_local_artifact(entry_name: str) -> bool:
@@ -229,6 +242,18 @@ def test_generated_project_copytree_ignores_repo_local_artifacts(tmp_path):
     assert not (destination / "build").exists()
     assert not (destination / ".coverage").exists()
     assert not (destination / ".coverage.unit").exists()
+
+
+def test_e2e_host_ports_preserve_parent_reservations_under_xdist(monkeypatch):
+    """Core workers must retain the runner's collision-free lane ports."""
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    monkeypatch.setenv("QS_E2E_APP_PORT", "42001")
+    monkeypatch.setenv("QS_E2E_FRONTEND_PORT", "42002")
+
+    def unexpected_allocation() -> int:
+        raise AssertionError("parent-reserved ports must not be replaced")
+
+    assert _e2e_host_ports(unexpected_allocation) == (42001, 42002)
 
 
 @pytest.fixture(scope="session")
@@ -2272,12 +2297,7 @@ class TestDockerIntegration:
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
         scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "sa142-warm-build")
-        port = int(os.environ.get("QS_E2E_APP_PORT", str(helper._find_free_port())))
-        frontend_port = int(
-            os.environ.get("QS_E2E_FRONTEND_PORT", str(helper._find_free_port()))
-        )
-        if os.environ.get("PYTEST_XDIST_WORKER"):
-            frontend_port = helper._find_free_port()
+        port, frontend_port = _e2e_host_ports(helper._find_free_port)
         env = {
             **os.environ,
             "COMPOSE_PROJECT_NAME": scope,
@@ -2337,12 +2357,7 @@ class TestDockerIntegration:
         project_path = tmp_path / project_name
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
         scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "sa142-no-cleanup")
-        port = int(os.environ.get("QS_E2E_APP_PORT", str(helper._find_free_port())))
-        frontend_port = int(
-            os.environ.get("QS_E2E_FRONTEND_PORT", str(helper._find_free_port()))
-        )
-        if os.environ.get("PYTEST_XDIST_WORKER"):
-            frontend_port = helper._find_free_port()
+        port, frontend_port = _e2e_host_ports(helper._find_free_port)
         env = {
             **os.environ,
             "COMPOSE_PROJECT_NAME": scope,

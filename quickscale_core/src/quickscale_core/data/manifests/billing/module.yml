@@ -48,9 +48,9 @@ contract_vintage:
   minimum: "0.89.0"
   manual_adoption_steps:
     - "Compare and manually adopt the current templates/base.html, templates/index.html, and generated templates/social/*.html files so every DEBUG host loads the Vite-served /static/frontend/src/index.css, production loads frontend/assets/index.css, and the shell restores the persisted theme."
-    - "Compare and manually adopt the current frontend/vite.config.ts static proxy rule so Vite serves /static/frontend/ directly instead of forwarding that path to Django."
-    - "Compare and manually adopt the current <package>/settings/local.py QUICKSCALE_FRONTEND_HOST_PORT and QUICKSCALE_FRONTEND_ORIGIN settings so DEBUG React and module pages use the same browser-visible Vite stylesheet URL."
-    - "Compare and manually adopt the current docker-compose.yml frontend workflow so it builds assets before starting Vite, publishes ${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173, passes the port and optional full origin to Django, and waits for the Vite-served stylesheet."
+    - "Compare and manually adopt the current frontend/vite.config.ts static proxy and exact HTTP/WebSocket Host enforcement so Vite serves /static/frontend/ directly and accepts only the effective browser Host: configured QUICKSCALE_FRONTEND_ORIGIN, or localhost:QUICKSCALE_FRONTEND_HOST_PORT when blank."
+    - "Compare and manually adopt the current <package>/settings/local.py QUICKSCALE_FRONTEND_HOST_PORT and validated QUICKSCALE_FRONTEND_ORIGIN settings so DEBUG React and module pages use the same browser-visible Vite stylesheet URL and malformed origins fail explicitly."
+    - "Compare and manually adopt the current docker-compose.yml frontend workflow so it builds assets before starting Vite, publishes ${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173, passes the port and optional full origin to Vite and Django, probes Vite with the effective Host, and waits for the Vite-served stylesheet."
     - "Run pnpm dev alongside Django for DEBUG module pages; run pnpm build so static/frontend/assets/index.css exists before serving non-DEBUG module pages."
 
 # ---------------------------------------------------------------------------

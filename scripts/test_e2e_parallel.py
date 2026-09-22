@@ -46,8 +46,26 @@ failure = os.environ.get("FAKE_E2E_FAILURE", "") == lane
 
 with event_log.open("a", encoding="utf-8") as stream:
     stream.write(f"CALL|{lane}|{' '.join(args[2:])}\n")
+    stream.write(
+        "ENV|"
+        f"{lane}|{os.environ['QS_E2E_RESOURCE_SCOPE']}|"
+        f"{os.environ['QS_E2E_COMPOSE_PROJECT_NAME']}|"
+        f"{os.environ['COMPOSE_PROJECT_NAME']}\n"
+    )
     stream.write(f"START|{lane}|{os.getpid()}\n")
     stream.flush()
+if os.environ.get("FAKE_E2E_WAIT_FOR_PEER") == "1":
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        starts = sum(
+            line.startswith("START|")
+            for line in event_log.read_text(encoding="utf-8").splitlines()
+        )
+        if starts == 2:
+            break
+        time.sleep(0.01)
+    else:
+        raise SystemExit("timed out waiting for the peer E2E lane")
 time.sleep(delay)
 with event_log.open("a", encoding="utf-8") as stream:
     stream.write(f"END|{lane}|{os.getpid()}\n")
@@ -195,11 +213,11 @@ def _events(tmp_path: Path) -> list[str]:
     return (tmp_path / "events.log").read_text(encoding="utf-8").splitlines()
 
 
-def _lane_ports(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+def _lane_ports(result: subprocess.CompletedProcess[str], service: str = "App") -> dict[str, str]:
     return {
         line.removeprefix("[").split("]", 1)[0].lower(): line.rsplit(":", 1)[1].strip()
         for line in result.stdout.splitlines()
-        if "App host port:" in line
+        if f"{service} host port:" in line
     }
 
 
@@ -225,7 +243,12 @@ def _max_active(events: list[str]) -> int:
 
 def test_parallel_lanes_overlap_and_replay_in_lane_order(tmp_path: Path) -> None:
     """The default launches both lanes and replays Core before CLI."""
-    result = _run(tmp_path, FAKE_E2E_DELAY_CORE="0.2", FAKE_E2E_DELAY_CLI="0.05")
+    result = _run(
+        tmp_path,
+        FAKE_E2E_DELAY_CORE="0.2",
+        FAKE_E2E_DELAY_CLI="0.05",
+        FAKE_E2E_WAIT_FOR_PEER="1",
+    )
 
     assert result.returncode == 0, result.stdout + result.stderr
     events = _events(tmp_path)
@@ -235,11 +258,28 @@ def test_parallel_lanes_overlap_and_replay_in_lane_order(tmp_path: Path) -> None
     lane_lines = [line for line in result.stdout.splitlines() if "App host port:" in line]
     assert len(lane_lines) == 2
     assert len({line.rsplit(":", 1)[1].strip() for line in lane_lines}) == 2
+    app_ports = _lane_ports(result)
+    frontend_ports = _lane_ports(result, "Frontend")
+    assert len(app_ports) == 2
+    assert len(frontend_ports) == 2
+    assert len({*app_ports.values(), *frontend_ports.values()}) == 4
     core_start = next(event for event in events if event.startswith("START|core"))
     core_end = next(event for event in events if event.startswith("END|core"))
     assert events.index(core_start) < events.index(core_end)
     assert result.stdout.index("[Core] Lane:") < result.stdout.index("[CLI] Lane:")
     assert "All E2E Tests Passed" in result.stdout
+
+
+def test_pytest_compose_project_is_disjoint_from_resource_scope(tmp_path: Path) -> None:
+    """CLI Compose teardown cannot remove pytest-docker's lane database."""
+    result = _run(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    environments = [event.split("|") for event in _events(tmp_path) if event.startswith("ENV|")]
+    assert len(environments) == 2
+    for _event, _lane, resource_scope, pytest_compose_project, compose_project in environments:
+        assert pytest_compose_project != resource_scope
+        assert compose_project == pytest_compose_project
 
 
 def test_serial_opt_out_forwards_flags_and_preserves_cleanup_mode(tmp_path: Path) -> None:
@@ -320,6 +360,55 @@ def test_parallel_explicit_port_is_reserved_for_core_lane(tmp_path: Path) -> Non
     ports = _lane_ports(result)
     assert ports["core"] == "43123"
     assert ports["cli"] != "43123"
+
+
+def test_parallel_explicit_frontend_port_is_reserved_without_collision(
+    tmp_path: Path,
+) -> None:
+    """Core keeps caller ports while all concurrent lane endpoints stay unique."""
+    result = _run(
+        tmp_path,
+        QS_E2E_APP_PORT="43123",
+        QS_E2E_FRONTEND_PORT="45173",
+        QS_E2E_XDIST_WORKERS="3",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    app_ports = _lane_ports(result)
+    frontend_ports = _lane_ports(result, "Frontend")
+    assert app_ports["core"] == "43123"
+    assert frontend_ports["core"] == "45173"
+    assert len({*app_ports.values(), *frontend_ports.values()}) == 4
+
+
+@pytest.mark.parametrize("variable", ["QS_E2E_APP_PORT", "QS_E2E_FRONTEND_PORT"])
+def test_oversized_explicit_host_port_fails_without_shell_overflow(
+    tmp_path: Path, variable: str
+) -> None:
+    """Arbitrarily large decimal ports fail before shell integer arithmetic."""
+    result = _run(
+        tmp_path,
+        **{variable: "999999999999999999999999999999999999"},
+    )
+
+    assert result.returncode != 0
+    assert f"{variable} must be between 1 and 65535" in result.stderr
+    assert "integer expression expected" not in result.stderr
+
+
+def test_zero_padded_equivalent_host_ports_fail_before_collision_checks(
+    tmp_path: Path,
+) -> None:
+    """Equivalent decimal spellings cannot bypass raw-string collision checks."""
+    result = _run(
+        tmp_path,
+        QS_E2E_APP_PORT="043123",
+        QS_E2E_FRONTEND_PORT="43123",
+    )
+
+    assert result.returncode != 0
+    assert "QS_E2E_APP_PORT must be between 1 and 65535" in result.stderr
+    assert "App host port:" not in result.stdout
 
 
 def test_serial_explicit_port_is_reused_by_sequential_lanes(tmp_path: Path) -> None:
