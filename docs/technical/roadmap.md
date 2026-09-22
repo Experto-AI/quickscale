@@ -46,8 +46,6 @@ context, scope, and acceptance;
 | SA193 | Derive the generated `.env.example` credential contract from module manifests | post-v88 | 2 | — | Deferred |
 | SA198 | Carry the database's TLS settings into the backup and restore commands | post-v88 | 2 | — | Deferred |
 | SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
-| SA195 | Share one module test-settings stub instead of copying it per module | post-v88 | 2 | — | Deferred |
-| SA192 | Style the module-shipped Django pages with the shared design | post-v88 | 2 | SA195 | Deferred |
 | SA199 | Keep external calls out of transactions and hold the webhook lock | post-v88 | 3 | — | Deferred |
 | SA200 | Gate the proxy and correlation-id settings the generator emits | post-v88 | 3 | — | Deferred |
 | SA196 | Fail hard on undefined generator template context | post-v88 | 3 | — | Deferred |
@@ -58,7 +56,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
-Track 2: SA195 ──► SA192 ──► SA193 ──► SA198 ──► SA202   (SA195/SA192 in progress, interrupted)
+Track 2: SA193 ──► SA198 ──► SA202
 Track 3: SA199 (in progress, interrupted) ──► SA200 ──► SA196 ──► SA201 ──► SA203
 ```
 
@@ -83,10 +81,6 @@ the critical path.
   fresh-first mode, which the halt does not reach, but it uses a tool whose gate is currently blind
   to the CLI it invokes; SA194 makes the gate observe it before the tool is trusted with the real
   site. SA191 redeploys through the fail-hard `deploy railway` path.
-- **SA195 precedes SA192.** The SA192 precursor already minted three byte-identical test-settings
-  stubs for the modules it restyled, while a sanctioned shared commons is imported by those same
-  three suites. SA192 restyles five module surfaces on that pattern and SA154's inventory queues
-  more, so the copy multiplies before it is removed unless the stub is shared first.
 - **SA193 is independent of the completed SA190 orgs work.** It touches generation-time wiring in
   `quickscale_cli` and `quickscale_core`; the completed purge and removal-obligation work lives in
   the `orgs` module, so the two have no shared file. One interaction, previously a watch item, has
@@ -97,8 +91,7 @@ the critical path.
 - **SA198 and SA202 are queued on track 2 by what publication would ship.** SA198 is the only
   S2 defect in the packaged bytes that no other ticket touches, and SA202 hardens the workflow that
   performs the publication those bytes are waiting on. Neither blocks another ticket, so both are
-  queue order rather than edges; both are placed ahead of the presentation work (SA195, SA192)
-  because that work changes nothing a published artifact does.
+  queue order rather than edges.
 - **SA199 remains open after SA190.** The completed SA190 work moved account-deletion Stripe calls
   outside database transactions and added the named obligations list that both removal boundaries
   consume. SA199 still owns the rest of its acceptance, including the Stripe search-query hardening,
@@ -151,10 +144,8 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA195 + SA192 (resume) | yes | yes | no | no | no |
+| 2 | SA193 | yes | yes | yes | **yes** | no |
 | 3 | SA199 (resume) | yes | yes | yes | **yes** | no |
-
-Track 2 cannot merge until its uncommitted work is checkpointed and reconciled with `v89` (below).
 
 ### Interrupted work (measured 2026-09-22)
 
@@ -168,34 +159,12 @@ before that date is gone and everything uncommitted now shows as unstaged.
   commits behind `v89`. To resume: `git merge v89` in the worktree (fast-forward), then start SA194
   from its ticket body; nothing is half-done. Old stash `stash@{2}` ("SA152 final resync
   preservation") predates SA194 and is not part of it.
-- **Track 2 — SA195 and SA192, partly committed, partly on disk.** The agent picked up SA195 and
-  SA192 instead of SA193, so the queue above is reordered to match. Branch `wt-track2` carries
-  checkpoint `e12e9867` "WIP: SA195 & SA192 resumed checkpoint state" (51 files, SA192 module
-  stylesheets, templates, vintage bumps, and the style-contract test) and is three commits behind
-  `v89` (missing `1270ed46`). On top of that commit the worktree holds 48 more uncommitted changes
-  that are **ahead** of it, not stale:
-  - *SA195, not in any commit:* the new `tests_shared/templates/base.html` (untracked), the blog,
-    CRM, and listings `tests/settings.py` pointing `DIRS` at it, and the deletion of their three
-    `tests/templates/base.html` copies.
-  - *SA192 follow-ups, mostly additive:* `test_module_page_style_contract.py` (+157, frontend-origin
-    validation and billing CTA cascade tests), `vite.config.ts`, `viteAssetRouting.test.ts`,
-    `local.py.j2`, `.env.example.j2`, manifest vintage lines, module CSS, e2e tests and scripts.
-  - *Must not be carried:* the deletion of `docs/others/arch-audit.md` and `tech-audit.md`, and the
-    worktree's own `roadmap.md` and `test_roadmap_consistency.py` edits, which mark SA195/SA192
-    delivered and drop them from the schedule without verification. Treat the `CHANGELOG.md`,
-    `decisions.md`, release-note, and other doc edits as drafts to review, not evidence.
-
-  To resume: (1) leave the audit deletions out of every checkpoint and do not restore either audit
-  from the worktree or `v89` by hand; `v89` wins, so after step 3 both
-  `docs/others/arch-audit.md` and `docs/others/tech-audit.md` must be byte-identical to `v89`'s,
-  and discard the unverified roadmap edits with `git restore
-  docs/technical/roadmap.md quickscale_core/tests/test_roadmap_consistency.py`; (2) review the
-  remaining diff and commit it as a second labeled WIP checkpoint by explicit file list, including
-  `tests_shared/templates/base.html`; (3) `git merge v89` and resolve, re-running the auth tests
-  because `1270ed46` edited the account-delete view; (4) finish SA195 first (stub shared, three
-  non-identical stubs converged or recorded, module suites unchanged), then SA192 against its full
-  acceptance; (5) write the closeout in this roadmap and the changelog, then merge through the
-  serialized queue before SA193 starts.
+- **Track 2 — SA195 and SA192 delivered.** The interrupted work was checkpointed by explicit file
+  list, reconciled with `v89`, and completed: blog, CRM, listings, and analytics test settings share
+  one repository-owned `tests_shared/templates/base.html`, while auth and billing keep local stubs
+  whose suites assert the older shell markup; the five module page surfaces carry the shared design
+  with the frontend-origin contract and its checks. Track 2's remaining queue is SA193, SA198, and
+  SA202.
 - **Track 3 — SA199, clean.** `wt-track3` has no uncommitted changes and sits one commit behind
   `v89` (this roadmap only). The only SA199 work is the part landed in `1270ed46` (see SA199
   *Progress*). To resume: `git merge v89`; confirm the `1270ed46` portions still meet their
@@ -522,80 +491,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `ruff.toml`, `scripts/gate_registry.json` and the parity oracles, the publication procedure doc,
   and the tech audit.
 
-- [ ] **SA195 — Share one module test-settings stub instead of copying it per module.**
+- [x] **SA195 — Share one module test-settings stub instead of copying it per module.**
 
-  **Context:** The commit that restyled the blog, CRM, and listings Django pages also minted three
-  byte-identical `tests/templates/base.html` stubs and three near-identical template-rendering
-  suites. The argument that would justify per-module copies is that publication splits each module
-  with its own prefix, so a module must stay self-contained — but those same three suites already
-  import a repo-root shared test commons, so the modules' own imports contradict it. Whatever
-  contract governs that commons today governs the stub too. SA192 restyles two further modules that
-  carry their own divergent stubs, and the promotion inventory queues more behind them.
-
-  The remaining three module stubs are not identical and predate the restyle; they are a separate
-  question. This is presentation-free cleanup: no template output changes.
-
-  **Acceptance:** the three byte-identical stubs resolve to one shared definition on the same terms
-  as the existing shared test commons, or the copies are kept and a check asserts they stay
-  identical, with the split constraint that forced them written down. Converge the three
-  non-identical stubs only if the shared one renders their suites unchanged; otherwise leave them
-  and record why. Module test suites pass unchanged, the publication split scope is unchanged, and
-  the shared commons' portability contract is neither weakened nor newly claimed — if module tests
-  are not in fact split-portable today, record that rather than fix it here. No styling, template,
-  or rendering change; those belong to SA192.
-
-  **Surfaces:** the blog, CRM, and listings test settings and template stubs, the shared test
-  commons, and the affected module test suites.
-
-- [ ] **SA192 — Style the module-shipped Django pages with the shared design.**
-
-  **Context:** After the frontend direction, a user moves between React screens and Django-rendered module pages:
-  `auth` account pages, `billing` pricing and status, and the blog, generic listings, and CRM
-  dashboard pages. Those pages use their own plainer styling, which reads as a different product.
-  The fix is presentation only.
-
-  Two layers produce a module page's look, and they update differently. The module's own templates
-  and static files (for example `quickscale_modules_auth/base.html` and its `auth.css`) live under
-  `modules/<name>/`, so `quickscale update` delivers changes to them. Those templates extend the
-  generated `base.html`, which is project-owned and never rewritten. Module-specific styling therefore
-  belongs in the module, where updates reach existing projects; the shell's tokens and header belong
-  in the generated `base.html`, which fresh projects receive and existing projects adopt through the
-  vintage rule from SA185.
-
-  The styling must not rely on project-level overrides. Django resolves a project `templates/` copy
-  before the module's, so an override would freeze that page at generation time and hide every later
-  module fix. It also cannot assume Tailwind utility classes are available: the project's Tailwind
-  build scans only `frontend/src`, so classes used only in module templates are never emitted. A
-  module stylesheet expressed in the shared design tokens avoids both traps.
-
-  Behavior stays exactly as tested. Allauth flows, form handling, CSRF and session semantics, and
-  the Stripe hosted checkout hand-off must not change, which is why existing tests should pass
-  without behavior edits.
-
-  **Acceptance:** every user-facing page template shipped by `auth` (account pages), `billing`
-  (pricing, dashboard, checkout and portal return pages), `blog`, `listings`, and the `crm`
-  dashboard uses the same design tokens (colors, radius, typography) and component look as
-  `showcase_react`, so moving between the React app and these pages shows no visual break. The
-  tokens are the shadcn/ui CSS variables (`--primary`, `--radius`, …) defined once for the project
-  and loaded by both the React app and `base.html`, so changing a token restyles React and Django
-  pages together; module styles read those variables instead of hard-coded colors. The
-  module-specific styling ships inside each module — its templates and a module stylesheet built
-  from the shared tokens — not as project-level `templates/` overrides, so `quickscale update`
-  delivers it and later design fixes; a generated project contains no copy of a module template.
-  The page shell stays the generated, project-owned `base.html`: fresh generations get the shared
-  tokens and header there, and the change moves the owning vintage through SA185 with manual
-  adoption steps for existing projects. Styling must not depend on Tailwind classes that the
-  project's frontend build does not emit, since that build scans only `frontend/src`. Flow logic,
-  URLs, forms, CSRF and session handling, allauth behavior, and the Stripe hosted checkout hand-off
-  are unchanged, and existing module tests pass without behavior edits. A generated-project check
-  fails when a module page stops extending `base.html` or loses its module stylesheet. Each
-  restyled module carries its own stylesheet, but its test-settings stub comes from the shared
-  definition SA195 establishes rather than a new per-module copy. Django admin and notification
-  emails are out of scope.
-
-  **Surfaces:** `auth`, `billing`, `blog`, `listings`, and `crm` templates and static styles; the
-  generated `base.html` template; the module vintage declarations; generator tests; the theme
-  documentation; and the user manual's update-ownership section.
+- [x] **SA192 — Style the module-shipped Django pages with the shared design.**
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 

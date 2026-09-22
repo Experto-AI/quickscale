@@ -3,7 +3,9 @@
 import os
 from pathlib import Path
 
-TESTS_DIR = Path(__file__).resolve().parent
+SHARED_TEST_TEMPLATES = (
+    Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
+)
 
 SECRET_KEY = "test-secret-key-for-analytics-module"
 DEBUG = True
@@ -29,7 +31,7 @@ ROOT_URLCONF = "tests.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [str(TESTS_DIR / "templates")],
+        "DIRS": [SHARED_TEST_TEMPLATES],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

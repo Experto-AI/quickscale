@@ -1,5 +1,15 @@
 {# Test stub mirroring the project base.html emitted by the showcase_react theme.
-   Only the block contract matters here: title, extra_css, content, extra_js. #}
+   Only the block contract matters here: title, extra_css, content, extra_js.
+
+   The blog, CRM, listings, and analytics test settings point at this single
+   definition. The auth and billing stubs stay local because their suites assert
+   the older shell markup (site-nav/nav-menu/nav-brand, /static/css/style.css)
+   that this restyled stub deliberately does not reproduce.
+
+   Module test suites are not split-portable today: `git subtree split` carries
+   each module's own `tests/` but not this repo-root commons, so a split branch
+   cannot import it. This stub follows that existing contract rather than
+   changing the publication split scope. #}
 <!DOCTYPE html>
 <html lang="en">
 <head>

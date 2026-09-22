@@ -97,7 +97,7 @@ the shared-design generated-file boundary is described above.
 ## Delivery provenance
 
 The SA195/SA192 delivery was synchronized with `v89` at
-`978676f3fbd5aadfff0205d7bdf1383d6c0ca795`. It changes the shared module-test shell; the auth,
+`6e8b24036bb26a74b585aa78cd9e53d54cd29e88`. It changes the shared module-test shell; the auth,
 billing, blog, CRM, and listings templates and stylesheets; the generated React/Django shell,
 frontend-origin settings, Vite proxy, and Compose workflow; their source/embedded module manifests;
 the exact-emission fixture; focused contract and E2E coverage; and the corresponding changelog,
