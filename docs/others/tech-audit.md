@@ -1,6 +1,6 @@
 # QuickScale — Deep Technical Audit (defect sweep)
 
-**Date:** 2026-09-17 · **HEAD:** `d2aee905` (branch `v89`) · **Mode:** first run (no prior `tech-audit.md`, no `arch-audit.md`)
+> **Audit snapshot:** 2026-09-17 at `d2aee905` (branch `v89`) · **Reconciled:** 2026-09-18 through `1270ed46`
 
 ---
 
@@ -9,7 +9,7 @@
 QuickScale is a **Python 3.14 / Django project generator and module workspace** laid out as a Poetry
 monorepo: `quickscale_core` (generator, Jinja2 templates, DR/backup engine, manifest + plan-apply
 system), `quickscale_cli` (Click CLI: `init`/`apply`/`deploy railway`/Docker dev commands),
-`quickscale_devtools`, and thirteen first-party Django modules under `quickscale_modules/`
+`quickscale_devtools`, and twelve first-party Django modules under `quickscale_modules/`
 (analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social,
 storage). There are **three distinct deployment realities**, and every finding below names the one
 it lives in:
@@ -119,29 +119,11 @@ at*, not *clean*.
   status: open
   reality: R2
   chain: []
-- id: billing-stripe-call-inside-delete-txn
-  severity: S2
-  category: "II. Concurrency / I. Correctness"
-  title: Stripe cancel runs inside the account-deletion transaction holding org row locks
-  effort: Small
-  confidence: High
-  status: open
-  reality: R2
-  chain: [billing-checkout-endpoints-unthrottled]
 - id: proxy-ssl-header-trusted-unconditionally
   severity: S3
   category: "VI. Error handling and operability"
   title: SECURE_PROXY_SSL_HEADER is set even when forwarding trust is disabled
   effort: Trivial
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
-- id: billing-webhook-lock-released-before-processing
-  severity: S3
-  category: "II. Concurrency"
-  title: Webhook duplicate check releases its lock before the handler runs
-  effort: Small
   confidence: High
   status: open
   reality: R2
@@ -154,7 +136,7 @@ at*, not *clean*.
   confidence: High
   status: open
   reality: R2
-  chain: [billing-stripe-call-inside-delete-txn]
+  chain: []
 - id: correlation-id-header-unbounded
   severity: S3
   category: "VI. Error handling and operability"
@@ -227,9 +209,7 @@ at*, not *clean*.
 | ID | Sev | Category | Title | Effort | Conf | Status |
 |---|---|---|---|---|---|---|
 | `dr-backup-drops-tls-options` | S2 | Data handling | pg_dump/pg_restore drop the database's TLS settings | Small | High | open |
-| `billing-stripe-call-inside-delete-txn` | S2 | Concurrency | Stripe cancel inside the account-deletion transaction | Small | High | open |
 | `proxy-ssl-header-trusted-unconditionally` | S3 | Operability | `SECURE_PROXY_SSL_HEADER` set even with forwarding trust off | Trivial | High | open **(quick win)** |
-| `billing-webhook-lock-released-before-processing` | S3 | Concurrency | Webhook duplicate check releases its lock too early | Small | High | open |
 | `billing-checkout-endpoints-unthrottled` | S3 | Security | Stripe-calling endpoints have no throttle | Small | High | open |
 | `correlation-id-header-unbounded` | S3 | Operability | Unbounded client `X-Request-ID` into every log line | Trivial | High | open **(quick win)** |
 | `orgs-ready-early-return-skips-receivers` | S3 | Correctness | Privileged-command exemption skips two other installs | Small | High | open |
@@ -239,7 +219,7 @@ at*, not *clean*.
 | `stripe-search-query-unescaped` | S4 | Security | Unescaped interpolation into a Stripe search query | Trivial | High | open |
 | `build-system-requires-unpinned` | S4 | Pipeline | Unpinned `poetry-core` build requirement | Trivial | High | open |
 
-**Counts:** S1 — 0 · S2 — 2 · S3 — 7 · S4 — 3 · total 12.
+**Counts:** S1 — 0 · S2 — 1 · S3 — 6 · S4 — 3 · total 10.
 
 ---
 
@@ -326,94 +306,7 @@ at*, not *clean*.
 
 ---
 
-### Finding 2: Stripe cancellation runs inside the account-deletion transaction, holding org row locks
-
-- **ID:** `billing-stripe-call-inside-delete-txn`
-- **Severity:** **S2** — an external HTTP round trip is made while an explicit `transaction.atomic()`
-  block holds `SELECT ... FOR UPDATE` locks on `Organization` rows, and the call has no configured
-  timeout. Reality **R2**. Two consequences land at once: lock-hold amplification under a slow
-  Stripe, and an irreversible external side effect inside a transaction that can still roll back.
-  No unverified preconditions — the path is the ordinary "delete my account" flow for any user who
-  owns a personal org with an active subscription.
-- **Category:** II. Concurrency (secondary angle: I. Correctness — partial-failure handling).
-- **Confidence:** **High** — verified directly across both files.
-- **Location:** `quickscale_modules/auth/src/quickscale_modules_auth/views.py:82–135`
-  (`AccountDeleteView.form_valid`) → `:167–241` (`_cancel_personal_org_subscriptions`) →
-  `quickscale_modules/billing/src/quickscale_modules_billing/services.py:736–764`
-  (`cancel_current_subscription` → `resolved_client.cancel_subscription`).
-- **Defect:** `form_valid` opens `transaction.atomic()`, row-locks every org where the user is an
-  owner (deliberately, to close the SA47 race), and then — still inside that block — calls
-  `_cancel_personal_org_subscriptions`, which reaches Stripe over the network. The Stripe client
-  wrapper (`services.py:303–325`) sets no timeout and no `max_network_retries`, so the default SDK
-  timeout applies.
-- **Failure scenario (reproducer):** User A owns personal org P (active subscription) and is a
-  co-owner of shared org S. A submits the account-deletion form. The request enters
-  `form_valid`, locks P and S, and issues `Subscription.modify(...)` to Stripe. Stripe is degraded
-  and the call hangs for the SDK's default timeout. For that whole window, every other request
-  that touches org S — a co-owner editing settings, a concurrent account deletion, any writer that
-  takes the same row lock — blocks behind it, and the database connection stays checked out of a
-  pool sized for fast requests. Second variant, same path: the Stripe call *succeeds*, then
-  `super().form_valid(form)` raises (a `pre_delete` receiver rejects the cascade — see the
-  last-owner backstop wired at `orgs/apps.py:206–213`) and the transaction rolls back. The user's
-  account still exists, but their Stripe subscription is now set to `cancel_at_period_end` and
-  nothing in the local database records that. The user is silently unsubscribed from a plan they
-  are still being shown.
-- **Evidence:**
-  ```python
-  # auth/views.py:95
-  with transaction.atomic():
-      ...
-      list(Organization.objects.select_for_update().filter(pk__in=owner_org_ids).order_by("pk"))
-      ...
-      self._cancel_personal_org_subscriptions(user)   # ← network call to Stripe
-      ...
-      return super().form_valid(form)
-  ```
-- **Refutation:** Attempted. The strongest counter-argument is that the billing module already
-  learned this lesson and should therefore be assumed safe: `handle_stripe_event`
-  (`services.py:973–989`) carries an explicit "Phase 3: slice the outer atomic into short-lived
-  transactions so Stripe round-trips happen outside the atomic/org-context window" comment, and
-  `cancel_current_subscription` itself carefully performs its Stripe call *before* opening its own
-  `transaction.atomic()` at `services.py:782`. That is exactly why the finding stands rather than
-  falls: the discipline is real and deliberate inside the billing module, but the auth module's
-  caller wraps the whole thing in an outer atomic block, so `cancel_current_subscription`'s inner
-  `atomic()` degrades to a savepoint inside the caller's transaction and the careful ordering buys
-  nothing. I also checked for a blessing — no test in `quickscale_modules/auth/tests/` asserts that
-  the Stripe call happens inside the transaction, and no comment acknowledges the trade-off. No
-  refutation survived.
-- **Fix:** Split the operation. Inside the atomic block, do only the guard check and collect the
-  cancel targets. Commit (or use `transaction.on_commit`) before touching Stripe — but note that
-  on-commit ordering would cancel *after* deletion, so the cleaner shape is: (1) short atomic —
-  lock, run `_get_blocking_orgs_for_deletion`, and mark the account for deletion; (2) outside any
-  transaction — cancel the subscriptions; (3) short atomic — delete the user. Independently, set an
-  explicit request timeout on the Stripe client in
-  `get_stripe_client` so no billing call can hang for the SDK default.
-  **Effort: Small.**
-- **Verification:** Add a test that patches the billing `stripe_client` with a double whose
-  `cancel_subscription` asserts `django.db.connection.in_atomic_block is False`, then posts to the
-  account-deletion view for a user with a personal-org subscription. It fails today. Add a second
-  test that makes `super().form_valid` raise after a successful cancel and asserts the cancel was
-  not issued (or was compensated).
-- **Fix risk:** Moving the Stripe call out of the transaction opens a genuine window where the
-  subscription is cancelled and the account deletion then fails — the inverse of today's window.
-  That is the better failure (a user who keeps their account but lost a subscription can be
-  restored by support; a silently-cancelled subscription on a live account cannot even be detected).
-  The last-owner guard must stay inside the locked block or the SA47 race that
-  `select_for_update` was added to close reopens — the fix must not move step (1).
-- **Detection signal:** Today, as `django.db.utils.OperationalError: canceling statement due to
-  lock timeout` or `deadlock detected` on unrelated org writes during a Stripe incident, and as
-  p99 latency on the account-deletion route tracking Stripe's status page. The rollback variant
-  leaves no signal at all; the thing to instrument is a reconciliation job comparing
-  `Subscription.status` against Stripe for rows whose `cancel_at_period_end` is set remotely but
-  not locally.
-- **Deliberate?** None found. The surrounding comments show the author was thinking hard about
-  lock ordering and about Django ≥ 4.0's `form_valid` entry point, but not about the external call.
-- **Age:** The `select_for_update` block is the newer half (added for SA47); the Stripe call
-  predates it. The regression is the *combination*, introduced when the lock was added.
-
----
-
-### Finding 3: `SECURE_PROXY_SSL_HEADER` is trusted even when forwarding trust is disabled
+### Finding 2: `SECURE_PROXY_SSL_HEADER` is trusted even when forwarding trust is disabled
 
 - **ID:** `proxy-ssl-header-trusted-unconditionally` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/production.py.j2:88`
@@ -440,41 +333,7 @@ at*, not *clean*.
   a single-host operator who was relying on the spoofable header to avoid a redirect loop will
   start seeing redirects, which is the correct behaviour.
 
-### Finding 4: Webhook duplicate check releases its lock before the handler runs
-
-- **ID:** `billing-webhook-lock-released-before-processing` · **S3** · Reality **R2** · Confidence **High**
-- **Location:** `quickscale_modules/billing/src/quickscale_modules_billing/services.py:977–1019`
-  (`handle_stripe_event`)
-- **Defect + failure scenario:** The `select_for_update()` on `WebhookEvent` is taken inside a
-  `with transaction.atomic():` block that ends immediately after the `processed` check, so the lock
-  is released *before* the handler runs. Stripe retries and can deliver the same event
-  concurrently: two workers receive event `evt_X`, both take and release the lock, both observe
-  `processed == False`, and both run the handler. Both then issue the same outbound Stripe
-  round-trips (`retrieve_subscription`, `retrieve_payment_intent`) and both race on the subscription
-  upsert, where the loser hits
-  `quickscale_billing_unique_stripe_subscription_id_when_populated` and is recorded with
-  `processed=False` plus an error message — an event that in fact *was* processed is now marked
-  failed. This violates oracle item 7. It is S3 rather than S2 because the money path is separately
-  protected: `credit_user` (`services.py:830–870`) re-checks inside its own transaction and the
-  partial unique index `quickscale_billing_unique_stripe_event_id_per_type` makes a double credit
-  impossible, with the `IntegrityError` handler returning the already-committed row.
-- **Fix:** Hold the lock for the whole processing span — open the `atomic()` before the duplicate
-  check and close it after the result is persisted — or, to keep Stripe round-trips out of the
-  transaction (which is the reason the code was sliced this way), claim the event first: inside the
-  short atomic, `UPDATE ... SET processing_started_at = now() WHERE processed = false AND
-  processing_started_at IS NULL` and treat a zero-row result as a duplicate. **Effort: Small.**
-  Verify with a test that drives two `handle_stripe_event` calls for one event id from two threads
-  against a real PostgreSQL connection and asserts the handler body runs exactly once.
-- **Refutation:** The comment at lines 973–976 argues the slicing is deliberate and correct, and it
-  is right about its stated goal (keeping Stripe calls out of a long transaction). It does not
-  address what replaces the lock as the idempotency mechanism during the unlocked window — and
-  nothing does. The DB constraints downgrade the severity; they do not close the finding, because
-  they leave the `WebhookEvent` row lying about its own status.
-  **Fix risk:** claiming the event up front means a worker that crashes mid-processing leaves the
-  event claimed and never retried — the claim needs a staleness timeout, which is why this is
-  Small rather than Trivial.
-
-### Finding 5: Stripe-calling endpoints have no throttle, and no DRF throttle defaults exist
+### Finding 3: Stripe-calling endpoints have no throttle, and no DRF throttle defaults exist
 
 - **ID:** `billing-checkout-endpoints-unthrottled` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_modules/billing/src/quickscale_modules_billing/views.py:171–230`
@@ -505,7 +364,7 @@ at*, not *clean*.
   every DRF view in every generated project, so the rate must be generous enough not to break
   legitimate polling clients; ship it as a named default operators can raise.
 
-### Finding 6: Client-supplied `X-Request-ID` is echoed unbounded into every log line
+### Finding 4: Client-supplied `X-Request-ID` is echoed unbounded into every log line
 
 - **ID:** `correlation-id-header-unbounded` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2:183–189`
@@ -529,7 +388,7 @@ at*, not *clean*.
   legitimately propagating a trace id will be using a UUID or similar, which passes; anything that
   does not pass was never a usable correlation key.
 
-### Finding 7: The privileged-command exemption skips GUC priming and the last-owner backstop
+### Finding 5: The privileged-command exemption skips GUC priming and the last-owner backstop
 
 - **ID:** `orgs-ready-early-return-skips-receivers` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:186–188`
@@ -563,7 +422,7 @@ at*, not *clean*.
   be blocked by the backstop and will need an explicit bypass — worth checking existing migrations
   before landing.
 
-### Finding 8: Blog rate limiter is non-atomic on the default production cache backend
+### Finding 6: Blog rate limiter is non-atomic on the default production cache backend
 
 - **ID:** `blog-throttle-racy-on-database-cache` · **S3** · Reality **R2** · Confidence **Medium**
 - **Location:** `quickscale_modules/blog/src/quickscale_modules_blog/views.py:303–330`
@@ -590,7 +449,7 @@ at*, not *clean*.
   documented as optional and the DB-cache branch is the written fallback, complete with a
   `createcachetable` step in `start.sh.j2`. Checked for a layer-up limiter — none.
 
-### Finding 9: The publishing workflow trusts mutable action refs and an unpinned Poetry
+### Finding 7: The publishing workflow trusts mutable action refs and an unpinned Poetry
 
 - **ID:** `pipeline-mutable-action-refs` · **S3** · Reality **R3** · Confidence **High**
 - **Location:** `.github/workflows/publish.yml:294`, `:318`
@@ -631,10 +490,10 @@ at*, not *clean*.
   address `1.2` and the IPv6 fragment `1:2` normalize to the same bucket — two unrelated clients can
   share a rate-limit budget, or evade one. · Hash the identifier
   (`hashlib.blake2s(ident.encode()).hexdigest()`) instead of character-substituting it.
-- `stripe-search-query-unescaped` · `quickscale_modules/billing/src/quickscale_modules_billing/services.py:196–213`
+- `stripe-search-query-unescaped` · `quickscale_modules/billing/src/quickscale_modules_billing/services.py:243–261`
   · `search_customers` builds a Stripe Search Query Language string by f-string interpolation inside
   single quotes. It is **not** exploitable today — both references come from
-  `_organization_reference`/`_user_reference` (`services.py:2197–2202`), which emit
+  `_organization_reference`/`_user_reference` (`services.py:4054–4059`), which emit
   `label_lower:pk` — but it is a query-injection sink held safe only by its current callers. ·
   Reject or escape any reference containing `'`, `\`, or a newline before interpolating.
 - `build-system-requires-unpinned` · `quickscale_core/pyproject.toml:41–43`,
@@ -651,16 +510,16 @@ Cells name the layer that supplies the safeguard, or the finding ID for an empty
 
 | Entry point | AuthN | AuthZ | Input validation | Output encoding | Rate limit | Timeout | Idempotency | Error shape | Audit record |
 |---|---|---|---|---|---|---|---|---|---|
-| `StripeWebhookView` (billing) | HMAC via `construct_event` | n/a (signature *is* authz) | payload key checks in each handler | JSON | — *(signature-gated; acceptable)* | `billing-stripe-call-inside-delete-txn` (no SDK timeout) | partial — `billing-webhook-lock-released-before-processing` | explicit 400/403/500 in view | `WebhookEvent` row |
+| `StripeWebhookView` (billing) | HMAC via `construct_event` | n/a (signature *is* authz) | payload key checks in each handler | JSON | — *(signature-gated; acceptable)* | implicit Stripe SDK timeout — see Notes | session advisory mutex spans processing | explicit 400/403/500 in view | `WebhookEvent` row |
 | `NotificationWebhookView` | HMAC + timestamp TTL, `compare_digest` | n/a | explicit required-field checks + `validate_email` | JSON | — *(signature-gated)* | not applicable (no outbound call) | idempotency key + atomic block | explicit 400/403 | delivery event row |
-| `CreateCheckoutSessionView` + billing siblings | `SessionAuthentication` + explicit `is_authenticated` | `_resolve_request_organization(require_owner=True)` | DRF serializer | DRF JSON renderer | **`billing-checkout-endpoints-unthrottled`** | **`billing-stripe-call-inside-delete-txn`** | Stripe `idempotency_key` on customer create | DRF | Stripe-side |
+| `CreateCheckoutSessionView` + billing siblings | `SessionAuthentication` + explicit `is_authenticated` | `_resolve_request_organization(require_owner=True)` | DRF serializer | DRF JSON renderer | **`billing-checkout-endpoints-unthrottled`** | implicit Stripe SDK timeout — see Notes | stable reservation-derived Stripe idempotency keys | DRF | Stripe-side |
 | `PlanListView` | `AllowAny` — deliberate, public catalog | n/a (public data only) | n/a (GET, no params) | DRF | `billing-checkout-endpoints-unthrottled` | n/a | n/a | DRF | n/a |
 | `BillingDashboardView` | `LoginRequiredMixin` | org resolution in context | n/a | Django template autoescape | n/a | n/a | n/a | Django | n/a |
 | Blog media upload API | `authenticate_blog_api_request` (session or token) | author + `_resolve_api_org` | request parsing in `create_blog_media_asset_from_request` | JSON | custom limiter — **`blog-throttle-racy-on-database-cache`**, `blog-throttle-ident-collision` | n/a | n/a | JSON | n/a |
 | Forms public submit | `AllowAny` — deliberate, public form | n/a | DRF serializer | DRF | `FormSubmitThrottle` + required `FORMS_RATE_LIMIT` | n/a | n/a | DRF | submission row |
 | Forms admin list / CRM admin views | DRF auth | `IsAdminUser` | DRF serializer | DRF | `billing-checkout-endpoints-unthrottled` (same missing default) | n/a | n/a | DRF | n/a |
 | `ProfileView` / `ProfileUpdateView` | `LoginRequiredMixin` | `get_object` returns `request.user` — no IDOR surface | `ProfileUpdateForm` | template autoescape | out of scope — session-auth'd self-service | n/a | n/a | Django | n/a |
-| `AccountDeleteView` | `LoginRequiredMixin` | self only | confirmation form | template autoescape | out of scope — same | **`billing-stripe-call-inside-delete-txn`** | n/a | Django messages | n/a |
+| `AccountDeleteView` | `LoginRequiredMixin` | self only | confirmation form | template autoescape | out of scope — same | provider I/O outside DB transactions; implicit Stripe SDK timeout — see Notes | compensating resume on delete failure | Django messages | n/a |
 | Org views (`OrgListView`, `OrgCreateView`, detail/member views) | `LoginRequiredMixin` | `OrgRoleMixin` + `SaasModeRequiredMixin` | Django forms | template autoescape | out of scope | n/a | n/a | Django | n/a |
 | Analytics template tag (`analytics_public_config_json`) | n/a (render-time) | n/a | n/a | `_JSON_HTML_ESCAPES` on `<`, `>`, `&` — see Notes | n/a | n/a | n/a | n/a | n/a |
 | CLI command tree (R1) | OS user | OS file permissions | `validate_config` + `validate_project_name` | n/a | n/a | per-`subprocess` timeouts, sampled | apply ledger | Click exit codes | apply ledger |
@@ -674,12 +533,12 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 
 ## 6. Per-subsystem verdicts
 
-- **billing** — `billing-stripe-call-inside-delete-txn` (jointly with auth),
-  `billing-webhook-lock-released-before-processing`, `billing-checkout-endpoints-unthrottled`,
-  `stripe-search-query-unescaped`. Read in full: the Stripe client wrapper, the webhook pipeline,
+- **billing** — `billing-checkout-endpoints-unthrottled`, `stripe-search-query-unescaped`. Read in
+  full: the Stripe client wrapper, the webhook pipeline,
   `credit_user`, `cancel_current_subscription`, and the whole permission surface of `views.py`.
 - **notifications** — clean. Webhook ingestion and signature verification read in full.
-- **auth** — `billing-stripe-call-inside-delete-txn`. All 551 lines read.
+- **auth** — clean after provider I/O moved outside database transactions with compensating resume.
+  All 551 lines read in the baseline pass; the account-deletion correction was re-read.
 - **orgs** — `orgs-ready-early-return-skips-receivers`. `apps.py` and `current_org.py` read in full;
   `views.py` decorator surface and `managers.py`/`tenancy.py` sampled.
 - **blog** — `blog-throttle-racy-on-database-cache`, `blog-throttle-ident-collision`. The rate
@@ -713,8 +572,8 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
   (`notifications/services.py:722–754`).
 - **Credit double-spend is impossible even if the webhook is processed twice.** A partial unique
   index (`quickscale_billing_unique_stripe_event_id_per_type`) plus an `IntegrityError` handler that
-  re-fetches the committed row (`billing/services.py:830–870`). This is what downgraded Finding 4
-  from S2 to S3.
+  re-fetches the committed row (`billing/services.py:830–870`). Webhook processing now also holds a
+  session advisory mutex across handler execution and result persistence.
 - **`AllowAny` in billing is deliberate, not a hole.** Every `AllowAny` view either serves genuinely
   public data (`PlanListView`) or re-checks `request.user.is_authenticated` by hand to return a
   JSON 401 instead of a login redirect (`views.py:180–182` and siblings).
@@ -727,11 +586,10 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 - **No test tampering.** All 42 skip markers in the repository are conditional `skipif`s with
   stated reasons (git availability, PostgreSQL version); no bare `skip`, no `xfail`, no assertion-free
   test found in the sweep.
-- **Chain pass (§3.10) ran.** One chain surfaced and is recorded on Finding 2: an unthrottled
-  checkout endpoint (`billing-checkout-endpoints-unthrottled`) plus a Stripe call with no timeout
-  inside a lock-holding transaction (`billing-stripe-call-inside-delete-txn`) means a single caller
-  can drive the org-row lock-hold window wide enough to stall unrelated tenants — worse than either
-  alone. No other pair combined into anything above its parts.
+- **Chain pass (§3.10) ran.** The original chain between an unthrottled checkout endpoint and a
+  Stripe call inside a lock-holding transaction was broken by moving provider I/O outside database
+  transactions. The unthrottled endpoint remains a standalone finding, and the implicit Stripe SDK
+  timeout remains a watch item. No other pair combined into anything above its parts.
 
 ---
 
@@ -745,10 +603,9 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 - `base.py.j2` **replaces** the whole `REST_FRAMEWORK` dict after `MODULE_SETTINGS`, so a module can
   never contribute DRF configuration (throttle rates, renderers, authentication classes) even
   though the settings-composition system exists precisely to let modules contribute settings.
-- Outbound-call discipline (timeouts, retry caps, keeping network I/O out of transactions) is
-  re-derived independently in each module — carefully inside `billing/services.py`, not at all in
-  `auth/views.py` — which is what let Finding 2 exist between two modules that are each internally
-  consistent.
+- Outbound-call discipline (timeouts, retry caps, keeping network I/O out of transactions) remains
+  distributed across module boundaries. Billing and auth now share transaction-safe services, but
+  timeout policy is still implicit in the Stripe SDK configuration.
 - Connection parameters are destructured by hand in at least three places (`_build_pg_dump_command`,
   `_build_pg_restore_command`, `start.sh.j2`'s psycopg2 connect), each picking a different subset of
   the Django settings dict; Finding 1 is the visible symptom of there being no single owner of
@@ -780,6 +637,11 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 
 ## 10. Notes (watch items)
 
+- **Stripe SDK request timeout is implicit** (`billing/services.py:511–528`). Provider calls now run
+  outside database transactions and organization-row lock windows, so a slow request no longer
+  amplifies database contention or creates the remediated rollback inconsistency. The client still
+  sets no explicit timeout or retry policy; promote this if operational latency requires a tighter
+  bound or another provider client duplicates the omission.
 - **`REST_FRAMEWORK` clobbers module-supplied DRF config** (`base.py.j2:371`). Not promoted: no
   module ships a `REST_FRAMEWORK` key today, so it fails §0's *live* gate. It becomes a finding the
   day one does — and the natural fix for `billing-checkout-endpoints-unthrottled` may be exactly

@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 import os
+from typing import Any
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Q
 
 from quickscale_modules_orgs.models import Organization, OrganizationMembership
@@ -188,6 +189,54 @@ def _collect_unmigratable_row_messages() -> list[str]:
     return messages
 
 
+def _lock_target_organizations(
+    organization_ids: set[object],
+) -> dict[object, Organization]:
+    """Lock every recovery target in deterministic organization-first order."""
+    locked_organizations = list(
+        Organization.objects.select_for_update()
+        .filter(pk__in=organization_ids)
+        .order_by("pk")
+    )
+    locked_by_id = {
+        organization.pk: organization for organization in locked_organizations
+    }
+    missing_ids = sorted(
+        (
+            organization_id
+            for organization_id in organization_ids
+            if organization_id not in locked_by_id
+        ),
+        key=str,
+    )
+    if missing_ids:
+        raise CommandError(
+            "Billing org migration target disappeared before it could be locked: "
+            f"{missing_ids}. Retry after checking organization purge history."
+        )
+    return locked_by_id
+
+
+def _lock_planned_users(user_model: Any, user_ids: set[object]) -> dict[object, Any]:
+    """Lock recovery users after organizations so memberships cannot drift."""
+    locked_users = list(
+        user_model._default_manager.select_for_update()
+        .filter(pk__in=user_ids)
+        .order_by("pk")
+    )
+    locked_by_id = {user.pk: user for user in locked_users}
+    missing_ids = sorted(
+        (user_id for user_id in user_ids if user_id not in locked_by_id),
+        key=str,
+    )
+    if missing_ids:
+        raise CommandError(
+            "Billing org migration user disappeared before it could be locked: "
+            f"{missing_ids}. Retry after checking account deletion history."
+        )
+    return locked_by_id
+
+
 class Command(BaseCommand):
     help = (
         "Backfill billing subscriptions, balances, and transactions to the "
@@ -226,17 +275,58 @@ class Command(BaseCommand):
                 ambiguity_messages.append(str(exc))
                 continue
 
+            migration_plan.append(
+                {
+                    "user": user,
+                    "organization": organization,
+                    "created_personal_org": created_personal_org,
+                }
+            )
+
+        target_organization_ids = {
+            organization.pk
+            for plan_entry in migration_plan
+            for organization in [plan_entry["organization"]]
+            if isinstance(organization, Organization)
+        }
+        locked_organizations = _lock_target_organizations(target_organization_ids)
+        for plan_entry in migration_plan:
+            organization = plan_entry["organization"]
+            assert isinstance(organization, Organization)
+            plan_entry["organization"] = locked_organizations[organization.pk]
+
+        planned_user_ids = {
+            user.pk for plan_entry in migration_plan for user in [plan_entry["user"]]
+        }
+        locked_users = _lock_planned_users(User, planned_user_ids)
+        for plan_entry in migration_plan:
+            user = plan_entry["user"]
+            plan_entry["user"] = locked_users[user.pk]
+
+        for plan_entry in migration_plan:
+            user = plan_entry["user"]
+            organization = plan_entry["organization"]
+            assert isinstance(organization, Organization)
+            resolved_organization, _ = _resolve_authoritative_organization(user)
+            if resolved_organization.pk != organization.pk:
+                ambiguity_messages.append(
+                    "Billing org migration requires manual resolution: "
+                    f"user {user.pk} changed authoritative organization from "
+                    f"{organization.pk} to {resolved_organization.pk} before locking."
+                )
+                continue
+
             existing_org_ids = {
                 *Subscription.all_objects.filter(
-                    user_id=user_id,
+                    user_id=user.pk,
                     organization_id__isnull=False,
                 ).values_list("organization_id", flat=True),
                 *CreditBalance.all_objects.filter(
-                    user_id=user_id,
+                    user_id=user.pk,
                     organization_id__isnull=False,
                 ).values_list("organization_id", flat=True),
                 *CreditTransaction.all_objects.filter(
-                    user_id=user_id,
+                    user_id=user.pk,
                     organization_id__isnull=False,
                 ).values_list("organization_id", flat=True),
             }
@@ -258,7 +348,7 @@ class Command(BaseCommand):
 
             current_subscription_ids_by_org[organization.pk].extend(
                 Subscription.all_objects.filter(
-                    user_id=user_id,
+                    user_id=user.pk,
                     status__in=Subscription.current_statuses(),
                 )
                 .filter(
@@ -267,21 +357,14 @@ class Command(BaseCommand):
                 .values_list("pk", flat=True)
             )
             credit_balance_ids_by_org[organization.pk].extend(
-                CreditBalance.all_objects.filter(user_id=user_id)
+                CreditBalance.all_objects.filter(user_id=user.pk)
                 .filter(
                     Q(organization_id__isnull=True) | Q(organization_id=organization.pk)
                 )
                 .values_list("pk", flat=True)
             )
             candidate_customer_ids_by_org[organization.pk].update(
-                _candidate_customer_ids_for_user(user_id=user_id)
-            )
-            migration_plan.append(
-                {
-                    "user": user,
-                    "organization": organization,
-                    "created_personal_org": created_personal_org,
-                }
+                _candidate_customer_ids_for_user(user_id=user.pk)
             )
 
         for (
@@ -307,7 +390,7 @@ class Command(BaseCommand):
             organization_id,
             candidate_customer_ids,
         ) in candidate_customer_ids_by_org.items():
-            organization = Organization.objects.get(pk=organization_id)
+            organization = locked_organizations[organization_id]
             existing_customer_id = _normalized_text(organization.stripe_customer_id)
             if existing_customer_id:
                 conflicting_customer_ids = sorted(
@@ -327,6 +410,45 @@ class Command(BaseCommand):
                     "Billing org migration requires manual resolution: "
                     f"organization {organization_id} would own multiple stripe customer ids: "
                     f"{sorted(candidate_customer_ids)}."
+                )
+
+        customer_owner_by_id: dict[str, object] = {}
+        for organization_id, customer_id in Organization.objects.exclude(
+            stripe_customer_id=""
+        ).values_list("pk", "stripe_customer_id"):
+            normalized_customer_id = _normalized_text(customer_id)
+            if not normalized_customer_id:
+                continue
+            existing_owner_id = customer_owner_by_id.setdefault(
+                normalized_customer_id,
+                organization_id,
+            )
+            if existing_owner_id != organization_id:
+                ambiguity_messages.append(
+                    "Billing org migration requires manual resolution: "
+                    f"stripe customer id {normalized_customer_id!r} is already owned "
+                    f"by organizations {existing_owner_id} and {organization_id}."
+                )
+        for organization_id, candidate_customer_ids in sorted(
+            candidate_customer_ids_by_org.items(),
+            key=lambda item: str(item[0]),
+        ):
+            organization = locked_organizations[organization_id]
+            proposed_customer_id = _normalized_text(organization.stripe_customer_id)
+            if not proposed_customer_id and len(candidate_customer_ids) == 1:
+                proposed_customer_id = next(iter(candidate_customer_ids))
+            if not proposed_customer_id:
+                continue
+            existing_owner_id = customer_owner_by_id.setdefault(
+                proposed_customer_id,
+                organization_id,
+            )
+            if existing_owner_id != organization_id:
+                ambiguity_messages.append(
+                    "Billing org migration requires manual resolution: "
+                    f"stripe customer id {proposed_customer_id!r} is already owned "
+                    f"by organization {existing_owner_id}, so it cannot also be "
+                    f"assigned to organization {organization_id}."
                 )
 
         if ambiguity_messages:
@@ -365,7 +487,14 @@ class Command(BaseCommand):
                     if len(candidate_customer_ids) == 1:
                         synced_customer_id = candidate_customer_ids[0]
                         organization.stripe_customer_id = synced_customer_id
-                        organization.save(update_fields=["stripe_customer_id"])
+                        try:
+                            with transaction.atomic():
+                                organization.save(update_fields=["stripe_customer_id"])
+                        except IntegrityError as exc:
+                            raise CommandError(
+                                "Billing org migration refused a Stripe customer id "
+                                "that another organization acquired concurrently."
+                            ) from exc
                     synchronized_customer_org_ids.add(organization.pk)
 
                 created_personal_org = bool(plan_entry["created_personal_org"])

@@ -13,13 +13,16 @@ from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
 
 BILLING_CREDIT_BALANCE_RLS_POLICY = "billing_credit_balance_org_isolation"
 BILLING_CREDIT_TRANSACTION_RLS_POLICY = "billing_credit_transaction_org_isolation"
+BILLING_PURCHASE_CHECKOUT_RLS_POLICY = "billing_purchase_checkout_org_isolation"
 BILLING_SUBSCRIPTION_RLS_POLICY = "billing_subscription_org_isolation"
 BILLING_CREDIT_BALANCE_TABLE = "quickscale_modules_billing_creditbalance"
 BILLING_CREDIT_TRANSACTION_TABLE = "quickscale_modules_billing_credittransaction"
+BILLING_PURCHASE_CHECKOUT_TABLE = "quickscale_modules_billing_purchasecheckout"
 BILLING_SUBSCRIPTION_TABLE = "quickscale_modules_billing_subscription"
 _BILLING_RLS_TARGETS = (
     (BILLING_CREDIT_BALANCE_TABLE, BILLING_CREDIT_BALANCE_RLS_POLICY),
     (BILLING_CREDIT_TRANSACTION_TABLE, BILLING_CREDIT_TRANSACTION_RLS_POLICY),
+    (BILLING_PURCHASE_CHECKOUT_TABLE, BILLING_PURCHASE_CHECKOUT_RLS_POLICY),
     (BILLING_SUBSCRIPTION_TABLE, BILLING_SUBSCRIPTION_RLS_POLICY),
 )
 
@@ -213,6 +216,78 @@ class Migration(migrations.Migration):
                         name="quickscale_billing_unique_stripe_event_id_per_type",
                     )
                 ],
+            },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
+        ),
+        migrations.CreateModel(
+            name="PurchaseCheckout",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "stripe_checkout_session_id",
+                    models.CharField(
+                        blank=True,
+                        max_length=255,
+                        null=True,
+                        unique=True,
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("preparing", "Preparing"),
+                            ("open", "Open"),
+                            ("completed", "Completed"),
+                            ("expired", "Expired"),
+                        ],
+                        default="preparing",
+                        max_length=20,
+                    ),
+                ),
+                ("checkout_expires_at", models.DateTimeField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="purchase_checkouts",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+                (
+                    "plan",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="purchase_checkouts",
+                        to="quickscale_modules_billing.plan",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="billing_purchase_checkouts",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["-id"],
+                "base_manager_name": "all_objects",
             },
             managers=[
                 ("objects", django.db.models.manager.Manager()),

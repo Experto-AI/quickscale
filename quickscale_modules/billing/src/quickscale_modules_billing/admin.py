@@ -13,6 +13,7 @@ from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
     Plan,
+    PurchaseCheckout,
     Subscription,
     WebhookEvent,
 )
@@ -118,8 +119,8 @@ class CreditTransactionAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
 
 
 @admin.register(Subscription)
-class SubscriptionAdmin(TenantModelAdmin):
-    """Editable admin surface for local subscription snapshots."""
+class SubscriptionAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
+    """Read-only admin for provider-authoritative subscription snapshots."""
 
     list_display = [
         "organization",
@@ -137,6 +138,22 @@ class SubscriptionAdmin(TenantModelAdmin):
         "stripe_subscription_id",
         "stripe_customer_id",
     ]
+
+
+@admin.register(PurchaseCheckout)
+class PurchaseCheckoutAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
+    """Read-only admin for one-time Checkout lifecycle reservations."""
+
+    list_display = [
+        "organization",
+        "user",
+        "plan",
+        "status",
+        "stripe_checkout_session_id",
+        "checkout_expires_at",
+    ]
+    list_filter = ["status", "plan"]
+    list_select_related = ["organization", "user", "plan"]
 
 
 @admin.register(WebhookEvent)

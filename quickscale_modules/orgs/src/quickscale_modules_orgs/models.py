@@ -56,6 +56,11 @@ class Organization(models.Model):
                 condition=models.Q(is_system=True),
                 name="unique_system_org",
             ),
+            models.UniqueConstraint(
+                fields=["stripe_customer_id"],
+                condition=~models.Q(stripe_customer_id=""),
+                name="unique_nonempty_org_stripe_customer",
+            ),
         ]
 
     def clean(self) -> None:

@@ -304,7 +304,7 @@ def test_billing_dashboard_view_renders_for_authenticated_users(
         OrganizationMembership,
     )
 
-    OrganizationMembership.objects.create(
+    OrganizationMembership.objects.update_or_create(
         user=user, organization=organization, role=OrgRole.OWNER
     )
     plan = _create_recurring_plan(
@@ -629,7 +629,7 @@ def test_billing_portal_session_view_missing_csrf_returns_403_without_calling_se
 
 
 @pytest.mark.django_db
-def test_credit_balance_view_creates_zero_balance_on_first_use(
+def test_credit_balance_view_returns_zero_without_creating_balance(
     client: Client,
     user,
     organization,
@@ -642,7 +642,8 @@ def test_credit_balance_view_creates_zero_balance_on_first_use(
 
     assert response.status_code == 200
     assert response.json()["balance"] == 0
-    assert response.json()["updated_at"] is not None
+    assert response.json()["updated_at"] is None
+    assert not CreditBalance.all_objects.filter(organization=organization).exists()
 
 
 @pytest.mark.django_db
@@ -1171,6 +1172,66 @@ def test_cancel_subscription_view_returns_204_and_calls_service(
     assert response.content == b""
     assert captured_user == user
     assert captured_organization is not None
+
+
+@pytest.mark.django_db
+def test_cancel_subscription_view_preserves_concurrent_provider_replacement(
+    client: Client,
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
+) -> None:
+    """The default view path fails loud instead of writing A over newer B."""
+    from quickscale_modules_billing.services import cancel_current_subscription
+
+    plan = _create_recurring_plan(price_id="price_view_cancel_identity")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_view_cancel_identity_a",
+        status=Subscription.Status.ACTIVE,
+    )
+
+    class IdentityDriftStripeClient:
+        def cancel_subscription(self, *, stripe_subscription_id: str) -> dict[str, str]:
+            assert stripe_subscription_id == "sub_view_cancel_identity_a"
+            Subscription.all_objects.filter(pk=subscription.pk).update(
+                stripe_subscription_id="sub_view_cancel_identity_b"
+            )
+            return {
+                "id": stripe_subscription_id,
+                "status": Subscription.Status.ACTIVE,
+            }
+
+    stripe_client = IdentityDriftStripeClient()
+
+    def cancel_through_real_service(auth_user, *, organization):
+        return cancel_current_subscription(
+            auth_user,
+            organization=organization,
+            stripe_client=stripe_client,
+        )
+
+    monkeypatch.setattr(
+        billing_views,
+        "cancel_current_subscription",
+        cancel_through_real_service,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:subscription-cancel-current"),
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    subscription.refresh_from_db()
+    assert response.status_code == 500
+    assert "captured subscription changed" in response.json()["error"]
+    assert subscription.stripe_subscription_id == "sub_view_cancel_identity_b"
 
 
 @pytest.mark.django_db

@@ -53,14 +53,13 @@ context, scope, and acceptance;
 | SA196 | Fail hard on undefined generator template context | post-v88 | 3 | — | Deferred |
 | SA201 | Give generated projects one throttling contract | post-v88 | 3 | — | Deferred |
 | SA203 | Narrow the privileged-command exemption in the orgs boot path | post-v88 | 3 | — | Deferred |
-| SA190 | Derive the purge plan and share organization-removal obligations | post-v88 | 3 | SA199 | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
-Track 2: SA193 ──► SA198 ──► SA202 ──► SA195 ──► SA192
-Track 3: SA199 ──► SA200 ──► SA196 ──► SA201 ──► SA203 ──► SA190
+Track 2: SA195 ──► SA192 ──► SA193 ──► SA198 ──► SA202   (SA195/SA192 in progress, interrupted)
+Track 3: SA199 (in progress, interrupted) ──► SA200 ──► SA196 ──► SA201 ──► SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -88,9 +87,10 @@ the critical path.
   stubs for the modules it restyled, while a sanctioned shared commons is imported by those same
   three suites. SA192 restyles five module surfaces on that pattern and SA154's inventory queues
   more, so the copy multiplies before it is removed unless the stub is shared first.
-- **SA193 is independent of the orgs work.** It touches generation-time wiring in `quickscale_cli`
-  and `quickscale_core`; SA190's findings live in the `orgs` module, so the two run on different
-  tracks with no shared file. One interaction, previously a watch item, has now fired: giving the
+- **SA193 is independent of the completed SA190 orgs work.** It touches generation-time wiring in
+  `quickscale_cli` and `quickscale_core`; the completed purge and removal-obligation work lives in
+  the `orgs` module, so the two have no shared file. One interaction, previously a watch item, has
+  now fired: giving the
   `backups` remote-credential variables placeholders makes the DR path more exercised, and that
   path is the one SA198 fixes. SA193 is queued before SA198 for that reason, but the two edit
   disjoint files and carry no dependency edge.
@@ -99,11 +99,10 @@ the critical path.
   performs the publication those bytes are waiting on. Neither blocks another ticket, so both are
   queue order rather than edges; both are placed ahead of the presentation work (SA195, SA192)
   because that work changes nothing a published artifact does.
-- **SA199 precedes SA190, and this is a real edge.** Both rewrite the account-delete view. SA199
-  splits it into an in-transaction guard and an out-of-transaction Stripe call; SA190 then designs
-  the named obligations list that both boundaries consume. Designing that list against today's
-  single atomic block would encode the defect into the contract, so SA199 lands first. It is also
-  the reason SA190 moved off the head of track 3.
+- **SA199 remains open after SA190.** The completed SA190 work moved account-deletion Stripe calls
+  outside database transactions and added the named obligations list that both removal boundaries
+  consume. SA199 still owns the rest of its acceptance, including the Stripe search-query hardening,
+  and remains the head of track 3 until that whole ticket closes.
 - **SA200 precedes SA201 in the queue, not by dependency.** Both edit the generator's settings
   templates, so serializing them avoids a self-inflicted conflict on `base.py.j2`, and SA200's
   `check --deploy` gate is the station SA201's throttle defaults are then observed by. SA201 is
@@ -113,12 +112,11 @@ the critical path.
   privileged-command stations, and late in the queue because it is the least severe of them.
 - **SA196 is queued early on track 3 but gates nothing.** Making the generator raise on an
   undefined context key protects the fresh recipient scaffold SA191 generates and the `base.html`
-  rewrite SA192 performs, which is why it precedes SA190 in the queue. Neither ticket depends on
-  it and both are correct without it, so it carries no dependency edge.
-- **SA153 decides whether SA190's purge half stays real.** If the property tables ship as
-  project-owned extension models, purge membership stays closed against them and the finding keeps
-  its horizon; if they ship inside a first-party module, that half retires. SA190 is scheduled
-  either way for the obligations half.
+  rewrite SA192 performs. Neither ticket depends on it and both are correct without it, so it
+  carries no dependency edge.
+- **SA190 removed the purge dependency from SA153.** Project-owned extension tables now join the
+  marker-derived purge plan without a vendored-module edit, regardless of whether the first portal
+  ultimately keeps those tables project-owned or promotes them into a first-party module.
 - **SA192 uses the enforced vintage boundary.** The module pages extend the generated,
   project-owned `base.html`, which `quickscale update` never rewrites, so a design change there is
   contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not
@@ -139,10 +137,10 @@ module template and module test surfaces: the `.env.example` derivation (SA193),
 contract (SA198), the supply-chain pinning and scanners (SA202), the shared test stub (SA195), and
 the restyle (SA192). Track 3 takes orgs tenancy, purge, the settings and privileged/runtime-role
 templates, the billing and auth transaction boundaries, and the generator's rendering strictness:
-SA199, SA200, SA196, SA201, SA203, SA190.
+SA199, SA200, SA196, SA201, and SA203.
 
-Track 3 now carries six tickets to Track 2's five, but four of Track 3's are Small or Trivial by
-the audit's own effort column, and its two substantial ones (SA196, SA190) were already scheduled.
+Tracks 2 and 3 now carry five tickets each. Four of Track 3's are Small or Trivial by the audit's
+own effort column, and its substantial one (SA196) was already scheduled.
 Track 3 completed its independent RLS predicate work and privileged-command work, while Track 2
 delivered SA186 and SA187.
 
@@ -153,8 +151,58 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA193 | yes | yes | yes | **yes** | no |
-| 3 | SA199 | yes | yes | yes | **yes** | no |
+| 2 | SA195 + SA192 (resume) | yes | yes | no | no | no |
+| 3 | SA199 (resume) | yes | yes | yes | **yes** | no |
+
+Track 2 cannot merge until its uncommitted work is checkpointed and reconciled with `v89` (below).
+
+### Interrupted work (measured 2026-09-22)
+
+Tracks 2 and 3 were started and interrupted mid-ticket when the Codex agent ran out of credit. The
+next handoff on each track resumes the interrupted ticket rather than the head of the original
+queue. On 2026-09-22 all three worktrees had lost their `.git/worktrees/` metadata; they were
+relinked to their branches without touching the working trees, so staged-vs-unstaged state from
+before that date is gone and everything uncommitted now shows as unstaged.
+
+- **Track 1 — SA194, not started.** `wt-track1` is clean, has no commits of its own, and is five
+  commits behind `v89`. To resume: `git merge v89` in the worktree (fast-forward), then start SA194
+  from its ticket body; nothing is half-done. Old stash `stash@{2}` ("SA152 final resync
+  preservation") predates SA194 and is not part of it.
+- **Track 2 — SA195 and SA192, partly committed, partly on disk.** The agent picked up SA195 and
+  SA192 instead of SA193, so the queue above is reordered to match. Branch `wt-track2` carries
+  checkpoint `e12e9867` "WIP: SA195 & SA192 resumed checkpoint state" (51 files, SA192 module
+  stylesheets, templates, vintage bumps, and the style-contract test) and is three commits behind
+  `v89` (missing `1270ed46`). On top of that commit the worktree holds 48 more uncommitted changes
+  that are **ahead** of it, not stale:
+  - *SA195, not in any commit:* the new `tests_shared/templates/base.html` (untracked), the blog,
+    CRM, and listings `tests/settings.py` pointing `DIRS` at it, and the deletion of their three
+    `tests/templates/base.html` copies.
+  - *SA192 follow-ups, mostly additive:* `test_module_page_style_contract.py` (+157, frontend-origin
+    validation and billing CTA cascade tests), `vite.config.ts`, `viteAssetRouting.test.ts`,
+    `local.py.j2`, `.env.example.j2`, manifest vintage lines, module CSS, e2e tests and scripts.
+  - *Must not be carried:* the deletion of `docs/others/arch-audit.md` and `tech-audit.md`, and the
+    worktree's own `roadmap.md` and `test_roadmap_consistency.py` edits, which mark SA195/SA192
+    delivered and drop them from the schedule without verification. Treat the `CHANGELOG.md`,
+    `decisions.md`, release-note, and other doc edits as drafts to review, not evidence.
+
+  To resume: (1) leave the audit deletions out of every checkpoint and do not restore either audit
+  from the worktree or `v89` by hand; `v89` wins, so after step 3 both
+  `docs/others/arch-audit.md` and `docs/others/tech-audit.md` must be byte-identical to `v89`'s,
+  and discard the unverified roadmap edits with `git restore
+  docs/technical/roadmap.md quickscale_core/tests/test_roadmap_consistency.py`; (2) review the
+  remaining diff and commit it as a second labeled WIP checkpoint by explicit file list, including
+  `tests_shared/templates/base.html`; (3) `git merge v89` and resolve, re-running the auth tests
+  because `1270ed46` edited the account-delete view; (4) finish SA195 first (stub shared, three
+  non-identical stubs converged or recorded, module suites unchanged), then SA192 against its full
+  acceptance; (5) write the closeout in this roadmap and the changelog, then merge through the
+  serialized queue before SA193 starts.
+- **Track 3 — SA199, clean.** `wt-track3` has no uncommitted changes and sits one commit behind
+  `v89` (this roadmap only). The only SA199 work is the part landed in `1270ed46` (see SA199
+  *Progress*). To resume: `git merge v89`; confirm the `1270ed46` portions still meet their
+  acceptance lines (no network I/O inside `transaction.atomic()` on account deletion, with the
+  chosen compensation written down; webhook claim held across the handler); add the two-thread
+  `handle_stripe_event` regression against real PostgreSQL; harden `search_customers` against `'`,
+  `\`, and newline with a test; close SA199 in the tech audit's own entry and the changelog.
 
 ### Ownership and merge coordination
 
@@ -182,15 +230,15 @@ A track is **truly green** only when all three states are yes.
   rate limiter.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  and the owning audit: the arch audit for SA193 and SA190, the tech audit for SA198, SA199, SA200,
-  SA201, SA202, SA203, and the parts of SA190 it also records. SA191, SA153, SA192, SA195, SA194,
+  and the owning audit: the arch audit for SA193, and the tech audit for SA198, SA199, SA200,
+  SA201, SA202, and SA203. SA191, SA153, SA192, SA195, SA194,
   and SA196 have no owning audit row; their evidence goes to the changelog, SA191's also to the
   migration playbook. All are Markdown with no generated consumer, but the tech audit is now a
   six-ticket shared file across two tracks, so its closeouts are the hottest merge surface in this
   cycle — each ticket edits only its own finding's entry.
   Code-adjacent overlaps that cross tracks: SA153 edits the extension and organizations
-  documentation; SA192 restyles the `auth` account templates while SA190 and SA199 edit the
-  account-delete view, so whichever lands second re-runs the auth tests; SA196 turns strict
+  documentation; SA192 restyles the `auth` account templates while SA199 edits the account-delete
+  view, so whichever lands second re-runs the auth tests; SA196 turns strict
   rendering on for every generator template, including the `.env.example` template SA193 rewrites,
   the settings templates SA200 and SA201 edit, and the generated `base.html` SA192 restyles, so its
   fixes may reach both other tracks' files and whichever lands second re-runs the generator tests
@@ -352,8 +400,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   edit under vendored module source. Prove the search → detail → inquiry journey and isolation
   between organizations through both the API and the rendered pages. Correct reusable-module feature
   claims that the module does not provide. Adding a frontend dependency for prerendering follows the
-  decisions rule for the approved frontend stack. Purging an organization that owns property rows
-  is SA190's.
+  decisions rule for the approved frontend stack. The marker-derived purge plan covers property
+  rows without a vendored module edit.
 
   **Surfaces:** the project-owned property extension, its API and React pages, and the project's
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
@@ -557,7 +605,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   searches, favorites, and alerts; agent/office profiles; syndication; tours/video; paid
   placement; blog/listing cross-links; and PostgreSQL full-text search. Promote an item only with a concrete consumer, bounded acceptance, and
   a fresh dependency and track. Items that add tenant tables (saved searches, favorites, profiles,
-  tours) build on marker-derived enrollment and SA190's purge derivation, not on module-source edits. Close
+  tours) build on marker-derived enrollment and purge, not on module-source edits. Close
   when every item is promoted or dropped with rationale.
 
   **Context:** The inventory includes reusable generalization of the proven property API, React pages, and
@@ -592,20 +640,28 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA189 — Provision the runtime database role in one place under one name.**
 
+- [x] **SA190 — Derive the purge plan and share organization-removal obligations.**
+
 - [ ] **SA199 — Keep external calls out of transactions and hold the webhook lock.**
 
-  **Context:** Two boundaries in the same payment path get the transaction/network relationship
-  backwards, in opposite directions.
+  **Progress:** Commit `1270ed46` completed the two transaction/concurrency portions while delivering
+  SA190: account-deletion provider I/O now runs between short database transactions with a
+  compensating resume, and webhook processing holds a session advisory mutex across the handler and
+  result persistence. The ticket remains open for its Stripe search-query hardening and final
+  acceptance evidence; the original failure analysis is retained below as context.
 
-  Account deletion holds a transaction open across a Stripe round trip. `form_valid` opens
+  **Context:** Two boundaries in the same payment path originally got the transaction/network
+  relationship backwards, in opposite directions.
+
+  Account deletion held a transaction open across a Stripe round trip. `form_valid` opened
   `transaction.atomic()`, row-locks every organization the user owns, and then cancels the
-  subscription over the network inside that block. A slow or hanging Stripe call holds the org row
+  subscription over the network inside that block. A slow or hanging Stripe call held the org row
   locks for its entire duration, and every other request touching those organizations queues behind
   a third party's latency. Billing's own service layer is careful about exactly this; `auth/views.py`
   is not, which is what the audit calls out as outbound-call discipline being re-derived per module
   rather than stated once.
 
-  Webhook processing does the reverse: it takes `select_for_update()` on `WebhookEvent` inside an
+  Webhook processing did the reverse: it took `select_for_update()` on `WebhookEvent` inside an
   `atomic()` block that closes immediately after the `processed` check, so the lock is released
   before the handler runs. Two concurrent deliveries of the same event both take and release the
   lock, both see `processed == False`, and both run the handler; the loser of the subscription
@@ -683,38 +739,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `production.py.j2` and `base.py.j2` in the generator's settings templates, the
   rendered-template tests, `scripts/gate_registry.json` and the CI workflow for the deploy-check
   station, the deployment documentation, and the tech audit.
-
-- [ ] **SA190 — Derive the purge plan and share organization-removal obligations.**
-
-  **Context:** Marker-derived tenant discovery classifies and refreshes project-owned tenant tables,
-  but purge still enumerates its own literal `_DELETE_SPECS`. Because tenant foreign keys are
-  `PROTECT`, an organization that owns an unlisted row cannot be purged at all. Derive membership
-  from the same tenant set, and order it topologically from installed foreign keys, with overrides
-  where the graph is not enough.
-
-  Organization removal also has two boundaries that discharge disjoint obligations. The account-delete
-  view cancels Stripe but leaves the personal organization's rows; purge deletes rows, clears caches,
-  and writes a tombstone, but does not touch Stripe. Account deletion removes a person and may keep
-  organization data on purpose, so the goal is not identical behavior. It is one named list of
-  obligations, where each boundary either discharges an item or states that it deliberately skips it.
-  Design the list together with the derived purge plan, keep network effects out of transactions, and
-  leave the last-owner model/signal backstop in place.
-
-  **Acceptance:** `purge_organization` takes its membership from the derived tenant-model set and
-  its deletion order from installed FK metadata, with explicit overrides, so purging an organization
-  that owns project-owned tenant rows succeeds without a `_DELETE_SPECS` edit. The obligations of
-  removing an organization — the SA183 billing refusal, owned-row purge, social cache invalidation,
-  and tombstone — are one named list that both `purge_organization` and the account-delete view
-  consume; the view records which obligations it deliberately skips (retained organization data)
-  instead of omitting them. The last-owner model/signal backstop is unchanged. Regressions purge a
-  non-module tenant model with a child row cleanly, and a conformance test fails when a purged model
-  carries an external provider id with no refuse-or-reconcile obligation. This retires the purge
-  half of `org-model-universe-hand-enumerated`, the first step of
-  `deletion-invariants-per-boundary-reimplementation`, and the tech audit's teardown tooling gap. No
-  durable deletion job or outbox.
-
-  **Surfaces:** `purge_organization.py`, `auth/views.py` account deletion, the billing cancellation
-  seam, orgs and auth tests, `organizations.md`, and both audits.
 
 - [ ] **SA196 — Fail hard on undefined generator template context.**
 
@@ -829,9 +853,9 @@ The [architecture audit](../others/arch-audit.md) and [technical audit](../other
 deferred findings and their growth triggers. Items they record without scheduling — the watchlists
 and watch notes, the beta-migration ownership taxonomy whose derivation `decisions.md` § Release
 scope safeguards explicitly withholds authorization for, and the later deletion-coordinator options
-— stay there until a trigger fires. Three are no longer among them, because a ticket now carries
-each: the external-provider conformance gap is in SA190's acceptance; the dependency-scan, secret-
-scan and workflow-lint gaps are SA202's; and the generated-project smoke-boot gap is SA196's. Two
+— stay there until a trigger fires. The external-provider conformance gap is no longer among them
+because completed SA190 closed it. Two others now have tickets: the dependency-scan, secret-scan and
+workflow-lint gaps are SA202's, and the generated-project smoke-boot gap is SA196's. Two
 watch notes are deliberately fired rather than carried: the `REST_FRAMEWORK` clobber, which SA201
 resolves because SA201 is the change that would otherwise trigger it, and the DR
 `pg_dump`/`pg_restore` dependence that SA193 makes live and SA198 fixes. The remaining watch
