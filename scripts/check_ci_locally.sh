@@ -40,7 +40,7 @@ show_help() {
     echo "  4. Module-core import linter (check_module_core_imports)"
     echo "  5. Manifest sync gate (sync_module_manifests)"
     echo "  6. Module app declaration and org-context primitives gates"
-    echo "  7. Registered script suites, CSRF-exempt, dependency vulnerability, security static-analysis, beta-migration smoke, and generated deploy posture gates"
+    echo "  7. Registered script suites, CSRF-exempt, dependency vulnerability, security static-analysis, beta-migration smoke, generated deploy posture, workflow security, and secret scanning gates"
     echo "  8. Type check (mypy)"
     echo "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint"
     echo "     (frontend lint runs when Node.js and pnpm are available)"
@@ -490,6 +490,16 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Registered scripts test suites passed"
             LOCAL_GATE_FAILURE_LABEL="Registered Script Test Suites"
             ;;
+        check-workflow-security)
+            LOCAL_GATE_DESCRIPTION="Running workflow security gate..."
+            LOCAL_GATE_SUCCESS="✓ Workflow actions are pinned and permissions are declared"
+            LOCAL_GATE_FAILURE_LABEL="Workflow Security Gate"
+            ;;
+        check-secret-scanning)
+            LOCAL_GATE_DESCRIPTION="Running secret scanning gate..."
+            LOCAL_GATE_SUCCESS="✓ No committed secrets found"
+            LOCAL_GATE_FAILURE_LABEL="Secret Scanning Gate"
+            ;;
         *)
             LOCAL_GATE_DESCRIPTION="Running $target..."
             LOCAL_GATE_SUCCESS="✓ $target passed"
@@ -683,6 +693,16 @@ report_static_failure_banner() {
         check-gate-suites)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Registered Script Suites Failed    ║"
+            echo "╚════════════════════════════════════════╝"
+            ;;
+        check-workflow-security)
+            echo "╔════════════════════════════════════════╗"
+            echo "║   ✗ Workflow Security Gate Failed      ║"
+            echo "╚════════════════════════════════════════╝"
+            ;;
+        check-secret-scanning)
+            echo "╔════════════════════════════════════════╗"
+            echo "║   ✗ Secret Scanning Gate Failed        ║"
             echo "╚════════════════════════════════════════╝"
             ;;
         typecheck)

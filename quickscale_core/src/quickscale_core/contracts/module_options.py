@@ -74,12 +74,12 @@ DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR: Final[str] = (
     "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
 )
 DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR: Final[str] = (
-    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
+    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"  # noqa: S105 - environment-variable name constant, not a credential
 )
 
 BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: Final[str] = "remote_access_key_id_env_var"
 BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: Final[str] = (
-    "remote_secret_access_key_env_var"
+    "remote_secret_access_key_env_var"  # noqa: S105 - environment-variable name constant, not a credential
 )
 
 _LEGACY_BACKUPS_SECRET_OPTIONS: Final[dict[str, str]] = {
@@ -93,8 +93,8 @@ _LEGACY_BACKUPS_SECRET_OPTIONS: Final[dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR: Final[str] = "STRIPE_PUBLISHABLE_KEY"
-DEFAULT_BILLING_SECRET_KEY_ENV_VAR: Final[str] = "STRIPE_SECRET_KEY"
-DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR: Final[str] = "QUICKSCALE_BILLING_WEBHOOK_SECRET"
+DEFAULT_BILLING_SECRET_KEY_ENV_VAR: Final[str] = "STRIPE_SECRET_KEY"  # noqa: S105 - environment-variable name constant, not a credential
+DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR: Final[str] = "QUICKSCALE_BILLING_WEBHOOK_SECRET"  # noqa: S105 - environment-variable name constant, not a credential
 DEFAULT_BILLING_CURRENCY: Final[str] = "usd"
 
 BILLING_ENV_VAR_OPTION_NAMES: Final[tuple[str, ...]] = (
@@ -144,11 +144,11 @@ BILLING_SUPPORTED_CURRENCIES: Final[tuple[str, ...]] = (
 
 DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR: Final[str] = "RESEND_API_KEY"
 DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR: Final[str] = (
-    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"  # noqa: S105 - environment-variable name constant, not a credential
 )
 
 NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION: Final[str] = "resend_api_key_env_var"
-NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION: Final[str] = "webhook_secret_env_var"
+NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION: Final[str] = "webhook_secret_env_var"  # noqa: S105 - environment-variable name constant, not a credential
 
 
 # ---------------------------------------------------------------------------
@@ -219,10 +219,10 @@ DEFAULT_STORAGE_PUBLIC_BASE_URL: Final[str] = ""
 DEFAULT_STORAGE_PRIVATE_MEDIA_ENABLED: Final[bool] = False
 
 DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR: Final[str] = "AWS_ACCESS_KEY_ID"
-DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR: Final[str] = "AWS_SECRET_ACCESS_KEY"
+DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR: Final[str] = "AWS_SECRET_ACCESS_KEY"  # noqa: S105 - environment-variable name constant, not a credential
 
 STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: Final[str] = "access_key_id_env_var"
-STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: Final[str] = "secret_access_key_env_var"
+STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: Final[str] = "secret_access_key_env_var"  # noqa: S105 - environment-variable name constant, not a credential
 
 _LEGACY_STORAGE_SECRET_OPTIONS: Final[dict[str, str]] = {
     "access_key_id": DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,

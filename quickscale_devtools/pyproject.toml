@@ -76,7 +76,7 @@ quickscale-core = {path = "../quickscale_core"}
 # Use: poetry install from repository root
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"
 
 # Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
@@ -87,12 +87,18 @@ build-backend = "poetry.core.masonry.api"
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "S"]
 
 # NOTE: `I` (isort) is not in the select above, so the [tool.ruff.lint.isort]
 # override below is currently inert — it configures a rule that is not
 # enabled. It is kept because it becomes correct the moment this package
 # adopts the shared select (which does enable `I`); see implementation_contract.md.
+
+# The S (flake8-bandit) rules govern shipped package source. The Bandit
+# static-security gate already scopes its scan to maintained source roots,
+# excluding test trees; this table keeps the Ruff selection in step.
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
 
 # Package-specific isort override
 [tool.ruff.lint.isort]

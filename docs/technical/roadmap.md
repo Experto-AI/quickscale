@@ -14,7 +14,7 @@ seal, or PyPI upload has happened. Publication stays a maintainer decision; this
 that it is owed: release-tier validation on the packaged bytes, the phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. The packaged bytes
 predate fixes now on `v89` (the `.env.example` credential placeholders, backup/restore TLS, and the
-account-deletion transaction boundary), and SA202 hardens the workflow that would upload them;
+account-deletion transaction boundary), and SA202 has since hardened the workflow that would upload them;
 shipping any of those in 0.88.0 means repackaging.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
@@ -30,7 +30,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA194 | Remove the in-place beta-migration mode | post-v88 | 1 | SA191 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
 | SA201 | Give generated projects one throttling contract | post-v88 | 3 | — | Deferred |
 | SA203 | Narrow the privileged-command exemption in the orgs boot path | post-v88 | 3 | — | Deferred |
 
@@ -38,7 +37,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA194 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
-Track 2: SA202
+Track 2: — (SA202 closed)
 Track 3: SA201 ──► SA203
 ```
 
@@ -60,7 +59,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA202 | yes | yes | yes | **yes** | no |
+| 2 | — | yes | yes | yes | **yes** | no |
 | 3 | SA201 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -200,38 +199,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
   extension documentation.
 
-- [ ] **SA202 — Pin the publishing supply chain and add the missing CI scanners.**
-
-  **Context:** `publish.yml` pins two third-party actions to `@release/v1`, which is a **branch**,
-  not a tag: whoever can push to it changes what runs inside the job that holds the OIDC
-  trusted-publishing identity. Poetry is installed unpinned in the same workflow, and every package
-  in the monorepo declares `requires = ["poetry-core"]` with no upper bound, so the build backend is
-  whatever resolves at build time. None of this is exploitable by a defect in this repository; all
-  of it is trust extended to something outside it, on the exact path that would upload the release
-  the project is currently holding.
-
-  The audit reached no conclusion at all about CVE exposure, because no dependency scanner exists
-  to run — that silence is a tooling gap, not a clean result. The same holds for secret scanning:
-  the sweep found no committed secret, but that rests on greps. Both belong with the pinning work,
-  because they are the same job's hygiene and because a workflow linter is what keeps the pinning
-  caught rather than re-derived by the next audit.
-
-  **Acceptance:** every third-party `uses:` in every workflow is pinned to a full commit SHA with
-  the human-readable version in a trailing comment; Poetry is installed at a pinned version; every
-  package's `[build-system]` declares a bounded `poetry-core` range. A workflow linter (`zizmor` or
-  `actionlint`) runs as a registered gate and fails on an unpinned `uses:` ref and on a workflow
-  missing a top-level `permissions:`, so the pinning cannot silently regress. Dependency scanning
-  (`pip-audit` against `poetry.lock`) and secret scanning run in CI, each as a registered gate with
-  its failure policy stated — including whether a new advisory fails the build or files a finding,
-  which is decided here rather than left to the tool's default. Ruff's `S` rule set is selected and
-  its findings are either fixed or per-line suppressed with a reason; `ASYNC` is selected only if
-  the tree has async code to govern, and otherwise recorded as not applicable. The gate registry
-  rows and the parity oracles they feed are updated in the same change and reconciled with Track 1
-  at merge. Publication behavior is otherwise unchanged; this ticket publishes nothing.
-
-  **Surfaces:** `.github/workflows/` (all four), the `[build-system]` block of every package,
-  `ruff.toml`, `scripts/gate_registry.json` and the parity oracles, the publication procedure doc,
-  and the tech audit.
+- [x] **SA202 — Pin the publishing supply chain and add the missing CI scanners.**
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 

@@ -52,7 +52,7 @@ def _get_docker_status() -> dict[str, str] | None:
     """
     try:
         result = subprocess.run(
-            ["docker", "compose", "ps", "--format", "{{.Name}}: {{.Status}}"],
+            ["docker", "compose", "ps", "--format", "{{.Name}}: {{.Status}}"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=False,

@@ -312,7 +312,7 @@ def is_interactive() -> bool:
 def is_docker_running() -> bool:
     """Check if Docker daemon is running."""
     try:
-        subprocess.run(["docker", "info"], capture_output=True, check=True, timeout=5)
+        subprocess.run(["docker", "info"], capture_output=True, check=True, timeout=5)  # noqa: S607 - PATH-resolved executable by design
         return True
     except (
         subprocess.SubprocessError,
@@ -332,7 +332,10 @@ def get_docker_compose_command() -> list[str]:
     """Get the Docker Compose v2 command."""
     try:
         subprocess.run(
-            ["docker", "compose", "version"], capture_output=True, check=True, timeout=2
+            ["docker", "compose", "version"],  # noqa: S607 - PATH-resolved executable by design
+            capture_output=True,
+            check=True,
+            timeout=2,
         )
     except (
         subprocess.SubprocessError,
@@ -395,8 +398,8 @@ def get_container_status(container_name: str) -> ContainerStatus:
     an absent container.
     """
     try:
-        result = subprocess.run(
-            [
+        result = subprocess.run(  # noqa: S603 - caller-supplied argv, shell never enabled
+            [  # noqa: S607 - PATH-resolved executable by design
                 "docker",
                 "ps",
                 "-a",
@@ -431,7 +434,7 @@ def exec_in_container(
     cmd.extend(command)
 
     try:
-        result = subprocess.run(cmd)
+        result = subprocess.run(cmd)  # noqa: S603 - caller-supplied argv, shell never enabled
         return result.returncode
     except subprocess.SubprocessError:
         return 1
@@ -441,7 +444,7 @@ def get_running_containers() -> list[str]:
     """Get list of running QuickScale containers."""
     try:
         result = subprocess.run(
-            ["docker", "ps", "--format", "{{.Names}}"],
+            ["docker", "ps", "--format", "{{.Names}}"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=True,
@@ -453,7 +456,7 @@ def get_running_containers() -> list[str]:
         return []
 
 
-def is_port_available(port: int, host: str = "0.0.0.0") -> bool:
+def is_port_available(port: int, host: str = "0.0.0.0") -> bool:  # noqa: S104 - default host for a local port probe
     """Check if a port is available for binding.
 
     This is more accurate than checking for listening processes because it
@@ -592,7 +595,7 @@ def list_existing_volumes(names: list[str]) -> list[str]:
         return []
     try:
         result = subprocess.run(
-            ["docker", "volume", "ls", "--format", "{{.Name}}"],
+            ["docker", "volume", "ls", "--format", "{{.Name}}"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=True,
@@ -637,8 +640,8 @@ def remove_volumes(names: list[str]) -> tuple[list[str], list[str]]:
     failed: list[str] = []
     for name in names:
         try:
-            result = subprocess.run(
-                ["docker", "volume", "rm", name],
+            result = subprocess.run(  # noqa: S603 - caller-supplied argv, shell never enabled
+                ["docker", "volume", "rm", name],  # noqa: S607 - PATH-resolved executable by design
                 capture_output=True,
                 text=True,
                 check=False,
@@ -671,7 +674,7 @@ def compose_down(project_path: Path) -> bool:
         return False
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 - caller-supplied argv, shell never enabled
             compose_cmd + ["down", "--remove-orphans"],
             cwd=project_path,
             capture_output=True,

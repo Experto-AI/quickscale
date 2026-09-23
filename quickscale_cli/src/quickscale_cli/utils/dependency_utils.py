@@ -71,7 +71,7 @@ def check_poetry_installed() -> DependencyStatus:
         )
     try:
         result = subprocess.run(
-            ["poetry", "--version"],
+            ["poetry", "--version"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=True,
@@ -117,7 +117,7 @@ def check_git_installed() -> DependencyStatus:
     if git_path:
         try:
             result = subprocess.run(
-                ["git", "--version"],
+                ["git", "--version"],  # noqa: S607 - PATH-resolved executable by design
                 capture_output=True,
                 text=True,
                 check=True,
@@ -165,7 +165,7 @@ def check_docker_installed() -> DependencyStatus:
     if docker_path:
         try:
             result = subprocess.run(
-                ["docker", "--version"],
+                ["docker", "--version"],  # noqa: S607 - PATH-resolved executable by design
                 capture_output=True,
                 text=True,
                 check=True,
@@ -179,7 +179,7 @@ def check_docker_installed() -> DependencyStatus:
             # Docker-backed workflows require the Compose v2 plugin.
             try:
                 subprocess.run(
-                    ["docker", "compose", "version"],
+                    ["docker", "compose", "version"],  # noqa: S607 - PATH-resolved executable by design
                     capture_output=True,
                     check=True,
                     timeout=2,
@@ -238,7 +238,7 @@ def check_postgresql_installed() -> DependencyStatus:
     if psql_path:
         try:
             result = subprocess.run(
-                ["psql", "--version"],
+                ["psql", "--version"],  # noqa: S607 - PATH-resolved executable by design
                 capture_output=True,
                 text=True,
                 check=True,

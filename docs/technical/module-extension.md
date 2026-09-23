@@ -277,7 +277,7 @@ Django = ">=6.0.7,<6.1.0"
 pytest-django = "^4.7.0"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"
 
 # Required. Any [tool.ruff.*] table makes this file Ruff's config root for the

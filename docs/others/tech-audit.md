@@ -31,10 +31,12 @@ as generated launchers. R3: tag-triggered workflow dispatch.
 **Tooling baseline.** Ruff (E/W/F/I/N/UP/D, line-length 100, `target-version = py314`), mypy with
 django-stubs, pytest + pytest-cov + pytest-django + pytest-timeout, vulture/radon/pylint for
 quality metrics, pre-commit declared as a dev dependency. CI runs lint, a rendered-frontend lint
-gate, several fail-fast contract jobs, and a separate BYPASSRLS-privileged test workflow. **No
-security scanner is wired into CI** — no secret scanning, no SAST, no `pip-audit`/dependency SCA,
-no container or IaC scanning. Under §2d that absence is a tooling gap, not coverage, and nothing in
-this report was deflated on the assumption that a scanner already catches it.
+gate, several fail-fast contract jobs, and a separate BYPASSRLS-privileged test workflow. The
+scanner baseline has since closed: SA123 wired a checksum-pinned Trivy dependency scan and a Bandit
+static-security gate, and SA202 added a checksum-pinned gitleaks secret scan and a zizmor
+workflow-security gate that fails on unpinned `uses:` refs and missing top-level `permissions:`.
+Ruff `S` is now selected for maintained source, and `ASYNC` is recorded as not applicable (the tree
+has no async code). Container and IaC scanning remain absent — a tooling gap, not coverage.
 
 **Oracle list (the project's own declared invariants, mined per §2g).**
 
@@ -143,7 +145,7 @@ at*, not *clean*.
   title: Publishing workflow trusts mutable action refs and an unpinned Poetry
   effort: Small
   confidence: High
-  status: open
+  status: resolved
   reality: R3
   chain: []
 - id: blog-throttle-ident-collision
@@ -161,7 +163,7 @@ at*, not *clean*.
   title: Every package declares an unpinned poetry-core build requirement
   effort: Trivial
   confidence: High
-  status: open
+  status: resolved
   reality: R3
   chain: []
 ```
@@ -175,9 +177,9 @@ at*, not *clean*.
 | `billing-checkout-endpoints-unthrottled` | S3 | Security | Stripe-calling endpoints have no throttle | Small | High | open |
 | `orgs-ready-early-return-skips-receivers` | S3 | Correctness | Privileged-command exemption skips two other installs | Small | High | open |
 | `blog-throttle-racy-on-database-cache` | S3 | Concurrency | Rate limiter non-atomic on the default prod cache | Small | Medium | open |
-| `pipeline-mutable-action-refs` | S3 | Pipeline | Publishing workflow trusts mutable refs | Small | High | open |
+| `pipeline-mutable-action-refs` | S3 | Pipeline | Publishing workflow trusts mutable refs | Small | High | resolved |
 | `blog-throttle-ident-collision` | S4 | Security | IPv4/IPv6 throttle bucket collision | Trivial | High | open |
-| `build-system-requires-unpinned` | S4 | Pipeline | Unpinned `poetry-core` build requirement | Trivial | High | open |
+| `build-system-requires-unpinned` | S4 | Pipeline | Unpinned `poetry-core` build requirement | Trivial | High | resolved |
 
 **Counts:** S1 — 0 · S2 — 0 · S3 — 4 · S4 — 2 · total 6.
 
@@ -308,6 +310,13 @@ at*, not *clean*.
   in good shape; what remains is the supply-chain pinning, which is why this is S3 and not higher.
   **Fix risk:** none functional — SHA pinning is inert until an action is updated, at which point
   the update becomes an explicit, reviewable commit rather than a silent one.
+- **Resolution (SA202, 2026-09-23):** every third-party `uses:` across all four workflows is pinned
+  to a full commit SHA with the human-readable version in a trailing comment; `snok/install-poetry`
+  installs Poetry 2.4.1 rather than `latest`; every workflow declares top-level
+  `permissions: contents: read`, and the two publish jobs keep their narrow `id-token: write`. The
+  `check-workflow-security` gate runs zizmor at a medium severity and confidence floor — exactly
+  `unpinned-uses` and `excessive-permissions` — and fails on either, so the pinning cannot silently
+  regress. Dependabot for `github-actions` remains a separate follow-up.
 
 ---
 
@@ -321,7 +330,11 @@ at*, not *clean*.
 - `build-system-requires-unpinned` · `quickscale_core/pyproject.toml:41–43`,
   `quickscale_cli/pyproject.toml:40–42`, and the sibling packages · every package declares
   `requires = ["poetry-core"]` with no version bound, so the build backend is whatever resolves at
-  build time. · Pin to a compatible range, e.g. `poetry-core>=2.0,<3.0`.
+  build time. · Pin to a compatible range, e.g. `poetry-core>=2.0,<3.0`. **Resolved (SA202,
+  2026-09-23):** all seventeen repository `pyproject.toml` files declare
+  `poetry-core>=2.0,<3.0`. The generator's `pyproject.toml.j2` template still emits the unbounded
+  requirement into generated projects; it is out of SA202's package scope and is carried as a
+  follow-up because changing it moves the SA90 emission fixture that the generator track owns.
 
 ---
 
@@ -371,7 +384,7 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
   defaults). `base.py.j2`, `production.py.j2`, `.env.j2`, `start.sh.j2` read in full.
 - **quickscale_cli** — clean on the sinks swept. All 94 files swept for shell/eval/deserialization
   sinks; `railway_utils.py` secret handling read in full.
-- **CI/CD (R3)** — `pipeline-mutable-action-refs`. All four workflows read in full.
+- **CI/CD (R3)** — `pipeline-mutable-action-refs` (now resolved). All four workflows read in full.
 - **analytics, crm, forms, listings, social, storage** — clean on the lenses applied (injection
   sinks, permission decorators, `mark_safe`/raw-SQL sweeps). Not read in full; see residual risk.
 
@@ -437,15 +450,23 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 ## 9. Tooling gaps
 
 - **Dependency/SCA scanning in CI** (`pip-audit` or `poetry audit` against `poetry.lock`, failing
-  the build). Nothing exists today; this report therefore reaches no conclusion at all about CVE
-  exposure. Would systematically cover §VII.
-- **Secret scanning** (gitleaks or GitHub's native push protection). Nothing exists today; the
-  sweep found no committed secret, but that silence rests on greps, not on a scanner.
+  the build). **Closed by SA123** with Trivy against the single committed root lockfile, including
+  development dependencies; `decisions.md` records Trivy as the approved lock-native replacement
+  for the originally proposed `pip-audit` design. CVE exposure now reaches a conclusion on every
+  run instead of none.
+- **Secret scanning** (gitleaks or GitHub's native push protection). **Closed by SA202**: the
+  `check-secret-scanning` gate acquires a checksum-pinned gitleaks v8.30.1 and scans the working
+  tree, failing on any finding. Verified false positives live in `scripts/gitleaks.toml` with a
+  reason per entry.
 - **Workflow linting** (`zizmor` or `actionlint`), failing on unpinned `uses:` refs and on missing
-  top-level `permissions:`. Would have caught **`pipeline-mutable-action-refs`** and keeps it
-  caught.
-- **Ruff `S` (flake8-bandit) and `ASYNC` rule sets**, currently unselected in `ruff.toml`. `S` would
-  flag the `except Exception: return False` swallow patterns.
+  top-level `permissions:`. **Closed by SA202** as the `check-workflow-security` gate, which caught
+  and keeps caught **`pipeline-mutable-action-refs`**.
+- **Ruff `S` (flake8-bandit) and `ASYNC` rule sets**, previously unselected in `ruff.toml`.
+  **Closed by SA202**: `S` is selected for maintained first-party source, with test trees and
+  maintainer tooling excluded on the same terms as the Bandit source-root contract; every remaining
+  finding is per-line suppressed with a specific reason. `ASYNC` is recorded as **not applicable** —
+  the tree contains no `async def`, `asyncio`, `await`, or `async with`/`for` in first-party
+  Python, so the rule set has nothing to govern.
 
 ---
 

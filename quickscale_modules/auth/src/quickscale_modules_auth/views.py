@@ -275,7 +275,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
                 if rejection_response is not None:
                     return rejection_response
-                assert success_response is not None
+                assert success_response is not None  # noqa: S101 - internal invariant guaranteed by the caller
                 messages.success(
                     self.request,
                     "Your account has been deleted successfully.",

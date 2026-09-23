@@ -35,7 +35,7 @@ class GitRunner:
         run_kwargs = dict(kwargs)
         run_kwargs["env"] = dict(self.env) if self.env is not None else None
         run_kwargs["shell"] = False
-        return subprocess.run([self.executable, *args], **run_kwargs)
+        return subprocess.run([self.executable, *args], **run_kwargs)  # noqa: S603 - fixed argv list, shell disabled
 
 
 _PUBLICATION_EXECUTABLE_ENV = "QUICKSCALE_GIT_EXECUTABLE"
@@ -192,7 +192,7 @@ def _run_git(
 ) -> subprocess.CompletedProcess[Any]:
     """Run a Git command, preserving legacy defaults when no runner is given."""
     if runner is None:
-        return subprocess.run(["git", *args], **kwargs)
+        return subprocess.run(["git", *args], **kwargs)  # noqa: S603, S607 - fixed argv list, shell disabled; PATH-resolved executable by design
     return runner.run(args, **kwargs)
 
 
@@ -283,8 +283,8 @@ def check_remote_branch_exists(
     """Check if branch exists on remote repository"""
     cwd = path or Path.cwd()
     try:
-        result = subprocess.run(
-            ["git", "ls-remote", "--heads", remote, branch],
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "ls-remote", "--heads", remote, branch],  # noqa: S607 - PATH-resolved executable by design
             cwd=cwd,
             check=True,
             capture_output=True,
@@ -318,7 +318,7 @@ def run_git_subtree_add(
         cmd.append("--squash")
 
     try:
-        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
+        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)  # noqa: S603 - fixed argv list, shell disabled
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to add git subtree: {e.stderr}")
 
@@ -345,7 +345,7 @@ def run_git_subtree_pull(
         cmd.append("--squash")
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
             cmd, cwd=cwd, check=True, capture_output=True, text=True
         )
         return result.stdout
@@ -361,7 +361,7 @@ def run_git_subtree_push(
     cmd = ["git", "subtree", "push", f"--prefix={prefix}", remote, branch]
 
     try:
-        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
+        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)  # noqa: S603 - fixed argv list, shell disabled
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to push git subtree: {e.stderr}")
 
@@ -388,8 +388,8 @@ def resolve_remote_ref(remote: str, branch: str, path: Path | None = None) -> st
     """
     cwd = path or Path.cwd()
     try:
-        result = subprocess.run(
-            ["git", "ls-remote", "--heads", remote, branch],
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "ls-remote", "--heads", remote, branch],  # noqa: S607 - PATH-resolved executable by design
             cwd=cwd,
             check=True,
             capture_output=True,
@@ -771,8 +771,8 @@ def _resolve_remote_tag_commit(
     validate_tag_name(tag)
     cwd = path or Path.cwd()
     try:
-        result = subprocess.run(
-            [
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            [  # noqa: S607 - PATH-resolved executable by design
                 "git",
                 "ls-remote",
                 "--tags",
@@ -814,8 +814,8 @@ def get_tree_sha(commit: str, path: Path | None = None) -> str:
     """Return the tree SHA for *commit* using Git's verified tree peel."""
     cwd = path or Path.cwd()
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", f"{commit}^{{tree}}"],
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "rev-parse", "--verify", f"{commit}^{{tree}}"],  # noqa: S607 - PATH-resolved executable by design
             cwd=cwd,
             check=True,
             capture_output=True,
@@ -832,8 +832,8 @@ def get_local_tag_commit(tag: str, path: Path | None = None) -> str | None:
     cwd = path or Path.cwd()
     tag_ref = f"refs/tags/{tag}"
     try:
-        presence = subprocess.run(
-            ["git", "show-ref", "--verify", "--quiet", tag_ref],
+        presence = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "show-ref", "--verify", "--quiet", tag_ref],  # noqa: S607 - PATH-resolved executable by design
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -849,8 +849,8 @@ def get_local_tag_commit(tag: str, path: Path | None = None) -> str | None:
         )
 
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", f"{tag_ref}^{{commit}}"],
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "rev-parse", "--verify", f"{tag_ref}^{{commit}}"],  # noqa: S607 - PATH-resolved executable by design
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -884,8 +884,8 @@ def create_annotated_tag(tag: str, commit: str, path: Path | None = None) -> Non
 
     cwd = path or Path.cwd()
     try:
-        subprocess.run(
-            ["git", "tag", "--annotate", tag, requested_sha, "--message", tag],
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "tag", "--annotate", tag, requested_sha, "--message", tag],  # noqa: S607 - PATH-resolved executable by design
             cwd=cwd,
             check=True,
             capture_output=True,
@@ -901,8 +901,8 @@ def push_tag(tag: str, remote: str = "origin", path: Path | None = None) -> None
     cwd = path or Path.cwd()
     refspec = f"refs/tags/{tag}:refs/tags/{tag}"
     try:
-        subprocess.run(
-            ["git", "push", "--", remote, refspec],
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "push", "--", remote, refspec],  # noqa: S607 - PATH-resolved executable by design
             cwd=cwd,
             check=True,
             capture_output=True,

@@ -215,7 +215,7 @@ def _collect_module_versions() -> dict[str, str]:
             continue
         try:
             package = import_module(app_config.name)
-        except Exception:
+        except Exception:  # noqa: S112 - best-effort inventory; an unimportable module is omitted
             continue
         versions[app_config.name] = str(getattr(package, "__version__", "unknown"))
     return versions
@@ -226,7 +226,7 @@ def _get_git_revision() -> str | None:
     base_dir = Path(getattr(settings, "BASE_DIR", Path.cwd()))
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+            ["git", "rev-parse", "HEAD"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             check=False,
             text=True,
@@ -2721,7 +2721,7 @@ def restore_admin_uploaded_backup(
             )
         raise
 
-    assert result is not None
+    assert result is not None  # noqa: S101 - internal invariant guaranteed by the caller
     cleanup_error = _cleanup_admin_restore_upload_directory(staging_directory)
     if cleanup_error is None:
         return result

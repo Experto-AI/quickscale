@@ -426,7 +426,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                 form.cleaned_data["source_mode"]
                                 == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT
                             ):
-                                assert selected_artifact is not None
+                                assert selected_artifact is not None  # noqa: S101 - internal invariant guaranteed by the caller
                                 result = restore_backup_artifact(
                                     selected_artifact,
                                     confirmation=form.cleaned_data["confirmation"],
@@ -476,7 +476,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                 form.cleaned_data["source_mode"]
                                 == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT
                             ):
-                                assert selected_artifact is not None
+                                assert selected_artifact is not None  # noqa: S101 - internal invariant guaranteed by the caller
                                 confirm_value = form.cleaned_data["confirmation"]
                                 dispatch_background_restore(
                                     selected_artifact,

@@ -118,8 +118,8 @@ def assess_auth_migration_state(
         )
 
     try:
-        result = subprocess.run(
-            ["python", "manage.py", "shell", "-c", _migration_probe_script()],
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["python", "manage.py", "shell", "-c", _migration_probe_script()],  # noqa: S607 - PATH-resolved executable by design
             cwd=project_path,
             capture_output=True,
             text=True,
