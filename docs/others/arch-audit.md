@@ -35,7 +35,7 @@ commit carries a `v89:` testimony token, so the commit-testimony gate is holding
     **SA192 precursor**: it restyled the blog, crm and listings Django pages, added three
     per-module `<module>.css` static files, and minted **three byte-identical**
     `tests/templates/base.html` stubs (md5 `2902eaa7…`) plus three near-identical
-    `test_templates.py` suites. Measured as probe B below.
+    `test_templates.py` suites. Measured as probe A below.
   - `6a8e0189` "derive expected test versions" — test-only, replaces hardcoded version literals
     with derivation. Sound.
   - `adc753c6` "reject malformed authentication headers" — a real defect class, not a rename:
@@ -47,8 +47,8 @@ commit carries a `v89:` testimony token, so the commit-testimony gate is holding
 **Growth direction (planning surface, authoritative).** `roadmap.md` scheduling table: the critical
 path is **SA194 → SA191 → SA153** on track 1 — unblock the in-place migration gate, migrate
 `bap-web` onto current QuickScale, then build the first property portal as a project-owned
-extension. Track 2's next ticket is **SA193** (derive the generated credential contract); track 3's
-is **SA199** (finish the external-call and webhook hardening ticket). All three tracks are "truly
+extension. Track 2's next ticket is **SA198** (carry the database's TLS settings into backup and restore);
+track 3's is **SA199** (finish the external-call and webhook hardening ticket). All three tracks are "truly
 green". Completed SA190 removed project-owned tenant tables as a purge dependency by deriving the
 purge plan from installed tenant metadata; the durable deletion coordinator remains deferred.
 
@@ -84,10 +84,11 @@ internals, and the module test suites as tests.
 
 **Coverage and residual risk.** The baseline is static analysis of source at `98b6c455`; nothing was
 executed in that pass. SA190's affected source and regressions were re-read through `1270ed46` for
-the reconciliation below. Two baseline claims still want runtime confirmation: that a generated
-project with `storage` or `backups` enabled really does ship a `.env.example` with no placeholder
-for its declared credential variables (rank 1), and that the beta-migration smoke gate keeps
-`beta_migration.py`'s privileged-command copy honest (watchlist W1). A reader must **not** conclude
+the reconciliation below. One baseline claim still wants runtime confirmation: that the beta-migration smoke gate keeps
+`beta_migration.py`'s privileged-command copy honest (watchlist W1). The former rank-1 claim — a
+generated project with `storage` or `backups` enabled shipping a `.env.example` with no placeholder
+for its declared credential variables — was confirmed and closed by the credential-contract
+derivation, whose conformance check now runs with the test suite. A reader must **not** conclude
 from this document's silence that `contracts/resolvers.py`, the manifest resolver, or the dr_engine
 internals are sound — they were not read at depth this pass, and no pass has read them yet.
 
@@ -97,13 +98,13 @@ internals are sound — they were not read at depth this pass, and no pass has r
 |---|---|---|---|
 | Tenant reads/writes stay organization-scoped | `TenantManager`, `FORCE RLS`, restricted-role boot guard | Structural | unchanged |
 | **Tenant-model universe is classified (and refreshed, and purged)** | Marker-derived tenant classification, FORCE-RLS refresh, and FK-ordered purge membership; the shipped `TENANT_TABLE_REGISTRY` is a parity oracle only | **Structural and open to installed project-owned tenant models** | **strengthened** — purge no longer hand-enumerates the model universe |
-| **Module-declared credential env vars reach the generated `.env.example`** | Three hand-written render/sync triples in `apply_command.py` + three named core steps | **Convention — 3 of 5 declaring modules covered** | **new row — rank 1** |
+| **Module-declared credential env vars reach the generated `.env.example`** | One declaration-driven renderer for every enabled credential-bearing module, plus a manifest-coverage conformance check | **Structural and gated** | **closed — rank 1 resolved; `storage` and `backups` gain placeholders on the next `apply`** |
 | Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard; exemption set declared across fail-closed stations | Guard structural; duplicated declarations cross-checked | unchanged |
 | Restricted runtime role exists with the right grants | `runtime_database.py` declares the role, attributes and grants; generator renders them into `db/init.sql.j2`, `start.sh.j2`, `OPERATIONS.md.j2`; Railway deploy imports the same name | Structural — one role name, one statement set | **strengthened** (`98b6c455` unified provisioning) |
 | Privileged Django command set | Three `frozenset` stations + `start.sh.j2`, held equal by `test_privileged_command_contract.py`; a **fifth** copy in `beta_migration.py:3663` is outside that test but exercised by the smoke gate | Gated, exact-member | **set reduced to two members** (`37987df9`); **station count 4 → 5** — W1 |
 | Template ↔ upgradable-code contract compatibility | `project_contract` in state plus declared module/CLI vintages; `status` reports gaps; `update`/`apply`/Railway deploy enforce them | Structural at mutation boundaries | unchanged |
 | Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy; bidirectional (no stale entries) | Membership gated both ways; **disposition choice and its documented rationale are not** | unchanged — **census: 117 emitted paths; 47 (40%) classified solely as `INTENTIONALLY_UNMANAGED`**; list shrank 87 → 78 — W5 |
-| Cross-domain deletion obligations are discharged | Last-owner predicate + locked model delete + `pre_delete` receiver; one named contract classifies billing reconciliation, row purge, cache invalidation, and tombstone handling across account deletion and `purge_organization` | Last-owner, live-subscription refusal, and obligation classification structural; **execution remains split across two boundaries** | **strengthened** — shared contract added; durable coordinator remains deferred — rank 2 |
+| Cross-domain deletion obligations are discharged | Last-owner predicate + locked model delete + `pre_delete` receiver; one named contract classifies billing reconciliation, row purge, cache invalidation, and tombstone handling across account deletion and `purge_organization` | Last-owner, live-subscription refusal, and obligation classification structural; **execution remains split across two boundaries** | **strengthened** — shared contract added; durable coordinator remains deferred — rank 1 |
 | Shared-secret comparison at module API boundaries | Per-module hand-rolled `compare_digest` calls (2), plus Stripe's library verifier (1) | Convention | **both hand-rolled callsites carried the same `str`-vs-`bytes` defect; both fixed** (`adc753c6`) |
 | CSRF-exempt endpoints have alternate integrity checks | AST gate plus sanctioned endpoint bases | Structural and gated | unchanged |
 | Core/module dependency direction and lockstep pin | Import-compatibility and reverse-import gates; exact `>=X.Y.0,<X.(Y+1).0` pin derived from `VERSION` | Gated | unchanged |
@@ -117,26 +118,18 @@ internals are sound — they were not read at depth this pass, and no pass has r
 
 | Rank | ID | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|
-| 1 | `module-env-contract-hand-wired` | now | High | M | two-way door | The generated `.env.example` credential contract is hand-wired per module across four stations in two packages, although `module.yml` already declares the variable names — and two of the five declaring modules get nothing. |
-| 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | two-way door | Two org-deletion boundaries share one obligation contract but still execute different subsets without a durable coordinator. |
+| 1 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | two-way door | Two org-deletion boundaries share one obligation contract but still execute different subsets without a durable coordinator. |
 
-Rank 1 leads because it is the only finding with a **live defect today** rather than a scheduled
-trigger: `storage` and `backups` ship declared credential variables that never reach the generated
-`.env.example`. Rank 2 remains at the 6–18 month horizon: SA190 completed its shared declaration
-and marker-derived purge prerequisites, while a durable coordinator is still deferred until another
-destructive boundary or durable-erasure requirement fires the trigger.
+The former rank-1 finding closed: module-declared credential variables now reach the generated
+`.env.example` through one declaration-driven renderer, and a conformance check fails when a
+declaration has no placeholder. The remaining finding takes rank 1 at the 6–18 month horizon:
+SA190 completed its shared declaration and marker-derived purge prerequisites, while a durable
+coordinator is still deferred until another destructive boundary or durable-erasure requirement
+fires the trigger.
 
 ## Machine-readable finding index
 
 ```yaml
-- id: module-env-contract-hand-wired
-  title: Module-declared credential env vars are hand-wired into .env.example
-  horizon: now
-  confidence: high
-  size: M
-  reversibility: two-way-door
-  status: open
-  depends_on: []
 - id: deletion-invariants-per-boundary-reimplementation
   title: Organization deletion obligations are split across two boundaries
   horizon: 6-18-months
@@ -146,136 +139,6 @@ destructive boundary or durable-erasure requirement fires the trigger.
   status: open
   depends_on: []
 ```
-
----
-
-## Finding — Module-declared credential env vars are hand-wired into `.env.example`
-
-**ID:** `module-env-contract-hand-wired` · **Horizon:** now · **Confidence:** High ·
-**Size:** M · **Context dependence:** `wrong-regardless`
-
-**Rank rationale:** blast radius is the credential-setup surface of every generated project that
-enables a credential-bearing module, times the coordination tax on every future one. Likelihood is
-not a forecast — the trigger has already fired twice, silently, in shipped modules.
-
-**Problem:** `.env.example` content is treated as bespoke Python per module rather than as a
-projection of the module manifest, even though `module.yml` already declares each credential
-variable by name and the manifest layer already has a derivation mechanism for exactly this kind of
-wiring.
-
-**Evidence** (all anchors established this pass):
-
-- **The manifest already declares the contract.** `notifications/module.yml` declares
-  `resend_api_key_env_var` (default `RESEND_API_KEY`) and `webhook_secret_env_var`, each with a
-  type, default, `django_setting` and description, alongside a `derivation.wiring_projections`
-  block that derives Django app wiring generically.
-- **Census — modules declaring `*_env_var` options vs. modules with an `.env.example` sync:**
-
-  | Module | `*_env_var` options declared | Managed `.env.example` block |
-  |---|---:|---|
-  | analytics | 4 | ✅ `_sync_analytics_env_example` |
-  | billing | 6 | ✅ `_sync_billing_env_example` |
-  | notifications | 2 | ✅ `_sync_notifications_env_example` |
-  | **storage** | **2** (`access_key_id_env_var`, `secret_access_key_env_var`) | **❌ none** |
-  | **backups** | **2** (`remote_access_key_id_env_var`, `remote_secret_access_key_env_var`) | **❌ none** |
-
-  The two uncovered modules are precisely the two whose variables are object-storage credentials.
-- **Four stations per covered module, across two packages.** `apply_command.py:1459/1498/1540`
-  (notifications), `:1553/1592/1637` (analytics), `:1650/1694/1725` (billing) — a
-  `_render_*_block`, a `_sync_*_impl`, and a thin wrapper each; plus a named core step
-  (`apply/steps/env_sync.py:60,92,124`) re-exported through `apply/steps/__init__.py` and
-  `apply/__init__.py`. The three `_sync_*_impl` bodies are the same marker-splice algorithm —
-  read, split on a start/end marker pair, replace-or-append, write — copied verbatim three times,
-  varying only in marker text, resolver, and log message.
-- **A fourth copy of the same knowledge.** `.env.example.j2:49-53` statically hardcodes
-  `RESEND_API_KEY=` and `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=` under the same markers the
-  apply step splices on — so notifications' variable names exist in the manifest, in
-  `module_options.py` `DEFAULT_*` constants, in the template, and in the render function.
-- **The gap is load-bearing, not cosmetic.** `dr_engine/orchestration.py:2144-2150` *requires*
-  `remote_access_key_id_env_var` and `remote_secret_access_key_env_var` when
-  `target_mode is private_remote`, and `module_options.py:73-76,221` carries their `DEFAULT_*`
-  constants. A user enabling private-remote backups therefore hits a validation error naming a
-  variable their generated `.env.example` never mentioned.
-
-**Counter-evidence:** searched for any other writer of `.env.example` across
-`quickscale_cli/src`, `quickscale_core/src` and the template tree — there is none besides the three
-triples and the static template block. Searched `quickscale_core/tests`, `quickscale_cli/tests` and
-`scripts/` for a gate asserting that every declared `*_env_var` option reaches `.env.example`;
-the suites that touch env sync (`test_apply_deps_and_env_sync.py`, `test_apply_step.py`,
-`test_apply_command_extended.py`) exercise the three implemented steps and do not assert coverage
-over the manifest set. Checked whether storage/backups reach `.env.example` through the manifest
-renderer, `module_wiring_manager`, or a module-owned template — they do not. Checked
-`decisions.md` § Release scope safeguards for a recorded decision deferring this, as there is for
-taxonomy derivation; there is none, so this is a gap rather than an accepted trade-off.
-
-*Runtime confirmation:* generate a project with `storage` and `backups` enabled, run
-`quickscale apply`, and grep the resulting `.env.example` for `AWS_ACCESS_KEY_ID` and the backups
-remote key variables.
-
-**Why it compounds:**
-
-- Every future credential-bearing module needs a fourth-station triple plus two re-export edits, or
-  it silently ships without placeholders — measured at **8 stations** in probe A below.
-- The marker-splice algorithm is copied three times, so any fix to it (encoding, idempotency,
-  CRLF, a missing trailing newline) must be applied three times and will be applied to two.
-- Already built on top: `analytics`, `billing` and `notifications` depend on the current block
-  shape and its markers; `storage` and `backups` have shipped without it, so closing the gap is
-  also a behaviour change for existing generated projects on their next `apply`.
-- SA154's promotion inventory is a list of further module capabilities built on this pattern.
-
-**Detection signal:** a generated project whose `.env.example` lacks a variable that the module's
-`module.yml` declares — assert this in CI over the manifest set. Today the operator-visible
-signal is a `BackupConfigurationError` naming `remote_access_key_id_env_var` on a project whose
-`.env.example` never mentioned it.
-
-**Steelman:** the three implemented blocks carry genuinely bespoke prose — notifications explains
-Resend domain verification, billing explains Stripe key handling — and that guidance is not
-derivable from a type and a default. Rendering it generically would either lose the guidance or
-push prose into `module.yml`, which is a config schema and not a docs surface. `storage` and
-`backups` may also have been judged not to need placeholders because their variables are AWS
-conventional names that users already set. Do not fix this if the maintainer's position is that
-`.env.example` is curated documentation rather than a derived contract — but in that case the two
-uncovered modules still need a deliberate decision recorded, not silence.
-
-**Correct shape:** the set of environment variables a generated project must define is derived from
-the module manifests that declare them, in one place, so that a module cannot declare a credential
-variable and have it silently absent from the generated project's environment contract.
-Module-specific prose, if kept, hangs off that derived set rather than replacing it.
-
-**Do-nothing cost (next ~12 months):** two shipped modules keep handing users a runtime error
-instead of a placeholder; every new credential-bearing module is an ~8-station edit across two
-packages with a coin-flip chance of being skipped, as it was twice; and the triplicated splice
-algorithm means any correctness fix to it is applied inconsistently.
-
-**Options:**
-
-1. **Derive the block from the manifest.** One generic renderer consumes the declared
-   `*_env_var` options for every enabled module, emitting one managed block per module under the
-   existing marker convention; optional per-module prose comes from a manifest `description` or a
-   single optional hook. Removes the compounding and closes the storage/backups gap in the same
-   change. Largest edit, but it deletes three triples and four re-export stations.
-2. **Keep the triples, add a coverage gate.** Leave the hand-written blocks and add a conformance
-   test asserting that every `*_env_var` option declared in any `module.yml` appears in the
-   generated `.env.example`. Small and safe; it converts a silent gap into a loud one, but leaves
-   the 8-station tax and the triplicated algorithm in place — a gate that holds a copy honest
-   rather than removing the copy.
-3. **Accept and document.** Record in `decisions.md` that `.env.example` is curated prose, not a
-   derived contract, and that `storage` and `backups` are deliberately excluded; add the rationale
-   to `generated_file_ownership.md`. Revoked the moment a module ships a non-conventional
-   credential variable name.
-
-**Recommendation:** **Option 1**, with option 2's gate landing first as a cheap tripwire. The
-manifest already carries the declarations and `derivation.wiring_projections` is the precedent for
-projecting them, so this is the system's own stated architecture applied to a surface that escaped
-it — not a new abstraction. Doing option 2 alone leaves the tax that caused the gap.
-· **Size:** `M` (one seam plus migration of three callers).
-· **Reversibility:** `two-way door` — the change is confined to generation-time rendering under an
-existing marker convention; a bad render is fixed by the next `apply`, and no user data or public
-contract is transformed. The one edge to verify before shipping is that the new block is
-byte-identical to the current output for the three covered modules, so existing projects see no
-spurious diff.
-· **First step:** add the coverage assertion over the manifest `*_env_var` set and let it fail for
-`storage` and `backups` — that failing test is the specification for the renderer.
 
 ---
 
@@ -365,23 +228,7 @@ callers can be reverted to inline orchestration without transforming state.
 
 ## Change-cost probe
 
-**Probe A — add one credential-bearing module option that needs an `.env.example` placeholder**
-(the shape `storage` and `backups` already have, and the shape SA154 promotions will have):
-
-1. `module.yml` — declare the `*_env_var` option.
-2. `contracts/module_options.py` — `DEFAULT_*` constant, resolver entry, `__all__`.
-3. `apply/steps/env_sync.py` — `step_<module>_env_sync` plus `__all__`.
-4. `apply/steps/__init__.py` — import and `__all__`.
-5. `apply/__init__.py` — re-export and `__all__`.
-6. `apply_command.py` — `_render_<module>_env_example_block`.
-7. `apply_command.py` — `_sync_<module>_env_example_impl` (the copied marker-splice body).
-8. `apply_command.py` — `_sync_<module>_env_example` wrapper and its call site.
-
-**Verdict: finding evidence** (rank 1). Eight stations across two packages for a declaration the
-manifest already carries, with no gate detecting omission — and the omission has already happened
-twice.
-
-**Probe B — SA192: style one more module's Django pages**, measured against `4a8fb649`, which did
+**Probe A — SA192: style one more module's Django pages**, measured against `4a8fb649`, which did
 exactly this for three modules:
 
 1. `src/.../static/<module>/<module>.css` — new stylesheet.
@@ -401,7 +248,7 @@ that would justify the copies is contradicted by the modules' own existing impor
 ticket-shaped (extract the stub, point three test settings at it) and therefore not a finding, but
 SA192 will replicate the copy nine more times if it is not done first.
 
-**Probe C — add one project-owned tenant child table** (re-measured after SA190):
+**Probe B — add one project-owned tenant child table** (re-measured after SA190):
 
 1. The project model: `tenant_org_fk()` plus `TenantManager()` and `TenantManager(super_scope=True)`.
 2. A project migration calling `apply_force_rls()`, plus `add_composite_child_fk()`.
@@ -422,14 +269,11 @@ and purge all have an extension path without vendored module edits.
   inventory, is complete; preserve that contract if a later trigger justifies a coordinator.
 - **SA152's completed maintainer verification** does not conflict with the remaining finding.
 - **SA177 is independent:** its "each enrolled table" scope already covers project tables.
-
-- **Rank 1 is independent of the remaining deletion finding:** it touches generation-time wiring in
-  `quickscale_cli`/`quickscale_core`, while the deletion contract lives in the `orgs`, `auth`, and
-  `billing` modules.
-- **One interaction to watch:** rank 1's fix touches the backups credential variables that
-  `dr_engine/orchestration.py:2144-2150` validates, and watch item W3 notes the DR `pg_dump`/
-  `pg_restore` contract's dependence on two independently-pinned PostgreSQL majors. Closing rank 1
-  makes the backups credential path more exercised, which makes W3's trigger more likely to fire.
+- **One interaction now live:** the closed credential-contract derivation touches the backups
+  credential variables that `dr_engine/orchestration.py:2144-2150` validates, and watch item W3
+  notes the DR `pg_dump`/`pg_restore` contract's dependence on two independently-pinned PostgreSQL
+  majors. Closing rank 1 made the backups credential path more exercised, which makes W3's trigger
+  more likely to fire.
 
 ## Sound load-bearing decisions
 
@@ -460,7 +304,7 @@ and purge all have an extension path without vendored module edits.
 - **Runtime role provisioning is one contract with many renderings.** `98b6c455` made
   `runtime_database.py` the single declaration of the `quickscale_runtime` role name, attributes
   and grants, rendered into `db/init.sql.j2`, `start.sh.j2` and `OPERATIONS.md.j2` and imported by
-  Railway deploy. This is the precedent rank 1 should follow.
+  Railway deploy. This is the precedent the credential-contract derivation followed.
 - **Module identity and the CI environment are derived, not pinned.** Every consumer shells out to
   `module_discovery.py --list-modules` and hard-fails on drift; `provision_ci_postgres.sh` derives
   its module list. Co-change measurement supports this: modules barely change together, so the
@@ -515,15 +359,15 @@ and purge all have an extension path without vendored module edits.
   tuple and `generated_file_ownership.md`; or SA191 discovering that a disposition was wrong in
   practice rather than merely unverified.
 
-## Questions that would change the ranking
-
-- **`module-env-contract-hand-wired`** — is `.env.example` intended as a *derived contract* or as
-  *curated documentation*? If the latter is the maintainer's settled position, rank 1 collapses to
-  option 3 (accept and document) plus a deliberate decision about `storage` and `backups`, and the
-  finding leaves the list.
-
 ## Reconciliation log
 
+- 2026-09-23 — `module-env-contract-hand-wired`: **closed**. The generated `.env.example`
+  contract renders from each module's declared `*_env_var` options in one place; the static
+  template copy and the three hand-written render/splice triples are retired, and a conformance
+  check fails when a declaration has no placeholder. `storage` and `backups` gain placeholders on
+  the next `apply` — a deliberate behavior change. With rank 1 closed,
+  `deletion-invariants-per-boundary-reimplementation` is the only live finding and takes rank 1;
+  closure archived in CHANGELOG.
 - 2026-09-18 — `deletion-invariants-per-boundary-reimplementation`: **still-open**. SA190 made the
   obligation inventory structural and completed marker-derived, FK-ordered purge, retiring the
   former purge-membership dependency whose closure is archived in CHANGELOG. Boundary-local

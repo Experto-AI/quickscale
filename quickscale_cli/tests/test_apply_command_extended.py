@@ -21,6 +21,7 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_LINK_TREE_PATH,
 )
 from quickscale_core.contracts.resolvers import default_notifications_module_options
+from quickscale_core.apply.steps.env_sync import render_env_example_block
 
 # AF5 Phase 4: Bypass the late destructive/remote confirmation gate in
 # all tests so test output assertions remain stable.  Each test function
@@ -63,7 +64,6 @@ from quickscale_cli.commands.apply_command import (
     _print_apply_failure_summary,
     _provenance_repair_might_be_needed,
     _refresh_context_after_lock,
-    _render_billing_env_example_block,
     _isolated_poetry_env,
     _run_command,
     _run_migrations,
@@ -72,7 +72,6 @@ from quickscale_cli.commands.apply_command import (
     _run_poetry_lock,
     _run_poetry_install,
     _run_post_generation_steps,
-    _render_analytics_env_example_block,
     _save_apply_recovery_state,
     _save_project_state,
     _sync_billing_env_example,
@@ -3357,12 +3356,13 @@ class TestAnalyticsEnvExampleSync:
 
     def test_render_analytics_env_example_block_uses_custom_env_vars(self):
         """The rendered analytics block should expose runtime and Vite env vars."""
-        block = _render_analytics_env_example_block(
+        block = render_env_example_block(
+            "analytics",
             {
                 "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
                 "posthog_host_env_var": "OPS_POSTHOG_HOST",
                 "posthog_host": "https://eu.i.posthog.com",
-            }
+            },
         )
 
         assert "# QuickScale Analytics (managed)" in block
@@ -3434,7 +3434,7 @@ class TestBillingEnvExampleSync:
 
     def test_render_billing_env_example_block_uses_default_env_vars(self):
         """Billing env-example rendering should expose the default Stripe env vars."""
-        block = _render_billing_env_example_block({})
+        block = render_env_example_block("billing", {})
 
         assert "# QuickScale Billing (managed)" in block
         assert "STRIPE_PUBLISHABLE_KEY=" in block
@@ -3504,6 +3504,32 @@ class TestBillingEnvExampleSync:
         assert "OPS_BILLING_WEBHOOK_SECRET=" in updated
         assert "# Billing currency from quickscale.yml: eur" in updated
         assert "KEEP_ME=1" in updated
+
+
+class TestStorageAndBackupsEnvExampleSync:
+    """Storage and backups blocks project from their declared options (SA193)."""
+
+    def test_any_env_example_station_syncs_the_declared_storage_and_backups_set(
+        self,
+        tmp_path,
+    ):
+        """The shared sync adds the previously missing credential placeholders."""
+        env_example = tmp_path / ".env.example"
+        env_example.write_text("SECRET_KEY=test\n")
+        qs_config = Mock()
+        qs_config.modules = {
+            "storage": Mock(options={}),
+            "backups": Mock(options={}),
+        }
+
+        result = _sync_notifications_env_example(tmp_path, qs_config)
+
+        assert result is True
+        updated = env_example.read_text()
+        assert "AWS_ACCESS_KEY_ID=" in updated
+        assert "AWS_SECRET_ACCESS_KEY=" in updated
+        assert "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID=" in updated
+        assert "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY=" in updated
 
 
 # ============================================================================

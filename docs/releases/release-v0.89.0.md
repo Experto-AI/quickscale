@@ -87,6 +87,12 @@ canonical HTTP(S) origin; malformed values fail startup. When it is blank, Djang
 `http://localhost:<QUICKSCALE_FRONTEND_HOST_PORT>`; Vite accepts only the effective origin's exact
 Host in either case.
 
+Managed module credential blocks in `.env.example` change on this line: an existing project that
+enables `storage` or `backups` gains their credential placeholders on its next `apply`, while the
+blocks for notifications, analytics, and billing keep their exact previous bytes so no spurious
+diff appears for those. Fresh generations no longer carry a module-managed block until `apply`
+writes it, and user-authored lines outside the managed markers are never rewritten.
+
 This maintenance release also adds maintainer-only beta-migration compatibility validation and
 mode-specific runtime provenance to report output; incompatible launcher, settings, and package
 combinations now fail before recipient mutation, and fresh-first identity changes reconcile raw
@@ -103,12 +109,19 @@ frontend-origin settings, Vite proxy, and Compose workflow; their source/embedde
 the exact-emission fixture; focused contract and E2E coverage; and the corresponding changelog,
 roadmap, frontend architecture, and user-manual documentation. No dependency was added.
 
+The credential-contract derivation followed on the same line: the generated `.env.example` now
+renders one managed block per enabled credential-bearing module from that module's declared
+environment-variable options, the static notifications block left the template, and enabling
+`storage` or `backups` adds their credential placeholders on the next `apply`. That changes the
+fresh-generation `.env.example` bytes for every variant, so the hash row below is the current
+emission; the other rows are the SA195/SA192 delivery's.
+
 The exact-emission hashes below apply identically to `react_default`, `react_empty`, and
 `react_selected`; all paths not listed remain unchanged in those manifests.
 
 | Generated path | SHA-256 |
 |---|---|
-| `.env.example` | `e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1` |
+| `.env.example` | `e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265` |
 | `README.md` | `1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387` |
 | `docker-compose.yml` | `d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3` |
 | `frontend/src/test/viteAssetRouting.test.ts` | `c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016` |
