@@ -37,4 +37,4 @@ def analytics_public_config_json(context: template.Context) -> str:
     """Return the resolved analytics config as JSON."""
     payload = get_template_analytics_context(_resolve_request(context))
     rendered = json.dumps(payload, sort_keys=True).translate(_JSON_HTML_ESCAPES)
-    return mark_safe(rendered)
+    return mark_safe(rendered)  # noqa: S308 - value is JSON-encoded then HTML-escape-translated
