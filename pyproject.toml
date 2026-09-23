@@ -23,7 +23,7 @@ django-markdownx = ">=4.0.9"
 pillow = ">=12.2.0"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
@@ -38,7 +38,13 @@ target-version = "py314"
 # them by ~900 across the modules). Adopting the shared select here is
 # worthwhile, but it is its own cleanup.
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "S"]
+
+# The S (flake8-bandit) rules govern shipped package source. The Bandit
+# static-security gate already scopes its scan to maintained source roots,
+# excluding test trees; this table keeps the Ruff selection in step.
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
