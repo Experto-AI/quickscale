@@ -278,7 +278,7 @@ def _get_manage_py() -> str:
         candidate = base / "manage.py"
         if candidate.exists():
             return str(candidate)
-    except Exception:
+    except Exception:  # noqa: S110 - fallback probe; the caller raises on failure
         pass
     raise BackupError("manage.py could not be resolved")
 
@@ -450,7 +450,7 @@ def dispatch_background_restore(
         )
 
     try:
-        subprocess.Popen(
+        subprocess.Popen(  # noqa: S603 - fixed argv list, shell disabled
             [
                 sys.executable,
                 manage_py,
@@ -516,7 +516,7 @@ def dispatch_background_create(
         argv.extend(["--trigger", trigger])
 
     try:
-        subprocess.Popen(argv, close_fds=True)
+        subprocess.Popen(argv, close_fds=True)  # noqa: S603 - fixed argv list, shell disabled
     except Exception as exc:
         raise BackupError(
             f"Failed to dispatch background backup creation: {exc}"
@@ -537,7 +537,7 @@ def dispatch_background_prune() -> None:
     """
     manage_py = _get_manage_py()
     try:
-        subprocess.Popen(
+        subprocess.Popen(  # noqa: S603 - fixed argv list, shell disabled
             [sys.executable, manage_py, "backups_prune"],
             close_fds=True,
         )
