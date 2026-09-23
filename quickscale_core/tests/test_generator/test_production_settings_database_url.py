@@ -1,4 +1,10 @@
-"""Tests for DATABASE_URL validation and RUNTIME_DATABASE_URL override in production settings template."""
+"""Tests for DATABASE_URL validation and RUNTIME_DATABASE_URL override in production settings template.
+
+SA206 moved the command-mode contract into the versioned
+``quickscale_core.runtime.settings`` facade.  The production template keeps the
+user configuration and delegates the validation to the facade, so the
+contract-text assertions below read the facade source.
+"""
 
 from pathlib import Path
 
@@ -14,6 +20,33 @@ from quickscale_core.generator.runtime_pins import (
     PYTHON_DOCKER_TAG,
     PYTHON_VERSION,
 )
+
+
+PRODUCTION_TEMPLATE_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "quickscale_core"
+    / "generator"
+    / "templates"
+    / "project_name"
+    / "settings"
+    / "production.py.j2"
+)
+FACADE_SOURCE_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "quickscale_core"
+    / "runtime"
+    / "settings.py"
+)
+
+
+def _production_template_source() -> str:
+    return PRODUCTION_TEMPLATE_PATH.read_text()
+
+
+def _facade_source() -> str:
+    return FACADE_SOURCE_PATH.read_text()
 
 
 @pytest.fixture
@@ -52,148 +85,59 @@ class TestProductionSettingsValidation:
         assert "linked" in expected_error_message.lower()
         assert "database service" in expected_error_message.lower()
 
-    def test_template_contains_database_url_validation(self) -> None:
-        """Test that production settings template contains DATABASE_URL validation."""
-        # Read the actual template file
-        template_path = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "quickscale_core"
-            / "generator"
-            / "templates"
-            / "project_name"
-            / "settings"
-            / "production.py.j2"
-        )
+    def test_template_delegates_database_url_validation_to_facade(self) -> None:
+        """The template keeps the env reads and delegates the validation."""
+        template_content = _production_template_source()
+        facade_content = _facade_source()
 
-        if template_path.exists():
-            with open(template_path) as f:
-                template_content = f.read()
-
-            # Verify key validation logic is present in template
-            assert "DATABASE_URL" in template_content
-            assert (
-                "database_url = config(" in template_content
-                or "DATABASE_URL" in template_content
-            )
-            assert "ValueError" in template_content
-            assert "Railway" in template_content
+        assert "DATABASE_URL" in template_content
+        assert "database_url = config(" in template_content
+        assert "resolve_runtime_database_url(" in template_content
+        assert "ValueError" in facade_content
+        assert "Railway" in template_content
 
     def test_template_allows_collectstatic_without_db(self) -> None:
-        """Test that template allows collectstatic to run without DATABASE_URL."""
-        # Read the actual template file
-        template_path = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "quickscale_core"
-            / "generator"
-            / "templates"
-            / "project_name"
-            / "settings"
-            / "production.py.j2"
-        )
+        """The facade allows collectstatic to run without DATABASE_URL."""
+        template_content = _production_template_source()
+        facade_content = _facade_source()
 
-        if template_path.exists():
-            with open(template_path) as f:
-                template_content = f.read()
-
-            # Verify template has logic to allow collectstatic without DATABASE_URL
-            assert "QUICKSCALE_NON_DB_COMMAND" in template_content
-            assert "collectstatic" in template_content
+        assert "QUICKSCALE_NON_DB_COMMAND" in template_content
+        assert "collectstatic" in facade_content
 
     def test_template_provides_dummy_url_for_collectstatic(self) -> None:
-        """Test that template provides dummy DATABASE_URL for collectstatic."""
-        # Read the actual template file
-        template_path = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "quickscale_core"
-            / "generator"
-            / "templates"
-            / "project_name"
-            / "settings"
-            / "production.py.j2"
-        )
+        """The facade provides a dummy DATABASE_URL for collectstatic."""
+        facade_content = _facade_source()
 
-        if template_path.exists():
-            with open(template_path) as f:
-                template_content = f.read()
-
-            # Verify template provides a dummy URL when DATABASE_URL is not set
-            assert "dummy" in template_content.lower()
-            # Should have postgresql connection string format
-            assert "postgresql://" in template_content
+        assert "dummy" in facade_content.lower()
+        # Should have postgresql connection string format
+        assert "postgresql://" in facade_content
 
     def test_template_has_runtime_database_url_override(self) -> None:
         """Test production settings template contains RUNTIME_DATABASE_URL override logic."""
-        template_path = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "quickscale_core"
-            / "generator"
-            / "templates"
-            / "project_name"
-            / "settings"
-            / "production.py.j2"
-        )
+        template_content = _production_template_source()
 
-        if template_path.exists():
-            with open(template_path) as f:
-                template_content = f.read()
-
-            assert "RUNTIME_DATABASE_URL" in template_content
-            assert 'config("RUNTIME_DATABASE_URL", default=None)' in template_content
-            assert "conn_health_checks=True" in template_content
+        assert "RUNTIME_DATABASE_URL" in template_content
+        assert 'config("RUNTIME_DATABASE_URL", default=None)' in template_content
+        assert "conn_health_checks=True" in template_content
 
     def test_fail_closed_when_runtime_url_unset_for_serving(self) -> None:
-        """Test template raises clear error when RUNTIME_DATABASE_URL is unset for serving."""
-        template_path = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "quickscale_core"
-            / "generator"
-            / "templates"
-            / "project_name"
-            / "settings"
-            / "production.py.j2"
-        )
+        """The facade raises a clear error when RUNTIME_DATABASE_URL is unset for serving."""
+        template_content = _production_template_source()
+        facade_content = _facade_source()
 
-        if template_path.exists():
-            with open(template_path) as f:
-                template_content = f.read()
-
-            # Template must raise a clear error about RUNTIME_DATABASE_URL
-            # when serving and the env var is not set (fail-closed).
-            assert (
-                "RUNTIME_DATABASE_URL is required for runtime serving"
-                in template_content
-            )
-            assert (
-                "NOSUPERUSER" in template_content or "NOBYPASSRLS" in template_content
-            )
-            # The privileged command path must be documented
-            assert "QUICKSCALE_PRIVILEGED_COMMAND" in template_content
+        assert "RUNTIME_DATABASE_URL is required for runtime serving" in facade_content
+        assert "NOSUPERUSER" in facade_content or "NOBYPASSRLS" in facade_content
+        # The privileged command path must be documented
+        assert "QUICKSCALE_PRIVILEGED_COMMAND" in template_content
 
     def test_migration_exception_preserved(self) -> None:
-        """Test template preserves the migration path with DATABASE_URL."""
-        template_path = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "quickscale_core"
-            / "generator"
-            / "templates"
-            / "project_name"
-            / "settings"
-            / "production.py.j2"
-        )
+        """The facade preserves the migration path with DATABASE_URL."""
+        template_content = _production_template_source()
+        facade_content = _facade_source()
 
-        if template_path.exists():
-            with open(template_path) as f:
-                template_content = f.read()
-
-            # Migration path must use QUICKSCALE_PRIVILEGED_COMMAND
-            assert "QUICKSCALE_PRIVILEGED_COMMAND" in template_content
-            assert "migrate" in template_content
-            assert "DATABASE_URL" in template_content
-            # DATABASE_URL error message should still be present
-            assert "DATABASE_URL is required for privileged" in template_content
+        # Migration path must use QUICKSCALE_PRIVILEGED_COMMAND
+        assert "QUICKSCALE_PRIVILEGED_COMMAND" in template_content
+        assert "migrate" in template_content
+        assert "DATABASE_URL" in template_content
+        # DATABASE_URL error message should still be present
+        assert "DATABASE_URL is required for privileged" in facade_content

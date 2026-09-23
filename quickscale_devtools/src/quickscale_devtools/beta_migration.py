@@ -1218,34 +1218,6 @@ def _validate_report_snapshot_paths(report: BetaMigrationReport) -> None:
         )
 
 
-def _literal_string_set(node: ast.expr, *, name: str, path: Path) -> set[str]:
-    """Resolve the canonical immutable ``frozenset({...})`` allowlist."""
-    if not (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "frozenset"
-        and len(node.args) == 1
-        and not node.keywords
-    ):
-        raise ValueError(
-            f"{path}: {name} must be a literal collection wrapped in frozenset(...)."
-        )
-
-    try:
-        value = ast.literal_eval(node.args[0])
-    except (ValueError, SyntaxError) as exc:
-        raise ValueError(
-            f"{path}: {name} must be a literal collection of command names."
-        ) from exc
-    if not isinstance(value, (set, frozenset, list, tuple)) or any(
-        not isinstance(item, str) or not item for item in value
-    ):
-        raise ValueError(
-            f"{path}: {name} must be a literal collection of non-empty command names."
-        )
-    return set(value)
-
-
 def _static_string_expression(node: ast.expr) -> str | None:
     """Resolve a statically constructed string without executing settings code."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -1288,2054 +1260,309 @@ def _static_string_expression(node: ast.expr) -> str | None:
     return None
 
 
-_LOCAL_AST_SCOPES = (
-    ast.FunctionDef,
-    ast.AsyncFunctionDef,
-    ast.ClassDef,
-    ast.Lambda,
-    ast.ListComp,
-    ast.SetComp,
-    ast.DictComp,
-    ast.GeneratorExp,
-)
-
-
-def _bound_names(node: ast.AST) -> tuple[str, ...]:
-    """Return names bound or unbound by one AST node."""
-    if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
-        return (node.id,)
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        return (node.name,)
-    if isinstance(node, ast.Import):
-        return tuple(
-            alias.asname or alias.name.split(".", maxsplit=1)[0] for alias in node.names
-        )
-    if isinstance(node, ast.ImportFrom):
-        return tuple(alias.asname or alias.name for alias in node.names)
-    if isinstance(node, ast.ExceptHandler) and isinstance(node.name, str):
-        return (node.name,)
-    if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name is not None:
-        return (node.name,)
-    if isinstance(node, ast.MatchMapping) and node.rest is not None:
-        return (node.rest,)
-    return ()
-
-
-def _module_scope_nodes(tree: ast.Module) -> tuple[ast.AST, ...]:
-    """Return nodes evaluated in or writing through the module lexical scope."""
-    parents: dict[ast.AST, ast.AST] = {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
-
-    def is_descendant_of(node: ast.AST, root: ast.AST) -> bool:
-        current: ast.AST | None = node
-        while current is not None and current is not tree:
-            if current is root:
-                return True
-            current = parents.get(current)
-        return False
-
-    def evaluates_in_enclosing_scope(node: ast.AST, scope: ast.AST) -> bool:
-        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            roots: list[ast.AST] = [scope.args, *scope.decorator_list]
-            if scope.returns is not None:
-                roots.append(scope.returns)
-            return any(is_descendant_of(node, root) for root in roots)
-        if isinstance(scope, ast.Lambda):
-            return is_descendant_of(node, scope.args)
-        if isinstance(scope, ast.ClassDef):
-            roots = [*scope.bases, *scope.keywords, *scope.decorator_list]
-            return any(is_descendant_of(node, root) for root in roots)
-        if isinstance(
-            scope, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-        ):
-            return is_descendant_of(node, scope.generators[0].iter)
-        return False
-
-    def nearest_scope(node: ast.AST) -> ast.AST | None:
-        origin = node
-        current = parents.get(node)
-        while current is not None and current is not tree:
-            if isinstance(current, _LOCAL_AST_SCOPES):
-                if evaluates_in_enclosing_scope(origin, current):
-                    current = parents.get(current)
-                    continue
-                return current
-            current = parents.get(current)
+def _dotted_expression_name(node: ast.expr) -> str | None:
+    """Resolve a plain dotted attribute chain to its source text, if static."""
+    parts: list[str] = []
+    current: ast.expr = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if not isinstance(current, ast.Name):
         return None
-
-    def parent_scope(scope: ast.AST) -> ast.AST | None:
-        current = parents.get(scope)
-        while current is not None and current is not tree:
-            if isinstance(current, _LOCAL_AST_SCOPES):
-                return current
-            current = parents.get(current)
-        return None
-
-    def scope_declares_global(scope: ast.AST, name: str) -> bool:
-        return any(
-            isinstance(candidate, ast.Global)
-            and name in candidate.names
-            and nearest_scope(candidate) is scope
-            for candidate in ast.walk(scope)
-        )
-
-    def scope_declares_nonlocal(scope: ast.AST, name: str) -> bool:
-        return any(
-            isinstance(candidate, ast.Nonlocal)
-            and name in candidate.names
-            and nearest_scope(candidate) is scope
-            for candidate in ast.walk(scope)
-        )
-
-    def binding_binds_module(node: ast.AST, name: str) -> bool:
-        scope = nearest_scope(node)
-        parent = parents.get(node)
-        if (
-            isinstance(node, ast.Name)
-            and isinstance(parent, ast.NamedExpr)
-            and parent.target is node
-            and isinstance(node.ctx, ast.Store)
-        ):
-            while isinstance(
-                scope, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-            ):
-                scope = nearest_scope(scope)
-        while scope is not None:
-            if scope_declares_global(scope, name):
-                return True
-            if scope_declares_nonlocal(scope, name):
-                scope = parent_scope(scope)
-                continue
-            return False
-        return True
-
-    module_nodes: list[ast.AST] = []
-    for node in ast.walk(tree):
-        bound_names = _bound_names(node)
-        if nearest_scope(node) is None or any(
-            binding_binds_module(node, name) for name in bound_names
-        ):
-            module_nodes.append(node)
-    return tuple(module_nodes)
+    parts.append(current.id)
+    return ".".join(reversed(parts))
 
 
-def _validate_unshadowed_builtin(
-    tree: ast.Module,
-    *,
-    name: str,
-    path: Path,
-) -> None:
-    """Fail closed when settings rebind a constructor used by static analysis."""
-    module_nodes = _module_scope_nodes(tree)
-    builtins_aliases = {
-        alias.asname or alias.name
-        for node in module_nodes
-        if isinstance(node, ast.Import)
-        for alias in node.names
-        if alias.name == "builtins"
-    }
-
-    for node in module_nodes:
-        if name in _bound_names(node):
-            raise ValueError(
-                f"{path}: built-in {name} must not be shadowed in production settings."
-            )
-        if (
-            isinstance(node, ast.Attribute)
-            and node.attr == name
-            and isinstance(node.ctx, (ast.Store, ast.Del))
-            and isinstance(node.value, ast.Name)
-            and node.value.id in builtins_aliases
-        ):
-            raise ValueError(
-                f"{path}: built-in {name} must not be replaced through an attribute."
-            )
-
-
-_PROTECTED_ALLOWLIST_NAMES = frozenset(
-    {"_KNOWN_PRIVILEGED_COMMANDS", "_KNOWN_NON_DB_COMMANDS"}
-)
-_RUNTIME_DATABASE_ENVIRONMENT_NAMES = frozenset(
-    {
-        "RUNTIME_DATABASE_URL",
-        "DATABASE_URL",
-        "QUICKSCALE_PRIVILEGED_COMMAND",
-        "QUICKSCALE_NON_DB_COMMAND",
-        "QUICKSCALE_ALLOW_BYPASSRLS",
-    }
-)
-_DYNAMIC_NAMESPACE_NAMES = frozenset(
-    {
-        "__builtins__",
-        "__import__",
-        "compile",
-        "eval",
-        "exec",
-        "globals",
-        "locals",
-    }
-)
-_BUILTINS_NAMESPACE_ATTRIBUTES = frozenset(
-    {
-        "__dict__",
-        "__import__",
-        "compile",
-        "eval",
-        "exec",
-        "globals",
-        "locals",
-    }
-)
-_REFLECTIVE_ACCESS_NAMES = frozenset({"getattr", "__getattribute__"})
-_REFLECTIVE_MUTATION_NAMES = frozenset(
-    {"setattr", "delattr", "__setattr__", "__delattr__"}
-)
-
-
-def _validate_allowlist_namespace_isolation(tree: ast.Module, *, path: Path) -> None:
-    """Reject reflective operations that could rebind protected allowlists.
-
-    Production settings are donor-owned and may contain arbitrary integrations and
-    configuration.  Static extraction therefore leaves unrelated statements alone
-    and rejects only namespace capabilities that could hide a rebind of either
-    protected command allowlist.
-    """
-    parents: dict[ast.AST, ast.AST] = {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
-    builtins_aliases = {
-        alias.asname or alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Import)
-        for alias in node.names
-        if alias.name == "builtins"
-    }
-    sys_aliases = {
-        alias.asname or alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Import)
-        for alias in node.names
-        if alias.name == "sys"
-    }
-    module_registry_aliases = {
-        alias.asname or alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module == "sys"
-        for alias in node.names
-        if alias.name == "modules"
-    }
-    importlib_aliases = {
-        alias.asname or alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Import)
-        for alias in node.names
-        if alias.name == "importlib"
-    }
-    import_module_aliases = {
-        alias.asname or alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module == "importlib"
-        for alias in node.names
-        if alias.name == "import_module"
-    }
-    module_lookup_aliases: set[str] = set()
-    module_name_aliases = {"__name__"}
-    current_module_name = f"{path.parent.parent.name}.settings.production"
-
-    def is_module_alias(node: ast.expr, aliases: set[str]) -> bool:
-        return isinstance(node, ast.Name) and node.id in aliases
-
-    def resolves_attribute(
-        node: ast.expr, object_aliases: set[str], attribute_name: str
-    ) -> bool:
-        if not isinstance(node, ast.Call):
-            return False
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id == "getattr"
-            and len(node.args) >= 2
-        ):
-            object_node, attribute_node = node.args[:2]
-        elif (
-            isinstance(node.func, ast.Attribute)
-            and node.func.attr == "__getattribute__"
-        ):
-            if is_module_alias(node.func.value, object_aliases) and node.args:
-                object_node = node.func.value
-                attribute_node = node.args[0]
-            elif len(node.args) >= 2:
-                object_node, attribute_node = node.args[:2]
-            else:
-                return False
-        else:
-            return False
-        return (
-            is_module_alias(object_node, object_aliases)
-            and _static_string_expression(attribute_node) == attribute_name
-        )
-
-    def is_module_registry(node: ast.expr) -> bool:
-        return (
-            is_module_alias(node, module_registry_aliases)
-            or (
-                isinstance(node, ast.Attribute)
-                and node.attr == "modules"
-                and is_module_alias(node.value, sys_aliases)
-            )
-            or resolves_attribute(node, sys_aliases, "modules")
-        )
-
-    def is_module_lookup_function(node: ast.expr) -> bool:
-        registry_methods = {"get", "__getitem__", "setdefault"}
-        reflective_registry_method = (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "getattr"
-            and len(node.args) >= 2
-            and is_module_registry(node.args[0])
-            and _static_string_expression(node.args[1]) in registry_methods
-        ) or (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "__getattribute__"
-            and len(node.args) >= 1
-            and is_module_registry(node.func.value)
-            and _static_string_expression(node.args[0]) in registry_methods
-        )
-        return (
-            is_module_alias(node, module_lookup_aliases)
-            or (
-                isinstance(node, ast.Attribute)
-                and node.attr in registry_methods
-                and is_module_registry(node.value)
-            )
-            or reflective_registry_method
-        )
-
-    def is_import_module_function(node: ast.expr) -> bool:
-        return (
-            is_module_alias(node, import_module_aliases)
-            or (
-                isinstance(node, ast.Attribute)
-                and node.attr == "import_module"
-                and is_module_alias(node.value, importlib_aliases)
-            )
-            or resolves_attribute(node, importlib_aliases, "import_module")
-        )
-
-    def may_resolve_to_current_module_name(node: ast.expr) -> bool:
-        if isinstance(node, ast.Name) and node.id in module_name_aliases:
-            return True
-        static_name = _static_string_expression(node)
-        return static_name is None or static_name == current_module_name
-
-    def is_imported_module(node: ast.expr, module_name: str) -> bool:
-        return (
-            isinstance(node, ast.Call)
-            and is_import_module_function(node.func)
-            and bool(node.args)
-            and _static_string_expression(node.args[0]) == module_name
-        )
-
-    def is_current_module_object(node: ast.expr) -> bool:
-        if isinstance(node, ast.Subscript):
-            return is_module_registry(
-                node.value
-            ) and may_resolve_to_current_module_name(node.slice)
-        return (
-            isinstance(node, ast.Call)
-            and bool(node.args)
-            and (
-                (
-                    is_module_lookup_function(node.func)
-                    and may_resolve_to_current_module_name(node.args[0])
-                )
-                or (
-                    is_import_module_function(node.func)
-                    and may_resolve_to_current_module_name(node.args[0])
-                )
-            )
-        )
-
-    changed = True
-    while changed:
-        changed = False
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-                continue
-            value = node.value
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            for target in targets:
-                if not isinstance(target, ast.Name):
-                    continue
-                if (
-                    isinstance(value, ast.Name)
-                    and value.id in builtins_aliases
-                    and target.id not in builtins_aliases
-                ):
-                    builtins_aliases.add(target.id)
-                    changed = True
-                if (
-                    isinstance(value, ast.Name)
-                    and value.id in sys_aliases
-                    and target.id not in sys_aliases
-                ):
-                    sys_aliases.add(target.id)
-                    changed = True
-                if (
-                    value is not None
-                    and is_module_registry(value)
-                    and target.id not in module_registry_aliases
-                ):
-                    module_registry_aliases.add(target.id)
-                    changed = True
-                if (
-                    isinstance(value, ast.Name)
-                    and value.id in importlib_aliases
-                    and target.id not in importlib_aliases
-                ):
-                    importlib_aliases.add(target.id)
-                    changed = True
-                if (
-                    value is not None
-                    and is_import_module_function(value)
-                    and target.id not in import_module_aliases
-                ):
-                    import_module_aliases.add(target.id)
-                    changed = True
-                if (
-                    value is not None
-                    and is_module_lookup_function(value)
-                    and target.id not in module_lookup_aliases
-                ):
-                    module_lookup_aliases.add(target.id)
-                    changed = True
-                if (
-                    isinstance(value, ast.Name)
-                    and value.id in module_name_aliases
-                    and target.id not in module_name_aliases
-                ):
-                    module_name_aliases.add(target.id)
-                    changed = True
-
-    def call_name(node: ast.expr) -> str | None:
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Attribute):
-            return node.attr
-        return None
-
-    def evaluates_in_local_namespace(node: ast.AST) -> bool:
-        child = node
-        current = parents.get(node)
-        while current is not None and current is not tree:
-            if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if child in current.body:
-                    return True
-            elif isinstance(current, ast.Lambda):
-                if child is current.body:
-                    return True
-            elif isinstance(current, ast.ClassDef) and child in current.body:
-                return True
-            child = current
-            current = parents.get(current)
-        return False
-
-    def is_local_namespace_call(node: ast.expr) -> bool:
-        call = parents.get(node)
-        return (
-            isinstance(call, ast.Call)
-            and call.func is node
-            and not call.args
-            and not call.keywords
-            and evaluates_in_local_namespace(call)
-        )
-
-    def call_is_read_only_globals_membership(call: ast.Call) -> bool:
-        comparison = parents.get(call)
-        return (
-            not call.args
-            and not call.keywords
-            and isinstance(comparison, ast.Compare)
-            and len(comparison.ops) == 1
-            and isinstance(comparison.ops[0], (ast.In, ast.NotIn))
-            and comparison.comparators == [call]
-            and _static_string_expression(comparison.left) is not None
-        )
-
-    def is_read_only_globals_membership(node: ast.Name) -> bool:
-        call = parents.get(node)
-        return (
-            node.id == "globals"
-            and isinstance(call, ast.Call)
-            and call.func is node
-            and call_is_read_only_globals_membership(call)
-        )
-
-    for node in ast.walk(tree):
-        detail: str | None = None
-        if isinstance(node, ast.Global) and (
-            protected_globals := set(node.names)
-            & (_PROTECTED_ALLOWLIST_NAMES | {"frozenset"})
-        ):
-            detail = "global declaration for protected binding(s) " + ", ".join(
-                sorted(protected_globals)
-            )
-        elif isinstance(node, ast.Name) and node.id in _DYNAMIC_NAMESPACE_NAMES:
-            if is_read_only_globals_membership(node):
-                continue
-            if node.id == "locals" and is_local_namespace_call(node):
-                continue
-            detail = f"dynamic namespace name {node.id!r}"
-        elif isinstance(node, ast.Attribute):
-            parent = parents.get(node)
-            module_qualified_helper = (
-                node.attr in _BUILTINS_NAMESPACE_ATTRIBUTES
-                and is_module_alias(node.value, builtins_aliases)
-            )
-            if (
-                module_qualified_helper
-                and node.attr == "globals"
-                and isinstance(parent, ast.Call)
-                and parent.func is node
-                and call_is_read_only_globals_membership(parent)
-            ):
-                continue
-            if (
-                module_qualified_helper
-                and node.attr == "locals"
-                and is_local_namespace_call(node)
-            ):
-                continue
-            if module_qualified_helper:
-                detail = f"builtins namespace helper {node.attr!r}"
-            elif node.attr in {"f_globals", "f_locals"}:
-                detail = f"frame namespace attribute {node.attr!r}"
-            elif node.attr in _PROTECTED_ALLOWLIST_NAMES and isinstance(
-                node.ctx, (ast.Store, ast.Del)
-            ):
-                detail = f"indirect write to {node.attr}"
-        elif isinstance(node, ast.Subscript) and is_current_module_object(node):
-            detail = "current-module lookup through a runtime module registry"
-        elif (
-            isinstance(node, ast.Subscript)
-            and isinstance(node.ctx, (ast.Store, ast.Del))
-            and _static_string_expression(node.slice) in _PROTECTED_ALLOWLIST_NAMES
-        ):
-            detail = "indirect write to a protected command allowlist"
-        elif isinstance(node, ast.ImportFrom) and any(
-            node.module == "builtins" and alias.name in _BUILTINS_NAMESPACE_ATTRIBUTES
-            for alias in node.names
-        ):
-            detail = "dynamic namespace helper import"
-        elif isinstance(node, ast.Call) and is_current_module_object(node):
-            detail = "current-module lookup through a runtime module registry"
-        elif isinstance(node, ast.Call) and is_imported_module(node, "builtins"):
-            detail = "builtins module lookup through importlib"
-        elif isinstance(node, ast.Call):
-            resolved_call_name = call_name(node.func)
-            if (
-                resolved_call_name == "vars"
-                and (
-                    isinstance(node.func, ast.Name)
-                    or (
-                        isinstance(node.func, ast.Attribute)
-                        and is_module_alias(node.func.value, builtins_aliases)
-                    )
-                )
-                and (
-                    (
-                        not node.args
-                        and not (
-                            not node.keywords and evaluates_in_local_namespace(node)
-                        )
-                    )
-                    or (len(node.args) == 1 and is_current_module_object(node.args[0]))
-                )
-            ):
-                detail = "current-module vars() access"
-            elif (
-                resolved_call_name in _REFLECTIVE_ACCESS_NAMES
-                and len(node.args) >= 2
-                and is_module_alias(node.args[0], builtins_aliases)
-                and (
-                    (resolved_name := _static_string_expression(node.args[1])) is None
-                    or resolved_name in _BUILTINS_NAMESPACE_ATTRIBUTES
-                    or resolved_name in _REFLECTIVE_MUTATION_NAMES
-                    or resolved_name == "frozenset"
-                )
-            ):
-                detail = "reflective access to a mutable namespace capability"
-            elif (
-                isinstance(node.func, ast.Attribute)
-                and is_module_alias(node.func.value, builtins_aliases)
-                and node.func.attr == "__getattribute__"
-                and node.args
-                and (
-                    (resolved_name := _static_string_expression(node.args[0])) is None
-                    or resolved_name in _BUILTINS_NAMESPACE_ATTRIBUTES
-                    or resolved_name in _REFLECTIVE_MUTATION_NAMES
-                    or resolved_name == "frozenset"
-                )
-            ):
-                detail = "reflective access to a mutable namespace capability"
-            elif (
-                resolved_call_name in _REFLECTIVE_MUTATION_NAMES
-                and len(node.args) >= 2
-                and is_module_alias(node.args[0], builtins_aliases)
-                and (
-                    (mutated_name := _static_string_expression(node.args[1])) is None
-                    or mutated_name in _BUILTINS_NAMESPACE_ATTRIBUTES
-                    or mutated_name in _REFLECTIVE_MUTATION_NAMES
-                    or mutated_name == "frozenset"
-                )
-            ):
-                detail = "reflective mutation of a required built-in capability"
-            elif (
-                isinstance(node.func, ast.Attribute)
-                and is_module_alias(node.func.value, builtins_aliases)
-                and node.func.attr in {"__setattr__", "__delattr__"}
-                and node.args
-                and (
-                    (mutated_name := _static_string_expression(node.args[0])) is None
-                    or mutated_name in _BUILTINS_NAMESPACE_ATTRIBUTES
-                    or mutated_name in _REFLECTIVE_MUTATION_NAMES
-                    or mutated_name == "frozenset"
-                )
-            ):
-                detail = "reflective mutation of a required built-in capability"
-            elif (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr == "attrgetter"
-                and node.args
-                and _static_string_expression(node.args[0])
-                in (
-                    _BUILTINS_NAMESPACE_ATTRIBUTES
-                    | _REFLECTIVE_MUTATION_NAMES
-                    | {"frozenset"}
-                )
-            ):
-                detail = "dynamic namespace helper resolution through attrgetter()"
-        if detail is None:
-            continue
-        line = getattr(node, "lineno", 1)
-        raise ValueError(
-            f"{path}:{line}: {detail} is unsupported because it can obscure "
-            "_KNOWN_PRIVILEGED_COMMANDS/_KNOWN_NON_DB_COMMANDS from static extraction."
-        )
-
-
-def _allowlist_assignment(
-    tree: ast.Module,
-    *,
-    name: str,
-    path: Path,
-) -> tuple[ast.Name, ast.expr]:
-    """Return one canonical assignment under a restricted immutable-use grammar."""
-    assignments: list[tuple[ast.Name, ast.expr]] = []
-    for statement in tree.body:
-        if isinstance(statement, ast.Assign):
-            matching_targets = [
-                target
-                for target in statement.targets
-                if isinstance(target, ast.Name) and target.id == name
-            ]
-            if matching_targets:
-                if len(statement.targets) != 1:
-                    raise ValueError(
-                        f"{path}: {name} must use one direct top-level assignment."
-                    )
-                assignments.append((matching_targets[0], statement.value))
-        elif (
-            isinstance(statement, ast.AnnAssign)
-            and isinstance(statement.target, ast.Name)
-            and statement.target.id == name
-            and statement.value is not None
-        ):
-            assignments.append((statement.target, statement.value))
-
-    if len(assignments) != 1:
-        raise ValueError(
-            f"{path}: {name} must have exactly one direct top-level assignment; "
-            f"found {len(assignments)}."
-        )
-
-    canonical_target, value = assignments[0]
-    parents = {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
-    for node in _module_scope_nodes(tree):
-        if (
-            isinstance(node, ast.Name)
-            and node.id == name
-            and isinstance(node.ctx, (ast.Store, ast.Del))
-            and node is not canonical_target
-        ):
-            raise ValueError(
-                f"{path}: {name} has a non-canonical reassignment or mutation."
-            )
-        if (
-            isinstance(node, ast.Name)
-            and node.id == name
-            and isinstance(node.ctx, ast.Load)
-        ):
-            parent = parents.get(node)
-            used_in_membership_check = (
-                isinstance(parent, ast.Compare)
-                and len(parent.ops) == 1
-                and isinstance(parent.ops[0], (ast.In, ast.NotIn))
-                and parent.comparators == [node]
-            )
-            used_for_sorted_diagnostic = (
-                isinstance(parent, ast.Call)
-                and isinstance(parent.func, ast.Name)
-                and parent.func.id == "sorted"
-                and parent.args == [node]
-                and not parent.keywords
-            )
-            if not (used_in_membership_check or used_for_sorted_diagnostic):
-                raise ValueError(
-                    f"{path}: {name} may only be read by a direct membership check or "
-                    "sorted(...) diagnostic; aliases and computed uses are not allowed."
-                )
-    return canonical_target, value
-
-
-def _environment_read_name(node: ast.expr) -> str | None:
-    """Return the literal environment key read by one supported call."""
-    if not isinstance(node, ast.Call) or not node.args:
-        return None
-    if isinstance(node.func, ast.Name) and node.func.id == "config":
-        return _static_string_expression(node.args[0])
+def _canonical_read_env_var(node: ast.expr) -> str | None:
+    """Return the environment variable a canonical read reads, if it is one."""
     if (
-        isinstance(node.func, ast.Attribute)
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "config"
+        and len(node.args) == 1
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value in {"RUNTIME_DATABASE_URL", "DATABASE_URL"}
+        and len(node.keywords) == 1
+        and node.keywords[0].arg == "default"
+        and isinstance(node.keywords[0].value, ast.Constant)
+        and node.keywords[0].value.value is None
+    ):
+        return str(node.args[0].value)
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
         and node.func.attr == "get"
-        and isinstance(node.func.value, ast.Attribute)
-        and node.func.value.attr == "environ"
-        and isinstance(node.func.value.value, ast.Name)
-        and node.func.value.value.id == "os"
+        and _dotted_expression_name(node.func.value) == "os.environ"
+        and len(node.args) == 2
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value
+        in {"QUICKSCALE_PRIVILEGED_COMMAND", "QUICKSCALE_NON_DB_COMMAND"}
+        and isinstance(node.args[1], ast.Constant)
+        and node.args[1].value == ""
+        and not node.keywords
     ):
-        return _static_string_expression(node.args[0])
+        return str(node.args[0].value)
     return None
 
 
-def _expression_matches(node: ast.expr, source: str) -> bool:
-    """Return whether one expression has exactly the parsed executable shape."""
-    expected = ast.parse(source, mode="eval").body
-    return ast.dump(node, include_attributes=False) == ast.dump(
-        expected, include_attributes=False
-    )
+def _facade_imports(
+    tree: ast.Module,
+) -> tuple[set[str], set[str], set[str], set[str]]:
+    """Return the facade import names and the dj_database_url parse names."""
+    facade_names: set[str] = set()
+    facade_roots: set[str] = set()
+    module_aliases: set[str] = set()
+    direct_names: set[str] = set()
+    for node in tree.body:
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "quickscale_core.runtime.settings"
+        ):
+            for alias in node.names:
+                if alias.name == "resolve_runtime_database_url":
+                    facade_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "quickscale_core.runtime.settings":
+                    facade_roots.add(alias.asname or alias.name)
+                if alias.name == "dj_database_url":
+                    module_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "dj_database_url":
+            for alias in node.names:
+                if alias.name == "parse":
+                    direct_names.add(alias.asname or alias.name)
+    return facade_names, facade_roots, module_aliases, direct_names
 
 
-def _is_exact_raising_guard(statement: ast.stmt, expression: str) -> bool:
-    """Return whether one direct guard has the exact test and one raise body."""
+def _is_facade_selection_call(
+    node: ast.expr,
+    *,
+    facade_names: set[str],
+    facade_roots: set[str],
+) -> bool:
+    """Return whether *node* calls the facade's database selection."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name) and func.id in facade_names:
+        return True
+    dotted = _dotted_expression_name(func)
+    if dotted is None or not dotted.endswith(".resolve_runtime_database_url"):
+        return False
+    return dotted[: -len(".resolve_runtime_database_url")] in facade_roots
+
+
+def _is_canonical_selection_call(
+    node: ast.Call,
+    *,
+    runtime_reads: set[str],
+    database_reads: set[str],
+    privileged_reads: set[str],
+    non_db_reads: set[str],
+) -> bool:
+    """Return whether the facade call receives its canonical input reads."""
+    if node.args:
+        return False
+    keywords = {keyword.arg: keyword.value for keyword in node.keywords}
+    required = {
+        "runtime_database_url",
+        "database_url",
+        "privileged_command",
+        "non_db_command",
+        "allow_bypass_rls",
+    }
+    if set(keywords) != required:
+        return False
+    expected = {
+        "runtime_database_url": runtime_reads,
+        "database_url": database_reads,
+        "privileged_command": privileged_reads,
+        "non_db_command": non_db_reads,
+    }
+    for argument, allowed_names in expected.items():
+        value = keywords[argument]
+        if not isinstance(value, ast.Name) or value.id not in allowed_names:
+            return False
+    return True
+
+
+def _is_canonical_parse_call(
+    node: ast.expr,
+    *,
+    selected_name: str,
+    module_aliases: set[str],
+    direct_names: set[str],
+) -> bool:
+    """Return whether *node* parses the selected URL through dj_database_url."""
+    if not isinstance(node, ast.Call) or not node.args:
+        return False
+    first = node.args[0]
+    if not isinstance(first, ast.Name) or first.id != selected_name:
+        return False
+    func = node.func
+    if isinstance(func, ast.Name) and func.id in direct_names:
+        return True
+    dotted = _dotted_expression_name(func)
+    if dotted is None or not dotted.endswith(".parse"):
+        return False
+    return dotted[: -len(".parse")] in module_aliases
+
+
+def _is_canonical_database_entry(
+    node: ast.expr,
+    *,
+    selected_name: str,
+    module_aliases: set[str],
+    direct_names: set[str],
+) -> bool:
+    """Return whether the default connection is built from the selected URL."""
+    if isinstance(node, ast.Name):
+        return node.id == selected_name
+    if _is_canonical_parse_call(
+        node,
+        selected_name=selected_name,
+        module_aliases=module_aliases,
+        direct_names=direct_names,
+    ):
+        return True
+    # cast(dict[str, object], dj_database_url.parse(<selected>, ...))
     return (
-        isinstance(statement, ast.If)
-        and _expression_matches(statement.test, expression)
-        and not statement.orelse
-        and len(statement.body) == 1
-        and isinstance(statement.body[0], ast.Raise)
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "cast"
+        and len(node.args) == 2
+        and _is_canonical_parse_call(
+            node.args[1],
+            selected_name=selected_name,
+            module_aliases=module_aliases,
+            direct_names=direct_names,
+        )
     )
 
 
-def _direct_assignment_value(statement: ast.stmt, target_name: str) -> ast.expr | None:
-    """Return a single direct assignment value for ``target_name``."""
-    if (
-        isinstance(statement, ast.Assign)
-        and len(statement.targets) == 1
-        and isinstance(statement.targets[0], ast.Name)
-        and statement.targets[0].id == target_name
-    ):
-        return statement.value
-    if (
-        isinstance(statement, ast.AnnAssign)
-        and isinstance(statement.target, ast.Name)
-        and statement.target.id == target_name
-    ):
-        return statement.value
-    return None
+def _default_entry_is_canonical(
+    databases_value: ast.Dict,
+    *,
+    selected_name: str,
+    module_aliases: set[str],
+    direct_names: set[str],
+) -> bool:
+    """Return whether the ``default`` entry parses the selected URL."""
+    for key, entry in zip(databases_value.keys, databases_value.values, strict=False):
+        if isinstance(key, ast.Constant) and key.value == "default":
+            return _is_canonical_database_entry(
+                entry,
+                selected_name=selected_name,
+                module_aliases=module_aliases,
+                direct_names=direct_names,
+            )
+    return False
 
 
-def _database_parse_selected_name(value: ast.expr, *, path: Path) -> str:
-    """Return the statically selected URL consumed by canonical DATABASES."""
-    if not (
-        isinstance(value, ast.Dict)
-        and len(value.keys) == 1
-        and isinstance(value.keys[0], ast.Constant)
-        and value.keys[0].value == "default"
-    ):
-        raise ValueError(
-            f"{path}: DATABASES must contain only the canonical default database bridge."
-        )
-    database_value = value.values[0]
-    if (
-        isinstance(database_value, ast.Call)
-        and isinstance(database_value.func, ast.Name)
-        and database_value.func.id == "cast"
-        and len(database_value.args) == 2
-        and not database_value.keywords
-        and _expression_matches(database_value.args[0], "dict[str, object]")
-    ):
-        database_value = database_value.args[1]
-    if not (
-        isinstance(database_value, ast.Call)
-        and isinstance(database_value.func, ast.Attribute)
-        and database_value.func.attr == "parse"
-        and isinstance(database_value.func.value, ast.Name)
-        and database_value.func.value.id == "dj_database_url"
-        and database_value.args
-        and isinstance(database_value.args[0], ast.Name)
-    ):
-        raise ValueError(
-            f"{path}: DATABASES must parse one statically selected runtime database URL."
-        )
-    selected_url_name = database_value.args[0].id
-    accepted_calls = (
-        f"dj_database_url.parse({selected_url_name})",
-        (
-            f"dj_database_url.parse({selected_url_name}, conn_max_age=600, "
-            "conn_health_checks=True)"
-        ),
-    )
-    if not any(
-        _expression_matches(database_value, source) for source in accepted_calls
-    ):
-        raise ValueError(
-            f"{path}: DATABASES must use the canonical runtime database parser options."
-        )
-    return selected_url_name
-
-
-def _is_static_database_fallback(node: ast.expr, source_name: str) -> bool:
-    """Return whether non-DB mode chooses the database URL then a dummy URL."""
+def _supersedes_selection(node: ast.stmt, *, protected: set[str]) -> bool:
+    """Return whether a statement could replace the validated selection."""
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id in protected:
+                return True
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "DATABASES"
+            ):
+                return True
     return (
-        isinstance(node, ast.BoolOp)
-        and isinstance(node.op, ast.Or)
-        and len(node.values) == 2
-        and isinstance(node.values[0], ast.Name)
-        and node.values[0].id == source_name
-        and isinstance(node.values[1], ast.Constant)
-        and isinstance(node.values[1].value, str)
-        and bool(node.values[1].value)
+        isinstance(node, ast.AugAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id in protected
     )
 
 
-def _validate_runtime_environment_immutability(tree: ast.Module, *, path: Path) -> None:
-    """Reject writes that can change a runtime database bridge environment input."""
-    parents: dict[ast.AST, ast.AST] = {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
-    environment_methods = {
-        "clear",
-        "pop",
-        "popitem",
-        "setdefault",
-        "update",
-        "__delitem__",
-        "__ior__",
-        "__setitem__",
-    }
-    local_scopes = (
-        ast.FunctionDef,
-        ast.AsyncFunctionDef,
-        ast.ClassDef,
-        ast.Lambda,
-        ast.ListComp,
-        ast.SetComp,
-        ast.DictComp,
-        ast.GeneratorExp,
+def _facade_selection_targets_databases(tree: ast.Module) -> bool:
+    """Return whether module scope delegates the database selection canonically.
+
+    This is a whitelist: the donor settings must import the facade selection,
+    read the runtime and command-mode inputs through their canonical
+    environment reads, call the facade with those names, and build the default
+    connection from the call's result — with no later statement that could
+    supersede the selection.  A syntactic call alone is not enough: donor
+    settings that call the facade in an unused function, feed it the privileged
+    URL, or let another URL win for the default connection would otherwise be
+    accepted and then serve under the privileged role.
+    """
+    facade_names, facade_roots, module_aliases, direct_names = _facade_imports(tree)
+    if not facade_names and not facade_roots:
+        return False
+    if not module_aliases and not direct_names:
+        return False
+
+    bound: set[str] = (
+        set(facade_names) | set(facade_roots) | set(module_aliases) | set(direct_names)
     )
+    reads: dict[str, set[str]] = {}
+    selected_name: str | None = None
+    databases_seen = False
 
-    def is_descendant_of(node: ast.AST, root: ast.AST) -> bool:
-        current: ast.AST | None = node
-        while current is not None and current is not tree:
-            if current is root:
-                return True
-            current = parents.get(current)
-        return False
-
-    def evaluates_in_enclosing_scope(node: ast.AST, scope: ast.AST) -> bool:
-        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            roots: list[ast.AST] = [scope.args, *scope.decorator_list]
-            if scope.returns is not None:
-                roots.append(scope.returns)
-            return any(is_descendant_of(node, root) for root in roots)
-        if isinstance(scope, ast.Lambda):
-            return is_descendant_of(node, scope.args)
-        if isinstance(scope, ast.ClassDef):
-            roots = [*scope.bases, *scope.keywords, *scope.decorator_list]
-            return any(is_descendant_of(node, root) for root in roots)
-        if isinstance(
-            scope, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-        ):
-            return is_descendant_of(node, scope.generators[0].iter)
-        return False
-
-    def nearest_local_scope(node: ast.AST) -> ast.AST | None:
-        origin = node
-        current = parents.get(node)
-        while current is not None and current is not tree:
-            if isinstance(current, local_scopes):
-                if evaluates_in_enclosing_scope(origin, current):
-                    current = parents.get(current)
-                    continue
-                return current
-            current = parents.get(current)
-        return None
-
-    def parent_local_scope(scope: ast.AST) -> ast.AST | None:
-        current = parents.get(scope)
-        while current is not None and current is not tree:
-            if isinstance(current, local_scopes):
-                if isinstance(current, ast.ClassDef):
-                    current = parents.get(current)
-                    continue
-                return current
-            current = parents.get(current)
-        return None
-
-    def named_expression_binding_scope(node: ast.AST) -> ast.AST | None:
-        parent = parents.get(node)
-        if not (
-            isinstance(node, ast.Name)
-            and isinstance(node.ctx, ast.Store)
-            and isinstance(parent, ast.NamedExpr)
-            and parent.target is node
-        ):
-            return None
-        scope = nearest_local_scope(node)
-        while isinstance(
-            scope, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-        ):
-            scope = nearest_local_scope(scope)
-        return scope or tree
-
-    def scope_binds_name(scope: ast.AST, name: str) -> bool:
-        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-            arguments = scope.args
-            if (
-                name
-                in {
-                    argument.arg
-                    for argument in (
-                        *arguments.posonlyargs,
-                        *arguments.args,
-                        *arguments.kwonlyargs,
-                    )
-                }
-                or (arguments.vararg is not None and arguments.vararg.arg == name)
-                or (arguments.kwarg is not None and arguments.kwarg.arg == name)
-            ):
-                return True
-        for candidate in ast.walk(scope):
-            named_expression_scope = named_expression_binding_scope(candidate)
-            if named_expression_scope is not None:
-                if (
-                    named_expression_scope is scope
-                    and isinstance(candidate, ast.Name)
-                    and candidate.id == name
-                ):
-                    return True
-                continue
-            if candidate is scope or nearest_local_scope(candidate) is not scope:
-                continue
-            if name in _bound_names(candidate):
-                return True
-        return False
-
-    def assignment_target_binds_name(target: ast.expr, name: str) -> bool:
-        return any(
-            isinstance(candidate, ast.Name)
-            and candidate.id == name
-            and isinstance(candidate.ctx, (ast.Store, ast.Del))
-            for candidate in ast.walk(target)
-        )
-
-    def class_scope_binds_name_before(
-        scope: ast.ClassDef, node: ast.AST, name: str
-    ) -> bool:
-        """Resolve sequential class-namespace bindings before one expression."""
-        direct_child = node
-        while parents.get(direct_child) is not scope:
-            parent = parents.get(direct_child)
-            if parent is None:
+    for node in tree.body:
+        if databases_seen:
+            if _supersedes_selection(node, protected=bound | {"DATABASES"}):
                 return False
-            direct_child = parent
-
-        is_bound = False
-        for statement in scope.body:
-            if statement is direct_child:
-                return is_bound
-            if isinstance(statement, ast.Assign) and any(
-                assignment_target_binds_name(target, name)
-                for target in statement.targets
-            ):
-                is_bound = True
-            elif (
-                isinstance(statement, ast.AnnAssign)
-                and statement.value is not None
-                and assignment_target_binds_name(statement.target, name)
-            ):
-                is_bound = True
-            elif isinstance(statement, ast.AugAssign) and assignment_target_binds_name(
-                statement.target, name
-            ):
-                is_bound = True
-            elif isinstance(
-                statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            ):
-                if statement.name == name:
-                    is_bound = True
-            elif isinstance(statement, ast.Import):
-                if any(
-                    (alias.asname or alias.name.split(".", maxsplit=1)[0]) == name
-                    for alias in statement.names
-                ):
-                    is_bound = True
-            elif isinstance(statement, ast.ImportFrom):
-                if any(
-                    (alias.asname or alias.name) == name for alias in statement.names
-                ):
-                    is_bound = True
-            elif isinstance(statement, ast.Delete) and any(
-                assignment_target_binds_name(target, name)
-                for target in statement.targets
-            ):
-                is_bound = False
-        return is_bound
-
-    def scope_declares_global(scope: ast.AST, name: str) -> bool:
-        return any(
-            isinstance(candidate, ast.Global) and name in candidate.names
-            for candidate in ast.walk(scope)
-            if nearest_local_scope(candidate) is scope
-        )
-
-    def scope_declares_nonlocal(scope: ast.AST, name: str) -> bool:
-        return any(
-            isinstance(candidate, ast.Nonlocal) and name in candidate.names
-            for candidate in ast.walk(scope)
-            if nearest_local_scope(candidate) is scope
-        )
-
-    def binding_scope(node: ast.AST, name: str) -> ast.AST:
-        named_expression_scope = named_expression_binding_scope(node)
-        if named_expression_scope is not None:
-            return named_expression_scope
-        scope = nearest_local_scope(node)
-        while scope is not None:
-            if scope_declares_global(scope, name):
-                return tree
-            if scope_declares_nonlocal(scope, name):
-                scope = parent_local_scope(scope)
-                continue
-            if isinstance(scope, ast.ClassDef):
-                if isinstance(node, ast.Name) and isinstance(
-                    node.ctx, (ast.Store, ast.Del)
-                ):
-                    return scope
-                if class_scope_binds_name_before(scope, node, name):
-                    return scope
-                scope = parent_local_scope(scope)
-                continue
-            if scope_binds_name(scope, name):
-                return scope
-            scope = parent_local_scope(scope)
-        return tree
-
-    def import_scope(node: ast.Import | ast.ImportFrom) -> ast.AST:
-        return nearest_local_scope(node) or tree
-
-    os_aliases: set[tuple[ast.AST, str]] = set()
-    environment_aliases: set[tuple[ast.AST, str]] = set()
-    mutation_aliases: dict[tuple[ast.AST, str], str] = {}
-    for import_node in ast.walk(tree):
-        if isinstance(import_node, ast.Import):
-            for alias in import_node.names:
-                if alias.name == "os":
-                    os_aliases.add(
-                        (import_scope(import_node), alias.asname or alias.name)
-                    )
-        elif isinstance(import_node, ast.ImportFrom) and import_node.module == "os":
-            for alias in import_node.names:
-                alias_name = alias.asname or alias.name
-                if alias.name == "environ":
-                    environment_aliases.add((import_scope(import_node), alias_name))
-                elif alias.name in {"putenv", "unsetenv"}:
-                    mutation_aliases[(import_scope(import_node), alias_name)] = (
-                        alias.name
-                    )
-
-    def is_os_module(node: ast.expr) -> bool:
-        return (
-            isinstance(node, ast.Name)
-            and (binding_scope(node, node.id), node.id) in os_aliases
-        )
-
-    def is_environment(node: ast.expr) -> bool:
-        if isinstance(node, ast.NamedExpr):
-            return is_environment(node.value)
-        if (
-            isinstance(node, ast.Name)
-            and (binding_scope(node, node.id), node.id) in environment_aliases
-        ):
-            return True
-        if (
-            isinstance(node, ast.Attribute)
-            and node.attr == "environ"
-            and is_os_module(node.value)
-        ):
-            return True
-        return (
-            isinstance(node, ast.Call)
-            and len(node.args) >= 1
-            and (
-                (
-                    isinstance(node.func, ast.Name)
-                    and node.func.id == "getattr"
-                    and len(node.args) >= 2
-                    and is_os_module(node.args[0])
-                    and _static_string_expression(node.args[1]) == "environ"
-                )
-                or (
-                    isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "__getattribute__"
-                    and is_os_module(node.func.value)
-                    and _static_string_expression(node.args[0]) == "environ"
-                )
-            )
-        )
-
-    def reflected_attribute(node: ast.expr) -> tuple[ast.expr, str | None] | None:
-        if not isinstance(node, ast.Call):
-            return None
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id == "getattr"
-            and len(node.args) >= 2
-        ):
-            return node.args[0], _static_string_expression(node.args[1])
-        if (
-            isinstance(node.func, ast.Attribute)
-            and node.func.attr == "__getattribute__"
-            and node.args
-        ):
-            return node.func.value, _static_string_expression(node.args[0])
-        return None
-
-    def mutation_operation(node: ast.expr) -> str | None:
-        if isinstance(node, ast.Name):
-            return mutation_aliases.get((binding_scope(node, node.id), node.id))
-        if isinstance(node, ast.Attribute):
-            if is_environment(node.value) and node.attr in environment_methods:
-                return node.attr
-            if is_os_module(node.value) and node.attr in {"putenv", "unsetenv"}:
-                return node.attr
-            return None
-        reflected = reflected_attribute(node)
-        if reflected is None:
-            return None
-        reflected_object, attribute_name = reflected
-        if is_environment(reflected_object) and attribute_name in environment_methods:
-            return attribute_name
-        if is_os_module(reflected_object) and attribute_name in {"putenv", "unsetenv"}:
-            return attribute_name
-        return None
-
-    def is_environment_value(node: ast.expr) -> bool:
-        if is_environment(node):
-            return True
-        if isinstance(node, (ast.BoolOp, ast.List, ast.Set, ast.Tuple)):
-            values = node.values if isinstance(node, ast.BoolOp) else node.elts
-            return any(is_environment_value(value) for value in values)
-        if isinstance(node, ast.Dict):
-            return any(
-                value is not None and is_environment_value(value)
-                for value in (*node.keys, *node.values)
-            )
-        if isinstance(node, ast.IfExp):
-            return is_environment_value(node.body) or is_environment_value(node.orelse)
-        if isinstance(node, ast.NamedExpr):
-            return is_environment_value(node.value)
-        if isinstance(node, ast.Subscript):
-            return is_environment_value(node.value)
-        return False
-
-    def assignment_alias_values(
-        target: ast.expr, value: ast.expr
-    ) -> list[tuple[ast.Name, ast.expr]]:
-        """Pair every assignment-bound name with its possible runtime value."""
-        if isinstance(target, ast.Name):
-            return [(target, value)]
-        if isinstance(target, ast.Starred):
-            return assignment_alias_values(target.value, value)
-        if isinstance(target, (ast.Tuple, ast.List)):
-            if isinstance(value, (ast.Tuple, ast.List)) and len(target.elts) == len(
-                value.elts
-            ):
-                return [
-                    binding
-                    for target_element, value_element in zip(
-                        target.elts, value.elts, strict=True
-                    )
-                    for binding in assignment_alias_values(
-                        target_element, value_element
-                    )
-                ]
-            return [
-                binding
-                for target_element in target.elts
-                for binding in assignment_alias_values(target_element, value)
-            ]
-        return []
-
-    def record_alias_bindings(
-        target: ast.expr,
-        value: ast.expr,
-        *,
-        forced_scope: ast.AST | None = None,
-    ) -> bool:
-        aliases_changed = False
-        for name_target, possible_value in assignment_alias_values(target, value):
-            target_binding = (
-                forced_scope or binding_scope(name_target, name_target.id),
-                name_target.id,
-            )
-            if (
-                is_environment_value(possible_value)
-                and target_binding not in environment_aliases
-            ):
-                environment_aliases.add(target_binding)
-                aliases_changed = True
-            operation = mutation_operation(possible_value)
-            if (
-                operation is not None
-                and mutation_aliases.get(target_binding) != operation
-            ):
-                mutation_aliases[target_binding] = operation
-                aliases_changed = True
-        return aliases_changed
-
-    changed = True
-    while changed:
-        changed = False
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
-                targets = (
-                    node.targets if isinstance(node, ast.Assign) else [node.target]
-                )
-                for target in targets:
-                    changed = record_alias_bindings(target, node.value) or changed
-            elif isinstance(node, ast.NamedExpr):
-                changed = record_alias_bindings(node.target, node.value) or changed
-            elif isinstance(node, (ast.For, ast.AsyncFor)):
-                changed = record_alias_bindings(node.target, node.iter) or changed
-        for comprehension in (
-            node
-            for node in ast.walk(tree)
-            if isinstance(
-                node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-            )
-        ):
-            for generator in comprehension.generators:
-                changed = (
-                    record_alias_bindings(
-                        generator.target,
-                        generator.iter,
-                        forced_scope=comprehension,
-                    )
-                    or changed
-                )
-
-    def fail(node: ast.AST, detail: str) -> None:
-        line = getattr(node, "lineno", 1)
-        raise ValueError(
-            f"{path}:{line}: {detail} can change a protected runtime database "
-            "environment input before or after static bridge validation."
-        )
-
-    def static_environment_names(call: ast.Call) -> set[str] | None:
-        names: set[str] = set()
-        if len(call.args) > 1:
-            return None
-        if call.args:
-            mapping = call.args[0]
-            if not isinstance(mapping, ast.Dict):
-                return None
-            for key in mapping.keys:
-                if key is None:
-                    return None
-                name = _static_string_expression(key)
-                if name is None:
-                    return None
-                names.add(name)
-        for keyword in call.keywords:
-            if keyword.arg is None:
-                return None
-            names.add(keyword.arg)
-        return names
-
-    module_bound_names = {
-        node.id
-        for node in _module_scope_nodes(tree)
-        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del))
-    }
-    module_bound_names.update(
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-    )
-    module_bound_names.update(
-        node.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Name) and named_expression_binding_scope(node) is tree
-    )
-    for statement in tree.body:
-        if isinstance(statement, ast.Import):
-            module_bound_names.update(
-                alias.asname or alias.name.split(".", maxsplit=1)[0]
-                for alias in statement.names
-            )
-        elif isinstance(statement, ast.ImportFrom):
-            module_bound_names.update(
-                alias.asname or alias.name for alias in statement.names
-            )
-
-    def is_unshadowed_builtin_call(call: ast.Call, name: str) -> bool:
-        if not isinstance(call.func, ast.Name) or call.func.id != name:
-            return False
-        return name not in module_bound_names and binding_scope(call, name) is tree
-
-    def is_environment_copy(node: ast.expr) -> bool:
-        if not isinstance(node, ast.Call):
-            return False
-        if (
-            is_unshadowed_builtin_call(node, "dict")
-            and len(node.args) == 1
-            and not node.keywords
-            and is_environment(node.args[0])
-        ):
-            return True
-        return (
-            isinstance(node.func, ast.Attribute)
-            and node.func.attr == "copy"
-            and is_environment(node.func.value)
-            and not node.args
-            and not node.keywords
-        )
-
-    def contains_mutable_environment(node: ast.AST) -> bool:
-        if isinstance(node, ast.expr) and is_environment_copy(node):
-            return False
-        if isinstance(node, ast.expr) and is_environment(node):
-            return True
-        return any(
-            contains_mutable_environment(child) for child in ast.iter_child_nodes(node)
-        )
-
-    def reflected_mutation(call: ast.Call) -> tuple[ast.expr, str | None] | None:
-        if (
-            isinstance(call.func, ast.Name)
-            and call.func.id in {"setattr", "delattr"}
-            and len(call.args) >= 2
-        ):
-            return call.args[0], _static_string_expression(call.args[1])
-        if (
-            isinstance(call.func, ast.Attribute)
-            and call.func.attr in {"__setattr__", "__delattr__"}
-            and call.args
-        ):
-            return call.func.value, _static_string_expression(call.args[0])
-        return None
-
-    protected_bindings = {"os", "config", "dj_database_url"}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Global) and set(node.names) & protected_bindings:
-            fail(node, "a nested scope's global declaration for a canonical binding")
-        if (
-            isinstance(node, ast.Attribute)
-            and isinstance(node.ctx, (ast.Store, ast.Del))
-            and is_os_module(node.value)
-            and node.attr in {"environ", "putenv", "unsetenv"}
-        ):
-            fail(node, f"reassignment of os.{node.attr}")
-        if (
-            isinstance(node, ast.Subscript)
-            and isinstance(node.ctx, (ast.Store, ast.Del))
-            and is_environment(node.value)
-        ):
-            environment_name = _static_string_expression(node.slice)
-            if (
-                environment_name is None
-                or environment_name in _RUNTIME_DATABASE_ENVIRONMENT_NAMES
-            ):
-                fail(node, "direct mutation of a protected or dynamic environment key")
-        if isinstance(node, ast.AugAssign) and is_environment(node.target):
-            fail(node, "whole-environment augmented assignment")
-        if isinstance(node, (ast.Return, ast.Yield)) and node.value is not None:
-            if contains_mutable_environment(node.value):
-                fail(node, "return of the mutable process environment")
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-            defaults = [*node.args.defaults, *node.args.kw_defaults]
-            if any(
-                default is not None and contains_mutable_environment(default)
-                for default in defaults
-            ):
-                fail(node, "capture of the mutable process environment in a default")
-        if not isinstance(node, ast.Call):
             continue
-        mutation = reflected_mutation(node)
-        if mutation is not None:
-            mutation_target, attribute_name = mutation
-            if is_os_module(mutation_target) and (
-                attribute_name is None
-                or attribute_name in {"environ", "putenv", "unsetenv"}
-            ):
-                fail(node, "reflective reassignment of the os environment binding")
-            if is_environment(mutation_target) and (
-                attribute_name is None or attribute_name in environment_methods
-            ):
-                fail(node, "reflective replacement of an environment mutation method")
-        operation = mutation_operation(node.func)
-        if operation is None:
-            if is_environment_copy(node):
-                continue
-            if any(
-                contains_mutable_environment(argument) for argument in node.args
-            ) or any(
-                contains_mutable_environment(keyword.value) for keyword in node.keywords
-            ):
-                fail(node, "passing the mutable process environment to an opaque call")
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
             continue
-        if operation in {"clear", "popitem", "__ior__"}:
-            fail(node, f"whole-environment {operation}() mutation")
-        if operation == "update":
-            environment_names = static_environment_names(node)
-            if environment_names is None or (
-                environment_names & _RUNTIME_DATABASE_ENVIRONMENT_NAMES
-            ):
-                fail(node, "update() of protected or dynamic environment keys")
+        target = node.targets[0]
+        if not isinstance(target, ast.Name):
             continue
-        if not node.args:
-            fail(node, f"{operation}() with no statically inspectable environment key")
-        environment_name = _static_string_expression(node.args[0])
-        if (
-            environment_name is None
-            or environment_name in _RUNTIME_DATABASE_ENVIRONMENT_NAMES
+        name = target.id
+        if name in bound:
+            # Rebinding an imported name or a validated read can replace the
+            # contract source with anything.
+            return False
+        env_var = _canonical_read_env_var(node.value)
+        if env_var is not None:
+            reads.setdefault(env_var, set()).add(name)
+            bound.add(name)
+            continue
+        value = node.value
+        if _is_facade_selection_call(
+            value, facade_names=facade_names, facade_roots=facade_roots
         ):
-            fail(node, f"{operation}() of a protected or dynamic environment key")
-
-
-def _validate_runtime_database_bridge(tree: ast.Module, *, path: Path) -> None:
-    """Require the canonical executable command/database selection invariant."""
-    module_nodes = _module_scope_nodes(tree)
-    parents: dict[ast.AST, ast.AST] = {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
-    database_scopes = (
-        ast.FunctionDef,
-        ast.AsyncFunctionDef,
-        ast.ClassDef,
-        ast.Lambda,
-        ast.ListComp,
-        ast.SetComp,
-        ast.DictComp,
-        ast.GeneratorExp,
-    )
-
-    def is_descendant_of(node: ast.AST, root: ast.AST) -> bool:
-        current: ast.AST | None = node
-        while current is not None and current is not tree:
-            if current is root:
-                return True
-            current = parents.get(current)
-        return False
-
-    def evaluates_in_enclosing_scope(node: ast.AST, scope: ast.AST) -> bool:
-        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            roots: list[ast.AST] = [scope.args, *scope.decorator_list]
-            if scope.returns is not None:
-                roots.append(scope.returns)
-            return any(is_descendant_of(node, root) for root in roots)
-        if isinstance(scope, ast.Lambda):
-            return is_descendant_of(node, scope.args)
-        if isinstance(scope, ast.ClassDef):
-            roots = [*scope.bases, *scope.keywords, *scope.decorator_list]
-            return any(is_descendant_of(node, root) for root in roots)
-        if isinstance(
-            scope, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-        ):
-            return is_descendant_of(node, scope.generators[0].iter)
-        return False
-
-    def nearest_database_scope(node: ast.AST) -> ast.AST | None:
-        origin = node
-        current = parents.get(node)
-        while current is not None and current is not tree:
-            if isinstance(current, database_scopes):
-                if evaluates_in_enclosing_scope(origin, current):
-                    current = parents.get(current)
-                    continue
-                return current
-            current = parents.get(current)
-        return None
-
-    def parent_database_scope(scope: ast.AST) -> ast.AST | None:
-        current = parents.get(scope)
-        while current is not None and current is not tree:
-            if isinstance(current, database_scopes):
-                return current
-            current = parents.get(current)
-        return None
-
-    def named_expression_database_scope(node: ast.AST) -> ast.AST | None:
-        parent = parents.get(node)
-        if not (
-            isinstance(node, ast.Name)
-            and isinstance(node.ctx, ast.Store)
-            and isinstance(parent, ast.NamedExpr)
-            and parent.target is node
-        ):
-            return None
-        scope = nearest_database_scope(node)
-        while isinstance(
-            scope, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-        ):
-            scope = nearest_database_scope(scope)
-        return scope or tree
-
-    def scope_declares_database_global(scope: ast.AST) -> bool:
-        return any(
-            isinstance(candidate, ast.Global) and "DATABASES" in candidate.names
-            for candidate in ast.walk(scope)
-            if nearest_database_scope(candidate) is scope
-        )
-
-    def scope_declares_database_nonlocal(scope: ast.AST) -> bool:
-        return any(
-            isinstance(candidate, ast.Nonlocal) and "DATABASES" in candidate.names
-            for candidate in ast.walk(scope)
-            if nearest_database_scope(candidate) is scope
-        )
-
-    def scope_binds_databases(scope: ast.AST) -> bool:
-        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-            arguments = scope.args
-            if "DATABASES" in {
-                argument.arg
-                for argument in (
-                    *arguments.posonlyargs,
-                    *arguments.args,
-                    *arguments.kwonlyargs,
-                )
-            } or (
-                arguments.vararg is not None
-                and arguments.vararg.arg == "DATABASES"
-                or arguments.kwarg is not None
-                and arguments.kwarg.arg == "DATABASES"
+            if not isinstance(value, ast.Call) or not _is_canonical_selection_call(
+                value,
+                runtime_reads=reads.get("RUNTIME_DATABASE_URL", set()),
+                database_reads=reads.get("DATABASE_URL", set()),
+                privileged_reads=reads.get("QUICKSCALE_PRIVILEGED_COMMAND", set()),
+                non_db_reads=reads.get("QUICKSCALE_NON_DB_COMMAND", set()),
             ):
-                return True
-        for candidate in ast.walk(scope):
-            named_expression_scope = named_expression_database_scope(candidate)
-            if named_expression_scope is not None:
-                if (
-                    named_expression_scope is scope
-                    and isinstance(candidate, ast.Name)
-                    and candidate.id == "DATABASES"
-                ):
-                    return True
-                continue
-            if candidate is scope or nearest_database_scope(candidate) is not scope:
-                continue
-            if "DATABASES" in _bound_names(candidate):
-                return True
-        return False
-
-    def target_binds_databases(target: ast.expr) -> bool:
-        return any(
-            isinstance(candidate, ast.Name)
-            and candidate.id == "DATABASES"
-            and isinstance(candidate.ctx, (ast.Store, ast.Del))
-            for candidate in ast.walk(target)
-        )
-
-    def class_binds_databases_before(scope: ast.ClassDef, node: ast.AST) -> bool:
-        direct_child = node
-        while parents.get(direct_child) is not scope:
-            parent = parents.get(direct_child)
-            if parent is None:
                 return False
-            direct_child = parent
-
-        is_bound = False
-        for statement in scope.body:
-            if statement is direct_child:
-                return is_bound
-            if isinstance(statement, ast.Assign) and any(
-                target_binds_databases(target) for target in statement.targets
-            ):
-                is_bound = True
-            elif (
-                isinstance(statement, ast.AnnAssign)
-                and statement.value is not None
-                and target_binds_databases(statement.target)
-            ):
-                is_bound = True
-            elif isinstance(statement, ast.AugAssign) and target_binds_databases(
-                statement.target
-            ):
-                is_bound = True
-            elif (
-                isinstance(
-                    statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-                )
-                and statement.name == "DATABASES"
-            ):
-                is_bound = True
-            elif isinstance(statement, ast.Import) and any(
-                (alias.asname or alias.name.split(".", maxsplit=1)[0]) == "DATABASES"
-                for alias in statement.names
-            ):
-                is_bound = True
-            elif isinstance(statement, ast.ImportFrom) and any(
-                (alias.asname or alias.name) == "DATABASES" for alias in statement.names
-            ):
-                is_bound = True
-            elif isinstance(statement, ast.Delete) and any(
-                target_binds_databases(target) for target in statement.targets
-            ):
-                is_bound = False
-        return is_bound
-
-    def database_binding_scope(node: ast.Name) -> ast.AST:
-        named_expression_scope = named_expression_database_scope(node)
-        if named_expression_scope is not None:
-            return named_expression_scope
-        scope = nearest_database_scope(node)
-        while scope is not None:
-            if scope_declares_database_global(scope):
-                return tree
-            if scope_declares_database_nonlocal(scope):
-                scope = parent_database_scope(scope)
-                continue
-            if isinstance(scope, ast.ClassDef):
-                if isinstance(node.ctx, (ast.Store, ast.Del)):
-                    parent = parents.get(node)
-                    augmented_read_before_store = (
-                        isinstance(parent, ast.AugAssign)
-                        and parent.target is node
-                        and not class_binds_databases_before(scope, node)
-                    )
-                    if not augmented_read_before_store:
-                        return scope
-                if class_binds_databases_before(scope, node):
-                    return scope
-                scope = parent_database_scope(scope)
-                while isinstance(scope, ast.ClassDef):
-                    scope = parent_database_scope(scope)
-                continue
-            if scope_binds_databases(scope):
-                return scope
-            scope = parent_database_scope(scope)
-            while isinstance(scope, ast.ClassDef):
-                scope = parent_database_scope(scope)
-        return tree
-
-    has_os_import = any(
-        isinstance(statement, ast.Import)
-        and any(
-            alias.name == "os" and alias.asname is None for alias in statement.names
-        )
-        for statement in tree.body
-    )
-    has_database_import = any(
-        isinstance(statement, ast.Import)
-        and any(
-            alias.name == "dj_database_url" and alias.asname is None
-            for alias in statement.names
-        )
-        for statement in tree.body
-    )
-    has_config_import = any(
-        isinstance(statement, ast.ImportFrom)
-        and statement.module == "decouple"
-        and any(
-            alias.name == "config" and alias.asname is None for alias in statement.names
-        )
-        for statement in tree.body
-    )
-    if not (has_os_import and has_database_import and has_config_import):
-        raise ValueError(
-            f"{path}: runtime database bridge must use the canonical os, decouple.config, "
-            "and dj_database_url bindings."
-        )
-    _validate_runtime_environment_immutability(tree, path=path)
-
-    def is_canonical_binding_import(node: ast.AST, bound_name: str) -> bool:
-        if node not in tree.body:
-            return False
-        if bound_name in {"os", "dj_database_url"} and isinstance(node, ast.Import):
-            return any(
-                alias.name == bound_name and alias.asname is None
-                for alias in node.names
-            )
-        return (
-            bound_name == "config"
-            and isinstance(node, ast.ImportFrom)
-            and node.module == "decouple"
-            and any(
-                alias.name == "config" and alias.asname is None for alias in node.names
-            )
-        )
-
-    protected_binding_stores = [
-        bound_name
-        for node in module_nodes
-        for bound_name in _bound_names(node)
-        if bound_name in {"os", "config", "dj_database_url"}
-        and not is_canonical_binding_import(node, bound_name)
-    ]
-    protected_attribute_writes = [
-        node
-        for node in module_nodes
-        if isinstance(node, ast.Attribute)
-        and isinstance(node.ctx, (ast.Store, ast.Del))
-        and isinstance(node.value, ast.Name)
-        and node.value.id in {"os", "dj_database_url"}
-    ]
-    if protected_binding_stores or protected_attribute_writes:
-        raise ValueError(
-            f"{path}: canonical runtime database bridge bindings must not be reassigned."
-        )
-
-    environment_assignments: dict[str, list[tuple[int, str, ast.expr]]] = {}
-    for statement_index, statement in enumerate(tree.body):
-        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            selected_name = name
+            bound.add(name)
             continue
-        value = statement.value
-        if value is None:
-            continue
-        environment_name = _environment_read_name(value)
-        if environment_name is None:
-            continue
-        targets = (
-            statement.targets
-            if isinstance(statement, ast.Assign)
-            else [statement.target]
-        )
-        if len(targets) == 1 and isinstance(targets[0], ast.Name):
-            environment_assignments.setdefault(environment_name, []).append(
-                (statement_index, targets[0].id, value)
-            )
+        if name == "DATABASES":
+            if selected_name is None:
+                return False
+            if not isinstance(node.value, ast.Dict) or not _default_entry_is_canonical(
+                node.value,
+                selected_name=selected_name,
+                module_aliases=module_aliases,
+                direct_names=direct_names,
+            ):
+                return False
+            databases_seen = True
+            bound.add(name)
 
-    required_environment_names = {
-        "RUNTIME_DATABASE_URL",
-        "DATABASE_URL",
-        "QUICKSCALE_PRIVILEGED_COMMAND",
-        "QUICKSCALE_NON_DB_COMMAND",
-    }
-    missing_environment_names = sorted(
-        required_environment_names - environment_assignments.keys()
-    )
-    if missing_environment_names:
-        raise ValueError(
-            f"{path}: production settings must read the complete runtime database "
-            f"bridge; missing {', '.join(missing_environment_names)}."
-        )
-
-    duplicate_environment_names = sorted(
-        name
-        for name in required_environment_names
-        if len(environment_assignments[name]) != 1
-    )
-    if duplicate_environment_names:
-        raise ValueError(
-            f"{path}: runtime database bridge environment reads must each have one "
-            f"top-level assignment; invalid {', '.join(duplicate_environment_names)}."
-        )
-    expected_environment_reads = {
-        "RUNTIME_DATABASE_URL": 'config("RUNTIME_DATABASE_URL", default=None)',
-        "DATABASE_URL": 'config("DATABASE_URL", default=None)',
-        "QUICKSCALE_PRIVILEGED_COMMAND": (
-            'os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")'
-        ),
-        "QUICKSCALE_NON_DB_COMMAND": (
-            'os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")'
-        ),
-    }
-    for environment_name, expected_source in expected_environment_reads.items():
-        _index, _target, value = environment_assignments[environment_name][0]
-        if not _expression_matches(value, expected_source):
-            raise ValueError(
-                f"{path}: {environment_name} must use its canonical immutable "
-                "environment read."
-            )
-
-    runtime_url_name = environment_assignments["RUNTIME_DATABASE_URL"][0][1]
-    database_url_name = environment_assignments["DATABASE_URL"][0][1]
-    privileged_command_name = environment_assignments["QUICKSCALE_PRIVILEGED_COMMAND"][
-        0
-    ][1]
-    non_db_command_name = environment_assignments["QUICKSCALE_NON_DB_COMMAND"][0][1]
-    role_names = {
-        runtime_url_name,
-        database_url_name,
-        privileged_command_name,
-        non_db_command_name,
-    }
-    if len(role_names) != 4:
-        raise ValueError(
-            f"{path}: runtime database bridge inputs must use four distinct variables."
-        )
-
-    for role_name in role_names:
-        role_stores = [node for node in module_nodes if role_name in _bound_names(node)]
-        if len(role_stores) != 1:
-            raise ValueError(
-                f"{path}: runtime database bridge variable {role_name} must have one "
-                "immutable source assignment."
-            )
-
-    database_assignments: list[ast.Assign | ast.AnnAssign] = []
-    for statement in tree.body:
-        if (
-            isinstance(statement, ast.Assign)
-            and len(statement.targets) == 1
-            and isinstance(statement.targets[0], ast.Name)
-            and statement.targets[0].id == "DATABASES"
-        ):
-            database_assignments.append(statement)
-        elif (
-            isinstance(statement, ast.AnnAssign)
-            and isinstance(statement.target, ast.Name)
-            and statement.target.id == "DATABASES"
-            and statement.value is not None
-        ):
-            database_assignments.append(statement)
-    database_name_nodes = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Name)
-        and node.id == "DATABASES"
-        and database_binding_scope(node) is tree
-    ]
-    database_binding_nodes = [
-        node for node in module_nodes if "DATABASES" in _bound_names(node)
-    ]
-    canonical_database_target = (
-        database_assignments[0].targets[0]
-        if len(database_assignments) == 1
-        and isinstance(database_assignments[0], ast.Assign)
-        else (
-            database_assignments[0].target
-            if len(database_assignments) == 1
-            and isinstance(database_assignments[0], ast.AnnAssign)
-            else None
-        )
-    )
-    if (
-        canonical_database_target is None
-        or len(database_name_nodes) != 1
-        or database_name_nodes[0] is not canonical_database_target
-        or len(database_binding_nodes) != 1
-        or database_binding_nodes[0] is not canonical_database_target
-    ):
-        raise ValueError(
-            f"{path}: DATABASES must have one immutable top-level assignment from the "
-            "runtime database bridge."
-        )
-    database_assignment = database_assignments[0]
-    database_value = database_assignment.value
-    if database_value is None:
-        raise ValueError(f"{path}: DATABASES must have a static assigned value.")
-    selected_url_name = _database_parse_selected_name(database_value, path=path)
-    if selected_url_name in role_names | _PROTECTED_ALLOWLIST_NAMES:
-        raise ValueError(
-            f"{path}: selected runtime database URL must use a dedicated bridge variable."
-        )
-
-    bridge_candidates = [
-        (index, statement)
-        for index, statement in enumerate(tree.body)
-        if isinstance(statement, ast.If)
-        and isinstance(statement.test, ast.Name)
-        and statement.test.id == privileged_command_name
-    ]
-    if len(bridge_candidates) != 1:
-        raise ValueError(
-            f"{path}: runtime database bridge must have one canonical privileged "
-            "command branch."
-        )
-    bridge_index, bridge_root = bridge_candidates[0]
-    mutual_exclusion_sources = (
-        f"{privileged_command_name} and {non_db_command_name}",
-        f"{non_db_command_name} and {privileged_command_name}",
-    )
-    mutual_exclusion_indices = [
-        index
-        for index, statement in enumerate(tree.body[:bridge_index])
-        if any(
-            _is_exact_raising_guard(statement, source)
-            for source in mutual_exclusion_sources
-        )
-    ]
-    if len(mutual_exclusion_indices) != 1:
-        raise ValueError(
-            f"{path}: privileged and non-database command modes must have one exact "
-            "fail-closed mutual-exclusion guard before database selection."
-        )
-    source_assignment_indices = [
-        environment_assignments[name][0][0] for name in required_environment_names
-    ]
-    if any(index >= mutual_exclusion_indices[0] for index in source_assignment_indices):
-        raise ValueError(
-            f"{path}: runtime database bridge inputs must be assigned before its guards."
-        )
-
-    privileged_assignment = (
-        _direct_assignment_value(bridge_root.body[3], selected_url_name)
-        if len(bridge_root.body) == 4
-        else None
-    )
-    if (
-        len(bridge_root.body) != 4
-        or not _is_exact_raising_guard(
-            bridge_root.body[0],
-            f"{privileged_command_name} not in _KNOWN_PRIVILEGED_COMMANDS",
-        )
-        or not _is_exact_raising_guard(
-            bridge_root.body[1],
-            f'{runtime_url_name} is None or {runtime_url_name} != ""',
-        )
-        or not _is_exact_raising_guard(bridge_root.body[2], f"not {database_url_name}")
-        or privileged_assignment is None
-        or not _expression_matches(privileged_assignment, database_url_name)
-    ):
-        raise ValueError(
-            f"{path}: privileged command mode must exactly validate its allowlist, "
-            "require an explicitly blank runtime URL and DATABASE_URL, then select it."
-        )
-
-    if len(bridge_root.orelse) != 1 or not isinstance(bridge_root.orelse[0], ast.If):
-        raise ValueError(f"{path}: non-database command bridge branch is missing.")
-    non_db_branch = bridge_root.orelse[0]
-    non_db_assignment = (
-        _direct_assignment_value(non_db_branch.body[1], selected_url_name)
-        if len(non_db_branch.body) == 2
-        else None
-    )
-    if (
-        not isinstance(non_db_branch.test, ast.Name)
-        or non_db_branch.test.id != non_db_command_name
-        or len(non_db_branch.body) != 2
-        or not _is_exact_raising_guard(
-            non_db_branch.body[0],
-            f"{non_db_command_name} not in _KNOWN_NON_DB_COMMANDS",
-        )
-        or non_db_assignment is None
-        or not _is_static_database_fallback(non_db_assignment, database_url_name)
-    ):
-        raise ValueError(
-            f"{path}: non-database command mode must validate its allowlist and select "
-            "the non-runtime database path."
-        )
-
-    if len(non_db_branch.orelse) != 1 or not isinstance(
-        non_db_branch.orelse[0], ast.If
-    ):
-        raise ValueError(f"{path}: restricted runtime database branch is missing.")
-    runtime_branch = non_db_branch.orelse[0]
-    runtime_assignment = (
-        _direct_assignment_value(runtime_branch.body[0], selected_url_name)
-        if len(runtime_branch.body) == 1
-        else None
-    )
-    if (
-        not isinstance(runtime_branch.test, ast.Name)
-        or runtime_branch.test.id != runtime_url_name
-        or len(runtime_branch.body) != 1
-        or runtime_assignment is None
-        or not _expression_matches(runtime_assignment, runtime_url_name)
-    ):
-        raise ValueError(
-            f"{path}: ordinary runtime mode must select RUNTIME_DATABASE_URL."
-        )
-
-    if len(runtime_branch.orelse) != 1 or not isinstance(
-        runtime_branch.orelse[0], ast.If
-    ):
-        raise ValueError(f"{path}: explicit bypass bridge branch is missing.")
-    bypass_branch = runtime_branch.orelse[0]
-    bypass_assignment = (
-        _direct_assignment_value(bypass_branch.body[1], selected_url_name)
-        if len(bypass_branch.body) == 2
-        else None
-    )
-    bypass_expression = (
-        f'{runtime_url_name} == "" and '
-        'os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1"'
-    )
-    if (
-        not _expression_matches(bypass_branch.test, bypass_expression)
-        or len(bypass_branch.body) != 2
-        or not _is_exact_raising_guard(
-            bypass_branch.body[0], f"not {database_url_name}"
-        )
-        or bypass_assignment is None
-        or not _expression_matches(bypass_assignment, database_url_name)
-    ):
-        raise ValueError(
-            f"{path}: privileged database bypass must require an explicitly blank "
-            "runtime URL and QUICKSCALE_ALLOW_BYPASSRLS=1."
-        )
-    if len(bypass_branch.orelse) != 1 or not isinstance(
-        bypass_branch.orelse[0], ast.Raise
-    ):
-        raise ValueError(
-            f"{path}: runtime database selection must end in a fail-closed raise."
-        )
-    selected_url_stores = [
-        node for node in module_nodes if selected_url_name in _bound_names(node)
-    ]
-    if len(selected_url_stores) != 4:
-        raise ValueError(
-            f"{path}: selected runtime database URL must be assigned exactly once in "
-            "each validated bridge branch."
-        )
-    database_assignment_index = tree.body.index(database_assignment)
-    if database_assignment_index <= bridge_index:
-        raise ValueError(
-            f"{path}: DATABASES must consume the selected URL after database selection."
-        )
-    for allowlist_name in _PROTECTED_ALLOWLIST_NAMES:
-        assignment_indices = [
-            index
-            for index, statement in enumerate(tree.body)
-            if _direct_assignment_value(statement, allowlist_name) is not None
-        ]
-        if len(assignment_indices) != 1 or assignment_indices[0] >= bridge_index:
-            raise ValueError(
-                f"{path}: {allowlist_name} must be defined once before runtime guards."
-            )
+    return databases_seen
 
 
-def _extract_known_runtime_commands(settings_path: Path) -> dict[str, set[str]]:
-    """Extract the command allowlists from effective production settings."""
-    assignment_names = {
-        "_KNOWN_PRIVILEGED_COMMANDS": "QUICKSCALE_PRIVILEGED_COMMAND",
-        "_KNOWN_NON_DB_COMMANDS": "QUICKSCALE_NON_DB_COMMAND",
-    }
+def _load_settings_facade_contract(settings_path: Path) -> dict[str, set[str]]:
+    """Confirm effective production settings call the versioned runtime facade.
+
+    SA206 moved the launcher one-shot command contract into
+    ``quickscale_core.runtime.settings``.  Donor settings that still carry an
+    inline copy of the contract are refused before any mutation; the allowlists
+    the launchers are checked against come from the facade itself, so the
+    contract has a single declaration.
+    """
     try:
         tree = ast.parse(settings_path.read_text(), filename=str(settings_path))
     except (OSError, SyntaxError) as exc:
@@ -3343,30 +1570,36 @@ def _extract_known_runtime_commands(settings_path: Path) -> dict[str, set[str]]:
             f"Unable to parse effective production settings {settings_path}: {exc}"
         ) from exc
 
-    _validate_unshadowed_builtin(tree, name="frozenset", path=settings_path)
-    _validate_allowlist_namespace_isolation(tree, path=settings_path)
-    _validate_runtime_database_bridge(tree, path=settings_path)
+    if not _facade_selection_targets_databases(tree):
+        raise ValueError(
+            f"{settings_path} does not select its database through the QuickScale "  # noqa: S608 - operator diagnostic text, not SQL
+            "runtime settings facade. Replace the inline command-mode contract with "
+            "'from quickscale_core.runtime.settings import resolve_runtime_database_url', "
+            "assign its result at module scope (for example '_db_url = "
+            "resolve_runtime_database_url(...)'), and build DATABASES from that name so "
+            "the facade's privileged/runtime selection governs the connection."
+        )
 
-    known_commands: dict[str, set[str]] = {}
-    for assignment_name, environment_name in assignment_names.items():
-        _target, value = _allowlist_assignment(
-            tree,
-            name=assignment_name,
-            path=settings_path,
-        )
-        known_commands[environment_name] = _literal_string_set(
-            value,
-            name=assignment_name,
-            path=settings_path,
-        )
+    # Imported lazily: this maintainer tool runs in the repository environment,
+    # where quickscale-core's Django dependency is installed, while the module
+    # itself stays importable without it.
+    from quickscale_core.runtime.settings import (
+        KNOWN_NON_DB_COMMANDS,
+        KNOWN_PRIVILEGED_COMMANDS,
+    )
+
+    known_commands: dict[str, set[str]] = {
+        "QUICKSCALE_PRIVILEGED_COMMAND": set(KNOWN_PRIVILEGED_COMMANDS),
+        "QUICKSCALE_NON_DB_COMMAND": set(KNOWN_NON_DB_COMMANDS),
+    }
     expected_privileged_commands = _REQUIRED_RUNTIME_COMMANDS[
         "QUICKSCALE_PRIVILEGED_COMMAND"
     ]
     if known_commands["QUICKSCALE_PRIVILEGED_COMMAND"] != expected_privileged_commands:
         expected = ", ".join(sorted(expected_privileged_commands))
         raise ValueError(
-            f"{settings_path}: _KNOWN_PRIVILEGED_COMMANDS must contain exactly "
-            f"the supported commands: {expected}."
+            "The installed quickscale-core runtime settings facade must declare "
+            f"exactly the supported privileged commands: {expected}."
         )
     return known_commands
 
@@ -5552,7 +3785,7 @@ def _validate_runtime_compatibility(report: BetaMigrationReport) -> None:
 
     settings_path, launcher_paths = _select_effective_runtime_files(report)
     try:
-        known_commands = _extract_known_runtime_commands(settings_path)
+        known_commands = _load_settings_facade_contract(settings_path)
         expected_package = donor.identity.package
         referenced_commands: dict[str, set[str]] = {
             "QUICKSCALE_PRIVILEGED_COMMAND": set(),

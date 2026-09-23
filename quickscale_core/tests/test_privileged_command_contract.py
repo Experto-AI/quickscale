@@ -23,9 +23,8 @@ DECLARATION_STATIONS = (
         "_PRIVILEGED_DJANGO_COMMANDS",
     ),
     (
-        ROOT
-        / "quickscale_core/src/quickscale_core/generator/templates/project_name/settings/production.py.j2",
-        "_KNOWN_PRIVILEGED_COMMANDS",
+        ROOT / "quickscale_core/src/quickscale_core/runtime/settings.py",
+        "KNOWN_PRIVILEGED_COMMANDS",
     ),
 )
 

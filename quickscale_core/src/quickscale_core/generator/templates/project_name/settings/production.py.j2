@@ -37,26 +37,16 @@ from typing import cast
 
 import dj_database_url
 from decouple import config
+from quickscale_core.runtime.settings import (
+    num_proxies_for,
+    require_production_secret_key,
+    resolve_runtime_database_url,
+    secure_proxy_ssl_header,
+)
 
 from .base import *  # noqa: F403, F405
 
-_SHIPPED_SECRET_KEY_PLACEHOLDER = "django-insecure-change-this-in-production"
-
-
-def _require_production_secret_key(secret_key: object) -> str:
-    """Reject blank or shipped placeholder SECRET_KEY values in production."""
-    normalized_secret_key = str(secret_key).strip()
-    if not normalized_secret_key or normalized_secret_key == _SHIPPED_SECRET_KEY_PLACEHOLDER:
-        raise ValueError(
-            "SECRET_KEY must be set to a non-empty, non-default value in "
-            "production. Generate one with: "
-            "python -c 'from django.core.management.utils import "
-            "get_random_secret_key; print(get_random_secret_key())'"
-        )
-    return normalized_secret_key
-
-
-SECRET_KEY = _require_production_secret_key(SECRET_KEY)  # noqa: F405
+SECRET_KEY = require_production_secret_key(SECRET_KEY)  # noqa: F405
 
 # SECURITY: DEBUG must be False in production
 DEBUG = False
@@ -126,7 +116,7 @@ TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=1, cast=int)
 # ``X-Forwarded-Proto: https`` cannot mark a plaintext request secure, the
 # HTTPS redirect keeps firing, and secure cookies are never set on a plaintext
 # response. This is deliberate — it replaces the previous unconditional trust.
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if USE_X_FORWARDED_FOR else None
+SECURE_PROXY_SSL_HEADER = secure_proxy_ssl_header(USE_X_FORWARDED_FOR)
 
 
 # Recompute DRF's right-indexed selection count after production overrides.
@@ -134,7 +124,9 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if USE_X_FORWARDED
 # that stock DRF 3.17.2 does not implement on its own, and the throttle
 # defaults declared in base.py resolve their client identity through DRF's
 # own use of this count.
-REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else None  # noqa: F405
+REST_FRAMEWORK["NUM_PROXIES"] = num_proxies_for(  # noqa: F405
+    USE_X_FORWARDED_FOR, TRUSTED_PROXY_COUNT
+)
 
 
 # Database - PostgreSQL for production
@@ -168,68 +160,17 @@ database_url = config("DATABASE_URL", default=None)
 _privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")
 _non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")
 
-_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})
-_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})
-
-# Mutual exclusivity: cannot set both command-mode vars simultaneously.
-if _privileged_command and _non_db_command:
-    raise ValueError(
-        "Both QUICKSCALE_PRIVILEGED_COMMAND and QUICKSCALE_NON_DB_COMMAND "
-        "are set. These modes are mutually exclusive. "
-        "Set only one command-mode variable at a time."
-    )
-
-if _privileged_command:
-    # Privileged DB command: validate and require superuser DATABASE_URL
-    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:
-        raise ValueError(
-            f"Unknown QUICKSCALE_PRIVILEGED_COMMAND value {_privileged_command!r}. "
-            f"Supported values: {', '.join(sorted(_KNOWN_PRIVILEGED_COMMANDS))}."
-        )
-    if _runtime_db_url is None or _runtime_db_url != "":
-        raise ValueError(
-            "RUNTIME_DATABASE_URL must be explicitly blank when "
-            "QUICKSCALE_PRIVILEGED_COMMAND is set. "
-            'Set RUNTIME_DATABASE_URL="" alongside the privileged command.'
-        )
-    if not database_url:
-        raise ValueError(
-            "DATABASE_URL is required for privileged database commands. "
-            "Set DATABASE_URL to the superuser connection string."
-        )
-    _db_url = database_url
-elif _non_db_command:
-    # Non-DB bootstrap command: validate, provide dummy URL if needed
-    if _non_db_command not in _KNOWN_NON_DB_COMMANDS:
-        raise ValueError(
-            f"Unknown QUICKSCALE_NON_DB_COMMAND value {_non_db_command!r}. "
-            f"Supported values: {', '.join(sorted(_KNOWN_NON_DB_COMMANDS))}."
-        )
-    _db_url = database_url or "postgresql://dummy:dummy@localhost:5432/dummy"
-elif _runtime_db_url:
-    _db_url = _runtime_db_url
-elif _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
-    # Explicit non-serving dev/test or retired-recovery opt-out: bridge to DATABASE_URL
-    if not database_url:
-        raise ValueError(
-            "DATABASE_URL environment variable is not set or is empty. "
-            "QUICKSCALE_ALLOW_BYPASSRLS=1 requires the superuser "
-            "DATABASE_URL for privileged operations. "
-            "Ensure the database service is linked to your app service."
-        )
-    _db_url = database_url
-else:
-    # Runtime serving: fail closed — RUNTIME_DATABASE_URL is required
-    raise ValueError(
-        "RUNTIME_DATABASE_URL is required for runtime serving. "
-        "The restricted NOSUPERUSER/NOBYPASSRLS database role connection "
-        "string must be provided when serving requests. "
-        "Set RUNTIME_DATABASE_URL in your environment to the runtime role's "
-        "PostgreSQL connection string. "
-        "For privileged commands, the deployment script (start.sh) "
-        "automatically sets QUICKSCALE_PRIVILEGED_COMMAND and clears "
-        "RUNTIME_DATABASE_URL so the superuser DATABASE_URL is used instead."
-    )
+# The command-mode contract — mutual exclusivity, the supported-command
+# allowlists, and the privileged/runtime selection — lives in the versioned
+# QuickScale runtime settings facade, so every generated project and launcher
+# enforces the same fail-closed rules.
+_db_url = resolve_runtime_database_url(
+    runtime_database_url=_runtime_db_url,
+    database_url=database_url,
+    privileged_command=_privileged_command,
+    non_db_command=_non_db_command,
+    allow_bypass_rls=os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1",
+)
 
 DATABASES = {
     "default": cast(

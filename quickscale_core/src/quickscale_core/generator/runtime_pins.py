@@ -10,6 +10,8 @@ All templates that reference a pin use the same value from this module,
 so a single change here propagates to every emitted file.
 """
 
+from quickscale_core.version import __version__ as CORE_VERSION
+
 # ── Python ──────────────────────────────────────────────────────────
 # The Python major.minor version used in CI matrix, Docker tags,
 # MyPy configuration, and the Poetry constraint.
@@ -30,3 +32,16 @@ DJANGO_CI_MATRIX_VERSION: str = "6.0"
 POSTGRES_VERSION: str = "18"
 # Docker image tag for the PostgreSQL Alpine base image.
 POSTGRES_DOCKER_TAG: str = f"{POSTGRES_VERSION}-alpine"
+
+
+# ── QuickScale core (lockstep pin) ──────────────────────────────────
+# Every generated project depends on the same major.minor line of
+# quickscale-core as the generator that produced it, so the runtime settings
+# facade ships with the project that imports it.
+def _core_lockstep_pin(version: str) -> str:
+    """Return the bounded lockstep pin for a QuickScale core version."""
+    major, minor, *_ = version.split(".")
+    return f">={major}.{minor}.0,<{major}.{int(minor) + 1}.0"
+
+
+QUICKSCALE_CORE_PIN: str = _core_lockstep_pin(CORE_VERSION)

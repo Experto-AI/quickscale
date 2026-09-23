@@ -47,9 +47,16 @@ The compatibility preflight uses these effective runtime sources while preservin
 |---|---|---|---|
 | Fresh-first | donor | recipient | recipient |
 
-Both command allowlists must be immutable literal `frozenset(...)` definitions. Every use of
-`QUICKSCALE_PRIVILEGED_COMMAND` or `QUICKSCALE_NON_DB_COMMAND` in the effective launchers must use
-a supported static assignment form. Computed, continued, concatenated, unknown, or otherwise
+The donor-owned `settings/production.py` must call the versioned QuickScale runtime settings
+facade (`from quickscale_core.runtime.settings import resolve_runtime_database_url`) instead of
+carrying an inline copy of the command-mode contract; the facade declares the command allowlists
+once. The preflight is a canonical-shape whitelist: the four inputs must be read through their
+canonical forms (`config("RUNTIME_DATABASE_URL", default=None)`, `config("DATABASE_URL",
+default=None)`, `os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")`,
+`os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")`), passed to the facade call by name, and
+`DATABASES["default"]` must parse the call's result — with no later statement superseding it.
+Every use of `QUICKSCALE_PRIVILEGED_COMMAND` or `QUICKSCALE_NON_DB_COMMAND` in the effective
+launchers must use a supported static assignment form. Computed, continued, concatenated, unknown, or otherwise
 unresolved values, persistent Docker `ENV` assignments, mismatched `manage.py` arguments, and
 privileged commands that do not blank `RUNTIME_DATABASE_URL` block the workflow before any project
 file changes. Unguarded `manage.py` invocations of commands covered by those allowlists also block;
@@ -565,7 +572,7 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Fresh-first report confirms App.tsx, custom pages/components, utilities, Django files, and missing path deps were copied
 [ ] Tool report contains seven passed verification results: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
 [ ] Local smoke-test completed — existing pages intact and new module pages work
-[ ] Effective donor-owned production settings contain the complete SA68 env-pair bridge and both immutable command allowlists before the current maintainer tool is invoked
+[ ] Effective donor-owned production settings call `quickscale_core.runtime.settings.resolve_runtime_database_url` before the current maintainer tool is invoked
 [ ] Result committed or staged in the target repo
 [ ] Module env vars set in Railway (storage, notifications if added)
 [ ] Merged to main and Railway deployment confirmed
@@ -617,15 +624,15 @@ The final design uses two explicit one-shot command env vars — `QUICKSCALE_PRI
 The Redis-dependent launcher-first sequence used during SA63/SA68 delivery is
 historical deployment context, not a compatibility path accepted by the current
 maintainer tool. The tool now requires the effective donor-owned
-`settings/production.py` to define both immutable `_KNOWN_*` command allowlists
-and implement the complete env-pair bridge before the migration starts,
-regardless of whether `REDIS_URL` is set.
+`settings/production.py` to call the `quickscale_core.runtime.settings` facade
+(`resolve_runtime_database_url`) before the migration starts, regardless of
+whether `REDIS_URL` is set.
 
 A pre-SA68 production settings file that still uses the former
 `"migrate" in sys.argv` branch is therefore incompatible with the current
-command. Reconcile that donor-owned file first by adopting the current env-pair
-definitions and control flow while preserving its unrelated site configuration;
-do not replace it wholesale. Commit and verify that bridge reconciliation before
+command. Reconcile that donor-owned file first by importing and calling the
+runtime settings facade while preserving its unrelated site configuration;
+do not replace it wholesale. Commit and verify that facade adoption before
 invoking `make beta-migrate-fresh`. Do not use
 Redis presence to justify a launcher-first run of the current automation.
 

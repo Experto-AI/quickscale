@@ -125,7 +125,7 @@ preserved invariants are in
 
 The DR engine split is a maintainer-side code reorganization. The `backups` module now imports from `quickscale-core` at runtime.
 
-> **Important:** `quickscale update` updates module subtree code only and does not add root dependency constraints. The generated project's `pyproject.toml` template does not include `quickscale-core` by default. However, `quickscale apply` syncs the `quickscale-core` dependency entry from the embedded module manifest into the root `pyproject.toml`. The synced entry uses a repo-relative path reference (`{path = "../../quickscale_core"}`) that resolves in the maintainer layout but may not be valid for standalone projects. Those projects must replace or satisfy the synced entry with a resolvable source before `poetry install` succeeds.
+> **Important:** `quickscale update` updates module subtree code only and does not add root dependency constraints. Current fresh generated projects already declare the bounded `quickscale-core` lockstep pin in `pyproject.toml`, so nothing needs to be added for them. Older projects generated before the pin was emitted do not carry `quickscale-core`; for those, `quickscale apply` adds the bounded version spec from the embedded module manifest (`quickscale-core = ">=X.Y.0,<X.(Y+1).0"`) to the root `pyproject.toml`. That spec must resolve from a package index, or from the local wheelhouse a locally installed CLI stages, before `poetry install` succeeds — a project pinned to a core version the index does not carry must be given a resolvable source first. The developer-only path dependency in the module's own `pyproject.toml` is rewritten to the same bounded spec when the path does not exist inside the generated project.
 
 ### Steps
 
@@ -168,7 +168,7 @@ The following surfaces are preserved:
 
 ### New Generated Projects
 
-Fresh generated projects that include the `backups` module will receive the updated module code through `quickscale apply`. The `apply` command syncs the `quickscale-core` dependency entry from the module manifest into the root `pyproject.toml`, but the synced path reference may need adjustment for the new project's layout — see Step 2 above.
+Fresh generated projects that include the `backups` module will receive the updated module code through `quickscale apply`. A fresh project already declares the bounded `quickscale-core` lockstep pin, so the module manifest's `quickscale-core` requirement is already satisfied; projects generated before the pin was emitted receive the synced bounded spec instead, which must resolve from a package index or the staged local wheelhouse — see Step 2 above.
 
 ## Backward Compatibility
 

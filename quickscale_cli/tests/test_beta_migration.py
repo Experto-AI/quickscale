@@ -144,34 +144,18 @@ def _write_project(
         "import dj_database_url\n"
         "import os\n"
         "from decouple import config\n"
+        "from quickscale_core.runtime.settings import resolve_runtime_database_url\n"
         '\n_runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)\n'
         'database_url = config("DATABASE_URL", default=None)\n'
         '_privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")\n'
         '_non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")\n'
-        '_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})\n'
-        '_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})\n'
-        "if _privileged_command and _non_db_command:\n"
-        '    raise ValueError("command modes are mutually exclusive")\n'
-        "if _privileged_command:\n"
-        "    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:\n"
-        '        raise ValueError("unknown privileged command")\n'
-        '    if _runtime_db_url is None or _runtime_db_url != "":\n'
-        '        raise ValueError("privileged command requires blank runtime URL")\n'
-        "    if not database_url:\n"
-        '        raise ValueError("DATABASE_URL is required")\n'
-        "    _db_url = database_url\n"
-        "elif _non_db_command:\n"
-        "    if _non_db_command not in _KNOWN_NON_DB_COMMANDS:\n"
-        '        raise ValueError("unknown non-database command")\n'
-        '    _db_url = database_url or "postgresql://dummy:dummy@localhost/dummy"\n'
-        "elif _runtime_db_url:\n"
-        "    _db_url = _runtime_db_url\n"
-        'elif _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":\n'
-        "    if not database_url:\n"
-        '        raise ValueError("DATABASE_URL is required")\n'
-        "    _db_url = database_url\n"
-        "else:\n"
-        '    raise ValueError("RUNTIME_DATABASE_URL is required")\n'
+        "_db_url = resolve_runtime_database_url(\n"
+        "    runtime_database_url=_runtime_db_url,\n"
+        "    database_url=database_url,\n"
+        "    privileged_command=_privileged_command,\n"
+        "    non_db_command=_non_db_command,\n"
+        '    allow_bypass_rls=os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1",\n'
+        ")\n"
         'DATABASES = {"default": dj_database_url.parse(_db_url)}\n'
         f'DEFAULT_FROM_EMAIL = "noreply@{slug}.com"\n'
         f'LOGGER = "{package}"\n'
@@ -561,59 +545,6 @@ def test_fresh_first_missing_path_dependency_target_blocks_preflight(
     assert any(
         "quickscale-module-blog" in blocker and "missing recipient directory" in blocker
         for blocker in report.blockers
-    )
-
-
-@pytest.mark.parametrize(
-    "privileged_allowlist",
-    [
-        'frozenset({"migrate"})',
-        'frozenset({"migrate", "createcachetable", "migrate_billing_to_orgs"})',
-    ],
-)
-def test_runtime_privileged_allowlist_skew_blocks_before_mutation(
-    tmp_path: Path,
-    privileged_allowlist: str,
-) -> None:
-    """Production settings must declare exactly the fixed privileged commands."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    settings_path.write_text(
-        settings_path.read_text().replace(
-            'frozenset({"migrate", "createcachetable"})', privileged_allowlist
-        )
-    )
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert report.verification_results == []
-    assert any("must contain exactly" in blocker for blocker in report.blockers)
-    assert any(
-        check.name == "runtime-launcher-settings-compatibility"
-        and check.status == "failed"
-        for check in report.preflight_checks
     )
 
 
@@ -1037,676 +968,10 @@ def test_docker_env_runtime_command_forms_block_before_mutation(
     assert any(expected_blocker in blocker for blocker in report.blockers)
 
 
-def test_nonliteral_runtime_allowlist_blocks_before_mutation(
-    tmp_path: Path,
-) -> None:
-    """Computed production command allowlists must fail closed."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    settings_path.write_text(
-        settings_path.read_text().replace(
-            '_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})',
-            "_KNOWN_PRIVILEGED_COMMANDS = load_commands()",
-        )
-    )
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert report.verification_results == []
-    assert any(
-        "_KNOWN_PRIVILEGED_COMMANDS must be a literal collection" in blocker
-        for blocker in report.blockers
-    )
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        (
-            "\nif ENABLE_EXTRA_COMMANDS:\n"
-            "    _KNOWN_PRIVILEGED_COMMANDS = load_commands()\n"
-        ),
-        "\n_KNOWN_PRIVILEGED_COMMANDS |= load_commands()\n",
-        "\n_KNOWN_PRIVILEGED_COMMANDS.clear()\n",
-        ("\nglobals()['_KNOWN_' + 'PRIVILEGED_COMMANDS'] = frozenset()\n"),
-        (
-            "\nimport sys\n"
-            "sys.modules[__name__]._KNOWN_PRIVILEGED_COMMANDS = frozenset()\n"
-        ),
-        (
-            "\nnamespace = globals\n"
-            "namespace()['_KNOWN_' + 'PRIVILEGED_COMMANDS'] = frozenset()\n"
-        ),
-        (
-            "\nnamespace = globals\n"
-            'namespace()["".join(["_KNOWN_PRIVILEGED", "_COMMANDS"])] = '
-            'frozenset({"createcachetable"})\n'
-        ),
-        "\nallowlist_alias = _KNOWN_PRIVILEGED_COMMANDS\n",
-        (
-            "\nimport sys\n"
-            "sys.modules[__name__].__dict__.update("
-            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-        ),
-        (
-            "\nimport sys\n"
-            "sys.modules.get(__name__).__dict__.update("
-            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-        ),
-        (
-            "\nfrom sys import modules as module_registry\n"
-            "module_registry.get(__name__).__dict__.update("
-            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-        ),
-        (
-            "\nimport sys\n"
-            "module_name = __name__\n"
-            "sys.modules.get(module_name).__dict__.update("
-            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-        ),
-        (
-            "\nimport sys\n"
-            "module_registry = sys.modules\n"
-            "module_lookup = module_registry.get\n"
-            "current_module = module_lookup(__name__)\n"
-            "current_module.__dict__.update("
-            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-        ),
-        (
-            "\nimport sys\n"
-            'module_registry = getattr(sys, "modules")\n'
-            "current_module = module_registry[__name__]\n"
-            'setattr(current_module, "_KNOWN_PRIVILEGED_COMMANDS", frozenset())\n'
-        ),
-        (
-            "\nimport sys\n"
-            'module_registry = getattr(sys, "modules")\n'
-            'module_lookup = getattr(module_registry, "get")\n'
-            "current_module = module_lookup(__name__)\n"
-            "current_module.__dict__.update("
-            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-        ),
-        (
-            "\nimport importlib\n"
-            "module_loader = importlib.import_module\n"
-            "current_module = module_loader(__name__)\n"
-            "current_module.__dict__.update("
-            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-        ),
-        (
-            "\nfrom importlib import import_module as load_module\n"
-            "loader = load_module\n"
-            "current_module = loader(__name__)\n"
-            "current_module._KNOWN_PRIVILEGED_COMMANDS = frozenset()\n"
-        ),
-        (
-            "\nimport importlib\n"
-            'load_module = getattr(importlib, "import_module")\n'
-            "current_module = load_module(__name__)\n"
-            "current_module._KNOWN_PRIVILEGED_COMMANDS = frozenset()\n"
-        ),
-        (
-            "\ndef capture_module_namespace(namespace=locals()):\n"
-            "    return namespace\n"
-            "capture_module_namespace().update("
-            '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-        ),
-        (
-            "\nfrom builtins import setattr as mutate\n"
-            "import sys\n"
-            "mutate(sys.modules[__name__], "
-            '"".join(["_KNOWN_PRIVILEGED", "_COMMANDS"]), frozenset())\n'
-        ),
-        (
-            "\nimport builtins\n"
-            "import sys\n"
-            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
-            'mutate = getattr(builtins, "set" + "attr")\n'
-            "mutate(sys.modules[__name__], target_name, frozenset())\n"
-        ),
-        (
-            "\nimport sys\n"
-            "sys.modules[__name__].__setattr__("
-            '"_KNOWN_" + "PRIVILEGED_COMMANDS", frozenset())\n'
-        ),
-        (
-            '\n__builtins__["exec"](\'_KNOWN_PRIVILEGED_COMMANDS = '
-            'frozenset({"migrate"})\')\n'
-        ),
-        (
-            '\n__builtins__.get("exec")(\'_KNOWN_PRIVILEGED_COMMANDS = '
-            'frozenset({"unsupported_migration"})\')\n'
-        ),
-        (
-            "\nb = __builtins__\n"
-            'mutate = b.get("exec")\n'
-            "mutate('_KNOWN_PRIVILEGED_COMMANDS = "
-            'frozenset({"unsupported_migration"})\')\n'
-        ),
-        (
-            "\nimport builtins as b\n"
-            "import sys\n"
-            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
-            'mutate = b.__getattribute__("set" + "attr")\n'
-            "mutate(sys.modules[__name__], target_name, frozenset())\n"
-        ),
-        (
-            "\nimport builtins as b\n"
-            'runner = b.__getattribute__("ex" + "ec")\n'
-            "runner('_KNOWN_PRIVILEGED_COMMANDS = "
-            'frozenset({"unsupported_migration"})\')\n'
-        ),
-        (
-            "\nimport sys\n"
-            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
-            "lookup = object.__getattribute__\n"
-            'mutate = lookup(__import__("builtins"), "set" + "attr")\n'
-            "mutate(sys.modules[__name__], target_name, frozenset())\n"
-        ),
-        (
-            "\nimport sys\n"
-            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
-            'lookup = getattr(object, "__getattribute__")\n'
-            'mutate = lookup(__import__("builtins"), "set" + "attr")\n'
-            "mutate(sys.modules[__name__], target_name, frozenset())\n"
-        ),
-        (
-            "\nclass Mutator:\n"
-            "    def __eq__(self, namespace):\n"
-            "        namespace.update(\n"
-            '            {"_KNOWN_PRIVILEGED_COMMANDS": frozenset({"unsupported_migration"})}\n'
-            "        )\n"
-            "        return False\n"
-            "\nMutator() == globals()\n"
-        ),
-        (
-            "\nimport operator\n"
-            "import sys\n"
-            'module_name = "".join(["built", "ins"])\n'
-            'helper_name = "set" + "attr"\n'
-            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
-            "builtins_module = __import__(module_name)\n"
-            "getter = operator.attrgetter(helper_name)\n"
-            "mutate = getter(builtins_module)\n"
-            "mutate(sys.modules[__name__], target_name, frozenset())\n"
-        ),
-        (
-            "\nimport sys\n"
-            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
-            "namespace = sys._getframe().f_globals\n"
-            "namespace.update(\n"
-            '    {target_name: frozenset({"unsupported_migration"})}\n'
-            ")\n"
-        ),
-        (
-            "\nimport builtins\n"
-            'target_name = "_KNOWN_PRIVILEGED" + "_COMMANDS"\n'
-            "builtins.globals()[target_name] = "
-            'frozenset({"unsupported_migration"})\n'
-        ),
-        (
-            "\ndef replace_commands():\n"
-            "    global _KNOWN_PRIVILEGED_COMMANDS\n"
-            "    _KNOWN_PRIVILEGED_COMMANDS = "
-            'frozenset({"unsupported_migration"})\n'
-            "replace_commands()\n"
-        ),
-        (
-            "\ndef widen_commands():\n"
-            "    global _KNOWN_PRIVILEGED_COMMANDS\n"
-            '    _KNOWN_PRIVILEGED_COMMANDS |= {"unsupported_migration"}\n'
-            "widen_commands()\n"
-        ),
-    ],
-)
-def test_runtime_allowlist_reassignment_or_mutation_blocks_before_mutation(
-    tmp_path: Path,
-    mutation: str,
-) -> None:
-    """An allowlist must have one immutable literal definition and no mutations."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    settings_path.write_text(settings_path.read_text() + mutation)
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert report.verification_results == []
-    assert any("_KNOWN_PRIVILEGED_COMMANDS" in blocker for blocker in report.blockers)
-
-
-def test_concrete_importlib_current_module_mutation_blocks_before_mutation(
-    tmp_path: Path,
-) -> None:
-    """The effective settings module path must count as a current-module lookup."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    settings_path.write_text(
-        settings_path.read_text()
-        + "\nimport importlib\n"
-        + f'current_module = importlib.import_module("{package}.settings.production")\n'
-        + "current_module.__dict__.update("
-        + '{"_KNOWN_PRIVILEGED_COMMANDS": frozenset()})\n'
-    )
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert any("current-module lookup" in blocker for blocker in report.blockers)
-
-
-@pytest.mark.parametrize(
-    ("old_bridge", "replacement"),
-    [
-        (
-            "if _privileged_command and _non_db_command:\n"
-            '    raise ValueError("command modes are mutually exclusive")\n',
-            "",
-        ),
-        (
-            "if _privileged_command and _non_db_command:\n"
-            '    raise ValueError("command modes are mutually exclusive")\n',
-            "if False and _privileged_command and _non_db_command:\n"
-            '    raise ValueError("command modes are mutually exclusive")\n',
-        ),
-        (
-            "    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:\n"
-            '        raise ValueError("unknown privileged command")\n',
-            "    if False and _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:\n"
-            '        raise ValueError("unknown privileged command")\n',
-        ),
-        (
-            '    if _runtime_db_url is None or _runtime_db_url != "":\n'
-            '        raise ValueError("privileged command requires blank runtime URL")\n',
-            '    if _runtime_db_url is not None and _runtime_db_url == "":\n'
-            '        raise ValueError("privileged command requires blank runtime URL")\n',
-        ),
-        (
-            '    _db_url = database_url or "postgresql://dummy:dummy@localhost/dummy"\n',
-            '    _db_url = "postgresql://dummy:dummy@localhost/dummy" or database_url\n',
-        ),
-        (
-            "elif _non_db_command:\n"
-            "    if _non_db_command not in _KNOWN_NON_DB_COMMANDS:\n"
-            '        raise ValueError("unknown non-database command")\n'
-            '    _db_url = database_url or "postgresql://dummy:dummy@localhost/dummy"\n'
-            "elif _runtime_db_url:\n"
-            "    _db_url = _runtime_db_url\n",
-            "elif _runtime_db_url:\n"
-            "    _db_url = _runtime_db_url\n"
-            "elif _non_db_command:\n"
-            "    if _non_db_command not in _KNOWN_NON_DB_COMMANDS:\n"
-            '        raise ValueError("unknown non-database command")\n'
-            '    _db_url = database_url or "postgresql://dummy:dummy@localhost/dummy"\n',
-        ),
-        (
-            "elif _runtime_db_url:\n    _db_url = _runtime_db_url\n",
-            "elif _runtime_db_url:\n    _db_url = database_url\n",
-        ),
-        (
-            'elif _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":\n',
-            'elif False and _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":\n',
-        ),
-    ],
-)
-def test_incomplete_runtime_database_bridge_blocks_before_mutation(
-    tmp_path: Path,
-    old_bridge: str,
-    replacement: str,
-) -> None:
-    """Incomplete or reordered database-role selection must fail closed."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    settings_text = settings_path.read_text()
-    assert old_bridge in settings_text
-    settings_path.write_text(settings_text.replace(old_bridge, replacement))
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert any("runtime" in blocker.lower() for blocker in report.blockers)
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        '\nos.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"\n',
-        ('\nenvironment = os.environ\nenvironment["RUNTIME_DATABASE_URL"] = ""\n'),
-        '\nos.environ.update({"QUICKSCALE_PRIVILEGED_COMMAND": "migrate"})\n',
-        '\nos.putenv("DATABASE_URL", "postgresql://wrong")\n',
-        (
-            "\nfrom os import environ as process_environment\n"
-            'process_environment["DATABASE_URL"] = "postgresql://wrong"\n'
-        ),
-        (
-            "\nfrom os import putenv as mutate_process_environment\n"
-            'mutate_process_environment("DATABASE_URL", "postgresql://wrong")\n'
-        ),
-        (
-            "\ndef mutate_runtime_environment():\n"
-            '    os.environ.pop("QUICKSCALE_NON_DB_COMMAND", None)\n'
-            "mutate_runtime_environment()\n"
-        ),
-        (
-            "\ndef mutate_runtime_environment(environment):\n"
-            '    environment["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"\n'
-            "mutate_runtime_environment(os.environ)\n"
-        ),
-        (
-            '\nenvironment = os.__getattribute__("environ")\n'
-            'environment.__setitem__("DATABASE_URL", "postgresql://wrong")\n'
-        ),
-        (
-            '\nos.environ.__getattribute__("update")('
-            '{"DATABASE_URL": "postgresql://wrong"})\n'
-        ),
-        '\nos.__getattribute__("putenv")("RUNTIME_DATABASE_URL", "")\n',
-        '\nsetattr(os, "environ", {})\n',
-        (
-            "\ndef mutate_runtime_environment(environment=os.environ):\n"
-            '    environment["QUICKSCALE_NON_DB_COMMAND"] = "collectstatic"\n'
-            "mutate_runtime_environment()\n"
-        ),
-        (
-            "\ndef mutate_runtime_environment(wrapper):\n"
-            '    wrapper[0]["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"\n'
-            "mutate_runtime_environment([os.environ])\n"
-        ),
-        (
-            "\ndef mutate_runtime_environment():\n"
-            "    [None for os in ()]\n"
-            '    os.environ["DATABASE_URL"] = "postgresql://wrong"\n'
-            "mutate_runtime_environment()\n"
-        ),
-        (
-            "\ndef mutate_runtime_environment():\n"
-            '    [environment.__setitem__("DATABASE_URL", "postgresql://wrong") '
-            "for environment in [os.environ]]\n"
-            "mutate_runtime_environment()\n"
-        ),
-        (
-            "\nclass RuntimeMutation:\n"
-            '    os.environ["RUNTIME_DATABASE_URL"] = ""\n'
-            "    os = object()\n"
-        ),
-        (
-            "\nclass RuntimeMutation:\n"
-            "    environment = os.environ\n"
-            '    environment["RUNTIME_DATABASE_URL"] = ""\n'
-        ),
-        (
-            "\ndef mutate_runtime_environment():\n"
-            "    environment, = (os.environ,)\n"
-            '    environment["RUNTIME_DATABASE_URL"] = ""\n'
-            "mutate_runtime_environment()\n"
-        ),
-        (
-            "\ndef mutate_runtime_environment():\n"
-            "    dict = lambda environment: environment\n"
-            "    def mutate_from_closure():\n"
-            "        environment = dict(os.environ)\n"
-            '        environment["RUNTIME_DATABASE_URL"] = ""\n'
-            "    mutate_from_closure()\n"
-            "mutate_runtime_environment()\n"
-        ),
-        (
-            "\n[(environment := os.environ) for _ in [0]]\n"
-            'environment["RUNTIME_DATABASE_URL"] = ""\n'
-        ),
-        (
-            "\ndef mutate_runtime_environment():\n"
-            "    [(environment := os.environ) for _ in [0]]\n"
-            '    environment["RUNTIME_DATABASE_URL"] = ""\n'
-            "mutate_runtime_environment()\n"
-        ),
-        ('\n(environment := os.environ)["RUNTIME_DATABASE_URL"] = ""\n'),
-    ],
-)
-def test_runtime_database_environment_mutation_blocks_before_migration(
-    tmp_path: Path,
-    mutation: str,
-) -> None:
-    """Settings must not mutate inputs after the validator extracts the bridge."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    settings_path.write_text(settings_path.read_text() + mutation)
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert any("environment" in blocker.lower() for blocker in report.blockers)
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        '\nDATABASES |= {"default": dj_database_url.parse(database_url)}\n',
-        "\ndel DATABASES\n",
-        "\ndatabase_alias = DATABASES\ndatabase_alias.clear()\n",
-        '\nDATABASES["default"] = dj_database_url.parse(database_url)\n',
-        '\nDATABASES = {"default": dj_database_url.parse(database_url)}\n',
-        (
-            "\ndef replace_databases():\n"
-            "    global DATABASES\n"
-            '    DATABASES = {"default": dj_database_url.parse(database_url)}\n'
-            "replace_databases()\n"
-        ),
-        (
-            "\ndef mutate_databases():\n"
-            "    database_alias = DATABASES\n"
-            "    database_alias.clear()\n"
-            "mutate_databases()\n"
-        ),
-        (
-            "\nclass MutateDatabases:\n"
-            '    DATABASES |= {"default": dj_database_url.parse(database_url)}\n'
-        ),
-        '\n[(DATABASES := {"overwritten": True}) for _ in [0]]\n',
-    ],
-)
-def test_runtime_databases_reassignment_or_mutation_blocks_before_migration(
-    tmp_path: Path,
-    mutation: str,
-) -> None:
-    """The canonical DATABASES bridge must remain the sole immutable binding."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    settings_path.write_text(settings_path.read_text() + mutation)
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert any("DATABASES" in blocker for blocker in report.blockers)
-
-
-@pytest.mark.parametrize(
-    "binding_source",
-    [
-        '    _db_url = "postgresql://other.invalid/other"\n',
-        "    import sys as _db_url\n",
-    ],
-)
-def test_nested_global_selected_database_url_write_blocks_before_migration(
-    tmp_path: Path,
-    binding_source: str,
-) -> None:
-    """Nested global writes must not retarget the selected database URL."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    database_assignment = 'DATABASES = {"default": dj_database_url.parse(_db_url)}\n'
-    settings_text = settings_path.read_text()
-    assert database_assignment in settings_text
-    settings_path.write_text(
-        settings_text.replace(
-            database_assignment,
-            "def retarget_selected_url():\n"
-            "    global _db_url\n"
-            + binding_source
-            + "retarget_selected_url()\n"
-            + database_assignment,
-        )
-    )
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert any(
-        "selected runtime database URL" in blocker for blocker in report.blockers
-    )
-
-
 def test_unrelated_custom_production_settings_are_allowed(
     tmp_path: Path,
 ) -> None:
-    """Donor-owned integrations must not be rejected by allowlist extraction."""
+    """Donor-owned integrations must not be rejected by the facade check."""
     donor = _write_project(
         tmp_path / "donor",
         slug="fresh-donor",
@@ -1724,64 +989,13 @@ def test_unrelated_custom_production_settings_are_allowed(
     settings_path = settings_root / package / "settings" / "production.py"
     settings_path.write_text(
         settings_path.read_text()
-        + "\nimport builtins\n"
-        + "import sys\n"
-        + "import sentry_sdk\n"
-        + "from os import environ as process_environment\n"
-        + "from os import putenv as mutate_process_environment\n"
+        + "\nimport sentry_sdk\n"
         + "from sentry_sdk.integrations.django import DjangoIntegration\n"
-        + "def custom_option(frozenset):\n"
-        + '    return getattr(frozenset, "value", None)\n'
         + 'SENTRY_DSN = "https://public@example.invalid/1"\n'
-        + 'CUSTOM_VALUE = getattr(object(), "missing", None)\n'
-        + 'CUSTOM_BUILTIN_VALUE = builtins.getattr(object(), "missing", None)\n'
-        + 'SENTRY_MODULE = sys.modules.get("sentry_sdk")\n'
         + "def build_request_context(request):\n"
-        + '    config = {"enabled": True}\n'
-        + '    os = "local-only"\n'
-        + '    dj_database_url = "local-only"\n'
         + '    _KNOWN_PRIVILEGED_COMMANDS = {"local-only"}\n'
-        + "    context = dict(locals())\n"
-        + "    context.update(vars())\n"
-        + "    context.update(builtins.locals())\n"
-        + "    return context\n"
-        + "class CustomEnvironment:\n"
-        + "    def __init__(self):\n"
-        + "        self.environ = {}\n"
-        + "def annotate_local_environment():\n"
-        + "    os = CustomEnvironment()\n"
-        + '    os.environ["DATABASE_URL"] = "display-only"\n'
-        + "    return os.environ\n"
-        + "LOCAL_ENVIRONMENT = annotate_local_environment()\n"
-        + "class LocalClassEnvironment:\n"
-        + "    os = CustomEnvironment()\n"
-        + '    os.environ["DATABASE_URL"] = "display-only"\n'
-        + "def build_local_mapping():\n"
-        + "    process_environment = {}\n"
-        + '    process_environment["DATABASE_URL"] = "display-only"\n'
-        + "    return process_environment\n"
-        + "LOCAL_MAPPING = build_local_mapping()\n"
-        + "def build_local_databases():\n"
-        + '    [(DATABASES := {"local": True}) for _ in [0]]\n'
-        + "    return DATABASES\n"
-        + "LOCAL_DATABASES = build_local_databases()\n"
-        + "def build_local_frozenset():\n"
-        + "    [(frozenset := lambda values: set(values)) for _ in [0]]\n"
-        + "    return frozenset\n"
-        + "LOCAL_FROZENSET = build_local_frozenset()\n"
-        + "def record_local_mutation():\n"
-        + "    mutate_process_environment = lambda *_args: None\n"
-        + '    mutate_process_environment("DATABASE_URL", "display-only")\n'
-        + "record_local_mutation()\n"
+        + "    return dict(locals())\n"
         + 'os.environ.setdefault("SENTRY_ENVIRONMENT", "production")\n'
-        + "environment = os.environ\n"
-        + 'environment.update({"CUSTOM_INTEGRATION_MODE": "enabled"})\n'
-        + "ENVIRONMENT_SNAPSHOT = dict(os.environ)\n"
-        + "CHILD_ENVIRONMENT = os.environ.copy()\n"
-        + "def annotate_custom_mapping(environment):\n"
-        + '    environment["DATABASE_URL"] = "display-only"\n'
-        + "    return environment\n"
-        + "CUSTOM_MAPPING = annotate_custom_mapping({})\n"
         + "if SENTRY_DSN:\n"
         + "    sentry_sdk.init(dsn=SENTRY_DSN, integrations=[DjangoIntegration()])\n"
     )
@@ -1797,6 +1011,202 @@ def test_unrelated_custom_production_settings_are_allowed(
 
     assert report.status == "ready"
     assert report.changed_files == []
+
+
+_INLINE_CONTRACT_PRODUCTION_SETTINGS = (
+    '"""Inline command-mode contract (pre-SA206 donor copy)."""\n'
+    "import dj_database_url\n"
+    "import os\n"
+    "from decouple import config\n"
+    '\n_runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)\n'
+    'database_url = config("DATABASE_URL", default=None)\n'
+    '_privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")\n'
+    '_non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")\n'
+    '_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})\n'
+    '_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})\n'
+    "if _privileged_command:\n"
+    "    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:\n"
+    '        raise ValueError("unknown privileged command")\n'
+    "    _db_url = database_url\n"
+    "elif _non_db_command:\n"
+    "    _db_url = database_url or "
+    '"postgresql://dummy:dummy@localhost:5432/dummy"\n'
+    "elif _runtime_db_url:\n"
+    "    _db_url = _runtime_db_url\n"
+    "else:\n"
+    '    raise ValueError("RUNTIME_DATABASE_URL is required")\n'
+    'DATABASES = {"default": dj_database_url.parse(_db_url)}\n'
+)
+
+
+def test_inline_command_contract_blocks_before_mutation(
+    tmp_path: Path,
+) -> None:
+    """Donor settings that keep the retired inline contract must be refused."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_path = donor / "fresh_donor" / "settings" / "production.py"
+    settings_path.write_text(_INLINE_CONTRACT_PRODUCTION_SETTINGS)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert any(
+        "does not select its database through the QuickScale runtime settings facade"
+        in blocker
+        for blocker in report.blockers
+    )
+    assert any(
+        check.name == "runtime-launcher-settings-compatibility"
+        and check.status == "failed"
+        for check in report.preflight_checks
+    )
+
+
+_FACADE_CALL_IN_DEAD_FUNCTION_SETTINGS = (
+    '"""Facade call inside an unused function."""\n'
+    "import dj_database_url\n"
+    "from decouple import config\n"
+    "from quickscale_core.runtime.settings import resolve_runtime_database_url\n"
+    "\n"
+    "def unused_helper():\n"
+    "    return resolve_runtime_database_url(\n"
+    '        runtime_database_url=None, database_url=None, privileged_command=""\n'
+    "    )\n"
+    "\n"
+    'database_url = config("DATABASE_URL", default=None)\n'
+    'DATABASES = {"default": dj_database_url.parse(database_url)}\n'
+)
+
+_FACADE_SELECTION_NOT_CONSUMED_SETTINGS = (
+    '"""Facade selection assigned but not used for DATABASES."""\n'
+    "import dj_database_url\n"
+    "from decouple import config\n"
+    "from quickscale_core.runtime.settings import resolve_runtime_database_url\n"
+    "\n"
+    'database_url = config("DATABASE_URL", default=None)\n'
+    "_db_url = resolve_runtime_database_url(\n"
+    '    runtime_database_url=None, database_url=database_url, privileged_command=""\n'
+    ")\n"
+    'DATABASES = {"default": dj_database_url.parse(database_url)}\n'
+)
+
+
+_FACADE_SELECTION_OUTRANKED_SETTINGS = (
+    '"""Facade selection mentioned but another URL wins for the default."""\n'
+    "import dj_database_url\n"
+    "from decouple import config\n"
+    "from quickscale_core.runtime.settings import resolve_runtime_database_url\n"
+    "\n"
+    'database_url = config("DATABASE_URL", default=None)\n'
+    "_db_url = resolve_runtime_database_url(\n"
+    '    runtime_database_url=None, database_url=database_url, privileged_command=""\n'
+    ")\n"
+    'DATABASES = {"default": database_url or _db_url}\n'
+)
+
+
+@pytest.mark.parametrize(
+    "settings_text",
+    [
+        _FACADE_CALL_IN_DEAD_FUNCTION_SETTINGS,
+        _FACADE_SELECTION_NOT_CONSUMED_SETTINGS,
+        _FACADE_SELECTION_OUTRANKED_SETTINGS,
+    ],
+    ids=["call-in-dead-function", "selection-not-consumed", "selection-outranked"],
+)
+def test_facade_call_must_select_databases(tmp_path: Path, settings_text: str) -> None:
+    """A syntactic facade call that does not govern DATABASES must be refused."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_path = donor / "fresh_donor" / "settings" / "production.py"
+    settings_path.write_text(settings_text)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "does not select its database through the QuickScale runtime settings facade"
+        in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_module_attribute_facade_call_is_accepted(tmp_path: Path) -> None:
+    """The facade check accepts the module-attribute call form."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_path = donor / "fresh_donor" / "settings" / "production.py"
+    settings_path.write_text(
+        settings_path.read_text()
+        .replace(
+            "from quickscale_core.runtime.settings import "
+            "resolve_runtime_database_url\n",
+            "import quickscale_core.runtime.settings as runtime_settings\n",
+        )
+        .replace(
+            "_db_url = resolve_runtime_database_url(",
+            "_db_url = runtime_settings.resolve_runtime_database_url(",
+        )
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "ready"
 
 
 def test_dockerfile_package_skew_blocks_before_mutation(
@@ -1923,63 +1333,6 @@ def test_required_collectstatic_must_be_in_effective_final_stage(
     assert report.changed_files == []
     assert any(
         "required QUICKSCALE_NON_DB_COMMAND=collectstatic" in blocker
-        for blocker in report.blockers
-    )
-
-
-@pytest.mark.parametrize(
-    "shadow_source",
-    [
-        "frozenset = lambda values: set()\n",
-        "[(frozenset := lambda values: set()) for _ in [0]]\n",
-        (
-            "def poison_default(\n"
-            "    default=[(frozenset := lambda values: set()) for _ in [0]],\n"
-            "):\n"
-            "    return default\n"
-        ),
-        "import builtins\nbuiltins.frozenset = lambda values: set()\n",
-        (
-            "import builtins\n"
-            'builtins.__setattr__("frozen" + "set", lambda values=(): set())\n'
-        ),
-    ],
-)
-def test_shadowed_frozenset_blocks_runtime_allowlist_preflight(
-    tmp_path: Path,
-    shadow_source: str,
-) -> None:
-    """Static extraction must not trust a shadowed immutable constructor name."""
-    donor = _write_project(
-        tmp_path / "donor",
-        slug="fresh-donor",
-        package="fresh_donor",
-        marker="donor",
-    )
-    recipient = _write_project(
-        tmp_path / "recipient",
-        slug="beta-site",
-        package="beta_site",
-        marker="recipient",
-    )
-    settings_root = donor
-    package = "fresh_donor"
-    settings_path = settings_root / package / "settings" / "production.py"
-    settings_path.write_text(shadow_source + settings_path.read_text())
-
-    report = run_beta_migration(
-        BetaMigrationInput(
-            mode="fresh-first",
-            donor=donor,
-            recipient=recipient,
-            dry_run=True,
-        )
-    )
-
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert any(
-        "frozenset" in blocker or "__setattr__" in blocker
         for blocker in report.blockers
     )
 

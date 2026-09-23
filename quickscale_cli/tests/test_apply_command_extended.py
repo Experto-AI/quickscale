@@ -4,6 +4,7 @@
 import sys
 from pathlib import Path
 import subprocess
+import tomllib
 from unittest.mock import ANY, Mock, patch
 
 import click
@@ -2934,6 +2935,108 @@ class TestSyncProjectModuleDependenciesForApply:
         assert "QUICKSCALE_LOCAL_WHEELHOUSE must name an absolute wheelhouse" in (
             capsys.readouterr().err
         )
+
+
+class TestSyncProjectCoreDependency:
+    """Tests for the lockstep quickscale-core pin sync (SA206)."""
+
+    @staticmethod
+    def _write_project(tmp_path, dependency_line: str) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            f'[tool.poetry.dependencies]\npython = ">=3.14,<3.15"\n{dependency_line}\n'
+        )
+
+    @staticmethod
+    def _wheelhouse(tmp_path, wheel_name: str):
+        wheelhouse = tmp_path / "wheelhouse"
+        wheelhouse.mkdir(exist_ok=True)
+        (wheelhouse / wheel_name).write_bytes(b"wheel")
+        return wheelhouse
+
+    def test_rewrites_pin_to_local_wheel_once(self, tmp_path):
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_core_dependency,
+        )
+
+        self._write_project(tmp_path, 'quickscale-core = ">=0.89.0,<0.90.0"')
+        wheelhouse = self._wheelhouse(
+            tmp_path, "quickscale_core-0.89.0-py3-none-any.whl"
+        )
+
+        assert sync_project_core_dependency(tmp_path, wheelhouse) is True
+
+        content = (tmp_path / "pyproject.toml").read_text()
+        data = tomllib.loads(content)
+        dependency = data["tool"]["poetry"]["dependencies"]["quickscale-core"]
+        assert dependency["path"].endswith(
+            ".quickscale/wheels/quickscale_core-0.89.0-py3-none-any.whl"
+        )
+        assert (
+            tmp_path
+            / ".quickscale"
+            / "wheels"
+            / "quickscale_core-0.89.0-py3-none-any.whl"
+        ).is_file()
+        assert sync_project_core_dependency(tmp_path, wheelhouse) is False
+
+    def test_project_without_the_pin_is_left_untouched(self, tmp_path):
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_core_dependency,
+        )
+
+        self._write_project(tmp_path, 'Django = ">=6.0.7,<6.1.0"')
+        wheelhouse = self._wheelhouse(
+            tmp_path, "quickscale_core-0.89.0-py3-none-any.whl"
+        )
+
+        assert sync_project_core_dependency(tmp_path, wheelhouse) is False
+        assert "quickscale-core" not in (tmp_path / "pyproject.toml").read_text()
+
+    def test_existing_local_path_resolution_is_preserved(self, tmp_path):
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_core_dependency,
+        )
+
+        self._write_project(
+            tmp_path,
+            'quickscale-core = { path = ".quickscale/wheels/quickscale_core-0.89.0-py3-none-any.whl" }',
+        )
+        wheelhouse = self._wheelhouse(
+            tmp_path, "quickscale_core-0.89.0-py3-none-any.whl"
+        )
+
+        assert sync_project_core_dependency(tmp_path, wheelhouse) is False
+        assert (
+            ".quickscale/wheels/quickscale_core-0.89.0-py3-none-any.whl"
+            in (tmp_path / "pyproject.toml").read_text()
+        )
+
+    def test_wheel_outside_the_lockstep_pin_is_refused(self, tmp_path):
+        from quickscale_cli.utils.module_dependency_sync import (
+            DependencySyncError,
+            sync_project_core_dependency,
+        )
+
+        self._write_project(tmp_path, 'quickscale-core = ">=0.89.0,<0.90.0"')
+        wheelhouse = self._wheelhouse(
+            tmp_path, "quickscale_core-0.88.0-py3-none-any.whl"
+        )
+
+        with pytest.raises(DependencySyncError, match="does not satisfy"):
+            sync_project_core_dependency(tmp_path, wheelhouse)
+        assert ">=0.89.0,<0.90.0" in (tmp_path / "pyproject.toml").read_text()
+
+    def test_empty_wheelhouse_is_a_noop(self, tmp_path):
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_core_dependency,
+        )
+
+        self._write_project(tmp_path, 'quickscale-core = ">=0.89.0,<0.90.0"')
+        empty_wheelhouse = tmp_path / "empty-wheelhouse"
+        empty_wheelhouse.mkdir()
+
+        assert sync_project_core_dependency(tmp_path, empty_wheelhouse) is False
+        assert ">=0.89.0,<0.90.0" in (tmp_path / "pyproject.toml").read_text()
 
 
 # ============================================================================

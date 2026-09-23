@@ -532,6 +532,7 @@ Keep this anchor in place for compatibility. Update the companion doc when the s
 
 **Settings Inheritance:**
 - ✅ Current generated projects: Standalone `settings.py` (no automatic inheritance from quickscale_core)
+- ✅ Generated settings import the versioned `quickscale_core.runtime.settings` facade for executable runtime contracts (SA206) — a library import, not settings inheritance
 - ✅ Optional: Manual inheritance after git subtree embed (advanced users)
 - ❌ NO automatic settings inheritance in generated projects
 
@@ -836,6 +837,39 @@ superuser ``DATABASE_URL``).
 
 ---
 
+### Runtime Settings Facade (Public API) {#runtime-settings-facade}
+
+**Decision (SA206):** `quickscale_core.runtime.settings` is the public import
+path for the executable runtime contracts shared by generated settings and
+launchers. It exports the client-identity and correlation-id middleware, the
+trusted-proxy derivation, the privileged-command/runtime-database selection,
+the production SECRET_KEY guard, and the structured-logging helpers.
+
+**Why:** generated settings are user-owned and never upgraded, so an inline
+contract copy reached only freshly generated projects — SA200's proxy-trust fix
+was the last example — and the fresh-first migration had to hand-patch donor
+settings copies. One facade ships every contract fix through the existing
+`quickscale-core` lockstep pin.
+
+**Rules:**
+- ✅ Generated `settings/base.py` and `settings/production.py` import the
+  facade and keep only user configuration.
+- ✅ Every generated project declares the bounded `quickscale-core` lockstep
+  pin (`>=X.Y.0,<X.(Y+1).0`) in its `pyproject.toml`, including zero-module
+  projects.
+- ✅ The privileged-command contract test holds the facade's
+  `KNOWN_PRIVILEGED_COMMANDS` declaration in place of the retired template
+  copy.
+- ✅ The beta-migration donor validator checks that donor settings call
+  `resolve_runtime_database_url` instead of parsing an inline copy of the
+  contract.
+- ❌ No generated settings module re-declares the contract inline.
+
+**Adoption:** existing projects adopt the facade through the declared
+generated-project contract step (SA207).
+
+---
+
 ### ImproperlyConfigured Exception Identity {#improperlyconfigured-exception-identity}
 
 **Decision:** QuickScale's shared contract layer
@@ -931,7 +965,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
 - **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
-  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `apps.py` module guard, generated production-settings validator, CLI producer, and generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
+  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `apps.py` module guard, the `quickscale_core.runtime.settings` facade, the CLI producer, and the generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — non-serving environment-variable escape hatch for intentional single-tenant/development use or the explicitly acknowledged retired billing recovery invocation. It is never a production serving mode.
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; supplied argv, including the retired `migrate_billing_to_orgs` mode, exits 2 without a privileged path; `runserver`/`gunicorn` must still use the restricted runtime role
 - `quickscale manage` clears `RUNTIME_DATABASE_URL` only for those two sanctioned commands; every other management command (for example `createsuperuser` or `migrate_billing_to_orgs`) runs under the restricted runtime role, which the boot guard requires
@@ -1046,7 +1080,9 @@ and asserts every emitted file is classified.
    ``FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`` and
    ``FRESH_FIRST_DONOR_DJANGO_FILES``).  The donor's production settings carry
    the real deploy-time configuration and must not be replaced by the fresh
-   scaffold's defaults.
+   scaffold's defaults.  Since SA206 the donor copy must call the versioned
+   ``quickscale_core.runtime.settings`` facade; the donor validator refuses an
+   inline copy of the command-mode contract before any mutation.
 
 2. **``start.sh`` follows the recipient scaffold's identity.**  The fresh
    scaffold's ``start.sh`` is the effective launcher and is reconciled in

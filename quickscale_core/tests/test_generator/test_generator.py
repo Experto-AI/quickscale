@@ -389,11 +389,16 @@ class TestGeneratedProjectSa63RegenerationEvidence:
             "local.py should not inspect sys.argv after SA63"
         )
 
-    def test_emitted_production_py_has_dummy_url_fallback(
+    def test_emitted_production_py_delegates_command_contract(
         self, generated_project_path: Path
     ) -> None:
-        """The emitted production.py must contain the dummy URL fallback
-        for non-DB commands (SA68 Phase 3 regression)."""
+        """The emitted production.py delegates the command-mode contract to
+        the runtime settings facade (SA206)."""
+        from quickscale_core.runtime.settings import (
+            KNOWN_NON_DB_COMMANDS,
+            NON_DB_FALLBACK_DATABASE_URL,
+        )
+
         production_py = (
             generated_project_path / "testproject" / "settings" / "production.py"
         )
@@ -401,19 +406,18 @@ class TestGeneratedProjectSa63RegenerationEvidence:
 
         content = production_py.read_text()
 
-        # Must have the dummy URL fallback for when DATABASE_URL is unset
-        # during a non-DB command (collectstatic/compilemessages)
-        assert "postgresql://dummy:dummy@localhost:5432/dummy" in content, (
-            "Generated production.py must contain the dummy URL fallback "
-            "for non-DB commands without DATABASE_URL"
+        assert "from quickscale_core.runtime.settings import (" in content, (
+            "Generated production.py must import the runtime settings facade"
         )
-        # The non-DB command frozenset must be present
-        assert "_KNOWN_NON_DB_COMMANDS" in content, (
-            "Generated production.py must define _KNOWN_NON_DB_COMMANDS"
+        assert "resolve_runtime_database_url(" in content, (
+            "Generated production.py must call the facade's database selection"
         )
-        assert "compilemessages" in content, (
-            "Generated production.py must include compilemessages "
-            "in known non-DB commands"
+        # The dummy URL fallback and the non-DB allowlist live in the facade
+        assert NON_DB_FALLBACK_DATABASE_URL == (
+            "postgresql://dummy:dummy@localhost:5432/dummy"
+        ), "The facade must keep the non-DB dummy URL fallback"
+        assert "compilemessages" in KNOWN_NON_DB_COMMANDS, (
+            "The facade must include compilemessages in known non-DB commands"
         )
 
     def test_emitted_production_py_valid_python(
