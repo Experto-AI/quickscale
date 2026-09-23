@@ -26,8 +26,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA194 | Unblock in-place beta migration at the contract-vintage gate | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA194 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
+| SA194 | Remove the in-place beta-migration mode | post-v88 | 1 | SA191 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
@@ -38,17 +38,16 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
+Track 1: SA191 ──► SA194 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
 Track 2: SA202
 Track 3: SA196 ──► SA201 ──► SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA194 → SA191 → SA153. SA194 makes the migration tool's smoke gate observe the
-real CLI and stops the in-place mode aborting mid-run; SA191 then migrates `bap-web` with the
-fresh-first mode and redeploys through `deploy railway`; SA153 builds the portal on the migrated
-project. SA154 is an inventory, not work. Everything else is off the critical path.
+**Critical path.** SA191 → SA153. SA191 migrates `bap-web` with the fresh-first mode and
+redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA194 waits
+for SA191 so the removal keeps anything the real run needs, and is off the critical path. SA154 is an inventory, not work. Everything else is off the critical path.
 
 **Ordering.** Tracks 2 and 3 carry no dependency edges. SA196 strict rendering touches templates
 other tracks own (the `.env.example` template, settings templates, generated `base.html`), so
@@ -60,7 +59,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA194 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA202 | yes | yes | yes | **yes** | no |
 | 3 | SA196 (in progress) | yes | yes | yes | **yes** | no |
 
@@ -95,45 +94,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA194 — Unblock in-place beta migration at the contract-vintage gate.**
-
-  **Context:** SA185 made `quickscale apply` refuse a project whose recorded `project_contract` is
-  below every installed module's declared minimum — now `0.89.0` for `orgs` — unless the
-  acknowledgement flag is passed. The in-place beta migration shells out to a bare
-  `quickscale apply` and nowhere mentions the contract vintage, so a beta site generated at 0.88.0
-  or earlier, which is the only kind of recipient the mode exists for, halts at that step. By then
-  four steps have already rewritten the recipient's working tree — managed infrastructure files,
-  `pyproject.toml`, `frontend/package.json`, and `quickscale.yml` — and the run ends
-  `in-place-partial` and `blocked`, skipping the React-surface copy and the verification stack. A
-  stateless recipient does not escape it: an absent `project_contract` resolves as behind, and the
-  only pre-apply step that touches recipient state never writes that key.
-
-  The gap is invisible to CI because the beta-migration smoke gate shims `quickscale` so `apply`
-  exits 0 unconditionally. The gate exercises the in-place path without ever observing the CLI that
-  path invokes, so it is green today and would stay green through any refusal, gate, or regression
-  in the real command. That blindness also explains why the fifth declaration of the privileged
-  command set, the copy inside the migration tool that the cross-station contract test does not
-  cover, is currently only assumed to be held honest by this gate.
-
-  Fix the policy at the one callsite. A preflight that reads the recipient's recorded contract
-  against the shipped manifests and refuses before any mutating step is the better shape than
-  passing the acknowledgement, because it moves the refusal ahead of the damage; passing the
-  acknowledgement is defensible only if the infrastructure-copy step genuinely performs all three
-  `orgs` adoption steps, which must be checked against the manifest before choosing it.
-
-  **Acceptance:** an in-place continuation against a recipient whose recorded contract is behind
-  the shipped manifests either completes or refuses before the first mutating step, never aborts
-  between them, and the refusal names the adoption steps; the chosen policy is recorded in the
-  migration playbook, which currently documents the continuation order without mentioning the gate
-  at all. The smoke gate runs the real `quickscale apply` on the in-place path instead of a shim
-  that always succeeds, with the recipient fixture carrying a pre-`0.89.0` contract, and fails if
-  the path regresses. With the real CLI in the loop, confirm the gate reaches the migration tool's
-  own required-runtime-command validator, so the fifth privileged-command station is held honest by
-  something observed rather than assumed. Fresh-first mode's behavior is unchanged.
-
-  **Surfaces:** `quickscale_devtools/.../beta_migration.py` at its apply and in-place execution
-  sites, `scripts/check_beta_migration_smoke.py`, and the migration playbook.
-
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 
   Use `make beta-migrate-fresh` with `bap-web` as donor and a fresh scaffold generated with the same
@@ -145,9 +105,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   building the portal on it first requires catching it up to the current release.
 
   The fresh-first mode is the documented primary path: a fresh scaffold with the same slug receives
-  the donor's custom content, so infrastructure files start correct instead of being merged. It
-  waits for SA194 so the tool's smoke gate observes the real CLI before the tool touches the real
-  site. Manual continuation is expected where the tool stops safely; the value of
+  the donor's custom content, so infrastructure files start correct instead of being merged. Manual continuation is expected where the tool stops safely; the value of
   this ticket is that every such stop becomes either a playbook step or a deterministic tool fix.
 
   The migration preserves behavior, including the existing React and JSON API property surface that
@@ -167,6 +125,24 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the `bap-web` repository; the migration playbook and, for deterministic gaps found,
   `quickscale_devtools/.../beta_migration.py` and its tests.
+
+- [ ] **SA194 — Remove the in-place beta-migration mode.**
+
+  **Context:** Fresh-first is the only migration path: a fresh scaffold receives the old site's
+  custom content, and data moves by backup and restore under the fresh-database rule. Upgrading a
+  live project is `quickscale update`/`apply` with contract-vintage adoption steps. In-place mode
+  duplicates that upgrade path with a riskier shape (it rewrites the recipient, then halts at the
+  vintage gate), and its smoke gate shims the CLI, so it is never observed working.
+
+  **Acceptance:** `beta-migrate-in-place`, the in-place mode, its continuation, and their tests are
+  gone; fresh-first behavior is unchanged. The smoke gate covers fresh-first only, and any gate
+  registry or parity count it feeds is updated. The playbook, `generated_file_ownership.md`, and
+  the `decisions.md` ownership entry describe one migration mode, and `decisions.md` records the
+  removal. Before deleting, port anything SA191's real run showed fresh-first lacks.
+
+  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, `scripts/beta_migrate.py`, the
+  Makefile targets, `scripts/check_beta_migration_smoke.py`, the migration playbook,
+  `generated_file_ownership.md`, and `decisions.md`.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
