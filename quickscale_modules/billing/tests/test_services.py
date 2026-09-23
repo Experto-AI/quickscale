@@ -2246,10 +2246,9 @@ def test_handle_stripe_event_serializes_concurrent_duplicate_deliveries(
     assert first_result.duplicate is False
     assert second_result.duplicate is True
     assert call_count == 1
-    assert (
-        WebhookEvent.objects.get(stripe_event_id="evt_concurrent_duplicate").processed
-        is True
-    )
+    settled_event = WebhookEvent.objects.get(stripe_event_id="evt_concurrent_duplicate")
+    assert settled_event.processed is True
+    assert settled_event.processing_error == ""
 
 
 @pytest.mark.django_db
@@ -3053,6 +3052,97 @@ def test_stripe_client_search_customers_uses_mapping_response() -> None:
 
     assert customers == [{"id": "cus_search"}]
     assert stripe_module.api_key == "sk_test"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "unsafe_character", "character_label"),
+    [
+        ("user_reference", "'", "apostrophe"),
+        ("user_reference", "\\", "backslash"),
+        ("user_reference", "\n", "newline"),
+        ("organization_reference", "'", "apostrophe"),
+        ("organization_reference", "\\", "backslash"),
+        ("organization_reference", "\n", "newline"),
+    ],
+)
+def test_stripe_client_search_customers_rejects_query_breaking_references(
+    field_name: str,
+    unsafe_character: str,
+    character_label: str,
+) -> None:
+    """A reference that would break the Stripe search query is rejected first."""
+    search_calls: list[dict[str, Any]] = []
+
+    def record_search(**kwargs: Any) -> dict[str, Any]:
+        search_calls.append(kwargs)
+        return {"data": []}
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        Customer=SimpleNamespace(search=record_search),
+        Webhook=SimpleNamespace(construct_event=lambda **kwargs: {"id": "unused"}),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key="sk_test")
+    user_reference = ""
+    organization_reference = ""
+    if field_name == "user_reference":
+        user_reference = f"auth.user:1{unsafe_character}"
+    else:
+        organization_reference = f"orgs.organization:1{unsafe_character}"
+
+    with pytest.raises(
+        BillingValidationError,
+        match=f"{field_name} contains an unsupported {character_label}",
+    ):
+        stripe_client.search_customers(
+            user_reference=user_reference,
+            organization_reference=organization_reference,
+        )
+
+    assert search_calls == []
+
+
+@pytest.mark.parametrize(
+    ("user_reference", "organization_reference", "expected_query"),
+    [
+        (
+            "auth.user:1",
+            "",
+            "metadata['quickscale_user_reference']:'auth.user:1'",
+        ),
+        (
+            "",
+            "orgs.organization:7",
+            "metadata['quickscale_org_reference']:'orgs.organization:7'",
+        ),
+    ],
+)
+def test_stripe_client_search_customers_emits_metadata_query_for_safe_references(
+    user_reference: str,
+    organization_reference: str,
+    expected_query: str,
+) -> None:
+    """A safe reference still emits the unchanged metadata search query."""
+    captured_queries: list[str] = []
+
+    def record_search(**kwargs: Any) -> dict[str, Any]:
+        captured_queries.append(kwargs["query"])
+        return {"data": []}
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        Customer=SimpleNamespace(search=record_search),
+        Webhook=SimpleNamespace(construct_event=lambda **kwargs: {"id": "unused"}),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key="sk_test")
+
+    customers = stripe_client.search_customers(
+        user_reference=user_reference,
+        organization_reference=organization_reference,
+    )
+
+    assert customers == []
+    assert captured_queries == [expected_query]
 
 
 def test_stripe_client_create_customer_includes_name_and_email() -> None:

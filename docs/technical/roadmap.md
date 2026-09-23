@@ -45,7 +45,6 @@ context, scope, and acceptance;
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA198 | Carry the database's TLS settings into the backup and restore commands | post-v88 | 2 | — | Deferred |
 | SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
-| SA199 | Keep external calls out of transactions and hold the webhook lock | post-v88 | 3 | — | Deferred |
 | SA200 | Gate the proxy and correlation-id settings the generator emits | post-v88 | 3 | — | Deferred |
 | SA196 | Fail hard on undefined generator template context | post-v88 | 3 | — | Deferred |
 | SA201 | Give generated projects one throttling contract | post-v88 | 3 | — | Deferred |
@@ -56,7 +55,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
 Track 2: SA198 ──► SA202
-Track 3: SA199 (in progress, interrupted) ──► SA200 ──► SA196 ──► SA201 ──► SA203
+Track 3: SA200 ──► SA196 ──► SA201 ──► SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -90,10 +89,6 @@ the critical path.
   S2 defect in the packaged bytes that no other ticket touches, and SA202 hardens the workflow that
   performs the publication those bytes are waiting on. Neither blocks another ticket, so both are
   queue order rather than edges.
-- **SA199 remains open after SA190.** The completed SA190 work moved account-deletion Stripe calls
-  outside database transactions and added the named obligations list that both removal boundaries
-  consume. SA199 still owns the rest of its acceptance, including the Stripe search-query hardening,
-  and remains the head of track 3 until that whole ticket closes.
 - **SA200 precedes SA201 in the queue, not by dependency.** Both edit the generator's settings
   templates, so serializing them avoids a self-inflicted conflict on `base.py.j2`, and SA200's
   `check --deploy` gate is the station SA201's throttle defaults are then observed by. SA201 is
@@ -143,7 +138,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA198 | yes | yes | yes | **yes** | no |
-| 3 | SA199 (resume) | yes | yes | yes | **yes** | no |
+| 3 | SA200 | yes | yes | yes | **yes** | no |
 
 ### Interrupted work (measured 2026-09-22)
 
@@ -162,13 +157,11 @@ before that date is gone and everything uncommitted now shows as unstaged.
   one repository-owned `tests_shared/templates/base.html`, while auth and billing keep local stubs
   whose suites assert the older shell markup; the five module page surfaces carry the shared design
   with the frontend-origin contract and its checks. Track 2's remaining queue is SA198 and SA202.
-- **Track 3 — SA199, clean.** `wt-track3` has no uncommitted changes and sits one commit behind
-  `v89` (this roadmap only). The only SA199 work is the part landed in `1270ed46` (see SA199
-  *Progress*). To resume: `git merge v89`; confirm the `1270ed46` portions still meet their
-  acceptance lines (no network I/O inside `transaction.atomic()` on account deletion, with the
-  chosen compensation written down; webhook claim held across the handler); add the two-thread
-  `handle_stripe_event` regression against real PostgreSQL; harden `search_customers` against `'`,
-  `\`, and newline with a test; close SA199 in the tech audit's own entry and the changelog.
+- **Track 3 — SA199 delivered.** Account deletion runs its Stripe calls between short database
+  transactions and restores the cancellation state when deletion is rejected; webhook processing
+  holds a session-level lock across its handler and result persistence; and `search_customers`
+  refuses a reference containing `'`, `\`, or a newline. Track 3's remaining queue is SA200, SA196,
+  SA201, and SA203.
 
 ### Ownership and merge coordination
 
@@ -495,61 +488,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA190 — Derive the purge plan and share organization-removal obligations.**
 
-- [ ] **SA199 — Keep external calls out of transactions and hold the webhook lock.**
-
-  **Progress:** Commit `1270ed46` completed the two transaction/concurrency portions while delivering
-  SA190: account-deletion provider I/O now runs between short database transactions with a
-  compensating resume, and webhook processing holds a session advisory mutex across the handler and
-  result persistence. The ticket remains open for its Stripe search-query hardening and final
-  acceptance evidence; the original failure analysis is retained below as context.
-
-  **Context:** Two boundaries in the same payment path originally got the transaction/network
-  relationship backwards, in opposite directions.
-
-  Account deletion held a transaction open across a Stripe round trip. `form_valid` opened
-  `transaction.atomic()`, row-locks every organization the user owns, and then cancels the
-  subscription over the network inside that block. A slow or hanging Stripe call held the org row
-  locks for its entire duration, and every other request touching those organizations queues behind
-  a third party's latency. Billing's own service layer is careful about exactly this; `auth/views.py`
-  is not, which is what the audit calls out as outbound-call discipline being re-derived per module
-  rather than stated once.
-
-  Webhook processing did the reverse: it took `select_for_update()` on `WebhookEvent` inside an
-  `atomic()` block that closes immediately after the `processed` check, so the lock is released
-  before the handler runs. Two concurrent deliveries of the same event both take and release the
-  lock, both see `processed == False`, and both run the handler; the loser of the subscription
-  upsert race trips the unique index and is recorded `processed=False` with an error, so the row
-  now lies about an event that was in fact processed. That violates the project's stated webhook
-  idempotency invariant. The money path survives it — `credit_user` re-checks inside its own
-  transaction and a partial unique index makes a double credit impossible — which is why this is a
-  correctness and observability defect rather than a financial one.
-
-  The comment defending the webhook slicing is right about its goal (keep Stripe round trips out of
-  a long transaction) and silent about what replaces the lock as the idempotency mechanism during
-  the unlocked window. Nothing does. The fix must honor both halves at once, which is why these two
-  findings share a ticket: they are one rule — *hold the lock for the whole claim, make the network
-  call outside it* — applied at two callsites that each got one half right.
-
-  **Acceptance:** account deletion performs no network I/O inside `transaction.atomic()`; the
-  atomic block does the guard check and collects what must be cancelled, and the Stripe call runs
-  outside it, with the window this opens (a user deleted whose subscription cancellation then
-  fails) handled explicitly rather than ignored — either by cancelling before committing the
-  deletion or by recording the outstanding cancellation for retry, and the choice is written down.
-  Webhook processing claims the event before releasing the lock: either the `atomic()` spans the
-  whole handler, or the short atomic performs a conditional claim (`processed = false AND
-  processing_started_at IS NULL`) and a zero-row result is treated as a duplicate, in which case a
-  staleness timeout releases a claim whose worker died. A concurrency regression drives two
-  `handle_stripe_event` calls for one event id from two threads against a real PostgreSQL
-  connection and asserts the handler body runs exactly once and no row is left claiming a failure
-  that did not occur. While in `billing/services.py`, `search_customers` stops building its Stripe
-  Search Query Language string by unescaped f-string interpolation: references containing `'`, `\`
-  or a newline are rejected or escaped, with a test, closing a query-injection sink that is safe
-  today only by virtue of its two current callers. The last-owner backstop, the SA183 live-
-  subscription purge refusal, and the existing idempotency constraints are unchanged.
-
-  **Surfaces:** `auth/views.py` account deletion, `billing/services.py`
-  (`handle_stripe_event`, `cancel_current_subscription`, `search_customers`), the billing
-  cancellation seam, the auth and billing tests, and the tech audit.
+- [x] **SA199 — Keep external calls out of transactions and hold the webhook lock.**
 
 - [ ] **SA200 — Gate the proxy and correlation-id settings the generator emits.**
 

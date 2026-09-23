@@ -75,6 +75,11 @@ _STRIPE_TO_LOCAL_SUBSCRIPTION_STATUS = {
     "unpaid": Subscription.Status.UNPAID,
     "paused": Subscription.Status.PAUSED,
 }
+_CUSTOMER_SEARCH_REFERENCE_UNSAFE_CHARACTERS: tuple[tuple[str, str], ...] = (
+    ("'", "apostrophe"),
+    ("\\", "backslash"),
+    ("\n", "newline"),
+)
 
 
 class BillingError(Exception):
@@ -247,6 +252,14 @@ class StripeClient:
         organization_reference: str = "",
     ) -> list[dict[str, Any]]:
         """Search Stripe customers by the authoritative local metadata reference."""
+        _validate_customer_search_reference(
+            field_name="user_reference",
+            reference=user_reference,
+        )
+        _validate_customer_search_reference(
+            field_name="organization_reference",
+            reference=organization_reference,
+        )
         self._activate_api_key()
         if organization_reference:
             query = (
@@ -4044,6 +4057,16 @@ def _organization_reference(organization: Any) -> str:
 
 def _user_reference(user: Any) -> str:
     return f"{user._meta.label_lower}:{user.pk}"
+
+
+def _validate_customer_search_reference(*, field_name: str, reference: str) -> None:
+    """Reject a customer-search reference that would break the Stripe query."""
+    for character, label in _CUSTOMER_SEARCH_REFERENCE_UNSAFE_CHARACTERS:
+        if character in reference:
+            raise BillingValidationError(
+                f"{field_name} contains an unsupported {label} character "
+                f"({character!r}) for a Stripe customer search reference."
+            )
 
 
 def _display_name_for_user(user: Any) -> str:
