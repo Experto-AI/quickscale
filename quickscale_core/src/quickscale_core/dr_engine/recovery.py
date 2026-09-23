@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Callable, Iterator, Protocol
+from typing import Any, Callable, Iterator, Mapping, Protocol
 
 from quickscale_core.dr_engine.primitives import (
     BackupError,
@@ -59,6 +59,7 @@ class ArtifactLike(Protocol):
     remote_key: str
     database_server_major: int | None
     dump_client_major: int | None
+    metadata_json: dict[str, Any]
 
     def is_export_only(self) -> bool: ...
 
@@ -205,11 +206,105 @@ def _get_restore_source_validation_issues(
 # ---------------------------------------------------------------------------
 
 
+def _collect_artifact_module_versions(artifact: ArtifactLike) -> dict[str, str] | None:
+    """Return the module versions recorded in the artifact's metadata, if any.
+
+    Backup capture records the module vintage under
+    ``metadata_json["module_versions"]``.  An artifact that records none —
+    missing capture metadata, a missing key, or an empty mapping — returns
+    ``None`` so the restore guard can fail closed instead of treating the
+    artifact as compatible.
+    """
+    metadata = getattr(artifact, "metadata_json", None)
+    if not isinstance(metadata, dict):
+        return None
+    recorded_versions = metadata.get("module_versions")
+    if not isinstance(recorded_versions, dict) or not recorded_versions:
+        return None
+    return {str(name): str(version) for name, version in recorded_versions.items()}
+
+
+def _get_module_vintage_issues(
+    recorded_module_versions: Mapping[str, str] | None,
+    installed_module_versions: Mapping[str, str],
+) -> list[str]:
+    """Return refusal issues for a recorded module-vintage mismatch.
+
+    The clean-break migration history means a restored schema is only runnable
+    by the module versions that recorded it, so a differing or absent recorded
+    vintage is refused.  Each differing module is named with both versions.
+    """
+    if not recorded_module_versions:
+        return [
+            "backup records no module vintage; restore requires a recorded "
+            "module vintage that matches the installed modules"
+        ]
+
+    recorded_versions = {
+        str(name): str(version) for name, version in recorded_module_versions.items()
+    }
+    installed_versions = {
+        str(name): str(version) for name, version in installed_module_versions.items()
+    }
+    if recorded_versions == installed_versions:
+        return []
+
+    differences: list[str] = []
+    for name in sorted(set(recorded_versions) | set(installed_versions)):
+        recorded_version = recorded_versions.get(name)
+        installed_version = installed_versions.get(name)
+        if recorded_version == installed_version:
+            continue
+        differences.append(
+            f"{name} recorded '{recorded_version or 'none'}' but installed "
+            f"'{installed_version or 'none'}'"
+        )
+    return [
+        "backup module vintage differs from the installed modules: "
+        + "; ".join(differences)
+    ]
+
+
+def _get_restore_source_vintage_issues(
+    restore_source: ResolvedRestoreSource,
+    installed_module_versions: Mapping[str, str],
+    *,
+    recorded_module_versions: Mapping[str, str] | None = None,
+) -> list[str]:
+    """Return vintage refusal issues for the resolved restore source.
+
+    Artifact-backed sources compare the artifact's recorded metadata, and an
+    artifact that records none is refused.  A source with no artifact row — a
+    snapshot report restored by file path — is compared only when the caller
+    carries the recorded vintage in; an operator-supplied file that records
+    none has nothing to compare.
+    """
+    if restore_source.artifact is not None:
+        return _get_module_vintage_issues(
+            _collect_artifact_module_versions(restore_source.artifact),
+            installed_module_versions,
+        )
+    if recorded_module_versions is None:
+        return []
+    return _get_module_vintage_issues(
+        recorded_module_versions,
+        installed_module_versions,
+    )
+
+
 def _get_restore_compatibility_issues(
     artifact: ArtifactLike,
     current_engine: str,
+    *,
+    installed_module_versions: Mapping[str, str] | None = None,
 ) -> list[str]:
-    """Return restore guardrail issues for current database engine compatibility."""
+    """Return restore guardrail issues for current database engine compatibility.
+
+    When *installed_module_versions* is provided, the artifact's recorded module
+    vintage must match it exactly; a mismatch, or an artifact that records none,
+    is refused.  Pass *None* only where no installed-module registry is
+    available; the Django-backed restore path always supplies it.
+    """
     issues: list[str] = []
     current_engine_family = _database_engine_family(current_engine)
     artifact_engine_family = _database_engine_family(artifact.database_engine)
@@ -252,22 +347,50 @@ def _get_restore_compatibility_issues(
                 f"PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} restore contract"
             )
 
+    if installed_module_versions is not None:
+        issues.extend(
+            _get_module_vintage_issues(
+                _collect_artifact_module_versions(artifact),
+                installed_module_versions,
+            )
+        )
+
     return issues
 
 
 def _get_restore_source_compatibility_issues(
     restore_source: ResolvedRestoreSource,
     current_engine: str,
+    *,
+    installed_module_versions: Mapping[str, str] | None = None,
+    recorded_module_versions: Mapping[str, str] | None = None,
 ) -> list[str]:
-    """Return compatibility issues for artifact and operator-supplied sources."""
+    """Return compatibility issues for artifact and operator-supplied sources.
+
+    When *installed_module_versions* is provided the source's recorded module
+    vintage must match it; *recorded_module_versions* carries the vintage for a
+    source that has no artifact row, such as a snapshot report restored by file
+    path.
+    """
+    issues: list[str] = []
     if restore_source.artifact is not None:
-        return _get_restore_compatibility_issues(
-            restore_source.artifact, current_engine
+        issues.extend(
+            _get_restore_compatibility_issues(restore_source.artifact, current_engine)
+        )
+    elif _database_engine_family(current_engine) != "postgresql":
+        issues.append(
+            "operator-supplied restore files require a PostgreSQL target database"
         )
 
-    if _database_engine_family(current_engine) != "postgresql":
-        return ["operator-supplied restore files require a PostgreSQL target database"]
-    return []
+    if installed_module_versions is not None:
+        issues.extend(
+            _get_restore_source_vintage_issues(
+                restore_source,
+                installed_module_versions,
+                recorded_module_versions=recorded_module_versions,
+            )
+        )
+    return issues
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +631,8 @@ def _execute_restore_for_resolved_source(
     connection_settings: dict[str, Any] | None = None,
     is_debug: bool = False,
     pg_contract_checker: Callable[..., Any] | None = None,
+    installed_module_versions: Mapping[str, str] | None = None,
+    recorded_module_versions: Mapping[str, str] | None = None,
 ) -> RestoreResult:
     """Run the guarded restore pipeline for one resolved restore source.
 
@@ -545,6 +670,15 @@ def _execute_restore_for_resolved_source(
         Django-backed caller should provide
         ``_require_postgresql_18_contract`` to enforce full version
         requirements.
+    installed_module_versions:
+        Module vintage of the running code.  When provided, an artifact whose
+        recorded ``module_versions`` differ — or that records none — is refused
+        before any destructive step, whether or not *current_engine* is known.
+        The Django-backed restore path always supplies it.
+    recorded_module_versions:
+        Module vintage recorded for a source that has no artifact row, such as
+        a snapshot report restored by file path.  Ignored for artifact-backed
+        sources, which use the artifact's own recorded metadata.
     """
     if confirmation.strip() != restore_source.confirmation_value:
         raise BackupRestoreBlocked(
@@ -575,6 +709,14 @@ def _execute_restore_for_resolved_source(
         compatibility_issues = _get_restore_source_compatibility_issues(
             restore_source,
             resolved_engine,
+            installed_module_versions=installed_module_versions,
+            recorded_module_versions=recorded_module_versions,
+        )
+    elif installed_module_versions is not None:
+        compatibility_issues = _get_restore_source_vintage_issues(
+            restore_source,
+            installed_module_versions,
+            recorded_module_versions=recorded_module_versions,
         )
     if compatibility_issues:
         compatibility_prefix = (

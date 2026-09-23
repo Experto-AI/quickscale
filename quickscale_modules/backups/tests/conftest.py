@@ -67,6 +67,13 @@ def artifact_file(tmp_path: Path) -> Path:
     return path
 
 
+def _recorded_module_versions() -> dict[str, str]:
+    """Return the module vintage a backup captured in this process would record."""
+    from quickscale_core.runtime import _collect_module_versions
+
+    return _collect_module_versions()
+
+
 @pytest.fixture
 def postgresql_artifact_file(tmp_path: Path) -> Path:
     """Return a filesystem path with sample pg_dump-style artifact content."""
@@ -88,7 +95,10 @@ def backup_artifact(db, artifact_file: Path, superuser) -> "BackupArtifact":
         backup_format="json",
         database_engine="django.db.backends.sqlite3",
         database_name="test.sqlite3",
-        metadata_json={"environment": "test"},
+        metadata_json={
+            "environment": "test",
+            "module_versions": _recorded_module_versions(),
+        },
         initiated_by=superuser,
     )
 
@@ -121,6 +131,7 @@ def postgresql_backup_artifact(
             "database_server_major": 18,
             "pg_dump_version": "pg_dump (PostgreSQL) 18.4",
             "dump_client_major": 18,
+            "module_versions": _recorded_module_versions(),
         },
         initiated_by=superuser,
     )

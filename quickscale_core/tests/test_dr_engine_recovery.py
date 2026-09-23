@@ -76,6 +76,7 @@ class FakeArtifact:
         remote_key: str = "",
         database_server_major: int | None = _REQUIRED_POSTGRESQL_MAJOR,
         dump_client_major: int | None = _REQUIRED_POSTGRESQL_MAJOR,
+        metadata_json: dict[str, Any] | None = None,
         export_only: bool = False,
     ) -> None:
         self.backup_format = backup_format
@@ -87,6 +88,7 @@ class FakeArtifact:
         self.remote_key = remote_key
         self.database_server_major = database_server_major
         self.dump_client_major = dump_client_major
+        self.metadata_json = metadata_json if metadata_json is not None else {}
         self._export_only = export_only
 
     def is_export_only(self) -> bool:
@@ -406,6 +408,75 @@ class TestGetRestoreCompatibilityIssues:
         )
         assert any("client major" in issue for issue in issues)
 
+    def test_matching_module_vintage_passes(self) -> None:
+        artifact = FakeArtifact(
+            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+        )
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_module_versions={"quickscale_modules_auth": "1.2"},
+        )
+        assert issues == []
+
+    def test_differing_module_vintage_names_both_versions(self) -> None:
+        artifact = FakeArtifact(
+            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+        )
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_module_versions={"quickscale_modules_auth": "2.0"},
+        )
+        assert len(issues) == 1
+        assert "module vintage differs from the installed modules" in issues[0]
+        assert "quickscale_modules_auth recorded '1.2' but installed '2.0'" in issues[0]
+
+    def test_module_absent_from_artifact_is_named(self) -> None:
+        artifact = FakeArtifact(
+            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+        )
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_module_versions={
+                "quickscale_modules_auth": "1.2",
+                "quickscale_modules_listings": "0.89.0",
+            },
+        )
+        assert len(issues) == 1
+        assert (
+            "quickscale_modules_listings recorded 'none' but installed '0.89.0'"
+            in issues[0]
+        )
+
+    def test_artifact_recording_no_module_vintage_is_refused(self) -> None:
+        artifact = FakeArtifact()
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_module_versions={"quickscale_modules_auth": "1.2"},
+        )
+        assert len(issues) == 1
+        assert "records no module vintage" in issues[0]
+
+    def test_empty_recorded_module_versions_are_refused(self) -> None:
+        artifact = FakeArtifact(metadata_json={"module_versions": {}})
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_module_versions={},
+        )
+        assert len(issues) == 1
+        assert "records no module vintage" in issues[0]
+
+    def test_module_vintage_check_skipped_without_installed_versions(self) -> None:
+        artifact = FakeArtifact()
+        issues = _get_restore_compatibility_issues(
+            artifact, "django.db.backends.postgresql"
+        )
+        assert issues == []
+
 
 class TestGetRestoreSourceCompatibilityIssues:
     def test_artifact_delegates_to_compatibility_issues(self) -> None:
@@ -443,6 +514,70 @@ class TestGetRestoreSourceCompatibilityIssues:
         )
         issues = _get_restore_source_compatibility_issues(
             src, "django.db.backends.postgresql"
+        )
+        assert issues == []
+
+    def test_artifact_module_vintage_mismatch_is_reported(self) -> None:
+        artifact = FakeArtifact(
+            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test.dump",
+            local_path=Path("/tmp/test.dump"),
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+        issues = _get_restore_source_compatibility_issues(
+            src,
+            "django.db.backends.postgresql",
+            installed_module_versions={"quickscale_modules_auth": "2.0"},
+        )
+        assert any("module vintage differs" in issue for issue in issues)
+
+    def test_operator_supplied_source_is_not_vintage_checked(self) -> None:
+        src = ResolvedRestoreSource(
+            confirmation_value="test.dump",
+            local_path=Path("/tmp/test.dump"),
+            backup_format="pg_dump_custom",
+        )
+        issues = _get_restore_source_compatibility_issues(
+            src,
+            "django.db.backends.postgresql",
+            installed_module_versions={"quickscale_modules_auth": "2.0"},
+        )
+        assert issues == []
+
+    def test_recorded_vintage_mismatch_is_reported_for_artifactless_source(
+        self,
+    ) -> None:
+        src = ResolvedRestoreSource(
+            confirmation_value="test.dump",
+            local_path=Path("/tmp/test.dump"),
+            backup_format="pg_dump_custom",
+        )
+        issues = _get_restore_source_compatibility_issues(
+            src,
+            "django.db.backends.postgresql",
+            installed_module_versions={"quickscale_modules_auth": "2.0"},
+            recorded_module_versions={"quickscale_modules_auth": "1.2"},
+        )
+        assert any("module vintage differs" in issue for issue in issues)
+        assert any(
+            "quickscale_modules_auth recorded '1.2' but installed '2.0'" in issue
+            for issue in issues
+        )
+
+    def test_matching_recorded_vintage_passes_for_artifactless_source(self) -> None:
+        src = ResolvedRestoreSource(
+            confirmation_value="test.dump",
+            local_path=Path("/tmp/test.dump"),
+            backup_format="pg_dump_custom",
+        )
+        issues = _get_restore_source_compatibility_issues(
+            src,
+            "django.db.backends.postgresql",
+            installed_module_versions={"quickscale_modules_auth": "2.0"},
+            recorded_module_versions={"quickscale_modules_auth": "2.0"},
         )
         assert issues == []
 
@@ -1128,4 +1263,264 @@ class TestExecuteRestoreForResolvedSource:
         assert result.executed is True
         assert result.dry_run is False
         assert "Restore executed" in result.message
+        mock_run.assert_called()
+
+    def test_differing_module_vintage_refused_before_pg_restore(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            with pytest.raises(
+                BackupRestoreBlocked,
+                match="module vintage differs from the installed modules",
+            ) as exc_info:
+                _execute_restore_for_resolved_source(
+                    src,
+                    confirmation="test-backup.dump",
+                    dry_run=False,
+                    allow_production=True,
+                    current_engine="django.db.backends.postgresql",
+                    connection_settings={
+                        "HOST": "localhost",
+                        "PORT": 5432,
+                        "USER": "test",
+                        "NAME": "testdb",
+                    },
+                    installed_module_versions={"quickscale_modules_auth": "2.0"},
+                )
+
+        assert "recorded '1.2' but installed '2.0'" in str(exc_info.value)
+        mock_run.assert_not_called()
+
+    def test_artifact_without_module_vintage_refused_before_pg_restore(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            with pytest.raises(
+                BackupRestoreBlocked,
+                match="records no module vintage",
+            ):
+                _execute_restore_for_resolved_source(
+                    src,
+                    confirmation="test-backup.dump",
+                    dry_run=False,
+                    allow_production=True,
+                    current_engine="django.db.backends.postgresql",
+                    connection_settings={
+                        "HOST": "localhost",
+                        "PORT": 5432,
+                        "USER": "test",
+                        "NAME": "testdb",
+                    },
+                    installed_module_versions={"quickscale_modules_auth": "2.0"},
+                )
+
+        mock_run.assert_not_called()
+
+    def test_matching_module_vintage_artifact_executes_restore(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={"module_versions": {"quickscale_modules_auth": "2.0"}},
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            result = _execute_restore_for_resolved_source(
+                src,
+                confirmation="test-backup.dump",
+                dry_run=False,
+                allow_production=True,
+                current_engine="django.db.backends.postgresql",
+                connection_settings={
+                    "HOST": "localhost",
+                    "PORT": 5432,
+                    "USER": "test",
+                    "NAME": "testdb",
+                },
+                installed_module_versions={"quickscale_modules_auth": "2.0"},
+            )
+
+        assert result.executed is True
+        assert "Restore executed" in result.message
+        mock_run.assert_called()
+
+    def test_module_vintage_refused_without_engine_when_installed_versions_given(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            with pytest.raises(
+                BackupRestoreBlocked,
+                match="module vintage differs from the installed modules",
+            ):
+                _execute_restore_for_resolved_source(
+                    src,
+                    confirmation="test-backup.dump",
+                    dry_run=False,
+                    allow_production=True,
+                    connection_settings={
+                        "HOST": "localhost",
+                        "PORT": 5432,
+                        "USER": "test",
+                        "NAME": "testdb",
+                    },
+                    installed_module_versions={"quickscale_modules_auth": "2.0"},
+                )
+
+        mock_run.assert_not_called()
+
+    def test_recorded_vintage_refused_for_file_source_before_pg_restore(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "snapshot-restore.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        src = ResolvedRestoreSource(
+            confirmation_value="snapshot-restore.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            with pytest.raises(
+                BackupRestoreBlocked,
+                match="module vintage differs from the installed modules",
+            ):
+                _execute_restore_for_resolved_source(
+                    src,
+                    confirmation="snapshot-restore.dump",
+                    dry_run=False,
+                    allow_production=True,
+                    current_engine="django.db.backends.postgresql",
+                    connection_settings={
+                        "HOST": "localhost",
+                        "PORT": 5432,
+                        "USER": "test",
+                        "NAME": "testdb",
+                    },
+                    installed_module_versions={"quickscale_modules_auth": "2.0"},
+                    recorded_module_versions={"quickscale_modules_auth": "1.2"},
+                )
+
+        mock_run.assert_not_called()
+
+    def test_matching_recorded_vintage_executes_file_source_restore(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "snapshot-restore.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        src = ResolvedRestoreSource(
+            confirmation_value="snapshot-restore.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            result = _execute_restore_for_resolved_source(
+                src,
+                confirmation="snapshot-restore.dump",
+                dry_run=False,
+                allow_production=True,
+                current_engine="django.db.backends.postgresql",
+                connection_settings={
+                    "HOST": "localhost",
+                    "PORT": 5432,
+                    "USER": "test",
+                    "NAME": "testdb",
+                },
+                installed_module_versions={"quickscale_modules_auth": "2.0"},
+                recorded_module_versions={"quickscale_modules_auth": "2.0"},
+            )
+
+        assert result.executed is True
         mock_run.assert_called()

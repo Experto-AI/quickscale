@@ -22,7 +22,7 @@ from importlib import import_module
 from io import StringIO
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Mapping, Protocol, cast
 
 import django
 from django.apps import apps
@@ -58,6 +58,7 @@ from quickscale_core.dr_engine.recovery import (
     RestoreResult,
     RestoreSourceResolutionMode,
     RestoreWarning,
+    _collect_artifact_module_versions,
     _collect_local_backup_validation_issues,
     _detect_restore_file_format,
     _execute_restore_for_resolved_source as _core_execute_restore_for_resolved_source,
@@ -1534,6 +1535,8 @@ def _build_snapshot_full_backup_contract(
             "database_name": authoritative_dump.database_name,
             "checksum_sha256": authoritative_dump.checksum_sha256,
             "size_bytes": authoritative_dump.size_bytes,
+            "module_versions": _collect_artifact_module_versions(authoritative_dump)
+            or {},
         }
 
     required_sidecars: dict[str, dict[str, Any]] = {}
@@ -1709,6 +1712,8 @@ def build_backup_snapshot_report(
             "remote_key": authoritative_dump.remote_key,
             "checksum_sha256": authoritative_dump.checksum_sha256,
             "size_bytes": authoritative_dump.size_bytes,
+            "module_versions": _collect_artifact_module_versions(authoritative_dump)
+            or {},
             "created_at": authoritative_dump.created_at.astimezone(
                 timezone.utc
             ).isoformat(),
@@ -2372,7 +2377,11 @@ def _get_restore_compatibility_issues(artifact: Any) -> list[str]:
     current_engine = str(
         django.db.connections["default"].settings_dict.get("ENGINE") or ""
     ).strip()
-    return _core_get_restore_compatibility_issues(artifact, current_engine)
+    return _core_get_restore_compatibility_issues(
+        artifact,
+        current_engine,
+        installed_module_versions=_collect_module_versions(),
+    )
 
 
 @contextmanager
@@ -2450,6 +2459,7 @@ def _execute_restore_for_resolved_source(
     dry_run: bool,
     allow_production: bool,
     shell_runner: ShellCommandRunner | None,
+    recorded_module_versions: Mapping[str, str] | None = None,
 ) -> RestoreResult:
     """Run the guarded restore pipeline — Django-backed wrapper around core."""
     current_engine = str(
@@ -2467,6 +2477,8 @@ def _execute_restore_for_resolved_source(
         connection_settings=connection_settings,
         is_debug=settings.DEBUG,
         pg_contract_checker=_require_postgresql_18_contract,
+        installed_module_versions=_collect_module_versions(),
+        recorded_module_versions=recorded_module_versions,
     )
 
     if result.executed and restore_source.artifact is not None:
@@ -2494,8 +2506,14 @@ def restore_backup_source(
     shell_runner: ShellCommandRunner | None = None,
     policy: BackupPolicySnapshot | None = None,
     remote_materializer: RemoteMaterializer | None = None,
+    recorded_module_versions: Mapping[str, str] | None = None,
 ) -> RestoreResult:
-    """Run guarded restore validation or execution for one restore source."""
+    """Run guarded restore validation or execution for one restore source.
+
+    *recorded_module_versions* carries the module vintage for a source that has
+    no artifact row, such as a snapshot report restored by file path; the
+    Django-backed restore path compares it with the installed modules.
+    """
     with _resolve_restore_source(
         artifact=artifact,
         file_path=file_path,
@@ -2510,6 +2528,7 @@ def restore_backup_source(
             dry_run=dry_run,
             allow_production=allow_production,
             shell_runner=shell_runner,
+            recorded_module_versions=recorded_module_versions,
         )
 
 

@@ -145,6 +145,32 @@ def set_rollback_pin(
 # ---------------------------------------------------------------------------
 
 
+def _recorded_module_versions_from_report(
+    snapshot_report: dict[str, Any],
+) -> dict[str, str]:
+    """Return the module vintage recorded for the snapshot's authoritative dump.
+
+    The vintage is read from the dump artifact's own capture metadata, which is
+    the schema actually restored: a snapshot resume recaptures the release
+    sidecar under the then-current modules while reusing the original dump, so
+    the sidecar's vintage can differ from the dump's.  A report that records
+    none returns an empty mapping so the restore guard fails closed.
+    """
+    full_backup = snapshot_report.get("full_backup")
+    if not isinstance(full_backup, dict):
+        return {}
+    provenance = full_backup.get("provenance")
+    if not isinstance(provenance, dict):
+        return {}
+    authoritative_dump = provenance.get("authoritative_dump")
+    if not isinstance(authoritative_dump, dict):
+        return {}
+    recorded_versions = authoritative_dump.get("module_versions")
+    if not isinstance(recorded_versions, dict):
+        return {}
+    return {str(name): str(version) for name, version in recorded_versions.items()}
+
+
 @_register
 def build_database_plan(
     snapshot_report: dict[str, Any],
@@ -169,6 +195,7 @@ def build_database_plan(
         file_path=restore_file,
         confirmation=confirmation_value,
         dry_run=True,
+        recorded_module_versions=_recorded_module_versions_from_report(snapshot_report),
     )
 
     return {
@@ -214,6 +241,7 @@ def execute_database_restore(
         confirmation=confirmation_value,
         dry_run=False,
         allow_production=allow_production,
+        recorded_module_versions=_recorded_module_versions_from_report(snapshot_report),
     )
 
     # Run post-restore migration and health check.
