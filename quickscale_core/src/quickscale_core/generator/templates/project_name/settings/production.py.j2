@@ -131,7 +131,9 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if USE_X_FORWARDED
 
 # Recompute DRF's right-indexed selection count after production overrides.
 # The earlier request middleware supplies the short-chain fail-closed behavior
-# that stock DRF 3.17.2 does not implement on its own.
+# that stock DRF 3.17.2 does not implement on its own, and the throttle
+# defaults declared in base.py resolve their client identity through DRF's
+# own use of this count.
 REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else None  # noqa: F405
 
 
@@ -276,12 +278,13 @@ STORAGES["staticfiles"] = {  # noqa: F405
 
 # Shared cache backend for production
 #
-# A shared (not per-process in-memory) cache is required so that DRF
-# throttles and per-user rate limits are enforced consistently across all
-# workers and replicas.  Redis is the primary backend when ``REDIS_URL``
-# is available (standard on Railway).  Falls back to Django's database-
-# backed cache which, while slower, still provides cross-process
-# coherence.
+# A shared (not per-process in-memory) cache is required so that the DRF
+# throttles configured in base.py (``DEFAULT_THROTTLE_CLASSES`` /
+# ``DEFAULT_THROTTLE_RATES``) and per-user rate limits are enforced
+# consistently across all workers and replicas.  Redis is the primary
+# backend when ``REDIS_URL`` is available (standard on Railway).  Falls
+# back to Django's database-backed cache which, while slower, still
+# provides cross-process coherence.
 #
 # To create the database cache table, run::
 #

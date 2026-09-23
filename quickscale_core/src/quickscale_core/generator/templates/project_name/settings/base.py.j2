@@ -380,18 +380,49 @@ if globals().get("EMAIL_BACKEND") == "anymail.backends.resend.EmailBackend":
         ANYMAIL["RESEND_SENDER_DOMAIN"] = _notifications_resend_domain
 
 
-# DRF default permission baseline — fail-closed
-# ----------------------------------------------
+# DRF defaults — fail-closed permissions and conservative throttle rates
+# ----------------------------------------------------------------------
+# Modules may contribute DRF configuration through MODULE_SETTINGS (for
+# example extra throttle scopes); their keys are merged in below and win on
+# collision, exactly as module settings win over the template defaults for
+# every other settings key.  The template only fills in what a module leaves
+# unset, so a project with no modules still fails closed.
+REST_FRAMEWORK = dict(globals().get("REST_FRAMEWORK", {}))
+
 # Module APIs default to authenticated-only unless a view explicitly opts
-# into public access via ``permission_classes``.  Set after MODULE_SETTINGS
-# so this template's safe default wins over any module-provided DRF config.
-REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": [
+# into public access via ``permission_classes``.
+REST_FRAMEWORK.setdefault(
+    "DEFAULT_PERMISSION_CLASSES",
+    [
         "rest_framework.permissions.IsAuthenticated",
     ],
-    # Client-IP resolution for DRF throttles
-    "NUM_PROXIES": TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else None,
+)
+
+# Conservative default rates an operator raises for their traffic profile.
+# They sit above interactive use and legitimate polling (a client polling
+# every two seconds stays under the per-user rate) while still bounding a
+# runaway or abusive client; a module that ships a tighter scope
+# contributes it through MODULE_SETTINGS and it merges in below.
+REST_FRAMEWORK.setdefault(
+    "DEFAULT_THROTTLE_CLASSES",
+    [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+)
+_DEFAULT_DRF_THROTTLE_RATES = {
+    "anon": "1200/hour",
+    "user": "3000/hour",
 }
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
+    **_DEFAULT_DRF_THROTTLE_RATES,
+    **REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {}),
+}
+
+# Client-IP resolution for DRF throttles.  Derived from the trusted-proxy
+# settings above so DRF and the shared resolver cannot disagree.
+REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else None
 
 
 # Default primary key field type

@@ -110,30 +110,12 @@ at*, not *clean*.
 ## 2. Machine-readable finding index
 
 ```yaml
-- id: billing-checkout-endpoints-unthrottled
-  severity: S3
-  category: "III. Security"
-  title: Stripe-calling endpoints have no throttle and no DRF throttle defaults exist
-  effort: Small
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
 - id: orgs-ready-early-return-skips-receivers
   severity: S3
   category: "I. Correctness"
   title: Privileged-command exemption skips GUC priming and the last-owner backstop
   effort: Small
   confidence: High
-  status: open
-  reality: R2
-  chain: []
-- id: blog-throttle-racy-on-database-cache
-  severity: S3
-  category: "II. Concurrency"
-  title: Blog rate limiter is non-atomic on the default production cache backend
-  effort: Small
-  confidence: Medium
   status: open
   reality: R2
   chain: []
@@ -145,15 +127,6 @@ at*, not *clean*.
   confidence: High
   status: open
   reality: R3
-  chain: []
-- id: blog-throttle-ident-collision
-  severity: S4
-  category: "III. Security"
-  title: Throttle cache key collapses ':' and '.' so an IPv6 and IPv4 client can share a bucket
-  effort: Trivial
-  confidence: High
-  status: open
-  reality: R2
   chain: []
 - id: build-system-requires-unpinned
   severity: S4
@@ -172,51 +145,17 @@ at*, not *clean*.
 
 | ID | Sev | Category | Title | Effort | Conf | Status |
 |---|---|---|---|---|---|---|
-| `billing-checkout-endpoints-unthrottled` | S3 | Security | Stripe-calling endpoints have no throttle | Small | High | open |
 | `orgs-ready-early-return-skips-receivers` | S3 | Correctness | Privileged-command exemption skips two other installs | Small | High | open |
-| `blog-throttle-racy-on-database-cache` | S3 | Concurrency | Rate limiter non-atomic on the default prod cache | Small | Medium | open |
 | `pipeline-mutable-action-refs` | S3 | Pipeline | Publishing workflow trusts mutable refs | Small | High | open |
-| `blog-throttle-ident-collision` | S4 | Security | IPv4/IPv6 throttle bucket collision | Trivial | High | open |
 | `build-system-requires-unpinned` | S4 | Pipeline | Unpinned `poetry-core` build requirement | Trivial | High | open |
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 4 · S4 — 2 · total 6.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 2 · S4 — 1 · total 3.
 
 ---
 
 ## 4. Findings
 
-### Finding 1: Stripe-calling endpoints have no throttle, and no DRF throttle defaults exist
-
-- **ID:** `billing-checkout-endpoints-unthrottled` · **S3** · Reality **R2** · Confidence **High**
-- **Location:** `quickscale_modules/billing/src/quickscale_modules_billing/views.py:171–230`
-  (`CreateCheckoutSessionView`), `:227`, `:280`, `:332`, `:383` (the sibling checkout/portal views);
-  the absent configuration is at
-  `quickscale_core/.../templates/project_name/settings/base.py.j2:371–377`.
-- **Defect + failure scenario:** `REST_FRAMEWORK` in the generated settings defines
-  `DEFAULT_PERMISSION_CLASSES` and `NUM_PROXIES` but **no** `DEFAULT_THROTTLE_CLASSES` or
-  `DEFAULT_THROTTLE_RATES`, and none of the billing views declares `throttle_classes`. Only the
-  forms module (`forms/throttles.py`) and the blog module (its own hand-rolled limiter) rate-limit
-  anything. So any single authenticated org owner can POST to `/billing/checkout/` in a loop; each
-  request makes at least one and often two outbound Stripe API calls (`search_customers`,
-  `create_customer`, `checkout_session.create`). The result is Stripe rate-limit exhaustion for the
-  whole tenant fleet — every other tenant's checkout and webhook processing starts failing — plus
-  a pile of abandoned Checkout Sessions. Per §III this is a *named* unprotected expensive
-  operation, not a systemic complaint; the systemic version is recorded as a structural smell below.
-  There is a mild oracle mismatch worth naming: `production.py.j2:120–123` tunes `NUM_PROXIES`
-  specifically "so that DRF throttles and per-user rate limits are enforced consistently across all
-  workers and replicas", which reads as though throttles are configured. They are not.
-- **Fix:** Add `DEFAULT_THROTTLE_CLASSES`/`DEFAULT_THROTTLE_RATES` to the `REST_FRAMEWORK` block in
-  `base.py.j2` with conservative `user`/`anon` scopes, and give the checkout and billing-portal
-  views an explicit tighter `throttle_scope`. **Effort: Small.**
-  Verify by posting past the rate in a test and asserting a 429.
-- **Refutation:** Searched for a layer-up throttle — middleware in `base.py.j2:204–219`, the module
-  middleware list, and each billing view's class body. `ClientIdentityMiddleware` normalizes the
-  client IP *for* throttles but enforces nothing itself. No WAF or edge rate limit is configured in
-  `railway.json.j2`. No refutation survived. **Fix risk:** a default `user` throttle applies to
-  every DRF view in every generated project, so the rate must be generous enough not to break
-  legitimate polling clients; ship it as a named default operators can raise.
-
-### Finding 2: The privileged-command exemption skips GUC priming and the last-owner backstop
+### Finding 1: The privileged-command exemption skips GUC priming and the last-owner backstop
 
 - **ID:** `orgs-ready-early-return-skips-receivers` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:186–188`
@@ -250,34 +189,7 @@ at*, not *clean*.
   be blocked by the backstop and will need an explicit bypass — worth checking existing migrations
   before landing.
 
-### Finding 3: Blog rate limiter is non-atomic on the default production cache backend
-
-- **ID:** `blog-throttle-racy-on-database-cache` · **S3** · Reality **R2** · Confidence **Medium**
-- **Location:** `quickscale_modules/blog/src/quickscale_modules_blog/views.py:303–330`
-  (`_enforce_blog_api_rate_limit`); the backend selection is
-  `.../templates/project_name/settings/production.py.j2` (Redis when `REDIS_URL` is set, otherwise
-  `django.core.cache.backends.db.DatabaseCache`).
-- **Defect + failure scenario:** The limiter relies on `cache.add` + `cache.incr` being atomic.
-  That holds on `RedisCache`. In the configuration cell **production + no `REDIS_URL`** — which
-  `production.py.j2` explicitly supports and which the template's own comment concedes is "slower"
-  but coherent — the backend is `DatabaseCache`, whose `incr` is a read-then-write rather than a
-  single atomic operation. N concurrent uploads then read the same counter value and write back the
-  same increment, so the effective limit is far above the configured one. The `except
-  RATE_LIMIT_CACHE_FALLBACK_ERRORS` branch at lines 317–321 has the same read-modify-write shape
-  and makes it worse. Confidence is **Medium** rather than High: the exact atomicity of
-  `DatabaseCache.incr` is a runtime property of the installed Django version, and I reasoned from
-  the backend's documented behaviour rather than executing it.
-- **Fix:** Either require a cache backend with atomic `incr` for the limiter and fail closed on
-  boot when one is absent, or move the counter to a single `UPDATE ... SET n = n + 1 RETURNING n`
-  against a dedicated table. **Effort: Small.** Verify by driving the limiter from N threads
-  against a `DatabaseCache`-configured test settings module and asserting the observed request
-  count never exceeds the limit — that is the runtime confirmation this finding is marked as
-  needing.
-- **Refutation:** Checked whether production always has Redis — it does not; `REDIS_URL` is
-  documented as optional and the DB-cache branch is the written fallback, complete with a
-  `createcachetable` step in `start.sh.j2`. Checked for a layer-up limiter — none.
-
-### Finding 4: The publishing workflow trusts mutable action refs and an unpinned Poetry
+### Finding 2: The publishing workflow trusts mutable action refs and an unpinned Poetry
 
 - **ID:** `pipeline-mutable-action-refs` · **S3** · Reality **R3** · Confidence **High**
 - **Location:** `.github/workflows/publish.yml:294`, `:318`
@@ -313,11 +225,6 @@ at*, not *clean*.
 
 ### S4 findings
 
-- `blog-throttle-ident-collision` · `quickscale_modules/blog/src/quickscale_modules_blog/views.py:296–301`
-  · `_get_blog_api_rate_limit_cache_key` replaces both `":"` and `"."` with `"_"`, so the IPv4
-  address `1.2` and the IPv6 fragment `1:2` normalize to the same bucket — two unrelated clients can
-  share a rate-limit budget, or evade one. · Hash the identifier
-  (`hashlib.blake2s(ident.encode()).hexdigest()`) instead of character-substituting it.
 - `build-system-requires-unpinned` · `quickscale_core/pyproject.toml:41–43`,
   `quickscale_cli/pyproject.toml:40–42`, and the sibling packages · every package declares
   `requires = ["poetry-core"]` with no version bound, so the build backend is whatever resolves at
@@ -334,12 +241,12 @@ Cells name the layer that supplies the safeguard, or the finding ID for an empty
 |---|---|---|---|---|---|---|---|---|---|
 | `StripeWebhookView` (billing) | HMAC via `construct_event` | n/a (signature *is* authz) | payload key checks in each handler | JSON | — *(signature-gated; acceptable)* | implicit Stripe SDK timeout — see Notes | session advisory mutex spans processing | explicit 400/403/500 in view | `WebhookEvent` row |
 | `NotificationWebhookView` | HMAC + timestamp TTL, `compare_digest` | n/a | explicit required-field checks + `validate_email` | JSON | — *(signature-gated)* | not applicable (no outbound call) | idempotency key + atomic block | explicit 400/403 | delivery event row |
-| `CreateCheckoutSessionView` + billing siblings | `SessionAuthentication` + explicit `is_authenticated` | `_resolve_request_organization(require_owner=True)` | DRF serializer | DRF JSON renderer | **`billing-checkout-endpoints-unthrottled`** | implicit Stripe SDK timeout — see Notes | stable reservation-derived Stripe idempotency keys | DRF | Stripe-side |
-| `PlanListView` | `AllowAny` — deliberate, public catalog | n/a (public data only) | n/a (GET, no params) | DRF | `billing-checkout-endpoints-unthrottled` | n/a | n/a | DRF | n/a |
+| `CreateCheckoutSessionView` + billing siblings | `SessionAuthentication` + explicit `is_authenticated` | `_resolve_request_organization(require_owner=True)` | DRF serializer | DRF JSON renderer | `billing_checkout` / `billing_portal` scopes | implicit Stripe SDK timeout — see Notes | stable reservation-derived Stripe idempotency keys | DRF | Stripe-side |
+| `PlanListView` | `AllowAny` — deliberate, public catalog | n/a (public data only) | n/a (GET, no params) | DRF | `DEFAULT_THROTTLE_RATES` (`anon`/`user`) | n/a | n/a | DRF | n/a |
 | `BillingDashboardView` | `LoginRequiredMixin` | org resolution in context | n/a | Django template autoescape | n/a | n/a | n/a | Django | n/a |
-| Blog media upload API | `authenticate_blog_api_request` (session or token) | author + `_resolve_api_org` | request parsing in `create_blog_media_asset_from_request` | JSON | custom limiter — **`blog-throttle-racy-on-database-cache`**, `blog-throttle-ident-collision` | n/a | n/a | JSON | n/a |
+| Blog media upload API | `authenticate_blog_api_request` (session or token) | author + `_resolve_api_org` | request parsing in `create_blog_media_asset_from_request` | JSON | custom limiter (atomic counter, hashed identity) | n/a | n/a | JSON | n/a |
 | Forms public submit | `AllowAny` — deliberate, public form | n/a | DRF serializer | DRF | `FormSubmitThrottle` + required `FORMS_RATE_LIMIT` | n/a | n/a | DRF | submission row |
-| Forms admin list / CRM admin views | DRF auth | `IsAdminUser` | DRF serializer | DRF | `billing-checkout-endpoints-unthrottled` (same missing default) | n/a | n/a | DRF | n/a |
+| Forms admin list / CRM admin views | DRF auth | `IsAdminUser` | DRF serializer | DRF | `DEFAULT_THROTTLE_RATES` (`anon`/`user`) | n/a | n/a | DRF | n/a |
 | `ProfileView` / `ProfileUpdateView` | `LoginRequiredMixin` | `get_object` returns `request.user` — no IDOR surface | `ProfileUpdateForm` | template autoescape | out of scope — session-auth'd self-service | n/a | n/a | Django | n/a |
 | `AccountDeleteView` | `LoginRequiredMixin` | self only | confirmation form | template autoescape | out of scope — same | provider I/O outside DB transactions; implicit Stripe SDK timeout — see Notes | compensating resume on delete failure | Django messages | n/a |
 | Org views (`OrgListView`, `OrgCreateView`, detail/member views) | `LoginRequiredMixin` | `OrgRoleMixin` + `SaasModeRequiredMixin` | Django forms | template autoescape | out of scope | n/a | n/a | Django | n/a |
@@ -355,20 +262,21 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 
 ## 6. Per-subsystem verdicts
 
-- **billing** — `billing-checkout-endpoints-unthrottled`. Read in
-  full: the Stripe client wrapper, the webhook pipeline,
+- **billing** — clean after the generated DRF throttle defaults and the billing
+  checkout/portal scopes landed. Read in full: the Stripe client wrapper, the webhook pipeline,
   `credit_user`, `cancel_current_subscription`, and the whole permission surface of `views.py`.
 - **notifications** — clean. Webhook ingestion and signature verification read in full.
 - **auth** — clean after provider I/O moved outside database transactions with compensating resume.
   All 551 lines read in the baseline pass; the account-deletion correction was re-read.
 - **orgs** — `orgs-ready-early-return-skips-receivers`. `apps.py` and `current_org.py` read in full;
   `views.py` decorator surface and `managers.py`/`tenancy.py` sampled.
-- **blog** — `blog-throttle-racy-on-database-cache`, `blog-throttle-ident-collision`. The rate
-  limiter and API authentication path read in full; the rest sampled.
+- **blog** — clean after the rate limiter moved to a single atomic counter with hashed client
+  identities. The rate limiter and API authentication path read in full; the rest sampled.
 - **dr_engine / backups** — clean on the dump/restore TLS posture, its one finding. `primitives.py`,
   the `recovery.py` execution gate, and the `orchestration.py` call sites read in full.
-- **generator templates** — `billing-checkout-endpoints-unthrottled` (the missing DRF
-  defaults). `base.py.j2`, `production.py.j2`, `.env.j2`, `start.sh.j2` read in full.
+- **generator templates** — clean after the DRF throttle defaults and the composable
+  `REST_FRAMEWORK` block landed. `base.py.j2`, `production.py.j2`, `.env.j2`, `start.sh.j2` read in
+  full.
 - **quickscale_cli** — clean on the sinks swept. All 94 files swept for shell/eval/deserialization
   sinks; `railway_utils.py` secret handling read in full.
 - **CI/CD (R3)** — `pipeline-mutable-action-refs`. All four workflows read in full.
@@ -409,8 +317,8 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
   test found in the sweep.
 - **Chain pass (§3.10) ran.** The original chain between an unthrottled checkout endpoint and a
   Stripe call inside a lock-holding transaction was broken by moving provider I/O outside database
-  transactions. The unthrottled endpoint remains a standalone finding, and the implicit Stripe SDK
-  timeout remains a watch item. No other pair combined into anything above its parts.
+  transactions. The endpoint's throttle gap is closed; the implicit Stripe SDK timeout remains a
+  watch item. No other pair combined into anything above its parts.
 
 ---
 
@@ -418,12 +326,9 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 
 *(candidate inputs for the companion architectural audit — one line each, not findings here)*
 
-- Rate limiting is per-module folklore: forms uses a DRF `ScopedRateThrottle`, blog hand-rolls a
-  cache-counter limiter with its own IP normalization, and everything else has nothing — this
-  points at a missing shared throttling contract in the module ABI, not at any one endpoint.
-- `base.py.j2` **replaces** the whole `REST_FRAMEWORK` dict after `MODULE_SETTINGS`, so a module can
-  never contribute DRF configuration (throttle rates, renderers, authentication classes) even
-  though the settings-composition system exists precisely to let modules contribute settings.
+- Rate limiting is per-module folklore: forms uses a DRF `ScopedRateThrottle`, blog hand-rolls its
+  own atomic counter limiter, and everything else relies on the generated `user`/`anon` defaults —
+  this points at a missing shared throttling contract in the module ABI, not at any one endpoint.
 - Outbound-call discipline (timeouts, retry caps, keeping network I/O out of transactions) remains
   distributed across module boundaries. Billing and auth now share transaction-safe services, but
   timeout policy is still implicit in the Stripe SDK configuration.
@@ -456,10 +361,6 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
   amplifies database contention or creates the remediated rollback inconsistency. The client still
   sets no explicit timeout or retry policy; promote this if operational latency requires a tighter
   bound or another provider client duplicates the omission.
-- **`REST_FRAMEWORK` clobbers module-supplied DRF config** (`base.py.j2:371`). Not promoted: no
-  module ships a `REST_FRAMEWORK` key today, so it fails §0's *live* gate. It becomes a finding the
-  day one does — and the natural fix for `billing-checkout-endpoints-unthrottled` may be exactly
-  that. Recorded as the structural smell above.
 - **`QUICKSCALE_PRIVILEGED_COMMAND` as persistent configuration.** Setting it in the environment
   would disable the BYPASSRLS boot guard for a serving process. Not a finding: `production.py.j2`
   refuses to start unless `RUNTIME_DATABASE_URL` is explicitly blank alongside it, which is the

@@ -479,7 +479,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "5c11455ad359778a00e2d41b49ef8cbdfc253b30c68e6714e409803146181875"
+      "sha256": "927bd418d3383bd1157e98fa84dcaa99cd6db847af2ebd2283d7bd8c9219df5e"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -491,7 +491,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "172dbafa1a865ec26c76ec7e1102a08af65f69898a31148261f65eaa35698465"
+      "sha256": "b29111a0f734b90aa7537b4908fb27a59419e5ca0dc6c015e797bea4cb77a176"
     },
     "testproject/urls.py": {
       "mode": "664",
@@ -949,7 +949,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "5c11455ad359778a00e2d41b49ef8cbdfc253b30c68e6714e409803146181875"
+      "sha256": "927bd418d3383bd1157e98fa84dcaa99cd6db847af2ebd2283d7bd8c9219df5e"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -961,7 +961,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "172dbafa1a865ec26c76ec7e1102a08af65f69898a31148261f65eaa35698465"
+      "sha256": "b29111a0f734b90aa7537b4908fb27a59419e5ca0dc6c015e797bea4cb77a176"
     },
     "testproject/urls.py": {
       "mode": "664",
@@ -1419,7 +1419,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "5c11455ad359778a00e2d41b49ef8cbdfc253b30c68e6714e409803146181875"
+      "sha256": "927bd418d3383bd1157e98fa84dcaa99cd6db847af2ebd2283d7bd8c9219df5e"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -1431,7 +1431,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "172dbafa1a865ec26c76ec7e1102a08af65f69898a31148261f65eaa35698465"
+      "sha256": "b29111a0f734b90aa7537b4908fb27a59419e5ca0dc6c015e797bea4cb77a176"
     },
     "testproject/urls.py": {
       "mode": "664",

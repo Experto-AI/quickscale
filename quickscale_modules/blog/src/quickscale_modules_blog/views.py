@@ -1,22 +1,24 @@
 """Views for QuickScale blog module."""
 
+import hashlib
 import json
 import logging
 import secrets
-from time import time
 from collections.abc import Callable, Mapping
+from datetime import timedelta
 from importlib import import_module
+from time import time
 from typing import Any, TypeVar, cast
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.core.files.uploadedfile import UploadedFile
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.html import escape
 from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
@@ -57,7 +59,12 @@ DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
 IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
 DEFAULT_BLOG_POSTS_PER_PAGE = 10
 RATE_LIMIT_VALUE_PARSE_ERRORS = (TypeError, ValueError)
-RATE_LIMIT_CACHE_FALLBACK_ERRORS = (AttributeError, NotImplementedError, ValueError)
+# Dedicated counter table for the blog API limiter, created by the module's
+# initial migration.  The counter is deliberately not a Django model: it holds
+# no tenant-owned data, so it stays out of the model-based tenant
+# classification and purge contract and is only ever touched by the limiter's
+# atomic upsert below.
+BLOG_API_THROTTLE_COUNTER_TABLE = "quickscale_modules_blog_api_throttle_counter"
 
 # ---------------------------------------------------------------------------
 # Org-resolution helpers for the single-URL contract (T1.6)
@@ -293,11 +300,52 @@ def _get_blog_api_rate_limit_ident(request: HttpRequest) -> str:
     return "unknown"
 
 
-def _get_blog_api_rate_limit_cache_key(request: HttpRequest, bucket: int) -> str:
-    """Build a stable cache key for the current blog API throttle bucket."""
+def _get_blog_api_rate_limit_counter_key(request: HttpRequest, bucket: int) -> str:
+    """Build a stable counter key for the current blog API throttle bucket.
+
+    The client identity is hashed, so two distinct identifiers can never
+    normalize into the same bucket the way character substitution allowed.
+    """
     ident = _get_blog_api_rate_limit_ident(request)
-    safe_ident = ident.replace(":", "_").replace(".", "_") or "unknown"
-    return f"throttle_blog_api_{safe_ident}_{bucket}"
+    ident_digest = hashlib.blake2s(ident.encode("utf-8"), digest_size=16).hexdigest()
+    return f"throttle_blog_api_{ident_digest}_{bucket}"
+
+
+def _increment_blog_api_rate_limit_counter(
+    counter_key: str,
+    window_seconds: int,
+) -> int:
+    """Atomically increment the fixed-window counter and return its new value.
+
+    A single ``INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING`` statement
+    keeps the count exact under concurrent requests on every backend,
+    including Django's database cache, whose ``incr`` is a read-modify-write
+    that loses increments.  Expired rows are removed in the same call so the
+    table cannot grow without bound.
+    """
+    now = timezone.now()
+    expires_at = now + timedelta(seconds=window_seconds)
+    table = connection.ops.quote_name(BLOG_API_THROTTLE_COUNTER_TABLE)
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"DELETE FROM {table} WHERE expires_at < %s",
+            [now],
+        )
+        cursor.execute(
+            f"INSERT INTO {table} (counter_key, request_count, expires_at) "
+            "VALUES (%s, 1, %s) "
+            "ON CONFLICT (counter_key) DO UPDATE SET "
+            f"request_count = {table}.request_count + 1, "
+            "expires_at = EXCLUDED.expires_at "
+            "RETURNING request_count",
+            [counter_key, expires_at],
+        )
+        row = cursor.fetchone()
+
+    if row is None:  # pragma: no cover - RETURNING always yields the row
+        raise RuntimeError("Blog API throttle counter increment returned no row")
+    return int(row[0])
 
 
 def _enforce_blog_api_rate_limit(request: HttpRequest) -> HttpResponse | None:
@@ -307,18 +355,12 @@ def _enforce_blog_api_rate_limit(request: HttpRequest) -> HttpResponse | None:
     )
     current_time = int(time())
     bucket = current_time // window_seconds
-    cache_key = _get_blog_api_rate_limit_cache_key(request, bucket)
+    counter_key = _get_blog_api_rate_limit_counter_key(request, bucket)
 
-    try:
-        if cache.add(cache_key, 1, timeout=window_seconds):
-            request_count = 1
-        else:
-            request_count = cache.incr(cache_key)
-    except RATE_LIMIT_CACHE_FALLBACK_ERRORS:
-        cached_value = cache.get(cache_key, 0)
-        request_count = cached_value if isinstance(cached_value, int) else 0
-        request_count += 1
-        cache.set(cache_key, request_count, timeout=window_seconds)
+    request_count = _increment_blog_api_rate_limit_counter(
+        counter_key,
+        window_seconds,
+    )
 
     if request_count <= allowed_requests:
         return None

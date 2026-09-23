@@ -18,7 +18,7 @@ from quickscale_modules_blog.views import (
     _build_media_response_url,
     _enforce_blog_api_rate_limit,
     _get_authorization_token,
-    _get_blog_api_rate_limit_cache_key,
+    _get_blog_api_rate_limit_counter_key,
     _get_blog_api_rate_limit_ident,
     _get_blog_api_tokens,
     authenticate_blog_api_request,
@@ -146,9 +146,26 @@ def staff_org(db, staff_user):
     return Organization.objects.get_system_org()
 
 
+def counter_rows() -> dict[str, int]:
+    """Return the blog API throttle counter rows keyed by counter key."""
+    from django.db import connection
+
+    from quickscale_modules_blog.views import BLOG_API_THROTTLE_COUNTER_TABLE
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"SELECT counter_key, request_count FROM {BLOG_API_THROTTLE_COUNTER_TABLE}"
+        )
+        return {str(key): int(count) for key, count in cursor.fetchall()}
+
+
 @pytest.fixture(autouse=True)
 def clear_blog_api_rate_limit_cache():
-    """Keep per-IP blog API throttle state isolated across tests."""
+    """Keep blog cache state isolated across tests.
+
+    The limiter's counter lives in its own table, which the per-test database
+    transaction rolls back like any other row.
+    """
     cache.clear()
     yield
     cache.clear()
@@ -409,7 +426,7 @@ class TestPublishPostApi:
         proxy_count: int,
         xff: str | None,
     ) -> None:
-        """Identifier, cache key, and enforcement share resolver value parity."""
+        """Identifier, counter key, and enforcement share resolver value parity."""
         request_kwargs: dict[str, str] = {"REMOTE_ADDR": "10.0.0.1"}
         if xff is not None:
             request_kwargs["HTTP_X_FORWARDED_FOR"] = xff
@@ -422,18 +439,12 @@ class TestPublishPostApi:
             expected_ip = get_client_ip(request)
             expected_ident = expected_ip.strip() or "unknown"
             assert _get_blog_api_rate_limit_ident(request) == expected_ident
-            expected_key = _get_blog_api_rate_limit_cache_key(request, 1)
+            expected_key = _get_blog_api_rate_limit_counter_key(request, 1)
 
-            with (
-                patch("quickscale_modules_blog.views.time", return_value=3600),
-                patch(
-                    "quickscale_modules_blog.views.cache.add",
-                    return_value=True,
-                ) as cache_add,
-            ):
+            with patch("quickscale_modules_blog.views.time", return_value=3600):
                 assert _enforce_blog_api_rate_limit(request) is None
 
-        cache_add.assert_called_once_with(expected_key, 1, timeout=3600)
+        assert counter_rows() == {expected_key: 1}
 
     def test_blog_rate_limiter_empty_identity_uses_unknown_bucket(self, rf):
         """An empty resolved value keeps the limiter's existing safe fallback."""
@@ -443,18 +454,25 @@ class TestPublishPostApi:
             expected_ip = get_client_ip(request)
             assert expected_ip == ""
             assert _get_blog_api_rate_limit_ident(request) == "unknown"
-            expected_key = _get_blog_api_rate_limit_cache_key(request, 1)
+            expected_key = _get_blog_api_rate_limit_counter_key(request, 1)
 
-            with (
-                patch("quickscale_modules_blog.views.time", return_value=3600),
-                patch(
-                    "quickscale_modules_blog.views.cache.add",
-                    return_value=True,
-                ) as cache_add,
-            ):
+            with patch("quickscale_modules_blog.views.time", return_value=3600):
                 assert _enforce_blog_api_rate_limit(request) is None
 
-        cache_add.assert_called_once_with(expected_key, 1, timeout=3600)
+        assert counter_rows() == {expected_key: 1}
+
+    def test_blog_rate_limiter_hashed_identity_keeps_former_collision_apart(self, rf):
+        """Hashing keeps an IPv4 address and an IPv6 fragment in separate buckets."""
+        ipv4_request = rf.post("/blog/api/publish/", REMOTE_ADDR="1.2")
+        ipv6_request = rf.post("/blog/api/publish/", REMOTE_ADDR="1:2")
+
+        with override_settings(USE_X_FORWARDED_FOR=False, TRUSTED_PROXY_COUNT=0):
+            ipv4_key = _get_blog_api_rate_limit_counter_key(ipv4_request, 1)
+            ipv6_key = _get_blog_api_rate_limit_counter_key(ipv6_request, 1)
+
+        assert ipv4_key != ipv6_key
+        assert "1.2" not in ipv4_key
+        assert "1:2" not in ipv6_key
 
     @pytest.mark.parametrize("setting_name,setting_value", BLOG_INVALID_PROXY_SETTINGS)
     def test_publish_post_api_invalid_proxy_settings_fail_loud_without_mutation(
@@ -467,7 +485,7 @@ class TestPublishPostApi:
         setting_name: str,
         setting_value: object,
     ) -> None:
-        """The published-post limiter raises before cache or post mutation."""
+        """The published-post limiter raises before counter or post mutation."""
         settings.BLOG_API_RATE_LIMIT = "1/hour"
         settings.BLOG_API_TOKENS = [
             {"token": "invalid-proxy-token", "username": staff_user.username}
@@ -498,28 +516,19 @@ class TestPublishPostApi:
                 get_client_ip(direct_request)
 
             client = Client(enforce_csrf_checks=True)
-            with (
-                patch.object(cache, "add") as cache_add,
-                patch.object(cache, "incr") as cache_incr,
-                patch.object(cache, "set") as cache_set,
-            ):
-                with pytest.raises(ImproperlyConfigured) as endpoint_error:
-                    client.post(
-                        url,
-                        data=json.dumps(
-                            {"title": "Invalid Proxy Post", "content": "Body"}
-                        ),
-                        content_type="application/json",
-                        HTTP_AUTHORIZATION="Bearer invalid-proxy-token",
-                        **request_kwargs,
-                    )
+            with pytest.raises(ImproperlyConfigured) as endpoint_error:
+                client.post(
+                    url,
+                    data=json.dumps({"title": "Invalid Proxy Post", "content": "Body"}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION="Bearer invalid-proxy-token",
+                    **request_kwargs,
+                )
 
             assert type(endpoint_error.value) is type(direct_error.value)
             assert str(endpoint_error.value) == str(direct_error.value)
             assert setting_name in str(endpoint_error.value)
-            cache_add.assert_not_called()
-            cache_incr.assert_not_called()
-            cache_set.assert_not_called()
+            assert counter_rows() == {}
 
         with blog_org_scope(staff_org):
             assert Post.all_objects.filter(slug="invalid-proxy-post").count() == (
