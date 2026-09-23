@@ -62,6 +62,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `connect_timeout` through libpq environment variables, so a deployment that verifies the server
     certificate keeps verifying it while the database is moved and a strict-TLS deployment whose
     server cannot satisfy the request now fails its backup instead of completing it in plaintext.
+  - **Restore refuses a schema the running modules cannot read.** A recorded backup artifact whose
+    metadata module versions differ from the installed modules — or that records none — is refused
+    before `pg_restore` runs, naming each differing module with both versions, and the DR snapshot
+    route compares the vintage recorded with the snapshot's authoritative dump.
   - **The generator fails closed on undefined template context.** A missing or renamed context key
     raises during generation instead of rendering empty text, and the release lane boots a freshly
     generated project through its shipped `start.sh` and asserts `/healthcheck/` answers `OK`.

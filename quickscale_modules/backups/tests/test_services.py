@@ -2255,6 +2255,61 @@ class TestBackupLifecycle:
         assert "artifact database engine" in str(exc_info.value)
         assert "artifact backup format 'pg_dump_custom'" in str(exc_info.value)
 
+    def test_restore_rejects_artifact_recording_a_different_module_vintage(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        postgresql_backup_artifact.metadata_json = {
+            **postgresql_backup_artifact.metadata_json,
+            "module_versions": {"quickscale_modules_backups": "0.0.1"},
+        }
+        postgresql_backup_artifact.save(update_fields=["metadata_json", "updated_at"])
+        runner_calls: list[list[str]] = []
+
+        def fake_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            runner_calls.append(command)
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="module vintage differs from the installed modules",
+        ) as exc_info:
+            restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=False,
+                shell_runner=cast(ShellCommandRunner, fake_runner),
+            )
+
+        message = str(exc_info.value)
+        assert "quickscale_modules_backups recorded '0.0.1'" in message
+        assert "but installed '" in message
+        assert runner_calls == []
+
+    def test_restore_rejects_artifact_recording_no_module_vintage(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        metadata_without_vintage = dict(postgresql_backup_artifact.metadata_json)
+        metadata_without_vintage.pop("module_versions", None)
+        postgresql_backup_artifact.metadata_json = metadata_without_vintage
+        postgresql_backup_artifact.save(update_fields=["metadata_json", "updated_at"])
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="records no module vintage",
+        ):
+            restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=True,
+            )
+
     def test_restore_dry_run_requires_postgresql_18_server(
         self,
         postgresql_backup_artifact: BackupArtifact,

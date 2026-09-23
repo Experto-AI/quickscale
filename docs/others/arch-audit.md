@@ -106,7 +106,7 @@ runtime-contract seams, not its frontend or media carry-over.
 | Tenant-model universe is classified, refreshed, and purged | Marker-derived classification, FORCE-RLS refresh, FK-ordered purge | Structural; open to project-owned models | unchanged |
 | Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard | Structural | **strengthened**: SA203 narrowed the privileged exemption to the role check only, so the last-owner backstop and isolation-check registration now run on every startup path (`aa5ff547`) |
 | Privileged Django command set | 3 frozensets + `start.sh.j2`, held equal by `test_privileged_command_contract.py`; a 5th copy in `beta_migration.py:3389-3396` is validated only through the fresh-first smoke gate, whose donor is always current-vintage | Gated, exact-member | unchanged. The station exists *because* `production.py` is donor-owned; now counted under finding 2 |
-| **Schema and data survive a QuickScale upgrade** | **None.** Clean-break rule (`decisions.md:952-968`). Restore checks engine, format, and PG majors (`recovery.py:208-256`) but not the recorded `module_versions` (`orchestration.py:391`). Migration smoke gate is same-vintage with `migrate` shimmed | **Convention (explicit non-support)** | **new row**: finding 1 |
+| **Schema and data survive a QuickScale upgrade** | **Containment only.** Clean-break rule (`decisions.md:952-968`). Restore refuses an artifact whose recorded `module_versions` differ from the installed modules — or that records none — before `pg_restore` runs (SA205); engine, format, and PG majors are still checked. No tool carries data across a rewrite. Migration smoke gate is same-vintage with `migrate` shimmed | **Convention (explicit non-support), one refusal gate** | **strengthened**: SA205 added the restore vintage refusal; finding 1 |
 | **Template ↔ upgradable-code contract compatibility** | Detection: `project_contract` versus manifest vintages at `update`/`apply`/`deploy railway`. Adoption: prose steps, hand-copied (one block ×5, Railway ×2); `project_contract` never advances, so acknowledgement is per-invocation forever | **Detection gated; adoption content is convention** | **regressed**: SA200 and SA201 changed runtime contracts with no adoption step; finding 2 |
 | Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy | Membership gated both ways; disposition and doc mirror not gated | **weakened**: `INTENTIONALLY_UNMANAGED` grew **78 → 89**, and 4 entries have no rationale in `generated_file_ownership.md` |
 | Module-declared credential env vars reach `.env.example` | One declaration-driven managed-block renderer plus conformance | Structural and gated | unchanged. The managed-block shape is the precedent for finding 2 |
@@ -207,8 +207,15 @@ under vintage-N+k code without objection.
 - **The restore path cannot carry it either.** `_build_pg_restore_command` is a whole-database
   `pg_restore --clean --if-exists --no-owner` (`primitives.py:350-360`), so it restores the *old*
   schema and the old `django_migrations` rows. Backup metadata records `module_versions`
-  (`orchestration.py:391`). `_get_restore_compatibility_issues` (`recovery.py:208-256`) checks
-  engine, format, and PostgreSQL majors, and never compares module vintage.
+  (`orchestration.py:391`). At the audit snapshot `_get_restore_compatibility_issues`
+  (`recovery.py:208-256`) checked engine, format, and PostgreSQL majors, and never compared module
+  vintage. **SA205 has since added that refusal**: an artifact-backed restore whose recorded
+  `module_versions` differ from the installed modules — or that records none — is refused before
+  `pg_restore` runs, naming each differing module with both versions. The DR snapshot route
+  compares the vintage recorded with the snapshot's authoritative dump, so a resumed snapshot is
+  judged by the dump it restores rather than by recaptured sidecars. That containment does not
+  carry data: it converts a silent bad restore into a hard stop, and a bare operator-supplied
+  `--file` restore records no vintage to compare.
 - **The CLI already tells users the answer.** On `InconsistentMigrationHistory`,
   `development_commands.py:385-420` offers to destroy the volume, or to "reconcile the migration
   history manually."
@@ -221,7 +228,8 @@ under vintage-N+k code without objection.
 - A data-carry plan in `decisions.md`, the playbook, `dr_engine_migration.md`, and the user
   manual (`dumpdata`, `loaddata`, natural keys, export/import, "carry"): none. The backups JSON
   artifacts are documented as "export-only rather than restore inputs" (`user_manual.md:495`).
-- A vintage check in restore: none.
+- A vintage check in restore: none at the audit snapshot; SA205 has since added one for
+  artifact-backed restores (a recorded artifact that records no vintage is refused too).
 - A deploy-time migration-state preflight: none. The only `InconsistentMigrationHistory`
   handling is the stale-local-volume helper.
 - A recorded decision that SA191 may reseed instead of carry: none. The acceptance says counts
@@ -238,8 +246,10 @@ under vintage-N+k code without objection.
   FORCE RLS and composite FKs. Its next upgrade needs an ETL that runs privileged, assigns
   `organization_id`, and preserves RLS policies, and it grows with every tenant table SA153 and
   SA154 add.
-- **Backups decay into write-only artifacts.** A backup taken before any upgrade restores
-  cleanly at the PostgreSQL level into code that cannot run on it. The recovery path is untested
+- **Backups decay into write-only artifacts.** A backup taken before any upgrade used to restore
+  cleanly at the PostgreSQL level into code that cannot run on it; restore now refuses that
+  artifact on its recorded module vintage (SA205), so it is a hard stop rather than a silent bad
+  restore. Without a data path it stays unrestorable. The recovery path is untested
   exactly where it matters (§5.XVI).
 - **The population grows.** `experto-ai-web` (generated before `orgs`, with auth, forms, and
   blog) and every future production project join the set.
@@ -291,8 +301,8 @@ the cheapest freeze point, because its database is rebuilt anyway. This fits a o
 project that is about to have its first real tenant. · **Size:** `M` · **Reversibility:**
 `one-way door` for option 1. Before closing it, prove on a restored `bap-web` copy that
 `migrate` from the frozen `0001` produces the parity baseline (22 FORCE-RLS tables / 44
-policies). · **First step:** in `recovery.py`, make restore refuse an artifact whose
-`module_versions` differ from the installed modules.
+policies). · **First step (done, SA205):** in `recovery.py`, restore refuses an artifact whose
+`module_versions` differ from the installed modules; what remains is the tool-owned data path.
 
 ---
 

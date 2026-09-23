@@ -498,6 +498,40 @@ class TestReportsAndProvenance:
             for issue in changed["provenance"]["issues"]
         )
 
+    def test_full_contract_reports_dump_vintage_over_recaptured_sidecar(
+        self, tmp_path: Path
+    ) -> None:
+        # A snapshot resume reuses the original dump but recaptures the release
+        # sidecar, so the sidecar can record the newer modules while the dump
+        # records the vintage its schema was captured under.
+        snapshot = self._complete_snapshot(tmp_path)
+        snapshot.authoritative_dump.metadata_json = {
+            "module_versions": {"quickscale_modules_backups": "1.0"}
+        }
+        (tmp_path / "release-metadata.json").write_text(
+            json.dumps(
+                {
+                    "status": "ready",
+                    "project_slug": "demo",
+                    "source_environment": "local",
+                    "captured_at": "t",
+                    "app_version": "2",
+                    "django_version": "5",
+                    "module_versions": {"quickscale_modules_backups": "2.0"},
+                    "git_sha": "sha",
+                }
+            )
+        )
+
+        contract = orch._build_snapshot_full_backup_contract(snapshot, now=_NOW)
+
+        assert contract["provenance"]["authoritative_dump"]["module_versions"] == {
+            "quickscale_modules_backups": "1.0"
+        }
+        assert contract["provenance"]["release"]["module_versions"] == {
+            "quickscale_modules_backups": "2.0"
+        }
+
     def test_report_contains_children_requested_payloads_and_load_errors(
         self, tmp_path: Path
     ) -> None:

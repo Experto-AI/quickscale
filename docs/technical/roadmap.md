@@ -11,8 +11,8 @@ Capabilities are generalized only after that project proves their value.
 
 SA191 is the first QuickScale upgrade that carries real production state, and the 2026-09-23
 audits found three things it needs first: a frozen module migration history to land on (SA204),
-a restore that refuses a schema its code cannot read (SA205), and runtime contracts that ship as
-library code instead of being hand-patched into the donor's settings (SA206).
+a restore that refuses a schema its code cannot read (SA205, closed on v89), and runtime contracts
+that ship as library code instead of being hand-patched into the donor's settings (SA206).
 
 **Release status — v0.88.0 packaged, not published.** No core tag, split-branch republication,
 seal, or PyPI upload has happened. Publication stays a maintainer decision; this planner tracks only
@@ -32,8 +32,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA205 | Refuse a restore whose recorded module vintage differs from the installed modules | post-v88 | 2 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA204, SA205 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA204 | Deferred |
 | SA208 | Run provider-ID removal conformance in generated projects | post-v88 | 3 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA208 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
@@ -45,21 +44,21 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA204 ──► SA191 ──► SA153 ──► SA154 (inventory)
-Track 2: SA205 ──► SA209 ──► SA207 ──► SA210
+Track 2: SA209 ──► SA207 ──► SA210
 Track 3: SA208
-                         critical path: {SA204, SA205} → SA191 → SA153
+                         critical path: SA204 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
 **Critical path.** SA204, SA205, and SA206 started together, one per track, and all three gate
-SA191; SA206 has landed, so SA191 waits on SA204 and SA205. SA191 migrates `bap-web` onto the frozen
+SA191; SA205 and SA206 have landed, so SA191 waits on SA204. SA191 migrates `bap-web` onto the frozen
 history, carries its data by a project-owned ETL, and redeploys through `deploy railway`. SA153
 builds the portal on the migrated project. SA154 is an inventory, not work.
 
 **Ordering off the critical path.** SA208 must land before SA153 starts and has all of SA191 to do
-it in. SA209 is S1 and goes next on Track 2 after SA205. SA207 carries the facade adoption step
-SA206 left to it (see SA207). SA210 is trivial and fills the Track 2 tail.
+it in. SA209 is S1 and goes next on Track 2. SA207 carries the facade adoption step SA206 left to
+it (see SA207). SA210 is trivial and fills the Track 2 tail.
 
 ### Track states
 
@@ -68,7 +67,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA205 | yes | yes | yes | **yes** | **yes** (SA205 only) |
+| 2 | SA209 | yes | yes | yes | **yes** | no |
 | 3 | SA208 | yes | yes | yes | **yes** | no (SA208 precedes SA153) |
 
 ### Ownership and merge coordination
@@ -130,30 +129,19 @@ suite, and merge only the reviewed delivery through the serialized queue.
   proving that it rejects an in-place `0001` edit and accepts a new `0002`. Proof that the frozen
   history carries real data belongs to SA191.
 
-  **Surfaces:** decisions, the new gate with its registry row and gate documentation, and the arch
-  audit.
+  The gate compares against a checked-in manifest of the frozen files' content hashes, not a git
+  ref: no 0.89.0 tag exists yet, and a manifest also works in shallow CI clones. The freeze takes
+  effect when SA204 merges, so any later `v89` change to a model-bearing module's models ships as
+  a `0002`; confirm before merging that SA208 and SA209 change no module models. The topology guard
+  in `test_module_migration_topology.py` currently requires exactly one `0001_initial` and has a
+  canary that rejects any `0002`; it changes to require a `0001_initial` followed by an ordered
+  chain, and that canary is inverted. Settle the arch audit's open question of whether `bap-web`'s
+  data is reseeded instead of carried before this merges, because the freeze cannot be undone.
 
-- [ ] **SA205 — Refuse a restore whose recorded module vintage differs from the installed modules.**
+  **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
+  documentation, `quickscale_core/tests/test_module_migration_topology.py`, and the arch audit.
 
-  **Context:** restore is a whole-database `pg_restore --clean --if-exists --no-owner`
-  (`dr_engine/primitives.py`), so it brings back the artifact's schema and its `django_migrations`
-  rows. Backup metadata records `module_versions` (`orchestration.py`), but
-  `_get_restore_compatibility_issues` (`recovery.py`) checks only the engine, format, and
-  PostgreSQL majors. Under the clean-break rule, a backup taken before an upgrade therefore
-  restores "successfully" into code that cannot run on it, and the first symptom is
-  `InconsistentMigrationHistory` or a missing `organization_id` column. SA191 is the first time
-  this path holds production data (arch audit `clean-break-schema-no-data-path`, first step).
-
-  **Acceptance:** restore refuses an artifact whose recorded `module_versions` differ from the
-  installed modules, or that records none, before any destructive step runs. The refusal names each
-  differing module with both versions. A matching artifact restores as before. A discriminating
-  test proves the refusal happens before `pg_restore` is invoked. The DR documentation states that
-  restore compatibility now includes module vintage as well as the two PostgreSQL majors. Relaxing
-  the guard so that an older artifact on SA204's frozen history may restore and then migrate
-  forward is not part of this ticket.
-
-  **Surfaces:** `quickscale_core/dr_engine/recovery.py` and its tests, the DR documentation, and
-  the arch audit.
+- [x] **SA205 — Refuse a restore whose recorded module vintage differs from the installed modules.**
 
 - [x] **SA206 — Move code-shaped runtime contracts from the settings templates into `quickscale_core.runtime`.**
 

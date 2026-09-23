@@ -84,13 +84,21 @@ class TestRestoreResolutionAndGuards:
                 ),
             ),
             patch(
+                f"{_ORCH}._collect_module_versions",
+                return_value={"quickscale_modules_auth": "2.0"},
+            ),
+            patch(
                 f"{_ORCH}._core_get_restore_compatibility_issues",
                 return_value=["issue"],
             ) as checker,
         ):
             result = orch._get_restore_compatibility_issues(artifact)
         assert result == ["issue"]
-        checker.assert_called_once_with(artifact, "sqlite")
+        checker.assert_called_once_with(
+            artifact,
+            "sqlite",
+            installed_module_versions={"quickscale_modules_auth": "2.0"},
+        )
 
     @pytest.mark.parametrize(
         ("snapshot", "message"),
@@ -174,6 +182,7 @@ class TestRestoreResolutionAndGuards:
                 ),
             ),
             patch(f"{_ORCH}.settings", SimpleNamespace(DEBUG=True)),
+            patch(f"{_ORCH}._collect_module_versions", return_value={}),
             patch(
                 f"{_ORCH}._core_execute_restore_for_resolved_source",
                 return_value=result,
@@ -211,6 +220,7 @@ class TestRestoreResolutionAndGuards:
                 ),
             ),
             patch(f"{_ORCH}.settings", SimpleNamespace(DEBUG=True)),
+            patch(f"{_ORCH}._collect_module_versions", return_value={}),
             patch(
                 f"{_ORCH}._core_execute_restore_for_resolved_source",
                 return_value=result,
@@ -228,6 +238,41 @@ class TestRestoreResolutionAndGuards:
                 is result
             )
         persist.assert_not_called()
+
+    def test_execute_restore_wrapper_supplies_installed_module_versions(
+        self, tmp_path: Path
+    ) -> None:
+        source = _source(tmp_path / "trusted.dump", _artifact())
+        result = RestoreResult(executed=False, dry_run=True, message="dry")
+        with (
+            patch(
+                f"{_ORCH}.django.db",
+                SimpleNamespace(
+                    connections={
+                        "default": SimpleNamespace(settings_dict={"ENGINE": "pg"})
+                    }
+                ),
+            ),
+            patch(f"{_ORCH}.settings", SimpleNamespace(DEBUG=True)),
+            patch(
+                f"{_ORCH}._collect_module_versions",
+                return_value={"quickscale_modules_auth": "2.0"},
+            ),
+            patch(
+                f"{_ORCH}._core_execute_restore_for_resolved_source",
+                return_value=result,
+            ) as core,
+        ):
+            orch._execute_restore_for_resolved_source(
+                source,
+                confirmation="trusted.dump",
+                dry_run=True,
+                allow_production=False,
+                shell_runner=None,
+            )
+        assert core.call_args.kwargs["installed_module_versions"] == {
+            "quickscale_modules_auth": "2.0"
+        }
 
     def test_restore_backup_source_resolves_then_executes_in_order(self) -> None:
         source = _source(Path("/tmp/file.dump"))
@@ -256,7 +301,29 @@ class TestRestoreResolutionAndGuards:
             dry_run=True,
             allow_production=False,
             shell_runner="runner",
+            recorded_module_versions=None,
         )
+
+    def test_restore_backup_source_passes_recorded_module_versions(self) -> None:
+        source = _source(Path("/tmp/file.dump"))
+        result = RestoreResult(executed=False, dry_run=True, message="ok")
+        with (
+            patch(f"{_ORCH}._resolve_restore_source") as resolver,
+            patch(
+                f"{_ORCH}._execute_restore_for_resolved_source", return_value=result
+            ) as execute,
+        ):
+            resolver.return_value.__enter__.return_value = source
+            resolver.return_value.__exit__.return_value = None
+            orch.restore_backup_source(
+                file_path="/tmp/file.dump",
+                confirmation="file.dump",
+                dry_run=True,
+                recorded_module_versions={"quickscale_modules_auth": "2.0"},
+            )
+        assert execute.call_args.kwargs["recorded_module_versions"] == {
+            "quickscale_modules_auth": "2.0"
+        }
 
     def test_restore_backup_artifact_is_thin_source_wrapper(self) -> None:
         artifact = _artifact()
