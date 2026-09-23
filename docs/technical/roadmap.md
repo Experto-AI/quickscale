@@ -13,9 +13,7 @@ Capabilities are generalized only after that project proves their value.
 seal, or PyPI upload has happened. Publication stays a maintainer decision; this planner tracks only
 that it is owed: release-tier validation on the packaged bytes, the phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. The packaged bytes
-predate fixes now on `v89` (the `.env.example` credential placeholders, backup/restore TLS, and the
-account-deletion transaction boundary), and SA202 has since hardened the workflow that would upload them;
-shipping any of those in 0.88.0 means repackaging.
+predate fixes now on `v89`; shipping any of them in 0.88.0 means repackaging.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves history.
@@ -34,16 +32,15 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
-Track 2: — (SA202 closed)
-Track 3: — (SA203 closed)
+Track 2: —
+Track 3: —
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
 **Critical path.** SA191 → SA153. SA191 migrates `bap-web` with the fresh-first migration tool and
-redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA154 is an inventory, not work. Everything else is off the critical path.
-
-**Ordering.** Tracks 2 and 3 carry no dependency edges.
+redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA154 is an
+inventory, not work. Tracks 2 and 3 are empty.
 
 ### Track states
 
@@ -64,8 +61,7 @@ A track is **truly green** only when all three states are yes.
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
   every package, `ruff.toml`, the module page templates and test-settings stubs, the generated
   `base.html`, the CLI apply/deploy/update commands, `contracts/module_options.py` and the
-  `.env.example` template, and `quickscale_core/dr_engine/`. SA202's new gates add rows to
-  `scripts/gate_registry.json`, reconciled with Track 1 at merge.
+  `.env.example` template, and `quickscale_core/dr_engine/`.
 - Track 3 owns the orgs tenancy, purge, and boot path (`orgs/apps.py`), the privileged-command and
   runtime-role stations, the generated settings templates (`base.py.j2`, `production.py.j2`,
   `local.py.j2`), the generator's Jinja environment, `billing/services.py`, `billing/views.py`,
@@ -86,8 +82,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [x] **SA194 — Remove the in-place beta-migration mode.**
-
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 
   Use `make beta-migrate-fresh` with `bap-web` as donor and a fresh scaffold generated with the same
@@ -98,12 +92,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `/api/properties/` endpoint, and React property pages. It was generated on an older QuickScale, so
   building the portal on it first requires catching it up to the current release.
 
-  The fresh-first mode is the documented primary path: a fresh scaffold with the same slug receives
-  the donor's custom content, so infrastructure files start correct instead of being merged. Manual continuation is expected where the tool stops safely; the value of
-  this ticket is that every such stop becomes either a playbook step or a deterministic tool fix.
-
-  The migration preserves behavior, including the existing React and JSON API property surface that
-  the portal then builds on.
+  Every point where the tool stops safely becomes a playbook step or a deterministic tool fix.
 
   **Acceptance:** the migrated project records the current QuickScale version in `quickscale.yml`
   and its lock, and passes its own test suite and local verification stack. The project-owned
@@ -150,9 +139,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   pages, and inquiry handling. These tables join the tenant universe through the marker-derived
   classification of SA182, never through edits to the vendored `orgs` source.
 
-  A public read API inside the reusable `listings` module, and generic support requiring no
-  project-owned code, belong in the optional inventory until a second consumer justifies them.
-
   **Acceptance:** first record in decisions that React is the standard frontend for new application
   and public pages; `auth` and `billing` stay Django-rendered on the shared design (SA192); the
   existing module-shipped Django pages (blog, listings, CRM dashboard) stay Django-rendered on that
@@ -176,8 +162,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
   extension documentation.
 
-- [x] **SA202 — Pin the publishing supply chain and add the missing CI scanners.**
-
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
   Inventory only: generalizing the property API, React pages, or prerender step into reusable
@@ -185,19 +169,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   dashboard; React `auth` and `billing` flows; broader translations; maps/geocoding; saved
   searches, favorites, and alerts; agent/office profiles; syndication; tours/video; paid
   placement; blog/listing cross-links; and PostgreSQL full-text search. Promote an item only with a concrete consumer, bounded acceptance, and
-  a fresh dependency and track. Items that add tenant tables (saved searches, favorites, profiles,
-  tours) build on marker-derived enrollment and purge, not on module-source edits. Close
-  when every item is promoted or dropped with rationale.
-
-  Promote a capability only with a concrete consumer, bounded acceptance criteria, and evidence
-  that it improves the working portal. Public API design and generic extension work should follow
-  the actual project contracts they need to support.
-
-- [x] **SA196 — Fail hard on undefined generator template context.**
-
-- [x] **SA201 — Give generated projects one throttling contract.**
-
-- [x] **SA203 — Narrow the privileged-command exemption in the orgs boot path.**
+  a fresh dependency and track. Items that add tenant tables build on marker-derived enrollment
+  and purge, not on module-source edits. Close when every item is promoted or dropped with rationale.
 
 ## Deferred constraints and references
 
