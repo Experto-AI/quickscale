@@ -248,8 +248,9 @@ to compare.
   months).
 - **The data grows under stricter invariants.** After SA153, `bap-web` holds tenant rows under
   FORCE RLS and composite FKs. Under the clean-break rule its next upgrade would need an ETL that
-  runs privileged, assigns `organization_id`, and preserves RLS policies, and it grows with every
-  tenant table SA153 and SA154 add. The freeze removes that ETL for every upgrade after it.
+  runs under `operator_access`, assigns `organization_id`, and preserves RLS policies, and it
+  grows with every tenant table SA153 and SA154 add. The freeze removes that ETL for every upgrade
+  after it.
 - **Backups decay into write-only artifacts.** A backup taken before any upgrade used to restore
   cleanly at the PostgreSQL level into code that cannot run on it; restore now refuses that
   artifact on its recorded module vintage (SA205), so it is a hard stop rather than a silent bad
@@ -463,9 +464,10 @@ site reaches it only if the maintainer remembers to paste the prose.
 and the privileged-command bridge. Use option 3's template-change gate and single project-level
 vintage for what remains configuration. A generator whose shipped modules already depend on a
 runtime facade should not keep its security middleware in templates. · **Size:** `M` ·
-**Reversibility:** `one-way door`, because generated projects will import the facade. Before
-closing, confirm that a zero-module generated project still gets `quickscale-core` installed, and
-version the facade under the lockstep pin. · **First step:** move `ClientIdentityMiddleware` and
+**Reversibility:** `one-way door`, because generated projects will import the facade. SA206
+implemented option 1 and confirmed the zero-module `quickscale-core` pin; what remains is SA207's
+project-level vintage and template-change gate and SA191's donor adoption (see the Status note
+above). · **First step (done, SA206):** move `ClientIdentityMiddleware` and
 `CorrelationIdMiddleware` into `quickscale_core.runtime`, and have `base.py.j2` import them.
 
 ---
@@ -555,10 +557,12 @@ check where project models exist. Move to option 1 when the trigger fires. · **
 reseed decision reshaped its data station).
 Station list, in order:
 
-1. Hand-patch the donor `settings/production.py` to the SA68 env-pair bridge and both
-   `_KNOWN_*` allowlists; the tool blocks otherwise (`beta-site-migration.md:568`).
-2. Run `make beta-migrate-fresh`. It copies the patched donor `production.py` over the fresh one
-   and silently omits SA200/SA201-era contracts.
+1. Hand-patch the donor `settings/production.py` to call the versioned
+   `quickscale_core.runtime.settings` facade in its canonical shape; the preflight refuses an
+   inline copy of the command-mode contract (`beta-site-migration.md:50-63`).
+2. Run `make beta-migrate-fresh`. It copies the patched donor `production.py` over the fresh one;
+   the runtime contracts now arrive through the facade and the lockstep pin, so SA200/SA201-era
+   fixes reach the migrated project.
 3. Rewrite the project-owned `properties` migrations. `AbstractListing` now adds a NOT NULL org
    FK, and SA153 requires `TenantManager`, `apply_force_rls`, and composite FKs on
    `PropertyImage`/`PropertyFeature`.
