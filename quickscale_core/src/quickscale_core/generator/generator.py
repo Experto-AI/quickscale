@@ -17,6 +17,7 @@ from quickscale_core.generator.runtime_pins import (
     PYTHON_CONSTRAINT,
     PYTHON_DOCKER_TAG,
     PYTHON_VERSION,
+    QUICKSCALE_CORE_PIN,
 )
 from quickscale_core.utils.file_utils import (
     ensure_directory,
@@ -527,6 +528,7 @@ class ProjectGenerator:
             "django_ci_version": DJANGO_CI_MATRIX_VERSION,
             "postgres_version": POSTGRES_VERSION,
             "postgres_docker_tag": POSTGRES_DOCKER_TAG,
+            "quickscale_core_pin": QUICKSCALE_CORE_PIN,
             # Runtime DB role (RLS enforcement — NOSUPERUSER, NOBYPASSRLS)
             **runtime_db_template_context(package_name),
         }

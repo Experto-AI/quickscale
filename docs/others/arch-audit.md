@@ -325,6 +325,12 @@ project: proxy trust, the privileged-command bridge, runtime-role database selec
 throttling. Likelihood is demonstrated. Two contract changes in this delta reach no existing
 project, one of them fails open, and the next ticket carries a pre-`orgs` settings file forward.
 
+**Status (2026-09-23):** Option 1's code move is implemented by SA206 — the runtime contracts
+now live in `quickscale_core.runtime.settings`, generated settings import them, and the donor
+validator checks the facade call instead of parsing an inline copy (see the reconciliation log).
+The finding stays open for the remaining configuration surface and the migration path (SA207's
+single project-level vintage and template-change gate, SA191's donor adoption).
+
 **Problem:** QuickScale's executable runtime and security contracts are emitted as template text
 inside files classified as user-owned (`settings/production.py`, `settings/base.py`, `start.sh`,
 `vite.config.ts`). Those files are never upgraded. The vintage mechanism that replaced the old
@@ -692,6 +698,15 @@ is benign behind Railway and is recorded as finding-2 evidence, not as a red fla
   finds the compounding relocated into hand-copied adoption prose: one block ×5 and Railway ×2.
   That prose was already incomplete for SA200/SA201, `project_contract` never advances, and SA194
   grew the unmanaged taxonomy 78→89.
+- 2026-09-23 — `generated-file-ownership-unmodeled`: **option 1 implemented (SA206)**. The
+  middleware, proxy-trust derivation, privileged-command/runtime-database selection, and
+  SECRET_KEY guard now live in `quickscale_core.runtime.settings`; generated settings import
+  the facade and keep only user configuration, and the donor validator checks that donor
+  settings call `resolve_runtime_database_url` instead of parsing the inline contract
+  (`beta_migration.py` shrinks by ~2,000 lines, and the fifth station collapses to the facade).
+  A zero-module generated project declares the bounded `quickscale-core` lockstep pin in its
+  `pyproject.toml`. Remaining scope: SA207's single project-level vintage and template-change
+  gate, and SA191's donor adoption.
 - 2026-09-23 — `deletion-invariants-per-boundary-reimplementation`: **still-open**, rank 3. The
   prior counter-evidence was corrected: provider-ID conformance runs only in orgs' test suite and
   cannot see project-owned models. The trigger gained a project-provider-ID clause.

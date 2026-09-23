@@ -75,6 +75,7 @@ from quickscale_cli.commands.module_config import (
 )
 from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError,
+    sync_project_core_dependency,
     sync_project_module_dependencies,
 )
 from quickscale_cli.utils.docker_utils import (
@@ -2151,6 +2152,12 @@ def _sync_project_module_dependencies_for_apply_impl(
     qs_config: QuickScaleConfig,
 ) -> bool:
     """Original implementation used as callback for core step body."""
+    try:
+        if sync_project_core_dependency(output_path):
+            click.echo("  • Pinned quickscale-core to the local wheelhouse")
+    except DependencySyncError as error:
+        click.secho(f"❌ Core dependency sync failed: {error}", fg="red", err=True)
+        return False
     if not qs_config.modules:
         return True
     click.echo("\n⏳ Syncing module dependency entries...")

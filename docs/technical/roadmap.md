@@ -14,7 +14,7 @@ decision of 2026-09-23 that state is **reseeded, not carried**: the database is 
 reseeded, so SA191 no longer waits on a frozen migration history and SA204 is deferred to the
 SA153 go-live horizon. The 2026-09-23 audits found it needs a restore that refuses a schema its
 code cannot read (SA205, closed on v89) and runtime contracts that ship as library code instead of
-being hand-patched into the donor's settings (SA206).
+being hand-patched into the donor's settings (SA206, closed on v89).
 
 **Release status — v0.88.0 packaged, not published.** No core tag, split-branch republication,
 seal, or PyPI upload has happened. Publication stays a maintainer decision; this planner tracks only
@@ -34,8 +34,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA206 | Move code-shaped runtime contracts from the settings templates into `quickscale_core.runtime` | post-v88 | 3 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA206 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA208 | Run provider-ID removal conformance in generated projects | post-v88 | 3 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA208 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
@@ -48,23 +47,22 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: SA209 ──► SA207 ──► SA210
-Track 3: SA206 ──► SA208
-                         critical path: SA206 → SA191 → SA153
+Track 3: SA208
+                         critical path: SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA206 starts on Track 3 and gates SA191; it is the largest and most likely sets
-the pace. SA191 migrates `bap-web` onto current QuickScale, rebuilds and reseeds its database
-rather than carrying it, and redeploys through `deploy railway`. SA153 builds the portal on the
-migrated project. SA204's freeze no longer gates SA191 and is deferred to the SA153 go-live
-horizon. SA154 is an inventory, not work.
+**Critical path.** SA204, SA205, and SA206 started together, one per track; SA205 and SA206 have
+landed, and the reseed decision means SA191 no longer waits on SA204. SA191 migrates `bap-web`
+onto current QuickScale, rebuilds and reseeds its database rather than carrying it, and redeploys
+through `deploy railway`. SA153 builds the portal on the migrated project. SA204's freeze is
+deferred to the SA153 go-live horizon. SA154 is an inventory, not work.
 
 **Ordering off the critical path.** SA208 must land before SA153 starts and has all of SA191 to do
 it in. SA204 follows SA153 in Track 1 and must land before any post-SA153 module schema change.
-SA209 is S1 and goes next on Track 2. SA207 and SA206 carry no edge: whichever
-merges second reconciles the facade's adoption step (see SA207). SA210 is trivial and fills the
-Track 2 tail.
+SA209 is S1 and goes next on Track 2. SA207 carries the facade adoption step SA206 left to it
+(see SA207). SA210 is trivial and fills the Track 2 tail.
 
 ### Track states
 
@@ -72,9 +70,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 | no (SA206) | yes | yes | no | **yes** |
+| 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA209 | yes | yes | yes | **yes** | no |
-| 3 | SA206 | yes | yes | yes | **yes** | **yes** (SA206 only) |
+| 3 | SA208 | yes | yes | yes | **yes** | no (SA208 precedes SA153) |
 
 ### Ownership and merge coordination
 
@@ -95,14 +93,13 @@ A track is **truly green** only when all three states are yes.
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, and the
   blog rate limiter.
-- **Cross-track edits.** SA206 shrinks the donor-settings validator in Track 1's
-  `beta_migration.py`; it merges before SA191 starts, so the shrink lands before the tool is used
+- **Cross-track edits.** SA206 shrank the donor-settings validator in Track 1's
+  `beta_migration.py` and merged before SA191 starts, so the shrink landed before the tool is used
   for real. SA204 and SA207 each add a registered gate; Track 2 reconciles its
   `scripts/gate_registry.json` row with Track 1 at merge.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits,
-  [decisions.md](decisions.md) (SA204, SA206, SA207, SA153), and the SA90 emission fixture (SA206,
-  SA210). Each track resolves the shared set at its own merge, after the previous merge lands, then
+  [decisions.md](decisions.md) (SA204, SA207, SA153), and the SA90 emission fixture (SA210). Each track resolves the shared set at its own merge, after the previous merge lands, then
   runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -151,34 +148,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA205 — Refuse a restore whose recorded module vintage differs from the installed modules.**
 
-- [ ] **SA206 — Move code-shaped runtime contracts from the settings templates into `quickscale_core.runtime`.**
-
-  **Context:** generated settings are user-owned and never upgraded, yet they carry executable
-  QuickScale contracts. `base.py.j2` defines `ClientIdentityMiddleware`, whose client-IP
-  normalization throttling keys on, and `CorrelationIdMiddleware`. `production.py.j2` holds the
-  SECRET_KEY guard, the proxy-trust derivation, and the privileged-command/runtime-database bridge.
-  SA200's proxy-trust fix therefore reached only new projects. The fresh-first migration copies the
-  donor's `production.py` over the fresh one by policy, and `bap-web`'s copy has neither `_KNOWN_*`
-  allowlist and trusts `X-Forwarded-Proto` unconditionally, so the playbook requires hand-patching
-  it before the tool runs. About 3,670 of `beta_migration.py`'s lines are a static validator that
-  polices that donor copy, and it is the fifth privileged-command station
-  (arch audit `generated-file-ownership-unmodeled`, option 1).
-
-  **Acceptance:** `quickscale_core.runtime` exports, as a versioned settings facade, the two
-  middleware classes, the proxy-trust derivation, the privileged-command/runtime-database
-  selection, and the SECRET_KEY guard. `base.py.j2` and `production.py.j2` import them and keep only
-  user configuration. Freshly generated projects behave as before: the deploy-posture gate and the
-  release-lane boot through `start.sh` pass, and the SA90 emission fixture is updated. The boot
-  check also boots a project whose older settings were updated to the facade. A zero-module
-  generated project still installs `quickscale-core` under the lockstep pin. The privileged-command
-  contract test holds the facade in place of the template copy. The beta-migration validator
-  checks that donor settings call the facade instead of parsing an inline copy of the contract, so
-  the fifth station is gone. Decisions record the facade's import path as public API. Existing
-  projects adopt it through a declared contract step (SA207).
-
-  **Surfaces:** `quickscale_core/runtime/`, `base.py.j2`, `production.py.j2`, the
-  privileged-command contract test, the donor validator in `beta_migration.py` with its smoke gate,
-  the SA90 fixture, decisions, `generated_file_ownership.md`, and the arch audit.
+- [x] **SA206 — Move code-shaped runtime contracts from the settings templates into `quickscale_core.runtime`.**
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 
@@ -389,8 +359,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Acceptance:**
   - One project-level contract vintage declares each template contract change once, with its
     adoption steps. The five manifest copies and the Railway duplicate are gone.
-  - It declares SA192's shared design, SA200's proxy trust, and SA201's throttling. Whichever of
-    SA206 and SA207 merges second adds the facade adoption step.
+  - It declares SA192's shared design, SA200's proxy trust, SA201's throttling, and SA206's
+    runtime settings facade adoption step.
   - `update billing` on a project behind SA201's step refuses before mutation and names the step.
     After adoption, the 31st checkout in an hour returns 429.
   - `project_contract` advances when the user confirms adoption, so a project that has adopted
@@ -425,8 +395,8 @@ deferred findings, watch notes, and their growth triggers; items stay there unti
 Every live finding of the 2026-09-23 passes is scheduled above. The `bap-web` reseed question is
 settled: its data is reseeded rather than carried (2026-09-23), which defers SA204 to the SA153
 go-live horizon. The architecture audit's remaining open questions still apply: whether
-"regenerate and port" is the permanent upgrade model (which would reshape SA206 and SA207), and
-whether `experto-ai-web` migrates too.
+"regenerate and port" is the permanent upgrade model (which would reshape SA207 and SA191's donor
+adoption), and whether `experto-ai-web` migrates too.
 The standing scope
 rules, presence contracts, and resource safeguards live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).

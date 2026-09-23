@@ -20,6 +20,21 @@ generator-emitted file must be explicitly accounted for — the conformance gate
 (`test_beta_migration_ownership_conformance.py`) derives the expected inventory
 from the template tree and fails on any unclassified path.
 
+### Settings files and the runtime facade (SA206)
+
+``{package}/settings/base.py``, ``production.py``, ``local.py``, and ``modules.py``
+are user-owned generated settings and are not ``INTENTIONALLY_UNMANAGED``
+entries: ``production.py`` is donor-owned by policy
+(``FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES``), and the others are recipient-owned
+fresh-first requirements.  Since SA206 every generated settings module imports
+its executable runtime contracts (middleware, proxy-trust derivation,
+privileged-command/runtime-database selection, SECRET_KEY guard) from the
+versioned ``quickscale_core.runtime.settings`` facade and keeps only user
+configuration; a donor ``production.py`` must call
+``resolve_runtime_database_url``, because the donor validator refuses an inline
+copy of the command-mode contract before any mutation.  This changes what those
+files contain, not who owns them.
+
 ## Categories
 
 ### Category U1 — Project-level user-owned files (root-level generated config/docs)

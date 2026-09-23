@@ -27,6 +27,7 @@ from quickscale_core.generator.runtime_pins import (
     PYTHON_CONSTRAINT,
     PYTHON_DOCKER_TAG,
     PYTHON_VERSION,
+    QUICKSCALE_CORE_PIN,
 )
 
 
@@ -74,6 +75,7 @@ def test_context() -> dict[str, object]:
         "django_ci_version": DJANGO_CI_MATRIX_VERSION,
         "postgres_version": POSTGRES_VERSION,
         "postgres_docker_tag": POSTGRES_DOCKER_TAG,
+        "quickscale_core_pin": QUICKSCALE_CORE_PIN,
         **runtime_db_template_context("testproject"),
         "selected_modules": None,
     }
@@ -1181,14 +1183,17 @@ class TestProductionReadyFeatures:
         assert '"()": CorrelationIdFilter' in output
         assert '"filters": ["correlation_id"]' in output
 
-    def test_contextvar_mechanism_in_base(
+    def test_correlation_contract_imported_from_facade(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Base settings should use contextvars to bridge middleware and filter."""
+        """Base settings import the correlation contract from the runtime facade."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
-        assert "import contextvars" in output
-        assert "_correlation_id_var" in output
+        assert "from quickscale_core.runtime.settings import (" in output
+        assert "CorrelationIdFilter" in output
+        assert "class CorrelationIdFilter" not in output
+        assert "class JsonFormatter" not in output
+        assert "_correlation_id_var" not in output
 
     def test_django_server_logger_in_base(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1250,9 +1255,12 @@ class TestProductionReadyFeatures:
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
         """Test production settings configure PostgreSQL database."""
+        from quickscale_core.runtime.settings import NON_DB_FALLBACK_DATABASE_URL
+
         template = jinja_env.get_template("project_name/settings/production.py.j2")
         output = template.render(test_context)
-        assert "postgresql" in output
+        assert "dj_database_url.parse(" in output
+        assert NON_DB_FALLBACK_DATABASE_URL.startswith("postgresql://")
 
     def test_whitenoise_in_base(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1630,13 +1638,15 @@ class TestClientIpAndSharedCache:
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
 
-        assert "class ClientIdentityMiddleware" in output
+        assert "class ClientIdentityMiddleware" not in output
         middleware_start = output.index("MIDDLEWARE = [")
         identity_index = output.index(
-            '"testproject.settings.base.ClientIdentityMiddleware"', middleware_start
+            '"quickscale_core.runtime.settings.ClientIdentityMiddleware"',
+            middleware_start,
         )
         correlation_index = output.index(
-            '"testproject.settings.base.CorrelationIdMiddleware"', middleware_start
+            '"quickscale_core.runtime.settings.CorrelationIdMiddleware"',
+            middleware_start,
         )
         module_middleware_index = output.index("MIDDLEWARE += MODULE_MIDDLEWARE")
         assert middleware_start < identity_index < correlation_index
@@ -2057,11 +2067,13 @@ class TestCorrelationIdFilterRuntime:
         }
         exec(base_output, namespace)
 
+        from quickscale_core.runtime.settings import correlation_id_var
+
         CorrelationIdFilter = typing.cast(
             type[logging.Filter], namespace["CorrelationIdFilter"]
         )
         _correlation_id_var = typing.cast(
-            contextvars.ContextVar[str], namespace["_correlation_id_var"]
+            contextvars.ContextVar[str], correlation_id_var
         )
         filter_instance = CorrelationIdFilter()
 
@@ -2086,16 +2098,17 @@ class TestCorrelationIdClientInputBounds:
 
     def _middleware_factory(
         self,
-        namespace: dict[str, object],
     ) -> Callable[
         [Callable[[object], dict[str, str]]], Callable[[object], dict[str, str]]
     ]:
+        from quickscale_core.runtime.settings import CorrelationIdMiddleware
+
         return typing.cast(
             Callable[
                 [Callable[[object], dict[str, str]]],
                 Callable[[object], dict[str, str]],
             ],
-            namespace["CorrelationIdMiddleware"],
+            CorrelationIdMiddleware,
         )
 
     def test_well_formed_client_request_id_is_propagated(
@@ -2105,12 +2118,7 @@ class TestCorrelationIdClientInputBounds:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A bounded client trace id passes through unchanged."""
-        namespace = _execute_rendered_base_settings(
-            jinja_env=jinja_env,
-            test_context=test_context,
-            monkeypatch=monkeypatch,
-        )
-        middleware_factory = self._middleware_factory(namespace)
+        middleware_factory = self._middleware_factory()
 
         seen: dict[str, object] = {}
 
@@ -2144,7 +2152,7 @@ class TestCorrelationIdClientInputBounds:
             test_context=test_context,
             monkeypatch=monkeypatch,
         )
-        middleware_factory = self._middleware_factory(namespace)
+        middleware_factory = self._middleware_factory()
 
         def get_response(_request: object) -> dict[str, str]:
             return {}
@@ -3709,6 +3717,14 @@ class TestPyprojectTomlContent:
         assert "ruff" in output
         assert "mypy" in output
 
+    def test_quickscale_core_lockstep_pin(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """pyproject.toml must declare the bounded quickscale-core lockstep pin."""
+        template = jinja_env.get_template("pyproject.toml.j2")
+        output = template.render(test_context)
+        assert f'quickscale-core = "{QUICKSCALE_CORE_PIN}"' in output
+
     def test_mypy_overrides_for_optional_and_untyped_imports(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
@@ -4272,31 +4288,37 @@ class TestLauncherOneShotCommandContract:
     def test_privileged_commands_include_migrate(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """production.py must include migrate in _KNOWN_PRIVILEGED_COMMANDS."""
+        """production.py must delegate the privileged allowlist to the facade."""
+        from quickscale_core.runtime.settings import KNOWN_PRIVILEGED_COMMANDS
+
         output = _render_template(
             jinja_env, "project_name/settings/production.py.j2", test_context
         )
-        assert 'frozenset({"migrate", "createcachetable"})' in output or (
-            '"migrate"' in output
-            and '"createcachetable"' in output
-            and "_KNOWN_PRIVILEGED_COMMANDS" in output
+        assert "resolve_runtime_database_url" in output, (
+            "production.py must delegate command-mode selection to the runtime facade"
+        )
+        assert KNOWN_PRIVILEGED_COMMANDS == frozenset(
+            {"migrate", "createcachetable"}
         ), (
-            "production.py must list migrate and createcachetable as known privileged commands"
+            "the runtime facade must list migrate and createcachetable as privileged commands"
         )
 
     def test_non_db_commands_include_compilemessages(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """production.py must include compilemessages in _KNOWN_NON_DB_COMMANDS."""
+        """production.py must delegate the non-DB allowlist to the facade."""
+        from quickscale_core.runtime.settings import KNOWN_NON_DB_COMMANDS
+
         output = _render_template(
             jinja_env, "project_name/settings/production.py.j2", test_context
         )
-        assert 'frozenset({"collectstatic", "compilemessages"})' in output or (
-            '"collectstatic"' in output
-            and '"compilemessages"' in output
-            and "_KNOWN_NON_DB_COMMANDS" in output
+        assert "resolve_runtime_database_url" in output, (
+            "production.py must delegate command-mode selection to the runtime facade"
+        )
+        assert KNOWN_NON_DB_COMMANDS == frozenset(
+            {"collectstatic", "compilemessages"}
         ), (
-            "production.py must list collectstatic and compilemessages as known non-DB commands"
+            "the runtime facade must list collectstatic and compilemessages as non-DB commands"
         )
 
     # ── production.py.j2 — mutual exclusivity ─────────────────────────
@@ -4304,20 +4326,22 @@ class TestLauncherOneShotCommandContract:
     def test_privileged_and_non_db_mutually_exclusive(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """production.py must raise ValueError when both command vars are set."""
+        """production.py must fail closed when both command vars are set."""
+        from quickscale_core.runtime.settings import resolve_runtime_database_url
+
         output = _render_template(
             jinja_env, "project_name/settings/production.py.j2", test_context
         )
-        assert "mutually exclusive" in output, (
-            "production.py must document that the command vars are mutually exclusive"
+        assert "resolve_runtime_database_url" in output, (
+            "production.py must delegate command-mode selection to the runtime facade"
         )
-        assert "_privileged_command and _non_db_command" in output, (
-            "production.py must check for both vars being set simultaneously"
-        )
-        assert (
-            "raise ValueError"
-            in output[output.index("Both QUICKSCALE_PRIVILEGED_COMMAND") :]
-        ), "production.py must raise ValueError when both command vars are set"
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            resolve_runtime_database_url(
+                runtime_database_url="",
+                database_url="postgresql://user:pass@localhost:5432/app",
+                privileged_command="migrate",
+                non_db_command="collectstatic",
+            )
 
     # ── start.sh.j2 — one-shot inline prefix only ────────────────────
 
