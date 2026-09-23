@@ -182,15 +182,6 @@ at*, not *clean*.
   status: open
   reality: R2
   chain: []
-- id: stripe-search-query-unescaped
-  severity: S4
-  category: "III. Security"
-  title: Stripe search query is built by unescaped f-string interpolation
-  effort: Trivial
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
 - id: build-system-requires-unpinned
   severity: S4
   category: "VII. Dependencies, build, and pipeline hygiene"
@@ -216,10 +207,9 @@ at*, not *clean*.
 | `blog-throttle-racy-on-database-cache` | S3 | Concurrency | Rate limiter non-atomic on the default prod cache | Small | Medium | open |
 | `pipeline-mutable-action-refs` | S3 | Pipeline | Publishing workflow trusts mutable refs | Small | High | open |
 | `blog-throttle-ident-collision` | S4 | Security | IPv4/IPv6 throttle bucket collision | Trivial | High | open |
-| `stripe-search-query-unescaped` | S4 | Security | Unescaped interpolation into a Stripe search query | Trivial | High | open |
 | `build-system-requires-unpinned` | S4 | Pipeline | Unpinned `poetry-core` build requirement | Trivial | High | open |
 
-**Counts:** S1 — 0 · S2 — 1 · S3 — 6 · S4 — 3 · total 10.
+**Counts:** S1 — 0 · S2 — 1 · S3 — 6 · S4 — 2 · total 9.
 
 ---
 
@@ -490,12 +480,6 @@ at*, not *clean*.
   address `1.2` and the IPv6 fragment `1:2` normalize to the same bucket — two unrelated clients can
   share a rate-limit budget, or evade one. · Hash the identifier
   (`hashlib.blake2s(ident.encode()).hexdigest()`) instead of character-substituting it.
-- `stripe-search-query-unescaped` · `quickscale_modules/billing/src/quickscale_modules_billing/services.py:243–261`
-  · `search_customers` builds a Stripe Search Query Language string by f-string interpolation inside
-  single quotes. It is **not** exploitable today — both references come from
-  `_organization_reference`/`_user_reference` (`services.py:4054–4059`), which emit
-  `label_lower:pk` — but it is a query-injection sink held safe only by its current callers. ·
-  Reject or escape any reference containing `'`, `\`, or a newline before interpolating.
 - `build-system-requires-unpinned` · `quickscale_core/pyproject.toml:41–43`,
   `quickscale_cli/pyproject.toml:40–42`, and the sibling packages · every package declares
   `requires = ["poetry-core"]` with no version bound, so the build backend is whatever resolves at
@@ -533,7 +517,7 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 
 ## 6. Per-subsystem verdicts
 
-- **billing** — `billing-checkout-endpoints-unthrottled`, `stripe-search-query-unescaped`. Read in
+- **billing** — `billing-checkout-endpoints-unthrottled`. Read in
   full: the Stripe client wrapper, the webhook pipeline,
   `credit_user`, `cancel_current_subscription`, and the whole permission surface of `views.py`.
 - **notifications** — clean. Webhook ingestion and signature verification read in full.
@@ -630,8 +614,7 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
   has extensive rendered-template assertions but nothing that boots the artifact, which is the §4.X
   generator gap that lets template regressions ship.
 - **Ruff `S` (flake8-bandit) and `ASYNC` rule sets**, currently unselected in `ruff.toml`. `S` would
-  flag the `except Exception: return False` swallow patterns and the unescaped query construction
-  behind **`stripe-search-query-unescaped`**.
+  flag the `except Exception: return False` swallow patterns.
 
 ---
 
