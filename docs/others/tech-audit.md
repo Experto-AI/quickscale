@@ -535,9 +535,6 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 - **Workflow linting** (`zizmor` or `actionlint`), failing on unpinned `uses:` refs and on missing
   top-level `permissions:`. Would have caught **`pipeline-mutable-action-refs`** and keeps it
   caught.
-- **A generated-project smoke boot** in CI (generate → `start.sh` → hit `/healthcheck/`). The repo
-  has extensive rendered-template assertions but nothing that boots the artifact, which is the §4.X
-  generator gap that lets template regressions ship.
 - **Ruff `S` (flake8-bandit) and `ASYNC` rule sets**, currently unselected in `ruff.toml`. `S` would
   flag the `except Exception: return False` swallow patterns.
 

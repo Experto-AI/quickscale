@@ -45,7 +45,6 @@ context, scope, and acceptance;
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA198 | Carry the database's TLS settings into the backup and restore commands | post-v88 | 2 | — | Deferred |
 | SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
-| SA196 | Fail hard on undefined generator template context | post-v88 | 3 | — | Deferred |
 | SA201 | Give generated projects one throttling contract | post-v88 | 3 | — | Deferred |
 | SA203 | Narrow the privileged-command exemption in the orgs boot path | post-v88 | 3 | — | Deferred |
 
@@ -54,7 +53,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
 Track 2: SA198 ──► SA202
-Track 3: SA196 ──► SA201 ──► SA203
+Track 3: SA201 ──► SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -91,10 +90,6 @@ the critical path.
 - **SA203 is small and stands alone.** The `orgs.ready()` early return is boot-path code that no
   other ticket reads; it sits on track 3 because track 3 owns the orgs module and the
   privileged-command stations, and late in the queue because it is the least severe of them.
-- **SA196 is queued early on track 3 but gates nothing.** Making the generator raise on an
-  undefined context key protects the fresh recipient scaffold SA191 generates and the `base.html`
-  rewrite SA192 performs. Neither ticket depends on it and both are correct without it, so it
-  carries no dependency edge.
 - **SA190 removed the purge dependency from SA153.** Project-owned extension tables now join the
   marker-derived purge plan without a vendored-module edit, regardless of whether the first portal
   ultimately keeps those tables project-owned or promotes them into a first-party module.
@@ -133,7 +128,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA198 | yes | yes | yes | **yes** | no |
-| 3 | SA196 | yes | yes | yes | **yes** | no |
+| 3 | SA201 | yes | yes | yes | **yes** | no |
 
 ### Interrupted work (measured 2026-09-22)
 
@@ -152,14 +147,16 @@ before that date is gone and everything uncommitted now shows as unstaged.
   one repository-owned `tests_shared/templates/base.html`, while auth and billing keep local stubs
   whose suites assert the older shell markup; the five module page surfaces carry the shared design
   with the frontend-origin contract and its checks. Track 2's remaining queue is SA198 and SA202.
-- **Track 3 — SA199 and SA200 delivered.** Account deletion runs its Stripe calls between short
-  database transactions and restores the cancellation state when deletion is rejected; webhook
-  processing holds a session-level lock across its handler and result persistence; and
+- **Track 3 — SA199, SA200, and SA196 delivered.** Account deletion runs its Stripe calls between
+  short database transactions and restores the cancellation state when deletion is rejected;
+  webhook processing holds a session-level lock across its handler and result persistence; and
   `search_customers` refuses a reference containing `'`, `\`, or a newline. The generated
   production settings trust `X-Forwarded-Proto` only while forwarding trust is enabled, the
   correlation-id middleware accepts a client `X-Request-ID` only when it is bounded, and a
   registered gate runs Django's deployment checks on a freshly generated project in both
-  forwarding cells. Track 3's remaining queue is SA196, SA201, and SA203.
+  forwarding cells. The generator's Jinja environment fails closed on an undefined context key,
+  and a release-lane station boots a freshly generated project through its shipped `start.sh` and
+  asserts `/healthcheck/` answers. Track 3's remaining queue is SA201 and SA203.
 
 ### Ownership and merge coordination
 
@@ -195,12 +192,12 @@ before that date is gone and everything uncommitted now shows as unstaged.
   cycle — each ticket edits only its own finding's entry.
   Code-adjacent overlaps that cross tracks: SA153 edits the extension and organizations
   documentation; the landed SA192 restyle touched the `auth` account templates while SA199 edits
-  the account-delete view, so SA199 re-runs the auth tests when it lands; SA196 turns strict
+  the account-delete view, so SA199 re-runs the auth tests when it lands; SA196 turned strict
   rendering on for every generator template, including the `.env.example` template SA193 rewrote,
-  the settings templates SA201 edits, and the generated `base.html` SA192 restyles, so its
-  fixes may reach both other tracks' files and whichever lands second re-runs the generator tests
-  and the SA90 emission fixture; and SA202's workflow-lint gate adds a row to
-  `scripts/gate_registry.json`, which Track 1 also owns. The serialized queue
+  the settings templates SA201 edits, and the generated `base.html` SA192 restyled, so SA201
+  re-runs the generator tests and the SA90 emission fixture when it lands; and SA202's
+  workflow-lint gate adds a row to `scripts/gate_registry.json`, which Track 1 also owns. The
+  serialized queue
   covers them: each track resolves the shared set at its own merge, after the previous merge lands,
   then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
@@ -490,32 +487,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA200 — Gate the proxy and correlation-id settings the generator emits.**
 
-- [ ] **SA196 — Fail hard on undefined generator template context.**
-
-  **Context:** The generator's Jinja environment uses the default undefined behavior, so a missing
-  or renamed context key renders as empty text with no error — confirmed for plain substitution,
-  loops, and filters alike. SA189 moved the runtime role's attributes and grant statements out of
-  template literals and into context variables, which means a rename now silently emits a role
-  creation statement with no `NOSUPERUSER`, no `NOBYPASSRLS`, and no grants. The only thing
-  standing between that and a generated project is a content assertion in one test file.
-
-  The rest of the system applies the fail-hard principle to every configuration error, missing
-  dependency, and invalid runtime state. The generator's own rendering is the station where it was
-  never applied, and SA189 made that station load-bearing for the privilege contract.
-
-  **Acceptance:** the generator's Jinja environment raises on an undefined context key instead of
-  emitting empty text, and a regression test renders a template with a missing key and asserts the
-  failure. Generation still succeeds for every shipped template and module combination, and the
-  emission fixture stays byte-identical; any template that relied on undefined-renders-empty is
-  fixed by supplying or removing the key, never by restoring a permissive default. Fixes may reach
-  templates other tracks own, and they are in scope here. Additionally close the tech audit's
-  generated-project smoke-boot gap: CI generates a project, runs its `start.sh`, and hits
-  `/healthcheck/`, so a template regression that survives strict rendering is still caught by the
-  artifact refusing to boot. The repo has extensive rendered-template assertions and nothing that
-  boots the result, and strict rendering is the half of that gap this ticket already owns.
-
-  **Surfaces:** the generator's Jinja environment, any template rendering an undefined key,
-  generator and emission-fixture tests, the CI smoke-boot station, and the tech audit.
+- [x] **SA196 — Fail hard on undefined generator template context.**
 
 - [ ] **SA201 — Give generated projects one throttling contract.**
 
@@ -604,9 +576,9 @@ deferred findings and their growth triggers. Items they record without schedulin
 and watch notes, the beta-migration ownership taxonomy whose derivation `decisions.md` § Release
 scope safeguards explicitly withholds authorization for, and the later deletion-coordinator options
 — stay there until a trigger fires. The external-provider conformance gap is no longer among them
-because completed SA190 closed it. Two others now have tickets: the dependency-scan, secret-scan and
-workflow-lint gaps are SA202's, and the generated-project smoke-boot gap is SA196's. Two
-watch notes are deliberately fired rather than carried: the `REST_FRAMEWORK` clobber, which SA201
+because completed SA190 closed it. The dependency-scan, secret-scan and workflow-lint gaps are
+SA202's, and the generated-project smoke-boot gap closed with SA196. Two watch notes are
+deliberately fired rather than carried: the `REST_FRAMEWORK` clobber, which SA201
 resolves because SA201 is the change that would otherwise trigger it, and the DR
 `pg_dump`/`pg_restore` dependence that SA193 made live and SA198 fixes. The remaining watch
 notes — persistent `QUICKSCALE_PRIVILEGED_COMMAND`, the analytics single-quote escape, the

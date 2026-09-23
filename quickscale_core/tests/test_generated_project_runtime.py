@@ -18,6 +18,7 @@ import json
 import os
 import secrets
 import shutil
+import signal
 import socket
 import ssl
 import struct
@@ -37,6 +38,10 @@ from urllib.parse import urljoin, urlsplit
 
 import pytest
 
+from quickscale_core.generator.runtime_database import (
+    RUNTIME_DB_DEFAULT_PASSWORD,
+    RUNTIME_DB_ROLE,
+)
 from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -1553,7 +1558,15 @@ def _wait_for_server(
             time.sleep(0.5)
 
     error_msg = f"Server did not start within {timeout} seconds."
-    if server_process is not None and server_process.stdout:
+    # Only drain the pipe once the process has exited. ``readline()`` blocks on
+    # a live but stalled server, which would hang the caller past its bounded
+    # wait instead of failing it; a dead process guarantees EOF after whatever
+    # it buffered.
+    if (
+        server_process is not None
+        and server_process.poll() is not None
+        and server_process.stdout
+    ):
         output_lines: list[str] = []
         try:
             for _ in range(20):
@@ -1614,6 +1627,86 @@ def _stop_server(server_process: subprocess.Popen[str]) -> None:
     except subprocess.TimeoutExpired:
         server_process.kill()
         server_process.wait(timeout=2)
+
+
+def _start_start_sh(
+    project_path: Path, environment: dict[str, str]
+) -> subprocess.Popen[str]:
+    """Launch the generated project's shipped ``start.sh`` launcher.
+
+    ``start.sh`` is intentionally emitted non-executable, so it is invoked
+    through ``bash``. The launcher runs in its own process group: ``poetry run``
+    sits between this test and gunicorn, so teardown signals the whole group
+    instead of only the intermediate process.
+    """
+    return subprocess.Popen(
+        ["poetry", "run", "bash", "start.sh"],
+        cwd=project_path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=environment,
+        text=True,
+        bufsize=1,
+        start_new_session=True,
+    )
+
+
+def _stop_start_sh(server_process: subprocess.Popen[str]) -> None:
+    """Terminate the ``start.sh`` process group, escalating to SIGKILL."""
+    if server_process.poll() is not None:
+        return
+    try:
+        os.killpg(os.getpgid(server_process.pid), signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        server_process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(server_process.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        server_process.wait(timeout=5)
+
+
+def _assert_healthcheck_ok(url: str, timeout: int = 30) -> None:
+    """Assert the artifact's healthcheck answers ``200`` ``text/plain`` ``OK``.
+
+    The generated SPA catch-all answers ``200`` with HTML for an unknown path,
+    so the body and content type are asserted, not just the status. 4xx/5xx
+    responses fail immediately: they mean the server is up but the route is
+    broken.
+    """
+    start = time.time()
+    last_error: Exception | None = None
+
+    while time.time() - start < timeout:
+        try:
+            response = urllib.request.urlopen(url, timeout=2)
+        except urllib.error.HTTPError as exc:
+            raise AssertionError(
+                f"Healthcheck {url} returned HTTP {exc.code}: {exc.reason}"
+            ) from exc
+        except (urllib.error.URLError, OSError) as exc:
+            last_error = exc
+            time.sleep(0.5)
+            continue
+
+        with response:
+            status = response.getcode()
+            body = response.read().decode("utf-8", errors="replace")
+            content_type = response.headers.get("Content-Type", "")
+
+        assert status == 200, f"Healthcheck {url} returned status {status}"
+        assert content_type.startswith("text/plain"), (
+            f"Healthcheck {url} returned content type {content_type!r}, not text/plain"
+        )
+        assert body == "OK", f"Healthcheck {url} body was {body!r}, not 'OK'"
+        return
+
+    raise AssertionError(
+        f"Healthcheck {url} did not respond within {timeout}s. Last error: {last_error}"
+    )
 
 
 def test_generated_client_identity_middleware_aligns_installed_drf(
@@ -1935,6 +2028,117 @@ class TestGeneratedProjectRuntimeSmoke:
                 os.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = _allow_bypass_rls
             else:
                 os.environ.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
+
+    @pytest.mark.e2e
+    def test_generated_project_boots_through_start_sh_and_serves_healthcheck(
+        self, tmp_path: Path, per_test_db: dict[str, str]
+    ) -> None:
+        """The shipped launcher boots the artifact and serves its healthcheck.
+
+        Closes the tech audit's generated-project smoke-boot gap: the repo
+        asserted rendered template content extensively but never booted the
+        result. This node generates a project, installs its own declared
+        dependencies, and runs the real ``start.sh`` under the shipped
+        production settings against PostgreSQL, asserting ``/healthcheck/``
+        answers ``200 text/plain OK``. A template regression that survives
+        strict rendering -- an unloadable settings module, a broken URLconf or
+        WSGI module, an aborting launcher step -- fails here because the
+        artifact never serves.
+
+        The launcher runs with ``RUNTIME_DB_PASSWORD`` set, so its runtime-role
+        step executes exactly as a deployment runs it: the privileged URL
+        provisions the restricted role and grants, and the server itself serves
+        under that restricted URL. The station then asserts the role really
+        landed with its non-privileged attributes instead of trusting the boot
+        log.
+        """
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "smoke_boot_probe"
+        project_path = tmp_path / project_name
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+
+        assert (project_path / "start.sh").exists()
+        _install_project_dependencies(project_path, strict=True)
+
+        superuser_url = (
+            f"postgresql://{per_test_db['user']}:{per_test_db['password']}"
+            f"@{per_test_db['host']}:{per_test_db['port']}/{per_test_db['database']}"
+        )
+        runtime_url = (
+            f"postgresql://{RUNTIME_DB_ROLE}:{RUNTIME_DB_DEFAULT_PASSWORD}"
+            f"@{per_test_db['host']}:{per_test_db['port']}/{per_test_db['database']}"
+        )
+        server_port = _find_free_port()
+        environment = _standalone_generated_env(
+            {
+                "ALLOWED_HOSTS": "localhost,127.0.0.1",
+                "DATABASE_URL": superuser_url,
+                "DEBUG": "False",
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+                "PORT": str(server_port),
+                "RUNTIME_DATABASE_URL": runtime_url,
+                "RUNTIME_DB_PASSWORD": RUNTIME_DB_DEFAULT_PASSWORD,
+                # Bind the role the launcher provisions to the role this test
+                # connects as and asserts on; an ambient RUNTIME_DB_ROLE would
+                # otherwise make the station depend on the caller's environment.
+                "RUNTIME_DB_ROLE": RUNTIME_DB_ROLE,
+                "SECRET_KEY": (
+                    "smoke-boot-probe-secret-0123456789abcdefghijklmnopqrstuvwxyz"
+                ),
+            }
+        )
+        # A stale ambient service pointer would silently change the cache and
+        # role cells the launcher exercises; this station owns its environment.
+        environment.pop("REDIS_URL", None)
+        server_process = _start_start_sh(project_path, environment)
+
+        try:
+            _wait_for_server(
+                f"http://localhost:{server_port}",
+                timeout=60,
+                server_process=server_process,
+            )
+            _assert_healthcheck_ok(f"http://localhost:{server_port}/healthcheck/")
+        finally:
+            _stop_start_sh(server_process)
+
+        import psycopg2
+
+        connection = psycopg2.connect(superuser_url)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = %s",
+                    (RUNTIME_DB_ROLE,),
+                )
+                role_attributes = cursor.fetchone()
+        finally:
+            connection.close()
+
+        assert role_attributes is not None, (
+            f"start.sh did not provision the shipped runtime role {RUNTIME_DB_ROLE!r}"
+        )
+        assert role_attributes == (False, False), (
+            f"runtime role {RUNTIME_DB_ROLE!r} must be NOSUPERUSER/NOBYPASSRLS, "
+            f"got rolsuper={role_attributes[0]}, "
+            f"rolbypassrls={role_attributes[1]}"
+        )
+
+        # The launcher's grants must leave the restricted role usable against
+        # the migrated schema: connect as that role and read a migrated table,
+        # so a launcher that creates the role without its grants fails here.
+        runtime_connection = psycopg2.connect(runtime_url)
+        try:
+            with runtime_connection.cursor() as cursor:
+                cursor.execute("SELECT current_user")
+                assert cursor.fetchone() == (RUNTIME_DB_ROLE,), (
+                    "runtime connection did not assume the restricted role"
+                )
+                cursor.execute("SELECT COUNT(*) FROM django_migrations")
+                cursor.fetchone()
+        finally:
+            runtime_connection.close()
 
     @pytest.mark.e2e
     def test_all_module_initial_migrations_apply_from_embedded_sources(

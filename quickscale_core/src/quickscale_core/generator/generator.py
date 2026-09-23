@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from quickscale_core.generator.runtime_database import runtime_db_template_context
 from quickscale_core.generator.runtime_pins import (
@@ -365,6 +365,12 @@ class ProjectGenerator:
         self.env = Environment(
             loader=FileSystemLoader(str(template_dir), followlinks=True),
             keep_trailing_newline=True,
+            # Fail closed on a missing or renamed context key (SA196). The
+            # default ``Undefined`` renders empty text, so a template reading an
+            # absent key silently emits incomplete output — the runtime role's
+            # attributes and grants, for example, would vanish from
+            # ``db/init.sql`` and ``start.sh`` without any error.
+            undefined=StrictUndefined,
         )
 
         # Validate theme directory exists

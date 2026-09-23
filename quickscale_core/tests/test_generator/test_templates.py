@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Callable
 
 import pytest
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, UndefinedError
 
 from quickscale_core.generator.runtime_database import (
     RUNTIME_DB_GRANT_STATEMENTS,
@@ -43,8 +43,16 @@ def template_dir() -> Path:
 
 @pytest.fixture
 def jinja_env(template_dir: Path) -> Environment:
-    """Create a Jinja2 environment configured with template loader."""
-    return Environment(loader=FileSystemLoader(str(template_dir)))
+    """Create a Jinja2 environment that mirrors the generator's strict contract.
+
+    SA196 made the generator fail closed on undefined context keys, so the test
+    double renders under the same ``StrictUndefined`` contract instead of
+    silently substituting empty text.
+    """
+    return Environment(
+        loader=FileSystemLoader(str(template_dir)),
+        undefined=StrictUndefined,
+    )
 
 
 @pytest.fixture
@@ -2876,15 +2884,23 @@ class TestLocalSettingsRuntimeDatabaseUrl:
 
 
 class TestMissingVariableErrors:
-    """Verify templates handle missing variables appropriately."""
+    """Verify the generator fails closed on undefined context keys (SA196)."""
 
-    def test_missing_project_name_renders_partial(self, jinja_env: Environment) -> None:
-        """Test template renders with missing project_name using Jinja2 defaults."""
-        template = jinja_env.get_template("manage.py.j2")
-        output = template.render({})
-        # Jinja2 default behavior renders undefined variables as empty strings
-        # Production should use StrictUndefined for explicit failures
-        assert ".settings" in output
+    def test_generator_environment_uses_strict_undefined(self) -> None:
+        """The generator's Jinja environment rejects undefined keys."""
+        from quickscale_core.generator import ProjectGenerator
+
+        generator = ProjectGenerator(theme="showcase_react")
+        assert generator.env.undefined is StrictUndefined
+
+    def test_missing_context_key_raises_undefined_error(self) -> None:
+        """Rendering a shipped template without a required key fails loudly."""
+        from quickscale_core.generator import ProjectGenerator
+
+        generator = ProjectGenerator(theme="showcase_react")
+        template = generator.env.get_template("README.md.j2")
+        with pytest.raises(UndefinedError, match="project_name"):
+            template.render({})
 
 
 class TestDevOpsTemplateLoading:
