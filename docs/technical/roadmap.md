@@ -46,7 +46,6 @@ context, scope, and acceptance;
 | SA193 | Derive the generated `.env.example` credential contract from module manifests | post-v88 | 2 | — | Deferred |
 | SA198 | Carry the database's TLS settings into the backup and restore commands | post-v88 | 2 | — | Deferred |
 | SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
-| SA200 | Gate the proxy and correlation-id settings the generator emits | post-v88 | 3 | — | Deferred |
 | SA196 | Fail hard on undefined generator template context | post-v88 | 3 | — | Deferred |
 | SA201 | Give generated projects one throttling contract | post-v88 | 3 | — | Deferred |
 | SA203 | Narrow the privileged-command exemption in the orgs boot path | post-v88 | 3 | — | Deferred |
@@ -56,7 +55,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
 Track 2: SA193 ──► SA198 ──► SA202
-Track 3: SA200 ──► SA196 ──► SA201 ──► SA203
+Track 3: SA196 ──► SA201 ──► SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -91,10 +90,6 @@ the critical path.
   S2 defect in the packaged bytes that no other ticket touches, and SA202 hardens the workflow that
   performs the publication those bytes are waiting on. Neither blocks another ticket, so both are
   queue order rather than edges.
-- **SA200 precedes SA201 in the queue, not by dependency.** Both edit the generator's settings
-  templates, so serializing them avoids a self-inflicted conflict on `base.py.j2`, and SA200's
-  `check --deploy` gate is the station SA201's throttle defaults are then observed by. SA201 is
-  correct without SA200 and carries no edge.
 - **SA203 is small and stands alone.** The `orgs.ready()` early return is boot-path code that no
   other ticket reads; it sits on track 3 because track 3 owns the orgs module and the
   privileged-command stations, and late in the queue because it is the least severe of them.
@@ -140,7 +135,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA193 | yes | yes | yes | **yes** | no |
-| 3 | SA200 | yes | yes | yes | **yes** | no |
+| 3 | SA196 | yes | yes | yes | **yes** | no |
 
 ### Interrupted work (measured 2026-09-22)
 
@@ -160,11 +155,14 @@ before that date is gone and everything uncommitted now shows as unstaged.
   whose suites assert the older shell markup; the five module page surfaces carry the shared design
   with the frontend-origin contract and its checks. Track 2's remaining queue is SA193, SA198, and
   SA202.
-- **Track 3 — SA199 delivered.** Account deletion runs its Stripe calls between short database
-  transactions and restores the cancellation state when deletion is rejected; webhook processing
-  holds a session-level lock across its handler and result persistence; and `search_customers`
-  refuses a reference containing `'`, `\`, or a newline. Track 3's remaining queue is SA200, SA196,
-  SA201, and SA203.
+- **Track 3 — SA199 and SA200 delivered.** Account deletion runs its Stripe calls between short
+  database transactions and restores the cancellation state when deletion is rejected; webhook
+  processing holds a session-level lock across its handler and result persistence; and
+  `search_customers` refuses a reference containing `'`, `\`, or a newline. The generated
+  production settings trust `X-Forwarded-Proto` only while forwarding trust is enabled, the
+  correlation-id middleware accepts a client `X-Request-ID` only when it is bounded, and a
+  registered gate runs Django's deployment checks on a freshly generated project in both
+  forwarding cells. Track 3's remaining queue is SA196, SA201, and SA203.
 
 ### Ownership and merge coordination
 
@@ -202,10 +200,10 @@ before that date is gone and everything uncommitted now shows as unstaged.
   documentation; the landed SA192 restyle touched the `auth` account templates while SA199 edits
   the account-delete view, so SA199 re-runs the auth tests when it lands; SA196 turns strict
   rendering on for every generator template, including the `.env.example` template SA193 rewrites,
-  the settings templates SA200 and SA201 edit, and the generated `base.html` SA192 restyles, so its
+  the settings templates SA201 edits, and the generated `base.html` SA192 restyles, so its
   fixes may reach both other tracks' files and whichever lands second re-runs the generator tests
-  and the SA90 emission fixture; and SA200's `check --deploy` station and SA202's workflow-lint
-  gate both add rows to `scripts/gate_registry.json`, which Track 1 also owns. The serialized queue
+  and the SA90 emission fixture; and SA202's workflow-lint gate adds a row to
+  `scripts/gate_registry.json`, which Track 1 also owns. The serialized queue
   covers them: each track resolves the shared set at its own merge, after the previous merge lands,
   then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
@@ -535,47 +533,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA199 — Keep external calls out of transactions and hold the webhook lock.**
 
-- [ ] **SA200 — Gate the proxy and correlation-id settings the generator emits.**
-
-  **Context:** Two independent defects in the generated settings templates, both trivial, both in
-  the same two files, and both invisible to every test the repo runs because nothing ever checks a
-  generated project's deployment posture.
-
-  `production.py.j2` sets `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")`
-  unconditionally, while the same file lets an operator set `USE_X_FORWARDED_FOR=False` for a
-  single-host deployment — a combination the project's own contract explicitly invites. In that
-  cell the app stops trusting `X-Forwarded-For` and keeps trusting `X-Forwarded-Proto` from anyone,
-  so a client reaching the plaintext listener with `X-Forwarded-Proto: https` makes
-  `request.is_secure()` true: the SSL redirect stops firing and Django sets `Secure` session and
-  CSRF cookies on a plaintext response. `NUM_PROXIES` is already gated on the same flag; this
-  assignment was not.
-
-  `base.py.j2`'s `CorrelationIdMiddleware` accepts `X-Request-ID` verbatim with no length or
-  character-class check, puts it in a `ContextVar`, and stamps it onto every log record the request
-  emits and onto the response header. A 32 KB header multiplies the request's log footprint by its
-  record count; a modest loop becomes a log-ingestion bill and, against a per-line cap, truncated
-  lines exactly where the attacker's traffic is. Neither header injection nor log injection is
-  reachable — Django rejects newlines in headers and the JSON formatter escapes the value — so what
-  is left is purely unbounded size and cardinality, which nothing bounds.
-
-  The shared cause is the tooling gap: nothing in CI boots or inspects a generated project's
-  settings, so a deployment-posture regression in a template ships silently.
-
-  **Acceptance:** the generated `production.py` leaves `SECURE_PROXY_SSL_HEADER` unset when
-  `USE_X_FORWARDED_FOR` is false, with the assignment ordered after that flag's definition, and a
-  rendered-template test asserts both cells. The correlation-id middleware accepts a client value
-  only when it matches a bounded pattern (`^[A-Za-z0-9._-]{1,64}$`) and generates a UUID otherwise;
-  a request carrying a 10 KB `X-Request-ID` is asserted to log a fresh UUID. CI runs
-  `manage.py check --deploy` against a freshly generated project in both forwarding cells and fails
-  on a new warning, as a registered gate — the station that would have caught the first defect and
-  that guards the whole settings-template surface from here. The default proxied deployment's
-  behavior is unchanged; a single-host operator who was relying on the spoofable header to suppress
-  a redirect loop now gets the redirect, which is the correct behavior and is recorded as a
-  deliberate change.
-
-  **Surfaces:** `production.py.j2` and `base.py.j2` in the generator's settings templates, the
-  rendered-template tests, `scripts/gate_registry.json` and the CI workflow for the deploy-check
-  station, the deployment documentation, and the tech audit.
+- [x] **SA200 — Gate the proxy and correlation-id settings the generator emits.**
 
 - [ ] **SA196 — Fail hard on undefined generator template context.**
 

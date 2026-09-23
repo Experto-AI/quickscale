@@ -167,6 +167,13 @@ railway run --service myapp /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate 
 
 - `RAILWAY_ENVIRONMENT` - Detected automatically by Railway
 - `PORT` - Auto-assigned by Railway (default: 8000)
+- `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` - Client-IP forwarding trust for proxied
+  deployments (production defaults: `True` / `1`). Set `USE_X_FORWARDED_FOR=False` only for a
+  single-host deployment that terminates TLS itself; the generated production settings then also
+  stop trusting `X-Forwarded-Proto`, so a direct plaintext client can neither suppress the HTTPS
+  redirect nor make Django set secure cookies on a plaintext response. This is deliberate: the
+  header used to be trusted unconditionally, which let a spoofed `X-Forwarded-Proto: https` mark a
+  plaintext request secure.
 
 ## Railway Multi-Service Architecture
 

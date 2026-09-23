@@ -1,10 +1,12 @@
 """Tests for QuickScale project template rendering and validation."""
 
 import ast
+import logging
 from pathlib import Path
 import sys
 import types
 import typing
+import uuid
 from collections.abc import Callable
 
 import pytest
@@ -176,6 +178,26 @@ def _execute_rendered_settings(
     }
     exec(target_output, target_namespace)
     return target_namespace
+
+
+def _execute_rendered_base_settings(
+    *,
+    jinja_env: Environment,
+    test_context: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, object]:
+    """Execute the rendered base settings module with lightweight stubs."""
+    base_output = _render_template(
+        jinja_env, "project_name/settings/base.py.j2", test_context
+    )
+    return _execute_rendered_settings(
+        monkeypatch=monkeypatch,
+        package_name=test_context["package_name"],
+        base_output=base_output,
+        target_output=base_output,
+        target_module_name="base",
+        config_values={},
+    )
 
 
 class TestQuickScaleCorePackageMetadata:
@@ -1691,6 +1713,67 @@ class TestClientIpAndSharedCache:
         assert production_rest_framework["NUM_PROXIES"] is None
         assert "get_client_ip" not in production_namespace
 
+    def test_production_proxy_ssl_header_follows_forwarding_trust(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """SA200: X-Forwarded-Proto is trusted only while XFF trust is enabled."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+        production_output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
+
+        def production_config_values(use_xff: bool) -> dict[str, object]:
+            return {
+                "SECRET_KEY": "a-valid-production-secret-key",
+                "DATABASE_URL": (
+                    "postgresql://postgres:postgres@localhost:5432/testproject"
+                ),
+                "RUNTIME_DATABASE_URL": "",
+                "USE_X_FORWARDED_FOR": use_xff,
+            }
+
+        forwarded_namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values=production_config_values(True),
+        )
+        assert forwarded_namespace["USE_X_FORWARDED_FOR"] is True
+        assert forwarded_namespace["SECURE_PROXY_SSL_HEADER"] == (
+            "HTTP_X_FORWARDED_PROTO",
+            "https",
+        ), "The proxied deployment must keep trusting X-Forwarded-Proto"
+
+        single_host_namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values=production_config_values(False),
+        )
+        assert single_host_namespace["USE_X_FORWARDED_FOR"] is False
+        assert single_host_namespace["SECURE_PROXY_SSL_HEADER"] is None, (
+            "A single-host deployment must not trust a client-supplied "
+            "X-Forwarded-Proto"
+        )
+
+        flag_index = production_output.index(
+            'USE_X_FORWARDED_FOR = config("USE_X_FORWARDED_FOR"'
+        )
+        header_index = production_output.index("SECURE_PROXY_SSL_HEADER")
+        assert flag_index < header_index, (
+            "SECURE_PROXY_SSL_HEADER must be assigned after USE_X_FORWARDED_FOR"
+        )
+
     # ── Shared cache (production.py) ──────────────────────────────────
 
     def test_production_cache_is_not_locmem(
@@ -1904,6 +1987,94 @@ class TestCorrelationIdFilterRuntime:
         )
 
         _correlation_id_var.reset(token)
+
+
+class TestCorrelationIdClientInputBounds:
+    """SA200: a client-supplied X-Request-ID is bounded before it is used."""
+
+    def _middleware_factory(
+        self,
+        namespace: dict[str, object],
+    ) -> Callable[
+        [Callable[[object], dict[str, str]]], Callable[[object], dict[str, str]]
+    ]:
+        return typing.cast(
+            Callable[
+                [Callable[[object], dict[str, str]]],
+                Callable[[object], dict[str, str]],
+            ],
+            namespace["CorrelationIdMiddleware"],
+        )
+
+    def test_well_formed_client_request_id_is_propagated(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A bounded client trace id passes through unchanged."""
+        namespace = _execute_rendered_base_settings(
+            jinja_env=jinja_env,
+            test_context=test_context,
+            monkeypatch=monkeypatch,
+        )
+        middleware_factory = self._middleware_factory(namespace)
+
+        seen: dict[str, object] = {}
+
+        def get_response(request: object) -> dict[str, str]:
+            seen["correlation_id"] = getattr(request, "correlation_id", None)
+            return {}
+
+        client_value = "trace-4f8a_2.C-9"
+        request = types.SimpleNamespace(META={"HTTP_X_REQUEST_ID": client_value})
+        response = middleware_factory(get_response)(request)
+
+        assert seen["correlation_id"] == client_value
+        assert request.correlation_id == client_value
+        assert response["X-Request-ID"] == client_value
+
+    @pytest.mark.parametrize(
+        "client_value",
+        ["a" * 10_240, "x" * 65, "bad:id", "has space", ""],
+        ids=["oversized-10kb", "over-64", "invalid-char", "space", "empty"],
+    )
+    def test_unusable_client_request_id_is_replaced_with_fresh_uuid(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+        client_value: str,
+    ) -> None:
+        """Oversized or malformed client values never reach the logs."""
+        namespace = _execute_rendered_base_settings(
+            jinja_env=jinja_env,
+            test_context=test_context,
+            monkeypatch=monkeypatch,
+        )
+        middleware_factory = self._middleware_factory(namespace)
+
+        def get_response(_request: object) -> dict[str, str]:
+            return {}
+
+        request = types.SimpleNamespace(META={"HTTP_X_REQUEST_ID": client_value})
+        response = middleware_factory(get_response)(request)
+
+        generated = request.correlation_id
+        assert generated != client_value
+        uuid.UUID(generated)  # Raises when the middleware echoed the client value.
+        assert response["X-Request-ID"] == generated
+
+        CorrelationIdFilter = typing.cast(
+            type[logging.Filter], namespace["CorrelationIdFilter"]
+        )
+        record = logging.LogRecord(
+            "test", logging.INFO, __file__, 42, "test message", (), None
+        )
+        CorrelationIdFilter().filter(record)
+        assert record.correlation_id == generated, (  # type: ignore[attr-defined]
+            "Every log record must carry the replacement UUID, not the client value"
+        )
 
 
 class TestGeneratedSecretKeyGuards:

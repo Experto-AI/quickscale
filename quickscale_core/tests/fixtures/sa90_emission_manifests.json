@@ -39,7 +39,8 @@
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 — Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa188": "Regenerated 2026-09-16 — start.sh removes the retired migrate_billing_to_orgs argv mode and rejects every supplied argv with exit 2; production.py returns the privileged-command contract to migrate/createcachetable. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa189": "Regenerated 2026-09-17 — the generator and Railway deploy share the quickscale_runtime role name, while db/init.sql, start.sh, and OPERATIONS.md render one canonical grant set including database CONNECT. The role-name context also updates .env.example, docker-compose.yml, and settings/base.py. Only these six generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa192": "Regenerated 2026-09-17 — templates/base.html and templates/index.html load one Vite-served live token stylesheet through the configurable browser-visible frontend origin in DEBUG and compiled React CSS in production; templates/social/{embeds,link_tree}.html inherit that shell choice without overriding it; frontend/vite.config.ts reserves /static/frontend/ for Vite while proxying other Django static paths, loads the generated root environment with process overrides, rejects non-canonical origins, and compares the raw configured Host before Vite's localhost/IP exceptions; frontend/src/test/viteAssetRouting.test.ts proves stylesheet routing, absent and preconfigured .env restoration, exact HTTP/WebSocket Host handling including normalized-alias rejection, and the canonical origin corpus shared with Django settings; docker-compose.yml builds the Django-served SPA JavaScript, probes Vite with the configured Host, and passes both frontend port and origin to Django; testproject/settings/local.py validates the configurable frontend port and full origin against that corpus; .env, .env.example, and README.md document the local defaults and remote/tunnel override. Only these eleven generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
+      "sa192": "Regenerated 2026-09-17 — templates/base.html and templates/index.html load one Vite-served live token stylesheet through the configurable browser-visible frontend origin in DEBUG and compiled React CSS in production; templates/social/{embeds,link_tree}.html inherit that shell choice without overriding it; frontend/vite.config.ts reserves /static/frontend/ for Vite while proxying other Django static paths, loads the generated root environment with process overrides, rejects non-canonical origins, and compares the raw configured Host before Vite's localhost/IP exceptions; frontend/src/test/viteAssetRouting.test.ts proves stylesheet routing, absent and preconfigured .env restoration, exact HTTP/WebSocket Host handling including normalized-alias rejection, and the canonical origin corpus shared with Django settings; docker-compose.yml builds the Django-served SPA JavaScript, probes Vite with the configured Host, and passes both frontend port and origin to Django; testproject/settings/local.py validates the configurable frontend port and full origin against that corpus; .env, .env.example, and README.md document the local defaults and remote/tunnel override. Only these eleven generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa200": "Regenerated 2026-09-23 — generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -477,7 +478,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "9ec01ce1be5886233a524c9cbcba8f3d70b8db66545c565de50fcd433c7acdcd"
+      "sha256": "5c11455ad359778a00e2d41b49ef8cbdfc253b30c68e6714e409803146181875"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -489,7 +490,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "d2781505e786e7517fbf1f02409febdbb6fa1720d400cb1d1ec46f906831ac98"
+      "sha256": "172dbafa1a865ec26c76ec7e1102a08af65f69898a31148261f65eaa35698465"
     },
     "testproject/urls.py": {
       "mode": "664",
@@ -947,7 +948,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "9ec01ce1be5886233a524c9cbcba8f3d70b8db66545c565de50fcd433c7acdcd"
+      "sha256": "5c11455ad359778a00e2d41b49ef8cbdfc253b30c68e6714e409803146181875"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -959,7 +960,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "d2781505e786e7517fbf1f02409febdbb6fa1720d400cb1d1ec46f906831ac98"
+      "sha256": "172dbafa1a865ec26c76ec7e1102a08af65f69898a31148261f65eaa35698465"
     },
     "testproject/urls.py": {
       "mode": "664",
@@ -1417,7 +1418,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "9ec01ce1be5886233a524c9cbcba8f3d70b8db66545c565de50fcd433c7acdcd"
+      "sha256": "5c11455ad359778a00e2d41b49ef8cbdfc253b30c68e6714e409803146181875"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -1429,7 +1430,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "d2781505e786e7517fbf1f02409febdbb6fa1720d400cb1d1ec46f906831ac98"
+      "sha256": "172dbafa1a865ec26c76ec7e1102a08af65f69898a31148261f65eaa35698465"
     },
     "testproject/urls.py": {
       "mode": "664",

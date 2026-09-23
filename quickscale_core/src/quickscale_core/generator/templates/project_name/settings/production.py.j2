@@ -18,6 +18,8 @@ REQUIRED ENVIRONMENT VARIABLES:
 OPTIONAL ENVIRONMENT VARIABLES:
 - REDIS_URL: When set, enables Redis as the shared cache backend (recommended; standard on Railway)
 - USE_X_FORWARDED_FOR: Defaults to ``True`` in production; set to ``False`` for single-host
+  deployments. Disabling it also stops ``X-Forwarded-Proto`` from being trusted, so the HTTPS
+  redirect and secure cookies cannot be spoofed by a direct plaintext client.
 - TRUSTED_PROXY_COUNT: Defaults to ``1``; the number of reverse proxies in front of the app
 
 COMMAND-MODE ENVIRONMENT VARIABLES (mutually exclusive, one-shot):
@@ -85,7 +87,6 @@ ALLOWED_HOSTS = list(
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
 # Exempt healthcheck endpoint from HTTPS redirect (Railway healthchecks use HTTP)
 SECURE_REDIRECT_EXEMPT = [r"^healthcheck/$"]
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # SECURITY: Cookie security
 SESSION_COOKIE_SECURE = True
@@ -115,6 +116,17 @@ X_FRAME_OPTIONS = "DENY"
 # environment to keep ``REMOTE_ADDR`` behaviour.
 USE_X_FORWARDED_FOR = config("USE_X_FORWARDED_FOR", default=True, cast=bool)
 TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=1, cast=int)
+
+# SECURITY: Trust ``X-Forwarded-Proto`` only while forwarding trust is enabled.
+#
+# The proxied deployment keeps the header set, so the proxy's scheme decision
+# drives ``request.is_secure()``, HTTPS redirects, and secure cookies. The
+# single-host deployment (``USE_X_FORWARDED_FOR=False``) has no proxy vouching
+# for the scheme, so the header stays unset: a client-supplied
+# ``X-Forwarded-Proto: https`` cannot mark a plaintext request secure, the
+# HTTPS redirect keeps firing, and secure cookies are never set on a plaintext
+# response. This is deliberate — it replaces the previous unconditional trust.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if USE_X_FORWARDED_FOR else None
 
 
 # Recompute DRF's right-indexed selection count after production overrides.

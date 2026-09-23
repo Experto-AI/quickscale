@@ -46,6 +46,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     deletion is rejected; webhook processing holds a session-level lock across its handler and
     result persistence; and Stripe customer search refuses a reference containing an apostrophe, a
     backslash, or a newline instead of interpolating it into the query.
+  - **Generated settings gate proxy trust and bound the correlation id.** The generated production
+    settings trust `X-Forwarded-Proto` only while `USE_X_FORWARDED_FOR` is enabled, so a single-host
+    deployment no longer lets a spoofed header suppress the HTTPS redirect or set secure cookies on
+    a plaintext response; the correlation-id middleware replaces any client `X-Request-ID` outside
+    a 64-character `[A-Za-z0-9._-]` shape with a fresh UUID, and a registered gate deploy-checks a
+    freshly generated project in both forwarding cells.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

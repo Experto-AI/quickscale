@@ -281,6 +281,23 @@
             },
             "depends_on": [],
             "trigger_inputs": []
+        },
+        {
+            "id": "check-generated-deploy-posture",
+            "description": "Deploy-check a freshly generated project in both forwarding cells and fail on a new warning",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-generated-deploy-posture",
+                "ci_job": "generated-deploy-posture-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
         }
     ]
 }

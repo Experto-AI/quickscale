@@ -119,29 +119,11 @@ at*, not *clean*.
   status: open
   reality: R2
   chain: []
-- id: proxy-ssl-header-trusted-unconditionally
-  severity: S3
-  category: "VI. Error handling and operability"
-  title: SECURE_PROXY_SSL_HEADER is set even when forwarding trust is disabled
-  effort: Trivial
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
 - id: billing-checkout-endpoints-unthrottled
   severity: S3
   category: "III. Security"
   title: Stripe-calling endpoints have no throttle and no DRF throttle defaults exist
   effort: Small
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
-- id: correlation-id-header-unbounded
-  severity: S3
-  category: "VI. Error handling and operability"
-  title: Client-supplied X-Request-ID is echoed unbounded into every log line
-  effort: Trivial
   confidence: High
   status: open
   reality: R2
@@ -200,16 +182,14 @@ at*, not *clean*.
 | ID | Sev | Category | Title | Effort | Conf | Status |
 |---|---|---|---|---|---|---|
 | `dr-backup-drops-tls-options` | S2 | Data handling | pg_dump/pg_restore drop the database's TLS settings | Small | High | open |
-| `proxy-ssl-header-trusted-unconditionally` | S3 | Operability | `SECURE_PROXY_SSL_HEADER` set even with forwarding trust off | Trivial | High | open **(quick win)** |
 | `billing-checkout-endpoints-unthrottled` | S3 | Security | Stripe-calling endpoints have no throttle | Small | High | open |
-| `correlation-id-header-unbounded` | S3 | Operability | Unbounded client `X-Request-ID` into every log line | Trivial | High | open **(quick win)** |
 | `orgs-ready-early-return-skips-receivers` | S3 | Correctness | Privileged-command exemption skips two other installs | Small | High | open |
 | `blog-throttle-racy-on-database-cache` | S3 | Concurrency | Rate limiter non-atomic on the default prod cache | Small | Medium | open |
 | `pipeline-mutable-action-refs` | S3 | Pipeline | Publishing workflow trusts mutable refs | Small | High | open |
 | `blog-throttle-ident-collision` | S4 | Security | IPv4/IPv6 throttle bucket collision | Trivial | High | open |
 | `build-system-requires-unpinned` | S4 | Pipeline | Unpinned `poetry-core` build requirement | Trivial | High | open |
 
-**Counts:** S1 — 0 · S2 — 1 · S3 — 6 · S4 — 2 · total 9.
+**Counts:** S1 — 0 · S2 — 1 · S3 — 4 · S4 — 2 · total 7.
 
 ---
 
@@ -296,34 +276,7 @@ at*, not *clean*.
 
 ---
 
-### Finding 2: `SECURE_PROXY_SSL_HEADER` is trusted even when forwarding trust is disabled
-
-- **ID:** `proxy-ssl-header-trusted-unconditionally` · **S3** · Reality **R2** · Confidence **High**
-- **Location:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/production.py.j2:88`
-- **Defect + failure scenario:** Line 88 sets `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO",
-  "https")` unconditionally, while line 116 lets an operator set `USE_X_FORWARDED_FOR=False` for a
-  single-host deployment. That combination is exactly what oracle item 6 invites ("Single-host
-  (no-proxy) deployments can disable both settings"), and in it the app no longer trusts
-  `X-Forwarded-For` but still trusts `X-Forwarded-Proto` from anyone. A client that reaches the
-  app's HTTP listener directly and sends `X-Forwarded-Proto: https` makes `request.is_secure()`
-  return `True`: `SECURE_SSL_REDIRECT` stops redirecting, and Django happily sets
-  `SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE` cookies on a plaintext response, so the session
-  cookie is transmitted in the clear on that exchange. Two preconditions (single-host cell + a
-  reachable plaintext listener) keep this at S3 rather than S2. This is the configuration-cell
-  defect §2h asks for, and it contradicts the project's own declared single-host contract.
-- **Fix:** Gate it the same way `NUM_PROXIES` is gated —
-  `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if USE_X_FORWARDED_FOR else None`
-  — and move the assignment below the `USE_X_FORWARDED_FOR` definition at line 116. **Effort:
-  Trivial.** Verify with a rendered-template test asserting the generated `production.py` leaves
-  `SECURE_PROXY_SSL_HEADER` unset when `USE_X_FORWARDED_FOR=False`.
-- **Refutation:** Searched `base.py.j2` and the module settings for a middleware that strips
-  `X-Forwarded-Proto` — `ClientIdentityMiddleware` (`base.py.j2:90–116`) normalizes only
-  `HTTP_X_FORWARDED_FOR` and deliberately leaves `X-Forwarded-Proto` alone. No layer-up guard.
-  **Fix risk:** none for the default (proxied) deployment, which keeps `USE_X_FORWARDED_FOR=True`;
-  a single-host operator who was relying on the spoofable header to avoid a redirect loop will
-  start seeing redirects, which is the correct behaviour.
-
-### Finding 3: Stripe-calling endpoints have no throttle, and no DRF throttle defaults exist
+### Finding 2: Stripe-calling endpoints have no throttle, and no DRF throttle defaults exist
 
 - **ID:** `billing-checkout-endpoints-unthrottled` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_modules/billing/src/quickscale_modules_billing/views.py:171–230`
@@ -354,31 +307,7 @@ at*, not *clean*.
   every DRF view in every generated project, so the rate must be generous enough not to break
   legitimate polling clients; ship it as a named default operators can raise.
 
-### Finding 4: Client-supplied `X-Request-ID` is echoed unbounded into every log line
-
-- **ID:** `correlation-id-header-unbounded` · **S3** · Reality **R2** · Confidence **High**
-- **Location:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2:183–189`
-  (`CorrelationIdMiddleware.__call__`)
-- **Defect + failure scenario:** The middleware takes `HTTP_X_REQUEST_ID` verbatim with no length
-  or character-class check, stores it in a `ContextVar`, and `CorrelationIdFilter` stamps it onto
-  **every** log record for the request, where `JsonFormatter` serializes it. An unauthenticated
-  client sending a 32 KB `X-Request-ID` header multiplies its own log footprint by the number of
-  records that request emits; a modest request loop turns into a log-ingestion bill and, on a
-  hosted log backend with a per-line size cap, into truncated or dropped lines exactly when the
-  attacker's traffic is the thing you need to read. The value is also reflected into the response
-  header. This is the §VI cardinality/cost bullet in its header-shaped form.
-- **Fix:** Validate before accepting — require the value to match `^[A-Za-z0-9._-]{1,64}$` and fall
-  back to a generated UUID otherwise. **Effort: Trivial.** Verify with a request carrying a 10 KB
-  `X-Request-ID` and assert the emitted `correlation_id` is a fresh UUID.
-- **Refutation:** Two counter-arguments, both examined. (a) CRLF header injection is *not* reachable
-  — Django's `HttpResponse.__setitem__` raises `BadHeaderError` on newlines, so the reflection at
-  line 188 is safe, and the finding does not claim otherwise. (b) Log injection is likewise not
-  reachable, because `JsonFormatter` uses `json.dumps`, which escapes the value. What survives is
-  purely the unbounded size and cardinality, which nothing bounds. **Fix risk:** none — a client
-  legitimately propagating a trace id will be using a UUID or similar, which passes; anything that
-  does not pass was never a usable correlation key.
-
-### Finding 5: The privileged-command exemption skips GUC priming and the last-owner backstop
+### Finding 3: The privileged-command exemption skips GUC priming and the last-owner backstop
 
 - **ID:** `orgs-ready-early-return-skips-receivers` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:186–188`
@@ -412,7 +341,7 @@ at*, not *clean*.
   be blocked by the backstop and will need an explicit bypass — worth checking existing migrations
   before landing.
 
-### Finding 6: Blog rate limiter is non-atomic on the default production cache backend
+### Finding 4: Blog rate limiter is non-atomic on the default production cache backend
 
 - **ID:** `blog-throttle-racy-on-database-cache` · **S3** · Reality **R2** · Confidence **Medium**
 - **Location:** `quickscale_modules/blog/src/quickscale_modules_blog/views.py:303–330`
@@ -439,7 +368,7 @@ at*, not *clean*.
   documented as optional and the DB-cache branch is the written fallback, complete with a
   `createcachetable` step in `start.sh.j2`. Checked for a layer-up limiter — none.
 
-### Finding 7: The publishing workflow trusts mutable action refs and an unpinned Poetry
+### Finding 5: The publishing workflow trusts mutable action refs and an unpinned Poetry
 
 - **ID:** `pipeline-mutable-action-refs` · **S3** · Reality **R3** · Confidence **High**
 - **Location:** `.github/workflows/publish.yml:294`, `:318`
@@ -529,8 +458,7 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
   limiter and API authentication path read in full; the rest sampled.
 - **dr_engine / backups** — `dr-backup-drops-tls-options`. `primitives.py`, the `recovery.py`
   execution gate, and the `orchestration.py` call sites read in full.
-- **generator templates** — `proxy-ssl-header-trusted-unconditionally`,
-  `correlation-id-header-unbounded`, `billing-checkout-endpoints-unthrottled` (the missing DRF
+- **generator templates** — `billing-checkout-endpoints-unthrottled` (the missing DRF
   defaults). `base.py.j2`, `production.py.j2`, `.env.j2`, `start.sh.j2` read in full.
 - **quickscale_cli** — clean on the sinks swept. All 94 files swept for shell/eval/deserialization
   sinks; `railway_utils.py` secret handling read in full.
@@ -607,9 +535,6 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 - **Workflow linting** (`zizmor` or `actionlint`), failing on unpinned `uses:` refs and on missing
   top-level `permissions:`. Would have caught **`pipeline-mutable-action-refs`** and keeps it
   caught.
-- **A Django security-settings check in CI** — run `manage.py check --deploy` against a freshly
-  generated project with `USE_X_FORWARDED_FOR=False`. Would have caught
-  **`proxy-ssl-header-trusted-unconditionally`** and guards the whole settings-template surface.
 - **A generated-project smoke boot** in CI (generate → `start.sh` → hit `/healthcheck/`). The repo
   has extensive rendered-template assertions but nothing that boots the artifact, which is the §4.X
   generator gap that lets template regressions ship.

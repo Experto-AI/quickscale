@@ -150,6 +150,10 @@ jobs:
         run: |
           make check-beta-migration-smoke
 
+      - name: Run generated deploy posture gate
+        run: |
+          make check-generated-deploy-posture
+
       - name: Run rendered frontend proof
         run: |
           make frontend-proof

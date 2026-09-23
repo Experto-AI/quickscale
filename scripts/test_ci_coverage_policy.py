@@ -651,6 +651,7 @@ class TestMakefileGateTargetDerivation:
         "check-dependency-vulnerabilities",
         "check-security-static-analysis",
         "check-beta-migration-smoke",
+        "check-generated-deploy-posture",
     )
 
     def _derive_targets(self, cwd: Path, *, registry: Path | None = None) -> str:
@@ -733,7 +734,7 @@ class TestRegisteredScriptGateTarget:
                         "check-org-context-primitives check-csrf-exempt "
                         "check-commit-testimony check-gate-suites "
                         "check-dependency-vulnerabilities check-security-static-analysis "
-                        "check-beta-migration-smoke"
+                        "check-beta-migration-smoke check-generated-deploy-posture"
                     )
                     raise SystemExit(0)
                 if args[:2] != ["-m", "pytest"]:
@@ -1068,7 +1069,8 @@ class TestMakefileCoveragePipeline:
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
                         "check-security-static-analysis "
-                        "check-beta-migration-smoke"
+                        "check-beta-migration-smoke "
+                        "check-generated-deploy-posture"
                     )
                     raise SystemExit(0)
 
@@ -1539,7 +1541,8 @@ class TestCheckQuietSectionDispatch:
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
                         "check-security-static-analysis "
-                        "check-beta-migration-smoke"
+                        "check-beta-migration-smoke "
+                        "check-generated-deploy-posture"
                     )
                     raise SystemExit(0)
                 raise SystemExit(0)
@@ -2594,7 +2597,8 @@ class TestCheckNormalFrontendLint:
                         "check-gate-suites "
                         "check-dependency-vulnerabilities "
                         "check-security-static-analysis "
-                        "check-beta-migration-smoke"
+                        "check-beta-migration-smoke "
+                        "check-generated-deploy-posture"
                     )
                     raise SystemExit(0)
                 raise SystemExit(0)
