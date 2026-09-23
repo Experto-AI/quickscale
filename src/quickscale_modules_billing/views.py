@@ -174,6 +174,9 @@ class CreateCheckoutSessionView(_RenderedAPIView):
     permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
+    # Tighter than the generated user/anon defaults; the rate for this scope
+    # is contributed by the billing wiring spec.
+    throttle_scope = "billing_checkout"
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
@@ -227,6 +230,9 @@ class CreateSubscriptionCheckoutView(_RenderedAPIView):
     permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
+    # Tighter than the generated user/anon defaults; the rate for this scope
+    # is contributed by the billing wiring spec.
+    throttle_scope = "billing_checkout"
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
@@ -280,6 +286,9 @@ class CancelSubscriptionView(_RenderedAPIView):
     permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
+    # Stripe-calling session endpoint; the rate for this scope is contributed
+    # by the billing wiring spec.
+    throttle_scope = "billing_portal"
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
@@ -332,6 +341,9 @@ class CreateBillingPortalSessionView(_RenderedAPIView):
     permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
+    # Stripe-calling session endpoint; the rate for this scope is contributed
+    # by the billing wiring spec.
+    throttle_scope = "billing_portal"
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs

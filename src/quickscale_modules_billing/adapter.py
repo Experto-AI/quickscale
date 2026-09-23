@@ -21,11 +21,13 @@ from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spe
 def _billing_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Apply billing-specific bool/string coercions.
+    """Apply billing-specific bool/string coercions and DRF throttle scopes.
 
     Reproduces the legacy coercion behaviour that the declarative resolver
     cannot express: ``QUICKSCALE_BILLING_ENABLED`` is forced to ``bool``
-    and env-var name settings are forced to ``str``.
+    and env-var name settings are forced to ``str``.  It also contributes
+    the billing throttle scopes, which the generated settings merge over
+    their own ``user``/``anon`` defaults.
     """
     settings = dict(spec.settings)
 
@@ -44,6 +46,17 @@ def _billing_post_hook(
     ):
         if str_key in settings:
             settings[str_key] = str(settings[str_key])
+
+    # SA201 — every billing endpoint that calls Stripe carries an explicit
+    # scope, and the rate for those scopes travels with the module. 30/hour
+    # per client leaves room for retries while bounding a checkout loop that
+    # would otherwise exhaust the Stripe rate limit for every tenant.
+    settings["REST_FRAMEWORK"] = {
+        "DEFAULT_THROTTLE_RATES": {
+            "billing_checkout": "30/hour",
+            "billing_portal": "30/hour",
+        },
+    }
 
     return ModuleWiringSpec(
         apps=spec.apps,
