@@ -62,6 +62,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `connect_timeout` through libpq environment variables, so a deployment that verifies the server
     certificate keeps verifying it while the database is moved and a strict-TLS deployment whose
     server cannot satisfy the request now fails its backup instead of completing it in plaintext.
+  - **The publishing supply chain is pinned and scanned.** Every third-party `uses:` across the four
+    workflows is pinned to a full commit SHA with its human-readable version, Poetry installs at a
+    fixed release, and each workflow declares a minimal top-level `permissions:` block, while
+    `make check-workflow-security` and `make check-secret-scanning` fail on an unpinned ref, a
+    missing permissions block, or a committed secret. Every package's `[build-system]` bounds
+    `poetry-core`, and Ruff's security rules now govern maintained source.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

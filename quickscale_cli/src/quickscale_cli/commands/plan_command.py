@@ -419,7 +419,7 @@ def _parse_add_module_selection(
             if selected_entry is None:
                 raise ValueError(f"Unknown or already installed module: {part}")
 
-        assert selected_entry is not None
+        assert selected_entry is not None  # noqa: S101 - internal invariant guaranteed by the caller
         if not selected_entry.ready:
             raise ValueError(
                 get_module_readiness_reason(selected_entry.name)
@@ -538,7 +538,7 @@ def _build_add_config(
         docker_config = existing_config.docker
         project_config = existing_config.project
     else:
-        assert state is not None
+        assert state is not None  # noqa: S101 - internal invariant guaranteed by the caller
         docker_config = DockerConfig(start=False, build=False, create_superuser=False)
         project_config = ProjectConfig(
             slug=state.project.slug,

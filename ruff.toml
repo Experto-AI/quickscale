@@ -18,6 +18,7 @@ select = [
     "N",   # pep8-naming
     "UP",  # pyupgrade
     "D",   # docstring rules
+    "S",   # flake8-bandit security rules
 ]
 ignore = [
     "D100",  # Missing docstring in public module
@@ -35,3 +36,15 @@ ignore = [
 
 [lint.isort]
 known-first-party = ["quickscale_core", "quickscale_cli", "quickscale_devtools", "quickscale_modules_auth", "quickscale_modules_blog", "quickscale_modules_listings", "quickscale_modules_crm"]
+
+[lint.per-file-ignores]
+# The S (flake8-bandit) contract mirrors the Bandit static-security gate's
+# source roots: shipped first-party source only. Maintainer tooling under
+# scripts/ and sample code under examples/ are not shipped product source
+# and legitimately shell out or swallow exceptions, so S does not apply.
+"scripts/**" = ["S"]
+"examples/**" = ["S"]
+
+# ASYNC is deliberately not selected: the tree contains no async def,
+# asyncio, await, or async with/for in first-party Python, so the rule set
+# has nothing to govern. Recorded as not applicable in the tech audit.

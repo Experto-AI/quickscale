@@ -220,9 +220,9 @@ def _execute_compose_up(
     """Run one prepared Compose command with the requested output policy."""
     child_environment = dict(environment or os.environ)
     if show_output:
-        subprocess.run(cmd, check=True, text=True, env=child_environment)
+        subprocess.run(cmd, check=True, text=True, env=child_environment)  # noqa: S603 - fixed argv list, shell disabled
         return
-    subprocess.run(
+    subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
         cmd,
         check=True,
         capture_output=True,
@@ -318,7 +318,7 @@ def _superuser_exists_in_backend(container_name: str) -> bool | None:
             "sys.exit(0)"
         ),
     ]
-    result = subprocess.run(check_cmd, capture_output=True, text=True)
+    result = subprocess.run(check_cmd, capture_output=True, text=True)  # noqa: S603 - fixed argv list, shell disabled
     if result.returncode != 0:
         return None
 
@@ -561,7 +561,7 @@ def down(volumes: bool) -> None:
             cmd.append("--volumes")
 
         click.echo("🛑 Stopping Docker services...")
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True)  # noqa: S603 - fixed argv list, shell disabled
 
         # Wait for Docker's proxy process to fully release ports
         # docker-proxy can take a few seconds to release ports after containers stop
@@ -627,9 +627,9 @@ def _run_docker_exec_command(
     docker_cmd.extend([container_name] + cmd_args)
 
     if is_interactive() or not capture:
-        subprocess.run(docker_cmd, check=True)
+        subprocess.run(docker_cmd, check=True)  # noqa: S603 - fixed argv list, shell disabled
     else:
-        result = subprocess.run(docker_cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(docker_cmd, capture_output=True, text=True, check=True)  # noqa: S603 - fixed argv list, shell disabled
         if result.stdout:
             click.echo(result.stdout, nl=False)
         if result.stderr:
@@ -651,9 +651,9 @@ def shell(cmd: str | None) -> None:
             # Run single command (non-interactive)
             docker_cmd = ["docker", "exec", container_name, "bash", "-c", cmd]
             if is_interactive():
-                subprocess.run(docker_cmd, check=True)
+                subprocess.run(docker_cmd, check=True)  # noqa: S603 - fixed argv list, shell disabled
             else:
-                result = subprocess.run(
+                result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
                     docker_cmd, capture_output=True, text=True, check=True
                 )
                 if result.stdout:
@@ -745,7 +745,7 @@ def logs(service: str | None, follow: bool, tail: str | None, timestamps: bool) 
         if service:
             cmd.append(service)
 
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True)  # noqa: S603 - fixed argv list, shell disabled
 
     except subprocess.CalledProcessError as e:
         click.secho(
@@ -767,7 +767,7 @@ def ps() -> None:
     try:
         compose_cmd = _require_docker_compose_command()
         cmd = compose_cmd + ["ps"]
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True)  # noqa: S603 - fixed argv list, shell disabled
 
     except subprocess.CalledProcessError as e:
         click.secho(

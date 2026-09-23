@@ -75,6 +75,7 @@
         check-module-app-declaration check-org-context-primitives \
          check-csrf-exempt check-commit-testimony check-gate-suites isolation-conformance \
          check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture security-negative-probes \
+         check-workflow-security check-secret-scanning \
          check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
@@ -339,6 +340,8 @@ help:
 	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
 	@echo "  make check-beta-migration-smoke      - Exercise both beta migration modes on isolated generated fixtures"
 	@echo "  make check-generated-deploy-posture  - Run Django's deployment checks on a freshly generated project in both forwarding cells"
+	@echo "  make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
+	@echo "  make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
 	@echo "  make isolation-conformance         - Run the PostgreSQL isolation-conformance suite"
@@ -1065,6 +1068,19 @@ check-beta-migration-smoke:
 # ungated SECURE_PROXY_SSL_HEADER in the single-host cell, fails the gate.
 check-generated-deploy-posture:
 	@$(PYTHON) scripts/check_generated_deploy_posture.py
+
+# --- SA202 Supply-chain gates ---
+
+# Fail on any zizmor finding at medium severity and confidence or above: an
+# unpinned third-party `uses:` ref, or a workflow with no top-level
+# `permissions:` block.
+check-workflow-security:
+	@$(PYTHON) scripts/check_workflow_security.py
+
+# Fail on any committed secret gitleaks reports after applying the reasoned
+# allowlists in scripts/gitleaks.toml.
+check-secret-scanning:
+	@$(PYTHON) scripts/check_secret_scanning.py
 
 security-negative-probes:
 	@$(PYTHON) scripts/check_security_gates.py security-negative-probes

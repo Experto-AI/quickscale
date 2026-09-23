@@ -1,0 +1,33 @@
+# gitleaks configuration for the QuickScale secret-scanning gate (SA202).
+#
+# The default ruleset is extended, never replaced.  Every allowlist entry below
+# is either a non-source tree or a verified false positive, and each states the
+# reason it is exempt.  Anything not listed here fails the gate.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated .quickscale/ scratch state (linter caches, migration proof projects): gitignored and never committed."
+paths = ['''\.quickscale/''']
+
+[[allowlists]]
+description = "Non-source trees: virtualenvs, Node modules, VCS internals, and coverage/analysis output."
+paths = [
+    '''^\.venv/''',
+    '''/\.venv/''',
+    '''node_modules/''',
+    '''^\.git/''',
+    '''/\.git/''',
+    '''htmlcov/''',
+    '''graphify-out/''',
+    '''\.coverage$''',
+]
+
+[[allowlists]]
+description = "showcase_react asset-routing test: the RFC 6455 Sec-WebSocket-Key handshake sample nonce, a public protocol constant rather than a credential, appears in the test's header fixtures."
+regexes = ['''dGhlIHNhbXBsZSBub25jZQ==''']
+
+[[allowlists]]
+description = "billing view tests: the placeholder value PHASE_6A_PUBLISHABLE_KEY is assigned to a settings env-var name to prove the name is read, not a credential."
+regexes = ['''PHASE_6A_PUBLISHABLE_KEY''']

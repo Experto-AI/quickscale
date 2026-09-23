@@ -362,7 +362,7 @@ class ProjectGenerator:
             raise FileNotFoundError(f"Template directory not found: {template_dir}")
 
         self.template_dir = template_dir
-        self.env = Environment(
+        self.env = Environment(  # noqa: S701 - renders source templates, not HTML; autoescape would corrupt output
             loader=FileSystemLoader(str(template_dir), followlinks=True),
             keep_trailing_newline=True,
         )
@@ -616,7 +616,7 @@ class ProjectGenerator:
             return
         try:
             result = subprocess.run(
-                ["poetry", "lock"],
+                ["poetry", "lock"],  # noqa: S607 - PATH-resolved executable by design
                 cwd=project_path,
                 capture_output=True,
                 text=True,

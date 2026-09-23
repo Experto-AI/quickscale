@@ -213,7 +213,7 @@ def _build_context(
 
     source_runtime_variables: dict[str, str] = {}
     if route.source_requires_service():
-        assert source_service is not None
+        assert source_service is not None  # noqa: S101 - internal invariant guaranteed by the caller
         source_runtime_variables = _fetch_railway_runtime_variables(
             service=source_service,
             railway_environment=source_railway_environment,
@@ -222,7 +222,7 @@ def _build_context(
 
     target_runtime_variables: dict[str, str] = {}
     if include_target and route.target_requires_service():
-        assert target_service is not None
+        assert target_service is not None  # noqa: S101 - internal invariant guaranteed by the caller
         target_runtime_variables = _fetch_railway_runtime_variables(
             service=target_service,
             railway_environment=target_railway_environment,
@@ -264,7 +264,7 @@ def _call_adapter(
         function_name,
     ]
 
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
         docker_command,
         input=args_json,
         capture_output=True,
@@ -383,7 +383,7 @@ def _load_source_live_variables(context: DisasterRecoveryContext) -> dict[str, s
         get_backend_container_name(),
         "env",
     ]
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
         docker_command,
         capture_output=True,
         text=True,

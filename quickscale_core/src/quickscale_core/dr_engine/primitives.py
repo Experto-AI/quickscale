@@ -76,7 +76,7 @@ class ShellCommandRunner(Protocol):
 
 _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
 _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
-    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
+    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"  # noqa: S105 - environment-variable name constant, not a credential
 )
 
 
@@ -155,7 +155,7 @@ def _run_shell_command(
         command_env.update(env)
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
             list(command),
             capture_output=True,
             check=False,
@@ -209,7 +209,7 @@ def _get_postgresql_tool_version(executable: str) -> str:
         else ""
     )
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
             [executable, "--version"],
             capture_output=True,
             check=False,

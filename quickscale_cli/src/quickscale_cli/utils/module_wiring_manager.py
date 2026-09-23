@@ -309,7 +309,7 @@ def regenerate_managed_wiring(
     package_name, error = _resolve_package_name(project_path, project_package)
     if error is not None:
         return False, error
-    assert package_name is not None
+    assert package_name is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
     selected_modules = _select_module_names(project_path, module_names)
     module_options, error = _load_and_merge_module_options(
@@ -317,7 +317,7 @@ def regenerate_managed_wiring(
     )
     if error is not None:
         return False, error
-    assert module_options is not None
+    assert module_options is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
     if not selected_modules:
         # SA127: empty module selection requires no base path, manifests, or
@@ -339,7 +339,7 @@ def regenerate_managed_wiring(
         )
         if error is not None:
             return False, error
-        assert specs is not None
+        assert specs is not None  # noqa: S101 - internal invariant guaranteed by the caller
         return _write_wiring_files(project_path, package_name, specs)
     finally:
         _restore_modules_context(

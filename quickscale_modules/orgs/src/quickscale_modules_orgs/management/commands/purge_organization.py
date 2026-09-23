@@ -319,7 +319,7 @@ class Command(BaseCommand):
         # ------------------------------------------------------------------
         # Organization ID mode — parse UUID and dispatch
         # ------------------------------------------------------------------
-        assert raw_org_id is not None
+        assert raw_org_id is not None  # noqa: S101 - internal invariant guaranteed by the caller
         try:
             org_id = uuid.UUID(raw_org_id.strip())
         except ValueError, AttributeError:

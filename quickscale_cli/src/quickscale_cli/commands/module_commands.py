@@ -304,7 +304,7 @@ def _read_embedded_module_version(project_path: Path, module: str) -> str:
             current core version.
     """
     manifest = get_manifest_for_module(project_path, module, strict=True)
-    assert manifest is not None
+    assert manifest is not None  # noqa: S101 - internal invariant guaranteed by the caller
     assert_manifest_version_matches_core(manifest.version, module)
     normalized = normalize_installed_version(manifest.version)
     return normalized or manifest.version
@@ -780,7 +780,7 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
         click.echo("  • Refreshing poetry.lock...")
         poetry_env = build_isolated_poetry_env()
         lock_result = subprocess.run(
-            ["poetry", "lock"],
+            ["poetry", "lock"],  # noqa: S607 - PATH-resolved executable by design
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -800,7 +800,7 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
 
         click.echo("  • Installing all dependencies...")
         result = subprocess.run(
-            ["poetry", "install"],
+            ["poetry", "install"],  # noqa: S607 - PATH-resolved executable by design
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -1014,8 +1014,8 @@ def _refresh_git_index_after_update_rollback(
     if not tracked_paths:
         return True
 
-    result = subprocess.run(
-        ["git", "add", "-A", *tracked_paths],
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+        ["git", "add", "-A", *tracked_paths],  # noqa: S607 - PATH-resolved executable by design
         cwd=project_path,
         capture_output=True,
         text=True,
@@ -1387,8 +1387,8 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
         tracked_paths.append(str(pyproject_path))
 
     try:
-        subprocess.run(
-            ["git", "add", *tracked_paths],
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "add", *tracked_paths],  # noqa: S607 - PATH-resolved executable by design
             check=True,
             capture_output=True,
             text=True,
@@ -1397,7 +1397,7 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
         raise GitError(f"Failed to stage {module_name} update commit: {e.stderr}")
 
     cached_diff = subprocess.run(
-        ["git", "diff", "--cached", "--quiet"],
+        ["git", "diff", "--cached", "--quiet"],  # noqa: S607 - PATH-resolved executable by design
         capture_output=True,
         text=True,
     )
@@ -1411,8 +1411,8 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
 
     commit_message = f"chore(modules): update {module_name} module"
     try:
-        subprocess.run(
-            ["git", "commit", "-m", commit_message],
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "commit", "-m", commit_message],  # noqa: S607 - PATH-resolved executable by design
             check=True,
             capture_output=True,
             text=True,

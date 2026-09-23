@@ -70,7 +70,21 @@ HOSTED_GATE_ORDER = (
     "check-security-static-analysis",
     "check-beta-migration-smoke",
     "check-generated-deploy-posture",
+    "check-workflow-security",
+    "check-secret-scanning",
 )
+
+# SA202 pins every generated job's third-party action to a full commit SHA with
+# the human-readable version in a trailing comment, and pins the Poetry release
+# the action installs. The comments are YAML comments, so the parsed step value
+# is the bare ref while the emitted text carries the version.
+CHECKOUT_REF = "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803"
+CHECKOUT_COMMENT = "# v6.1.0"
+SETUP_PYTHON_REF = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+SETUP_PYTHON_COMMENT = "# v6.3.0"
+INSTALL_POETRY_REF = "snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263"
+INSTALL_POETRY_COMMENT = "# v1.4.2"
+POETRY_VERSION = "2.4.1"
 UNOWNED_JOB_RATIONALES = {
     "bypassrls": (
         "The reusable service-backed BYPASSRLS suite remains a separately owned hosted job."
@@ -178,6 +192,14 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     "check-generated-deploy-posture": HostedJobSpec(
         "Generated Deploy Posture Gate (SA200)",
         "Run generated-project deploy posture gate",
+    ),
+    "check-workflow-security": HostedJobSpec(
+        "Workflow Security Gate (SA202)",
+        "Run workflow security gate",
+    ),
+    "check-secret-scanning": HostedJobSpec(
+        "Secret Scanning Gate (SA202)",
+        "Run secret scanning gate",
     ),
 }
 
@@ -343,7 +365,7 @@ def _locate_hosted_jobs(
     jobs: dict[str, Any], label: str, *, allow_missing: bool = False
 ) -> dict[str, str]:
     """
-    Locate the twelve hosted jobs by their static catalog display names.
+    Locate the fourteen hosted jobs by their static catalog display names.
 
     Display metadata is helper-owned and static, so the generated job IDs may
     be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
@@ -413,16 +435,16 @@ def _validate_workflow_projection(
         if len(steps) != 5:
             raise GeneratorError(f"ci.yml: jobs.{job_id} must retain exactly five steps")
         expected_uses = (
-            "actions/checkout@v6",
-            "actions/setup-python@v6",
-            "snok/install-poetry@v1",
+            CHECKOUT_REF,
+            SETUP_PYTHON_REF,
+            INSTALL_POETRY_REF,
         )
         actual_uses = tuple(step.get("uses") for step in steps if "uses" in step)
         if actual_uses != expected_uses:
             raise GeneratorError(f"ci.yml: jobs.{job_id} action versions/ordering drifted")
         expected_checkout: dict[str, Any] = {
             "name": "Checkout code",
-            "uses": "actions/checkout@v6",
+            "uses": CHECKOUT_REF,
         }
         if spec.full_history:
             expected_checkout["with"] = {"fetch-depth": "0"}
@@ -430,15 +452,15 @@ def _validate_workflow_projection(
             raise GeneratorError(f"ci.yml: jobs.{job_id} checkout step drifted")
         if steps[1] != {
             "name": "Set up Python 3.14",
-            "uses": "actions/setup-python@v6",
+            "uses": SETUP_PYTHON_REF,
             "with": {"python-version": "3.14"},
         }:
             raise GeneratorError(f"ci.yml: jobs.{job_id} Python setup step drifted")
         if steps[2] != {
             "name": "Install Poetry",
-            "uses": "snok/install-poetry@v1",
+            "uses": INSTALL_POETRY_REF,
             "with": {
-                "version": "latest",
+                "version": POETRY_VERSION,
                 "virtualenvs-create": "true",
                 "virtualenvs-in-project": "true",
             },
@@ -489,7 +511,7 @@ def _validate_workflow_projection(
 
 def _render_job(gate_id: str, job_id: str, make_target: str) -> str:
     spec = HOSTED_JOB_CATALOG[gate_id]
-    checkout = "    - name: Checkout code\n      uses: actions/checkout@v6\n" + (
+    checkout = f"    - name: Checkout code\n      uses: {CHECKOUT_REF} {CHECKOUT_COMMENT}\n" + (
         "      with:\n        fetch-depth: 0\n" if spec.full_history else ""
     )
     return (
@@ -501,14 +523,14 @@ def _render_job(gate_id: str, job_id: str, make_target: str) -> str:
         f"{checkout}"
         "\n"
         "    - name: Set up Python 3.14\n"
-        "      uses: actions/setup-python@v6\n"
+        f"      uses: {SETUP_PYTHON_REF} {SETUP_PYTHON_COMMENT}\n"
         "      with:\n"
         '        python-version: "3.14"\n'
         "\n"
         "    - name: Install Poetry\n"
-        "      uses: snok/install-poetry@v1\n"
+        f"      uses: {INSTALL_POETRY_REF} {INSTALL_POETRY_COMMENT}\n"
         "      with:\n"
-        "        version: latest\n"
+        f"        version: {POETRY_VERSION}\n"
         "        virtualenvs-create: true\n"
         "        virtualenvs-in-project: true\n"
         "\n"
@@ -671,7 +693,7 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
 
 def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
     """
-    Locate the twelve hosted job header lines by their display names.
+    Locate the fourteen hosted job header lines by their display names.
 
     Use static display metadata to find the (possibly stale) hosted job IDs;
     this permits a registry ``ci_job`` (F-005) or Make-target edit while
