@@ -30,14 +30,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA203 | Narrow the privileged-command exemption in the orgs boot path | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
 Track 2: — (SA202 closed)
-Track 3: SA203
+Track 3: — (SA203 closed)
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -56,7 +55,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
 | 2 | — | yes | yes | yes | **yes** | no |
-| 3 | SA203 | yes | yes | yes | **yes** | no |
+| 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -74,9 +73,9 @@ A track is **truly green** only when all three states are yes.
   `local.py.j2`), the generator's Jinja environment, `billing/services.py`, `billing/views.py`,
   `auth/views.py`, and the blog rate limiter.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
-- **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), and the tech audit
-  (SA203 edits only its own finding's entry). Each track resolves the shared
-  set at its own merge, after the previous merge lands, then runs the consistency test.
+- **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), and the tech audit.
+  Each track resolves the shared set at its own merge, after the previous merge lands, then runs
+  the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
 ### Resuming a track
@@ -216,34 +215,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA201 — Give generated projects one throttling contract.**
 
-- [ ] **SA203 — Narrow the privileged-command exemption in the orgs boot path.**
-
-  **Context:** `QuickscaleOrgsConfig.ready()` opens with `if _is_privileged_command(): return`,
-  which exits `ready()` entirely and so skips three installations that come after it: the AF9 GUC
-  priming wrapper with its `connection_created` signal, the SA70 `pre_delete` last-owner backstop
-  receiver, and the SA1.3 tenant-isolation system check registration. The intent — skip the
-  BYPASSRLS boot guard during `migrate` — is served by `_check_rls_role()` alone. The asymmetry is
-  the tell: the *other* exemption, `QUICKSCALE_ALLOW_BYPASSRLS=1`, returns from inside
-  `_check_rls_role` and leaves the rest of `ready()` intact. The block's comment explains why the
-  guard is exempted and says nothing about the other three, which reads as a consequence of
-  `return` rather than a decision.
-
-  Concretely: a data migration that deletes `OrganizationMembership` rows under
-  `QUICKSCALE_PRIVILEGED_COMMAND=migrate` runs with the last-owner invariant unenforced and can
-  leave an organization with members and no owner — a state the application's own guard exists to
-  prevent and cannot repair afterwards. The priming wrapper's absence is harmless in this window
-  because the privileged role bypasses RLS anyway, and `check_tenant_isolation` is invoked
-  explicitly by the Makefile, which is what keeps this below the backstop's own severity.
-
-  **Acceptance:** `ready()` skips only `_check_rls_role()` under a privileged command; the priming
-  wrapper, the `pre_delete` receiver, and the system check registration install unconditionally. A
-  test sets `QUICKSCALE_PRIVILEGED_COMMAND=migrate`, re-runs `ready()`, and asserts the last-owner
-  receiver is connected to `pre_delete`. Existing migrations are checked before landing for one
-  that legitimately deletes owner memberships — if one exists it gets an explicit, named bypass
-  rather than the backstop being weakened. The BYPASSRLS guard's own exemption semantics, the
-  `QUICKSCALE_ALLOW_BYPASSRLS` path, and the privileged-command contract test are unchanged.
-
-  **Surfaces:** `orgs/apps.py` `ready()`, the orgs boot tests, and the tech audit.
+- [x] **SA203 — Narrow the privileged-command exemption in the orgs boot path.**
 
 ## Deferred constraints and references
 

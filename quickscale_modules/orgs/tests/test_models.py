@@ -252,6 +252,64 @@ def test_user_delete_of_last_owner_in_multi_member_org_is_refused() -> None:
     assert OrganizationMembership.objects.filter(pk=membership_pk).exists()
 
 
+@pytest.mark.django_db(transaction=True)
+def test_historical_model_delete_of_last_owner_in_multi_member_org_is_refused() -> None:
+    """SA203: a data migration's historical model also hits the backstop.
+
+    A ``RunPython`` migration deletes through the historical model class
+    that ``apps.get_model()`` renders, which is not the live class — a
+    sender-bound ``pre_delete`` receiver never fires for it.  The receiver
+    is therefore connected sender-free and filters on the model's app
+    label and name; this test renders the same historical class and proves
+    the deletion is refused.
+    """
+    from django.db.migrations.loader import MigrationLoader
+
+    owner = _create_user(
+        username="sa203_owner",
+        email="sa203_owner@example.com",
+        password="Sa203Owner1!",
+    )
+    other_member = _create_user(
+        username="sa203_member",
+        email="sa203_member@example.com",
+        password="Sa203Member1!",
+    )
+    organization = Organization.objects.create(
+        name="SA203 Historical Org",
+        slug="sa203-historical-org",
+    )
+    owner_membership = OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_member,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+
+    historical_membership = (
+        MigrationLoader(None, ignore_no_migrations=True)
+        .project_state()
+        .apps.get_model("quickscale_modules_orgs", "OrganizationMembership")
+    )
+    assert historical_membership is not OrganizationMembership
+
+    membership_pk = owner_membership.pk
+
+    with pytest.raises(ValidationError) as exc_info:
+        historical_membership.objects.filter(pk=membership_pk).delete()
+
+    assert exc_info.value.messages == [
+        OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+    ]
+
+    # The delete was rolled back — the owner membership survives.
+    assert OrganizationMembership.objects.filter(pk=membership_pk).exists()
+
+
 @pytest.mark.django_db
 def test_last_owner_save_uses_locked_persisted_role_for_stale_instances() -> None:
     """Stale membership saves should validate against the locked persisted role."""

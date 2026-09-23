@@ -26,6 +26,11 @@ declare the same fail-closed contract.
 fail closed under BYPASSRLS or SUPERUSER.  The old ``sys.argv``-based
 ``_is_migrate_command`` has been replaced by the explicit env-var
 contract (SA68 Phase 1).
+
+SA203 — the ``ready()`` exemption narrows to ``_check_rls_role()`` alone:
+the AF9 priming install, the SA70 ``pre_delete`` last-owner backstop, and
+the SA1.3 check registration install on every startup path, including a
+privileged command.
 """
 
 from __future__ import annotations
@@ -36,13 +41,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from django.db.backends.signals import connection_created
+from django.db.models.signals import pre_delete
 
 import quickscale_modules_orgs
 from quickscale_modules_orgs.apps import (
     _PRIVILEGED_COMMANDS,
     QuickscaleOrgsConfig,
     _check_rls_role,
+    _install_priming_on_connection,
     _is_privileged_command,
+)
+from quickscale_modules_orgs.models import OrganizationMembership
+from quickscale_modules_orgs.signals import (
+    _protect_last_owner_on_membership_delete,
 )
 
 
@@ -398,6 +410,57 @@ def test_ready_skips_check_for_createcachetable_command(settings: Any) -> None:
                 "quickscale_modules_orgs", quickscale_modules_orgs
             )
             config.ready()  # must not raise
+
+
+def test_ready_installs_backstops_under_privileged_command(settings: Any) -> None:
+    """SA203: a privileged command skips only ``_check_rls_role()``.
+
+    ``ready()`` must still connect the SA70 last-owner ``pre_delete``
+    backstop and the AF9 ``connection_created`` priming install when
+    ``QUICKSCALE_PRIVILEGED_COMMAND=migrate``.  The backstop is connected
+    sender-free, so it also fires for the historical model class a data
+    migration deletes through (covered by
+    ``test_models.test_historical_model_delete_of_last_owner_in_multi_member_org_is_refused``).
+    Both receivers are disconnected first so the assertions observe this
+    ``ready()`` call rather than Django's startup ``ready()``, then
+    reconnected so the rest of the suite sees the normal wiring.
+    """
+    settings.QUICKSCALE_MODE = "saas"
+    settings.DEBUG = False
+    mock_conn = _mock_postgres_connection(rolbypassrls=True)
+
+    pre_delete.disconnect(_protect_last_owner_on_membership_delete)
+    connection_created.disconnect(_install_priming_on_connection)
+    try:
+        with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+            with patch.dict(
+                os.environ,
+                {"QUICKSCALE_PRIVILEGED_COMMAND": "migrate"},
+                clear=True,
+            ):
+                config = QuickscaleOrgsConfig(
+                    "quickscale_modules_orgs", quickscale_modules_orgs
+                )
+                config.ready()  # must not raise — the guard is skipped
+
+        # ``_live_receivers`` returns ``(sync_receivers, async_receivers)``;
+        # both installs connect synchronous receivers.  A sender-free
+        # connection matches the live membership sender as well.
+        membership_receivers, _membership_async = pre_delete._live_receivers(
+            sender=OrganizationMembership
+        )
+        priming_receivers, _priming_async = connection_created._live_receivers(
+            sender=None
+        )
+        assert _protect_last_owner_on_membership_delete in membership_receivers, (
+            "privileged ready() skipped the SA70 last-owner pre_delete backstop"
+        )
+        assert _install_priming_on_connection in priming_receivers, (
+            "privileged ready() skipped the AF9 connection_created priming install"
+        )
+    finally:
+        pre_delete.connect(_protect_last_owner_on_membership_delete)
+        connection_created.connect(_install_priming_on_connection)
 
 
 def test_ready_rejects_retired_billing_backfill_under_bypassrls(settings: Any) -> None:

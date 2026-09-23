@@ -20,6 +20,10 @@ gunicorn, and WSGI) remain fail-closed regardless of
 AF9 Phase 1 — installs the connection-layer GUC priming execute wrapper
 on every Django ``DatabaseWrapper`` so that ``SET LOCAL app.current_org_id``
 is derived from the ContextVar in the same transaction as tenant SQL.
+
+SA203 — the privileged-command exemption narrows to ``_check_rls_role()``
+alone; the priming install, the SA70 last-owner ``pre_delete`` backstop,
+and the SA1.3 system check registration run on every startup path.
 """
 
 import os
@@ -183,9 +187,15 @@ class QuickscaleOrgsConfig(AppConfig):
         #      (checked inside _check_rls_role).
         # All other startup (runserver, gunicorn, WSGI) must still
         # fail closed — regardless of QUICKSCALE_MODE or DEBUG.
-        if _is_privileged_command():
-            return
-        _check_rls_role()
+        #
+        # SA203: a privileged command exempts *only* the role check.  The
+        # installations below stay unconditional, so a privileged
+        # ``migrate`` still gets the GUC priming wrapper, the last-owner
+        # ``pre_delete`` backstop, and the tenant-isolation system check —
+        # the backstop is what fails a data migration that would delete an
+        # organization's last owner.
+        if not _is_privileged_command():
+            _check_rls_role()
 
         # ---- AF9 Phase 1 — GUC priming execute wrapper ------------------
         # Install on any connections already created (defensive — at
@@ -202,17 +212,23 @@ class QuickscaleOrgsConfig(AppConfig):
         # Connects the backstop receiver defined in signals.py so that
         # cascade-driven membership deletions (e.g. user.delete()) also
         # enforce the last-owner invariant.
+        #
+        # SA203: connected without a sender so the receiver also fires for
+        # the historical model class a data migration deletes through
+        # (``apps.get_model()`` returns a different class); the receiver
+        # filters on the model's app label and name.  A sender-free receiver
+        # makes Django's fast-delete path unavailable for every model while
+        # connected — accepted: the invariant must cover every deletion
+        # path, and the cost is bounded to queryset deletes materialising
+        # one model's rows at a time on operator paths (organization purge,
+        # account deletion), which are not hot paths.
         from django.db.models.signals import pre_delete
 
-        from quickscale_modules_orgs.models import OrganizationMembership
         from quickscale_modules_orgs.signals import (
             _protect_last_owner_on_membership_delete,
         )
 
-        pre_delete.connect(
-            _protect_last_owner_on_membership_delete,
-            sender=OrganizationMembership,
-        )
+        pre_delete.connect(_protect_last_owner_on_membership_delete)
 
         # ---- SA1.3 — tenant-isolation system check -----------------------
         # Import checks.py to register the check_tenant_isolation system

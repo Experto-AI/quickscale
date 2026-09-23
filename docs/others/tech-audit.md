@@ -112,15 +112,6 @@ at*, not *clean*.
 ## 2. Machine-readable finding index
 
 ```yaml
-- id: orgs-ready-early-return-skips-receivers
-  severity: S3
-  category: "I. Correctness"
-  title: Privileged-command exemption skips GUC priming and the last-owner backstop
-  effort: Small
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
 - id: pipeline-mutable-action-refs
   severity: S3
   category: "VII. Dependencies, build, and pipeline hygiene"
@@ -147,51 +138,16 @@ at*, not *clean*.
 
 | ID | Sev | Category | Title | Effort | Conf | Status |
 |---|---|---|---|---|---|---|
-| `orgs-ready-early-return-skips-receivers` | S3 | Correctness | Privileged-command exemption skips two other installs | Small | High | open |
 | `pipeline-mutable-action-refs` | S3 | Pipeline | Publishing workflow trusts mutable refs | Small | High | resolved |
 | `build-system-requires-unpinned` | S4 | Pipeline | Unpinned `poetry-core` build requirement | Trivial | High | resolved |
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 2 · S4 — 1 · total 3.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 1 · S4 — 1 · total 2.
 
 ---
 
 ## 4. Findings
 
-### Finding 1: The privileged-command exemption skips GUC priming and the last-owner backstop
-
-- **ID:** `orgs-ready-early-return-skips-receivers` · **S3** · Reality **R2** · Confidence **High**
-- **Location:** `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:186–188`
-  (`QuickscaleOrgsConfig.ready`)
-- **Defect + failure scenario:** `if _is_privileged_command(): return` returns from `ready()`
-  entirely, so three later installations never happen: the AF9 GUC priming execute wrapper and its
-  `connection_created` signal (lines 190–202), the SA70 `pre_delete` last-owner backstop receiver
-  (lines 204–213), and the SA1.3 tenant-isolation system check registration (line 217). The
-  intent — skip the BYPASSRLS guard during `migrate` — is served by `_check_rls_role()` alone, and
-  note the asymmetry: the *other* exemption, `QUICKSCALE_ALLOW_BYPASSRLS=1`, returns from inside
-  `_check_rls_role` (line 124) and therefore leaves the rest of `ready()` intact. Concretely: a
-  data migration that deletes `OrganizationMembership` rows during
-  `QUICKSCALE_PRIVILEGED_COMMAND=migrate manage.py migrate` runs with the last-owner invariant
-  unenforced and can leave an organization with members but no owner — a state the application's
-  own guard (`auth/views.py:141–166`) exists to prevent and cannot repair afterwards. The priming
-  wrapper's absence is harmless in this window (the privileged role bypasses RLS anyway), and
-  `check_tenant_isolation` is invoked explicitly by the Makefile rather than relying on `ready()`,
-  which is why this is S3 and not higher.
-- **Fix:** Replace the bare `return` with a narrowed skip — call `_check_rls_role()` only when
-  `not _is_privileged_command()`, and let the wrapper install, the `pre_delete` connection, and the
-  check registration run unconditionally. **Effort: Small.** Verify with a test that sets
-  `QUICKSCALE_PRIVILEGED_COMMAND=migrate`, re-runs `ready()`, and asserts
-  `pre_delete` has the `_protect_last_owner_on_membership_delete` receiver connected.
-- **Refutation:** Checked whether the early return is load-bearing — whether priming or the
-  `pre_delete` receiver would *break* `migrate`. Priming issues `SET LOCAL app.current_org_id`
-  inside the migration's transaction, which is valid; the `pre_delete` receiver only raises on an
-  actual last-owner deletion, which is the behaviour wanted. Checked `git blame`-adjacent comments:
-  the block documents *why the guard* is exempted and says nothing about the other three installs,
-  which reads as an unintended consequence of `return` rather than a decision.
-  **Fix risk:** a migration that legitimately deletes owner memberships (a data cleanup) will now
-  be blocked by the backstop and will need an explicit bypass — worth checking existing migrations
-  before landing.
-
-### Finding 2: The publishing workflow trusts mutable action refs and an unpinned Poetry
+### Finding 1: The publishing workflow trusts mutable action refs and an unpinned Poetry
 
 - **ID:** `pipeline-mutable-action-refs` · **S3** · Reality **R3** · Confidence **High**
 - **Location:** `.github/workflows/publish.yml:294`, `:318`
@@ -281,8 +237,10 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 - **notifications** — clean. Webhook ingestion and signature verification read in full.
 - **auth** — clean after provider I/O moved outside database transactions with compensating resume.
   All 551 lines read in the baseline pass; the account-deletion correction was re-read.
-- **orgs** — `orgs-ready-early-return-skips-receivers`. `apps.py` and `current_org.py` read in full;
-  `views.py` decorator surface and `managers.py`/`tenancy.py` sampled.
+- **orgs** — clean after the privileged-command exemption narrowed to the role check: `ready()`
+  installs the priming wrapper, the last-owner `pre_delete` backstop (sender-free, so a migration's
+  historical model is covered), and the tenant-isolation check on every startup path. `apps.py` and
+  `current_org.py` read in full; `views.py` decorator surface and `managers.py`/`tenancy.py` sampled.
 - **blog** — clean after the rate limiter moved to a single atomic counter with hashed client
   identities. The rate limiter and API authentication path read in full; the rest sampled.
 - **dr_engine / backups** — clean on the dump/restore TLS posture, its one finding. `primitives.py`,

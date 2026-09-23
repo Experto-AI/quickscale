@@ -76,6 +76,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     and billing-portal POSTs carry tighter billing scopes, and the blog limiter counts in a
     dedicated table with hashed client identities, so the limit holds under concurrent requests on
     the database-backed cache production uses without Redis.
+  - **The orgs boot path installs its guards under privileged commands.** A sanctioned privileged
+    database command now skips only the BYPASSRLS role check; the GUC priming wrapper, the
+    last-owner deletion backstop, and the tenant-isolation system check install on every startup
+    path, and the backstop also covers the historical model a data migration deletes through, so
+    removing the sole owner of an organization that still has members fails closed.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

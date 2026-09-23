@@ -6,7 +6,10 @@ consuming module's ``AppConfig.ready()``, not by the orgs package.
 
 SA70 — ``_protect_last_owner_on_membership_delete`` is a ``pre_delete``
 receiver on ``OrganizationMembership`` that acts as a backstop for the
-last-owner invariant.  Connected in ``QuickscaleOrgsConfig.ready()``.
+last-owner invariant.  Connected sender-free in
+``QuickscaleOrgsConfig.ready()`` (SA203) so the historical model class a
+data migration deletes through also reaches it; the receiver filters on
+the model's app label and name.
 
 Future org lifecycle events (purge, rename, archive) should follow the
 same pattern — define here and let consuming modules connect their own
@@ -39,6 +42,12 @@ def _protect_last_owner_on_membership_delete(
     raises when the membership being removed is the sole owner of an
     org that has other members.
 
+    SA203: the receiver is connected without a sender so that it also
+    fires for the historical model class a data migration renders through
+    ``apps.get_model()``.  Historical and live classes share the app label
+    and model name, so the guard below matches on that identity rather
+    than on class equality.
+
     Caller-parity pass:
       Interface-facing: yes (new signal receiver on shared model)
       Seam: OrganizationMembership pre_delete signal
@@ -55,6 +64,11 @@ def _protect_last_owner_on_membership_delete(
     # Import here to avoid circular import at module level.
     from quickscale_modules_orgs.models import OrganizationMembership, OrgRole
 
+    # SA203: the sender-free connection sees every model's deletions; keep
+    # only the membership model, whose historical class shares this label.
+    if sender._meta.label_lower != OrganizationMembership._meta.label_lower:
+        return
+
     if instance.role != OrgRole.OWNER:
         return
 
@@ -63,8 +77,11 @@ def _protect_last_owner_on_membership_delete(
         return
 
     # During cascade deletion the org row still exists at pre_delete time.
+    # SA203: pass the user's pk, not ``instance.user`` — a historical model
+    # instance from a data migration is rejected by the live model's
+    # related-field lookup (``check_query_object_type``).
     if not OrganizationMembership.is_last_owner_with_members(
-        user=instance.user,
+        user=instance.user_id,
         organization=org_id,
     ):
         return
