@@ -71,6 +71,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `make check-workflow-security` and `make check-secret-scanning` fail on an unpinned ref, a
     missing permissions block, or a committed secret. Every package's `[build-system]` bounds
     `poetry-core`, and Ruff's security rules now govern maintained source.
+  - **Generated projects share one throttling contract.** The generated settings declare
+    conservative `anon` and `user` DRF throttle rates that module-supplied scopes extend, checkout
+    and billing-portal POSTs carry tighter billing scopes, and the blog limiter counts in a
+    dedicated table with hashed client identities, so the limit holds under concurrent requests on
+    the database-backed cache production uses without Redis.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

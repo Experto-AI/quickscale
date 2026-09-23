@@ -30,7 +30,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA201 | Give generated projects one throttling contract | post-v88 | 3 | — | Deferred |
 | SA203 | Narrow the privileged-command exemption in the orgs boot path | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -38,7 +37,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
 Track 2: — (SA202 closed)
-Track 3: SA201 ──► SA203
+Track 3: SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -47,10 +46,7 @@ Arrows within a track are queue order; the table holds the actual dependency edg
 redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA194 goes
 first so SA191 runs against the single remaining mode, and is off the critical path. SA154 is an inventory, not work. Everything else is off the critical path.
 
-**Ordering.** Tracks 2 and 3 carry no dependency edges. SA196 turned strict rendering on for
-every generator template, including templates other tracks own (the `.env.example` template, the
-settings templates, the generated `base.html`), so SA201 re-runs the generator tests and the SA90
-emission fixture when it lands.
+**Ordering.** Tracks 2 and 3 carry no dependency edges.
 
 ### Track states
 
@@ -60,7 +56,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
 | 2 | — | yes | yes | yes | **yes** | no |
-| 3 | SA201 | yes | yes | yes | **yes** | no |
+| 3 | SA203 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -79,7 +75,7 @@ A track is **truly green** only when all three states are yes.
   `auth/views.py`, and the blog rate limiter.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), and the tech audit
-  (SA201, SA202, SA203 each edit only their own finding's entry). Each track resolves the shared
+  (SA203 edits only its own finding's entry). Each track resolves the shared
   set at its own merge, after the previous merge lands, then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -218,53 +214,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA196 — Fail hard on undefined generator template context.**
 
-- [ ] **SA201 — Give generated projects one throttling contract.**
-
-  **Context:** Rate limiting in this system is per-module folklore. `forms` uses a DRF
-  `ScopedRateThrottle`; `blog` hand-rolls a cache-counter limiter with its own IP normalization;
-  everything else has nothing. The generated `REST_FRAMEWORK` block defines
-  `DEFAULT_PERMISSION_CLASSES` and `NUM_PROXIES` but no `DEFAULT_THROTTLE_CLASSES` or
-  `DEFAULT_THROTTLE_RATES`, and no billing view declares `throttle_classes` — so any authenticated
-  org owner can POST `/billing/checkout/` in a loop, and each request makes one or two outbound
-  Stripe calls. The failure is fleet-wide, not per-tenant: Stripe rate-limit exhaustion takes every
-  other tenant's checkout and webhook processing down with it. `production.py.j2` tunes
-  `NUM_PROXIES` with a comment explaining it is "so that DRF throttles are enforced consistently",
-  which reads as though throttles are configured. They are not.
-
-  `blog`'s limiter has its own two defects. It relies on `cache.add` plus `cache.incr` being
-  atomic, which holds on Redis and not on `DatabaseCache` — and production without `REDIS_URL` is a
-  configuration the template explicitly supports and `start.sh.j2` provisions a cache table for. In
-  that cell concurrent requests read the same counter and write back the same increment, so the
-  effective limit is far above the configured one, and the fallback branch has the same
-  read-modify-write shape. Separately, its cache key replaces both `":"` and `"."` with `"_"`, so
-  an IPv4 address and an IPv6 fragment can normalize into the same bucket — two unrelated clients
-  sharing a budget, or one evading it.
-
-  There is a structural obstacle worth naming up front: `base.py.j2` **replaces** the whole
-  `REST_FRAMEWORK` dict after `MODULE_SETTINGS`, so a module cannot contribute DRF configuration at
-  all, even though the settings-composition system exists to let modules contribute settings. The
-  natural fix for the throttle defaults is exactly to make that block composable. The audit records
-  the clobber as a watch item precisely because no module ships a `REST_FRAMEWORK` key today; this
-  ticket is the one that would make one, so it fires the trigger and owns it.
-
-  **Acceptance:** the generated settings declare `DEFAULT_THROTTLE_CLASSES` and
-  `DEFAULT_THROTTLE_RATES` with conservative `user` and `anon` scopes, documented as defaults an
-  operator raises; the checkout and billing-portal views carry an explicit tighter `throttle_scope`,
-  and a test posts past the rate and asserts a 429. The `REST_FRAMEWORK` composition stops
-  clobbering module-supplied DRF configuration — modules merge into it on the same terms as every
-  other settings key — and a test proves a module-contributed throttle rate survives composition.
-  `blog`'s limiter either requires a backend with atomic `incr` and fails closed on boot when one
-  is absent, or moves its counter to a single atomic `UPDATE ... RETURNING`; a regression drives it
-  from N threads against a `DatabaseCache`-configured settings module and asserts the observed
-  count never exceeds the limit — the runtime confirmation the audit marks this as needing. The
-  throttle identity is hashed rather than character-substituted, so no two distinct client
-  identifiers share a bucket. The rate defaults must not break legitimate polling clients, and the
-  numbers chosen are written down with the reasoning.
-
-  **Surfaces:** the `REST_FRAMEWORK` block and settings composition in `base.py.j2`, the
-  `NUM_PROXIES` comment in `production.py.j2`, `billing/views.py`, `blog/views.py` and its cache
-  key helper, `forms/throttles.py` if a shared scope absorbs it, the module settings-composition
-  tests, and the tech audit.
+- [x] **SA201 — Give generated projects one throttling contract.**
 
 - [ ] **SA203 — Narrow the privileged-command exemption in the orgs boot path.**
 
@@ -299,8 +249,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 The [architecture audit](../others/arch-audit.md) and [technical audit](../others/tech-audit.md) own
 deferred findings, watch notes, and their growth triggers; items stay there until a trigger fires.
-SA202 owns the dependency-scan, secret-scan and workflow-lint gaps, and SA201 the `REST_FRAMEWORK`
-clobber watch note; the generated-project smoke-boot gap closed with SA196. The standing scope
+The standing scope
 rules, presence contracts, and resource safeguards live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).
 

@@ -123,6 +123,7 @@ def _execute_rendered_settings(
     target_output: str,
     target_module_name: str,
     config_values: dict[str, object],
+    module_settings: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Execute rendered settings modules with lightweight import stubs."""
     settings_package_name = f"{package_name}.settings"
@@ -136,7 +137,7 @@ def _execute_rendered_settings(
     modules_module = types.ModuleType(modules_name)
     setattr(modules_module, "MODULE_INSTALLED_APPS", [])
     setattr(modules_module, "MODULE_MIDDLEWARE", [])
-    setattr(modules_module, "MODULE_SETTINGS", {})
+    setattr(modules_module, "MODULE_SETTINGS", dict(module_settings or {}))
 
     decouple_module = types.ModuleType("decouple")
     setattr(decouple_module, "config", _build_fake_config(config_values))
@@ -1451,10 +1452,11 @@ class TestDrfPermissionBaseline:
     def test_rest_framework_set_after_module_settings(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """``REST_FRAMEWORK`` must appear after ``globals().update(MODULE_SETTINGS)``.
+        """``REST_FRAMEWORK`` composition must read the module-contributed value.
 
-        The template's safe default must clobber any module-provided DRF
-        config so authentication is required by default (fail-closed).
+        The composition block has to appear after
+        ``globals().update(MODULE_SETTINGS)`` so it starts from whatever a
+        module contributed and only fills in what the module left unset.
         """
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
@@ -1463,9 +1465,91 @@ class TestDrfPermissionBaseline:
         drf_index = output.index("REST_FRAMEWORK")
 
         assert module_settings_index < drf_index, (
-            "REST_FRAMEWORK must be defined after MODULE_SETTINGS so the "
-            "template's safe default wins (fail-closed)"
+            "REST_FRAMEWORK must be composed after MODULE_SETTINGS so a "
+            "module-contributed DRF config is merged instead of clobbered"
         )
+
+    def test_default_throttle_classes_and_rates_declared(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The generated settings declare conservative throttle defaults."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        assert "DEFAULT_THROTTLE_CLASSES" in output
+        assert "rest_framework.throttling.AnonRateThrottle" in output
+        assert "rest_framework.throttling.UserRateThrottle" in output
+        assert "rest_framework.throttling.ScopedRateThrottle" in output
+        assert '"anon": "1200/hour"' in output
+        assert '"user": "3000/hour"' in output
+
+    def test_module_supplied_throttle_rate_survives_composition(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A module-contributed throttle rate must survive REST_FRAMEWORK composition."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=base_output,
+            target_module_name="base",
+            config_values={},
+            module_settings={
+                "REST_FRAMEWORK": {
+                    "DEFAULT_THROTTLE_RATES": {"billing_checkout": "30/hour"},
+                },
+            },
+        )
+
+        rest_framework = namespace["REST_FRAMEWORK"]
+        assert isinstance(rest_framework, dict)
+        rates = rest_framework["DEFAULT_THROTTLE_RATES"]
+        assert rates["billing_checkout"] == "30/hour"
+        assert rates["user"] == "3000/hour"
+        assert rates["anon"] == "1200/hour"
+        assert rest_framework["DEFAULT_PERMISSION_CLASSES"] == [
+            "rest_framework.permissions.IsAuthenticated",
+        ]
+
+    def test_module_supplied_drf_key_wins_composition(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A module-supplied DRF key wins over the template default."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=base_output,
+            target_module_name="base",
+            config_values={},
+            module_settings={
+                "REST_FRAMEWORK": {
+                    "DEFAULT_PERMISSION_CLASSES": [
+                        "rest_framework.permissions.AllowAny",
+                    ],
+                },
+            },
+        )
+
+        rest_framework = namespace["REST_FRAMEWORK"]
+        assert isinstance(rest_framework, dict)
+        assert rest_framework["DEFAULT_PERMISSION_CLASSES"] == [
+            "rest_framework.permissions.AllowAny",
+        ]
 
     def test_rest_framework_valid_python(
         self, jinja_env: Environment, test_context: dict[str, str]
