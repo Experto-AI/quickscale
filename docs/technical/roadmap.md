@@ -43,7 +43,6 @@ context, scope, and acceptance;
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA194 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA198 | Carry the database's TLS settings into the backup and restore commands | post-v88 | 2 | — | Deferred |
 | SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
 | SA196 | Fail hard on undefined generator template context | post-v88 | 3 | — | Deferred |
 | SA201 | Give generated projects one throttling contract | post-v88 | 3 | — | Deferred |
@@ -53,7 +52,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
-Track 2: SA198 ──► SA202
+Track 2: SA202
 Track 3: SA196 ──► SA201 ──► SA203
 ```
 
@@ -82,10 +81,10 @@ the critical path.
   `quickscale_cli` and `quickscale_core`; the completed purge and removal-obligation work lives in
   the `orgs` module, so the two have no shared file. One interaction, previously a watch item, has
   now fired: giving the `backups` remote-credential variables placeholders made the DR path more
-  exercised, and that path is the one SA198 fixes. SA193 was queued before SA198 for that reason,
+  exercised, and that path is the one SA198 fixed. SA193 was queued before SA198 for that reason,
   but the two edit disjoint files and carry no dependency edge.
-- **SA198 and SA202 are queued on track 2 by what publication would ship.** SA198 is the only
-  S2 defect in the packaged bytes that no other ticket touches, and SA202 hardens the workflow that
+- **SA198 and SA202 were queued on track 2 by what publication would ship.** SA198 was the only
+  S2 defect in the packaged bytes that no other ticket touched, and SA202 hardens the workflow that
   performs the publication those bytes are waiting on. Neither blocks another ticket, so both are
   queue order rather than edges.
 - **SA203 is small and stands alone.** The `orgs.ready()` early return is boot-path code that no
@@ -132,7 +131,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA198 | yes | yes | yes | **yes** | no |
+| 2 | SA202 | yes | yes | yes | **yes** | no |
 | 3 | SA196 | yes | yes | yes | **yes** | no |
 
 ### Interrupted work (measured 2026-09-22)
@@ -147,11 +146,13 @@ before that date is gone and everything uncommitted now shows as unstaged.
   commits behind `v89`. To resume: `git merge v89` in the worktree (fast-forward), then start SA194
   from its ticket body; nothing is half-done. Old stash `stash@{2}` ("SA152 final resync
   preservation") predates SA194 and is not part of it.
-- **Track 2 — SA195 and SA192 delivered.** The interrupted work was checkpointed by explicit file
-  list, reconciled with `v89`, and completed: blog, CRM, listings, and analytics test settings share
-  one repository-owned `tests_shared/templates/base.html`, while auth and billing keep local stubs
-  whose suites assert the older shell markup; the five module page surfaces carry the shared design
-  with the frontend-origin contract and its checks. Track 2's remaining queue is SA198 and SA202.
+- **Track 2 — SA195, SA192, and SA198 delivered.** The interrupted work was checkpointed by explicit
+  file list, reconciled with `v89`, and completed: blog, CRM, listings, and analytics test settings
+  share one repository-owned `tests_shared/templates/base.html`, while auth and billing keep local
+  stubs whose suites assert the older shell markup; the five module page surfaces carry the shared
+  design with the frontend-origin contract and its checks. The backup and restore commands now
+  translate the connection `OPTIONS` into libpq environment variables, so `pg_dump` and `pg_restore`
+  run under the database's own TLS posture. Track 2's remaining queue is SA202.
 - **Track 3 — SA199 and SA200 delivered.** Account deletion runs its Stripe calls between short
   database transactions and restores the cancellation state when deletion is rejected; webhook
   processing holds a session-level lock across its handler and result persistence; and
@@ -366,43 +367,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA193 — Derive the generated `.env.example` credential contract from module manifests.**
 
-- [ ] **SA198 — Carry the database's TLS settings into the backup and restore commands.**
-
-  **Context:** `_build_pg_dump_command` and `_build_pg_restore_command` destructure the Django
-  `settings_dict` by hand and read only `HOST`, `PORT`, `USER`, `NAME` and `PASSWORD`. Everything
-  `dj_database_url` puts in `OPTIONS` — `sslmode`, `sslrootcert`, `sslcert`, `sslkey`,
-  `connect_timeout` — is discarded, so both commands fall back to libpq's default `sslmode=prefer`:
-  TLS if the server offers it, plaintext if it does not, and no certificate verification either
-  way. A deployment whose `DATABASE_URL` demands `sslmode=verify-full` has Django verifying the
-  server certificate on every request while the one process that moves the entire database over the
-  network verifies nothing. The audit confirmed empirically that the TLS parameters do land in
-  `OPTIONS`, so this is a dropped value, not a missing one.
-
-  Database dumps are the highest-value artifact this system produces, which is what lifts an
-  omission to an S2. The precondition — a remote or managed PostgreSQL that accepts non-TLS
-  connections — is the ordinary Railway case, not an exotic one.
-
-  The audit also names the structural reason: connection parameters are destructured by hand in at
-  least three places (both command builders and `start.sh.j2`'s psycopg2 connect), each picking a
-  different subset, because nothing owns *how this system connects to its database*. The fix should
-  leave one owner behind rather than a fourth hand-written subset.
-
-  **Acceptance:** `pg_dump` and `pg_restore` run under the same TLS posture as the application's
-  own connections — the relevant `OPTIONS` keys are translated into libpq environment variables
-  (`PGSSLMODE`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`, `PGCONNECT_TIMEOUT`) alongside the
-  existing `PGPASSWORD`, never into argv, so the standing no-secrets-in-argv rule is preserved. A
-  regression asserts that a settings dict carrying `sslmode=verify-full` and an `sslrootcert` path
-  produces a child environment demanding both, and that a dict with empty `OPTIONS` behaves exactly
-  as today. The translation lives in one function that every connection-parameter consumer calls,
-  and a test fails if a builder reads `settings_dict` fields directly instead. The deliberate
-  behavior change is recorded as one: a deployment whose URL requests strict TLS will now fail its
-  backup if the server cannot satisfy it, where it previously succeeded in plaintext — that is the
-  point, and the release note says so. No change to backup contents, naming, or the DR gate's
-  semantics.
-
-  **Surfaces:** `quickscale_core/.../dr_engine/primitives.py` command builders, their
-  `dr_engine/orchestration.py` callers, the DR tests, `start.sh.j2`'s connect if the shared owner
-  absorbs it, the operations documentation, and the tech audit.
+- [x] **SA198 — Carry the database's TLS settings into the backup and restore commands.**
 
 - [ ] **SA202 — Pin the publishing supply chain and add the missing CI scanners.**
 
@@ -608,7 +573,7 @@ because completed SA190 closed it. Two others now have tickets: the dependency-s
 workflow-lint gaps are SA202's, and the generated-project smoke-boot gap is SA196's. Two
 watch notes are deliberately fired rather than carried: the `REST_FRAMEWORK` clobber, which SA201
 resolves because SA201 is the change that would otherwise trigger it, and the DR
-`pg_dump`/`pg_restore` dependence that SA193 made live and SA198 fixes. The remaining watch
+`pg_dump`/`pg_restore` dependence that SA193 made live and SA198 fixed. The remaining watch
 notes — persistent `QUICKSCALE_PRIVILEGED_COMMAND`, the analytics single-quote escape, the
 `BackupError` host echo, `set_railway_variable`'s swallowed reason, and future-dated notification
 timestamps — stay unscheduled with their triggers intact. The standing

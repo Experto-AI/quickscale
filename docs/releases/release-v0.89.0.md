@@ -93,6 +93,15 @@ blocks for notifications, analytics, and billing keep their exact previous bytes
 diff appears for those. Fresh generations no longer carry a module-managed block until `apply`
 writes it, and user-authored lines outside the managed markers are never rewritten.
 
+Backup and restore commands now run under the TLS posture of the Django connection they actually
+use: that connection's `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, and `connect_timeout` reach
+`pg_dump` and `pg_restore` as libpq environment variables instead of being dropped. This is a
+deliberate behavior change — a deployment whose active connection requests strict TLS (the
+`RUNTIME_DATABASE_URL` role connection while serving) will now fail its backup if the server cannot
+satisfy that request, where it previously completed in plaintext. Operators who require verified TLS
+must carry those parameters on `RUNTIME_DATABASE_URL`, not only on `DATABASE_URL`, and re-check that
+URL after `quickscale deploy railway`, which rewrites the runtime URL on services it manages.
+
 This maintenance release also adds maintainer-only beta-migration compatibility validation and
 mode-specific runtime provenance to report output; incompatible launcher, settings, and package
 combinations now fail before recipient mutation, and fresh-first identity changes reconcile raw

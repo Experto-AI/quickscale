@@ -91,7 +91,7 @@ no scanner output is transcribed here. Source reading, `git log`, and targeted g
 1. `dj_database_url.parse('postgresql://u:p@h:5432/db?sslmode=verify-full&sslrootcert=/etc/ca.pem')`
    in the project venv → `OPTIONS: {'sslmode': 'verify-full', 'sslrootcert': '/etc/ca.pem'}`.
    **Confirmed** TA-01: TLS parameters live in `OPTIONS`, which the dump/restore command builders
-   never read.
+   did not read before the `OPTIONS` translation landed.
 2. Walked a `project.slug` of `"evil\n"` through `validate_project_name`
    (`file_utils.py:22–55`) on paper: `re.match(r"^[a-z][a-z0-9_-]*$", name)` accepts a trailing
    newline (Python `$` semantics), but `package_name.isidentifier()` rejects it two lines earlier.
@@ -110,15 +110,6 @@ at*, not *clean*.
 ## 2. Machine-readable finding index
 
 ```yaml
-- id: dr-backup-drops-tls-options
-  severity: S2
-  category: "IX. Data handling / III. Security"
-  title: pg_dump and pg_restore silently drop the database's TLS settings
-  effort: Small
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
 - id: billing-checkout-endpoints-unthrottled
   severity: S3
   category: "III. Security"
@@ -181,7 +172,6 @@ at*, not *clean*.
 
 | ID | Sev | Category | Title | Effort | Conf | Status |
 |---|---|---|---|---|---|---|
-| `dr-backup-drops-tls-options` | S2 | Data handling | pg_dump/pg_restore drop the database's TLS settings | Small | High | open |
 | `billing-checkout-endpoints-unthrottled` | S3 | Security | Stripe-calling endpoints have no throttle | Small | High | open |
 | `orgs-ready-early-return-skips-receivers` | S3 | Correctness | Privileged-command exemption skips two other installs | Small | High | open |
 | `blog-throttle-racy-on-database-cache` | S3 | Concurrency | Rate limiter non-atomic on the default prod cache | Small | Medium | open |
@@ -189,94 +179,13 @@ at*, not *clean*.
 | `blog-throttle-ident-collision` | S4 | Security | IPv4/IPv6 throttle bucket collision | Trivial | High | open |
 | `build-system-requires-unpinned` | S4 | Pipeline | Unpinned `poetry-core` build requirement | Trivial | High | open |
 
-**Counts:** S1 — 0 · S2 — 1 · S3 — 4 · S4 — 2 · total 7.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 4 · S4 — 2 · total 6.
 
 ---
 
 ## 4. Findings
 
-### Finding 1: `pg_dump`/`pg_restore` silently drop the database's TLS settings
-
-- **ID:** `dr-backup-drops-tls-options`
-- **Severity:** **S2** — the DR engine runs against the production database and moves its entire
-  contents over the network; the connection it opens is unencrypted-capable even when the
-  application's own connection demands `sslmode=verify-full`. Reality **R2**. One precondition —
-  the deployment must use a remote/managed PostgreSQL that accepts non-TLS connections — which is
-  the ordinary case for a Railway or managed-Postgres deployment, but it is a precondition, so this
-  is S2 and not S1. It does not violate a listed oracle item; the project has simply never stated a
-  TLS-posture invariant for the backup path, which is part of why it went missing.
-- **Category:** IX. Data handling (secondary angle: III. Security — the certificate verification
-  the app performs is silently not performed here).
-- **Confidence:** **High** — verified in code and confirmed empirically (check 1).
-- **Location:** `quickscale_core/src/quickscale_core/dr_engine/primitives.py:264–314`
-  (`_build_pg_dump_command`, `_build_pg_restore_command`); callers pass the whole settings dict at
-  `dr_engine/orchestration.py:335` and `dr_engine/orchestration.py:2456–2467`.
-- **Defect:** Both command builders read only `HOST`, `PORT`, `USER`, `NAME` and `PASSWORD` out of
-  the Django `settings_dict`. Everything Django puts in `OPTIONS` — `sslmode`, `sslrootcert`,
-  `sslcert`, `sslkey`, `connect_timeout` — is discarded, so `pg_dump`/`pg_restore` fall back to
-  libpq's default `sslmode=prefer`: TLS if the server offers it, **plaintext if it does not**, and
-  no certificate verification in either case.
-- **Failure scenario (reproducer):** Deploy with
-  `DATABASE_URL=postgresql://app:pw@db.example.com:5432/app?sslmode=verify-full&sslrootcert=/etc/ssl/ca.pem`.
-  Django's own connections verify the server certificate. Now run the backup command; the process
-  executes
-  `pg_dump --format=c --file <path> --host db.example.com --port 5432 --username app app`
-  with only `PGPASSWORD` added to the environment. libpq negotiates `prefer`, so an attacker
-  positioned on the path between the app host and the database can either read the full dump —
-  every tenant's data, every user row — by downgrading the connection, or present any certificate
-  at all and be believed. The same holds in reverse for `pg_restore`, where the attacker controls
-  what is written back. Confirmed on paper against the code plus empirical check 1, which shows the
-  TLS parameters sitting in `OPTIONS` where neither builder looks.
-- **Evidence:**
-  ```python
-  # primitives.py:264
-  command = ["pg_dump", "--format=c", "--file", str(local_path)]
-  if host := str(connection_settings.get("HOST") or "").strip(): ...
-  password = str(connection_settings.get("PASSWORD") or "").strip()
-  env = None
-  if password:
-      env = {"PGPASSWORD": password}
-  ```
-  Empirical: `dj_database_url.parse(...)` → `{'ENGINE': ..., 'OPTIONS': {'sslmode': 'verify-full',
-  'sslrootcert': '/etc/ca.pem'}, ...}`.
-- **Refutation:** Attempted three ways. (a) Searched for any layer that sets `PGSSLMODE` or
-  `PGSSLROOTCERT` — it appears nowhere in `.env.j2`, `start.sh.j2`, `Dockerfile.j2`, or the
-  settings templates, and `_run_shell_command` (`primitives.py:148–160`) only *merges* the caller's
-  `env` into `os.environ`, so nothing upstream supplies it. (b) Checked whether `settings_dict`
-  might already be flattened — it is not; the callers pass
-  `django.db.connections["default"].settings_dict` verbatim and `OPTIONS` survives as a nested
-  dict. (c) Looked for a blessing: `quickscale_core/tests/test_dr_engine_primitives.py:125–149`
-  asserts the built command's shape but says nothing about TLS, and `git log` on
-  `primitives.py` shows only a refactor (`de81fe37`, `dc0a0596`) — the omission was carried through
-  the extraction, never decided. No refutation survived.
-- **Fix:** Translate the relevant `OPTIONS` keys into libpq environment variables alongside
-  `PGPASSWORD` in both builders — `sslmode → PGSSLMODE`, `sslrootcert → PGSSLROOTCERT`,
-  `sslcert → PGSSLCERT`, `sslkey → PGSSLKEY`, `connect_timeout → PGCONNECT_TIMEOUT`. Keep them in
-  the environment rather than on argv, consistent with oracle item 4. Consider defaulting
-  `PGSSLMODE=require` when `HOST` is not a loopback address and `OPTIONS` says nothing.
-  **Effort: Small.**
-- **Verification:** Extend `test_dr_engine_primitives.py` with the reproducer promoted to an
-  assertion: build a command from a settings dict carrying
-  `OPTIONS={'sslmode': 'verify-full', 'sslrootcert': '/etc/ca.pem'}` and assert the returned `env`
-  contains `PGSSLMODE=verify-full` and `PGSSLROOTCERT=/etc/ca.pem`. It fails today.
-- **Fix risk:** Low but real in one direction — a deployment whose `DATABASE_URL` carries
-  `sslmode=require` while the *backup host* cannot complete TLS to that database will start failing
-  its backups instead of silently succeeding in plaintext. That is the correct direction, but it is
-  a behaviour change on a scheduled job, so it belongs in a release note. Nothing depends on the
-  current command shape beyond the two shape-assertion tests named above.
-- **Detection signal:** Nothing today would show this — a downgraded connection succeeds and the
-  backup is recorded as healthy. To detect it, run
-  `SELECT ssl, client_addr, usename FROM pg_stat_ssl JOIN pg_stat_activity USING (pid)` during a
-  backup window and look for the dump's session with `ssl = false`; after the fix, a failed TLS
-  negotiation surfaces as a `BackupError` naming `pg_dump`.
-- **Deliberate?** None found — no comment, no suppression, no test, no commit message touches TLS
-  on this path.
-- **Age:** Long-standing; predates the `dr_engine` extraction (`de81fe37`) and survived it
-  unchanged. Forward-fix, not revert.
-
----
-
-### Finding 2: Stripe-calling endpoints have no throttle, and no DRF throttle defaults exist
+### Finding 1: Stripe-calling endpoints have no throttle, and no DRF throttle defaults exist
 
 - **ID:** `billing-checkout-endpoints-unthrottled` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_modules/billing/src/quickscale_modules_billing/views.py:171–230`
@@ -307,7 +216,7 @@ at*, not *clean*.
   every DRF view in every generated project, so the rate must be generous enough not to break
   legitimate polling clients; ship it as a named default operators can raise.
 
-### Finding 3: The privileged-command exemption skips GUC priming and the last-owner backstop
+### Finding 2: The privileged-command exemption skips GUC priming and the last-owner backstop
 
 - **ID:** `orgs-ready-early-return-skips-receivers` · **S3** · Reality **R2** · Confidence **High**
 - **Location:** `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:186–188`
@@ -341,7 +250,7 @@ at*, not *clean*.
   be blocked by the backstop and will need an explicit bypass — worth checking existing migrations
   before landing.
 
-### Finding 4: Blog rate limiter is non-atomic on the default production cache backend
+### Finding 3: Blog rate limiter is non-atomic on the default production cache backend
 
 - **ID:** `blog-throttle-racy-on-database-cache` · **S3** · Reality **R2** · Confidence **Medium**
 - **Location:** `quickscale_modules/blog/src/quickscale_modules_blog/views.py:303–330`
@@ -368,7 +277,7 @@ at*, not *clean*.
   documented as optional and the DB-cache branch is the written fallback, complete with a
   `createcachetable` step in `start.sh.j2`. Checked for a layer-up limiter — none.
 
-### Finding 5: The publishing workflow trusts mutable action refs and an unpinned Poetry
+### Finding 4: The publishing workflow trusts mutable action refs and an unpinned Poetry
 
 - **ID:** `pipeline-mutable-action-refs` · **S3** · Reality **R3** · Confidence **High**
 - **Location:** `.github/workflows/publish.yml:294`, `:318`
@@ -437,7 +346,7 @@ Cells name the layer that supplies the safeguard, or the finding ID for an empty
 | Analytics template tag (`analytics_public_config_json`) | n/a (render-time) | n/a | n/a | `_JSON_HTML_ESCAPES` on `<`, `>`, `&` — see Notes | n/a | n/a | n/a | n/a | n/a |
 | CLI command tree (R1) | OS user | OS file permissions | `validate_config` + `validate_project_name` | n/a | n/a | per-`subprocess` timeouts, sampled | apply ledger | Click exit codes | apply ledger |
 | `start.sh` generated launcher (R2 boot) | n/a | superuser `DATABASE_URL`, refuses to repurpose a superuser role | env-var presence checks | `sql.Identifier`/`sql.Literal` | n/a | n/a | idempotent role re-sync | `set -e` + explicit messages | step log |
-| DR backup / restore (R2 scheduled + admin) | Django admin / management command | `_restore_execution_allowed` env gate + `--allow-production` | archive format + PG18 contract checks | n/a | n/a | no `PGCONNECT_TIMEOUT` — **`dr-backup-drops-tls-options`** | restore confirmation value | `BackupError` with command context | artifact metadata rows |
+| DR backup / restore (R2 scheduled + admin) | Django admin / management command | `_restore_execution_allowed` env gate + `--allow-production` | archive format + PG18 contract checks | n/a | n/a | `PGSSLMODE`/`PGCONNECT_TIMEOUT` translated from connection `OPTIONS` | restore confirmation value | `BackupError` with command context | artifact metadata rows |
 | Release pipeline (R3) | GitHub OIDC | job `permissions` on publish jobs only | n/a | n/a | n/a | n/a | n/a | job failure | workflow log |
 
 Every empty cell above is resolved: it carries a finding ID, or a stated reason it does not apply.
@@ -456,8 +365,8 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
   `views.py` decorator surface and `managers.py`/`tenancy.py` sampled.
 - **blog** — `blog-throttle-racy-on-database-cache`, `blog-throttle-ident-collision`. The rate
   limiter and API authentication path read in full; the rest sampled.
-- **dr_engine / backups** — `dr-backup-drops-tls-options`. `primitives.py`, the `recovery.py`
-  execution gate, and the `orchestration.py` call sites read in full.
+- **dr_engine / backups** — clean on the dump/restore TLS posture, its one finding. `primitives.py`,
+  the `recovery.py` execution gate, and the `orchestration.py` call sites read in full.
 - **generator templates** — `billing-checkout-endpoints-unthrottled` (the missing DRF
   defaults). `base.py.j2`, `production.py.j2`, `.env.j2`, `start.sh.j2` read in full.
 - **quickscale_cli** — clean on the sinks swept. All 94 files swept for shell/eval/deserialization
@@ -518,10 +427,10 @@ Every empty cell above is resolved: it carries a finding ID, or a stated reason 
 - Outbound-call discipline (timeouts, retry caps, keeping network I/O out of transactions) remains
   distributed across module boundaries. Billing and auth now share transaction-safe services, but
   timeout policy is still implicit in the Stripe SDK configuration.
-- Connection parameters are destructured by hand in at least three places (`_build_pg_dump_command`,
-  `_build_pg_restore_command`, `start.sh.j2`'s psycopg2 connect), each picking a different subset of
-  the Django settings dict; Finding 1 is the visible symptom of there being no single owner of
-  "how this system connects to its database."
+- The pg_dump/pg_restore path now has one owner of its connection parameters
+  (`_resolve_postgres_connection_parameters`), but `start.sh.j2`'s psycopg2 connect still builds its
+  connection from `DATABASE_URL` on its own — the remaining separate constructor of "how this system
+  connects to its database."
 
 ---
 

@@ -13,7 +13,7 @@ import json
 import os
 import re
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -257,6 +257,76 @@ def _expected_backup_format_for_engine(engine: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# PostgreSQL connection parameters
+# ---------------------------------------------------------------------------
+
+# The one translation table from Django connection ``OPTIONS`` keys to the
+# libpq environment variables that carry them.  Every value travels in the
+# child process environment, never on argv, so no password, certificate, or
+# key path reaches the process table.
+_LIBPQ_OPTION_ENVIRONMENT_VARIABLES: dict[str, str] = {
+    "sslmode": "PGSSLMODE",
+    "sslrootcert": "PGSSLROOTCERT",
+    "sslcert": "PGSSLCERT",
+    "sslkey": "PGSSLKEY",
+    "connect_timeout": "PGCONNECT_TIMEOUT",
+}
+
+
+@dataclass(frozen=True)
+class PostgresConnectionParameters:
+    """Resolved libpq parameters for one Django database settings dict."""
+
+    host: str
+    port: str
+    user: str
+    database_name: str
+    environment: dict[str, str] | None
+
+
+def _resolve_postgres_connection_parameters(
+    connection_settings: Mapping[str, Any],
+) -> PostgresConnectionParameters:
+    """Resolve one Django connection settings dict into libpq parameters.
+
+    This is the single owner of how the pg_dump/pg_restore commands connect.
+    ``HOST``/``PORT``/``USER``/``NAME`` become command arguments, while
+    ``PASSWORD`` and the connection ``OPTIONS`` keys libpq understands become
+    environment variables, so the command tools run under the same TLS
+    posture as the application's own connections.
+    """
+    database_name = str(connection_settings.get("NAME") or "").strip()
+    if not database_name:
+        raise BackupConfigurationError("DATABASES['default']['NAME'] is required")
+
+    environment: dict[str, str] = {}
+    password = str(connection_settings.get("PASSWORD") or "").strip()
+    if password:
+        environment["PGPASSWORD"] = password
+
+    options = connection_settings.get("OPTIONS")
+    if isinstance(options, dict):
+        for (
+            option_key,
+            environment_variable,
+        ) in _LIBPQ_OPTION_ENVIRONMENT_VARIABLES.items():
+            option_value = options.get(option_key)
+            if option_value is None:
+                continue
+            option_text = str(option_value).strip()
+            if option_text:
+                environment[environment_variable] = option_text
+
+    return PostgresConnectionParameters(
+        host=str(connection_settings.get("HOST") or "").strip(),
+        port=str(connection_settings.get("PORT") or "").strip(),
+        user=str(connection_settings.get("USER") or "").strip(),
+        database_name=database_name,
+        environment=environment or None,
+    )
+
+
+# ---------------------------------------------------------------------------
 # PostgreSQL dump/restore command building
 # ---------------------------------------------------------------------------
 
@@ -265,53 +335,38 @@ def _build_pg_dump_command(
     local_path: Path,
     connection_settings: dict[str, Any],
 ) -> tuple[list[str], dict[str, str] | None]:
+    parameters = _resolve_postgres_connection_parameters(connection_settings)
     command = ["pg_dump", "--format=c", "--file", str(local_path)]
-    if host := str(connection_settings.get("HOST") or "").strip():
-        command.extend(["--host", host])
-    if port := str(connection_settings.get("PORT") or "").strip():
-        command.extend(["--port", port])
-    if user := str(connection_settings.get("USER") or "").strip():
-        command.extend(["--username", user])
-
-    database_name = str(connection_settings.get("NAME") or "").strip()
-    if not database_name:
-        raise BackupConfigurationError("DATABASES['default']['NAME'] is required")
-    command.append(database_name)
-
-    password = str(connection_settings.get("PASSWORD") or "").strip()
-    env = None
-    if password:
-        env = {"PGPASSWORD": password}
-    return command, env
+    if parameters.host:
+        command.extend(["--host", parameters.host])
+    if parameters.port:
+        command.extend(["--port", parameters.port])
+    if parameters.user:
+        command.extend(["--username", parameters.user])
+    command.append(parameters.database_name)
+    return command, parameters.environment
 
 
 def _build_pg_restore_command(
     local_path: Path,
     connection_settings: dict[str, Any],
 ) -> tuple[list[str], dict[str, str] | None]:
+    parameters = _resolve_postgres_connection_parameters(connection_settings)
     command = [
         "pg_restore",
         "--clean",
         "--if-exists",
         "--no-owner",
     ]
-    if host := str(connection_settings.get("HOST") or "").strip():
-        command.extend(["--host", host])
-    if port := str(connection_settings.get("PORT") or "").strip():
-        command.extend(["--port", port])
-    if user := str(connection_settings.get("USER") or "").strip():
-        command.extend(["--username", user])
+    if parameters.host:
+        command.extend(["--host", parameters.host])
+    if parameters.port:
+        command.extend(["--port", parameters.port])
+    if parameters.user:
+        command.extend(["--username", parameters.user])
 
-    database_name = str(connection_settings.get("NAME") or "").strip()
-    if not database_name:
-        raise BackupConfigurationError("DATABASES['default']['NAME'] is required")
-
-    command.extend(["--dbname", database_name, str(local_path)])
-    password = str(connection_settings.get("PASSWORD") or "").strip()
-    env = None
-    if password:
-        env = {"PGPASSWORD": password}
-    return command, env
+    command.extend(["--dbname", parameters.database_name, str(local_path)])
+    return command, parameters.environment
 
 
 def _dump_postgresql_database(
