@@ -57,6 +57,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     a plaintext response; the correlation-id middleware replaces any client `X-Request-ID` outside
     a 64-character `[A-Za-z0-9._-]` shape with a fresh UUID, and a registered gate deploy-checks a
     freshly generated project in both forwarding cells.
+  - **Backup and restore commands inherit the database's TLS posture.** `pg_dump` and `pg_restore`
+    receive the active Django connection's `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, and
+    `connect_timeout` through libpq environment variables, so a deployment that verifies the server
+    certificate keeps verifying it while the database is moved and a strict-TLS deployment whose
+    server cannot satisfy the request now fails its backup instead of completing it in plaintext.
   - **The generator fails closed on undefined template context.** A missing or renamed context key
     raises during generation instead of rendering empty text, and the release lane boots a freshly
     generated project through its shipped `start.sh` and asserts `/healthcheck/` answers `OK`.

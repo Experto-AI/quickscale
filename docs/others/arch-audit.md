@@ -47,9 +47,9 @@ commit carries a `v89:` testimony token, so the commit-testimony gate is holding
 **Growth direction (planning surface, authoritative).** `roadmap.md` scheduling table: the critical
 path is **SA194 → SA191 → SA153** on track 1 — unblock the in-place migration gate, migrate
 `bap-web` onto current QuickScale, then build the first property portal as a project-owned
-extension. Track 2's next ticket is **SA198** (carry the database's TLS settings into backup and restore);
-track 3's is **SA199** (finish the external-call and webhook hardening ticket). All three tracks are "truly
-green". Completed SA190 removed project-owned tenant tables as a purge dependency by deriving the
+extension. Track 2's next ticket is **SA202** (pin the publishing supply chain and add the missing CI
+scanners); track 3's is **SA196** (fail hard on undefined generator template context). All three tracks
+are "truly green". Completed SA190 removed project-owned tenant tables as a purge dependency by deriving the
 purge plan from installed tenant metadata; the durable deletion coordinator remains deferred.
 
 **Scope decision.** Three jobs: (1) re-verify both prior findings and all five watchlist triggers;

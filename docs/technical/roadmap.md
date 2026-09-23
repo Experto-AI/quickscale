@@ -5,33 +5,20 @@
 
 ## Goal and finish line
 
-`v88` is release-accepted (see [CHANGELOG.md](../../CHANGELOG.md)). The next goal is the first
-useful property portal (SA153) in a project-owned extension, generalizing capabilities only after
-that project proves their value. The portal is built on `bap-web`, the existing beta site, after
-the verified migration tools move it onto current QuickScale (SA191).
+The next goal is the first useful property portal (SA153) in a project-owned extension, built on
+`bap-web` after the verified migration tools move it onto current QuickScale (SA191).
+Capabilities are generalized only after that project proves their value.
 
-**Release status — v0.88.0 packaged, not published.** The v0.88.0 release commit carries a
-release-prepared public note; `v89` has since bumped the repository to `0.89.0`. No core tag,
-split-branch republication, seal, or PyPI upload has happened. Outstanding before publication:
-release-tier validation on the packaged bytes, the ordered phases in
-[publish_procedure.md](publish_procedure.md), and the release PR into `main`. SA185 now declares
-the `orgs` contract vintage that the 0.88 templates introduced; SA186 now requires a fast-forward
-before the split-branch force-push that publication runs. The packaged 0.88.0 bytes also carry an issue that v89 has since fixed:
-the CLI they contain generates an `.env.example` with no placeholder for the credential variables
-that `storage` and `backups` declare (SA193), so a project generated from those bytes with either
-module enabled meets a configuration error naming a variable it was never shown.
-
-The latest technical-audit pass adds more that the packaged bytes carry into every generated
-project: the DR engine drops the database's TLS settings when it dumps and restores (SA198), the
-account-deletion view makes a Stripe round trip inside a transaction holding organization row locks
-(SA199), and the publishing workflow itself trusts mutable action refs on the path that would do
-the uploading (SA202). Including any of these fixes in 0.88.0 means repackaging; publishing bytes
-without one ships its recorded issue. Publication itself stays a maintainer decision; this planner
-tracks only that it is owed.
+**Release status — v0.88.0 packaged, not published.** No core tag, split-branch republication,
+seal, or PyPI upload has happened. Publication stays a maintainer decision; this planner tracks only
+that it is owed: release-tier validation on the packaged bytes, the phases in
+[publish_procedure.md](publish_procedure.md), and the release PR into `main`. The packaged bytes
+predate fixes now on `v89` (the `.env.example` credential placeholders, backup/restore TLS, and the
+account-deletion transaction boundary), and SA202 hardens the workflow that would upload them;
+shipping any of those in 0.88.0 means repackaging.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
-context, scope, and acceptance;
-[CHANGELOG.md](../../CHANGELOG.md) preserves history and evidence.
+context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves history.
 
 ## Schedule and parallel execution
 
@@ -39,11 +26,10 @@ context, scope, and acceptance;
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA194 | Unblock in-place beta migration at the contract-vintage gate | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA194 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
+| SA194 | Remove the in-place beta-migration mode | post-v88 | 1 | SA191 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA198 | Carry the database's TLS settings into the backup and restore commands | post-v88 | 2 | — | Deferred |
 | SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
 | SA201 | Give generated projects one throttling contract | post-v88 | 3 | — | Deferred |
 | SA203 | Narrow the privileged-command exemption in the orgs boot path | post-v88 | 3 | — | Deferred |
@@ -51,74 +37,21 @@ context, scope, and acceptance;
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
-Track 2: SA198 ──► SA202
+Track 1: SA191 ──► SA194 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
+Track 2: SA202
 Track 3: SA201 ──► SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA194 → SA191 → SA153. The portal is built on the migrated `bap-web`, using the
-verified migration tools for real, once the tool's in-place halt and its blind smoke gate are
-cleared. Project-owned tenant tables no longer add a dependency to the portal. SA154 is an
-inventory, not work. Every other ticket, including all six tickets the latest audits added, is off
-the critical path.
+**Critical path.** SA191 → SA153. SA191 migrates `bap-web` with the fresh-first mode and
+redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA194 waits
+for SA191 so the removal keeps anything the real run needs, and is off the critical path. SA154 is an inventory, not work. Everything else is off the critical path.
 
-**Ordering.**
-
-- **Derived tenant tables support SA153 and SA177.** Project-owned tenant tables pass the generated
-  project's `check_tenant_isolation` without module-source edits, and predicate verification covers
-  them through the same derived tenant-model set.
-- **SA194 precedes SA191, and SA191 precedes SA153.** `bap-web` is migrated with the maintainer
-  tools only after SA152 proved them on isolated fixtures, and the portal is built on the migrated
-  project rather than on a fresh one. SA194 is the new edge: the tool's in-place mode aborts
-  mid-run at `quickscale apply` on exactly the recipients it was built for, and the smoke gate that
-  claims to cover that path shims the CLI so it always exits 0. The `bap-web` migration uses
-  fresh-first mode, which the halt does not reach, but it uses a tool whose gate is currently blind
-  to the CLI it invokes; SA194 makes the gate observe it before the tool is trusted with the real
-  site. SA191 redeploys through the fail-hard `deploy railway` path.
-- **SA193 was independent of the completed SA190 orgs work.** It touched generation-time wiring in
-  `quickscale_cli` and `quickscale_core`; the completed purge and removal-obligation work lives in
-  the `orgs` module, so the two have no shared file. One interaction, previously a watch item, has
-  now fired: giving the `backups` remote-credential variables placeholders made the DR path more
-  exercised, and that path is the one SA198 fixes. SA193 was queued before SA198 for that reason,
-  but the two edit disjoint files and carry no dependency edge.
-- **SA198 and SA202 are queued on track 2 by what publication would ship.** SA198 is the only
-  S2 defect in the packaged bytes that no other ticket touches, and SA202 hardens the workflow that
-  performs the publication those bytes are waiting on. Neither blocks another ticket, so both are
-  queue order rather than edges.
-- **SA203 is small and stands alone.** The `orgs.ready()` early return is boot-path code that no
-  other ticket reads; it sits on track 3 because track 3 owns the orgs module and the
-  privileged-command stations, and late in the queue because it is the least severe of them.
-- **SA190 removed the purge dependency from SA153.** Project-owned extension tables now join the
-  marker-derived purge plan without a vendored-module edit, regardless of whether the first portal
-  ultimately keeps those tables project-owned or promotes them into a first-party module.
-- **SA192 uses the enforced vintage boundary.** The module pages extend the generated,
-  project-owned `base.html`, which `quickscale update` never rewrites, so a design change there is
-  contract-bearing and existing projects adopt it through an enforced vintage move. SA192 is not
-  an SA153 edge: the portal's
-  React pages do not need the restyled Django pages to ship.
-
-**Rebalance.** Track 1 carries the whole critical path: the migration-tool fixes (SA194), the
-`bap-web` migration (SA191), and the portal (SA153), because each feeds the next and splitting them
-across tracks would only add merge handoffs. Track 1 is saturated by that path, so none of the new
-audit work was given to it — including the CI gates the tooling gaps call for, which would normally
-follow Track 1's ownership of the gate registry. Track 2 takes those instead and coordinates the
-registry entry with Track 1 at merge; the ownership list below records the transfer.
-
-Tracks 2 and 3 split the rest by conflict surface, now along a sharper line than before: **Track 2
-owns what the generator and the pipeline produce**, Track 3 owns **what the generated application
-does at runtime**. Track 2 therefore takes the CLI apply/deploy/update, publication, DR engine,
-module template and module test surfaces: the `.env.example` derivation (SA193), the backup TLS
-contract (SA198), the supply-chain pinning and scanners (SA202), the shared test stub (SA195), and
-the restyle (SA192). Track 3 takes orgs tenancy, purge, the settings and privileged/runtime-role
-templates, the billing and auth transaction boundaries, and the generator's rendering strictness:
-SA199, SA200, SA196, SA201, and SA203.
-
-Tracks 2 and 3 now carry five tickets each. Four of Track 3's are Small or Trivial by the audit's
-own effort column, and its substantial one (SA196) was already scheduled.
-Track 3 completed its independent RLS predicate work and privileged-command work, while Track 2
-delivered SA186 and SA187.
+**Ordering.** Tracks 2 and 3 carry no dependency edges. SA196 turned strict rendering on for
+every generator template, including templates other tracks own (the `.env.example` template, the
+settings templates, the generated `base.html`), so SA201 re-runs the generator tests and the SA90
+emission fixture when it lands.
 
 ### Track states
 
@@ -126,37 +59,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA194 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA198 | yes | yes | yes | **yes** | no |
+| 1 | SA191 | yes | yes | yes | **yes** | **yes** |
+| 2 | SA202 | yes | yes | yes | **yes** | no |
 | 3 | SA201 | yes | yes | yes | **yes** | no |
-
-### Interrupted work (measured 2026-09-22)
-
-Tracks 2 and 3 were started and interrupted mid-ticket when the Codex agent ran out of credit. The
-next handoff on each track resumes the interrupted ticket rather than the head of the original
-queue. On 2026-09-22 all three worktrees had lost their `.git/worktrees/` metadata; they were
-relinked to their branches without touching the working trees, so staged-vs-unstaged state from
-before that date is gone and everything uncommitted now shows as unstaged.
-
-- **Track 1 — SA194, not started.** `wt-track1` is clean, has no commits of its own, and is five
-  commits behind `v89`. To resume: `git merge v89` in the worktree (fast-forward), then start SA194
-  from its ticket body; nothing is half-done. Old stash `stash@{2}` ("SA152 final resync
-  preservation") predates SA194 and is not part of it.
-- **Track 2 — SA195 and SA192 delivered.** The interrupted work was checkpointed by explicit file
-  list, reconciled with `v89`, and completed: blog, CRM, listings, and analytics test settings share
-  one repository-owned `tests_shared/templates/base.html`, while auth and billing keep local stubs
-  whose suites assert the older shell markup; the five module page surfaces carry the shared design
-  with the frontend-origin contract and its checks. Track 2's remaining queue is SA198 and SA202.
-- **Track 3 — SA199, SA200, and SA196 delivered.** Account deletion runs its Stripe calls between
-  short database transactions and restores the cancellation state when deletion is rejected;
-  webhook processing holds a session-level lock across its handler and result persistence; and
-  `search_customers` refuses a reference containing `'`, `\`, or a newline. The generated
-  production settings trust `X-Forwarded-Proto` only while forwarding trust is enabled, the
-  correlation-id middleware accepts a client `X-Request-ID` only when it is bounded, and a
-  registered gate runs Django's deployment checks on a freshly generated project in both
-  forwarding cells. The generator's Jinja environment fails closed on an undefined context key,
-  and a release-lane station boots a freshly generated project through its shipped `start.sh` and
-  asserts `/healthcheck/` answers. Track 3's remaining queue is SA201 and SA203.
 
 ### Ownership and merge coordination
 
@@ -164,42 +69,19 @@ before that date is gone and everything uncommitted now shows as unstaged.
   workflow triggers, the maintainer migration tools with their smoke gate and playbook, the
   `bap-web` migration, the property extension, public templates, and the portal's extension
   documentation.
-- Track 2 owns `scripts/publish_module.py`, the module-shipped page templates and stylesheets, the
-  module test-settings stubs and the shared test commons, the generated `base.html`, the CLI apply,
-  deploy and update commands (`apply_command.py` with its env-sync steps, `deployment_commands.py`,
-  `railway_utils.py`, `module_commands.py`, the vintage check), `contracts/module_options.py` with
-  the `*_env_var` declarations in `module.yml` and the `.env.example` template, version
-  expectations in tests, and the blog/notifications credential comparisons. It additionally owns,
-  for the audit work, `quickscale_core/dr_engine/` (`primitives.py` command builders and their
-  `orchestration.py` callers), `.github/workflows/`, the `[build-system]` blocks of every package,
-  and `ruff.toml` — plus the new scanner and workflow-lint gates, whose `scripts/gate_registry.json`
-  entries Track 2 writes and reconciles with Track 1 at merge.
-- Track 3 owns the isolation-conformance runner, `orgs/tenancy.py` and its checks, the orgs policy
-  template/tests, `purge_organization.py` and the account-delete obligations, the privileged
-  command and runtime-role stations (`orgs/apps.py`, `production.py.j2`, `start.sh.j2`,
-  `db/init.sql.j2`, `development_commands.py`, the SA90 emission fixture), and the generator's
-  Jinja environment. It additionally owns the generated settings templates as a whole
-  (`base.py.j2`, `production.py.j2`, `local.py.j2`, including the `REST_FRAMEWORK` and logging
-  middleware blocks), `billing/services.py` and `billing/views.py`, `auth/views.py`, and the blog
-  rate limiter.
+- Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
+  every package, `ruff.toml`, the module page templates and test-settings stubs, the generated
+  `base.html`, the CLI apply/deploy/update commands, `contracts/module_options.py` and the
+  `.env.example` template, and `quickscale_core/dr_engine/`. SA202's new gates add rows to
+  `scripts/gate_registry.json`, reconciled with Track 1 at merge.
+- Track 3 owns the orgs tenancy, purge, and boot path (`orgs/apps.py`), the privileged-command and
+  runtime-role stations, the generated settings templates (`base.py.j2`, `production.py.j2`,
+  `local.py.j2`), the generator's Jinja environment, `billing/services.py`, `billing/views.py`,
+  `auth/views.py`, and the blog rate limiter.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
-- **Conflict surface.** The shared closeout set is this roadmap, [CHANGELOG.md](../../CHANGELOG.md),
-  and the owning audit: the arch audit for SA193, and the tech audit for SA198, SA199, SA200,
-  SA201, SA202, and SA203. SA191, SA153, SA192, SA195, SA194,
-  and SA196 have no owning audit row; their evidence goes to the changelog, SA191's also to the
-  migration playbook. All are Markdown with no generated consumer, but the tech audit is now a
-  six-ticket shared file across two tracks, so its closeouts are the hottest merge surface in this
-  cycle — each ticket edits only its own finding's entry.
-  Code-adjacent overlaps that cross tracks: SA153 edits the extension and organizations
-  documentation; the landed SA192 restyle touched the `auth` account templates while SA199 edits
-  the account-delete view, so SA199 re-runs the auth tests when it lands; SA196 turned strict
-  rendering on for every generator template, including the `.env.example` template SA193 rewrote,
-  the settings templates SA201 edits, and the generated `base.html` SA192 restyled, so SA201
-  re-runs the generator tests and the SA90 emission fixture when it lands; and SA202's
-  workflow-lint gate adds a row to `scripts/gate_registry.json`, which Track 1 also owns. The
-  serialized queue
-  covers them: each track resolves the shared set at its own merge, after the previous merge lands,
-  then runs the consistency test.
+- **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), and the tech audit
+  (SA201, SA202, SA203 each edit only their own finding's entry). Each track resolves the shared
+  set at its own merge, after the previous merge lands, then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
 ### Resuming a track
@@ -212,52 +94,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [x] **SA180 — Derive the gate-parity count oracles from the registry.**
-
-- [x] **SA152 — Verify maintainer migration modes and their runtime compatibility.**
-
-- [ ] **SA194 — Unblock in-place beta migration at the contract-vintage gate.**
-
-  **Context:** SA185 made `quickscale apply` refuse a project whose recorded `project_contract` is
-  below every installed module's declared minimum — now `0.89.0` for `orgs` — unless the
-  acknowledgement flag is passed. The in-place beta migration shells out to a bare
-  `quickscale apply` and nowhere mentions the contract vintage, so a beta site generated at 0.88.0
-  or earlier, which is the only kind of recipient the mode exists for, halts at that step. By then
-  four steps have already rewritten the recipient's working tree — managed infrastructure files,
-  `pyproject.toml`, `frontend/package.json`, and `quickscale.yml` — and the run ends
-  `in-place-partial` and `blocked`, skipping the React-surface copy and the verification stack. A
-  stateless recipient does not escape it: an absent `project_contract` resolves as behind, and the
-  only pre-apply step that touches recipient state never writes that key.
-
-  The gap is invisible to CI because the beta-migration smoke gate shims `quickscale` so `apply`
-  exits 0 unconditionally. The gate exercises the in-place path without ever observing the CLI that
-  path invokes, so it is green today and would stay green through any refusal, gate, or regression
-  in the real command. That blindness also explains why the fifth declaration of the privileged
-  command set, the copy inside the migration tool that the cross-station contract test does not
-  cover, is currently only assumed to be held honest by this gate.
-
-  Fix the policy at the one callsite. A preflight that reads the recipient's recorded contract
-  against the shipped manifests and refuses before any mutating step is the better shape than
-  passing the acknowledgement, because it moves the refusal ahead of the damage; passing the
-  acknowledgement is defensible only if the infrastructure-copy step genuinely performs all three
-  `orgs` adoption steps, which must be checked against the manifest before choosing it.
-
-  **Acceptance:** an in-place continuation against a recipient whose recorded contract is behind
-  the shipped manifests either completes or refuses before the first mutating step, never aborts
-  between them, and the refusal names the adoption steps; the chosen policy is recorded in the
-  migration playbook, which currently documents the continuation order without mentioning the gate
-  at all. The smoke gate runs the real `quickscale apply` on the in-place path instead of a shim
-  that always succeeds, with the recipient fixture carrying a pre-`0.89.0` contract, and fails if
-  the path regresses. With the real CLI in the loop, confirm the gate reaches the migration tool's
-  own required-runtime-command validator, so the fifth privileged-command station is held honest by
-  something observed rather than assumed. Fresh-first mode's behavior is unchanged. The latest
-  tech-audit pass swept a different surface and no longer carries this finding or its smoke-gate
-  tooling gap as live rows, so the evidence above is the ticket's own and the closeout goes to the
-  changelog rather than to an audit entry.
-
-  **Surfaces:** `quickscale_devtools/.../beta_migration.py` at its apply and in-place execution
-  sites, `scripts/check_beta_migration_smoke.py`, the migration playbook, and the tech audit.
-
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 
   Use `make beta-migrate-fresh` with `bap-web` as donor and a fresh scaffold generated with the same
@@ -269,11 +105,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   building the portal on it first requires catching it up to the current release.
 
   The fresh-first mode is the documented primary path: a fresh scaffold with the same slug receives
-  the donor's custom content, so infrastructure files start correct instead of being merged. The
-  migration is the first real run of the tools that SA152 verified on fixtures, which is why it
-  waits for that verification and for SA194 — the tool's in-place mode aborts mid-run at the
-  contract-vintage gate, and its smoke gate shims the CLI so it cannot observe that or any other
-  real refusal. Manual continuation is expected where the tool stops safely; the value of
+  the donor's custom content, so infrastructure files start correct instead of being merged. Manual continuation is expected where the tool stops safely; the value of
   this ticket is that every such stop becomes either a playbook step or a deterministic tool fix.
 
   The migration preserves behavior, including the existing React and JSON API property surface that
@@ -294,6 +126,24 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** the `bap-web` repository; the migration playbook and, for deterministic gaps found,
   `quickscale_devtools/.../beta_migration.py` and its tests.
 
+- [ ] **SA194 — Remove the in-place beta-migration mode.**
+
+  **Context:** Fresh-first is the only migration path: a fresh scaffold receives the old site's
+  custom content, and data moves by backup and restore under the fresh-database rule. Upgrading a
+  live project is `quickscale update`/`apply` with contract-vintage adoption steps. In-place mode
+  duplicates that upgrade path with a riskier shape (it rewrites the recipient, then halts at the
+  vintage gate), and its smoke gate shims the CLI, so it is never observed working.
+
+  **Acceptance:** `beta-migrate-in-place`, the in-place mode, its continuation, and their tests are
+  gone; fresh-first behavior is unchanged. The smoke gate covers fresh-first only, and any gate
+  registry or parity count it feeds is updated. The playbook, `generated_file_ownership.md`, and
+  the `decisions.md` ownership entry describe one migration mode, and `decisions.md` records the
+  removal. Before deleting, port anything SA191's real run showed fresh-first lacks.
+
+  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, `scripts/beta_migrate.py`, the
+  Makefile targets, `scripts/check_beta_migration_smoke.py`, the migration playbook,
+  `generated_file_ownership.md`, and `decisions.md`.
+
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
   Target `buenosairesproperties.com` with one React public property surface over a project-owned
@@ -307,17 +157,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   API, URLs, and filters under the documented [extension contract](module-extension.md).
   Use that extension path to launch `buenosairesproperties.com` and let working project needs
   inform later reusable module changes.
-
-  **Frontend direction.** React is the standard frontend for new application and public pages.
-  Django keeps the flows where its ready-made behavior is the point: `auth` (allauth login, signup,
-  reset, profile) and `billing` (pricing and status around Stripe's hosted checkout) stay
-  Django-rendered and adopt the shared visual design instead of being rebuilt. The module pages that
-  are already Django-rendered — blog, generic listings, the CRM dashboard — keep that rendering on
-  the same design until a concrete consumer promotes a React replacement, and Django admin stays as
-  shipped. The deciding costs were rebuilding security-sensitive flows against
-  an API for little user-visible gain; the look comes from the shared Tailwind design, not from
-  the rendering technology. `bap-web` already follows this shape, so the portal extends its React
-  pages and `/api/properties/` rather than replacing them.
 
   A client-rendered page gives crawlers and link-preview bots an empty document, so catalog and
   detail pages must be prerendered or server-rendered for Open Graph and indexing. Choosing that
@@ -361,46 +200,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
   extension documentation.
 
-- [x] **SA193 — Derive the generated `.env.example` credential contract from module manifests.**
-
-- [ ] **SA198 — Carry the database's TLS settings into the backup and restore commands.**
-
-  **Context:** `_build_pg_dump_command` and `_build_pg_restore_command` destructure the Django
-  `settings_dict` by hand and read only `HOST`, `PORT`, `USER`, `NAME` and `PASSWORD`. Everything
-  `dj_database_url` puts in `OPTIONS` — `sslmode`, `sslrootcert`, `sslcert`, `sslkey`,
-  `connect_timeout` — is discarded, so both commands fall back to libpq's default `sslmode=prefer`:
-  TLS if the server offers it, plaintext if it does not, and no certificate verification either
-  way. A deployment whose `DATABASE_URL` demands `sslmode=verify-full` has Django verifying the
-  server certificate on every request while the one process that moves the entire database over the
-  network verifies nothing. The audit confirmed empirically that the TLS parameters do land in
-  `OPTIONS`, so this is a dropped value, not a missing one.
-
-  Database dumps are the highest-value artifact this system produces, which is what lifts an
-  omission to an S2. The precondition — a remote or managed PostgreSQL that accepts non-TLS
-  connections — is the ordinary Railway case, not an exotic one.
-
-  The audit also names the structural reason: connection parameters are destructured by hand in at
-  least three places (both command builders and `start.sh.j2`'s psycopg2 connect), each picking a
-  different subset, because nothing owns *how this system connects to its database*. The fix should
-  leave one owner behind rather than a fourth hand-written subset.
-
-  **Acceptance:** `pg_dump` and `pg_restore` run under the same TLS posture as the application's
-  own connections — the relevant `OPTIONS` keys are translated into libpq environment variables
-  (`PGSSLMODE`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`, `PGCONNECT_TIMEOUT`) alongside the
-  existing `PGPASSWORD`, never into argv, so the standing no-secrets-in-argv rule is preserved. A
-  regression asserts that a settings dict carrying `sslmode=verify-full` and an `sslrootcert` path
-  produces a child environment demanding both, and that a dict with empty `OPTIONS` behaves exactly
-  as today. The translation lives in one function that every connection-parameter consumer calls,
-  and a test fails if a builder reads `settings_dict` fields directly instead. The deliberate
-  behavior change is recorded as one: a deployment whose URL requests strict TLS will now fail its
-  backup if the server cannot satisfy it, where it previously succeeded in plaintext — that is the
-  point, and the release note says so. No change to backup contents, naming, or the DR gate's
-  semantics.
-
-  **Surfaces:** `quickscale_core/.../dr_engine/primitives.py` command builders, their
-  `dr_engine/orchestration.py` callers, the DR tests, `start.sh.j2`'s connect if the shared owner
-  absorbs it, the operations documentation, and the tech audit.
-
 - [ ] **SA202 — Pin the publishing supply chain and add the missing CI scanners.**
 
   **Context:** `publish.yml` pins two third-party actions to `@release/v1`, which is a **branch**,
@@ -434,10 +233,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `ruff.toml`, `scripts/gate_registry.json` and the parity oracles, the publication procedure doc,
   and the tech audit.
 
-- [x] **SA195 — Share one module test-settings stub instead of copying it per module.**
-
-- [x] **SA192 — Style the module-shipped Django pages with the shared design.**
-
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
   Inventory only: generalizing the property API, React pages, or prerender step into reusable
@@ -449,43 +244,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   tours) build on marker-derived enrollment and purge, not on module-source edits. Close
   when every item is promoted or dropped with rationale.
 
-  **Context:** The inventory includes reusable generalization of the proven property API, React pages, and
-  prerender step; React pages for the blog, generic listings, and CRM dashboard; React `auth` and
-  `billing` flows; maps and geocoding, saved searches and alerts, agent and office profiles,
-  syndication feeds, virtual tours, featured placement tied to billing credits, blog/listing links,
-  and PostgreSQL full-text search.
-
   Promote a capability only with a concrete consumer, bounded acceptance criteria, and evidence
   that it improves the working portal. Public API design and generic extension work should follow
   the actual project contracts they need to support.
-
-- [x] **SA197 — Run the hosted gate set on integration branches.**
-
-- [x] **SA181 — Derive expected versions in tests from the repository version.**
-
-- [x] **SA184 — Make `quickscale deploy railway` re-runs read live state and fail hard.**
-
-- [x] **SA185 — Enforce contract vintage when upgradable code meets an older project.**
-
-- [x] **SA186 — Require a fast-forward before publication force-pushes a split branch.**
-
-- [x] **SA187 — Reject non-ASCII tokens and signatures as authentication failures.**
-
-- [x] **SA182 — Enroll marker-declared tenant models in classification and policy refresh.**
-
-- [x] **SA183 — Refuse to purge an organization with a live Stripe subscription.**
-
-- [x] **SA177 — Verify the predicates of enrolled RLS policies.**
-
-- [x] **SA188 — Settle the privileged-command set behind one declaration.**
-
-- [x] **SA189 — Provision the runtime database role in one place under one name.**
-
-- [x] **SA190 — Derive the purge plan and share organization-removal obligations.**
-
-- [x] **SA199 — Keep external calls out of transactions and hold the webhook lock.**
-
-- [x] **SA200 — Gate the proxy and correlation-id settings the generator emits.**
 
 - [x] **SA196 — Fail hard on undefined generator template context.**
 
@@ -556,9 +317,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   because the privileged role bypasses RLS anyway, and `check_tenant_isolation` is invoked
   explicitly by the Makefile, which is what keeps this below the backstop's own severity.
 
-  This is the fifth item in the privileged-command lineage after SA188 and SA189, and it is the
-  one about what the exemption *reaches* rather than what it contains.
-
   **Acceptance:** `ready()` skips only `_check_rls_role()` under a privileged command; the priming
   wrapper, the `pre_delete` receiver, and the system check registration install unconditionally. A
   test sets `QUICKSCALE_PRIVILEGED_COMMAND=migrate`, re-runs `ready()`, and asserts the last-owner
@@ -572,21 +330,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
 ## Deferred constraints and references
 
 The [architecture audit](../others/arch-audit.md) and [technical audit](../others/tech-audit.md) own
-deferred findings and their growth triggers. Items they record without scheduling — the watchlists
-and watch notes, the beta-migration ownership taxonomy whose derivation `decisions.md` § Release
-scope safeguards explicitly withholds authorization for, and the later deletion-coordinator options
-— stay there until a trigger fires. The external-provider conformance gap is no longer among them
-because completed SA190 closed it. The dependency-scan, secret-scan and workflow-lint gaps are
-SA202's, and the generated-project smoke-boot gap closed with SA196. Two watch notes are
-deliberately fired rather than carried: the `REST_FRAMEWORK` clobber, which SA201
-resolves because SA201 is the change that would otherwise trigger it, and the DR
-`pg_dump`/`pg_restore` dependence that SA193 made live and SA198 fixes. The remaining watch
-notes — persistent `QUICKSCALE_PRIVILEGED_COMMAND`, the analytics single-quote escape, the
-`BackupError` host echo, `set_railway_variable`'s swallowed reason, and future-dated notification
-timestamps — stay unscheduled with their triggers intact. The standing
-no-`teams`/no-third-updater scope, internal-only devtools, presence contracts, and resource
-safeguards live in
-[decisions](decisions.md) and [validation policy](validation_policy.md#candidate-review-and-integration).
+deferred findings, watch notes, and their growth triggers; items stay there until a trigger fires.
+SA202 owns the dependency-scan, secret-scan and workflow-lint gaps, and SA201 the `REST_FRAMEWORK`
+clobber watch note; the generated-project smoke-boot gap closed with SA196. The standing scope
+rules, presence contracts, and resource safeguards live in [decisions](decisions.md) and
+[validation policy](validation_policy.md#candidate-review-and-integration).
 
 Changes to this schedule must pass
 `poetry run pytest quickscale_core/tests/test_roadmap_consistency.py -q -o addopts= --no-cov`.

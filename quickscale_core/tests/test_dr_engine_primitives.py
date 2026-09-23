@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -9,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from quickscale_core.dr_engine import primitives as primitives_module
 from quickscale_core.dr_engine.primitives import (
     BackupConfigurationError,
     BackupError,
@@ -167,6 +169,189 @@ class TestPgDumpCommandBuilding:
         local_path = tmp_path / "dump.dump"
         with pytest.raises(BackupConfigurationError, match="NAME"):
             _build_pg_restore_command(local_path, {"NAME": ""})
+
+
+_CONNECTION_SETTING_KEYS = {"HOST", "PORT", "USER", "NAME", "PASSWORD", "OPTIONS"}
+_CONNECTION_PARAMETER_OWNER = "_resolve_postgres_connection_parameters"
+_TLS_CONNECTION_SETTINGS = {
+    "HOST": "db.example.com",
+    "PORT": "5432",
+    "USER": "app",
+    "NAME": "app",
+    "PASSWORD": "secret",
+    "OPTIONS": {"sslmode": "verify-full", "sslrootcert": "/etc/ssl/ca.pem"},
+}
+
+
+class TestPgCommandTlsTranslation:
+    """pg_dump/pg_restore run under the database's own TLS posture."""
+
+    def test_build_pg_dump_command_demands_connection_tls(self, tmp_path: Path) -> None:
+        command, env = _build_pg_dump_command(
+            tmp_path / "dump.dump", dict(_TLS_CONNECTION_SETTINGS)
+        )
+        assert env == {
+            "PGPASSWORD": "secret",
+            "PGSSLMODE": "verify-full",
+            "PGSSLROOTCERT": "/etc/ssl/ca.pem",
+        }
+        assert "verify-full" not in command
+        assert "/etc/ssl/ca.pem" not in command
+
+    def test_build_pg_restore_command_demands_connection_tls(
+        self, tmp_path: Path
+    ) -> None:
+        command, env = _build_pg_restore_command(
+            tmp_path / "dump.dump", dict(_TLS_CONNECTION_SETTINGS)
+        )
+        assert env == {
+            "PGPASSWORD": "secret",
+            "PGSSLMODE": "verify-full",
+            "PGSSLROOTCERT": "/etc/ssl/ca.pem",
+        }
+        assert "verify-full" not in command
+        assert "/etc/ssl/ca.pem" not in command
+
+    def test_translates_client_certificate_and_timeout_options(
+        self, tmp_path: Path
+    ) -> None:
+        connection_settings = {
+            "NAME": "mydb",
+            "OPTIONS": {
+                "sslcert": "/etc/ssl/client.crt",
+                "sslkey": "/etc/ssl/client.key",
+                "connect_timeout": 5,
+            },
+        }
+        command, env = _build_pg_dump_command(
+            tmp_path / "dump.dump", connection_settings
+        )
+        assert env == {
+            "PGSSLCERT": "/etc/ssl/client.crt",
+            "PGSSLKEY": "/etc/ssl/client.key",
+            "PGCONNECT_TIMEOUT": "5",
+        }
+        assert "/etc/ssl/client.key" not in command
+
+    def test_empty_options_behaves_exactly_as_before(self, tmp_path: Path) -> None:
+        with_password = {
+            "HOST": "localhost",
+            "PORT": "5432",
+            "USER": "user",
+            "NAME": "mydb",
+            "PASSWORD": "secret",
+            "OPTIONS": {},
+        }
+        _, dump_env = _build_pg_dump_command(tmp_path / "dump.dump", with_password)
+        _, restore_env = _build_pg_restore_command(
+            tmp_path / "dump.dump", with_password
+        )
+        assert dump_env == {"PGPASSWORD": "secret"}
+        assert restore_env == {"PGPASSWORD": "secret"}
+
+        without_password = {"NAME": "mydb", "OPTIONS": {}}
+        _, dump_env = _build_pg_dump_command(tmp_path / "dump.dump", without_password)
+        _, restore_env = _build_pg_restore_command(
+            tmp_path / "dump.dump", without_password
+        )
+        assert dump_env is None
+        assert restore_env is None
+
+    def test_dump_postgresql_database_hands_tls_environment_to_the_child(
+        self, tmp_path: Path
+    ) -> None:
+        calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+        def fake_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            calls.append((command, env))
+
+        _dump_postgresql_database(
+            tmp_path / "dump.dump",
+            dict(_TLS_CONNECTION_SETTINGS),
+            shell_runner=fake_runner,
+        )
+        assert len(calls) == 1
+        assert calls[0][1] == {
+            "PGPASSWORD": "secret",
+            "PGSSLMODE": "verify-full",
+            "PGSSLROOTCERT": "/etc/ssl/ca.pem",
+        }
+
+
+class TestConnectionParameterOwnership:
+    """Command builders must route through the single connection owner."""
+
+    def test_only_the_owner_reads_connection_setting_keys(self) -> None:
+        source = Path(primitives_module.__file__).read_text(encoding="utf-8")
+        offenders: list[str] = []
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            if node.name == _CONNECTION_PARAMETER_OWNER:
+                continue
+            for inner in ast.walk(node):
+                if (
+                    isinstance(inner, ast.Call)
+                    and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == "get"
+                    and inner.args
+                    and isinstance(inner.args[0], ast.Constant)
+                    and inner.args[0].value in _CONNECTION_SETTING_KEYS
+                ):
+                    offenders.append(f"{node.name}:{inner.lineno}")
+        assert offenders == [], (
+            "connection settings may be read only by "
+            f"{_CONNECTION_PARAMETER_OWNER}; direct readers: {offenders}"
+        )
+
+    @pytest.mark.parametrize(
+        "builder_name",
+        ["_build_pg_dump_command", "_build_pg_restore_command"],
+    )
+    def test_command_builders_delegate_to_the_connection_parameter_owner(
+        self, builder_name: str
+    ) -> None:
+        source = Path(primitives_module.__file__).read_text(encoding="utf-8")
+        builders = {
+            node.name: node
+            for node in ast.parse(source).body
+            if isinstance(node, ast.FunctionDef)
+        }
+        builder = builders[builder_name]
+        connection_parameter_name = builder.args.args[1].arg
+
+        owner_calls = 0
+        direct_reads: list[int] = []
+        for inner in ast.walk(builder):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id == _CONNECTION_PARAMETER_OWNER
+            ):
+                owner_calls += 1
+            if (
+                isinstance(inner, ast.Attribute)
+                and inner.attr == "get"
+                and isinstance(inner.value, ast.Name)
+                and inner.value.id == connection_parameter_name
+            ):
+                direct_reads.append(inner.lineno)
+            if (
+                isinstance(inner, ast.Subscript)
+                and isinstance(inner.value, ast.Name)
+                and inner.value.id == connection_parameter_name
+            ):
+                direct_reads.append(inner.lineno)
+
+        assert owner_calls == 1, (
+            f"{builder_name} must call {_CONNECTION_PARAMETER_OWNER} exactly once"
+        )
+        assert direct_reads == [], (
+            f"{builder_name} reads connection settings directly at lines "
+            f"{direct_reads}; use {_CONNECTION_PARAMETER_OWNER} instead"
+        )
 
 
 class TestShellRunner:
