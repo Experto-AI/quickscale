@@ -131,6 +131,14 @@ Rules to remember:
   resolve through quarantined trusted-match validation before restore continues;
   the exact filename must still be re-entered, and the admin flow never
   materializes remote-only artifacts
+- Restore compatibility includes the recorded module vintage as well as the two
+  PostgreSQL majors: a recorded artifact whose `module_versions` differ from the
+  installed modules — or that records none — is refused before `pg_restore`
+  runs, naming each differing module with both versions. The DR snapshot route
+  compares the vintage recorded with the snapshot's authoritative dump, so a
+  resumed snapshot is judged by the dump it restores rather than by recaptured
+  sidecars; an operator-supplied `--file` restore records no vintage and is not
+  compared.
 
 Production-style restores, including the BackupPolicy admin action, require an
 explicit environment gate:
