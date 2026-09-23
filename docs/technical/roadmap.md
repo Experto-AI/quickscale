@@ -132,8 +132,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   proving that it rejects an in-place `0001` edit and accepts a new `0002`. Proof that the frozen
   history carries real data belongs to SA191.
 
-  **Surfaces:** decisions, the new gate with its registry row and gate documentation, and the arch
-  audit.
+  The gate compares against a checked-in manifest of the frozen files' content hashes, not a git
+  ref: no 0.89.0 tag exists yet, and a manifest also works in shallow CI clones. The freeze takes
+  effect when SA204 merges, so any later `v89` change to a model-bearing module's models ships as
+  a `0002`; confirm before merging that SA208 and SA209 change no module models. The topology guard
+  in `test_module_migration_topology.py` currently requires exactly one `0001_initial` and has a
+  canary that rejects any `0002`; it changes to require a `0001_initial` followed by an ordered
+  chain, and that canary is inverted. Settle the arch audit's open question of whether `bap-web`'s
+  data is reseeded instead of carried before this merges, because the freeze cannot be undone.
+
+  **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
+  documentation, `quickscale_core/tests/test_module_migration_topology.py`, and the arch audit.
 
 - [x] **SA205 — Refuse a restore whose recorded module vintage differs from the installed modules.**
 
