@@ -40,6 +40,7 @@
       "sa188": "Regenerated 2026-09-16 — start.sh removes the retired migrate_billing_to_orgs argv mode and rejects every supplied argv with exit 2; production.py returns the privileged-command contract to migrate/createcachetable. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa189": "Regenerated 2026-09-17 — the generator and Railway deploy share the quickscale_runtime role name, while db/init.sql, start.sh, and OPERATIONS.md render one canonical grant set including database CONNECT. The role-name context also updates .env.example, docker-compose.yml, and settings/base.py. Only these six generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa192": "Regenerated 2026-09-17 — templates/base.html and templates/index.html load one Vite-served live token stylesheet through the configurable browser-visible frontend origin in DEBUG and compiled React CSS in production; templates/social/{embeds,link_tree}.html inherit that shell choice without overriding it; frontend/vite.config.ts reserves /static/frontend/ for Vite while proxying other Django static paths, loads the generated root environment with process overrides, rejects non-canonical origins, and compares the raw configured Host before Vite's localhost/IP exceptions; frontend/src/test/viteAssetRouting.test.ts proves stylesheet routing, absent and preconfigured .env restoration, exact HTTP/WebSocket Host handling including normalized-alias rejection, and the canonical origin corpus shared with Django settings; docker-compose.yml builds the Django-served SPA JavaScript, probes Vite with the configured Host, and passes both frontend port and origin to Django; testproject/settings/local.py validates the configurable frontend port and full origin against that corpus; .env, .env.example, and README.md document the local defaults and remote/tunnel override. Only these eleven generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa193": "Regenerated 2026-09-23 — the static notifications managed block left `.env.example.j2`. `quickscale apply` now renders one managed block per enabled credential-bearing module from that module's declared `*_env_var` options (notifications, analytics, billing, storage, backups); a fresh generation carries no module-managed block until apply syncs it.",
       "sa200": "Regenerated 2026-09-23 — generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py."
     },
     "normalization_notes": [
@@ -66,7 +67,7 @@
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1"
+      "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
@@ -536,7 +537,7 @@
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1"
+      "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
@@ -1006,7 +1007,7 @@
     },
     ".env.example": {
       "mode": "664",
-      "sha256": "e7ec92216acad33ac5d3ce7d4eb1d445fe7cdcb60780e391225c859dec3b4fc1"
+      "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
     ".github/workflows/ci.yml": {
       "mode": "664",

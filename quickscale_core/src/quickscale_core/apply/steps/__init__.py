@@ -31,10 +31,15 @@ from quickscale_core.apply.steps.embedding import (
     step_post_embed_snapshot,
 )
 from quickscale_core.apply.steps.env_sync import (
+    ENV_EXAMPLE_MODULE_SPECS,
+    EnvExampleModuleSpec,
+    EnvExampleSyncResult,
+    render_env_example_block,
     step_analytics_env_sync,
     step_backups_gitignore,
     step_billing_env_sync,
     step_notifications_env_sync,
+    sync_env_example_blocks,
 )
 from quickscale_core.apply.steps.finalize import (
     step_display_next_steps,
@@ -53,12 +58,16 @@ from quickscale_core.apply.steps.wiring import (
 
 __all__ = [
     "ApplyStepProtocol",
+    "ENV_EXAMPLE_MODULE_SPECS",
     "EmbedModulesResult",
+    "EnvExampleModuleSpec",
+    "EnvExampleSyncResult",
     "GitIndexSnapshot",
     "StepContext",
     "StepHook",
     "StepOutcome",
     "StepReporter",
+    "render_env_example_block",
     "step_analytics_env_sync",
     "step_apply_mutable_config",
     "step_backups_gitignore",
@@ -75,4 +84,5 @@ __all__ = [
     "step_run_migrations",
     "step_start_docker",
     "step_sync_dependencies",
+    "sync_env_example_blocks",
 ]

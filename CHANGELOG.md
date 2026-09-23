@@ -46,6 +46,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     deletion is rejected; webhook processing holds a session-level lock across its handler and
     result persistence; and Stripe customer search refuses a reference containing an apostrophe, a
     backslash, or a newline instead of interpolating it into the query.
+  - **Module credential placeholders derive from declarations.** The generated `.env.example`
+    renders one managed block per enabled credential-bearing module from that module's declared
+    env-var options, so enabling `storage` or `backups` — including on an existing project's next
+    `apply` — now shows the variables those modules require, and a conformance check fails when a
+    declared variable has no placeholder.
   - **Generated settings gate proxy trust and bound the correlation id.** The generated production
     settings trust `X-Forwarded-Proto` only while `USE_X_FORWARDED_FOR` is enabled, so a single-host
     deployment no longer lets a spoofed header suppress the HTTPS redirect or set secure cookies on

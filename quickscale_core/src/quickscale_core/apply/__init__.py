@@ -23,6 +23,11 @@ import them via ``quickscale_core.apply`` without changing import paths.
 AF6 Phase 2 extracts the 16 apply step bodies into
 :mod:`~quickscale_core.apply.steps`.  The step body functions are
 re-exported here for Phase 3 callers that need them from the package root.
+
+SA193 adds the shared ``.env.example`` managed-block sync and its
+declaration specs (:func:`~quickscale_core.apply.steps.env_sync.sync_env_example_blocks`,
+:func:`~quickscale_core.apply.steps.env_sync.render_env_example_block`), re-exported
+here alongside the step bodies so both re-export stations stay in step.
 """
 
 from quickscale_core.apply.executor import (
@@ -39,13 +44,17 @@ from quickscale_core.apply.ledger import (
 )
 from quickscale_core.apply.step import APPLY_STEPS, ApplyStep, step_by_id
 from quickscale_core.apply.steps import (
+    ENV_EXAMPLE_MODULE_SPECS,
     ApplyStepProtocol,
     EmbedModulesResult,
+    EnvExampleModuleSpec,
+    EnvExampleSyncResult,
     GitIndexSnapshot,
     StepContext,
     StepHook,
     StepOutcome,
     StepReporter,
+    render_env_example_block,
     step_analytics_env_sync,
     step_apply_mutable_config,
     step_backups_gitignore,
@@ -62,14 +71,18 @@ from quickscale_core.apply.steps import (
     step_run_migrations,
     step_start_docker,
     step_sync_dependencies,
+    sync_env_example_blocks,
 )
 
 __all__ = [
     "APPLY_STEPS",
     "ApplyExecutor",
+    "ENV_EXAMPLE_MODULE_SPECS",
     "ApplyStep",
     "ApplyStepProtocol",
     "EmbedModulesResult",
+    "EnvExampleModuleSpec",
+    "EnvExampleSyncResult",
     "GitIndexSnapshot",
     "LedgerError",
     "LedgerManager",
@@ -81,6 +94,7 @@ __all__ = [
     "StepProgress",
     "StepReporter",
     "advance_resume_checkpoint",
+    "render_env_example_block",
     "resolve_resume_step",
     "step_analytics_env_sync",
     "step_apply_mutable_config",
@@ -99,4 +113,5 @@ __all__ = [
     "step_run_migrations",
     "step_start_docker",
     "step_sync_dependencies",
+    "sync_env_example_blocks",
 ]

@@ -3988,16 +3988,20 @@ class TestEnvExampleContent:
         assert "#" in output
         assert "SECURITY WARNING" in output
 
-    def test_env_example_contains_managed_notifications_block(
+    def test_env_example_has_no_static_managed_module_block(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Template should include the managed notifications env-var placeholders."""
+        """Managed module blocks are derived at apply time, not hardcoded.
+
+        The template must not carry a module-managed block: `quickscale apply`
+        renders one block per enabled credential-bearing module from that
+        module's declared ``*_env_var`` options.
+        """
         template = jinja_env.get_template(".env.example.j2")
         output = template.render(test_context)
 
-        assert "# QuickScale Notifications (managed)" in output
-        assert "RESEND_API_KEY=" in output
-        assert "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=" in output
+        assert "(managed)" not in output
+        assert "# End QuickScale" not in output
 
 
 class TestGitignoreContent:

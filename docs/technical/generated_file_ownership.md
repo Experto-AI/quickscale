@@ -32,6 +32,14 @@ from the template tree and fails on any unclassified path.
  and is not a structural migration target. Identity-bearing text in the fresh
  scaffold is reconciled in place before handoff; no donor file replaces it.
 
+ **Managed module credential blocks.** ``.env.example`` also carries one managed block per
+ enabled credential-bearing module.  ``quickscale apply`` renders each block from that module's
+ declared ``*_env_var`` options under the existing ``# QuickScale <Module> (managed)`` /
+ ``# End QuickScale <Module>`` markers and never rewrites user-authored lines outside them.
+ Enabling ``storage`` or ``backups`` on an existing project therefore adds their credential
+ placeholders on the next ``apply`` — a deliberate behavior change for existing projects,
+ recorded with the credential-contract derivation.
+
 ### Category U2 — Package ``__init__`` markers
 ``{package}/__init__.py``, ``{package}/settings/__init__.py``.
 Rationale: These remain recipient-owned package markers. The fresh-first path

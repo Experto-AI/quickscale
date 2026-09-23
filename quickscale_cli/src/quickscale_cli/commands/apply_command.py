@@ -21,10 +21,6 @@ from quickscale_core.contracts.module_options import (
     ANALYTICS_POSTHOG_DEFAULT_HOST,
     DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
     DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
-    DEFAULT_BILLING_CURRENCY,
-    DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-    DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
@@ -43,7 +39,6 @@ from quickscale_core.contracts.module_options import (
 from quickscale_core.contracts.resolvers import (
     resolve_analytics_module_options,
     validate_analytics_module_options,
-    resolve_billing_module_options,
     validate_billing_module_options,
     validate_blog_module_options,
     validate_crm_module_options,
@@ -173,6 +168,7 @@ from quickscale_core.apply.steps import (
     step_run_migrations,
     step_start_docker,
     step_sync_dependencies,
+    sync_env_example_blocks,
 )
 from quickscale_core.apply.steps.types import StepContext, StepOutcome
 
@@ -1456,84 +1452,29 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     raise click.Abort()
 
 
-def _render_notifications_env_example_block(
-    options: Mapping[str, Any] | None,
-) -> str:
-    """Render the managed notifications section for `.env.example`."""
-    resolved = resolve_notifications_module_options(options)
-    resend_api_key_env_var = str(
-        resolved.get(
-            NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
-            DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
-        )
-        or DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
-    ).strip()
-    webhook_secret_env_var = str(
-        resolved.get(
-            NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
-            DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
-        )
-        or DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
-    ).strip()
-    resend_domain = str(resolved.get("resend_domain", "")).strip()
-    sender_email = str(resolved.get("sender_email", "noreply@example.com")).strip()
-
-    lines = [
-        "# QuickScale Notifications (managed)",
-        "# Leave these blank until your verified Resend domain is ready for live delivery.",
-        f"# Sender address from quickscale.yml: {sender_email}",
-    ]
-    if resend_domain:
-        lines.append(f"# Verified Resend domain from quickscale.yml: {resend_domain}")
-    lines.extend(
-        [
-            f"{resend_api_key_env_var}=",
-            f"{webhook_secret_env_var}=",
-            "# End QuickScale Notifications",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def _sync_notifications_env_example_impl(
+def _sync_env_example_blocks_impl(
     output_path: Path,
     qs_config: QuickScaleConfig,
 ) -> bool:
-    """Original implementation used as callback for core step body."""
-    notifications_config = qs_config.modules.get("notifications")
-    env_example_path = output_path / ".env.example"
-    if notifications_config is None or not env_example_path.exists():
-        return True
-    start_marker = "# QuickScale Notifications (managed)"
-    end_marker = "# End QuickScale Notifications"
-    rendered_block = _render_notifications_env_example_block(
-        notifications_config.options or {}
-    )
-    try:
-        content = env_example_path.read_text()
-    except OSError as e:
+    """Shared ``.env.example`` sync used by every env-example station.
+
+    One declaration-driven renderer owns the managed blocks for every
+    configured credential-bearing module, so notifications, analytics,
+    billing, storage, and backups all project from the same declared option
+    set.  The sync is idempotent, which is what lets the three legacy
+    stations below invoke it: any apply resume point among them lands a
+    complete contract.
+    """
+    result = sync_env_example_blocks(output_path, qs_config)
+    if not result.success:
         click.secho(
-            f"⚠️  Failed to read .env.example for notifications wiring: {e}",
+            "⚠️  Failed to update .env.example with the configured module "
+            f"env vars: {result.detail}",
             fg="yellow",
         )
         return False
-    if start_marker in content and end_marker in content:
-        before, remainder = content.split(start_marker, maxsplit=1)
-        _, after = remainder.split(end_marker, maxsplit=1)
-        replacement = rendered_block + after
-        updated_content = before + replacement
-    else:
-        suffix = "" if content.endswith("\n") else "\n"
-        updated_content = content + suffix + "\n" + rendered_block + "\n"
-    try:
-        env_example_path.write_text(updated_content)
-    except OSError as e:
-        click.secho(
-            f"⚠️  Failed to update .env.example for notifications wiring: {e}",
-            fg="yellow",
-        )
-        return False
-    click.secho("✅ Updated .env.example with notifications env vars", fg="green")
+    if result.changed:
+        click.secho("✅ Updated .env.example with module env vars", fg="green")
     return True
 
 
@@ -1545,93 +1486,9 @@ def _sync_notifications_env_example(
     step_ctx = StepContext(output_path=output_path, qs_config=qs_config)
     outcome = step_notifications_env_sync(
         step_ctx,
-        sync_notifications_fn=_sync_notifications_env_example_impl,
+        sync_notifications_fn=_sync_env_example_blocks_impl,
     )
     return outcome.success
-
-
-def _render_analytics_env_example_block(
-    options: Mapping[str, Any] | None,
-) -> str:
-    """Render the managed analytics section for `.env.example`."""
-    resolved = resolve_analytics_module_options(options)
-    api_key_env_var = str(
-        resolved.get(
-            "posthog_api_key_env_var",
-            DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-        )
-        or DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
-    ).strip()
-    host_env_var = str(
-        resolved.get(
-            "posthog_host_env_var",
-            DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
-        )
-        or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR
-    ).strip()
-    host = str(
-        resolved.get("posthog_host", ANALYTICS_POSTHOG_DEFAULT_HOST)
-        or ANALYTICS_POSTHOG_DEFAULT_HOST
-    ).strip()
-
-    return "\n".join(
-        [
-            "# QuickScale Analytics (managed)",
-            "# Runtime PostHog variables for the backend analytics module.",
-            "# VITE_* variables are for fresh showcase_react generations or manual frontend adoption.",
-            f"# Leave {host_env_var} blank to fall back to {host}.",
-            f"{api_key_env_var}=",
-            f"{host_env_var}=",
-            "VITE_POSTHOG_KEY=",
-            "VITE_POSTHOG_HOST=",
-            "# End QuickScale Analytics",
-        ]
-    )
-
-
-def _sync_analytics_env_example_impl(
-    output_path: Path,
-    qs_config: QuickScaleConfig,
-) -> bool:
-    """Original implementation used as callback for core step body."""
-    analytics_config = qs_config.modules.get("analytics")
-    env_example_path = output_path / ".env.example"
-    if not env_example_path.exists():
-        return True
-    start_marker = "# QuickScale Analytics (managed)"
-    end_marker = "# End QuickScale Analytics"
-    try:
-        content = env_example_path.read_text()
-    except OSError:
-        return False
-    rendered_block: str | None = None
-    if analytics_config is not None:
-        resolved = resolve_analytics_module_options(analytics_config.options or {})
-        if bool(resolved.get("enabled", True)):
-            rendered_block = _render_analytics_env_example_block(resolved)
-    if start_marker in content and end_marker in content:
-        before, remainder = content.split(start_marker, maxsplit=1)
-        _, after = remainder.split(end_marker, maxsplit=1)
-        if rendered_block is None:
-            updated_content = before.rstrip("\n")
-            if after.strip():
-                if updated_content:
-                    updated_content += "\n"
-                updated_content += after.lstrip("\n")
-            elif updated_content:
-                updated_content += "\n"
-        else:
-            updated_content = before + rendered_block + after
-    else:
-        if rendered_block is None:
-            return True
-        suffix = "" if content.endswith("\n") else "\n"
-        updated_content = content + suffix + "\n" + rendered_block + "\n"
-    try:
-        env_example_path.write_text(updated_content)
-    except OSError:
-        return False
-    return True
 
 
 def _sync_analytics_env_example(
@@ -1642,84 +1499,9 @@ def _sync_analytics_env_example(
     step_ctx = StepContext(output_path=output_path, qs_config=qs_config)
     outcome = step_analytics_env_sync(
         step_ctx,
-        sync_analytics_fn=_sync_analytics_env_example_impl,
+        sync_analytics_fn=_sync_env_example_blocks_impl,
     )
     return outcome.success
-
-
-def _render_billing_env_example_block(
-    options: Mapping[str, Any] | None,
-) -> str:
-    """Render the managed billing section for `.env.example`."""
-    resolved = resolve_billing_module_options(options)
-    publishable_key_env_var = str(
-        resolved.get(
-            "publishable_key_env_var",
-            DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-        )
-        or DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR
-    ).strip()
-    secret_key_env_var = str(
-        resolved.get(
-            "secret_key_env_var",
-            DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-        )
-        or DEFAULT_BILLING_SECRET_KEY_ENV_VAR
-    ).strip()
-    webhook_secret_env_var = str(
-        resolved.get(
-            "webhook_secret_env_var",
-            DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-        )
-        or DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR
-    ).strip()
-    billing_currency = str(
-        resolved.get("billing_currency", DEFAULT_BILLING_CURRENCY)
-        or DEFAULT_BILLING_CURRENCY
-    ).strip()
-
-    return "\n".join(
-        [
-            "# QuickScale Billing (managed)",
-            "# Runtime Stripe variables for the backend billing module.",
-            f"# Billing currency from quickscale.yml: {billing_currency}",
-            f"{publishable_key_env_var}=",
-            f"{secret_key_env_var}=",
-            f"{webhook_secret_env_var}=",
-            "# End QuickScale Billing",
-        ]
-    )
-
-
-def _sync_billing_env_example_impl(
-    output_path: Path,
-    qs_config: QuickScaleConfig,
-) -> bool:
-    """Original implementation used as callback for core step body."""
-    billing_config = qs_config.modules.get("billing")
-    env_example_path = output_path / ".env.example"
-    if billing_config is None or not env_example_path.exists():
-        return True
-    start_marker = "# QuickScale Billing (managed)"
-    end_marker = "# End QuickScale Billing"
-    rendered_block = _render_billing_env_example_block(billing_config.options or {})
-    try:
-        content = env_example_path.read_text()
-    except OSError:
-        return False
-    if start_marker in content and end_marker in content:
-        before, remainder = content.split(start_marker, maxsplit=1)
-        _, after = remainder.split(end_marker, maxsplit=1)
-        replacement = rendered_block + after
-        updated_content = before + replacement
-    else:
-        suffix = "" if content.endswith("\n") else "\n"
-        updated_content = content + suffix + "\n" + rendered_block + "\n"
-    try:
-        env_example_path.write_text(updated_content)
-    except OSError:
-        return False
-    return True
 
 
 def _sync_billing_env_example(
@@ -1730,7 +1512,7 @@ def _sync_billing_env_example(
     step_ctx = StepContext(output_path=output_path, qs_config=qs_config)
     outcome = step_billing_env_sync(
         step_ctx,
-        sync_billing_fn=_sync_billing_env_example_impl,
+        sync_billing_fn=_sync_env_example_blocks_impl,
     )
     return outcome.success
 

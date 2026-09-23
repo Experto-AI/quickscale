@@ -53,12 +53,6 @@
         "symbol": "_normalize_backups_gitignore_entry",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_sync_analytics_env_example_impl": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 15,
-        "symbol": "_sync_analytics_env_example_impl",
-        "type": "function"
-      },
       "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_validate_module_prerequisites": {
         "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
         "max_complexity": 45,

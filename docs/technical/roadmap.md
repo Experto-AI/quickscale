@@ -16,10 +16,10 @@ split-branch republication, seal, or PyPI upload has happened. Outstanding befor
 release-tier validation on the packaged bytes, the ordered phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. SA185 now declares
 the `orgs` contract vintage that the 0.88 templates introduced; SA186 now requires a fast-forward
-before the split-branch force-push that publication runs. The audits add a third recorded issue:
-the packaged CLI generates an `.env.example` with no placeholder for the credential variables that
-`storage` and `backups` declare (SA193), so a project generated from the published bytes with
-either module enabled meets a configuration error naming a variable it was never shown.
+before the split-branch force-push that publication runs. The packaged 0.88.0 bytes also carry an issue that v89 has since fixed:
+the CLI they contain generates an `.env.example` with no placeholder for the credential variables
+that `storage` and `backups` declare (SA193), so a project generated from those bytes with either
+module enabled meets a configuration error naming a variable it was never shown.
 
 The latest technical-audit pass adds more that the packaged bytes carry into every generated
 project: the DR engine drops the database's TLS settings when it dumps and restores (SA198), the
@@ -43,7 +43,6 @@ context, scope, and acceptance;
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | SA194 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA193 | Derive the generated `.env.example` credential contract from module manifests | post-v88 | 2 | — | Deferred |
 | SA198 | Carry the database's TLS settings into the backup and restore commands | post-v88 | 2 | — | Deferred |
 | SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
 | SA196 | Fail hard on undefined generator template context | post-v88 | 3 | — | Deferred |
@@ -54,7 +53,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: first portal
-Track 2: SA193 ──► SA198 ──► SA202
+Track 2: SA198 ──► SA202
 Track 3: SA196 ──► SA201 ──► SA203
 ```
 
@@ -79,13 +78,12 @@ the critical path.
   fresh-first mode, which the halt does not reach, but it uses a tool whose gate is currently blind
   to the CLI it invokes; SA194 makes the gate observe it before the tool is trusted with the real
   site. SA191 redeploys through the fail-hard `deploy railway` path.
-- **SA193 is independent of the completed SA190 orgs work.** It touches generation-time wiring in
+- **SA193 was independent of the completed SA190 orgs work.** It touched generation-time wiring in
   `quickscale_cli` and `quickscale_core`; the completed purge and removal-obligation work lives in
   the `orgs` module, so the two have no shared file. One interaction, previously a watch item, has
-  now fired: giving the
-  `backups` remote-credential variables placeholders makes the DR path more exercised, and that
-  path is the one SA198 fixes. SA193 is queued before SA198 for that reason, but the two edit
-  disjoint files and carry no dependency edge.
+  now fired: giving the `backups` remote-credential variables placeholders made the DR path more
+  exercised, and that path is the one SA198 fixes. SA193 was queued before SA198 for that reason,
+  but the two edit disjoint files and carry no dependency edge.
 - **SA198 and SA202 are queued on track 2 by what publication would ship.** SA198 is the only
   S2 defect in the packaged bytes that no other ticket touches, and SA202 hardens the workflow that
   performs the publication those bytes are waiting on. Neither blocks another ticket, so both are
@@ -134,7 +132,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA194 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA193 | yes | yes | yes | **yes** | no |
+| 2 | SA198 | yes | yes | yes | **yes** | no |
 | 3 | SA196 | yes | yes | yes | **yes** | no |
 
 ### Interrupted work (measured 2026-09-22)
@@ -153,8 +151,7 @@ before that date is gone and everything uncommitted now shows as unstaged.
   list, reconciled with `v89`, and completed: blog, CRM, listings, and analytics test settings share
   one repository-owned `tests_shared/templates/base.html`, while auth and billing keep local stubs
   whose suites assert the older shell markup; the five module page surfaces carry the shared design
-  with the frontend-origin contract and its checks. Track 2's remaining queue is SA193, SA198, and
-  SA202.
+  with the frontend-origin contract and its checks. Track 2's remaining queue is SA198 and SA202.
 - **Track 3 — SA199 and SA200 delivered.** Account deletion runs its Stripe calls between short
   database transactions and restores the cancellation state when deletion is rejected; webhook
   processing holds a session-level lock across its handler and result persistence; and
@@ -199,7 +196,7 @@ before that date is gone and everything uncommitted now shows as unstaged.
   Code-adjacent overlaps that cross tracks: SA153 edits the extension and organizations
   documentation; the landed SA192 restyle touched the `auth` account templates while SA199 edits
   the account-delete view, so SA199 re-runs the auth tests when it lands; SA196 turns strict
-  rendering on for every generator template, including the `.env.example` template SA193 rewrites,
+  rendering on for every generator template, including the `.env.example` template SA193 rewrote,
   the settings templates SA201 edits, and the generated `base.html` SA192 restyles, so its
   fixes may reach both other tracks' files and whichever lands second re-runs the generator tests
   and the SA90 emission fixture; and SA202's workflow-lint gate adds a row to
@@ -367,49 +364,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
   extension documentation.
 
-- [ ] **SA193 — Derive the generated `.env.example` credential contract from module manifests.**
-
-  **Context:** `module.yml` already declares every credential variable a module needs, by name,
-  with a type, default, Django setting, and description — and the manifest layer already projects
-  declarations like these into generated wiring. `.env.example` escaped that. Its content is
-  hand-written Python per module: a render function, a marker-splice implementation, and a wrapper
-  in the apply command, plus a named core step re-exported through two `__init__` stations. Three
-  modules have that treatment. `storage` and `backups` each declare two object-storage credential
-  variables and have none, so a user enabling private-remote backups meets a configuration error
-  naming a variable their generated `.env.example` never mentioned. The notifications variables
-  appear a fourth time, hardcoded in the `.env.example` template under the same markers the apply
-  step splices on.
-
-  The cost is measured, not projected: adding one credential-bearing module option is an
-  eight-station edit across two packages with no gate detecting omission, and the omission has
-  already happened twice, silently, in shipped modules. The three splice implementations are the
-  same algorithm copied verbatim, varying only in marker text, resolver, and log message, so any
-  correctness fix to it — encoding, idempotency, a missing trailing newline — must be applied three
-  times and will be applied to two.
-
-  The steelman is real and shapes the fix rather than blocking it: the three implemented blocks
-  carry bespoke prose that a type and a default cannot produce, and that guidance should not be
-  lost or pushed into a config schema. Prose can hang off a derived set; it does not have to
-  replace one.
-
-  **Acceptance:** a conformance check fails when any `*_env_var` option declared in any `module.yml`
-  has no placeholder in the generated `.env.example`, and it lands first, failing for `storage` and
-  `backups` — that failing check is the specification for the rest. The managed blocks are then
-  rendered from the declared option set in one place for every enabled module, under the existing
-  marker convention, retiring the three hand-written triples and the static template copy;
-  module-specific prose survives as manifest-hung text or one optional hook. Output is
-  byte-identical to today's for the three covered modules, so existing projects see no spurious
-  diff on their next `apply`, while `storage` and `backups` gain placeholders — a deliberate
-  behavior change for existing projects, recorded as one. If the settled position is instead that
-  `.env.example` is curated documentation rather than a derived contract, the ticket closes by
-  recording that in `decisions.md` and the generated-file ownership doc with an explicit rationale
-  for excluding `storage` and `backups`; silence is not an outcome. This closes the arch audit's
-  highest-ranked finding, the only one with a live defect rather than a scheduled trigger.
-
-  **Surfaces:** the apply command's env-sync render and splice functions, the named core env-sync
-  step and its two re-export stations, `contracts/module_options.py`, the `.env.example` template,
-  the five declaring `module.yml` files, the apply and env-sync tests, the generated-file ownership
-  doc, and the arch audit.
+- [x] **SA193 — Derive the generated `.env.example` credential contract from module manifests.**
 
 - [ ] **SA198 — Carry the database's TLS settings into the backup and restore commands.**
 
@@ -653,7 +608,7 @@ because completed SA190 closed it. Two others now have tickets: the dependency-s
 workflow-lint gaps are SA202's, and the generated-project smoke-boot gap is SA196's. Two
 watch notes are deliberately fired rather than carried: the `REST_FRAMEWORK` clobber, which SA201
 resolves because SA201 is the change that would otherwise trigger it, and the DR
-`pg_dump`/`pg_restore` dependence that SA193 makes live and SA198 fixes. The remaining watch
+`pg_dump`/`pg_restore` dependence that SA193 made live and SA198 fixes. The remaining watch
 notes — persistent `QUICKSCALE_PRIVILEGED_COMMAND`, the analytics single-quote escape, the
 `BackupError` host echo, `set_railway_variable`'s swallowed reason, and future-dated notification
 timestamps — stay unscheduled with their triggers intact. The standing
