@@ -329,11 +329,11 @@ def _increment_blog_api_rate_limit_counter(
 
     with connection.cursor() as cursor:
         cursor.execute(
-            f"DELETE FROM {table} WHERE expires_at < %s",
+            f"DELETE FROM {table} WHERE expires_at < %s",  # noqa: S608 - quoted constant table name, all values parameterized
             [now],
         )
         cursor.execute(
-            f"INSERT INTO {table} (counter_key, request_count, expires_at) "
+            f"INSERT INTO {table} (counter_key, request_count, expires_at) "  # noqa: S608 - quoted constant table name, all values parameterized
             "VALUES (%s, 1, %s) "
             "ON CONFLICT (counter_key) DO UPDATE SET "
             f"request_count = {table}.request_count + 1, "
