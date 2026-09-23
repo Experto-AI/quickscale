@@ -652,6 +652,8 @@ class TestMakefileGateTargetDerivation:
         "check-security-static-analysis",
         "check-beta-migration-smoke",
         "check-generated-deploy-posture",
+        "check-workflow-security",
+        "check-secret-scanning",
     )
 
     def _derive_targets(self, cwd: Path, *, registry: Path | None = None) -> str:

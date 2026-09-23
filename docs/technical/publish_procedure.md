@@ -94,7 +94,10 @@ The generated-project proof is non-skippable: acceptance is **one pass, zero ski
 `publish.yml` re-runs the full gate set on the tagged commit by the
 [publish-path full-coverage decision](decisions.md#publish-path-gate-coverage) — publish does not
 trust upstream. A gate failing there is a real defect; close it by fixing the cause, never by
-declaring an exclusion.
+declaring an exclusion. The SA202 supply-chain gates join that set: `check-workflow-security` fails
+on an unpinned `uses:` ref or a workflow missing a top-level `permissions:` block, and
+`check-secret-scanning` fails on any committed secret the reasoned allowlists in
+`scripts/gitleaks.toml` do not cover. Neither gate may be waived to publish.
 
 ---
 

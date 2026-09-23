@@ -22,5 +22,5 @@ quickscale-core = "^0.89.0"
 quickscale-cli = "^0.89.0"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"

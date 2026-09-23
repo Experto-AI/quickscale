@@ -292,7 +292,7 @@ class Command(BaseCommand):
         locked_organizations = _lock_target_organizations(target_organization_ids)
         for plan_entry in migration_plan:
             organization = plan_entry["organization"]
-            assert isinstance(organization, Organization)
+            assert isinstance(organization, Organization)  # noqa: S101 - internal invariant guaranteed by the caller
             plan_entry["organization"] = locked_organizations[organization.pk]
 
         planned_user_ids = {
@@ -306,7 +306,7 @@ class Command(BaseCommand):
         for plan_entry in migration_plan:
             user = plan_entry["user"]
             organization = plan_entry["organization"]
-            assert isinstance(organization, Organization)
+            assert isinstance(organization, Organization)  # noqa: S101 - internal invariant guaranteed by the caller
             resolved_organization, _ = _resolve_authoritative_organization(user)
             if resolved_organization.pk != organization.pk:
                 ambiguity_messages.append(
@@ -461,7 +461,7 @@ class Command(BaseCommand):
             for plan_entry in migration_plan:
                 user = plan_entry["user"]
                 organization = plan_entry["organization"]
-                assert isinstance(organization, Organization)
+                assert isinstance(organization, Organization)  # noqa: S101 - internal invariant guaranteed by the caller
 
                 subscriptions_updated = Subscription.all_objects.filter(
                     user_id=user.pk,

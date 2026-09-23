@@ -13,7 +13,7 @@ def is_npm_installed() -> bool:
     """Check if npm is installed."""
     try:
         subprocess.run(
-            ["npm", "--version"],
+            ["npm", "--version"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             check=True,
             timeout=5,
@@ -38,7 +38,7 @@ def get_railway_cli_version() -> str | None:
     """
     try:
         result = subprocess.run(
-            ["railway", "--version"],
+            ["railway", "--version"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=True,
@@ -70,7 +70,7 @@ def install_railway_cli() -> bool:
     """
     try:
         result = subprocess.run(
-            ["npm", "install", "-g", "@railway/cli"],
+            ["npm", "install", "-g", "@railway/cli"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             timeout=180,  # npm install can take a while
@@ -95,7 +95,7 @@ def upgrade_railway_cli() -> bool:
     """
     try:
         result = subprocess.run(
-            ["npm", "update", "-g", "@railway/cli"],
+            ["npm", "update", "-g", "@railway/cli"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             timeout=180,  # npm update can take a while
@@ -123,7 +123,7 @@ def login_railway_cli_browserless() -> bool:
     try:
         # Run interactively so user can see the authentication URL and instructions
         result = subprocess.run(
-            ["railway", "login", "--browserless"],
+            ["railway", "login", "--browserless"],  # noqa: S607 - PATH-resolved executable by design
             timeout=300,  # Give user 5 minutes to complete auth
         )
         return result.returncode == 0
@@ -139,7 +139,7 @@ def is_railway_cli_installed() -> bool:
     """Check if Railway CLI is installed."""
     try:
         subprocess.run(
-            ["railway", "--version"],
+            ["railway", "--version"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             check=True,
             timeout=5,
@@ -157,7 +157,7 @@ def check_railway_cli_version(minimum: str = "3.0.0") -> bool:
     """Check if Railway CLI meets minimum version requirement."""
     try:
         result = subprocess.run(
-            ["railway", "--version"],
+            ["railway", "--version"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=True,
@@ -196,7 +196,7 @@ def is_railway_authenticated() -> bool:
     """Check if user is authenticated with Railway."""
     try:
         result = subprocess.run(
-            ["railway", "whoami"],
+            ["railway", "whoami"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             check=True,
             timeout=5,
@@ -225,7 +225,7 @@ def get_railway_project_info() -> dict[str, Any] | None:
 
     try:
         result = subprocess.run(
-            ["railway", "status"],
+            ["railway", "status"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=True,
@@ -269,7 +269,7 @@ def run_railway_command(
             if input_data is not None:
                 raise ValueError("input_data is not supported in interactive mode.")
             # Run interactively - let user see prompts and provide input
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
                 cmd,
                 text=True,
                 timeout=timeout,
@@ -285,7 +285,7 @@ def run_railway_command(
             }
             if input_data is not None:
                 run_kwargs["input"] = input_data
-            result = subprocess.run(cmd, **run_kwargs)
+            result = subprocess.run(cmd, **run_kwargs)  # noqa: S603 - fixed argv list, shell disabled
         return result
     except subprocess.TimeoutExpired as e:
         raise TimeoutError(
@@ -573,7 +573,7 @@ def check_uncommitted_changes() -> tuple[bool, str]:
     """
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "status", "--porcelain"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=True,
@@ -699,7 +699,7 @@ def check_poetry_lock_consistency() -> tuple[bool, str]:
     try:
         # Run poetry check to verify lock file consistency
         result = subprocess.run(
-            ["poetry", "check", "--lock"],
+            ["poetry", "check", "--lock"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             timeout=10,
@@ -732,7 +732,7 @@ def fix_poetry_lock() -> tuple[bool, str]:
     """
     try:
         result = subprocess.run(
-            ["poetry", "lock"],
+            ["poetry", "lock"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             timeout=120,

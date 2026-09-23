@@ -997,8 +997,8 @@ def _compute_diff(donor_values: list[str], recipient_values: list[str]) -> DiffS
 def _check_clean_git_worktree(project_path: Path) -> tuple[bool, str]:
     """Return whether a project is a clean git worktree."""
     try:
-        inside_worktree = subprocess.run(
-            ["git", "-C", str(project_path), "rev-parse", "--is-inside-work-tree"],
+        inside_worktree = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "-C", str(project_path), "rev-parse", "--is-inside-work-tree"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=False,
@@ -1013,8 +1013,8 @@ def _check_clean_git_worktree(project_path: Path) -> tuple[bool, str]:
         return False, detail
 
     try:
-        status_result = subprocess.run(
-            ["git", "-C", str(project_path), "status", "--porcelain"],
+        status_result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "-C", str(project_path), "status", "--porcelain"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
             check=False,
@@ -6558,8 +6558,8 @@ def _render_toml_key_value_lines(values: dict[str, Any]) -> list[str]:
 def _collect_git_changed_files(project_path: Path) -> list[Path]:
     """Collect modified and untracked file paths from a git worktree."""
     try:
-        status_result = subprocess.run(
-            [
+        status_result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            [  # noqa: S607 - PATH-resolved executable by design
                 "git",
                 "-C",
                 str(project_path),
@@ -6816,7 +6816,7 @@ def _execute_quickscale_apply(report: BetaMigrationReport) -> None:
 
     try:
         result = subprocess.run(
-            ["quickscale", "apply"],
+            ["quickscale", "apply"],  # noqa: S607 - PATH-resolved executable by design
             cwd=report.recipient.path,
             capture_output=True,
             text=True,
@@ -7047,7 +7047,7 @@ def _run_verification_command(
         report, spec
     )
     try:
-        result = subprocess.run(list(spec.argv), **subprocess_kwargs)
+        result = subprocess.run(list(spec.argv), **subprocess_kwargs)  # noqa: S603 - fixed argv list, shell disabled
     except subprocess.TimeoutExpired as exc:
         _append_verification_result(
             report,

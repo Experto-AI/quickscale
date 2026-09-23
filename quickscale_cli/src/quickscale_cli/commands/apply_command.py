@@ -262,7 +262,7 @@ def _capture_git_index_snapshot(project_path: Path) -> _GitIndexTreeSnapshot | N
     """Capture the current git index tree for later index-only restoration."""
     try:
         result = subprocess.run(
-            ["git", "write-tree"],
+            ["git", "write-tree"],  # noqa: S607 - PATH-resolved executable by design
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -303,8 +303,8 @@ def _restore_git_index_snapshot(
 ) -> bool:
     """Restore the git index snapshot after an apply-owned checkpoint failure."""
     try:
-        result = subprocess.run(
-            ["git", "read-tree", "--reset", snapshot.tree_id],
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "read-tree", "--reset", snapshot.tree_id],  # noqa: S607 - PATH-resolved executable by design
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -395,7 +395,7 @@ def _run_command(
     """
     click.echo(f"⏳ {description}...")
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
             cmd,
             cwd=cwd,
             capture_output=capture,
@@ -790,7 +790,7 @@ def _start_docker_impl(
         click.echo("⏳ Starting Docker services (showing build output)...")
         click.echo("=" * 50)
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
                 cmd,
                 cwd=project_path,
                 text=True,
@@ -1929,12 +1929,12 @@ def _init_git_with_config(output_path: Path) -> None:
         return
 
     subprocess.run(
-        ["git", "config", "user.email", "quickscale@example.com"],
+        ["git", "config", "user.email", "quickscale@example.com"],  # noqa: S607 - PATH-resolved executable by design
         cwd=output_path,
         capture_output=True,
     )
     subprocess.run(
-        ["git", "config", "user.name", "QuickScale"],
+        ["git", "config", "user.name", "QuickScale"],  # noqa: S607 - PATH-resolved executable by design
         cwd=output_path,
         capture_output=True,
     )
@@ -1950,8 +1950,8 @@ def _list_git_changed_paths(
     description: str,
 ) -> list[str]:
     """Return changed git paths for pre-embed safety checks."""
-    result = subprocess.run(
-        ["git", *git_args],
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+        ["git", *git_args],  # noqa: S607 - PATH-resolved executable by design
         cwd=project_path,
         capture_output=True,
         text=True,
@@ -3459,8 +3459,8 @@ def _execute_apply_steps_locked(
 
     # Narrow the optional types: the adapter raises click.Abort on failure,
     # so these are always populated past this point.
-    assert post_embed_state is not None
-    assert checkpoint_tree_id is not None
+    assert post_embed_state is not None  # noqa: S101 - internal invariant guaranteed by the caller
+    assert checkpoint_tree_id is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
     # AF5 Phase 2 checkpoint: after step 2, the recovery ledger exists.
     # Write progress for step 1 (if modules were embedded) and step 2.

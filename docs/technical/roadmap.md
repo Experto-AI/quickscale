@@ -14,7 +14,7 @@ seal, or PyPI upload has happened. Publication stays a maintainer decision; this
 that it is owed: release-tier validation on the packaged bytes, the phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. The packaged bytes
 predate fixes now on `v89` (the `.env.example` credential placeholders, backup/restore TLS, and the
-account-deletion transaction boundary), and SA202 hardens the workflow that would upload them;
+account-deletion transaction boundary), and SA202 has since hardened the workflow that would upload them;
 shipping any of those in 0.88.0 means repackaging.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
@@ -26,26 +26,25 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
+| SA194 | Remove the in-place beta-migration mode | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
-| SA194 | Remove the in-place beta-migration mode | post-v88 | 1 | SA191 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA202 | Pin the publishing supply chain and add the missing CI scanners | post-v88 | 2 | — | Deferred |
 | SA203 | Narrow the privileged-command exemption in the orgs boot path | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ──► SA194 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
-Track 2: SA202
+Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
+Track 2: — (SA202 closed)
 Track 3: SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
 **Critical path.** SA191 → SA153. SA191 migrates `bap-web` with the fresh-first mode and
-redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA194 waits
-for SA191 so the removal keeps anything the real run needs, and is off the critical path. SA154 is an inventory, not work. Everything else is off the critical path.
+redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA194 goes
+first so SA191 runs against the single remaining mode, and is off the critical path. SA154 is an inventory, not work. Everything else is off the critical path.
 
 **Ordering.** Tracks 2 and 3 carry no dependency edges.
 
@@ -55,8 +54,8 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA202 | yes | yes | yes | **yes** | no |
+| 1 | SA194 | yes | yes | yes | **yes** | **yes** |
+| 2 | — | yes | yes | yes | **yes** | no |
 | 3 | SA203 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -76,7 +75,7 @@ A track is **truly green** only when all three states are yes.
   `auth/views.py`, and the blog rate limiter.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), and the tech audit
-  (SA202 and SA203 each edit only their own finding's entry). Each track resolves the shared
+  (SA203 edits only its own finding's entry). Each track resolves the shared
   set at its own merge, after the previous merge lands, then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -89,6 +88,24 @@ reset/checkout destructively. Merge `v89` into the worktree, resolve there, run 
 suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
+
+- [ ] **SA194 — Remove the in-place beta-migration mode.**
+
+  **Context:** Fresh-first is the only migration path: a fresh scaffold receives the old site's
+  custom content, and data moves by backup and restore under the fresh-database rule. Upgrading a
+  live project is `quickscale update`/`apply` with contract-vintage adoption steps. In-place mode
+  duplicates that upgrade path with a riskier shape (it rewrites the recipient, then halts at the
+  vintage gate), and its smoke gate shims the CLI, so it is never observed working.
+
+  **Acceptance:** `beta-migrate-in-place`, the in-place mode, its continuation, and their tests are
+  gone; fresh-first behavior is unchanged. The smoke gate covers fresh-first only, and any gate
+  registry or parity count it feeds is updated. The playbook, `generated_file_ownership.md`, and
+  the `decisions.md` ownership entry describe one migration mode, and `decisions.md` records the
+  removal.
+
+  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, `scripts/beta_migrate.py`, the
+  Makefile targets, `scripts/check_beta_migration_smoke.py`, the migration playbook,
+  `generated_file_ownership.md`, and `decisions.md`.
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 
@@ -121,24 +138,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the `bap-web` repository; the migration playbook and, for deterministic gaps found,
   `quickscale_devtools/.../beta_migration.py` and its tests.
-
-- [ ] **SA194 — Remove the in-place beta-migration mode.**
-
-  **Context:** Fresh-first is the only migration path: a fresh scaffold receives the old site's
-  custom content, and data moves by backup and restore under the fresh-database rule. Upgrading a
-  live project is `quickscale update`/`apply` with contract-vintage adoption steps. In-place mode
-  duplicates that upgrade path with a riskier shape (it rewrites the recipient, then halts at the
-  vintage gate), and its smoke gate shims the CLI, so it is never observed working.
-
-  **Acceptance:** `beta-migrate-in-place`, the in-place mode, its continuation, and their tests are
-  gone; fresh-first behavior is unchanged. The smoke gate covers fresh-first only, and any gate
-  registry or parity count it feeds is updated. The playbook, `generated_file_ownership.md`, and
-  the `decisions.md` ownership entry describe one migration mode, and `decisions.md` records the
-  removal. Before deleting, port anything SA191's real run showed fresh-first lacks.
-
-  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, `scripts/beta_migrate.py`, the
-  Makefile targets, `scripts/check_beta_migration_smoke.py`, the migration playbook,
-  `generated_file_ownership.md`, and `decisions.md`.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -196,38 +195,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
   extension documentation.
 
-- [ ] **SA202 — Pin the publishing supply chain and add the missing CI scanners.**
-
-  **Context:** `publish.yml` pins two third-party actions to `@release/v1`, which is a **branch**,
-  not a tag: whoever can push to it changes what runs inside the job that holds the OIDC
-  trusted-publishing identity. Poetry is installed unpinned in the same workflow, and every package
-  in the monorepo declares `requires = ["poetry-core"]` with no upper bound, so the build backend is
-  whatever resolves at build time. None of this is exploitable by a defect in this repository; all
-  of it is trust extended to something outside it, on the exact path that would upload the release
-  the project is currently holding.
-
-  The audit reached no conclusion at all about CVE exposure, because no dependency scanner exists
-  to run — that silence is a tooling gap, not a clean result. The same holds for secret scanning:
-  the sweep found no committed secret, but that rests on greps. Both belong with the pinning work,
-  because they are the same job's hygiene and because a workflow linter is what keeps the pinning
-  caught rather than re-derived by the next audit.
-
-  **Acceptance:** every third-party `uses:` in every workflow is pinned to a full commit SHA with
-  the human-readable version in a trailing comment; Poetry is installed at a pinned version; every
-  package's `[build-system]` declares a bounded `poetry-core` range. A workflow linter (`zizmor` or
-  `actionlint`) runs as a registered gate and fails on an unpinned `uses:` ref and on a workflow
-  missing a top-level `permissions:`, so the pinning cannot silently regress. Dependency scanning
-  (`pip-audit` against `poetry.lock`) and secret scanning run in CI, each as a registered gate with
-  its failure policy stated — including whether a new advisory fails the build or files a finding,
-  which is decided here rather than left to the tool's default. Ruff's `S` rule set is selected and
-  its findings are either fixed or per-line suppressed with a reason; `ASYNC` is selected only if
-  the tree has async code to govern, and otherwise recorded as not applicable. The gate registry
-  rows and the parity oracles they feed are updated in the same change and reconciled with Track 1
-  at merge. Publication behavior is otherwise unchanged; this ticket publishes nothing.
-
-  **Surfaces:** `.github/workflows/` (all four), the `[build-system]` block of every package,
-  `ruff.toml`, `scripts/gate_registry.json` and the parity oracles, the publication procedure doc,
-  and the tech audit.
+- [x] **SA202 — Pin the publishing supply chain and add the missing CI scanners.**
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
@@ -281,8 +249,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 The [architecture audit](../others/arch-audit.md) and [technical audit](../others/tech-audit.md) own
 deferred findings, watch notes, and their growth triggers; items stay there until a trigger fires.
-SA202 owns the dependency-scan, secret-scan and workflow-lint gaps; the generated-project
-smoke-boot gap closed with SA196. The standing scope
+The standing scope
 rules, presence contracts, and resource safeguards live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).
 

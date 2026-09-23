@@ -65,6 +65,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **The generator fails closed on undefined template context.** A missing or renamed context key
     raises during generation instead of rendering empty text, and the release lane boots a freshly
     generated project through its shipped `start.sh` and asserts `/healthcheck/` answers `OK`.
+  - **The publishing supply chain is pinned and scanned.** Every third-party `uses:` across the four
+    workflows is pinned to a full commit SHA with its human-readable version, Poetry installs at a
+    fixed release, and each workflow declares a minimal top-level `permissions:` block, while
+    `make check-workflow-security` and `make check-secret-scanning` fail on an unpinned ref, a
+    missing permissions block, or a committed secret. Every package's `[build-system]` bounds
+    `poetry-core`, and Ruff's security rules now govern maintained source.
   - **Generated projects share one throttling contract.** The generated settings declare
     conservative `anon` and `user` DRF throttle rates that module-supplied scopes extend, checkout
     and billing-portal POSTs carry tighter billing scopes, and the blog limiter counts in a

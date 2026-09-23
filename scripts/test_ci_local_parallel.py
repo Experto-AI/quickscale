@@ -351,14 +351,18 @@ def test_frontend_workflows_match_maintained_toolchain_pattern() -> None:
 
     for relative_path in FRONTEND_WORKFLOWS:
         content = (repository_root / relative_path).read_text(encoding="utf-8")
-        node_setup = content.index("uses: actions/setup-node@v6")
-        pnpm_setup = content.index("uses: pnpm/action-setup@v5")
+        node_setup = content.index(
+            "uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0"
+        )
+        pnpm_setup = content.index(
+            "uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0"
+        )
 
         assert node_setup < pnpm_setup
         assert 'node-version: "24"' in content
         assert "version: 11.0.9" in content
         assert 'echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV' in content
-        assert "uses: actions/cache@v5" in content
+        assert "uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0" in content
         assert "path: ${{ env.STORE_PATH }}" in content
         assert (
             "hashFiles('quickscale_core/src/quickscale_core/generator/"
@@ -401,6 +405,8 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "check-security-static-analysis": "Running security static-analysis",
         "check-beta-migration-smoke": "Running check-beta-migration-smoke",
         "check-generated-deploy-posture": "Running check-generated-deploy-posture",
+        "check-workflow-security": "Running workflow security gate",
+        "check-secret-scanning": "Running secret scanning gate",
     }
     replay_markers = [
         "[2/11] Running linters",
@@ -534,7 +540,8 @@ def test_help_stage_numbers_match_runtime_stage_order(tmp_path: Path) -> None:
     for grouped_heading in (
         "  6. Module app declaration and org-context primitives gates",
         "  7. Registered script suites, CSRF-exempt, dependency vulnerability, "
-        "security static-analysis, beta-migration smoke, and generated deploy posture gates",
+        "security static-analysis, beta-migration smoke, generated deploy posture, "
+        "workflow security, and secret scanning gates",
         "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint",
         " 12. E2E tests (optional, with --e2e flag)",
     ):

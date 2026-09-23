@@ -429,7 +429,7 @@ def _resolve_restore_source(
         artifact = snapshot_resolver(snapshot_id)
 
     # Artifact branch — local path or remote materialization.
-    assert artifact is not None
+    assert artifact is not None  # noqa: S101 - internal invariant guaranteed by the caller
     local_path = Path(artifact.local_path) if artifact.local_path else None
     if local_path is not None and local_path.exists():
         yield ResolvedRestoreSource(

@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   bypassrls:
     name: Run BYPASSRLS-privileged tests
@@ -17,15 +20,15 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Node.js
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
       with:
         node-version: "24"
 
     - name: Install pnpm
-      uses: pnpm/action-setup@v5
+      uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       with:
         version: 11.0.9
 
@@ -34,7 +37,7 @@ jobs:
       run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
     - name: Setup pnpm cache
-      uses: actions/cache@v5
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: ${{ env.STORE_PATH }}
         key: ${{ runner.os }}-pnpm-store-${{ hashFiles('quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/package.json.j2') }}
@@ -42,14 +45,14 @@ jobs:
           ${{ runner.os }}-pnpm-store-
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -79,17 +82,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -112,17 +115,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -141,17 +144,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -169,17 +172,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -197,17 +200,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -225,17 +228,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -253,17 +256,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -281,17 +284,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -309,19 +312,19 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       with:
         fetch-depth: 0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -339,17 +342,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -367,17 +370,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -395,17 +398,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -423,17 +426,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -451,17 +454,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
 
@@ -472,12 +475,68 @@ jobs:
     - name: Run generated-project deploy posture gate
       run: |
         make check-generated-deploy-posture
+
+  workflow-security-gate:
+    name: Workflow Security Gate (SA202)
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
+      with:
+        version: 2.4.1
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Run workflow security gate
+      run: |
+        make check-workflow-security
+
+  secret-scanning-gate:
+    name: Secret Scanning Gate (SA202)
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
+      with:
+        version: 2.4.1
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Run secret scanning gate
+      run: |
+        make check-secret-scanning
   # END GENERATED: hosted-gate-jobs
 
   test:
     name: Run Tests (Unit + Integration)
     # BEGIN GENERATED: needs-test
-    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, org-context-primitives-gate, csrf-exempt-gate, commit-testimony-gate, check-gate-suites, dependency-vulnerabilities-gate, security-static-analysis-gate, beta-migration-smoke-gate, generated-deploy-posture-gate]
+    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, org-context-primitives-gate, csrf-exempt-gate, commit-testimony-gate, check-gate-suites, dependency-vulnerabilities-gate, security-static-analysis-gate, beta-migration-smoke-gate, generated-deploy-posture-gate, workflow-security-gate, secret-scanning-gate]
     # END GENERATED: needs-test
     runs-on: ubuntu-latest
     services:
@@ -498,18 +557,18 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Install Poetry
       id: install-poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
       # Retry on SSL/network failures
@@ -519,12 +578,12 @@ jobs:
       if: steps.install-poetry.outcome == 'failure'
       run: |
         for i in {1..3}; do
-          curl -sSL https://install.python-poetry.org | python3 - && break || sleep 5
+          curl -sSL https://install.python-poetry.org | python3 - --version 2.4.1 && break || sleep 5
         done
         echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Cache Poetry dependencies
-      uses: actions/cache@v5
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: |
           ~/.cache/pypoetry
@@ -584,7 +643,7 @@ jobs:
         ./scripts/test_integration.sh
 
     - name: Upload coverage reports
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
       if: always() && github.ref == 'refs/heads/main'
       with:
         files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml,./quickscale_modules/*/coverage.xml
@@ -615,18 +674,18 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
       id: install-poetry-iso
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
       with:
-        version: latest
+        version: 2.4.1
         virtualenvs-create: true
         virtualenvs-in-project: true
       continue-on-error: true
@@ -635,12 +694,12 @@ jobs:
       if: steps.install-poetry-iso.outcome == 'failure'
       run: |
         for i in {1..3}; do
-          curl -sSL https://install.python-poetry.org | python3 - && break || sleep 5
+          curl -sSL https://install.python-poetry.org | python3 - --version 2.4.1 && break || sleep 5
         done
         echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Cache Poetry dependencies
-      uses: actions/cache@v5
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: |
           ~/.cache/pypoetry
@@ -669,16 +728,18 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: "3.14"
 
     - name: Install Poetry
       id: install-poetry-cli
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
+      with:
+        version: 2.4.1
       # Retry on SSL/network failures
       continue-on-error: true
 
@@ -686,7 +747,7 @@ jobs:
       if: steps.install-poetry-cli.outcome == 'failure'
       run: |
         for i in {1..3}; do
-          curl -sSL https://install.python-poetry.org | python3 - && break || sleep 5
+          curl -sSL https://install.python-poetry.org | python3 - --version 2.4.1 && break || sleep 5
         done
         echo "$HOME/.local/bin" >> $GITHUB_PATH
 

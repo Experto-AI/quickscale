@@ -298,6 +298,40 @@
             },
             "depends_on": [],
             "trigger_inputs": []
+        },
+        {
+            "id": "check-workflow-security",
+            "description": "Blocking zizmor scan: every workflow action is pinned to a commit SHA and every workflow declares top-level permissions",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-workflow-security",
+                "ci_job": "workflow-security-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
+            "id": "check-secret-scanning",
+            "description": "Blocking checksum-pinned gitleaks scan of the repository working tree",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-secret-scanning",
+                "ci_job": "secret-scanning-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
         }
     ]
 }

@@ -1342,6 +1342,8 @@ class TestParserPrecision:
             "security-static-analysis-gate": (),
             "beta-migration-smoke-gate": (),
             "generated-deploy-posture-gate": (),
+            "workflow-security-gate": (),
+            "secret-scanning-gate": (),
             "csrf-exempt-gate": (),
             "commit-testimony-gate": (),
             "isolation-conformance": (
@@ -1382,6 +1384,8 @@ class TestParserPrecision:
                 "security-static-analysis-gate",
                 "beta-migration-smoke-gate",
                 "generated-deploy-posture-gate",
+                "workflow-security-gate",
+                "secret-scanning-gate",
             ),
         }
 
@@ -1426,6 +1430,8 @@ class TestParserPrecision:
             ("test", "make check-security-static-analysis\n"),
             ("test", "make check-beta-migration-smoke\n"),
             ("test", "make check-generated-deploy-posture\n"),
+            ("test", "make check-workflow-security\n"),
+            ("test", "make check-secret-scanning\n"),
             ("test", "make frontend-proof\n"),
             ("test", "make smoke-install\n"),
             ("test", "make lint -- --core --cli --modules --devtools\n"),
@@ -3471,7 +3477,8 @@ class TestMakeRegistryDerivation:
             "check-module-app-declaration check-org-context-primitives "
             "check-csrf-exempt check-commit-testimony check-gate-suites "
             "check-dependency-vulnerabilities check-security-static-analysis "
-            "check-beta-migration-smoke check-generated-deploy-posture check-gate-parity"
+            "check-beta-migration-smoke check-generated-deploy-posture "
+            "check-workflow-security check-secret-scanning check-gate-parity"
         ) in output
 
     def test_local_non_check_gate_is_excluded_without_makefile_edit(self, tmp_path: Path) -> None:
@@ -3517,7 +3524,8 @@ class TestMakeRegistryDerivation:
             "check-module-app-declaration check-org-context-primitives "
             "check-csrf-exempt check-commit-testimony check-gate-suites "
             "check-dependency-vulnerabilities check-security-static-analysis "
-            "check-beta-migration-smoke check-generated-deploy-posture"
+            "check-beta-migration-smoke check-generated-deploy-posture "
+            "check-workflow-security check-secret-scanning"
         ) in output
         assert "make temporary-local-non-check" not in output
 
@@ -3575,6 +3583,8 @@ class TestHostedCiGateGeneration:
             "security-static-analysis-gate",
             "beta-migration-smoke-gate",
             "generated-deploy-posture-gate",
+            "workflow-security-gate",
+            "secret-scanning-gate",
         )
         for consumer in ("isolation-conformance", "lint-cli"):
             assert needs[consumer] == (
@@ -3659,7 +3669,8 @@ class TestHostedCiGateGeneration:
             "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
             "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate, beta-migration-smoke-gate, "
-            "generated-deploy-posture-gate]" in generated
+            "generated-deploy-posture-gate, workflow-security-gate, "
+            "secret-scanning-gate]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
 
@@ -3713,7 +3724,8 @@ class TestHostedCiGateGeneration:
             "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
             "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate, beta-migration-smoke-gate, "
-            "generated-deploy-posture-gate]" in generated
+            "generated-deploy-posture-gate, workflow-security-gate, "
+            "secret-scanning-gate]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
 
@@ -3754,7 +3766,8 @@ class TestHostedCiGateGeneration:
             "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
             "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate, beta-migration-smoke-gate, "
-            "generated-deploy-posture-gate]" in written
+            "generated-deploy-posture-gate, workflow-security-gate, "
+            "secret-scanning-gate]" in written
         )
 
         clean = subprocess.run(

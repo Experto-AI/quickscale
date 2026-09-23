@@ -198,7 +198,7 @@ class CreateCheckoutSessionView(_RenderedAPIView):
         payload, payload_error = _parse_json_object_payload(request._request)
         if payload_error is not None:
             return payload_error
-        assert payload is not None
+        assert payload is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
         serializer = CreateCheckoutSessionSerializer(data=payload)
         if not serializer.is_valid():
@@ -254,7 +254,7 @@ class CreateSubscriptionCheckoutView(_RenderedAPIView):
         payload, payload_error = _parse_json_object_payload(request._request)
         if payload_error is not None:
             return payload_error
-        assert payload is not None
+        assert payload is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
         serializer = CreateSubscriptionCheckoutSerializer(data=payload)
         if not serializer.is_valid():
@@ -310,7 +310,7 @@ class CancelSubscriptionView(_RenderedAPIView):
         payload, payload_error = _parse_json_object_payload(request._request)
         if payload_error is not None:
             return payload_error
-        assert payload is not None
+        assert payload is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
         serializer = CancelSubscriptionSerializer(data=payload)
         if not serializer.is_valid():
@@ -365,7 +365,7 @@ class CreateBillingPortalSessionView(_RenderedAPIView):
         payload, payload_error = _parse_json_object_payload(request._request)
         if payload_error is not None:
             return payload_error
-        assert payload is not None
+        assert payload is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
         serializer = CreateBillingPortalSessionSerializer(data=payload)
         if not serializer.is_valid():
