@@ -10,7 +10,8 @@ merged, but a path may participate in copy-if-missing adoption or the fresh
 scaffold's one-time field-aware identity reconciliation. Neither operation
 overwrites existing user-owned contents. This file owns the *inventory*; the *rules*
 that govern it (explicit-only classification, identity-only overlap,
-conformance-gate behaviour, donor-owned `production.py`, in-place `start.sh`) are authoritative in
+conformance-gate behaviour, donor-owned `production.py`, fresh-first `start.sh`
+identity reconciliation) are authoritative in
 [decisions.md § Generated-File Ownership](decisions.md#generated-file-ownership-taxonomy).
 
 Entries are organized by category. Add new entries to the appropriate category;
@@ -23,6 +24,7 @@ from the template tree and fails on any unclassified path.
 
 ### Category U1 — Project-level user-owned files (root-level generated config/docs)
  ``Makefile``, ``README.md``, ``.gitignore``, ``.dockerignore``, ``.editorconfig``,
+ ``.pre-commit-config.yaml``,
  ``.env.example``, ``.env``, ``scripts/lint.sh``, ``.github/workflows/ci.yml``,
  ``poetry.lock``, ``db/init.sql``, ``OPERATIONS.md``.
  Rationale: One-time scaffold that the user tailors to their deployment,
@@ -55,7 +57,7 @@ from the donor.
 Rationale: User-editable Django templates.  Unlike infrastructure files
 (``Dockerfile``, ``start.sh``), they are not copy targets during migration.
 Fresh-first preserves the recipient's templates structurally while
-reconciling generated project-name text; in-place does not touch them.
+reconciling generated project-name text; the workflow otherwise does not touch them.
 Theme-specific template overrides (social) are
 user-owned once generated.  ``templates/components/navigation.html`` is not a
 copy target — ``showcase_react`` does not emit a
@@ -72,21 +74,18 @@ targets — ``showcase_react`` does not emit them.
 Rationale: One-time generated test scaffold that users customize. Fresh-first
 reconciles only its generated project-name docstrings.
 
-### Category U6 — Frontend root configs (user-owned after generation)
+### Category U6 — Frontend build settings (user-owned after generation)
+``frontend/vite.config.ts``, ``frontend/tsconfig.json``,
+``frontend/eslint.config.js``, ``frontend/postcss.config.js``,
 ``frontend/pnpm-workspace.yaml``,
 ``frontend/.prettierignore``, ``frontend/.prettierrc``,
 ``frontend/vitest.config.ts``, ``frontend/playwright.config.ts``,
 ``frontend/components.json``, ``frontend/tailwind.config.js``,
 ``frontend/index.html``.
-Rationale: Unlike infrastructure frontend configs (``vite.config.ts``,
-``tsconfig.json``, ``eslint.config.js``, ``postcss.config.js``,
-``prettier.config.js``) which are in ``IN_PLACE_INFRASTRUCTURE_TARGETS``,
-these files are user-editable after generation. ``frontend/package.json`` is
-not in this category: the in-place executor donor-authoritatively merges its
-structure while preserving the recipient name, so it has an explicit
-``IN_PLACE_MERGED_ROOT_FILES`` disposition. ``tailwind.config.js``,
-``components.json``, ``playwright.config.ts``, ``.prettierrc``, and
-``index.html`` remain user-owned after one-time generation.
+Rationale: Generated once, user-editable, and not migration targets — the
+workflow keeps the recipient's copies exactly as generated. ``frontend/package.json``
+is not in this category: it is part of the fresh-first identity seam and is
+classified through ``FRESH_FIRST_IDENTITY_ROOT_FILES`` instead.
 
 ### Category U7 — Frontend user-owned source files
  ``frontend/src/main.tsx``, ``frontend/src/renderQuickScaleRoot.tsx``,
@@ -104,11 +103,9 @@ structure while preserving the recipient name, so it has an explicit
  Rationale: User-editable application source, styles, type declarations,
  utility helpers, and test files. They are not structural migration targets;
  generated identity text in ``frontend/e2e/home.spec.ts`` is reconciled on the
- fresh scaffold. Specific
- infrastructure-relevant files under ``frontend/src/`` (``useModules.ts``,
- ``vite.config.ts``, ``tsconfig*.json``, ``eslint.config.js``,
- ``postcss.config.js``, ``prettier.config.js``) are in the managed
- tuples.  ``frontend/src/App.tsx`` is classified by the fresh-first
+ fresh scaffold. ``frontend/src/hooks/useModules.ts`` is identity-reconciled on
+ the fresh scaffold, and
+ ``frontend/src/App.tsx`` is classified by the fresh-first
  required recipient spec (``MODE_REQUIRED_SPECS``) — it is a required
  preflight check for the fresh-first path and is copied from donor to
  recipient during the copy-custom-router-and-pages step (see rule 7).
@@ -141,11 +138,9 @@ migration-managed taxonomy entries.
 ``frontend/src/pages/BlogPage.tsx``, ``frontend/src/pages/CrmPage.tsx``,
 ``frontend/src/pages/ListingsPage.tsx``.
 Rationale: Emitted only when the gating module is selected at generation
-time.  After generation they are user-editable.  ``FormsPage.tsx``,
-``SocialLinkTreePublicPage.tsx``, and ``SocialEmbedsPublicPage.tsx``
-are managed via ``IN_PLACE_MODULE_REACT_SURFACES`` (post-apply module
-surface adoption targets) and are **not** in this category — they are
-migration-managed, not intentionally unmanaged.
+time.  After generation they are user-editable and are not structurally
+managed; donor-only copies may still be adopted through the explicit
+copy-if-missing walk, which never overwrites an existing user file.
 
 ### Category U11 — Org pages (React theme)
 ``frontend/src/pages/orgs/OrgLayout.tsx``,
@@ -162,6 +157,6 @@ generation.  Not migration targets.
 ``frontend/src/hooks/useOrgs.ts``,
 ``frontend/src/hooks/useApi.ts``,
 ``frontend/src/hooks/useFormSchema.ts``.
-Rationale: User-editable React hooks.  ``useModules.ts`` and
-``usePublicSocialSurface.ts`` are in the managed tuples; the rest are
-user-owned after generation.
+Rationale: User-editable React hooks.  ``useModules.ts`` is
+identity-reconciled on the fresh scaffold; the rest, including
+``usePublicSocialSurface.ts``, are user-owned after generation.

@@ -26,7 +26,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA194 | Remove the in-place beta-migration mode | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
@@ -35,16 +34,15 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA194 ──► SA191 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
+Track 1: SA191 ──► SA153 ──► SA154 (inventory)   critical path: SA191 → SA153
 Track 2: — (SA202 closed)
 Track 3: SA203
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA191 → SA153. SA191 migrates `bap-web` with the fresh-first mode and
-redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA194 goes
-first so SA191 runs against the single remaining mode, and is off the critical path. SA154 is an inventory, not work. Everything else is off the critical path.
+**Critical path.** SA191 → SA153. SA191 migrates `bap-web` with the fresh-first migration tool and
+redeploys through `deploy railway`; SA153 builds the portal on the migrated project. SA154 is an inventory, not work. Everything else is off the critical path.
 
 **Ordering.** Tracks 2 and 3 carry no dependency edges.
 
@@ -54,7 +52,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA194 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | — | yes | yes | yes | **yes** | no |
 | 3 | SA203 | yes | yes | yes | **yes** | no |
 
@@ -89,23 +87,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA194 — Remove the in-place beta-migration mode.**
-
-  **Context:** Fresh-first is the only migration path: a fresh scaffold receives the old site's
-  custom content, and data moves by backup and restore under the fresh-database rule. Upgrading a
-  live project is `quickscale update`/`apply` with contract-vintage adoption steps. In-place mode
-  duplicates that upgrade path with a riskier shape (it rewrites the recipient, then halts at the
-  vintage gate), and its smoke gate shims the CLI, so it is never observed working.
-
-  **Acceptance:** `beta-migrate-in-place`, the in-place mode, its continuation, and their tests are
-  gone; fresh-first behavior is unchanged. The smoke gate covers fresh-first only, and any gate
-  registry or parity count it feeds is updated. The playbook, `generated_file_ownership.md`, and
-  the `decisions.md` ownership entry describe one migration mode, and `decisions.md` records the
-  removal.
-
-  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, `scripts/beta_migrate.py`, the
-  Makefile targets, `scripts/check_beta_migration_smoke.py`, the migration playbook,
-  `generated_file_ownership.md`, and `decisions.md`.
+- [x] **SA194 — Remove the in-place beta-migration mode.**
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 

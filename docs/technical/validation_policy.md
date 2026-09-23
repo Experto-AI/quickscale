@@ -29,7 +29,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
 - `make check-dependency-vulnerabilities` - Run the blocking Trivy v0.74.0 scan of the committed root Poetry lockfile.
 - `make check-security-static-analysis` - Run the blocking focused Bandit 1.9.4 source scan.
-- `make check-beta-migration-smoke` - Exercise fresh-first and in-place beta migration compatibility on isolated generated fixtures.
+- `make check-beta-migration-smoke` - Exercise fresh-first beta migration compatibility on isolated generated fixtures.
 - `make check-generated-deploy-posture` - Run Django's deployment checks on a freshly generated project in both forwarding cells and fail on a new warning.
 - `make security-negative-probes` - Prove scanner, checksum, archive-safety, and stale-database failures remain fail-closed.
 - `make isolation-conformance` - Run the PostgreSQL isolation-conformance suites through the repository-owned runner.

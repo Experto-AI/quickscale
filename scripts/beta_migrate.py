@@ -1,4 +1,4 @@
-"""Thin maintainer-only wrapper for fresh-first exec and in-place flow"""
+"""Thin maintainer-only wrapper for the fresh-first beta migration workflow"""
 
 from __future__ import annotations
 

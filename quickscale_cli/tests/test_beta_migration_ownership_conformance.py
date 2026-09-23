@@ -5,7 +5,7 @@ SA66 (Finding 7 first step).  The generator template tree at
 files QuickScale emits into a generated project.  The beta-migration file
 taxonomy in ``quickscale_devtools/beta_migration.py`` classifies those
 emitted files by migration path (fresh-first donor, fresh-first recipient,
-in-place infrastructure, etc.).
+intentionally unmanaged, etc.).
 
 This test enumerates every ``.j2`` template, resolves it to its emitted
 project-relative path (accounting for theme-specific and conditional output),
@@ -42,10 +42,6 @@ from quickscale_devtools.beta_migration import (
     FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES,
     FRESH_FIRST_REQUIRED_RECIPIENT_PACKAGE_FILES,
     FRESH_FIRST_UTILITY_DIRS,
-    IN_PLACE_INFRASTRUCTURE_TARGETS,
-    IN_PLACE_MERGED_ROOT_FILES,
-    IN_PLACE_MODULE_REACT_SURFACES,
-    IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS,
     INTENTIONALLY_UNMANAGED,
     MODE_REQUIRED_SPECS,
 )
@@ -126,11 +122,6 @@ _TUPLE_NAMES: tuple[tuple[str, Collection[str]], ...] = (
     ("FRESH_FIRST_IDENTITY_ROOT_FILES", FRESH_FIRST_IDENTITY_ROOT_FILES),
     ("FRESH_FIRST_PROTECTED_PACKAGE_FILES", FRESH_FIRST_PROTECTED_PACKAGE_FILES),
     ("FRESH_FIRST_PROTECTED_ROOT_FILES", FRESH_FIRST_PROTECTED_ROOT_FILES),
-    ("IN_PLACE_INFRASTRUCTURE_TARGETS", IN_PLACE_INFRASTRUCTURE_TARGETS),
-    (
-        "IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS",
-        IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS,
-    ),
     ("INTENTIONALLY_UNMANAGED", INTENTIONALLY_UNMANAGED),
 )
 
@@ -161,17 +152,6 @@ def _build_classified_map() -> dict[str, list[str]]:
             if item not in classified:
                 classified[item] = []
             classified[item].append(tup_name)
-
-    # Module React surfaces (root-relative) — these are not a named tuple
-    # constant so we track them explicitly.
-    module_surfaces: list[str] = []
-    for paths in IN_PLACE_MODULE_REACT_SURFACES.values():
-        for path in paths:
-            module_surfaces.append(path)
-    for path in module_surfaces:
-        if path not in classified:
-            classified[path] = []
-        classified[path].append("IN_PLACE_MODULE_REACT_SURFACES")
 
     # MODE_REQUIRED_SPECS entries: include all file-type specs as explicit
     # classification sources.  The classification label uses the format
@@ -272,87 +252,12 @@ def _structural_migration_classifications(emitted: str) -> list[str]:
     ):
         classifications.append("FRESH_FIRST_COPY_MISSING_DIRS")
 
-    if emitted in IN_PLACE_INFRASTRUCTURE_TARGETS:
-        classifications.append("IN_PLACE_INFRASTRUCTURE_TARGETS")
-    if emitted in IN_PLACE_MERGED_ROOT_FILES:
-        classifications.append("IN_PLACE_MERGED_ROOT_FILES")
-    for module_paths in IN_PLACE_MODULE_REACT_SURFACES.values():
-        if any(
-            emitted == path or emitted.startswith(f"{path.rstrip('/')}/")
-            for path in module_paths
-        ):
-            classifications.append("IN_PLACE_MODULE_REACT_SURFACES")
-            break
     return classifications
-
-
-def _check_start_sh_classification(classified: dict[str, list[str]]) -> list[str]:
-    """Check that ``start.sh`` is classified by the in-place taxonomy."""
-    inconsistencies: list[str] = []
-    if "start.sh" not in IN_PLACE_INFRASTRUCTURE_TARGETS:
-        inconsistencies.append(
-            "start.sh is NOT in IN_PLACE_INFRASTRUCTURE_TARGETS "
-            "(user policy: start.sh is an in-place migration target)"
-        )
-    if "start.sh" in classified:
-        start_sh_tuples = classified["start.sh"]
-        if "IN_PLACE_INFRASTRUCTURE_TARGETS" not in start_sh_tuples:
-            inconsistencies.append(
-                "start.sh must be classified by IN_PLACE_INFRASTRUCTURE_TARGETS"
-            )
-    else:
-        inconsistencies.append("start.sh is not classified by any taxonomy tuple")
-    return inconsistencies
-
-
-def _check_production_py_classification(classified: dict[str, list[str]]) -> list[str]:
-    """Check that ``settings/production.py`` is classified (donor-owned by policy)."""
-    inconsistencies: list[str] = []
-    prod_pkg_rel = "settings/production.py"
-
-    in_donor_files = prod_pkg_rel in FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES
-    in_donor_django = prod_pkg_rel in FRESH_FIRST_DONOR_DJANGO_FILES
-    if not in_donor_files or not in_donor_django:
-        inconsistencies.append(
-            f"settings/production.py must be classified as a donor-owned file "
-            f"(in FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES={in_donor_files}, "
-            f"in FRESH_FIRST_DONOR_DJANGO_FILES={in_donor_django})"
-        )
-    return inconsistencies
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-
-
-def test_start_sh_is_in_place_managed() -> None:
-    """SA66: start.sh must be classified as an in-place infrastructure target.
-
-    User policy decision (2026-07-10): start.sh is an in-place migration
-    target so the SA63 createcachetable env-pair fix reaches beta sites
-    through the in-place migration path (the path that the existing sites
-    actually use).
-    """
-    assert "start.sh" in IN_PLACE_INFRASTRUCTURE_TARGETS, (
-        "start.sh must be in IN_PLACE_INFRASTRUCTURE_TARGETS "
-        "(user policy: in-place managed)"
-    )
-
-
-def test_start_sh_is_in_place_substituted() -> None:
-    """SA66 CR-SA66-001: start.sh must be identity-substituted during in-place.
-
-    When start.sh is copied from donor to recipient during the in-place
-    migration, the donor's embedded package/slug references (gunicorn
-    WSGI module, etc.) must be replaced with the recipient's identity.
-    Without substitution the copied file would retain the donor's
-    gunicorn package reference and fail to boot.
-    """
-    assert "start.sh" in IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS, (
-        "start.sh must be in IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS "
-        "so donor package/slug references are replaced during in-place copy"
-    )
 
 
 def test_start_sh_is_fresh_first_identity_reconciled() -> None:
@@ -367,7 +272,7 @@ def test_production_py_is_donor_owned_by_policy() -> None:
     """SA66: settings/production.py must be in the fresh-first donor tuples.
 
     This is an explicit policy decision documented in decisions.md, not an
-    accidental omission from the in-place targets.  The fresh-first path
+    accidental omission from the managed tuples.  The fresh-first path
     intentionally copies the donor's production.py onto the fresh recipient
     because the donor's production settings carry the real deploy-time
     configuration (env-var wiring, secret key references, etc.).
@@ -443,11 +348,11 @@ def test_taxonomy_classifies_every_emitted_template() -> None:
 def test_classification_no_duplicate_conflicts() -> None:
     """No emitted file should be classified by conflicting taxonomy lists.
 
-    A file that appears in both fresh-first and in-place lists is not
-    necessarily a conflict (e.g. ``Dockerfile`` is identity-reconciled in
-    fresh-first AND in-place-copied).  This test checks for *meaningful*
-    conflicts: a file listed in an intentionally-unmanaged tuple that also
-    appears in a structural replacement/merge disposition. Fresh-first identity
+    A file may legitimately appear in more than one taxonomy list (e.g.
+    ``Dockerfile`` is identity-reconciled in fresh-first while also being an
+    emitted scaffold file).  This test checks for *meaningful* conflicts: a
+    file listed in an intentionally-unmanaged tuple that also appears in a
+    structural replacement/merge disposition. Fresh-first identity
     reconciliation and copy-if-missing adoption may overlap because neither
     overwrites existing user-owned contents.
     """
@@ -480,9 +385,6 @@ def test_operation_derived_structural_paths_match_executor_contract() -> None:
     assert "FRESH_FIRST_COMPONENT_DIRECTORY_REPLACEMENT" not in (
         _structural_migration_classifications("frontend/src/components/ui/button.tsx")
     )
-    assert "IN_PLACE_MERGED_ROOT_FILES" in _structural_migration_classifications(
-        "frontend/package.json"
-    )
     assert "FRESH_FIRST_MERGED_ROOT_FILES" in _structural_migration_classifications(
         "pyproject.toml"
     )
@@ -501,7 +403,7 @@ def test_intentionally_unmanaged_entries_correspond_to_emitted_paths() -> None:
     for the ``INTENTIONALLY_UNMANAGED`` tuple specifically.  Stale entries
     (classifying a path no template emits) are detected and reported.
 
-    Managed tuples (fresh-first / in-place) may reference files that are
+    Managed tuples (fresh-first) may reference files that are
     expected on the donor but not necessarily emitted by the generator
     (e.g. ``middleware.py``, ``sitemaps.py`` as optional donor files), so
     this reverse check scopes only to ``INTENTIONALLY_UNMANAGED`` where

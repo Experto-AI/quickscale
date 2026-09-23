@@ -103,7 +103,7 @@ must carry those parameters on `RUNTIME_DATABASE_URL`, not only on `DATABASE_URL
 URL after `quickscale deploy railway`, which rewrites the runtime URL on services it manages.
 
 This maintenance release also adds maintainer-only beta-migration compatibility validation and
-mode-specific runtime provenance to report output; incompatible launcher, settings, and package
+effective runtime provenance to report output; incompatible launcher, settings, and package
 combinations now fail before recipient mutation, and fresh-first identity changes reconcile raw
 and derived slug/package values across the generated scaffold. Those beta-migration-only additions
 do not themselves change generated-project output, public package APIs, or upgrade requirements;
