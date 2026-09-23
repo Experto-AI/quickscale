@@ -196,9 +196,11 @@ def _probe_generated_runtime(project: Path) -> None:
         f"{package}.wsgi" in start_script.read_text(),
         f"generated start.sh does not reference {package}.wsgi",
     )
+    settings_text = settings_path.read_text()
     _require(
-        "_KNOWN_PRIVILEGED_COMMANDS" in settings_path.read_text(),
-        f"generated production settings lack the privileged command contract: {settings_path}",
+        "from quickscale_core.runtime.settings import (" in settings_text
+        and "resolve_runtime_database_url(" in settings_text,
+        f"generated production settings do not call the runtime settings facade: {settings_path}",
     )
 
 
@@ -474,7 +476,7 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
         and "beta_target.settings.production" in (package_root / "asgi.py").read_text()
         and "Django base settings for beta-target"
         in (package_root / "settings" / "base.py").read_text()
-        and '"beta_target.settings.base.ClientIdentityMiddleware"'
+        and '"quickscale_core.runtime.settings.ClientIdentityMiddleware"'
         in (package_root / "settings" / "base.py").read_text(),
         "fresh-first execution conflated slug and package fields in Django files",
     )

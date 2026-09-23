@@ -41,7 +41,8 @@
       "sa189": "Regenerated 2026-09-17 — the generator and Railway deploy share the quickscale_runtime role name, while db/init.sql, start.sh, and OPERATIONS.md render one canonical grant set including database CONNECT. The role-name context also updates .env.example, docker-compose.yml, and settings/base.py. Only these six generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa192": "Regenerated 2026-09-17 — templates/base.html and templates/index.html load one Vite-served live token stylesheet through the configurable browser-visible frontend origin in DEBUG and compiled React CSS in production; templates/social/{embeds,link_tree}.html inherit that shell choice without overriding it; frontend/vite.config.ts reserves /static/frontend/ for Vite while proxying other Django static paths, loads the generated root environment with process overrides, rejects non-canonical origins, and compares the raw configured Host before Vite's localhost/IP exceptions; frontend/src/test/viteAssetRouting.test.ts proves stylesheet routing, absent and preconfigured .env restoration, exact HTTP/WebSocket Host handling including normalized-alias rejection, and the canonical origin corpus shared with Django settings; docker-compose.yml builds the Django-served SPA JavaScript, probes Vite with the configured Host, and passes both frontend port and origin to Django; testproject/settings/local.py validates the configurable frontend port and full origin against that corpus; .env, .env.example, and README.md document the local defaults and remote/tunnel override. Only these eleven generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa193": "Regenerated 2026-09-23 — the static notifications managed block left `.env.example.j2`. `quickscale apply` now renders one managed block per enabled credential-bearing module from that module's declared `*_env_var` options (notifications, analytics, billing, storage, backups); a fresh generation carries no module-managed block until apply syncs it.",
-      "sa200": "Regenerated 2026-09-23 — generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py."
+      "sa200": "Regenerated 2026-09-23 — generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py.",
+      "sa206": "Regenerated 2026-09-23 — the generated settings import the executable runtime contracts (middleware, proxy-trust derivation, privileged-command/runtime-database selection, SECRET_KEY guard) from the versioned quickscale_core.runtime settings facade; pyproject.toml declares the bounded quickscale-core lockstep pin (SA206). Hashes updated per variant: pyproject.toml, testproject/settings/base.py, testproject/settings/production.py."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -91,7 +92,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-        "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
+      "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
       "mode": "664",
@@ -415,7 +416,7 @@
     },
     "pyproject.toml": {
       "mode": "664",
-      "sha256": "7d6e492652207dda743b2d6f2a099cc2590d1300005da19959ebff7ada391b4a"
+      "sha256": "a448f34bf2ec11539017dea6dda392b1eb982d0d08d7b15f0019f53a15e62176"
     },
     "railway.json": {
       "mode": "664",
@@ -479,7 +480,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "927bd418d3383bd1157e98fa84dcaa99cd6db847af2ebd2283d7bd8c9219df5e"
+      "sha256": "f273145adde5a9789d72ad010be2e1c6658333c47b9f9b19e6bc2078c6f72347"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -491,7 +492,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "b29111a0f734b90aa7537b4908fb27a59419e5ca0dc6c015e797bea4cb77a176"
+      "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
     },
     "testproject/urls.py": {
       "mode": "664",
@@ -561,7 +562,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-        "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
+      "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
       "mode": "664",
@@ -885,7 +886,7 @@
     },
     "pyproject.toml": {
       "mode": "664",
-      "sha256": "7d6e492652207dda743b2d6f2a099cc2590d1300005da19959ebff7ada391b4a"
+      "sha256": "a448f34bf2ec11539017dea6dda392b1eb982d0d08d7b15f0019f53a15e62176"
     },
     "railway.json": {
       "mode": "664",
@@ -949,7 +950,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "927bd418d3383bd1157e98fa84dcaa99cd6db847af2ebd2283d7bd8c9219df5e"
+      "sha256": "f273145adde5a9789d72ad010be2e1c6658333c47b9f9b19e6bc2078c6f72347"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -961,7 +962,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "b29111a0f734b90aa7537b4908fb27a59419e5ca0dc6c015e797bea4cb77a176"
+      "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
     },
     "testproject/urls.py": {
       "mode": "664",
@@ -1031,7 +1032,7 @@
     },
     "OPERATIONS.md": {
       "mode": "664",
-        "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
+      "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
       "mode": "664",
@@ -1355,7 +1356,7 @@
     },
     "pyproject.toml": {
       "mode": "664",
-      "sha256": "7d6e492652207dda743b2d6f2a099cc2590d1300005da19959ebff7ada391b4a"
+      "sha256": "a448f34bf2ec11539017dea6dda392b1eb982d0d08d7b15f0019f53a15e62176"
     },
     "railway.json": {
       "mode": "664",
@@ -1419,7 +1420,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "664",
-      "sha256": "927bd418d3383bd1157e98fa84dcaa99cd6db847af2ebd2283d7bd8c9219df5e"
+      "sha256": "f273145adde5a9789d72ad010be2e1c6658333c47b9f9b19e6bc2078c6f72347"
     },
     "testproject/settings/local.py": {
       "mode": "664",
@@ -1431,7 +1432,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "664",
-      "sha256": "b29111a0f734b90aa7537b4908fb27a59419e5ca0dc6c015e797bea4cb77a176"
+      "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
     },
     "testproject/urls.py": {
       "mode": "664",

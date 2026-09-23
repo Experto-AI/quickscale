@@ -87,7 +87,7 @@ myapp/
 Notes:
 - Embedded modules are runtime dependencies that land in `modules/`.
 - `quickscale apply` owns the managed backend and runtime wiring for installed modules.
-- `myapp/settings/base.py` defines the first-position `ClientIdentityMiddleware`, establishing the fail-closed client-identity boundary shared by canonical module consumers and ordinary DRF throttles before module middleware or views run. Keeping this seam in the protected generated settings surface avoids colliding with donor-owned project middleware during fresh-first migration.
+- `myapp/settings/base.py` imports the first-position `ClientIdentityMiddleware` from the versioned `quickscale_core.runtime.settings` facade, establishing the fail-closed client-identity boundary shared by canonical module consumers and ordinary DRF throttles before module middleware or views run. The generated settings keep only user configuration; the contract itself ships with `quickscale-core` under the lockstep pin.
 - The managed social backend transport remains theme-agnostic, but only fresh `showcase_react` starters auto-scaffold the public `/social` and `/social/embeds` pages.
 - Existing projects keep ownership of user-edited theme routes, navigation, and page files unless documentation for a specific release explicitly says otherwise.
 

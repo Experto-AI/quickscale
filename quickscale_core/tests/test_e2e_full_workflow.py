@@ -1524,6 +1524,9 @@ class TestFullE2EWorkflow:
 
     def _install_project_dependencies(self, project_path: Path):
         """Install dependencies in the generated project using poetry."""
+        from test_generated_project_runtime import _pin_project_core_dependency
+
+        _pin_project_core_dependency(project_path)
         # First, regenerate lock file to match current Python version
         poetry_env = build_isolated_poetry_env()
         lock_result = subprocess.run(

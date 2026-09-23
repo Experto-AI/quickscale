@@ -24,6 +24,7 @@ import ssl
 import struct
 import subprocess
 import sys
+import tempfile
 import textwrap
 import threading
 import time
@@ -914,6 +915,56 @@ def _standalone_generated_env(
     return environment
 
 
+_LOCAL_CORE_WHEEL_CACHE: dict[str, Path] = {}
+
+
+def _local_core_wheel() -> Path:
+    """Build the repository's quickscale-core wheel once per test session.
+
+    The repository's core version is unpublished during development, so a
+    generated project's lockstep pin cannot resolve from PyPI; the smoke lane
+    must exercise the same local-wheel path the installed-CLI flow uses.
+    """
+    version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    cached = _LOCAL_CORE_WHEEL_CACHE.get(version)
+    if cached is not None and cached.is_file():
+        return cached
+
+    build_root = Path(tempfile.mkdtemp(prefix="quickscale-core-wheel-"))
+    source_copy = build_root / "quickscale_core"
+    _copytree_for_generated_project_smoke(REPO_ROOT / "quickscale_core", source_copy)
+    build_result = subprocess.run(
+        ["poetry", "build", "--format", "wheel"],
+        cwd=source_copy,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=_standalone_generated_env(),
+    )
+    assert build_result.returncode == 0, (
+        "Local quickscale-core wheel build failed:\n"
+        f"stdout: {build_result.stdout}\nstderr: {build_result.stderr}"
+    )
+    candidates = sorted((source_copy / "dist").glob("quickscale_core-*.whl"))
+    assert len(candidates) == 1, (
+        "Expected exactly one local quickscale-core wheel, got "
+        f"{[candidate.name for candidate in candidates]}"
+    )
+    assert candidates[0].name.startswith(f"quickscale_core-{version}-"), (
+        f"Local core wheel does not match VERSION {version}: {candidates[0].name}"
+    )
+    _LOCAL_CORE_WHEEL_CACHE[version] = candidates[0]
+    return candidates[0]
+
+
+def _pin_project_core_dependency(project_path: Path) -> None:
+    """Point the generated project's lockstep core pin at the local wheel."""
+    from quickscale_cli.utils.module_dependency_sync import sync_project_core_dependency
+
+    wheel = _local_core_wheel()
+    sync_project_core_dependency(project_path, wheel.parent)
+
+
 def _install_project_dependencies(
     project_path: Path,
     *,
@@ -925,6 +976,7 @@ def _install_project_dependencies(
     transient network issues unless ``strict`` is requested by the
     standalone all-module runtime proof.
     """
+    _pin_project_core_dependency(project_path)
     poetry_env = _standalone_generated_env() if strict else build_isolated_poetry_env()
     lock_result = subprocess.run(
         ["poetry", "lock"],
@@ -1449,6 +1501,9 @@ def test_install_project_dependencies_strict_network_failure_is_not_skipped(
 ) -> None:
     """Strict generated-project installation reports network failures."""
     calls: list[list[str]] = []
+    monkeypatch.setattr(
+        sys.modules[__name__], "_pin_project_core_dependency", lambda _path: None
+    )
 
     def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         calls.append(command)
@@ -1720,7 +1775,7 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
     ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
     base_settings = (project_path / project_name / "settings" / "base.py").read_text()
-    middleware_entry = f'"{project_name}.settings.base.ClientIdentityMiddleware"'
+    middleware_entry = '"quickscale_core.runtime.settings.ClientIdentityMiddleware"'
     assert middleware_entry in base_settings
     assert base_settings.index(middleware_entry) < base_settings.index(
         '"django.middleware.security.SecurityMiddleware"'
@@ -1740,7 +1795,7 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
         from django.test import override_settings
         from rest_framework.throttling import SimpleRateThrottle
 
-        from client_identity_project.settings import base as generated_base
+        from quickscale_core.runtime.settings import ClientIdentityMiddleware
         from quickscale_modules_orgs.current_org import get_client_ip
 
 
@@ -1810,7 +1865,7 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
                 TRUSTED_PROXY_COUNT=proxy_count,
                 REST_FRAMEWORK={"NUM_PROXIES": num_proxies},
             ):
-                middleware = generated_base.ClientIdentityMiddleware(consume)
+                middleware = ClientIdentityMiddleware(consume)
                 assert middleware(request) is response, case_name
                 assert middleware(request) is response, case_name
 
@@ -1853,7 +1908,7 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
 
                 consumers = (
                     (
-                        generated_base.ClientIdentityMiddleware(
+                        ClientIdentityMiddleware(
                             downstream_should_not_run
                         ),
                         request,
@@ -1892,6 +1947,275 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_older_settings_updated_to_facade_boot(tmp_path: Path) -> None:
+    """A project whose older settings were updated to the facade still boots.
+
+    SA206 adoption shape: an existing project keeps its own middleware path
+    strings and user configuration, and the adoption edit replaces the inline
+    contract with the runtime settings facade.  The boot must resolve the
+    project-owned middleware paths, apply the facade's production SECRET_KEY
+    guard, and select the runtime database URL.
+    """
+    from quickscale_core.generator import ProjectGenerator
+
+    project_name = "adopted_settings_project"
+    project_path = tmp_path / project_name
+    ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+
+    base_path = project_path / project_name / "settings" / "base.py"
+    base_settings = base_path.read_text()
+    facade_import = (
+        "from quickscale_core.runtime.settings import (\n"
+        "    CorrelationIdFilter,\n"
+        "    JsonFormatter,\n"
+        "    num_proxies_for,\n"
+        ")"
+    )
+    adopted_import = (
+        "from quickscale_core.runtime.settings import (\n"
+        "    ClientIdentityMiddleware,\n"
+        "    CorrelationIdFilter,\n"
+        "    CorrelationIdMiddleware,\n"
+        "    JsonFormatter,\n"
+        "    num_proxies_for,\n"
+        ")"
+    )
+    assert facade_import in base_settings
+    adopted_base = base_settings.replace(facade_import, adopted_import)
+    adopted_base = adopted_base.replace(
+        '"quickscale_core.runtime.settings.ClientIdentityMiddleware"',
+        f'"{project_name}.settings.base.ClientIdentityMiddleware"',
+    ).replace(
+        '"quickscale_core.runtime.settings.CorrelationIdMiddleware"',
+        f'"{project_name}.settings.base.CorrelationIdMiddleware"',
+    )
+    assert f'"{project_name}.settings.base.ClientIdentityMiddleware"' in adopted_base
+    base_path.write_text(adopted_base)
+    (project_path / "logs").mkdir()
+
+    def _boot(secret_key: str) -> subprocess.CompletedProcess[str]:
+        environment = _standalone_generated_env(
+            {
+                "ALLOWED_HOSTS": "localhost,127.0.0.1",
+                "DATABASE_URL": "postgresql://user:pass@localhost:5432/app",
+                "RUNTIME_DATABASE_URL": "postgresql://runtime:pass@localhost:5432/app",
+                "SECRET_KEY": secret_key,
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+            }
+        )
+        return subprocess.run(
+            [sys.executable, "manage.py", "check"],
+            cwd=project_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+
+    boot = _boot("adopted-settings-boot-secret-0123456789abcdef")
+    assert boot.returncode == 0, boot.stdout + boot.stderr
+
+    refused = _boot("django-insecure-change-this-in-production")
+    assert refused.returncode != 0
+    assert "SECRET_KEY must be set" in refused.stderr + refused.stdout
+
+
+_LEGACY_INLINE_PRODUCTION_SETTINGS = '''"""Legacy production settings carrying the inline command-mode contract."""
+import os
+
+import dj_database_url
+from decouple import config
+
+from .base import *  # noqa: F403, F405
+
+_SHIPPED_SECRET_KEY_PLACEHOLDER = "django-insecure-change-this-in-production"
+
+
+def _require_production_secret_key(secret_key):
+    normalized_secret_key = str(secret_key).strip()
+    if not normalized_secret_key or normalized_secret_key == _SHIPPED_SECRET_KEY_PLACEHOLDER:
+        raise ValueError(
+            "SECRET_KEY must be set to a non-empty, non-default value in production."
+        )
+    return normalized_secret_key
+
+
+SECRET_KEY = _require_production_secret_key(SECRET_KEY)  # noqa: F405
+
+DEBUG = False
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else None  # noqa: F405
+
+_runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)
+database_url = config("DATABASE_URL", default=None)
+_privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")
+_non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")
+
+_KNOWN_PRIVILEGED_COMMANDS = frozenset(
+    {"migrate", "createcachetable", "migrate_billing_to_orgs"}
+)
+_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})
+
+if _privileged_command:
+    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:
+        raise ValueError("unknown privileged command")
+    _db_url = database_url
+elif _non_db_command:
+    _db_url = database_url or "postgresql://dummy:dummy@localhost:5432/dummy"
+elif _runtime_db_url:
+    _db_url = _runtime_db_url
+else:
+    raise ValueError("RUNTIME_DATABASE_URL is required for runtime serving")
+
+DATABASES = {
+    "default": dj_database_url.parse(
+        _db_url,
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
+}
+'''
+
+
+def _adopt_runtime_settings_facade(settings_text: str) -> str:
+    """Apply the declared facade adoption edit to legacy production settings."""
+    adopted = settings_text.replace(
+        "import dj_database_url\nfrom decouple import config\n",
+        "import dj_database_url\n"
+        "from decouple import config\n"
+        "from quickscale_core.runtime.settings import (\n"
+        "    num_proxies_for,\n"
+        "    require_production_secret_key,\n"
+        "    resolve_runtime_database_url,\n"
+        "    secure_proxy_ssl_header,\n"
+        ")\n",
+    )
+    legacy_guard = (
+        '_SHIPPED_SECRET_KEY_PLACEHOLDER = "django-insecure-change-this-in-production"\n'
+        "\n"
+        "\n"
+        "def _require_production_secret_key(secret_key):\n"
+        "    normalized_secret_key = str(secret_key).strip()\n"
+        "    if not normalized_secret_key or normalized_secret_key == "
+        "_SHIPPED_SECRET_KEY_PLACEHOLDER:\n"
+        "        raise ValueError(\n"
+        '            "SECRET_KEY must be set to a non-empty, non-default value in '
+        'production."\n'
+        "        )\n"
+        "    return normalized_secret_key\n"
+        "\n"
+        "\n"
+        "SECRET_KEY = _require_production_secret_key(SECRET_KEY)  # noqa: F405\n"
+    )
+    adopted = adopted.replace(
+        legacy_guard,
+        "SECRET_KEY = require_production_secret_key(SECRET_KEY)  # noqa: F405\n",
+    )
+    adopted = adopted.replace(
+        'SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")',
+        "SECURE_PROXY_SSL_HEADER = secure_proxy_ssl_header(USE_X_FORWARDED_FOR)",
+    )
+    adopted = adopted.replace(
+        'REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR '
+        "else None  # noqa: F405",
+        'REST_FRAMEWORK["NUM_PROXIES"] = num_proxies_for(  # noqa: F405\n'
+        "    USE_X_FORWARDED_FOR, TRUSTED_PROXY_COUNT\n"
+        ")",
+    )
+    legacy_bridge = (
+        "_KNOWN_PRIVILEGED_COMMANDS = frozenset(\n"
+        '    {"migrate", "createcachetable", "migrate_billing_to_orgs"}\n'
+        ")\n"
+        '_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})\n'
+        "\n"
+        "if _privileged_command:\n"
+        "    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:\n"
+        '        raise ValueError("unknown privileged command")\n'
+        "    _db_url = database_url\n"
+        "elif _non_db_command:\n"
+        '    _db_url = database_url or "postgresql://dummy:dummy@localhost:5432/dummy"\n'
+        "elif _runtime_db_url:\n"
+        "    _db_url = _runtime_db_url\n"
+        "else:\n"
+        '    raise ValueError("RUNTIME_DATABASE_URL is required for runtime serving")\n'
+    )
+    adopted = adopted.replace(
+        legacy_bridge,
+        "_db_url = resolve_runtime_database_url(\n"
+        "    runtime_database_url=_runtime_db_url,\n"
+        "    database_url=database_url,\n"
+        "    privileged_command=_privileged_command,\n"
+        "    non_db_command=_non_db_command,\n"
+        '    allow_bypass_rls=os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1",\n'
+        ")\n",
+    )
+    assert "resolve_runtime_database_url(" in adopted
+    assert "_KNOWN_PRIVILEGED_COMMANDS" not in adopted
+    assert "_require_production_secret_key" not in adopted
+    return adopted
+
+
+def test_legacy_settings_updated_to_facade_boot(tmp_path: Path) -> None:
+    """A legacy donor settings copy adopted onto the facade still boots.
+
+    The fresh-first policy copies a donor ``settings/production.py`` over the
+    fresh recipient's file.  A donor that carried the pre-SA206 inline contract
+    is adopted by importing and calling the runtime settings facade; the
+    adopted module must boot and the facade — not the retired inline copy —
+    must govern the command-mode contract.
+    """
+    from quickscale_core.generator import ProjectGenerator
+
+    project_name = "legacy_adopted_project"
+    project_path = tmp_path / project_name
+    ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+
+    production_path = project_path / project_name / "settings" / "production.py"
+    production_path.write_text(
+        _adopt_runtime_settings_facade(_LEGACY_INLINE_PRODUCTION_SETTINGS)
+    )
+    (project_path / "logs").mkdir()
+
+    def _boot(**overrides: str) -> subprocess.CompletedProcess[str]:
+        environment = _standalone_generated_env(
+            {
+                "ALLOWED_HOSTS": "localhost,127.0.0.1",
+                "DATABASE_URL": "postgresql://user:pass@localhost:5432/app",
+                "RUNTIME_DATABASE_URL": "postgresql://runtime:pass@localhost:5432/app",
+                "SECRET_KEY": "legacy-adopted-boot-secret-0123456789abcdef",
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+                **overrides,
+            }
+        )
+        return subprocess.run(
+            [sys.executable, "manage.py", "check"],
+            cwd=project_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+
+    boot = _boot()
+    assert boot.returncode == 0, boot.stdout + boot.stderr
+
+    refused = _boot(SECRET_KEY="django-insecure-change-this-in-production")
+    assert refused.returncode != 0
+    assert "SECRET_KEY must be set" in refused.stderr + refused.stdout
+
+    retired_command = _boot(
+        QUICKSCALE_PRIVILEGED_COMMAND="migrate_billing_to_orgs",
+        RUNTIME_DATABASE_URL="",
+    )
+    assert retired_command.returncode != 0
+    assert "Unknown QUICKSCALE_PRIVILEGED_COMMAND" in (
+        retired_command.stderr + retired_command.stdout
+    )
 
 
 class TestGeneratedProjectRuntimeSmoke:

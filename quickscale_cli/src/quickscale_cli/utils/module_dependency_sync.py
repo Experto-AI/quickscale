@@ -681,6 +681,94 @@ def _apply_pending_dependency_updates(
     return filtered_updates
 
 
+def _wheel_distribution_version(filename: str) -> str | None:
+    """Return the version component of a wheel filename, if it is well formed."""
+    if not filename.endswith(".whl"):
+        return None
+    parts = filename[: -len(".whl")].split("-")
+    if len(parts) < 5:
+        return None
+    if re.sub(r"[-_.]+", "_", parts[0]).lower() != "quickscale_core":
+        return None
+    return parts[1]
+
+
+def _version_satisfies_bounded_pin(version: str, pin: str) -> bool:
+    """Return whether *version* falls inside a ``>=floor,<ceiling`` pin."""
+    match = re.fullmatch(
+        r">=\s*([0-9]+(?:\.[0-9]+)*)\s*,\s*<\s*([0-9]+(?:\.[0-9]+)*)",
+        pin.strip(),
+    )
+    if match is None:
+        return False
+    try:
+        candidate = tuple(int(part) for part in version.split("."))
+        floor = tuple(int(part) for part in match.group(1).split("."))
+        ceiling = tuple(int(part) for part in match.group(2).split("."))
+    except ValueError:
+        return False
+    if len(candidate) < len(floor):
+        candidate = candidate + (0,) * (len(floor) - len(candidate))
+    return floor <= candidate < ceiling
+
+
+def sync_project_core_dependency(
+    project_path: Path,
+    wheelhouse: Path | None = None,
+) -> bool:
+    """Point the project's lockstep ``quickscale-core`` pin at a local wheel.
+
+    Generated projects declare the bounded ``quickscale-core`` lockstep pin
+    from the generator's version.  When the running CLI resolves QuickScale
+    distributions from a local wheelhouse — an unpublished development build —
+    that pin must be replaced with the local wheel path, or ``poetry lock``
+    chases a version that is not on PyPI.  Projects that do not declare the
+    dependency are left untouched; this function never adds it.
+
+    Returns True when ``pyproject.toml`` changed.
+    """
+    pyproject_path = project_path / "pyproject.toml"
+    if not pyproject_path.exists():
+        return False
+
+    project_pyproject = _load_toml_file(pyproject_path)
+    project_dependencies = _load_poetry_dependencies(pyproject_path, project_pyproject)
+    if "quickscale-core" not in project_dependencies:
+        return False
+    if isinstance(project_dependencies["quickscale-core"], dict):
+        # Already resolved to a local artifact (the module dependency sync ran
+        # first); leave the existing resolution in place.
+        return False
+
+    resolved_wheelhouse = (
+        wheelhouse if wheelhouse is not None else _resolve_wheelhouse_dir()
+    )
+    local_wheel = _resolve_local_wheel_dependency(
+        project_path,
+        project_path,
+        "quickscale-core",
+        resolved_wheelhouse,
+    )
+    if local_wheel is None or project_dependencies["quickscale-core"] == local_wheel:
+        return False
+
+    declared_pin = project_dependencies["quickscale-core"]
+    wheel_filename = Path(str(local_wheel.get("path", ""))).name
+    wheel_version = _wheel_distribution_version(wheel_filename)
+    if wheel_version is None or not _version_satisfies_bounded_pin(
+        wheel_version, str(declared_pin)
+    ):
+        raise DependencySyncError(
+            f"Local quickscale-core wheel {wheel_filename!r} does not satisfy the "
+            f"project's lockstep pin {declared_pin!r}. Build the wheel from the "
+            "matching VERSION, or unset QUICKSCALE_LOCAL_WHEELHOUSE to resolve the "
+            "pin from an index."
+        )
+
+    _update_dependency_entries(pyproject_path, {"quickscale-core": local_wheel})
+    return True
+
+
 def sync_project_module_dependencies(
     project_path: Path,
     module_options_by_name: Mapping[str, Mapping[str, Any] | None],
