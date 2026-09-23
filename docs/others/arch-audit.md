@@ -19,13 +19,13 @@ role. The project has one maintainer and 3,723 commits. Governance is deliberate
 registered-gate universe, AST and conformance gates, and monotonic baselines. `decisions.md`
 § Clean-Break Migration History declares a **fresh-database-only** upgrade posture.
 
-**Growth direction (planning surface, authoritative).** Tracks 2 and 3 are empty. The only live
-path is **SA191 → SA153**: migrate the production beta site `bap-web` onto current QuickScale with
-the fresh-first tool, then build the first property portal on it as a project-owned extension.
-SA191's acceptance requires that "the production database and media are carried over by a
-verified backup and restore, and listing, form, and user counts match"
-(`roadmap.md:104`). This pass is calibrated to that change. It is the first time a QuickScale
-upgrade must carry **real production state** across releases.
+**Growth direction (planning surface, authoritative).** The live path is
+**SA191 → SA153 → SA204**: migrate the production beta site `bap-web` onto current QuickScale with
+the fresh-first tool, build the first property portal on it as a project-owned extension, then
+freeze the module migration history at the SA153 go-live horizon. The maintainer's decision of
+2026-09-23 reseeds `bap-web`'s data rather than carrying it, so SA191 no longer needs a data path
+and the first upgrade that must carry **real production state** is the one that reaches SA153's
+tenant data (finding 1).
 
 **Commit delta** (`98b6c455..1cf67cf7`: 35 commits, 11 merges, 24 non-merge). Classification:
 
@@ -122,20 +122,21 @@ runtime-contract seams, not its frontend or media carry-over.
 
 | Rank | ID | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|
-| 1 | `clean-break-schema-no-data-path` | now (SA191) | High (mechanism) / Medium (exact failure) | M | one-way door | Every release rewrites each module's only migration, and nothing carries a deployed project's data across that rewrite, yet the next ticket requires it. |
+| 1 | `clean-break-schema-no-data-path` | SA153 go-live | High (mechanism) / Medium (exact failure) | M | one-way door | Every release rewrites each module's only migration, and nothing carries a deployed project's data across that rewrite, yet SA153's go-live brings the first tenant data that cannot be reseeded. |
 | 2 | `generated-file-ownership-unmodeled` | now (regressed) | High | M | one-way door | QuickScale-owned runtime and security contracts live in template text that existing projects never receive. The vintage gate detects the gap but delivers only hand-copied prose that is already incomplete. |
 | 3 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | two-way door | Org-removal obligations are declared centrally in vendored `orgs`, checked only in orgs' own test suite, and executed per boundary. |
 
-Rank changes: finding 1 is new and takes rank 1 because it sits on the only scheduled critical
-path. Finding 2 reopens a finding that `882b5cf6` closed; the fix-regression audit is below.
-Finding 3 moves from 1 to 3 with its horizon unchanged.
+Rank changes: finding 1 is new and takes rank 1 by blast radius — a production database — and by
+irreversibility; its horizon moved to SA153's go-live when the reseed decision removed it from the
+critical path. Finding 2 reopens a finding that `882b5cf6` closed; the fix-regression audit is
+below. Finding 3 moves from 1 to 3 with its horizon unchanged.
 
 ## Machine-readable finding index
 
 ```yaml
 - id: clean-break-schema-no-data-path
   title: Upgrades rewrite schema history with no data carry path
-  horizon: now
+  horizon: sa153-go-live
   confidence: high
   size: M
   reversibility: one-way-door
@@ -163,22 +164,24 @@ Finding 3 moves from 1 to 3 with its horizon unchanged.
 
 ## Finding 1: Upgrades rewrite schema history with no data carry path
 
-**ID:** `clean-break-schema-no-data-path` · **Horizon:** now. The trigger is **SA191**, the
-next ticket on the only critical path, followed by every QuickScale upgrade of a site holding
-SA153's first real tenant data. · **Confidence:** High on the mechanism, verified from source,
+**ID:** `clean-break-schema-no-data-path` · **Horizon:** SA153's go-live. The trigger is **SA153
+shipping the first real tenant data**, followed by every QuickScale upgrade of a site holding data
+that cannot be reseeded. · **Confidence:** High on the mechanism, verified from source,
 the local `bap-web` checkout, and the tool. Medium on the exact runtime symptom, which is inferred
 from Django's migration-consistency rule. · **Context dependence:** `wrong-for-now`, keyed on the
 first production data. The clean-break rule was right while no generated project held data
-anyone wanted to keep.
+anyone wanted to keep, and `bap-web`'s data is disposable by decision (2026-09-23).
 
-**Rank rationale:** blast radius is a production database: users, form submissions, and listings
-on the site the portal is built on. Likelihood is certain within the horizon, because SA191 cannot
-meet its own acceptance without this capability.
+**Rank rationale:** blast radius is a production database holding tenant data that cannot be
+reseeded. Likelihood is certain within the horizon: SA153's go-live creates that data, and the
+next module schema change would otherwise rewrite the only migration under it.
 
 **Problem:** Each model-bearing module ships exactly one `0001_initial` that is rewritten in place
 every release. The only upgrade path is a fresh database. No tool, contract, or guard carries a
-deployed project's data from vintage N to vintage N+k. Restore will even replay a vintage-N schema
-under vintage-N+k code without objection.
+deployed project's data from vintage N to vintage N+k. At the audit snapshot restore would even
+replay a vintage-N schema under vintage-N+k code without objection; SA205 has since refused that
+for an artifact-backed restore, and a bare operator-supplied `--file` restore records no vintage
+to compare.
 
 **Evidence:**
 
@@ -232,8 +235,9 @@ under vintage-N+k code without objection.
   artifact-backed restores (a recorded artifact that records no vintage is refused too).
 - A deploy-time migration-state preflight: none. The only `InconsistentMigrationHistory`
   handling is the stale-local-volume helper.
-- A recorded decision that SA191 may reseed instead of carry: none. The acceptance says counts
-  must match.
+- A recorded decision that SA191 may reseed instead of carry: **recorded 2026-09-23** — its data
+  is reseeded, so the acceptance no longer requires count matching and this finding's trigger
+  moves to SA153's go-live (see the reconciliation log).
 - The roadmap commit `0bf013f6` states the intent ("data moves by backup and restore under the
   fresh-database rule"), but that combination has no mechanism.
 
@@ -243,9 +247,9 @@ under vintage-N+k code without objection.
   every deployed project must hand-write on its next upgrade (10 of 10 modules, 60 commits in six
   months).
 - **The data grows under stricter invariants.** After SA153, `bap-web` holds tenant rows under
-  FORCE RLS and composite FKs. Its next upgrade needs an ETL that runs privileged, assigns
-  `organization_id`, and preserves RLS policies, and it grows with every tenant table SA153 and
-  SA154 add.
+  FORCE RLS and composite FKs. Under the clean-break rule its next upgrade would need an ETL that
+  runs privileged, assigns `organization_id`, and preserves RLS policies, and it grows with every
+  tenant table SA153 and SA154 add. The freeze removes that ETL for every upgrade after it.
 - **Backups decay into write-only artifacts.** A backup taken before any upgrade used to restore
   cleanly at the PostgreSQL level into code that cannot run on it; restore now refuses that
   artifact on its recorded module vintage (SA205), so it is a hard stop rather than a silent bad
@@ -261,48 +265,51 @@ fresh-first recipient at it, and run `python manage.py migrate --plan`.
 
 **Steelman:** pre-1.0 with no paying tenants, a clean-break history keeps every module's schema
 legible in one file, avoids a long tail of data migrations, and let the tenancy retrofit land
-without backfill code. The data on `bap-web` may be small enough, and partly reseedable through its
-catalog seed command, that a one-time, project-owned ETL is cheaper than a platform capability. You
-would choose not to fix it if SA153 is the last time a QuickScale-managed site with real data will
-ever be upgraded, or if its data is disposable.
+without backfill code. `bap-web`'s data was small enough, and partly reseedable through its
+catalog seed command, that reseeding beat building a platform capability — the maintainer's
+decision of 2026-09-23. The finding stays live because SA153's tenant data is not reseedable.
 
 **Correct shape:** once a project holds production data, a QuickScale upgrade has a verified,
 tool-owned path from the project's recorded vintage to the current one. Restore refuses an
 artifact whose recorded vintage the running code cannot read.
 
-**Do-nothing cost:** SA191 either misses its acceptance or ships a hand-written, untested ETL
-inside `bap-web`. That repeats on each later upgrade of `bap-web` with more tables and RLS in the
-way. Backups taken before any upgrade become unrestorable in practice. The first incident is a
+**Do-nothing cost:** SA191 reseeds and drops the old rows; the cost lands at SA153's go-live, where
+each later upgrade of `bap-web` needs a hand-written transform with more tables and RLS in the
+way. Backups taken before any upgrade stay unrestorable in practice. The first incident is a
 failed production deploy or a "successful" restore that the application cannot run on.
 
 **Options:**
 
 1. **Freeze history at the first production vintage.** Lift rule 1 of the clean-break decision
-   from a named release onward (the one SA191 lands on). From then on, each model-bearing module
-   ships `0002+` incremental migrations, and in-place `0001` edits become a gated failure. This
-   uses Django's native upgrade path, removes the compounding going forward, and reuses the
-   existing migration-quality gates. SA191 still needs its one-time ETL. This is a one-way door:
-   once a project applies a frozen `0001`, it can never be re-squashed under it.
+   from a named release onward. From then on, each model-bearing module ships `0002+` incremental
+   migrations, and in-place `0001` edits become a gated failure. This uses Django's native upgrade
+   path, removes the compounding going forward, and reuses the existing migration-quality gates.
+   With the reseed decision this no longer waits on SA191. This is a one-way door: once a project
+   applies a frozen `0001`, it can never be re-squashed under it.
 2. **Vintage-aware logical export/import.** Promote the backups JSON export to a restore input
    and add an importer keyed on the artifact's `module_versions`, with per-vintage transforms
    (org assignment, renamed fields). This keeps clean-break but **relocates** the compounding:
    every release that rewrites a `0001` must ship a transform. It is fully reversible.
 3. **Accept and document.** Declare cross-release data carry out of scope before 1.0:
-   - Rewrite SA191's acceptance to name a `bap-web`-owned ETL script and its verification (the
-     counts).
+   - Rewrite SA191's acceptance to reseed `bap-web`'s catalog and re-invite its users (done
+     2026-09-23).
    - Add one containment gate: restore refuses when the artifact's `module_versions` differ from
-     the installed modules.
+     the installed modules (done, SA205).
    - Revocation trigger: SA153's go-live with any tenant data that is not reseedable.
 
 **Recommendation:** Option 3's containment now, and decide on option 1 before SA153 goes live.
-Concretely: add the restore vintage refusal, write SA191's data step as an explicit
-`bap-web`-owned ETL, and freeze `0001_initial` at the vintage `bap-web` lands on. That vintage is
-the cheapest freeze point, because its database is rebuilt anyway. This fits a one-maintainer
-project that is about to have its first real tenant. · **Size:** `M` · **Reversibility:**
-`one-way door` for option 1. Before closing it, prove on a restored `bap-web` copy that
-`migrate` from the frozen `0001` produces the parity baseline (22 FORCE-RLS tables / 44
+Concretely: add the restore vintage refusal, and freeze `0001_initial` at the vintage `bap-web`
+lands on. That vintage is the cheapest freeze point, because its database is rebuilt anyway. This
+fits a one-maintainer project that is about to have its first real tenant. · **Size:** `M` ·
+**Reversibility:** `one-way door` for option 1. Before closing it, prove on a restored `bap-web`
+copy that `migrate` from the frozen `0001` produces the parity baseline (22 FORCE-RLS tables / 44
 policies). · **First step (done, SA205):** in `recovery.py`, restore refuses an artifact whose
-`module_versions` differ from the installed modules; what remains is the tool-owned data path.
+`module_versions` differ from the installed modules.
+
+**Settled 2026-09-23.** The maintainer reseeds `bap-web`'s data instead of carrying it: SA191's
+acceptance rebuilds and reseeds the database, so no ETL is written, and SA204's freeze is deferred
+to the SA153 go-live horizon (roadmap reshaped the same day). SA205's restore refusal is the
+containment that landed in the meantime.
 
 ---
 
@@ -538,7 +545,8 @@ check where project models exist. Move to option 1 when the trigger fires. · **
 
 ## Change-cost probe
 
-**Probe A: SA191, carry `bap-web` onto current QuickScale** (the only scheduled change).
+**Probe A: SA191, rebuild `bap-web` on current QuickScale** (the only scheduled change; the
+reseed decision reshaped its data station).
 Station list, in order:
 
 1. Hand-patch the donor `settings/production.py` to the SA68 env-pair bridge and both
@@ -549,15 +557,17 @@ Station list, in order:
    FK, and SA153 requires `TenantManager`, `apply_force_rls`, and composite FKs on
    `PropertyImage`/`PropertyFeature`.
 4. **Data:** a production database recording `listings` 0001–0003, `forms` 0001–0003, `auth`
-   0001–0002, and no `orgs`. Needs a fresh database plus a hand-written ETL assigning
-   `organization_id`. **No tool.**
-5. Verify listing, form, and user counts. **No tool.**
+   0001–0002, and no `orgs`. Rebuilt fresh and reseeded through `bap-web`'s own seed command,
+   with users re-invited; no ETL. **No tool; project-owned work.**
+5. Verify the reseeded catalog and the re-invited users against the old site. **No tool.**
 6. Replace the repo, deploy with `deploy railway`, and provision the runtime role (Railway vintage
    prose, 3 steps).
-7. Roll back. Playbook redeploy restores code, not the database. **No tool.**
+7. Roll back. Playbook redeploy restores code; the retained pre-cutover database is the data
+   rollback, and it is project-owned work. **No tool.**
 
 **Verdict: finding evidence** for findings 1 and 2. Of 7 stations, 3 have no mechanism, and 2 are
-hand edits of QuickScale-owned contract.
+hand edits of QuickScale-owned contract. The reseed decision removes station 4's ETL from SA191,
+but the finding stays live at SA153's go-live.
 
 **Probe B: ship one more runtime-security fix to existing generated projects,** measured on
 SA200 (`dd310cfc`, 22 files). Stations:
@@ -597,8 +607,9 @@ lint and SA199). **Verdict: still exonerated**, with finding 3's caveat for prov
 
 ## Fix order and interactions
 
-- **Findings 1 and 2 are both on SA191 and should be decided before it runs, not during.**
-  - Finding 1's freeze point is the vintage SA191 lands `bap-web` on.
+- **Findings 1 and 2 touch SA191, and both are decided before it runs, not during.**
+  - Finding 1 is settled: `bap-web` is reseeded, and the freeze lands at SA153's go-live horizon
+    on the vintage SA191 lands `bap-web` on.
   - Finding 2's first step removes one of SA191's hand edits (station 1) whenever the migrated
     settings adopt the runtime import.
   - They do not conflict, and each can proceed in parallel.
@@ -614,8 +625,8 @@ lint and SA199). **Verdict: still exonerated**, with finding 3's caveat for prov
 - **Tenant isolation is dual-layer and fails closed**, and SA203 made it more so. The boot guard
   still rejects `rolbypassrls`/`rolsuper`. The last-owner backstop and isolation-check
   registration now run even under the privileged command (`aa5ff547`, with discriminating tests).
-  Remediation of findings 1 and 3 must keep ETL and coordinator work under `operator_access`, not
-  BYPASSRLS at runtime.
+  Remediation of findings 1 and 3 must keep reseed/ETL and coordinator work under the restricted
+  runtime role, or `operator_access` where elevated scope is needed, never BYPASSRLS at runtime.
 - **Single-declaration derivation seams work where they are used.** Tenant classification and
   purge are marker-derived. Module identity is derived. Runtime pins and the runtime role have one
   declaration each. SA193's credential blocks are declaration-driven. These are the precedent for
@@ -654,14 +665,14 @@ lint and SA199). **Verdict: still exonerated**, with finding 3's caveat for prov
 
 ## Questions that would change the ranking
 
-- **`clean-break-schema-no-data-path`:** is `bap-web`'s production data (users, form submissions,
-  listings) worth carrying, or would a reseed plus user re-invitation be acceptable? If a reseed
-  is acceptable, SA191's acceptance changes and finding 1 moves to the SA153 go-live horizon.
 - **`generated-file-ownership-unmodeled`:** is "regenerate and port" the intended *permanent*
   upgrade model for generated projects, or only a pre-1.0 one? If permanent, option 3 is the right
   end state and the finding drops to watchlist containment.
 - **Both findings:** is `experto-ai-web` scheduled to migrate too? It is generated before `orgs`,
   with auth, forms, and blog, and it doubles the population both findings affect.
+
+The `clean-break-schema-no-data-path` question — carry or reseed — was settled on 2026-09-23: the
+data is reseeded, and the finding's horizon moves to SA153's go-live (reconciliation log below).
 
 *No red flags this pass.* No committed credential, unauthenticated surface, injection path, or
 imminent data-loss condition was encountered. `bap-web`'s unconditional `X-Forwarded-Proto` trust
@@ -669,6 +680,11 @@ is benign behind Railway and is recorded as finding-2 evidence, not as a red fla
 
 ## Reconciliation log
 
+- 2026-09-23 — `clean-break-schema-no-data-path`: horizon **moved** to SA153's go-live. Maintainer
+  decision: `bap-web`'s data is reseeded rather than carried, so SA191's acceptance no longer
+  requires a data path and SA204's freeze is deferred to the SA153 go-live horizon (roadmap
+  reshaped the same day). SA205's restore vintage refusal (`58f58864`) is the containment that
+  landed in the meantime; the question that opened this finding is closed.
 - 2026-09-23 — `clean-break-schema-no-data-path`: **new**, rank 1. SA191's acceptance requires
   carrying production data across a clean-break schema rewrite with no mechanism.
 - 2026-09-23 — `generated-file-ownership-unmodeled`: **regressed** (reopened, rank 2). `882b5cf6`
