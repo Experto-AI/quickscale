@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -242,25 +243,24 @@ def _is_drf_throttle_class(record: ClassRecord, classes: list[ClassRecord]) -> b
     for candidate in classes:
         class_by_name.setdefault(candidate.name, []).append(candidate)
 
-    visiting: set[tuple[Path, str]] = set()
-
-    def inherits(candidate: ClassRecord) -> bool:
-        key = (candidate.path, candidate.qualname)
-        if key in visiting:
-            return False
-        visiting.add(key)
-        try:
-            if _base_is_drf_throttle(candidate):
-                return True
-            for base in candidate.bases:
-                for parent in class_by_name.get(base, []):
-                    if inherits(parent):
-                        return True
-            return False
-        finally:
-            visiting.remove(key)
-
-    return inherits(record)
+    # Linear reachability over the name-matched inheritance graph.  Every
+    # migration class has base ``Migration``, so a path-enumerating walk over
+    # that complete digraph grows factorially; reachability is the question
+    # actually being asked and it visits each class once.
+    seen: set[tuple[Path, str]] = {(record.path, record.qualname)}
+    pending = [record]
+    while pending:
+        candidate = pending.pop()
+        if _base_is_drf_throttle(candidate):
+            return True
+        for base in candidate.bases:
+            for parent in class_by_name.get(base, []):
+                key = (parent.path, parent.qualname)
+                if key in seen:
+                    continue
+                seen.add(key)
+                pending.append(parent)
+    return False
 
 
 def test_client_ip_throttle_mixin_delegates_without_framework_coupling() -> None:
@@ -359,7 +359,7 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
             (
                 "quickscale_modules/blog/src/quickscale_modules_blog/views.py",
                 "_get_blog_api_rate_limit_ident",
-                290,
+                297,
             ),
         ]
     )
@@ -377,6 +377,27 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
         str(path.relative_to(REPO_ROOT))
         for path in GENERATED_SETTINGS_ROOT.rglob("*")
         if path.is_file()
-        and "DEFAULT_THROTTLE_CLASSES" in path.read_text(encoding="utf-8")
+        and re.search(
+            r'"DEFAULT_THROTTLE_CLASSES"\s*[,:]',
+            path.read_text(encoding="utf-8"),
+        )
     ]
-    assert generated_default_hits == []
+    expected_base_settings = (
+        GENERATED_SETTINGS_ROOT / "project_name" / "settings" / "base.py.j2"
+    )
+    assert generated_default_hits == [
+        str(expected_base_settings.relative_to(REPO_ROOT))
+    ], (
+        "Only the generated base settings may declare DRF throttle defaults; "
+        f"found {generated_default_hits!r}"
+    )
+
+    base_settings_text = expected_base_settings.read_text(encoding="utf-8")
+    assert re.findall(
+        r'"(rest_framework\.throttling\.[A-Za-z]+)"',
+        base_settings_text,
+    ) == [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ], "Generated throttle defaults must stay on stock DRF throttle classes"
