@@ -8,8 +8,8 @@ depends only on `quickscale-core` and never imports from `quickscale-cli`.
 
 ## Contents
 
-- `quickscale_devtools.beta_migration` — Maintainer helper for fresh-first
-  execution and in-place migration flows between QuickScale project layouts.
+- `quickscale_devtools.beta_migration` — Maintainer helper for the fresh-first
+  migration execution flow between QuickScale project layouts.
 
 ## Entry Point
 

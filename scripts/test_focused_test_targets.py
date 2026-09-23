@@ -140,11 +140,10 @@ def test_partial_ci_e2e_does_not_run_privileged_lane(selector: str) -> None:
     assert "make test-bypassrls" not in _recipe("ci-e2e", selector)
 
 
-@pytest.mark.parametrize("target", ["beta-migrate-fresh", "beta-migrate-in-place"])
-def test_beta_migration_paths_preserve_literal_make_syntax(target: str) -> None:
-    """Documented migration entrypoints must transport path syntax as data."""
+def test_beta_migration_paths_preserve_literal_make_syntax() -> None:
+    """The documented migration entrypoint must transport path syntax as data."""
     recipe = _recipe(
-        target,
+        "beta-migrate-fresh",
         "DONOR=/tmp/$(shell uname -s)",
         "RECIPIENT=/tmp/recipient path",
         "REPORT=/tmp/report's $(HOME).json",
@@ -155,15 +154,8 @@ def test_beta_migration_paths_preserve_literal_make_syntax(target: str) -> None:
     assert "/tmp/report'\\''s $(HOME).json" in recipe
 
 
-@pytest.mark.parametrize(
-    ("target", "mode"),
-    [
-        ("beta-migrate-fresh", "fresh-first"),
-        ("beta-migrate-in-place", "in-place"),
-    ],
-)
 def test_beta_migration_executes_with_literal_path_arguments(
-    tmp_path: Path, target: str, mode: str
+    tmp_path: Path,
 ) -> None:
     """Make and shell syntax in paths must reach the CLI without evaluation."""
     fake_bin = tmp_path / "bin"
@@ -186,7 +178,7 @@ def test_beta_migration_executes_with_literal_path_arguments(
     result = subprocess.run(
         [
             "make",
-            target,
+            "beta-migrate-fresh",
             f"DONOR={donor}",
             f"RECIPIENT={recipient}",
             f"REPORT={report}",
@@ -204,7 +196,7 @@ def test_beta_migration_executes_with_literal_path_arguments(
         "run",
         "python",
         "scripts/beta_migrate.py",
-        mode,
+        "fresh-first",
         "--donor",
         donor,
         "--recipient",

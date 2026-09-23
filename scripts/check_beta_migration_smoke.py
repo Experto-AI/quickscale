@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise beta migration compatibility on isolated generated projects."""
+"""Exercise fresh-first beta migration compatibility on isolated generated projects."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.schema.state_schema import (
@@ -81,38 +81,6 @@ def _generate_project(root: Path, slug: str) -> Path:
     )
     state_manager.flush_empty_consolidated_sections()
     return project
-
-
-def _git(project: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["git", "-C", str(project), *args],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        raise SmokeError(
-            f"git {' '.join(args)} failed in {project}: {(result.stderr or result.stdout).strip()}"
-        )
-    return result
-
-
-def _initialize_clean_worktree(project: Path) -> None:
-    _git(project, "init")
-    _git(project, "add", "-A")
-    _git(
-        project,
-        "-c",
-        "user.name=QuickScale Smoke",
-        "-c",
-        "user.email=quickscale-smoke@example.invalid",
-        "-c",
-        "commit.gpgSign=false",
-        "commit",
-        "-m",
-        "generated fixture",
-    )
 
 
 def _snapshot_tree(project: Path) -> dict[str, str]:
@@ -236,19 +204,17 @@ def _probe_generated_runtime(project: Path) -> None:
 
 def _run_migration(
     *,
-    mode: Literal["fresh-first", "in-place"],
     donor: Path,
     recipient: Path,
     report_path: Path,
     environment: dict[str, str],
     dry_run: bool = False,
-    continue_after_checkpoint: bool = False,
     expected_exit: int = 0,
 ) -> tuple[dict[str, Any], str]:
     command = [
         sys.executable,
         str(BETA_MIGRATE),
-        mode,
+        "fresh-first",
         "--donor",
         str(donor),
         "--recipient",
@@ -258,8 +224,6 @@ def _run_migration(
     ]
     if dry_run:
         command.append("--dry-run")
-    if continue_after_checkpoint:
-        command.append("--continue-after-checkpoint")
     result = subprocess.run(
         command,
         cwd=ROOT,
@@ -323,26 +287,25 @@ def _assert_common_report(report: dict[str, Any]) -> None:
 def _assert_successful_execution(
     report: dict[str, Any],
     *,
-    mode: Literal["fresh-first", "in-place"],
     donor: Path,
     recipient: Path,
     before_donor: dict[str, str],
     before_recipient: dict[str, str],
 ) -> None:
-    """Assert that a compatible generated-project migration completed."""
-    _require(report["status"] == "ready", f"{mode} execution was not ready")
+    """Assert that a compatible generated-project fresh-first migration completed."""
+    _require(report["status"] == "ready", "fresh-first execution was not ready")
     _require(
-        report["phase"] == f"{mode}-executed",
-        f"{mode} execution did not report its completed phase: {report['phase']}",
+        report["phase"] == "fresh-first-executed",
+        f"fresh-first execution did not report its completed phase: {report['phase']}",
     )
-    _require(report["changed_files"], f"{mode} execution listed no changed files")
+    _require(report["changed_files"], "fresh-first execution listed no changed files")
     _require(
         _snapshot_tree(donor) == before_donor,
-        f"{mode} execution unexpectedly mutated donor project {donor}",
+        f"fresh-first execution unexpectedly mutated donor project {donor}",
     )
     _require(
         _snapshot_tree(recipient) != before_recipient,
-        f"{mode} execution did not mutate recipient project {recipient}",
+        f"fresh-first execution did not mutate recipient project {recipient}",
     )
     _require(
         len(report["verification_results"]) == 7
@@ -350,7 +313,7 @@ def _assert_successful_execution(
             result["status"] == "passed" and result["return_code"] == 0
             for result in report["verification_results"]
         ),
-        f"{mode} execution did not complete the verification stack: "
+        "fresh-first execution did not complete the verification stack: "
         f"{report['verification_results']}",
     )
 
@@ -365,7 +328,6 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
     donor_before = _snapshot_tree(donor)
     recipient_before = _snapshot_tree(recipient)
     report, stdout = _run_migration(
-        mode="fresh-first",
         donor=donor,
         recipient=recipient,
         report_path=root / "fresh-compatible.json",
@@ -419,7 +381,6 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
     donor_before = _snapshot_tree(donor)
     recipient_before = _snapshot_tree(recipient)
     blocked, _stdout = _run_migration(
-        mode="fresh-first",
         donor=donor,
         recipient=recipient,
         report_path=root / "fresh-skew.json",
@@ -449,7 +410,6 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
     donor_before = _snapshot_tree(donor)
     recipient_before = _snapshot_tree(recipient)
     dynamic, _stdout = _run_migration(
-        mode="fresh-first",
         donor=donor,
         recipient=recipient,
         report_path=root / "fresh-dynamic-command.json",
@@ -480,7 +440,6 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
     recipient_before = _snapshot_tree(execution_recipient)
     spy_log.write_text("")
     executed, _stdout = _run_migration(
-        mode="fresh-first",
         donor=execution_donor,
         recipient=execution_recipient,
         report_path=root / "fresh-execution.json",
@@ -488,7 +447,6 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
     )
     _assert_successful_execution(
         executed,
-        mode="fresh-first",
         donor=execution_donor,
         recipient=execution_recipient,
         before_donor=donor_before,
@@ -541,197 +499,6 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
     )
 
 
-def _case_in_place(root: Path, environment: dict[str, str], spy_log: Path) -> None:
-    spy_log.write_text("")
-    donor = _generate_project(root, "fresh-scaffold")
-    recipient = _generate_project(root, "existing-site")
-    for project in (donor, recipient):
-        _probe_generated_runtime(project)
-    _initialize_clean_worktree(recipient)
-
-    donor_before = _snapshot_tree(donor)
-    recipient_before = _snapshot_tree(recipient)
-    report, stdout = _run_migration(
-        mode="in-place",
-        donor=donor,
-        recipient=recipient,
-        report_path=root / "in-place-compatible.json",
-        environment=environment,
-    )
-    _require(report["status"] == "checkpoint", "in-place run did not stop at checkpoint")
-    _require(report["phase"] == "in-place-checkpoint", "in-place report phase was not checkpoint")
-    _require(len(report["planned_actions"]) == 8, "in-place plan did not contain eight actions")
-    _require(
-        report["runtime_provenance"]
-        == {
-            "settings_production": "recipient",
-            "start_sh": "donor",
-            "dockerfile": "donor",
-        },
-        f"unexpected in-place runtime provenance: {report['runtime_provenance']}",
-    )
-    _require(
-        any(
-            check["name"] == "recipient-clean-git-worktree" and check["status"] == "passed"
-            for check in report["preflight_checks"]
-        ),
-        "in-place recipient clean-worktree preflight did not pass",
-    )
-    _require(
-        {step["step"] for step in report["skipped_steps"]}
-        == {
-            "perform-in-place-merge-sequence",
-            "run-quickscale-apply",
-            "copy-post-apply-react-surfaces",
-            "execute-verification-subprocesses",
-        },
-        f"unexpected in-place checkpoint skips: {report['skipped_steps']}",
-    )
-    pending = {action["action"] for action in report["pending_manual_actions"]}
-    _require(
-        {
-            "review-infrastructure-and-module-diff",
-            "run-in-place-continuation-later",
-        }
-        <= pending,
-        f"in-place checkpoint omitted handoff actions: {sorted(pending)}",
-    )
-    _require(
-        "No donor or recipient project files were modified." in stdout,
-        "in-place stdout omitted the non-mutation summary",
-    )
-    _assert_common_report(report)
-    _assert_non_mutating_run(
-        donor=donor,
-        recipient=recipient,
-        before_donor=donor_before,
-        before_recipient=recipient_before,
-        spy_log=spy_log,
-    )
-    _require(
-        not _git(recipient, "status", "--porcelain").stdout.strip(),
-        "in-place checkpoint dirtied the recipient git worktree",
-    )
-
-    compatible_start_script = (donor / "start.sh").read_text()
-    with (donor / "start.sh").open("a") as start_script:
-        start_script.write(
-            "\nQUICKSCALE_PRIVILEGED_COMMAND=unsupported_migration "
-            'RUNTIME_DATABASE_URL="" python manage.py unsupported_migration\n'
-        )
-    donor_before = _snapshot_tree(donor)
-    recipient_before = _snapshot_tree(recipient)
-    blocked, _stdout = _run_migration(
-        mode="in-place",
-        donor=donor,
-        recipient=recipient,
-        report_path=root / "in-place-skew.json",
-        environment=environment,
-        expected_exit=1,
-    )
-    _require(blocked["status"] == "blocked", "in-place skew did not block")
-    _require(
-        any("unsupported_migration" in blocker for blocker in blocked["blockers"]),
-        f"in-place skew blocker did not name the command: {blocked['blockers']}",
-    )
-    _assert_non_mutating_run(
-        donor=donor,
-        recipient=recipient,
-        before_donor=donor_before,
-        before_recipient=recipient_before,
-        spy_log=spy_log,
-    )
-    _require(
-        not _git(recipient, "status", "--porcelain").stdout.strip(),
-        "blocked in-place skew dirtied the recipient git worktree",
-    )
-
-    (donor / "start.sh").write_text(
-        compatible_start_script
-        + '\nruntime_command="${1:-migrate}"\n'
-        + 'QUICKSCALE_PRIVILEGED_COMMAND="$runtime_command" '
-        + 'python manage.py "$runtime_command"\n'
-    )
-    donor_before = _snapshot_tree(donor)
-    recipient_before = _snapshot_tree(recipient)
-    dynamic, _stdout = _run_migration(
-        mode="in-place",
-        donor=donor,
-        recipient=recipient,
-        report_path=root / "in-place-dynamic-command.json",
-        environment=environment,
-        expected_exit=1,
-    )
-    _require(dynamic["status"] == "blocked", "in-place dynamic command did not block")
-    _require(
-        any(
-            "QUICKSCALE_PRIVILEGED_COMMAND" in blocker and "static literal" in blocker
-            for blocker in dynamic["blockers"]
-        ),
-        f"in-place dynamic blocker was not actionable: {dynamic['blockers']}",
-    )
-    _assert_non_mutating_run(
-        donor=donor,
-        recipient=recipient,
-        before_donor=donor_before,
-        before_recipient=recipient_before,
-        spy_log=spy_log,
-    )
-    _require(
-        not _git(recipient, "status", "--porcelain").stdout.strip(),
-        "blocked in-place dynamic command dirtied the recipient git worktree",
-    )
-
-    execution_root = root / "execution"
-    execution_donor = _generate_project(execution_root, "test80")
-    execution_recipient = _generate_project(execution_root, "existing-site")
-    donor_vite_config = execution_donor / "frontend" / "vite.config.ts"
-    donor_vite_config.write_text(
-        donor_vite_config.read_text() + "\n// donor in-place smoke marker\n"
-    )
-    _initialize_clean_worktree(execution_recipient)
-    donor_before = _snapshot_tree(execution_donor)
-    recipient_before = _snapshot_tree(execution_recipient)
-    spy_log.write_text("")
-    executed, _stdout = _run_migration(
-        mode="in-place",
-        donor=execution_donor,
-        recipient=execution_recipient,
-        report_path=root / "in-place-execution.json",
-        environment=environment,
-        continue_after_checkpoint=True,
-    )
-    _assert_successful_execution(
-        executed,
-        mode="in-place",
-        donor=execution_donor,
-        recipient=execution_recipient,
-        before_donor=donor_before,
-        before_recipient=recipient_before,
-    )
-    _probe_generated_runtime(execution_recipient)
-    _require(
-        "existing_site.wsgi" in (execution_recipient / "start.sh").read_text(),
-        "in-place continuation did not substitute the start.sh package",
-    )
-    _require(
-        "existing_site.settings.production" in (execution_recipient / "Dockerfile").read_text(),
-        "in-place continuation did not substitute the Dockerfile package",
-    )
-    compose_text = (execution_recipient / "docker-compose.yml").read_text()
-    _require(
-        "test80" not in compose_text
-        and "quickscale-backend:existing-site" in compose_text
-        and "existing_site.settings.local" in compose_text,
-        f"in-place continuation did not reconcile all Compose slug/package fields:\n{compose_text}",
-    )
-    stale_identity_paths = _text_paths_containing(execution_recipient, "test80")
-    _require(
-        not stale_identity_paths,
-        f"in-place continuation left donor identity in recipient files: {stale_identity_paths}",
-    )
-
-
 def main() -> int:
     print("🔍 Beta migration generated-project smoke gate")
     previous_skip_lock = os.environ.get("QS_SKIP_POETRY_LOCK")
@@ -748,10 +515,6 @@ def main() -> int:
             print("  🔍 fresh-first compatibility, provenance, skew, and execution")
             _case_fresh_first(root / "fresh-first", environment, spy_log)
             print("    ✅ fresh-first covered non-mutation, fail-closed skew, and execution")
-
-            print("  🔍 in-place checkpoint, compatibility, skew, and continuation")
-            _case_in_place(root / "in-place", environment, spy_log)
-            print("    ✅ in-place covered checkpoint, fail-closed skew, and continuation")
     finally:
         if previous_skip_lock is None:
             os.environ.pop("QS_SKIP_POETRY_LOCK", None)

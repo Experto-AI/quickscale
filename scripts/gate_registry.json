@@ -267,7 +267,7 @@
         },
         {
             "id": "check-beta-migration-smoke",
-            "description": "Both beta migration modes preserve runtime ownership and reject incompatible generated fixtures",
+            "description": "The fresh-first beta migration preserves runtime ownership and rejects incompatible generated fixtures",
             "required_contexts": [
                 "local-serial",
                 "local-parallel",

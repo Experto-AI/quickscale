@@ -1046,16 +1046,14 @@ and asserts every emitted file is classified.
    ``FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`` and
    ``FRESH_FIRST_DONOR_DJANGO_FILES``).  The donor's production settings carry
    the real deploy-time configuration and must not be replaced by the fresh
-   scaffold's defaults.  The in-place path does not touch ``production.py``
-   because it is not an infrastructure-metadata file — it is hand-written
-   production configuration that the existing beta site already has.
+   scaffold's defaults.
 
-2. **``start.sh`` is an in-place infrastructure target.**  The in-place
-   migration path delivers template-derived infrastructure files
-   (``Dockerfile``, ``docker-compose.yml``, etc.) into the existing beta site.
-   ``start.sh`` is managed the same way so the createcachetable env-pair
-   fix reaches beta sites through the in-place path (the path that existing
-   sites actually use).  Classified under ``IN_PLACE_INFRASTRUCTURE_TARGETS``.
+2. **``start.sh`` follows the recipient scaffold's identity.**  The fresh
+   scaffold's ``start.sh`` is the effective launcher and is reconciled in
+   place: its embedded slug/package references follow the reconciled
+   identity, so the createcachetable env-pair fix reaches the migrated
+   project through the fresh-first path.  Classified under
+   ``FRESH_FIRST_IDENTITY_ROOT_FILES``.
 
 3. **``INTENTIONALLY_UNMANAGED`` is an explicit-only replacement/merge
    ownership class.** Existing files listed there are deliberately outside
@@ -1073,8 +1071,8 @@ and asserts every emitted file is classified.
    is added or an existing template is renamed without updating the taxonomy,
    the gate surfaces the gap as a test failure listing every unclassified
    emitted path.  This is the systematic prevention for the class of defect
-   where a new or renamed template file is silently missed by both migration
-   paths (e.g. ``start.sh``/``production.py``).
+   where a new or renamed template file is silently missed by the migration
+   path (e.g. ``start.sh``/``production.py``).
 
 5. **Every ``INTENTIONALLY_UNMANAGED`` entry carries an explicit category and
    rationale.** No entry may be added without stating why that generated file is
@@ -1116,18 +1114,23 @@ and asserts every emitted file is classified.
    frontend package name. Reconciliation is field-aware when the source slug
    and package share one token, token-boundary-aware for underscore-bearing
    slugs, and non-cascading. A file can remain user-owned and structurally
-   unmanaged while participating in this one-time identity rewrite. In-place
-   migration does not rewrite user-owned recipient files because its recipient
-   identity stays authoritative.
+   unmanaged while participating in this one-time identity rewrite.
 
 9. **Every structural executor path has an operation-derived disposition.**
    The conformance gate models direct file replacement, directory replacement,
    donor-authoritative merge, and copy-if-missing adoption from the executor's
    constants and selectors. This includes fresh-first component and utility
-   directory replacement and in-place ``frontend/package.json`` merge; a path
+   directory replacement; a path
    cannot remain ``INTENTIONALLY_UNMANAGED`` merely because the mutation is
    implemented by a directory walk or a dedicated merge helper rather than a
    named copy tuple.
+
+**Removal record:** The in-place beta-migration mode (``make
+beta-migrate-in-place``, ``--continue-after-checkpoint``, its infrastructure
+copy/apply continuation, and the ``IN_PLACE_*`` taxonomy entries) was removed
+when fresh-first became the only migration path.  The remaining taxonomy
+classifies every emitted file against that single path, and the smoke gate
+exercises fresh-first only.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md) (generated-file ownership finding, if currently open)
 
