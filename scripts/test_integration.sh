@@ -129,6 +129,15 @@ run_with_pythonpath() {
 
 cd "$REPO_ROOT"
 
+# SA-track3-ergonomics — QS_TEST_MODULE scopes the run to one module suite.
+# Validated the same way the `test`/`lint`/`typecheck` Make targets validate
+# MODULE: an unknown module fails fast instead of silently running nothing
+# (or, before this fix, silently running every module).
+if [ -n "${QS_TEST_MODULE:-}" ] && [ ! -d "quickscale_modules/${QS_TEST_MODULE}" ]; then
+  echo "Error: MODULE=${QS_TEST_MODULE} does not exist." >&2
+  exit 1
+fi
+
 persist_module_coverage_xml() {
   local stage_name="$1"
   local coverage_xml="$2"
@@ -158,6 +167,10 @@ show_help() {
   echo "  --help, -h        Show this help message"
   echo ""
   echo "Environment:"
+  echo "  QS_TEST_MODULE        Limit the run to quickscale_modules/<name>. Skips the"
+  echo "                        cross-module coverage-mean gate (a single module's"
+  echo "                        coverage is not representative of the repo mean);"
+  echo "                        the per-file 80% floor still applies."
   echo "  QS_INTEGRATION_JOBS   Concurrency limit for module test workers."
   echo "                        0 or unset = unlimited (all eligible modules run concurrently)."
   echo "                        1 = serial (one module at a time)."
@@ -289,6 +302,13 @@ check_overall_mean_coverage() {
   # gate does not apply. Opt out explicitly via QS_SKIP_COVERAGE_GATE=1.
   if [ "${QS_SKIP_COVERAGE_GATE:-}" = "1" ]; then
     echo "📊 Coverage gate skipped (QS_SKIP_COVERAGE_GATE=1 — subset run)."
+    return 0
+  fi
+  # A single-module run (QS_TEST_MODULE) is one module's coverage, not a
+  # cross-module mean — the equal-weight package-mean gate does not apply.
+  # The per-file 80% floor (extract_low_coverage_lines) still runs normally.
+  if [ -n "${QS_TEST_MODULE:-}" ]; then
+    echo "📊 Coverage-mean gate skipped (QS_TEST_MODULE=${QS_TEST_MODULE} — single-module run)."
     return 0
   fi
   if [ ! -s "$COVERAGE_RESULTS_FILE" ]; then
@@ -468,7 +488,16 @@ if [ -d "quickscale_modules" ]; then
   # before launching any workers.  Positive QS_JOBS values that exceed the
   # eligible count are capped so a request for 100 workers on 12 modules
   # does not leave leftover slots idle.
-  _qs_build_worker_order "$REPO_ROOT/quickscale_modules"
+  _qs_build_worker_order "$REPO_ROOT/quickscale_modules" "${QS_TEST_MODULE:-}"
+
+  # A QS_TEST_MODULE that names a directory (satisfying the earlier -d check)
+  # but no eligible suite -- e.g. a module with no tests/, or a value like
+  # "blog/" or "." that passes -d but matches no worker's basename -- would
+  # otherwise silently run zero tests and still report success.
+  if [ -n "${QS_TEST_MODULE:-}" ] && [ "${#WORKER_ORDER[@]}" -eq 0 ]; then
+    echo "Error: MODULE=${QS_TEST_MODULE} has no quickscale_modules/${QS_TEST_MODULE}/tests directory." >&2
+    exit 1
+  fi
 
   # Cap QS_JOBS at the eligible worker count for positive values.
   _qs_cap_at_eligible "${#WORKER_ORDER[@]}"
@@ -476,6 +505,9 @@ if [ -d "quickscale_modules" ]; then
   for mod in quickscale_modules/*; do
     if [ -d "$mod" ]; then
       mod_name=$(basename "$mod")
+      if [ -n "${QS_TEST_MODULE:-}" ] && [ "$mod_name" != "$QS_TEST_MODULE" ]; then
+        continue
+      fi
       if [ -d "$mod/tests" ]; then
         # WORKER_ORDER already populated in first pass; second pass launches
         # workers with the (possibly capped) QS_JOBS bound.

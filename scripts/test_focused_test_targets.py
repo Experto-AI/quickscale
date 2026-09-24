@@ -222,6 +222,54 @@ def test_integration_without_focus_keeps_its_coverage_gate() -> None:
     assert "QS_SKIP_COVERAGE_GATE=1" not in recipe
 
 
+def test_integration_module_scopes_the_run() -> None:
+    """MODULE=<name> must actually reach the runner, not just the help text."""
+    recipe = _recipe("test-integration", "MODULE=blog")
+    assert "QS_TEST_MODULE='blog'" in recipe
+
+
+def test_integration_without_module_passes_empty_scope() -> None:
+    """No MODULE keeps today's all-module behaviour (empty QS_TEST_MODULE)."""
+    recipe = _recipe("test-integration")
+    assert "QS_TEST_MODULE=''" in recipe
+
+
+def test_integration_rejects_an_unknown_module() -> None:
+    """An unknown MODULE fails fast, mirroring the `test` target's check."""
+    result = subprocess.run(
+        ["make", "test-integration", "MODULE=does-not-exist"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode != 0
+    assert "MODULE=does-not-exist does not exist" in result.stdout
+
+
+def test_integration_rejects_a_module_scope_with_no_eligible_suite() -> None:
+    """
+    A MODULE with no eligible suite must not silently run zero and pass.
+
+    A trailing slash, or a module with no ``tests/``, passes the ``-d`` check
+    but selects nothing. GITHUB_ACTIONS=true skips the PostgreSQL
+    lease/provisioning path so this needs no database.
+    """
+    environment = dict(os.environ)
+    environment["GITHUB_ACTIONS"] = "true"
+    environment["QS_TEST_MODULE"] = "blog/"
+    result = subprocess.run(
+        ["bash", "scripts/test_integration.sh"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=environment,
+    )
+    assert result.returncode == 1
+    assert "MODULE=blog/ has no" in result.stderr
+
+
 # --- Failure recording safety properties -----------------------------------
 
 

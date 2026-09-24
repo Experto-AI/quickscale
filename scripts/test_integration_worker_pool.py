@@ -255,6 +255,40 @@ class TestWorkerOrderBuilding:
         finally:
             _rmrf(tmpdir)
 
+    def test_module_filter_scopes_to_one_module(self) -> None:
+        """An optional module_filter limits WORKER_ORDER to that one module."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            mods_dir = os.path.join(tmpdir, "quickscale_modules")
+            os.makedirs(os.path.join(mods_dir, "blog", "tests"))
+            os.makedirs(os.path.join(mods_dir, "orgs", "tests"))
+
+            result = _source_and_call(
+                f'_qs_build_worker_order "{mods_dir}" "blog" && echo "${{WORKER_ORDER[@]}}"'
+            )
+            assert result.returncode == 0
+            names = result.stdout.strip().split()
+            assert names == ["blog"]
+        finally:
+            _rmrf(tmpdir)
+
+    def test_module_filter_for_a_module_without_tests_yields_empty(self) -> None:
+        """Filtering to a module with no tests/ dir must not fall back to all modules."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            mods_dir = os.path.join(tmpdir, "quickscale_modules")
+            os.makedirs(os.path.join(mods_dir, "no_tests"))
+            os.makedirs(os.path.join(mods_dir, "has_tests", "tests"))
+
+            result = _source_and_call(
+                f'_qs_build_worker_order "{mods_dir}" "no_tests" && echo "${{WORKER_ORDER[@]}}"'
+            )
+            assert result.returncode == 0
+            names = result.stdout.strip().split()
+            assert names == []
+        finally:
+            _rmrf(tmpdir)
+
 
 class TestEnforceWorkerBound:
     """_qs_enforce_worker_bound limits concurrent workers."""

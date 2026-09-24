@@ -85,16 +85,22 @@ qs_validate_jobs() {
 
 # _qs_build_worker_order  — populate WORKER_ORDER from a module directory
 #
-# Usage: _qs_build_worker_order <modules_dir>
-#   modules_dir  path to the quickscale_modules directory
+# Usage: _qs_build_worker_order <modules_dir> [module_filter]
+#   modules_dir    path to the quickscale_modules directory
+#   module_filter  optional single module name; when set, only that module
+#                   (if it has tests/) is added to WORKER_ORDER
 # Sets global array WORKER_ORDER to sorted directory names that have tests/
 _qs_build_worker_order() {
     local modules_dir="$1"
+    local module_filter="${2:-}"
     WORKER_ORDER=()
     for mod in "$modules_dir"/*; do
         if [ -d "$mod" ]; then
             local mod_name
             mod_name=$(basename "$mod")
+            if [ -n "$module_filter" ] && [ "$mod_name" != "$module_filter" ]; then
+                continue
+            fi
             if [ -d "$mod/tests" ]; then
                 WORKER_ORDER+=("$mod_name")
             fi
