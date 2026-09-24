@@ -9,20 +9,16 @@ The next goal is the first useful property portal (SA153) in a project-owned ext
 `bap-web` after the verified migration tools move it onto current QuickScale (SA191).
 Capabilities are generalized only after that project proves their value.
 
-SA191 is the first QuickScale upgrade of a site holding real production state, and by maintainer
-decision of 2026-09-23 that state is **reseeded, not carried**: the database is rebuilt and
-reseeded, so SA191 no longer waits on a frozen migration history and SA204 is deferred to the
-SA153 go-live horizon. The 2026-09-23 audits found it needs a restore that refuses a schema its
-code cannot read (SA205, closed on v89) and runtime contracts that ship as library code instead of
-being hand-patched into the donor's settings (SA206, closed on v89).
+SA191 is the first QuickScale upgrade of a site holding real production state. That state is
+**reseeded, not carried**, so SA204's migration-history freeze waits for SA153's go-live.
 
 **Release status — v0.88.0 packaged, not published.** No core tag, split-branch republication,
 seal, or PyPI upload has happened. Publication stays a maintainer decision; this planner tracks only
 that it is owed: release-tier validation on the packaged bytes, the phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. The packaged bytes
-predate fixes now on `v89`; shipping any of them in 0.88.0 means repackaging. They also carry both
-S1 billing defects the landed billing fix addresses: with billing enabled against real Stripe keys,
-every webhook and every checkout fails.
+predate fixes now on `v89` and carry two S1 billing defects: with billing enabled against real
+Stripe keys, every webhook and every checkout fails. Shipping any `v89` fix in 0.88.0 means
+repackaging.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves history.
@@ -43,27 +39,20 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA207 (landed) ──► SA211
-Track 3: SA208 (landed) ──► SA210 (landed)
+Track 2: SA211
+Track 3: idle
                          critical path: SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA204, SA205, and SA206 started together, one per track; SA205 and SA206 have
-landed, and the reseed decision means SA191 no longer waits on SA204. SA191 migrates `bap-web`
-onto current QuickScale, rebuilds and reseeds its database rather than carrying it, and redeploys
-through `deploy railway`. SA153 builds the portal on the migrated project. SA204's freeze is
-deferred to the SA153 go-live horizon. SA154 is an inventory, not work.
+**Critical path.** SA191 migrates `bap-web` onto current QuickScale, rebuilds and reseeds its
+database, and redeploys through `deploy railway`. SA153 builds the portal on it. SA204 freezes
+module migration history before any post-SA153 module schema change. SA154 is an inventory, not
+work.
 
-**Ordering off the critical path.** SA208 has landed ahead of SA153, which it gates. SA204 follows
-SA153 in Track 1 and must land before any post-SA153 module schema change. SA207 — which carried
-the facade adoption step SA206 left to it — has landed on Track 2 with the project-level
-declaration and its step-identity record, and SA211 follows it there. The 2026-09-24 arch audit
-recommended step identity over release-keyed adoption, so SA211 carries the rest: module-owned
-steps, the SA208 and SA209 steps, and a watched set derived from the emission manifest. SA211 must
-land before the first release published after 0.89.0, and it should land before SA191 records the
-migrated site's adoption state. SA210 has landed on Track 3, which has no queued work.
+**Ordering off the critical path.** SA211 should land before SA191 records the migrated site's
+adoption state, and must land before the first release published after 0.89.0.
 
 ### Track states
 
@@ -73,7 +62,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA211 | yes | yes | yes | **yes** | no |
-| 3 | — | — | — | — | **yes** | no |
+| 3 | — (idle) | — | — | — | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -88,17 +77,14 @@ A track is **truly green** only when all three states are yes.
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
-  docs), moved from Track 3 so SA209 runs in parallel with the critical path.
+  docs).
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
-  blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block (SA210, moved from
-  Track 2).
-- **Cross-track edits.** SA206 shrank the donor-settings validator in Track 1's
-  `beta_migration.py` and merged before SA191 starts, so the shrink landed before the tool is used
-  for real. SA204 adds a registered gate; SA207's `scripts/gate_registry.json` row reconciles
-  with Track 1 at merge.
+  blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block.
+- **Cross-track edits.** SA211 edits its gate's `scripts/gate_registry.json` row (Track 1) and
+  reads Track 3's emission manifest without changing it; the row reconciles with Track 1 at merge.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md) (SA204, SA153). Each track resolves the shared set at its
@@ -122,11 +108,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   only supported upgrade is a fresh database. Since `bap-web` was generated on 2026-03-05, all ten
   model-bearing modules' `0001_initial` were rewritten two to five times each. Every rewrite adds
   to the hand-written transform each deployed project needs on its next upgrade, and after SA153
-  that transform must also assign `organization_id` under FORCE RLS. The maintainer's decision of
-  2026-09-23 reseeds `bap-web`'s data rather than carrying it, so SA191's rebuild no longer needs
-  the freeze ahead of it: this ticket is deferred to the SA153 go-live horizon, where the first
-  non-reseedable tenant data appears, and it must land before any module schema change reaches
-  that project. This is a one-way door: once a project applies a frozen `0001`, it can never be
+  that transform must also assign `organization_id` under FORCE RLS. `bap-web`'s data is
+  reseeded, so the freeze is needed only at SA153's go-live, where the first non-reseedable tenant
+  data appears; it must land before any module schema change reaches that project. This is a one-way door: once a project applies a frozen `0001`, it can never be
   re-squashed under it (arch audit `clean-break-schema-no-data-path`, option 1).
 
   **Acceptance:** decisions record that rule 1 of the clean-break decision is lifted from 0.89.0
@@ -140,7 +124,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   ref: no 0.89.0 tag exists yet, and a manifest also works in shallow CI clones. The freeze takes
   effect when SA204 merges, so any later `v89` change to a model-bearing module's models ships as
   a `0002`; confirm before merging that no module schema change shipped between SA191's rebuild
-  and this freeze — SA208 and SA209 change no module models. The
+  and this freeze. The
   topology guard in `test_module_migration_topology.py` currently requires exactly one
   `0001_initial` and has a canary that rejects any `0002`; it changes to require a `0001_initial`
   followed by an ordered chain, and that canary is inverted. Fix the freeze release before SA153
@@ -148,10 +132,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
   documentation, `quickscale_core/tests/test_module_migration_topology.py`, and the arch audit.
-
-- [x] **SA205 — Refuse a restore whose recorded module vintage differs from the installed modules.**
-
-- [x] **SA206 — Move code-shaped runtime contracts from the settings templates into `quickscale_core.runtime`.**
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 
@@ -169,11 +149,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   0001–0003, `forms` 0001–0003, and `auth` 0001–0002 as applied and has no `orgs`. Current
   `listings` and `forms` ship only a rewritten `0001_initial` that depends on `orgs`, and
   `AbstractListing` now carries a NOT NULL organization FK. Running current code on a restored copy
-  violates Django's migration-history consistency, and SA205 refuses that restore. By maintainer
-  decision of 2026-09-23 the database is rebuilt and reseeded rather than carried: the catalog is
-  reseeded through `bap-web`'s own seed command and users are re-invited, so the rebuild lands on
-  current history and does not wait on SA204. SA206's facade replaces the hand-patched donor
-  settings.
+  violates Django's migration-history consistency, and restore refuses it. The database is
+  rebuilt and reseeded instead: the catalog through `bap-web`'s own seed command, users by
+  re-invitation.
 
   **Acceptance:** the migrated project records the current QuickScale version in `quickscale.yml`
   and its lock, and passes its own test suite and local verification stack. Its settings import the
@@ -184,8 +162,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   trees. Every manual step the tool did not automate is recorded in the migration report and fed
   back into the playbook, or into a tool fix when it is deterministic. The carried `properties`
   models pass SA208's provider-ID system check, which otherwise stops `start.sh` at `migrate`.
-  If billing is enabled, the Stripe webhook endpoint is recreated at `2026-06-24.dahlia` (SA209).
-  The vintage gate does not show that step to a project already recorded at `0.89.0`.
+  If billing is enabled, the Stripe webhook endpoint is recreated at `2026-06-24.dahlia`.
 
   The production data is reseeded, not carried. Rehearse first: restore a production dump into a
   scratch PostgreSQL 18 and confirm the expected history inconsistency with `migrate --plan`
@@ -206,8 +183,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** the `bap-web` repository and its reseed step; the migration playbook, including its
   data and rollback steps; and, for deterministic gaps found,
   `quickscale_devtools/.../beta_migration.py` and its tests.
-
-- [x] **SA208 — Run provider-ID removal conformance in generated projects.**
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -240,8 +215,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   classification of SA182, never through edits to the vendored `orgs` source.
 
   This is the first real tenant data on a QuickScale site. From here on, module schema changes
-  reach it only as incremental migrations on SA204's frozen history; the freeze is deferred to
-  this horizon and must land before the first such change.
+  reach it only as incremental migrations on SA204's frozen history.
 
   **Acceptance:** first record in decisions that React is the standard frontend for new application
   and public pages; `auth` and `billing` stay Django-rendered on the shared design (SA192); the
@@ -278,57 +252,35 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [x] **SA209 — Make billing work against the real Stripe SDK at API version `2026-06-24.dahlia`.**
-
-- [x] **SA207 — Declare generated-project contract changes once and let adoption advance the recorded vintage.**
-
-- [x] **SA210 — Bound the generated projects' `poetry-core` build requirement.**
-
 - [ ] **SA211 — Give every contract adoption step a stable identity and derive the watched template set.**
 
-  **Context:** SA207 declares each template contract change once in a project-level vintage and
-  landed the step-identity record for it: every declared step carries a stable id, applied state
-  records the adopted ids, and `update`, `apply`, and `deploy railway` refuse on exactly the
-  unadopted steps, so billing's SA209 dahlia webhook step is shown to a project recorded at
-  `0.89.0`. What remains: steps carry no owner, SA208's provider-ID classification is not declared
-  as an identified step, module manifests' step changes are not gated, and SA207's gate watches a
-  hand-listed set of paths rather than the generator's emission manifest. SA210 and SA209 changed
-  `pyproject.toml.j2` and `OPERATIONS.md.j2`, and neither is in SA207's watched set. 0.89.0 is
-  unpublished, so at release the dahlia step reaches every pre-0.89 project.
+  **Context:** every declared adoption step (the project-level declaration and each module's
+  `contract_vintage` block) already has a stable id, applied state records adopted ids, and
+  `update`, `apply`, and `deploy railway` refuse on exactly the unadopted steps. Three gaps remain:
+  SA208's provider-ID classification is not a declared step, a module manifest's step text can
+  change without a new id, and the template-change gate watches a hand-listed path set that
+  misses `pyproject.toml.j2` and `OPERATIONS.md.j2`.
 
   **Acceptance:**
-  - Each adoption step carries a stable id, an owner (project or module), and text.
-  - Applied state records the adopted step ids, and `update`, `apply`, and `deploy railway` show
-    and refuse on exactly the unadopted steps. A project that recorded every step needs no flag.
-    A pre-SA211 state migrates to ids from its recorded vintage.
-  - Identified steps cover SA209's dahlia webhook recreation and SA208's provider-ID
-    classification, which fails `migrate` on an upgraded project with an unclassified `*_id`
-    field. They also cover every step SA207 declares.
-  - The gate fails when a step's text changes without a new id, or when a manifest's steps
-    change without an id. Controls run in both directions.
-  - SA207's template-change gate derives its watched set from the generator's emission manifest,
-    not a path list. A control proves a change to `pyproject.toml.j2` without a step fails.
-  - Before closing, verify the state migration on a copy of `bap-web`'s post-SA191 state if
-    SA191 has landed. The state schema change is a one-way door.
+  - A declared step covers provider-ID classification, which fails `migrate` on an upgraded
+    project with an unclassified `*_id` field.
+  - The gate fails when a module manifest's step text changes without a new id, with controls in
+    both directions.
+  - The template-change gate derives its watched set from the generator's emission manifest. A
+    control proves a change to `pyproject.toml.j2` without a step fails.
 
-  **Surfaces:** `contract_vintage.py`, the apply-state writer and reader, the module manifests'
-  `contract_vintage` blocks, `deployment_commands.py`, SA207's gate and its registry row, and the
-  arch audit. The emission manifest is read, not changed; Track 3 owns the generator.
+  **Surfaces:** `project_contract.yml`, the module manifests' `contract_vintage` blocks, the
+  `check-project-contract-vintage` gate and its registry row, and the arch audit. The emission
+  manifest is read, not changed; Track 3 owns the generator.
 
 ## Deferred constraints and references
 
 The [architecture audit](../others/arch-audit.md) and [technical audit](../others/tech-audit.md) own
 deferred findings, watch notes, and their growth triggers; items stay there until a trigger fires.
-Every live finding of the 2026-09-24 passes is scheduled above or held behind its trigger. The
-tech audit has no open findings. Arch finding `deletion-invariants-per-boundary-reimplementation`
-stays contained by SA208 until its trigger fires. Watch items W2–W7 and the tech audit's notes are
-not scheduled. The `bap-web` reseed question is
-settled: its data is reseeded rather than carried (2026-09-23), which defers SA204 to the SA153
-go-live horizon. The architecture audit's remaining open questions still apply: whether
-"regenerate and port" is the permanent upgrade model (which would reshape the project-level
-vintage machinery and SA191's donor adoption), and whether `experto-ai-web` migrates too.
-The standing scope
-rules, presence contracts, and resource safeguards live in [decisions](decisions.md) and
+Arch finding `deletion-invariants-per-boundary-reimplementation` is contained until its trigger
+fires. Open questions: whether "regenerate and port" is the permanent upgrade model, and whether
+`experto-ai-web` migrates too. Standing scope rules, presence contracts, and resource safeguards
+live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).
 
 Changes to this schedule must pass

@@ -36,7 +36,7 @@ baselines. `decisions.md` § Clean-Break Migration History (`:986ff`) declares a
 3. SA204 freezes the module migration history at SA153's go-live horizon.
 
 Track 2 is **SA211**, the remainder of the contract-adoption work, after SA207 landed the
-project-level declaration and its step-identity record (`roadmap.md:36-61`).
+project-level declaration and its step-identity record.
 **Data sensitivity:** credentials, user PII, and Stripe billing identifiers; no regulatory regime
 is declared. **Cost driver:** flat Railway spend plus Stripe calls. **Out-of-repo architecture:**
 Railway proxy and service configuration, the Stripe account and its webhook endpoint versions, and
@@ -148,7 +148,7 @@ internals, or the DR orchestration are sound.
 | Rank | ID | Title | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | Upgrades rewrite schema history with no data carry path | SA153 go-live | High / Medium | M | one-way door | Every release rewrites each module's only migration, and nothing carries a deployed project's data across it, yet SA153 brings the first tenant data that cannot be reseeded. |
-| 2 | `generated-file-ownership-unmodeled` | Existing projects receive template contract changes only as declared adoption steps | now | High | M | one-way door | Code-shaped contracts ship through the facade (SA206) and adoption is declared once and recorded in state (SA207). Remaining: step owners, the SA208 provider-ID step, module-manifest step gating, and a watch set derived from the emission manifest (SA211). |
+| 2 | `generated-file-ownership-unmodeled` | Contract adoption steps are identified, but coverage is still hand-maintained | now | High | M | one-way door | Code-shaped contracts ship through the facade (SA206) and adoption is declared once and recorded in state (SA207). Remaining (SA211): the provider-ID step, module-manifest step-text gating, and a watch set derived from the emission manifest. |
 | 3 | `deletion-invariants-per-boundary-reimplementation` | Org deletion obligations are declared centrally and executed per boundary | 6–18 months | High | M | two-way door | The obligation inventory lives in vendored `orgs` and names billing's fields as strings; each boundary orchestrates its own subset. |
 
 Rank changes: none. Finding 2's blast radius drops from High to Medium, because SA206 moved the
@@ -169,7 +169,7 @@ items:
                quickscale_devtools/src/quickscale_devtools/beta_migration.py],
      first_seen: 2026-09-23, last_verified: 2026-09-24}
   - {id: generated-file-ownership-unmodeled, status: open, rank: 2,
-     title: "Existing projects receive template contract changes only as declared adoption steps",
+     title: "Contract adoption steps are identified, but coverage is still hand-maintained",
      lenses: [V, IX, XV, XIX], horizon: now, confidence: High, size: M,
      reversibility: one-way door, depends_on: [], amplifies: [],
      anchors: [quickscale_cli/src/quickscale_cli/commands/contract_vintage.py,
@@ -279,111 +279,26 @@ at the vintage SA191 lands `bap-web` on.
 
 ---
 
-## Finding 2: Existing projects receive template contract changes only as hand-copied prose
+## Finding 2: Contract adoption steps are identified, but coverage is still hand-maintained
 
-- **ID:** `generated-file-ownership-unmodeled` (reopened 2026-09-23)
-- **Rank rationale:** Medium × High, steep. Blast radius is down from High: SA206 made the
-  middleware, proxy trust, privileged-command/runtime-DB selection, and SECRET_KEY guard
-  upgradable library code. The remainder is configuration-shaped contracts (throttling order,
-  Vite Host enforcement, templates) and the adoption channel for existing projects. Likelihood is
-  already firing: SA209 in this delta.
-- **Horizon & trigger:** now. Next forcing events: SA191 carries a donor `production.py` forward,
-  and any post-release project runs `update`.
-- **Confidence:** High. The gate semantics were read in `contract_vintage.py`, and the manifests
-  were censused.
-- **Context dependence:** `wrong-for-now`. It lives in the deployed generated projects, and is
-  noise for projects that are regenerated.
+- **ID:** `generated-file-ownership-unmodeled` (partly fixed; narrowed 2026-09-24)
+- **Rank rationale:** Medium × High. Code-shaped contracts ship through the runtime facade, and
+  every declared step has a stable id recorded in applied state. What remains is coverage: steps
+  that are never declared reach no existing project.
+- **Horizon & trigger:** now; the first release published after 0.89.0.
+- **Context dependence:** `wrong-for-now` (deployed generated projects).
 
-**Problem:** A template-side contract change reaches an existing project only through adoption
-prose pasted into module manifests. The gate keys that prose to a release version, so it cannot
-tell whether a project has adopted a given step, and it cannot surface a step added within a
-release. `project_contract` never advances, so acknowledgement is per-invocation forever.
+**Still open (SA211):**
+- Provider-ID classification, which fails `migrate` on an upgraded project with an unclassified
+  `*_id` field, is not a declared adoption step.
+- A module manifest's `manual_adoption_steps` text can change without a new step id.
+- The `check-project-contract-vintage` gate watches a hand-listed path set; `pyproject.toml.j2`
+  and `OPERATIONS.md.j2` changes pass it without a step.
 
-**Evidence** (re-verified this pass unless marked new):
-- **Release-granularity detection (new).** `check_contract_vintage` flags a consumer only when
-  `project_tuple < parse_version_tuple(vintage.minimum)` (`contract_vintage.py:34-44`). SA209
-  appended the Stripe dahlia webhook step to billing's `manual_adoption_steps` under an unchanged
-  `minimum: "0.89.0"` (`quickscale_modules/billing/module.yml:47-50`). A project recorded at
-  `0.89.0` is never shown it. That step's failure mode is webhook 500s and uncredited events,
-  which fails closed but costs money until someone reconciles.
-- **`project_contract` never advances.** It is written only when state is created
-  (`apply_command.py:2263`); existing states "preserve whatever they already have" (`:2272-2278`).
-  Acknowledgement is per-invocation (`contract_vintage.py:90-96`).
-- **Hand-copied prose persists.** 6 manifests are at `minimum: "0.89.0"`. The SA192 shared-design
-  block is still pasted into auth, billing, listings, blog, and CRM, and
-  `RAILWAY_CONTRACT_VINTAGE` (`deployment_commands.py:43`) still duplicates orgs' steps.
-- **SA206's own adoption step is undeclared.** The facade docstring says "existing projects adopt
-  it through a declared contract step" (`runtime/settings.py:25-26`). No manifest or constant
-  mentions `quickscale_core.runtime.settings`; the roadmap assigns it to SA207
-  (`roadmap.md:294-295`).
-- **SA201's fail-open gap is unchanged for existing projects.** Fresh projects merge throttle
-  classes by `setdefault` (`base.py.j2:250-286`). A pre-SA201 `base.py` assigns `REST_FRAMEWORK`
-  wholesale with no throttle classes.
-- **The template-change gate SA207 specifies is path-enumerated (new).** It covers
-  `settings/*`, `start.sh.j2`, and `Dockerfile.j2` (`roadmap.md:300-301`). SA210 changed
-  `pyproject.toml.j2`'s build requirement in this delta, and SA209 changed `OPERATIONS.md.j2`.
-  Neither path is in that set. Both changes are benign, but they show the planned gate would be a
-  hand list.
+**Correct shape:** the watched set derives from the generator's emission manifest, and any step
+text change without a new id fails the gate.
 
-**Counter-evidence:**
-- Searched for a project-level vintage: none.
-- Searched for any writer advancing `project_contract`: only fresh state creation.
-- Searched for a step-level identity or hash in `ContractVintage`: none (`minimum` plus a list of
-  strings).
-- Searched for a gate tying manifest step additions to a `minimum` bump: none.
-- Real containment exists. The gate refuses before mutation, and SA206 removed the largest
-  compounding source: the donor validator shrank by about 1,770 lines, and the fifth privileged
-  station collapsed.
-
-**Why it compounds:** the growth variable is **template-side or operator-side contract changes ×
-existing projects**. Each change is written once for fresh projects and again as prose, and it
-reaches an existing project only if the author also bumps `minimum`. Built on top:
-- SA207's acceptance criteria;
-- the five SA192 copies;
-- the Railway duplicate;
-- SA209's step;
-- SA191's donor path.
-
-**Detection signal:** `quickscale status` "behind" on a project that did every step; a module
-feature that works fresh but not updated (throttling); Stripe webhook 500s after a billing update
-on an already-0.89 project. To instrument: a gate that fails when a manifest's
-`manual_adoption_steps` changes without a `minimum` change.
-
-**Steelman:** a generated project's files belong to the user. Before 1.0 "regenerate and port" is
-legitimate, `0.89.0` is unpublished (so no real project is recorded at it yet), and the gate is an
-honest fail-closed statement. Do not fix it if regenerate-and-port is the permanent model.
-
-**Correct shape:** every contract change an existing project must adopt has a **stable identity**
-(not a release number), is declared once at the right owner (project-level, or the module that
-owns it), and is shown to exactly the projects that have not recorded adopting it. Adoption is
-recorded, and a step added without an identity fails a gate.
-
-**Do-nothing cost:** after 0.89 publishes, every step added in a patch release reaches only the
-projects that happen to be below its `minimum`. The acknowledgement flag becomes a permanent part
-of every `update`. SA191's migrated site starts life behind.
-
-**Options:**
-1. ~~Move code-shaped contracts into the runtime library~~: **done (SA206)**.
-2. **Step-identified project contract (SA207, extended).** Replace `minimum` plus prose with named
-   steps (id, owner, text). Record adopted step ids in state, and show only the unadopted ones. A
-   gate fails when step text changes without a new id, or when a watched template changes without
-   a step. Derive the watched set from the emission manifest rather than a path list. **Live
-   option.**
-3. **SA207 as currently written.** A single project vintage keyed on version, and a
-   path-enumerated gate. This removes the ×5 copies but keeps release granularity, which is the
-   SA209 hole, and keeps a hand path list.
-4. **Accept and document** under regenerate-and-port. Revocation trigger: the first published
-   release after SA153.
-
-**Recommendation:** Option 2, which means amending SA207's acceptance before it starts. It is
-cheap now: SA207 has not begun, and no published project records `0.89.0`.
-- **Size:** `M`.
-- **Reversibility:** `one-way door` (the state schema gains adopted step ids). Verify on a copy of
-  `bap-web`'s post-SA191 state before closing.
-- **Guard:** the step-identity gate plus an emission-manifest-derived watch set.
-- **First step:** add the step-identity requirement to SA207's acceptance, and in the meantime
-  bump billing's `minimum`, or record that 0.89.0 is unpublished so the step reaches everyone at
-  release.
+**Alternative:** accept under regenerate-and-port (see the questions below).
 
 ---
 
@@ -500,7 +415,7 @@ SA208's additive check. **Verdict: still exonerated.**
 ## Fix order and interactions
 
 - **SA207 absorbed finding 2's step-identity shape** for the project-level declaration. SA211
-  carries the remainder: step owners, the SA208 provider-ID step, module-manifest step gating,
+  carries the remainder: the SA208 provider-ID step, module-manifest step gating,
   and the emission-manifest-derived watch set. This is independent of Track 1.
 - **Finding 1's freeze (SA204) must land before any post-SA153 module schema change.** Deciding
   the freeze release early lets SA153 write `0002+` from the start.
@@ -556,9 +471,6 @@ SA208's additive check. **Verdict: still exonerated.**
 - **`clean-break-schema-no-data-path` and `generated-file-ownership-unmodeled`:** will
   `experto-ai-web` migrate too? It doubles the population both findings affect. (Carried;
   unanswered.)
-- **`generated-file-ownership-unmodeled`:** will 0.89.0 publish with billing's `minimum`
-  unchanged? If yes, the SA209 step reaches every pre-0.89 project at release, and the new
-  evidence becomes a latent hole for patch releases only.
 
 *No red flags this pass.* No committed credential, unauthenticated surface, injection path, or
 imminent data-loss condition was encountered.
