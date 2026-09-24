@@ -10,6 +10,12 @@ from typing import Any
 from django.apps import AppConfig
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from quickscale_modules_orgs.removal import (
+    BILLING_PROVIDER_STATE,
+    ExternalProviderField,
+    OrganizationRemovalObligation,
+    RemovalAction,
+)
 
 
 class QuickscaleBillingConfig(AppConfig):
@@ -19,6 +25,79 @@ class QuickscaleBillingConfig(AppConfig):
     name = "quickscale_modules_billing"
     label = "quickscale_modules_billing"
     verbose_name = "QuickScale Billing"
+
+    def removal_obligations(self) -> tuple[OrganizationRemovalObligation, ...]:
+        """Declare billing's organization-removal provider-state obligation.
+
+        Billing owns the Stripe identifiers it writes — including the Stripe
+        customer id it stores on the organization row — so the declaration
+        lives here rather than in vendored ``orgs`` source. Purge refuses
+        while provider state is live and account deletion reconciles it.
+        """
+        return (
+            OrganizationRemovalObligation(
+                name=BILLING_PROVIDER_STATE,
+                purge_action=RemovalAction.REFUSE,
+                account_delete_action=RemovalAction.RECONCILE,
+                # Billing's purge refusal is decided by its own guards in the
+                # purge command (live subscription, pending checkout), not by a
+                # populated identifier, so every field is declared
+                # boundary-guarded rather than value-refused; a stale Stripe
+                # identifier must not block a purge.
+                external_provider_fields=(
+                    ExternalProviderField(
+                        "quickscale_modules_billing.credittransaction",
+                        "stripe_event_id",
+                        boundary_guarded=True,
+                    ),
+                    ExternalProviderField(
+                        "quickscale_modules_billing.credittransaction",
+                        "stripe_object_id",
+                        boundary_guarded=True,
+                    ),
+                    ExternalProviderField(
+                        "quickscale_modules_billing.credittransaction",
+                        "stripe_reference_data",
+                        structured_keys=(
+                            "charge_id",
+                            "checkout_session_id",
+                            "credit_grant_id",
+                            "invoice_id",
+                            "payment_intent_id",
+                            "stripe_customer_id",
+                            "stripe_price_id",
+                            "stripe_subscription_id",
+                        ),
+                        boundary_guarded=True,
+                    ),
+                    ExternalProviderField(
+                        "quickscale_modules_billing.purchasecheckout",
+                        "stripe_checkout_session_id",
+                        boundary_guarded=True,
+                    ),
+                    ExternalProviderField(
+                        "quickscale_modules_billing.subscription",
+                        "stripe_subscription_id",
+                        boundary_guarded=True,
+                    ),
+                    ExternalProviderField(
+                        "quickscale_modules_billing.subscription",
+                        "stripe_customer_id",
+                        boundary_guarded=True,
+                    ),
+                    ExternalProviderField(
+                        "quickscale_modules_billing.subscription",
+                        "stripe_checkout_session_id",
+                        boundary_guarded=True,
+                    ),
+                    ExternalProviderField(
+                        "quickscale_modules_orgs.organization",
+                        "stripe_customer_id",
+                        boundary_guarded=True,
+                    ),
+                ),
+            ),
+        )
 
     def reconcile_organization_removal_provider_state(
         self,

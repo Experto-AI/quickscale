@@ -50,14 +50,13 @@ from quickscale_modules_orgs.models import (
     OrganizationTombstone,
 )
 from quickscale_modules_orgs.removal import (
-    BILLING_PROVIDER_STATE,
-    OWNED_TENANT_ROWS,
-    PURGE_TOMBSTONE,
-    SOCIAL_CACHE_STATE,
+    ORGANIZATION_MODEL_LABEL,
     RemovalAction,
     RemovalBoundary,
+    RemovalCoordinator,
     declared_provider_backed_fields,
-    require_removal_action,
+    declared_refusal_fields,
+    organization_removal_obligations,
 )
 from quickscale_modules_orgs.tenancy import (
     get_tenant_models,
@@ -255,6 +254,18 @@ def _carries_provider_value(field: models.Field, value: object) -> bool:
     return True
 
 
+def _mapping_carries_value(value: object, key: str) -> bool:
+    """Return whether *value* carries provider state at *key*.
+
+    A declared structured field that does not hold a mapping cannot be
+    inspected key by key, so a non-empty value fails closed instead of being
+    read as absent.
+    """
+    if isinstance(value, dict):
+        return value.get(key) not in (None, "")
+    return bool(value)
+
+
 class Command(BaseCommand):
     help = (
         "Purge an organization and all owned rows across all modules. "
@@ -341,6 +352,8 @@ class Command(BaseCommand):
                 "Must be a valid UUID."
             )
 
+        coordinator = RemovalCoordinator(RemovalBoundary.PURGE)
+        self._require_dischargeable_obligations(coordinator)
         self._guard_provider_reconciliation_target(org_id)
         with self._billing_provider_mutation_lock(org_id):
             if dry_run:
@@ -350,10 +363,11 @@ class Command(BaseCommand):
                 )
                 return self._dry_run_by_uuid(
                     org_id,
+                    coordinator=coordinator,
                     provider_expired_checkout_id=provider_expired_checkout_id,
                 )
             self._reconcile_billing_provider_state(org_id, persist=True)
-            return self._purge_by_uuid(org_id)
+            return self._purge_by_uuid(org_id, coordinator=coordinator)
 
     # ------------------------------------------------------------------
     # Slug preflight
@@ -389,18 +403,19 @@ class Command(BaseCommand):
         self,
         org_id: uuid.UUID,
         *,
+        coordinator: RemovalCoordinator,
         provider_expired_checkout_id: str = "",
     ) -> str | None:
-        """Show ownership counts for an organization without deleting."""
+        """Show ownership counts for an organization without deleting.
+
+        A dry run is not a removal boundary: it rehearses the refusal stage
+        and performs no removal, so it discharges the refusal obligations it
+        honors without claiming the destructive ones.
+        """
         try:
             with transaction.atomic():
                 organization = self._lock_organization(org_id)
                 self._guard_reserved_org(organization)
-                require_removal_action(
-                    BILLING_PROVIDER_STATE,
-                    boundary=RemovalBoundary.PURGE,
-                    action=RemovalAction.REFUSE,
-                )
                 set_current_org_for_context(org_id=organization.pk)
                 try:
                     self._guard_live_stripe_subscriptions(
@@ -408,11 +423,16 @@ class Command(BaseCommand):
                         provider_expired_checkout_id=provider_expired_checkout_id,
                     )
                     self._guard_provider_backed_fields(organization)
+                    coordinator.discharge_stage(RemovalAction.REFUSE)
                     ownership_map = self._build_ownership_map(organization)
                 finally:
                     reset_current_org_id()
         except Organization.DoesNotExist:
-            self._check_tombstone(org_id, heal_social_cache=False)
+            self._check_tombstone(
+                org_id,
+                heal_social_cache=False,
+                coordinator=coordinator,
+            )
             raise CommandError(
                 f"No organization found with UUID {org_id}. "
                 "No tombstone exists for this UUID either."
@@ -431,8 +451,19 @@ class Command(BaseCommand):
     # Destructive purge by UUID
     # ------------------------------------------------------------------
 
-    def _purge_by_uuid(self, org_id: uuid.UUID) -> str | None:
-        """Irrevocably delete the organization and all owned rows."""
+    def _purge_by_uuid(
+        self,
+        org_id: uuid.UUID,
+        *,
+        coordinator: RemovalCoordinator,
+    ) -> str | None:
+        """Irrevocably delete the organization and all owned rows.
+
+        The boundary discharges every discovered obligation through one
+        coordinator and calls ``finish`` after the last one, so an obligation
+        this boundary never performed fails the purge instead of passing
+        silently.
+        """
         ownership_map: dict[str, int] = {}
         try:
             with transaction.atomic():
@@ -442,11 +473,6 @@ class Command(BaseCommand):
                 # commits first and is observed or waits and then fails closed.
                 organization = self._lock_organization(org_id)
                 self._guard_reserved_org(organization)
-                require_removal_action(
-                    BILLING_PROVIDER_STATE,
-                    boundary=RemovalBoundary.PURGE,
-                    action=RemovalAction.REFUSE,
-                )
 
                 # Establish consistent org context for RLS-protected tables
                 # BEFORE checking, counting, or deleting. Under PostgreSQL
@@ -456,18 +482,15 @@ class Command(BaseCommand):
                 try:
                     self._guard_live_stripe_subscriptions(organization)
                     self._guard_provider_backed_fields(organization)
+                    coordinator.discharge_stage(RemovalAction.REFUSE)
 
                     # Build the map inside the atomic block so counts match
                     # the pre-delete snapshot with org context already active.
                     ownership_map = self._build_ownership_map(organization)
 
                     # Cross-module owned rows (FK-safe delete order).
-                    require_removal_action(
-                        OWNED_TENANT_ROWS,
-                        boundary=RemovalBoundary.PURGE,
-                        action=RemovalAction.DELETE,
-                    )
                     self._delete_owned_rows(organization)
+                    coordinator.discharge_stage(RemovalAction.DELETE)
 
                     # Org-level rows — use _raw_delete to bypass model delete()
                     # and signal receivers (notably the SA70 pre_delete backstop
@@ -487,18 +510,18 @@ class Command(BaseCommand):
                         Organization.objects.db
                     )
 
-                    require_removal_action(
-                        PURGE_TOMBSTONE,
-                        boundary=RemovalBoundary.PURGE,
-                        action=RemovalAction.RECORD,
-                    )
                     OrganizationTombstone.objects.create(
                         organization_id=org_id,
                     )
+                    coordinator.discharge_stage(RemovalAction.RECORD)
                 finally:
                     reset_current_org_id()
         except Organization.DoesNotExist:
-            self._check_tombstone(org_id, heal_social_cache=True)
+            self._check_tombstone(
+                org_id,
+                heal_social_cache=True,
+                coordinator=coordinator,
+            )
             raise CommandError(
                 f"No organization found with UUID {org_id}. "
                 "No tombstone exists for this UUID either."
@@ -506,7 +529,8 @@ class Command(BaseCommand):
 
         # Cache backends may be remote. Keep this network effect outside the
         # database transaction; a tombstone retry heals any failure here.
-        self._invalidate_social_cache(organization.pk)
+        self._invalidate_organization_caches(organization.pk, coordinator=coordinator)
+        coordinator.finish()
         self._print_purge_summary(organization, ownership_map)
         return None
 
@@ -590,43 +614,47 @@ class Command(BaseCommand):
             if deleted_count:
                 self.stdout.write(f"  Deleted {deleted_count} {label.lower()}.")
 
-    def _clear_social_cache(self, org_id: uuid.UUID) -> None:
-        """Invalidate social cache keys for a purged organization.
+    def _invalidate_organization_caches(
+        self,
+        org_id: uuid.UUID,
+        *,
+        coordinator: RemovalCoordinator,
+    ) -> None:
+        """Run every installed app's declared cache invalidation hook.
 
-        Called after social rows are deleted via queryset.  The queryset
-        delete bypasses ``BaseSocialItem.delete()`` which would normally
-        clear ``SOCIAL_LINKS_CACHE_KEY`` and ``SOCIAL_EMBEDS_CACHE_KEY``
-        plus their ``:org:{org_id}`` variants.
+        The ``INVALIDATE`` stage's executor is the declaring app's
+        ``invalidate_organization_cache`` hook, so the stage is discharged only
+        after each installed app's own invalidation has run.
         """
-        from django.core.cache import cache
-
-        from quickscale_modules_social.contracts import (
-            SOCIAL_EMBEDS_CACHE_KEY,
-            SOCIAL_LINKS_CACHE_KEY,
-        )
-
-        cache.delete_many(
-            [
-                SOCIAL_LINKS_CACHE_KEY,
-                f"{SOCIAL_LINKS_CACHE_KEY}:org:{org_id}",
-                SOCIAL_EMBEDS_CACHE_KEY,
-                f"{SOCIAL_EMBEDS_CACHE_KEY}:org:{org_id}",
-            ]
-        )
-
-    def _invalidate_social_cache(self, org_id: uuid.UUID) -> None:
-        """Run the declared social-cache obligation outside DB transactions."""
-        require_removal_action(
-            SOCIAL_CACHE_STATE,
-            boundary=RemovalBoundary.PURGE,
-            action=RemovalAction.INVALIDATE,
-        )
-        if apps.is_installed("quickscale_modules_social"):
-            self._clear_social_cache(org_id)
+        for app_config in sorted(
+            apps.get_app_configs(), key=lambda config: config.label
+        ):
+            hook = getattr(app_config, "invalidate_organization_cache", None)
+            if callable(hook):
+                hook(org_id)
+        coordinator.discharge_stage(RemovalAction.INVALIDATE)
 
     # ------------------------------------------------------------------
     # Shared helpers
     # ------------------------------------------------------------------
+
+    def _require_dischargeable_obligations(
+        self,
+        coordinator: RemovalCoordinator,
+    ) -> None:
+        """Refuse before any destructive work when a declaration has no stage.
+
+        The completeness guard runs after the purge transaction commits (cache
+        invalidation is a post-commit effect), so a declaration the purge has
+        no stage for is rejected here instead, before anything is deleted.
+        """
+        undischargeable = coordinator.undischargeable()
+        if undischargeable:
+            names = ", ".join(obligation.name for obligation in undischargeable)
+            raise CommandError(
+                "Organization-removal obligations declare actions the purge "
+                f"boundary has no stage for: {names}. Nothing was deleted."
+            )
 
     def _guard_provider_reconciliation_target(self, org_id: object) -> None:
         """Apply non-mutating command guards before any provider request."""
@@ -758,27 +786,45 @@ class Command(BaseCommand):
             )
 
     def _guard_provider_backed_fields(self, organization: Organization) -> None:
-        """Refuse a purge while a row carries provider-backed state (SA208).
+        """Refuse a purge while a row carries provider-backed state (SA208/SA213).
 
         Project-owned models classify their non-relational ``*_id`` fields in
         ``provider_id_classification``.  A field classified provider-backed
         that holds a value is provider state the purge cannot reconcile, so
-        the purge refuses and names every such field.  The caller holds the
-        organization row lock and has established the RLS context for the
-        surrounding transaction.
+        the purge refuses and names every such field.  An obligation may also
+        declare its own provider fields (SA213); unless the declaring module
+        marks a field boundary-guarded, the same refusal applies to it, so a
+        project app's declaration is enforced without bespoke boundary code.
 
-        Every existing row of the organization in each declared model is
-        locked for the rest of the purge transaction, so a concurrent update
-        cannot add a provider value after this read and before deletion.  A
-        row inserted concurrently is not covered by those row locks and is
-        deleted with the organization.
+        The caller holds the organization row lock and has established the RLS
+        context for the surrounding transaction.  Every existing row of the
+        organization in each declared model is locked for the rest of the
+        purge transaction, so a concurrent update cannot add a provider value
+        after this read and before deletion.  A row inserted concurrently is
+        not covered by those row locks and is deleted with the organization.
         """
         try:
             declared_fields = declared_provider_backed_fields(get_tenant_models())
-        except ValueError as exc:
+            refusal_fields = declared_refusal_fields(RemovalBoundary.PURGE)
+            obligations = organization_removal_obligations()
+        except (TypeError, ValueError, RuntimeError) as exc:
             raise CommandError(
                 f"Cannot purge organization {organization.pk}: {exc}"
             ) from exc
+
+        # Every declared label must resolve, guarded or not: a misspelled or
+        # uninstalled label would otherwise be read as "no provider state".
+        for obligation in obligations:
+            for provider_field in obligation.external_provider_fields:
+                try:
+                    apps.get_model(provider_field.model_label)
+                except LookupError as exc:
+                    raise CommandError(
+                        f"Cannot purge organization {organization.pk}: obligation "
+                        f"{obligation.name!r} names "
+                        f"{provider_field.model_label}, which is not an installed "
+                        "model."
+                    ) from exc
 
         carried_fields: list[str] = []
         for model, field_name in declared_fields:
@@ -802,6 +848,10 @@ class Command(BaseCommand):
             ):
                 carried_fields.append(f"{_model_key(model)}.{field_name}")
 
+        carried_fields.extend(
+            self._carried_declared_refusal_fields(organization, refusal_fields)
+        )
+
         if carried_fields:
             joined_fields = ", ".join(sorted(carried_fields))
             raise CommandError(
@@ -810,11 +860,81 @@ class Command(BaseCommand):
                 "these fields before retrying."
             )
 
+    def _carried_declared_refusal_fields(
+        self,
+        organization: Organization,
+        refusal_fields: tuple,
+    ) -> list[str]:
+        """Return declared refusal fields that carry a value for *organization*.
+
+        Every discovered obligation whose purge action is refuse-or-reconcile
+        contributes its non-boundary-guarded provider fields; a populated
+        scalar value, or a populated declared structured key, refuses the
+        purge exactly like a model-classified provider-backed field.  The
+        organization row itself is inspected for a field declared on it, and a
+        declared field no organization scope can reach fails closed.  Rows are
+        locked for the rest of the purge transaction so a concurrent write
+        cannot add a value afterwards.
+        """
+        carried: list[str] = []
+        for provider_field in refusal_fields:
+            try:
+                model = apps.get_model(provider_field.model_label)
+            except LookupError as exc:
+                raise CommandError(
+                    f"Cannot purge organization {organization.pk}: declared refusal "
+                    f"field names {provider_field.model_label}, which is not an "
+                    "installed model."
+                ) from exc
+            label = f"{provider_field.model_label}.{provider_field.field_name}"
+            if model._meta.label_lower == ORGANIZATION_MODEL_LABEL:
+                # The organization row itself carries the declared state.
+                rows: list = [organization]
+            elif has_organization_id_field(model):
+                queryset = _get_qs(model, {"organization_id": organization.pk})
+                rows = list(
+                    queryset.select_for_update().only(  # type: ignore[attr-defined]
+                        provider_field.field_name
+                    )
+                )
+            else:
+                raise CommandError(
+                    f"Cannot purge organization {organization.pk}: declared "
+                    f"refusal field {label} is not organization-scoped, so the "
+                    "purge cannot inspect it."
+                )
+            try:
+                model_field = model._meta.get_field(provider_field.field_name)
+            except FieldDoesNotExist as exc:
+                raise CommandError(
+                    f"Cannot purge organization {organization.pk}: "
+                    f"{label} is declared as a refusal field but is not a model "
+                    "field."
+                ) from exc
+            if provider_field.structured_keys:
+                for row in rows:
+                    value = getattr(row, provider_field.field_name)
+                    carried.extend(
+                        f"{label}[{key}]"
+                        for key in provider_field.structured_keys
+                        if _mapping_carries_value(value, key)
+                    )
+            elif any(
+                _carries_provider_value(
+                    model_field,
+                    getattr(row, provider_field.field_name),
+                )
+                for row in rows
+            ):
+                carried.append(label)
+        return carried
+
     def _check_tombstone(
         self,
         org_id: uuid.UUID,
         *,
         heal_social_cache: bool,
+        coordinator: RemovalCoordinator,
     ) -> None:
         """Check for a tombstone when the org does not exist."""
         try:
@@ -823,7 +943,7 @@ class Command(BaseCommand):
             return
 
         if heal_social_cache:
-            self._invalidate_social_cache(org_id)
+            self._invalidate_organization_caches(org_id, coordinator=coordinator)
 
         self.stdout.write(
             f"Organization {org_id} was already purged "

@@ -136,7 +136,7 @@ internals, or the DR orchestration are sound.
 | Template ↔ upgradable-code contract compatibility | One project-level declaration plus module-specific vintages; applied state records adopted step ids, confirmation advances the recorded vintage, and a registered gate requires a new step id when a watched template changes (SA207) | Gated: declaration, step-id adoption, and template coupling; the watched set is still a path list | **strengthened** (SA207); the emission-manifest-derived watch set is owed to SA211 |
 | Every emitted path has a migration disposition | Generator-derived conformance over a hand-authored taxonomy (89) | Membership gated | unchanged |
 | Module credential env vars reach `.env.example` | Declaration-driven managed-block renderer + conformance | Structural + gated | unchanged |
-| Org-removal obligations discharged | Central `ORGANIZATION_REMOVAL_OBLIGATIONS`; provider-ID system check over installed tenant models + purge refusal (SA208) | Inventory structural; conformance runtime | **strengthened** (SA208); finding 3 |
+| Org-removal obligations discharged | Each app declares its own obligations on its `AppConfig`, and app-owned stages name the declaring app's executor hook; one coordinator discharges each boundary's stages over the discovered set and fails closed; the system check rejects an unrouted, executor-less, or uninspectable declaration and a boundary that stops routing its stages; provider-ID system check and purge refusal cover model-classified and declared provider fields (SA208/SA213) | Domain-declared; conformance runtime | **remediated** (SA213) |
 | Stripe webhook API version agrees with the SDK pin | `STRIPE_API_VERSION` set on the SDK; mismatched events refused (fail closed); 4 operator-facing copies of the literal | Structural at runtime; operator copies convention | **new row** (SA209); W7 |
 | DRF throttling | Template defaults + module scopes merged via `setdefault` (`base.py.j2:250-286`); declared for existing projects as the project-level `sa201-throttling` step (SA207) | Structural for fresh projects; declared for existing | **declared** (SA207) |
 | Generator template context complete | `StrictUndefined` + release-lane boot | Structural | unchanged |
@@ -149,11 +149,10 @@ internals, or the DR orchestration are sound.
 |---:|---|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | Upgrades rewrite schema history with no data carry path | SA153 go-live | High / Medium | M | one-way door | Every release rewrites each module's only migration, and nothing carries a deployed project's data across it, yet SA153 brings the first tenant data that cannot be reseeded. |
 | 2 | `generated-file-ownership-unmodeled` | Contract adoption steps are identified, but coverage is still hand-maintained | now | High | M | one-way door | Code-shaped contracts ship through the facade (SA206) and adoption is declared once and recorded in state (SA207). Remaining (SA211): the provider-ID step, module-manifest step-text gating, and a watch set derived from the emission manifest. |
-| 3 | `deletion-invariants-per-boundary-reimplementation` | Org deletion obligations are declared centrally and executed per boundary | 6–18 months | High | M | two-way door | The obligation inventory lives in vendored `orgs` and names billing's fields as strings; each boundary orchestrates its own subset. |
 
 Rank changes: none. Finding 2's blast radius drops from High to Medium, because SA206 moved the
-security-critical code into the upgradable library. It stays at rank 2 because finding 3's
-likelihood is lower.
+security-critical code into the upgradable library. Finding 3, previously below it at rank 3, is
+resolved and dropped (SA213; see the reconciliation log).
 
 ## Machine-readable index
 
@@ -164,7 +163,7 @@ items:
   - {id: clean-break-schema-no-data-path, status: open, rank: 1,
      title: "Upgrades rewrite schema history with no data carry path",
      lenses: [I, XVI, XIX], horizon: sa153-go-live, confidence: High, size: M,
-     reversibility: one-way door, depends_on: [], amplifies: [deletion-invariants-per-boundary-reimplementation],
+     reversibility: one-way door, depends_on: [], amplifies: [],
      anchors: [docs/technical/decisions.md, quickscale_core/src/quickscale_core/dr_engine/recovery.py,
                quickscale_devtools/src/quickscale_devtools/beta_migration.py],
      first_seen: 2026-09-23, last_verified: 2026-09-24}
@@ -177,14 +176,6 @@ items:
                quickscale_modules/billing/module.yml,
                quickscale_core/src/quickscale_core/runtime/settings.py],
      first_seen: 2026-09-16, last_verified: 2026-09-24}
-  - {id: deletion-invariants-per-boundary-reimplementation, status: open, rank: 3,
-     title: "Org deletion obligations are declared centrally and executed per boundary",
-     lenses: [II, III], horizon: 6-18 months, confidence: High, size: M,
-     reversibility: two-way door, depends_on: [], amplifies: [],
-     anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/removal.py,
-               quickscale_modules/auth/src/quickscale_modules_auth/views.py,
-               quickscale_modules/billing/src/quickscale_modules_billing/views.py],
-     first_seen: 2026-09-17, last_verified: 2026-09-24}
   - {id: W2, status: watchlist, title: "Two filesystem-lock implementations", lenses: [IX]}
   - {id: W3, status: watchlist, title: "Hand-pinned residue in CI provisioning", lenses: [XV]}
   - {id: W4, status: watchlist, title: "trigger_inputs legacy name for an exact allowlist", lenses: [XV]}
@@ -302,65 +293,6 @@ text change without a new id fails the gate.
 
 ---
 
-## Finding 3: Organization deletion obligations are declared centrally and executed per boundary
-
-- **ID:** `deletion-invariants-per-boundary-reimplementation`
-- **Rank rationale:** High × Medium, linear. Billing and retention for real organizations are at
-  stake, and both boundaries exist, but no third boundary or erasure requirement is scheduled.
-- **Horizon & trigger:** 6–18 months. The trigger is a third destructive removal boundary, a
-  durable-erasure requirement, or a project-owned tenant model with an external provider ID.
-  **Not fired:** SA153's scope names none.
-- **Confidence:** High.
-- **Context dependence:** `wrong-for-now` (production tenants).
-
-**Problem:** The obligation inventory is declared in the vendored `orgs` module, which names
-billing's model labels and fields as strings. Each boundary (account deletion, org purge)
-orchestrates its own subset.
-
-**Evidence** (re-verified): `RemovalBoundary` is a two-member enum (`removal.py:12`), and
-`ORGANIZATION_REMOVAL_OBLIGATIONS` begins at `:72`, with billing labels at `:79-109`.
-`cancel_current_subscription` has exactly two callers (`billing/views.py:320`,
-`auth/views.py:463`). SA208 runs the provider-ID walk as an orgs system check over
-`get_tenant_models()` and refuses a purge while a provider-backed field holds a value.
-
-**Counter-evidence:** billing has no `pre_delete`/`post_delete` receivers. Live-subscription
-refusal precedes the purge. Account deletion records its deliberate skips. SA208's containment
-holds at runtime for project-owned models.
-
-**Why it compounds:** the growth variable is **obligations × boundaries**. Each new obligation
-extends the central tuple and every boundary's handler, and each new boundary adds an enum member
-and its own orchestration. SA208's project provider-ID declaration discharges only the purge
-boundary.
-
-**Detection signal:** a new deletion path that does not consume the contract; the orgs system
-check failing on an unclassified `*_id`.
-
-**Steelman:** the two boundaries have different intents, and a coordinator before real tenants
-exist is premature.
-
-**Correct shape:** each domain, project apps included, declares its own obligations where it
-lives. Every boundary discharges the discovered set idempotently, and conformance runs in the
-generated project.
-
-**Do-nothing cost:** bounded until SA153 holds real organizations. After that, the first
-divergence is a retention or billing incident diagnosed by hand.
-
-**Options:**
-1. **Domain-registered obligations plus a coordinator** (an `AppConfig` hook, as tenant markers
-   use). **Live when the trigger fires.**
-2. **Domain-local safeguards** with an outbox.
-3. ~~Containment: system check over installed models~~: **done (SA208)**.
-
-**Recommendation:** option 1, scheduled as SA213 ahead of SA153's tenant tables.
-- **Size:** `M`.
-- **Reversibility:** `two-way door`.
-- **Guard:** the SA208 system check, extended to assert that every boundary calls the
-  coordinator.
-- **First step:** move billing's obligation declarations into billing's `AppConfig`, leaving the
-  tuple as the aggregate.
-
----
-
 ## Change-cost probe
 
 **Probe A: SA191, rebuild `bap-web`** (next on the critical path). Stations:
@@ -403,7 +335,7 @@ SA208's additive check. **Verdict: still exonerated.**
   left to SA207, which declared it and records its adoption in state. Finding 2 stays open,
   narrowed to SA211's remainder.
 - **SA208** (`1744355e`): containment as recorded; the fail direction is refusal. Sound; finding
-  3 stays open.
+  3 was later resolved by SA213 (reconciliation log).
 - **SA209** (`f1627c51`): replaced the hand-built Stripe fakes with real-SDK contract tests, and
   refuses mismatched-version events (fail closed). It **minted** a hand-synced version literal at
   5 stations (W7), and a step the vintage gate initially could not surface; SA207 gives it the id
@@ -419,9 +351,6 @@ SA208's additive check. **Verdict: still exonerated.**
   and the emission-manifest-derived watch set. This is independent of Track 1.
 - **Finding 1's freeze (SA204) must land before any post-SA153 module schema change.** Deciding
   the freeze release early lets SA153 write `0002+` from the start.
-- **Finding 1 amplifies finding 3:** a failed data carry after SA153 would also strand removal
-  obligations tied to rows that no longer migrate.
-- Finding 3 is otherwise independent.
 
 ## Sound load-bearing decisions
 
@@ -431,7 +360,8 @@ SA208's additive check. **Verdict: still exonerated.**
 - **Runtime contracts live in one upgradable facade** (SA206). Future security contract changes
   must go there, not back into templates.
 - **Single-declaration derivation seams** work: tenant classification, module identity, runtime
-  pins, and the SA193 credential blocks.
+  pins, the SA193 credential blocks, and, since SA213, organization-removal obligations declared
+  on each app's `AppConfig`.
 - **The generator fails loudly and proves its output boots** (`StrictUndefined` plus release-lane
   boot).
 - **Vendor contract drift fails closed** (SA209): mismatched Stripe event versions are refused
@@ -477,6 +407,13 @@ imminent data-loss condition was encountered.
 
 ## Reconciliation log
 
+- 2026-09-24 — `deletion-invariants-per-boundary-reimplementation`: **resolved** (SA213). Each app
+  declares its own removal obligations on its `AppConfig`; `orgs` aggregates the discovered set
+  with no vendored labels or fields, both removal boundaries discharge it through one coordinator
+  that fails closed on an undischarged obligation, declared provider fields refuse the purge until
+  they are cleared or reconciled, app-owned stages run the declaring app's own executor hook, and
+  the orgs system check (`E002`) fails a declaration no boundary can route or execute and a
+  boundary that stops routing its stages through the coordinator. Archived in CHANGELOG.
 - 2026-09-24 — `generated-file-ownership-unmodeled`: **SA207 landed** (merge reconciliation; not
   audited by this pass). One project-level declaration now owns each generated-template contract
   change with its adoption steps, the five SA192 manifest copies, orgs' block, and

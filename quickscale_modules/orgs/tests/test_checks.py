@@ -19,6 +19,14 @@ Covers the SA208 ``check_provider_id_conformance()`` paths:
 
 * E001 — exception during tenant-model discovery
 * E001 — undeclared ``*_id`` field, declared field, and the real installed walk
+
+Covers the SA213 ``check_removal_obligation_discharge()`` paths:
+
+* E002 — exception during obligation discovery
+* E002 — a declared action its boundary has no coordinator route for
+* E002 — a boundary implementation that bypasses the coordinator
+* E002 — provider reconciliation at account deletion without a boundary guard
+* Happy path — every shipped declaration is routed, no errors
 """
 
 from __future__ import annotations
@@ -606,3 +614,292 @@ def test_undeclared_project_field_fails_the_real_walk(
     named = " ".join(message.msg for message in messages)
     assert "sa208_project_app.projectproviderrecord.mls_id" in named
     assert "sa208_project_app.projectproviderrecord.local_ref_id" in named
+
+
+# ---------------------------------------------------------------------------
+# SA213 — Removal-obligation discharge check (E002)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckRemovalObligationDischargeE002:
+    """A declared action its boundary cannot route fails the check."""
+
+    @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
+    def test_returns_e002_on_discovery_exception(
+        self, mock_discover: MagicMock
+    ) -> None:
+        from quickscale_modules_orgs.checks import check_removal_obligation_discharge
+
+        mock_discover.side_effect = ValueError("Simulated declaration failure")
+
+        messages = check_removal_obligation_discharge(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.E002"
+        assert "Failed to discover organization-removal obligations" in messages[0].msg
+
+    @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
+    def test_unrouted_boundary_action_fails(self, mock_discover: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_removal_obligation_discharge
+        from quickscale_modules_orgs.removal import (
+            OrganizationRemovalObligation,
+            RemovalAction,
+        )
+
+        mock_discover.return_value = (
+            OrganizationRemovalObligation(
+                name="acme-registry-state",
+                purge_action=RemovalAction.RECONCILE,
+                account_delete_action=RemovalAction.SKIP,
+                account_delete_skip_reason="Account deletion retains the rows.",
+            ),
+        )
+
+        messages = check_removal_obligation_discharge(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.E002"
+        assert "acme-registry-state" in messages[0].msg
+        assert "'purge'" in messages[0].msg
+        assert "'reconcile'" in messages[0].msg
+
+    @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
+    def test_routed_boundary_action_passes(self, mock_discover: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_removal_obligation_discharge
+        from quickscale_modules_orgs.removal import (
+            OrganizationRemovalObligation,
+            RemovalAction,
+        )
+
+        mock_discover.return_value = (
+            OrganizationRemovalObligation(
+                name="acme-provider-state",
+                purge_action=RemovalAction.REFUSE,
+                account_delete_action=RemovalAction.RECONCILE,
+            ),
+        )
+
+        assert check_removal_obligation_discharge(app_configs=None) == []
+
+
+def test_removal_obligation_discharge_passes_for_installed_apps() -> None:
+    """Every shipped declaration has a coordinator route at both boundaries."""
+    from quickscale_modules_orgs.checks import check_removal_obligation_discharge
+
+    assert check_removal_obligation_discharge(app_configs=None) == []
+
+
+# ---------------------------------------------------------------------------
+# SA213 — Boundary wiring and account-deletion reconciliation (E002)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckRemovalObligationDischargeWiringE002:
+    """A boundary implementation that bypasses the coordinator fails the check."""
+
+    def test_bypassed_boundary_stage_and_finish_are_reported(
+        self, monkeypatch: MonkeyPatch
+    ) -> None:
+        from quickscale_modules_orgs import checks
+        from quickscale_modules_orgs.removal import RemovalBoundary
+
+        monkeypatch.setitem(
+            checks._BOUNDARY_IMPLEMENTATIONS,
+            RemovalBoundary.PURGE,
+            (
+                "quickscale_modules_orgs",
+                "tests.bypassed_boundary",
+                "BypassingPurgeBoundary.handle",
+            ),
+        )
+
+        messages = checks.check_removal_obligation_discharge(app_configs=None)
+
+        assert messages
+        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        joined = " ".join(message.msg for message in messages)
+        assert "does not route these stages through the shared coordinator" in joined
+        assert "never calls RemovalCoordinator.finish" in joined
+
+    def test_dead_branch_bypass_is_reported(self, monkeypatch: MonkeyPatch) -> None:
+        from quickscale_modules_orgs import checks
+        from quickscale_modules_orgs.removal import RemovalBoundary
+
+        monkeypatch.setitem(
+            checks._BOUNDARY_IMPLEMENTATIONS,
+            RemovalBoundary.PURGE,
+            (
+                "quickscale_modules_orgs",
+                "tests.bypassed_boundary",
+                "DeadBranchPurgeBoundary.handle",
+            ),
+        )
+
+        messages = checks.check_removal_obligation_discharge(app_configs=None)
+
+        assert messages
+        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        joined = " ".join(message.msg for message in messages)
+        assert "does not route these stages through the shared coordinator" in joined
+        assert "never calls RemovalCoordinator.finish" in joined
+
+    def test_folded_false_branch_bypass_is_reported(
+        self, monkeypatch: MonkeyPatch
+    ) -> None:
+        from quickscale_modules_orgs import checks
+        from quickscale_modules_orgs.removal import RemovalBoundary
+
+        monkeypatch.setitem(
+            checks._BOUNDARY_IMPLEMENTATIONS,
+            RemovalBoundary.PURGE,
+            (
+                "quickscale_modules_orgs",
+                "tests.bypassed_boundary",
+                "ConstantExpressionPurgeBoundary.handle",
+            ),
+        )
+
+        messages = checks.check_removal_obligation_discharge(app_configs=None)
+
+        assert messages
+        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        joined = " ".join(message.msg for message in messages)
+        assert "does not route these stages through the shared coordinator" in joined
+        assert "never calls RemovalCoordinator.finish" in joined
+
+    def test_operand_valued_false_branch_bypass_is_reported(
+        self, monkeypatch: MonkeyPatch
+    ) -> None:
+        from quickscale_modules_orgs import checks
+        from quickscale_modules_orgs.removal import RemovalBoundary
+
+        monkeypatch.setitem(
+            checks._BOUNDARY_IMPLEMENTATIONS,
+            RemovalBoundary.PURGE,
+            (
+                "quickscale_modules_orgs",
+                "tests.bypassed_boundary",
+                "OperandValuedPurgeBoundary.handle",
+            ),
+        )
+
+        messages = checks.check_removal_obligation_discharge(app_configs=None)
+
+        assert messages
+        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        joined = " ".join(message.msg for message in messages)
+        assert "does not route these stages through the shared coordinator" in joined
+        assert "never calls RemovalCoordinator.finish" in joined
+
+    def test_short_circuit_false_branch_bypass_is_reported(
+        self, monkeypatch: MonkeyPatch
+    ) -> None:
+        from quickscale_modules_orgs import checks
+        from quickscale_modules_orgs.removal import RemovalBoundary
+
+        monkeypatch.setitem(
+            checks._BOUNDARY_IMPLEMENTATIONS,
+            RemovalBoundary.PURGE,
+            (
+                "quickscale_modules_orgs",
+                "tests.bypassed_boundary",
+                "ShortCircuitPurgeBoundary.handle",
+            ),
+        )
+
+        messages = checks.check_removal_obligation_discharge(app_configs=None)
+
+        assert messages
+        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        joined = " ".join(message.msg for message in messages)
+        assert "does not route these stages through the shared coordinator" in joined
+        assert "never calls RemovalCoordinator.finish" in joined
+
+    @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
+    def test_refusal_field_on_an_unscoped_model_fails(
+        self, mock_discover: MagicMock
+    ) -> None:
+        from quickscale_modules_orgs.checks import check_removal_obligation_discharge
+        from quickscale_modules_orgs.removal import (
+            ExternalProviderField,
+            OrganizationRemovalObligation,
+            RemovalAction,
+        )
+
+        mock_discover.return_value = (
+            OrganizationRemovalObligation(
+                name="acme-provider-state",
+                purge_action=RemovalAction.REFUSE,
+                account_delete_action=RemovalAction.SKIP,
+                account_delete_skip_reason="Account deletion retains the rows.",
+                external_provider_fields=(
+                    ExternalProviderField(
+                        "quickscale_modules_billing.plan",
+                        "stripe_price_id",
+                    ),
+                ),
+            ),
+        )
+
+        messages = check_removal_obligation_discharge(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.E002"
+        assert "not organization-scoped" in messages[0].msg
+
+    @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
+    def test_reconcile_without_a_boundary_guard_fails(
+        self, mock_discover: MagicMock
+    ) -> None:
+        from quickscale_modules_orgs.checks import check_removal_obligation_discharge
+        from quickscale_modules_orgs.removal import (
+            ExternalProviderField,
+            OrganizationRemovalObligation,
+            RemovalAction,
+        )
+
+        mock_discover.return_value = (
+            OrganizationRemovalObligation(
+                name="acme-provider-state",
+                purge_action=RemovalAction.REFUSE,
+                account_delete_action=RemovalAction.RECONCILE,
+                external_provider_fields=(
+                    ExternalProviderField("acme_app.asset", "vendor_customer_id"),
+                ),
+            ),
+        )
+
+        messages = check_removal_obligation_discharge(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.E002"
+        assert "'account-delete'" in messages[0].msg
+        assert "no boundary guard reconciles" in messages[0].msg
+
+    @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
+    def test_reconcile_with_boundary_guarded_fields_passes(
+        self, mock_discover: MagicMock
+    ) -> None:
+        from quickscale_modules_orgs.checks import check_removal_obligation_discharge
+        from quickscale_modules_orgs.removal import (
+            ExternalProviderField,
+            OrganizationRemovalObligation,
+            RemovalAction,
+        )
+
+        mock_discover.return_value = (
+            OrganizationRemovalObligation(
+                name="acme-provider-state",
+                purge_action=RemovalAction.REFUSE,
+                account_delete_action=RemovalAction.RECONCILE,
+                external_provider_fields=(
+                    ExternalProviderField(
+                        "acme_app.asset",
+                        "vendor_customer_id",
+                        boundary_guarded=True,
+                    ),
+                ),
+            ),
+        )
+
+        assert check_removal_obligation_discharge(app_configs=None) == []

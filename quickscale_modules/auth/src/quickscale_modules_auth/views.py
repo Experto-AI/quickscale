@@ -20,11 +20,9 @@ from quickscale_modules_orgs.models import (
     OrgRole,
 )
 from quickscale_modules_orgs.removal import (
-    BILLING_PROVIDER_STATE,
     RemovalAction,
     RemovalBoundary,
-    require_removal_action,
-    skipped_removal_obligations,
+    RemovalCoordinator,
 )
 
 from quickscale_modules_auth.forms import ProfileUpdateForm
@@ -36,6 +34,11 @@ User = get_user_model()
 
 class _AccountDeletionBillingBlocked(Exception):
     """Raised when provider state is not safe for account deletion."""
+
+
+#: Apps whose account-deletion reconciliation is scoped by their own adapter
+#: rather than by the set of organizations the deletion touches.
+_SCOPED_RECONCILIATION_APPS = frozenset({"quickscale_modules_billing"})
 
 
 class ProfileView(LoginRequiredMixin, DetailView):
@@ -103,6 +106,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         locked check preserves the last-owner race guard before user deletion.
         """
         user = self.request.user
+        coordinator = RemovalCoordinator(RemovalBoundary.ACCOUNT_DELETE)
 
         with transaction.atomic():
             member_organizations = self._lock_member_organizations(user)
@@ -148,11 +152,18 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                         user,
                         prepared_billing_org_ids,
                     )
+                    self._reconcile_removal_provider_state(
+                        prepared_member_org_ids
+                        | prepared_billing_org_ids
+                        | prepared_tenant_user_ref_org_ids
+                        | cancellation_org_ids
+                    )
                     self._cancel_personal_org_subscriptions(
                         user,
                         cancellation_org_ids,
                         cancellation_transitions=cancellation_transitions,
                     )
+                    coordinator.discharge_stage(RemovalAction.RECONCILE)
                 except _AccountDeletionBillingBlocked as exc:
                     messages.error(
                         self.request,
@@ -243,8 +254,15 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                                 user,
                                 current_billing_org_ids,
                             )
-                            self._record_account_delete_skips(locked_organizations)
+                            self._record_account_delete_skips(
+                                locked_organizations,
+                                coordinator=coordinator,
+                            )
                             success_response = super().form_valid(form)
+                            # Fail closed inside the deletion transaction: a
+                            # discovered obligation this boundary never
+                            # discharged rolls the account deletion back.
+                            coordinator.finish()
                 except ProtectedError:
                     logger.exception(
                         "Account deletion was blocked by retained protected data "
@@ -399,6 +417,45 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
         return blocking
 
+    def _reconcile_removal_provider_state(
+        self,
+        organization_ids: set[Any],
+    ) -> None:
+        """Run every installed app's account-deletion provider hook.
+
+        The ``RECONCILE`` stage's executor is the declaring app's
+        ``reconcile_account_deletion_provider_state`` hook, so the boundary
+        calls each installed app that provides one before discharging the
+        stage, over every organization the deletion touches.  Billing's
+        subscription-checkout reconciliation has its own organization scope
+        (the organizations whose subscriptions the deletion actually cancels),
+        so it runs from ``_cancel_personal_org_subscriptions`` instead.
+        """
+        if not organization_ids:
+            return
+        hooks: list[tuple[str, Any]] = []
+        for app_config in sorted(
+            apps.get_app_configs(), key=lambda config: config.label
+        ):
+            if app_config.label in _SCOPED_RECONCILIATION_APPS:
+                continue
+            hook = getattr(
+                app_config, "reconcile_account_deletion_provider_state", None
+            )
+            if callable(hook):
+                hooks.append((app_config.label, hook))
+        if not hooks:
+            return
+
+        for organization_id in sorted(organization_ids, key=str):
+            for label, hook in hooks:
+                try:
+                    hook(organization_id)
+                except Exception as exc:  # noqa: BLE001 - fail closed on any provider error
+                    raise _AccountDeletionBillingBlocked(
+                        f"{label} provider reconciliation failed: {exc}"
+                    ) from exc
+
     def _cancel_personal_org_subscriptions(
         self,
         user: Any,
@@ -418,11 +475,6 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         changes made by this attempt. The caller restores those exact
         subscriptions on every path where the account survives.
         """
-        require_removal_action(
-            BILLING_PROVIDER_STATE,
-            boundary=RemovalBoundary.ACCOUNT_DELETE,
-            action=RemovalAction.RECONCILE,
-        )
         if not organization_ids:
             return
 
@@ -444,6 +496,9 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         organizations = Organization.objects.filter(pk__in=organization_ids).order_by(
             "pk"
         )
+        # Billing's checkout reconciliation stays scoped to the organizations
+        # whose subscriptions this deletion cancels: a retained organization's
+        # open checkout is not this user's to reconcile.
         app_config = apps.get_app_config("quickscale_modules_billing")
         reconcile_checkout = getattr(
             app_config,
@@ -664,9 +719,11 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
     def _record_account_delete_skips(
         self,
         retained_organizations: list[Organization],
+        *,
+        coordinator: RemovalCoordinator,
     ) -> None:
         """Record obligations skipped because account deletion retains orgs."""
-        for obligation in skipped_removal_obligations(RemovalBoundary.ACCOUNT_DELETE):
+        for obligation in coordinator.skipped():
             for organization in retained_organizations:
                 logger.info(
                     "Account deletion deliberately skips organization-removal "

@@ -35,14 +35,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA211 | Give every contract adoption step a stable identity and derive the watched template set | post-v88 | 2 | — | Deferred |
 | SA212 | Keep the CI supply-chain pins fresh and scan the generated container | post-v88 | 2 | — | Deferred |
-| SA213 | Let each module declare its own organization-removal obligations | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: SA211 ──► SA212
-Track 3: SA213
+Track 3: idle
                          critical path: SA191 → SA153
 ```
 
@@ -55,9 +54,7 @@ work.
 
 **Ordering off the critical path.** SA211 should land before SA191 records the migrated site's
 adoption state, and must land before the first release published after 0.89.0. SA212 queues
-behind SA211 because both edit `scripts/gate_registry.json` rows. SA213 has no dependency; it
-should land before SA153 adds the first project-owned tenant tables, so those declare their
-obligations the new way from the start.
+behind SA211 because both edit `scripts/gate_registry.json` rows.
 
 ### Track states
 
@@ -67,7 +64,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA211 | yes | yes | yes | **yes** | no |
-| 3 | SA213 | yes | yes | yes | **yes** | no |
+| 3 | — (idle) | — | — | — | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -88,8 +85,7 @@ A track is **truly green** only when all three states are yes.
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block.
-- **Cross-track edits.** SA213 moves billing's removal obligations into `billing/apps.py`
-  (Track 2's billing module); SA211 and SA212 do not touch it. SA211 edits its gate's `scripts/gate_registry.json` row (Track 1) and
+- **Cross-track edits.** SA211 edits its gate's `scripts/gate_registry.json` row (Track 1) and
   reads Track 3's emission manifest without changing it; the row reconciles with Track 1 at merge.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
@@ -297,26 +293,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `.github/`, `scripts/check_workflow_security.py`, the Trivy gate and its registry
   row, and the tech audit.
 
-- [ ] **SA213 — Let each module declare its own organization-removal obligations.**
-
-  **Context:** `ORGANIZATION_REMOVAL_OBLIGATIONS` in vendored `orgs/removal.py` names billing's
-  model labels and fields as strings, and account deletion and organization purge each orchestrate
-  their own subset (arch audit `deletion-invariants-per-boundary-reimplementation`). The SA208
-  system check contains it today. Fixing it before SA153 lets the portal's tables declare their
-  obligations where they live instead of in `orgs`.
-
-  **Acceptance:**
-  - A module or project app declares its removal obligations from its own `AppConfig`, the way
-    tenant markers are declared; billing's obligations move into `billing/apps.py`.
-  - `orgs` aggregates the discovered declarations; the tuple no longer names another module's
-    labels or fields.
-  - Account deletion and organization purge both discharge the discovered set through one shared
-    entry point, idempotently. The orgs system check fails when a boundary bypasses it.
-  - Purge and account-deletion behavior is unchanged, including billing refusals and last-owner
-    safeguards.
-
-  **Surfaces:** `orgs/removal.py`, `orgs/checks.py`, `purge_organization.py`, `auth/views.py`,
-  `billing/apps.py`, their tests, and the arch audit.
+- [x] **SA213 — Let each module declare its own organization-removal obligations.**
 
 ## Deferred constraints and references
 
