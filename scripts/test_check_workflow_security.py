@@ -114,6 +114,57 @@ def test_missing_tool_exits_two(tmp_path: Path) -> None:
     assert "infrastructure failure" in completed.stderr
 
 
+def test_missing_tool_names_the_exact_remediation(tmp_path: Path) -> None:
+    """The failure must say how to fix it, not just that it's missing."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    completed = _run([], str(empty))
+    assert completed.returncode == 2
+    assert "poetry install" in completed.stderr
+    assert "1.30.1" in completed.stderr
+
+
+def test_resolved_outside_project_environment_warns_but_still_runs(tmp_path: Path) -> None:
+    """A PATH hit outside this interpreter's own env is flagged, not trusted silently."""
+    bin_dir = _fake_zizmor(tmp_path, "[]", 0)
+    completed = _run([], str(bin_dir))
+    assert completed.returncode == 0, completed.stderr
+    assert "outside this interpreter's environment" in completed.stderr
+    assert "poetry install" in completed.stderr
+
+
+@pytest.mark.skipif(REAL_ZIZMOR is None, reason="zizmor is not installed")
+def test_correctly_synced_environment_does_not_warn() -> None:
+    """
+    A properly `poetry install`-ed zizmor must not trigger the stray-tool warning.
+
+    Regression for comparing against ``Path(sys.executable).resolve().parent``,
+    which follows the venv python's symlink to its base interpreter and lands
+    outside ``.venv/bin`` -- so a correctly installed zizmor sitting right next
+    to it would spuriously warn on every run, including in CI.
+    """
+    completed = _run([str(WORKFLOWS)])
+    assert completed.returncode == 0, completed.stderr
+    assert "outside this interpreter's environment" not in completed.stderr
+
+
+def test_preflight_reports_ok_without_requiring_workflows(tmp_path: Path) -> None:
+    """`make check`'s preflight step only needs zizmor resolution, not a workflow tree."""
+    bin_dir = _fake_zizmor(tmp_path, "[]", 0)
+    completed = _run(["--preflight"], str(bin_dir))
+    assert completed.returncode == 0, completed.stderr
+    assert "preflight ok" in completed.stdout
+
+
+def test_preflight_fails_fast_when_zizmor_is_missing(tmp_path: Path) -> None:
+    """The preflight step must exit 2 with the install remediation, like the full run."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    completed = _run(["--preflight"], str(empty))
+    assert completed.returncode == 2
+    assert "poetry install" in completed.stderr
+
+
 def test_unparseable_report_exits_two(tmp_path: Path) -> None:
     """A report that is not JSON fails closed."""
     bin_dir = _fake_zizmor(tmp_path, "not json", 0)

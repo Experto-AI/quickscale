@@ -16,7 +16,8 @@
 #   make lint -- --modules    - Run lint only for quickscale_modules/*
 #   make check -- --core      - Run checks only for quickscale_core
 #   make MODULE=blog test -- --modules - Run tests only for quickscale_modules/blog
-#   make test-integration     - Run integration tests for all modules (full gate; for focused module reruns use `make MODULE=<name> test -- --modules`)
+#   make test-integration     - Run integration tests for all modules (full gate, cross-module coverage-mean gate applies)
+#   make test-integration MODULE=<name> - Scope to quickscale_modules/<name> only; skips the coverage-mean gate (per-file floor still applies)
 #   make check SECTIONS="core modules" - Run checks for multiple sections without `--`
 #   make test-cov             - Run tests with coverage (aggregates DR-engine coverage from backups module when PostgreSQL is available)
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)
@@ -24,7 +25,7 @@
 #   Fast iteration after a failure (see `make help`):
 #   make test-unit K=test_name       - Run only matching tests (coverage gate off)
 #   make test-unit ARGS='-x --lf'    - Pass raw pytest flags through
-#   make test-integration MODULE=blog K=test_name - Narrow a module suite
+#   make test-integration MODULE=blog K=test_name - Narrow to one module suite (coverage-mean gate skipped)
 #   make ci ONLY=integration         - Run one CI stage (partial run, not a pass)
 #   make ci FROM=coverage            - Resume CI from a stage onward
 #   make ci SKIP_INSTALL=1           - Skip the dependency install stage
@@ -268,7 +269,7 @@ help:
 	@echo "  make retry-show           - Show what retry would run, without running it"
 	@echo "  make test-unit K=<expr>   - Run only tests matching <expr> (-k), coverage gate off"
 	@echo "  make test-unit ARGS='-x --lf' - Raw pytest flags (--lf replays per package)"
-	@echo "  make test-integration MODULE=blog K=<expr> - Narrow one module suite"
+	@echo "  make test-integration MODULE=blog K=<expr> - Narrow one module suite (coverage-mean gate off; per-file floor still applies)"
 	@echo "  make test-e2e K=<expr>    - Narrow the E2E lanes"
 	@echo "  make ci ONLY=<stage>      - Run one CI stage only; stages:"
 	@echo "                              install static coverage integration e2e"
@@ -501,15 +502,24 @@ test-unit:
 # Override explicitly per-suite (SA14.4 hatch) for tests that need BYPASSRLS.
 # A focused run also sets QS_SKIP_COVERAGE_GATE=1: the per-module mean-coverage
 # check is as meaningless on a narrowed selection as the unit lane's gate is.
+# MODULE=<name> scopes the run to quickscale_modules/<name> (validated the same
+# way the `test` target validates MODULE at line ~434) and composes with K=.
+# A single-module run always skips the cross-module coverage-mean gate (one
+# module's coverage is not the repo mean) but keeps the per-file 80% floor;
+# with no MODULE, today's all-module behaviour and its mean gate are unchanged.
 test-integration:
+	@if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
+		echo "Error: MODULE=$(MODULE) does not exist."; \
+		exit 1; \
+	fi
 	@$(FOCUS_BANNER_CMD)
 	@set -e; \
 	$(RESET_FAILURE_CACHES); \
 	$(call RECORD_FAILURES_ON_FAIL,integration); \
 	if [ "$${GITHUB_ACTIONS:-}" = "true" ]; then \
-		$(if $(PYTEST_FOCUSED),QS_SKIP_COVERAGE_GATE=1 ,)scripts/test_integration.sh $(if $(PYTEST_FOCUSED),-- $(PYTEST_FOCUS_ARGS),); \
+		QS_TEST_MODULE=$(call shell_quote,$(MODULE)) $(if $(PYTEST_FOCUSED),QS_SKIP_COVERAGE_GATE=1 ,)scripts/test_integration.sh $(if $(PYTEST_FOCUSED),-- $(PYTEST_FOCUS_ARGS),); \
 	else \
-		$(if $(PYTEST_FOCUSED),QS_SKIP_COVERAGE_GATE=1 ,)scripts/provision_ci_postgres.sh run --profile restricted -- scripts/test_integration.sh $(if $(PYTEST_FOCUSED),-- $(PYTEST_FOCUS_ARGS),); \
+		QS_TEST_MODULE=$(call shell_quote,$(MODULE)) $(if $(PYTEST_FOCUSED),QS_SKIP_COVERAGE_GATE=1 ,)scripts/provision_ci_postgres.sh run --profile restricted -- scripts/test_integration.sh $(if $(PYTEST_FOCUSED),-- $(PYTEST_FOCUS_ARGS),); \
 	fi
 
 # Run ONLY the BYPASSRLS-privileged tests (the `-m bypass_rls` migration/DDL
@@ -1322,7 +1332,13 @@ fix: format lint-fix
 #   make check           - full output, respects section flags (-- --core, MODULE=…)
 #   make check QUIET=1    - quiet on success for LLM/agent use (flat SRC/TEST dirs,
 #                           ruff/mypy --quiet, pytest output shown only on failure)
+#
+# The zizmor preflight runs first: it resolves the workflow-security gate's
+# pinned tool before lint/typecheck/the other repository gates run, so an
+# unsynced worktree's ".venv missing zizmor" fails immediately with an exact
+# remediation instead of after everything else has already run.
 check:
+	@$(PYTHON) scripts/check_workflow_security.py --preflight
 	@set -e; \
 	if [ -n "$(QUIET)" ]; then \
 		q_src_dirs=""; \

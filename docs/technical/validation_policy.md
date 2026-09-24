@@ -348,6 +348,7 @@ repeating the full lane; none of them changes what an unscoped run means.
 | Variable | Targets | Effect |
 | --- | --- | --- |
 | `K=<expr>` | `test-unit`, `test`, `test-integration`, `test-e2e` | Passes `-k <expr>` to pytest. Composes with `SECTIONS=` and `MODULE=`. |
+| `MODULE=<name>` | `test`, `test-integration`, `lint`, `typecheck` | Scopes the modules section (or, for `test-integration`, the whole run) to `quickscale_modules/<name>`. An unknown module fails fast. On `test-integration` a scoped run also skips the cross-module coverage-mean gate — one module's coverage is not the repo mean — while the 80% per-file floor still applies; composes with `K=`. |
 | `ARGS=<flags>` | same | Raw pytest flags, word-split by the recipe (`ARGS='-x --lf -vv'`). |
 | `ONLY=<stage>` | `ci`, `ci-e2e` | Run only the named stages: `install`, `static`, `coverage`, `integration`, `e2e` (comma-separated). |
 | `FROM=<stage>` | `ci`, `ci-e2e` | Run that stage and every stage after it. |
