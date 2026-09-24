@@ -19,6 +19,7 @@ from quickscale_cli.commands import (
     status_command,
 )
 from quickscale_cli.commands.contract_vintage import (
+    declared_adoption_step_ids,
     enforce_contract_vintage,
     record_contract_adoption,
 )
@@ -37,6 +38,9 @@ from quickscale_core.schema.state_schema import (
 
 
 _DECLARED_STEP_IDS = tuple(step.id for step in load_project_contract_vintage().steps)
+# The ids a confirmation records for the default fixture state: the project
+# declaration steps plus each installed module's declared vintage id.
+_RECORDED_STEP_IDS = tuple(declared_adoption_step_ids(("orgs",)))
 
 
 def _state(
@@ -83,11 +87,36 @@ def _orgs_manifest() -> ModuleManifest:
 
 
 def test_orgs_no_longer_owns_the_runtime_role_contract() -> None:
-    """SA207: the project-wide runtime-role contract lives in the declaration."""
+    """SA207: the project-wide runtime-role contract lives in the declaration.
+
+    SA211 gives orgs its own provider-ID classification step; that step must
+    not reintroduce the relocated runtime-role prose.
+    """
     manifest_path = Path(__file__).parents[2] / "quickscale_modules/orgs/module.yml"
     manifest = load_manifest_from_path(manifest_path)
 
-    assert manifest.contract_vintage is None
+    vintage = manifest.contract_vintage
+    steps = " ".join(vintage.manual_adoption_steps) if vintage is not None else ""
+    assert "RUNTIME_DB_ROLE" not in steps
+    assert "quickscale_runtime" not in steps
+    assert "start.sh" not in steps
+    assert "db/init.sql" not in steps
+
+
+def test_orgs_declares_the_provider_id_classification_step() -> None:
+    """SA211: the SA208 conformance boundary is an identified adoption step."""
+    manifest_path = Path(__file__).parents[2] / "quickscale_modules/orgs/module.yml"
+    manifest = load_manifest_from_path(manifest_path)
+
+    vintage = manifest.contract_vintage
+    assert vintage is not None
+    assert vintage.id == "sa208-provider-id-classification"
+    assert vintage.minimum == "0.89.0"
+    steps = " ".join(vintage.manual_adoption_steps)
+    assert "provider_id_classification" in steps
+    assert "provider-backed" in steps
+    assert "not-provider-backed" in steps
+    assert "quickscale_modules_orgs.E001" in steps
 
 
 @pytest.mark.parametrize("module_name", ["auth", "billing", "blog", "listings", "crm"])
@@ -229,6 +258,50 @@ def test_adopted_step_ids_satisfy_the_declaration() -> None:
     )
 
 
+def _orgs_provider_id_manifest() -> ModuleManifest:
+    return ModuleManifest(
+        name="orgs",
+        version="0.89.0",
+        contract_vintage=ContractVintage(
+            id="sa208-provider-id-classification",
+            minimum="0.89.0",
+            manual_adoption_steps=["Classify every *_id field"],
+        ),
+    )
+
+
+def test_provider_id_step_refuses_an_unadopted_project(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """SA211: SA208's conformance boundary is enforced as an identified step."""
+    with pytest.raises(click.Abort):
+        enforce_contract_vintage(
+            _state("0.89.0", adopted_steps=_DECLARED_STEP_IDS),
+            {"orgs": _orgs_provider_id_manifest()},
+            operation="'quickscale update'",
+            acknowledged=False,
+        )
+
+    captured = capsys.readouterr()
+    assert "orgs requires project_contract >= 0.89.0" in captured.err
+    assert "Classify every *_id field" in captured.err
+
+
+def test_provider_id_step_is_satisfied_when_the_id_is_recorded() -> None:
+    enforce_contract_vintage(
+        _state(
+            "0.89.0",
+            adopted_steps=(
+                *_DECLARED_STEP_IDS,
+                "sa208-provider-id-classification",
+            ),
+        ),
+        {"orgs": _orgs_provider_id_manifest()},
+        operation="'quickscale update'",
+        acknowledged=False,
+    )
+
+
 def test_update_records_adoption_after_module_mutations(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -286,7 +359,7 @@ def test_update_records_adoption_after_module_mutations(
     reloaded = ProjectStateManager(project).load_state()
     assert reloaded is not None
     assert reloaded.project.project_contract == "0.89.0"
-    assert reloaded.project.adopted_contract_steps == list(_DECLARED_STEP_IDS)
+    assert reloaded.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
     status_after = subprocess.run(
         ["git", "status", "--porcelain"],
         cwd=project,
@@ -365,11 +438,11 @@ def test_update_confirm_contract_adoption_records_and_proceeds(
     assert result.exit_code == 0
     assert update_module.call_count == 1
     assert state.project.project_contract == "0.89.0"
-    assert state.project.adopted_contract_steps == list(_DECLARED_STEP_IDS)
+    assert state.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
     reloaded = ProjectStateManager(project).load_state()
     assert reloaded is not None
     assert reloaded.project.project_contract == "0.89.0"
-    assert reloaded.project.adopted_contract_steps == list(_DECLARED_STEP_IDS)
+    assert reloaded.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
 
 
 def test_executed_apply_records_adoption_under_its_own_lock(
@@ -402,7 +475,7 @@ def test_executed_apply_records_adoption_under_its_own_lock(
     reloaded = ProjectStateManager(tmp_path).load_state()
     assert reloaded is not None
     assert reloaded.project.project_contract == "0.89.0"
-    assert reloaded.project.adopted_contract_steps == list(_DECLARED_STEP_IDS)
+    assert reloaded.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
 
 
 def test_record_contract_adoption_never_moves_the_vintage_backwards(
@@ -417,7 +490,7 @@ def test_record_contract_adoption_never_moves_the_vintage_backwards(
 
     assert recorded == "0.90.0"
     assert state.project.project_contract == "0.90.0"
-    assert state.project.adopted_contract_steps == list(_DECLARED_STEP_IDS)
+    assert state.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
 
 
 def test_status_treats_empty_modules_marker_as_consolidated(
@@ -490,7 +563,7 @@ def test_record_contract_adoption_is_idempotent(tmp_path: Path) -> None:
     assert recorded == "0.89.0"
     assert recorded_again == "0.89.0"
     assert state.project.project_contract == "0.89.0"
-    assert state.project.adopted_contract_steps == list(_DECLARED_STEP_IDS)
+    assert state.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
 
 
 def test_record_contract_adoption_keeps_consolidated_state_authoritative(
@@ -545,7 +618,7 @@ def test_locked_apply_path_records_confirmation_on_no_delta(
     assert execute_locked.call_count == 0
     reloaded = ProjectStateManager(tmp_path).load_state()
     assert reloaded is not None
-    assert reloaded.project.adopted_contract_steps == list(_DECLARED_STEP_IDS)
+    assert reloaded.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
 
 
 def test_deploy_confirm_contract_adoption_records(
@@ -719,7 +792,7 @@ def test_apply_confirm_contract_adoption_records_without_config_change(
     reloaded = ProjectStateManager(tmp_path).load_state()
     assert reloaded is not None
     assert reloaded.project.project_contract == "0.89.0"
-    assert reloaded.project.adopted_contract_steps == list(_DECLARED_STEP_IDS)
+    assert reloaded.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
 
 
 def test_status_keeps_unknown_orphan_as_drift(
