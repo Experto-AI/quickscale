@@ -46,6 +46,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     deletion is rejected; webhook processing holds a session-level lock across its handler and
     result persistence; and Stripe customer search refuses a reference containing an apostrophe, a
     backslash, or a newline instead of interpolating it into the query.
+  - **Billing works against the real Stripe SDK at API version `2026-06-24.dahlia`.** SDK objects
+    are converted before normalization, the pinned version is set on the SDK, a webhook event from
+    a different named release is refused with a retryable 500 instead of being misread, invoice and
+    subscription parsing reads the current payload shapes, and the billing docs and generated
+    operations guide name the required webhook endpoint version.
   - **Module credential placeholders derive from declarations.** The generated `.env.example`
     renders one managed block per enabled credential-bearing module from that module's declared
     env-var options, so enabling `storage` or `backups` — including on an existing project's next

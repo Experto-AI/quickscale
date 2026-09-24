@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 import quickscale_modules_billing.services as billing_services
+import stripe
 from django.db import IntegrityError
 from django.utils import timezone
 
@@ -27,6 +28,13 @@ from quickscale_modules_billing.services import (
     handle_stripe_event,
 )
 from quickscale_modules_orgs.current_org import org_scope
+
+from tests.stripe_payloads import (
+    checkout_session_event,
+    invoice_event,
+    normalize_stripe_object,
+    subscription_event,
+)
 
 
 def _create_recurring_plan(
@@ -68,34 +76,17 @@ def _invoice_event(
     billing_reason: str | None = "subscription_cycle",
     user_reference: str | None = None,
 ) -> dict[str, Any]:
-    subscription_details: dict[str, Any] = {}
-    if user_reference:
-        subscription_details["metadata"] = {
-            "quickscale_user_reference": user_reference,
-        }
-    invoice_object: dict[str, Any] = {
-        "id": invoice_id,
-        "customer": customer_id,
-        "subscription": subscription_id,
-        "subscription_details": subscription_details,
-        "metadata": {},
-        "lines": {
-            "data": [
-                {
-                    "price": {
-                        "id": price_id,
-                    }
-                }
-            ]
-        },
-    }
-    if billing_reason is not None:
-        invoice_object["billing_reason"] = billing_reason
-    return {
-        "id": event_id,
-        "type": event_type,
-        "data": {"object": invoice_object},
-    }
+    """Build a dahlia invoice event from a real SDK object."""
+    return invoice_event(
+        event_id=event_id,
+        event_type=event_type,
+        invoice_id=invoice_id,
+        customer_id=customer_id,
+        price_id=price_id,
+        subscription_id=subscription_id,
+        billing_reason=billing_reason,
+        user_reference=user_reference,
+    )
 
 
 def _subscription_event(
@@ -108,33 +99,16 @@ def _subscription_event(
     status: str,
     user_reference: str | None = None,
 ) -> dict[str, Any]:
-    metadata = {}
-    if user_reference:
-        metadata["quickscale_user_reference"] = user_reference
-        metadata["stripe_price_id"] = price_id
-    return {
-        "id": event_id,
-        "type": event_type,
-        "data": {
-            "object": {
-                "id": subscription_id,
-                "customer": customer_id,
-                "status": status,
-                "current_period_start": 1_700_000_000,
-                "current_period_end": 1_700_086_400,
-                "metadata": metadata,
-                "items": {
-                    "data": [
-                        {
-                            "price": {
-                                "id": price_id,
-                            }
-                        }
-                    ]
-                },
-            }
-        },
-    }
+    """Build a dahlia customer.subscription.* event from a real SDK object."""
+    return subscription_event(
+        event_id=event_id,
+        event_type=event_type,
+        subscription_id=subscription_id,
+        customer_id=customer_id,
+        price_id=price_id,
+        status=status,
+        user_reference=user_reference,
+    )
 
 
 def _subscription_checkout_completed_event(
@@ -145,20 +119,16 @@ def _subscription_checkout_completed_event(
     subscription_id: str = "",
     metadata: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    return {
-        "id": event_id,
-        "type": "checkout.session.completed",
-        "data": {
-            "object": {
-                "id": checkout_session_id,
-                "mode": "subscription",
-                "payment_status": "paid",
-                "customer": customer_id,
-                "subscription": subscription_id,
-                "metadata": dict(metadata or {}),
-            }
-        },
-    }
+    """Build a dahlia subscription Checkout completion event."""
+    return checkout_session_event(
+        event_id=event_id,
+        event_type="checkout.session.completed",
+        checkout_session_id=checkout_session_id,
+        customer_id=customer_id,
+        metadata=metadata,
+        subscription_id=subscription_id,
+        mode="subscription",
+    )
 
 
 @dataclass
@@ -186,7 +156,10 @@ class FakeSubscriptionStripeClient:
         organization_reference: str = "",
     ) -> list[dict[str, Any]]:
         self.searched_references.append(organization_reference or user_reference)
-        return list(self.customers)
+        return [
+            normalize_stripe_object(stripe.Customer, customer)
+            for customer in self.customers
+        ]
 
     def create_customer(
         self,
@@ -205,11 +178,14 @@ class FakeSubscriptionStripeClient:
         self.created_customers.append(
             {**customer, "idempotency_key": idempotency_key or ""}
         )
-        return customer
+        return normalize_stripe_object(stripe.Customer, customer)
 
     def retrieve_price(self, *, price_id: str) -> dict[str, Any]:
         self.retrieved_price_ids.append(price_id)
-        return dict(self.prices.get(price_id, {}))
+        return normalize_stripe_object(
+            stripe.Price,
+            dict(self.prices.get(price_id, {})),
+        )
 
     def create_subscription_checkout_session(
         self,
@@ -237,16 +213,22 @@ class FakeSubscriptionStripeClient:
         )
         if self.create_subscription_checkout_error is not None:
             raise self.create_subscription_checkout_error
-        return {
-            "id": f"cs_sub_{len(self.created_subscription_checkout_payloads)}",
-            "url": "https://checkout.stripe.test/subscription/123",
-            "status": "open",
-            "expires_at": 2_000_000_000,
-        }
+        return normalize_stripe_object(
+            stripe.checkout.Session,
+            {
+                "id": f"cs_sub_{len(self.created_subscription_checkout_payloads)}",
+                "url": "https://checkout.stripe.test/subscription/123",
+                "status": "open",
+                "expires_at": 2_000_000_000,
+            },
+        )
 
     def retrieve_checkout_session(self, *, checkout_session_id: str) -> dict[str, Any]:
         self.retrieved_checkout_session_ids.append(checkout_session_id)
-        return dict(self.checkout_sessions.get(checkout_session_id, {}))
+        return normalize_stripe_object(
+            stripe.checkout.Session,
+            dict(self.checkout_sessions.get(checkout_session_id, {})),
+        )
 
     def construct_event(
         self,
@@ -263,7 +245,7 @@ class FakeSubscriptionStripeClient:
             }
         )
         assert self.event is not None
-        return dict(self.event)
+        return normalize_stripe_object(stripe.Event, dict(self.event))
 
 
 def _simulate_subscription_reservation_conflict(

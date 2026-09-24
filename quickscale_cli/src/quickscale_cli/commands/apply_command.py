@@ -25,6 +25,7 @@ from quickscale_core.contracts.module_options import (
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
     normalize_backups_module_options,
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
@@ -38,6 +39,7 @@ from quickscale_core.contracts.module_options import (
 )
 from quickscale_core.contracts.resolvers import (
     resolve_analytics_module_options,
+    resolve_billing_module_options,
     validate_analytics_module_options,
     validate_billing_module_options,
     validate_blog_module_options,
@@ -2678,6 +2680,31 @@ def _display_next_steps_impl(
             "  showcase_react and existing generated projects only receive the managed "
             "backend transport automatically; use manual theme adoption if you want "
             "those public pages."
+        )
+
+    if "billing" in modules:
+        billing_options = resolve_billing_module_options(
+            modules["billing"].options or {}
+        )
+        webhook_secret_env_var = str(
+            billing_options.get(
+                "webhook_secret_env_var",
+                DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
+            )
+            or DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR
+        )
+        click.echo("\n  # Billing setup")
+        click.echo(
+            "  Create the Stripe webhook endpoint at API version 2026-06-24.dahlia, "
+            "pointed at /billing/webhooks/stripe/."
+        )
+        click.echo(
+            f"  Set `{webhook_secret_env_var}` to the endpoint's signing secret before "
+            "enabling billing traffic."
+        )
+        click.echo(
+            "  An endpoint on an older API version stops processing billing webhooks "
+            "until it is recreated."
         )
 
     click.echo("\n  Visit: http://localhost:8000")

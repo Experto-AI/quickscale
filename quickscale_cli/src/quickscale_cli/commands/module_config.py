@@ -1052,6 +1052,7 @@ def configure_billing_module(
         click.echo(
             "  • Webhook secret env var: " + str(defaults["webhook_secret_env_var"])
         )
+        click.echo("  • Stripe webhook endpoint API version: 2026-06-24.dahlia")
         click.echo("  • Billing currency: " + str(defaults["billing_currency"]))
         _raise_for_invalid_billing_config(defaults)
         return defaults
@@ -1061,7 +1062,8 @@ def configure_billing_module(
         "Billing is public-ready in quickscale plan, quickscale.yml, and "
         "quickscale apply flows. These settings configure the managed Stripe "
         "runtime, while quickscale apply still requires auth before billing "
-        "can be enabled.\n"
+        "can be enabled. The Stripe webhook endpoint must use API version "
+        "2026-06-24.dahlia.\n"
     )
 
     config = resolve_billing_module_options(
