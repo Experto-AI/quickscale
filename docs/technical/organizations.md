@@ -689,7 +689,7 @@ This section records the current repository slice, not the eventual end-state de
 | Server-rendered invitation flow: invite send/revoke on org admin surfaces, notifications registry-backed email, and slugless public accept continuation under `/orgs` | ✅ implemented |
 | Org-authoritative billing bridge (organization ownership fields, canonical org billing routes, flat compatibility shims, and ORM-backed feature gating) | ✅ implemented |
 | `migrate_billing_to_orgs` / `promote_to_saas` management commands | ✅ implemented |
-| Marker-derived organization purge and shared removal obligations | ✅ implemented — installed tenant models are FK-ordered child-before-parent; purge and account deletion consume one named obligation contract |
+| Marker-derived organization purge and shared removal obligations | ✅ implemented — installed tenant models are FK-ordered child-before-parent; purge and account deletion consume one named obligation contract, and a provider-ID system check with per-model `provider_id_classification` refuses the purge while a provider-backed project value remains |
 | React org-management UI surfaces | ✅ implemented for fresh `showcase_react` generations (`OrgListPage`, `OrgCreatePage`, `OrgLayout`, `OrgDashboardPage`, `OrgMembersPage`, `OrgSettingsPage`) |
 | Subdomain routing | ❌ future-ready (middleware decoupled; DNS/NGINX config deferred) |
 | Hard seat-count enforcement at DB layer | ❌ deferred |

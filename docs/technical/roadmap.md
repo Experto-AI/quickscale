@@ -35,8 +35,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|---|
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
-| SA208 | Run provider-ID removal conformance in generated projects | post-v88 | 3 | — | Deferred |
-| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA208 | Deferred |
+| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA209 | Make billing work against the real Stripe SDK at API version `2026-06-24.dahlia` | post-v88 | 2 | — | Deferred |
 | SA207 | Declare generated-project contract changes once and let adoption advance the recorded vintage | post-v88 | 2 | — | Deferred |
@@ -47,7 +46,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: SA209 ──► SA207 ──► SA210
-Track 3: SA208
+Track 3: SA208 (landed)
                          critical path: SA191 → SA153
 ```
 
@@ -59,8 +58,8 @@ onto current QuickScale, rebuilds and reseeds its database rather than carrying 
 through `deploy railway`. SA153 builds the portal on the migrated project. SA204's freeze is
 deferred to the SA153 go-live horizon. SA154 is an inventory, not work.
 
-**Ordering off the critical path.** SA208 must land before SA153 starts and has all of SA191 to do
-it in. SA204 follows SA153 in Track 1 and must land before any post-SA153 module schema change.
+**Ordering off the critical path.** SA208 has landed ahead of SA153, which it gates. SA204 follows
+SA153 in Track 1 and must land before any post-SA153 module schema change.
 SA209 is S1 and goes next on Track 2. SA207 carries the facade adoption step SA206 left to it
 (see SA207). SA210 is trivial and fills the Track 2 tail.
 
@@ -72,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA209 | yes | yes | yes | **yes** | no |
-| 3 | SA208 | yes | yes | yes | **yes** | no (SA208 precedes SA153) |
+| 3 | — | — | — | — | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -138,7 +137,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   ref: no 0.89.0 tag exists yet, and a manifest also works in shallow CI clones. The freeze takes
   effect when SA204 merges, so any later `v89` change to a model-bearing module's models ships as
   a `0002`; confirm before merging that no module schema change shipped between SA191's rebuild
-  and this freeze — SA208 and SA209, the scheduled candidates, change no module models. The
+  and this freeze — SA208 and SA209 change no module models. The
   topology guard in `test_module_migration_topology.py` currently requires exactly one
   `0001_initial` and has a canary that rejects any `0002`; it changes to require a `0001_initial`
   followed by an ordered chain, and that canary is inverted.
@@ -201,28 +200,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   data and rollback steps; and, for deterministic gaps found,
   `quickscale_devtools/.../beta_migration.py` and its tests.
 
-- [ ] **SA208 — Run provider-ID removal conformance in generated projects.**
-
-  **Context:** organization-removal obligations are declared centrally in vendored
-  `orgs/removal.py`. `external_provider_obligation_mismatches` is called only from orgs' own test
-  suite, over its test `INSTALLED_APPS`. It never runs in a generated project and cannot see
-  project-owned models. Its heuristic treats any non-relational `*_id` field as a provider ID, so a
-  SA153 property model with, say, an `mls_id` would be purged without refusal or reconciliation.
-  Declaring it would require editing vendored `orgs` source, which SA153 forbids. This containment
-  lands before SA153's first tenant tables. The domain-registered coordinator stays in the arch
-  audit until its trigger fires (arch audit `deletion-invariants-per-boundary-reimplementation`,
-  option 3).
-
-  **Acceptance:** the conformance walk runs as an orgs system check over `get_tenant_models()` in
-  generated projects. A project-owned app classifies each of its `*_id` fields as provider-backed or
-  not from its own code, in the same way it declares tenant markers, without editing vendored `orgs`
-  source. `purge_organization` refuses an organization with a row carrying a provider-backed
-  project field, naming the field. A test model with an undeclared `*_id` fails the check, and
-  declaring it passes; shipped modules still pass. The last-owner predicate, the `pre_delete`
-  backstop, and both removal boundaries are unchanged.
-
-  **Surfaces:** `orgs/removal.py`, `orgs/apps.py` check registration, `purge_organization`, the orgs
-  tests, the [extension contract](module-extension.md), and the arch audit.
+- [x] **SA208 — Run provider-ID removal conformance in generated projects.**
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 

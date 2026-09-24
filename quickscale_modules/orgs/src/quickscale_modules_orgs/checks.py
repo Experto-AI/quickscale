@@ -1,23 +1,35 @@
 """SA1.3 — Django system check for tenant-isolation conformance.
 SA1.4 — Default-deny classification system check.
+SA208 — Provider-ID removal-conformance system check.
 
-Registers two system checks with the ``quickscale_modules_orgs`` app:
+Registers three system checks with the ``quickscale_modules_orgs`` app:
 
 1. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
    ``organization_id`` or the exact FORCE-RLS policy contract.
 2. ``check_model_classification`` (SA1.4) — warns when a concrete project
    model has no marker-derived tenant classification.
+3. ``check_provider_id_conformance`` (SA208) — errors when a tenant model's
+   non-relational ``*_id`` field is neither covered by a central
+   refuse-or-reconcile obligation nor classified by the model's own
+   ``provider_id_classification`` declaration.
 
-Both checks use the same marker-based discovery as the management command.
-They emit ``WARNING`` level messages so they do not block startup in
+The first two checks use the same marker-based discovery as the management
+command.  They emit ``WARNING`` level messages so they do not block startup in
 development or pre-migration states.  Use the management command for a
 pass/fail exit code in CI.
+
+The provider-ID check is an ``ERROR``: it reads model declarations only, so it
+cannot depend on migration or database state, and an unclassified provider-ID
+field is exactly the state that would let ``purge_organization`` delete
+provider-backed rows without refusal or reconciliation.  It fails
+``manage.py check`` and ``migrate`` until the field is classified.
 """
 
 from __future__ import annotations
 
-from django.core.checks import Warning, register
+from django.core.checks import Error, Warning, register
 
+from quickscale_modules_orgs.removal import external_provider_obligation_mismatches
 from quickscale_modules_orgs.tenancy import (
     _is_implicit_m2m_through,
     check_tenant_model_isolation,
@@ -157,3 +169,47 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
         )
 
     return messages
+
+
+# ---------------------------------------------------------------------------
+# SA208 — Provider-ID removal-conformance system check
+# ---------------------------------------------------------------------------
+
+
+@register("quickscale_modules_orgs")
+def check_provider_id_conformance(app_configs: object, **kwargs: object) -> list:
+    """Error on tenant-model provider-ID fields that nothing classifies.
+
+    Walks :func:`get_tenant_models` and reports every non-relational ``*_id``
+    field that has no central refuse-or-reconcile obligation and no
+    ``provider_id_classification`` entry on its model.  Shipped modules cover
+    their provider fields in ``ORGANIZATION_REMOVAL_OBLIGATIONS``; a
+    project-owned model classifies its own fields without editing vendored
+    ``orgs`` source.
+
+    Returns:
+        A list of ``Error`` instances, one per uncovered, stale, or malformed
+        declaration.
+    """
+    try:
+        tenant_models = get_tenant_models()
+    except Exception as exc:
+        return [
+            Error(
+                f"Failed to discover tenant models for provider-ID conformance: {exc}",
+                hint="Ensure Django apps are fully loaded before this check runs.",
+                id="quickscale_modules_orgs.E001",
+            )
+        ]
+
+    hint = (
+        "Classify every non-relational *_id field on a tenant model in its "
+        "provider_id_classification mapping: 'provider-backed' for an "
+        "identifier of provider-held state (purge_organization refuses while a "
+        "row carries a value), or 'not-provider-backed' for a project-internal "
+        "identifier the purge may delete with the row."
+    )
+    return [
+        Error(mismatch, hint=hint, id="quickscale_modules_orgs.E001")
+        for mismatch in external_provider_obligation_mismatches(tenant_models)
+    ]
