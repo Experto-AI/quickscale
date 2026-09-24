@@ -325,9 +325,9 @@ Every empty cell is resolved with a finding ID or a stated reason.
 - **A named-release pin test for Stripe** — closed: the contract test fails when the installed
   SDK's pinned API version moves to a new named release, so a `stripe` bump cannot silently change
   payload shapes.
-- **Container and IaC scanning** — still absent (carried).
+- **Container and IaC scanning** — still absent; the generated `Dockerfile` scan is SA212.
 - **Dependabot (or equivalent) for `github-actions`** — the SHA pins from SA202 have no automated
-  refresh path (carried follow-up).
+  refresh path; scheduled as SA212.
 
 ---
 

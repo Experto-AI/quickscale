@@ -351,7 +351,7 @@ divergence is a retention or billing incident diagnosed by hand.
 2. **Domain-local safeguards** with an outbox.
 3. ~~Containment: system check over installed models~~: **done (SA208)**.
 
-**Recommendation:** keep the containment and move to option 1 when the trigger fires.
+**Recommendation:** option 1, scheduled as SA213 ahead of SA153's tenant tables.
 - **Size:** `M`.
 - **Reversibility:** `two-way door`.
 - **Guard:** the SA208 system check, extended to assert that every boundary calls the
