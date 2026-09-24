@@ -476,6 +476,85 @@ class TestAccountDeleteView:
         )
         mock_cancel.assert_not_called()
 
+    def test_account_delete_ignores_a_retained_orgs_open_checkout(
+        self, authenticated_client, user
+    ):
+        """Another owner's retained-organization checkout does not block deletion."""
+        from unittest.mock import MagicMock, patch
+
+        from django.contrib.auth import get_user_model
+        from django.utils import timezone
+
+        from quickscale_modules_billing.models import Plan, Subscription
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        other_user = get_user_model().objects.create_user(
+            username="retained-owner",
+            email="retained-owner@example.com",
+            password="test-pass-123",
+        )
+        personal_org = Organization.objects.create(
+            name="Deleting Member Personal",
+            slug="deleting-member-personal",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=personal_org,
+            role=OrgRole.OWNER,
+        )
+        shared_org = Organization.objects.create(
+            name="Retained Shared",
+            slug="retained-shared-open-checkout",
+        )
+        OrganizationMembership.objects.create(
+            user=other_user,
+            organization=shared_org,
+            role=OrgRole.OWNER,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=shared_org,
+            role=OrgRole.MEMBER,
+        )
+        plan = Plan.objects.create(
+            name="Retained Checkout Plan",
+            slug="retained-checkout-plan",
+            stripe_price_id="price_retained_checkout",
+            credits_per_period=100,
+            price_cents=1900,
+            currency="usd",
+            billing_interval=Plan.BillingInterval.MONTHLY,
+        )
+        with org_scope(shared_org):
+            Subscription.objects.create(
+                organization=shared_org,
+                user=other_user,
+                plan=plan,
+                status=Subscription.Status.INCOMPLETE,
+                stripe_checkout_session_id="cs_retained_shared_open",
+                checkout_expires_at=timezone.now() + timezone.timedelta(minutes=30),
+            )
+        stripe_client = MagicMock()
+        stripe_client.retrieve_checkout_session.return_value = {
+            "id": "cs_retained_shared_open",
+            "status": "open",
+        }
+
+        with patch(
+            "quickscale_modules_billing.services.get_stripe_client",
+            return_value=stripe_client,
+        ):
+            authenticated_client.post(reverse("quickscale_auth:account-delete"))
+
+        assert not get_user_model().objects.filter(pk=user.pk).exists()
+        stripe_client.retrieve_checkout_session.assert_not_called()
+
     def test_account_delete_blocks_open_purchase_checkout(
         self, authenticated_client, user
     ):
