@@ -22,10 +22,13 @@ deletion, and purge provider transitions share an organization-scoped advisory m
 row mutations also lock the organization row without placing Stripe calls in database transactions.
 
 Purge coverage and dependency-sensitive child-before-parent order are now derived from the installed
-tenant-model graph, including project-owned extension models. Purge and account deletion consume
-one named removal-obligation contract for billing reconciliation, tenant rows, social caches, and
-tombstones; account deletion records the data-removal steps it deliberately skips when an
-organization survives.
+tenant-model graph, including project-owned extension models. Each app declares the removal
+obligations it owns on its own `AppConfig`, and purge and account deletion discharge the discovered
+set through one shared coordinator that fails closed when a boundary skips a declared obligation; a
+declared provider field refuses the purge while it carries a value unless the declaring module marks
+it boundary-guarded and decides liveness itself, an app-owned stage runs the declaring app's own
+hook, and account deletion records the data-removal steps it deliberately skips when an organization
+survives.
 
 Server-rendered auth, billing, blog, listings, and CRM pages now share the generated React theme's
 design tokens and page shell. Their templates preserve Django-owned forms, URLs, sessions, and
@@ -73,7 +76,10 @@ and block, while completed purchases block until their webhook has synchronized 
 ledger.
 Project-owned tenant children no longer require vendored purge-command edits: their tenant marker
 enrolls them, and installed FK metadata determines deletion order for both cascading and blocking
-relationships.
+relationships. Removal obligations now declare on each app's `AppConfig`, so the module-level
+`ORGANIZATION_REMOVAL_OBLIGATIONS` tuple and the `require_removal_action` /
+`skipped_removal_obligations` helpers are replaced by the coordinator's stage discharge; a boundary
+that finishes without discharging a declared obligation fails closed.
 
 The shared-design change is an existing-project generated-file compatibility boundary, not only a
 template-override change. Module Python APIs, URLs, form fields, sessions, and settings consumed by

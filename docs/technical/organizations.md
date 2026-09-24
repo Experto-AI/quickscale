@@ -689,7 +689,7 @@ This section records the current repository slice, not the eventual end-state de
 | Server-rendered invitation flow: invite send/revoke on org admin surfaces, notifications registry-backed email, and slugless public accept continuation under `/orgs` | ✅ implemented |
 | Org-authoritative billing bridge (organization ownership fields, canonical org billing routes, flat compatibility shims, and ORM-backed feature gating) | ✅ implemented |
 | `migrate_billing_to_orgs` / `promote_to_saas` management commands | ✅ implemented |
-| Marker-derived organization purge and shared removal obligations | ✅ implemented — installed tenant models are FK-ordered child-before-parent; purge and account deletion consume one named obligation contract, and a provider-ID system check with per-model `provider_id_classification` refuses the purge while a provider-backed project value remains |
+| Marker-derived organization purge and shared removal obligations | ✅ implemented — installed tenant models are FK-ordered child-before-parent; purge and account deletion discharge the removal obligations each app declares on its own `AppConfig` through one shared coordinator, and a provider-ID system check with per-model `provider_id_classification` refuses the purge while a provider-backed project value remains |
 | React org-management UI surfaces | ✅ implemented for fresh `showcase_react` generations (`OrgListPage`, `OrgCreatePage`, `OrgLayout`, `OrgDashboardPage`, `OrgMembersPage`, `OrgSettingsPage`) |
 | Subdomain routing | ❌ future-ready (middleware decoupled; DNS/NGINX config deferred) |
 | Hard seat-count enforcement at DB layer | ❌ deferred |
@@ -778,7 +778,7 @@ No async job path should use the default tenant manager without first establishi
 ## References
 
 - [`quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py) — shipped RLS and org-context implementation
-- [`quickscale_modules/orgs/src/quickscale_modules_orgs/removal.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/removal.py) — shared organization-removal obligations and provider-ID conformance
+- [`quickscale_modules/orgs/src/quickscale_modules_orgs/removal.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/removal.py) — app-declared organization-removal obligations, the shared discharge coordinator, and provider-ID conformance
 - [`quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py) — marker-derived, FK-ordered destructive purge
 - [`docs/deployment/railway.md`](../deployment/railway.md) — Railway deployment contract (connection pooling notes, future subdomain config)
 - [`docs/technical/decisions.md`](decisions.md) — architecture decision log

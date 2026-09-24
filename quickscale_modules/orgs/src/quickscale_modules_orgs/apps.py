@@ -34,6 +34,14 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.db.backends.signals import connection_created
 
+from quickscale_modules_orgs.removal import (
+    OWNED_TENANT_ROWS,
+    PURGE_TOMBSTONE,
+    SOCIAL_CACHE_STATE,
+    OrganizationRemovalObligation,
+    RemovalAction,
+)
+
 
 # Module-guard declaration of the sanctioned privileged DB commands.
 # Keep it aligned with the independent fail-closed declarations in the production
@@ -168,6 +176,75 @@ class QuickscaleOrgsConfig(AppConfig):
     name = "quickscale_modules_orgs"
     label = "quickscale_modules_orgs"
     verbose_name = "QuickScale Organizations"
+
+    def removal_obligations(self) -> tuple[OrganizationRemovalObligation, ...]:
+        """Declare orgs' own organization-removal obligations.
+
+        Every domain declares the obligations it owns from its own
+        ``AppConfig``; ``orgs`` aggregates them for both removal boundaries.
+        These three are orgs' own: the marker-derived tenant rows it deletes,
+        the organization-scoped social cache state those rows leave behind,
+        and the purge tombstone it records.
+        """
+        return (
+            OrganizationRemovalObligation(
+                name=OWNED_TENANT_ROWS,
+                purge_action=RemovalAction.DELETE,
+                account_delete_action=RemovalAction.SKIP,
+                account_delete_skip_reason=(
+                    "Account deletion removes the person while retaining "
+                    "organization data."
+                ),
+            ),
+            OrganizationRemovalObligation(
+                name=SOCIAL_CACHE_STATE,
+                purge_action=RemovalAction.INVALIDATE,
+                account_delete_action=RemovalAction.SKIP,
+                account_delete_skip_reason=(
+                    "Retained organization data keeps its organization-scoped "
+                    "cache state."
+                ),
+            ),
+            OrganizationRemovalObligation(
+                name=PURGE_TOMBSTONE,
+                purge_action=RemovalAction.RECORD,
+                account_delete_action=RemovalAction.SKIP,
+                account_delete_skip_reason=(
+                    "No organization is removed, so account deletion writes no "
+                    "purge tombstone."
+                ),
+            ),
+        )
+
+    def invalidate_organization_cache(self, organization_id: object) -> None:
+        """Invalidate organization-scoped cache state for *organization_id*.
+
+        This is the executor for the ``social-cache-state`` obligation declared
+        in :meth:`removal_obligations`: the purge boundary calls it after the
+        organization's rows are deleted, and the tombstone retry path calls it
+        to heal an invalidation that failed.  It clears the organization-scoped
+        keys of the installed cache-owning modules (social).
+        """
+        from django.apps import apps as django_apps
+
+        if not django_apps.is_installed("quickscale_modules_social"):
+            return
+
+        from django.core.cache import cache
+
+        from quickscale_modules_social.contracts import (
+            SOCIAL_EMBEDS_CACHE_KEY,
+            SOCIAL_LINKS_CACHE_KEY,
+        )
+
+        cache.delete_many(
+            [
+                SOCIAL_LINKS_CACHE_KEY,
+                f"{SOCIAL_LINKS_CACHE_KEY}:org:{organization_id}",
+                SOCIAL_EMBEDS_CACHE_KEY,
+                f"{SOCIAL_EMBEDS_CACHE_KEY}:org:{organization_id}",
+            ]
+        )
 
     def ready(self) -> None:
         # ---- SA14.6 — QUICKSCALE_MODE boot guard -----------------------

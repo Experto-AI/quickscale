@@ -124,7 +124,7 @@ class ProjectListing(AbstractListing):
 
 The orgs provider-ID system check walks the marker-derived tenant models and
 fails as an error — `manage.py check` and `migrate` refuse — on any
-non-relational `*_id` field that neither a central refuse-or-reconcile
+non-relational `*_id` field that neither a declared refuse-or-reconcile
 obligation nor a `provider_id_classification` entry covers. `provider-backed`
 marks an identifier of state held by an external provider:
 `purge_organization` refuses while any row of the organization carries a value,
@@ -132,8 +132,58 @@ naming the field, until that value is cleared or reconciled.
 `not-provider-backed` marks a project-internal identifier that the purge
 deletes with its row. The two values are exported as `PROVIDER_BACKED` and
 `NOT_PROVIDER_BACKED` from `quickscale_modules_orgs.removal`; the literal
-strings are equivalent. Shipped module models keep their central declarations
-and need no model attribute.
+strings are equivalent. Shipped module models declare their provider fields
+from their own app configuration and need no model attribute.
+
+A project app also declares the removal obligations it owns on its own
+`AppConfig`; `orgs` discovers them, and the aggregate names no module's labels
+or fields (an app may still declare provider state stored on another installed
+model):
+
+```python
+from django.apps import AppConfig
+
+from quickscale_modules_orgs.removal import (
+    OrganizationRemovalObligation,
+    RemovalAction,
+)
+
+
+class PropertiesConfig(AppConfig):
+    name = "properties"
+
+    def removal_obligations(self):
+        return (
+            OrganizationRemovalObligation(
+                name="property-listing-state",
+                purge_action=RemovalAction.DELETE,
+                account_delete_action=RemovalAction.SKIP,
+                account_delete_skip_reason=(
+                    "Account deletion retains the organization's listings."
+                ),
+            ),
+        )
+```
+
+Both removal boundaries discharge the discovered set through one shared
+coordinator. `purge_organization` discharges one stage at a time — its refusal
+guards (`REFUSE`), the marker-derived row deletion (`DELETE`), the purge
+tombstone (`RECORD`), and organization-scoped cache invalidation
+(`INVALIDATE`) — while account deletion discharges provider reconciliation
+(`RECONCILE`); `SKIP` records an obligation a boundary deliberately does not
+execute. A declared provider field refuses the purge while it carries a value;
+a module whose own guard decides provider liveness marks the field
+`boundary_guarded=True` instead. The app-owned stages name their executor: an
+`INVALIDATE` declaration needs the declaring app's
+`invalidate_organization_cache` hook and a `RECONCILE` declaration needs its
+`reconcile_account_deletion_provider_state` hook, so the boundary runs the
+declaring app's own work instead of marking a declaration discharged for
+nothing. A removal that finishes while a declared obligation was not discharged
+fails closed, and the orgs system check (`quickscale_modules_orgs.E002`) fails
+a declaration whose action no boundary performs, a declaration without its
+executor hook, a boundary that stops routing its stages through the
+coordinator, and account-deletion reconciliation of provider fields no boundary
+guard covers — so `manage.py check` and `migrate` refuse them.
 
 ## Module Categories
 
