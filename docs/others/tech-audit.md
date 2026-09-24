@@ -142,15 +142,8 @@ about those areas means *not looked at*, not *clean*.
 ## 2. Machine-readable finding index
 
 ```yaml
-- id: build-system-requires-unpinned
-  severity: S4
-  category: "VII. Dependencies, build, and pipeline hygiene"
-  title: Generated projects still declare an unbounded poetry-core build requirement
-  effort: Trivial
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
+# No open findings; every prior ID is resolved — see the reconciliation log.
+[]
 ```
 
 ---
@@ -159,23 +152,16 @@ about those areas means *not looked at*, not *clean*.
 
 | ID | Sev | Category | Title | Effort | Conf | Status |
 |---|---|---|---|---|---|---|
-| `build-system-requires-unpinned` | S4 | Build hygiene | Generated `pyproject` build requirement unbounded | Trivial | High | open |
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open. Reconciliation: 13 prior IDs
-resolved and verified in code, 1 still open (narrowed), 0 regressed, 0 new.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 0 · total 0 open. Reconciliation: 14 prior IDs
+resolved and verified in code, 0 still open, 0 regressed, 0 new.
 
 ---
 
 ## 4. Findings
 
-### S4 findings
-
-- `build-system-requires-unpinned` ·
-  `quickscale_core/src/quickscale_core/generator/templates/pyproject.toml.j2:30` · The repository's
-  17 package manifests are now bounded (`poetry-core>=2.0,<3.0`), but every *generated* project
-  still declares `requires = ["poetry-core"]`, so its build backend resolves at build time. ·
-  Emit `poetry-core>=2.0,<3.0` from the template and update the SA90 emission fixture in the same
-  change.
+No open findings: SA209 resolved both billing findings and SA210 resolved
+`build-system-requires-unpinned`; each resolution is recorded in the reconciliation log.
 
 ---
 
@@ -218,8 +204,9 @@ Every empty cell is resolved with a finding ID or a stated reason.
   table covered by the runtime role's default privileges.
 - **dr_engine / backups** — clean. The SA198 translation is complete and the runner merges rather
   than replaces the environment (`primitives.py:153–155`).
-- **generator templates** — `build-system-requires-unpinned`. Settings templates and the
-  side-channel `local.py.j2`/compose/React-theme hunks are otherwise clean.
+- **generator templates** — clean after the generated `[build-system]` bound landed (SA210).
+  Settings templates and the side-channel `local.py.j2`/compose/React-theme hunks are otherwise
+  clean.
 - **quickscale_core apply** — clean. `env_sync.py` writes empty placeholders only.
 - **quickscale_cli / devtools** — clean. SA202 hunks are suppression-only; SA194 left no dangling
   caller.
@@ -398,3 +385,6 @@ only), X-generator.*
   `BillingConfigurationError` (500) and its version is logged, invoice reads use
   `parent.subscription_details`, line prices use `pricing.price_details.price`, and period bounds
   come from agreeing subscription items without blanking known bounds.
+- 2026-09-24 — `build-system-requires-unpinned`: resolved (SA210 closeout). Verified at
+  `pyproject.toml.j2:31`: generated projects emit `poetry-core>=2.0,<3.0`, and the SA90 emission
+  fixture pins the new `pyproject.toml` hashes in all three variants.

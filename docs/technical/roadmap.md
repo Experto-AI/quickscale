@@ -38,14 +38,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA207 | Declare generated-project contract changes once and let adoption advance the recorded vintage | post-v88 | 2 | — | Deferred |
-| SA210 | Bound the generated projects' `poetry-core` build requirement | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: SA207
-Track 3: SA210
+Track 3: SA208 (landed) ──► SA210 (landed)
                          critical path: SA191 → SA153
 ```
 
@@ -60,7 +59,7 @@ deferred to the SA153 go-live horizon. SA154 is an inventory, not work.
 **Ordering off the critical path.** SA208 has landed ahead of SA153, which it gates. SA204 follows
 SA153 in Track 1 and must land before any post-SA153 module schema change. SA209 has landed, so
 SA207 — which carries the facade adoption step SA206 left to it (see SA207) — goes next on Track 2.
-SA210 is trivial and fills the idle Track 3.
+SA210 has landed on Track 3.
 
 ### Track states
 
@@ -70,7 +69,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA207 | yes | yes | yes | **yes** | no |
-| 3 | SA210 | yes | yes | yes | **yes** | no |
+| 3 | — | — | — | — | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -97,9 +96,9 @@ A track is **truly green** only when all three states are yes.
   for real. SA204 and SA207 each add a registered gate; Track 2 reconciles its
   `scripts/gate_registry.json` row with Track 1 at merge.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
-- **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits,
-  [decisions.md](decisions.md) (SA204, SA207, SA153), and the SA90 emission fixture (SA210). Each track resolves the shared set at its own merge, after the previous merge lands, then
-  runs the consistency test.
+- **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
+  [decisions.md](decisions.md) (SA204, SA207, SA153). Each track resolves the shared set at its
+  own merge, after the previous merge lands, then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
 ### Resuming a track
@@ -310,16 +309,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `deployment_commands.py`, the apply-state writer, the new gate and its registry row, decisions,
   `generated_file_ownership.md`, and the arch audit.
 
-- [ ] **SA210 — Bound the generated projects' `poetry-core` build requirement.**
-
-  The 17 repository manifests declare `poetry-core>=2.0,<3.0`, but `pyproject.toml.j2` still emits
-  an unbounded `requires = ["poetry-core"]` into every generated project (tech audit
-  `build-system-requires-unpinned`).
-
-  **Acceptance:** the template emits `poetry-core>=2.0,<3.0`, and the SA90 emission fixture is
-  updated in the same change.
-
-  **Surfaces:** `generator/templates/pyproject.toml.j2`, the SA90 fixture, and the tech audit.
+- [x] **SA210 — Bound the generated projects' `poetry-core` build requirement.**
 
 ## Deferred constraints and references
 
