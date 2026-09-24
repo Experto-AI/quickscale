@@ -161,15 +161,6 @@ about those areas means *not looked at*, not *clean*.
   status: open
   reality: R2
   chain: [billing-stripe-objects-normalized-empty]
-- id: build-system-requires-unpinned
-  severity: S4
-  category: "VII. Dependencies, build, and pipeline hygiene"
-  title: Generated projects still declare an unbounded poetry-core build requirement
-  effort: Trivial
-  confidence: High
-  status: open
-  reality: R2
-  chain: []
 ```
 
 ---
@@ -180,10 +171,9 @@ about those areas means *not looked at*, not *clean*.
 |---|---|---|---|---|---|---|
 | `billing-stripe-objects-normalized-empty` | S1 | Correctness | Every Stripe SDK object normalizes to `{}` | Small | High | open |
 | `billing-stripe-api-version-drift` | S1 | Data handling | Retired payload shapes; must target `2026-06-24.dahlia` | Medium | High | open |
-| `build-system-requires-unpinned` | S4 | Build hygiene | Generated `pyproject` build requirement unbounded | Trivial | High | open |
 
-**Counts:** S1 — 2 · S2 — 0 · S3 — 0 · S4 — 1 · total 3 open. Reconciliation: 11 prior IDs
-resolved and verified in code, 1 still open (narrowed), 0 regressed, 2 new.
+**Counts:** S1 — 2 · S2 — 0 · S3 — 0 · S4 — 0 · total 2 open. Reconciliation: 12 prior IDs
+resolved and verified in code, 0 still open, 0 regressed, 2 new.
 
 ---
 
@@ -401,17 +391,6 @@ resolved and verified in code, 1 still open (narrowed), 0 regressed, 2 new.
 
 ---
 
-### S4 findings
-
-- `build-system-requires-unpinned` ·
-  `quickscale_core/src/quickscale_core/generator/templates/pyproject.toml.j2:30` · The repository's
-  17 package manifests are now bounded (`poetry-core>=2.0,<3.0`), but every *generated* project
-  still declares `requires = ["poetry-core"]`, so its build backend resolves at build time. ·
-  Emit `poetry-core>=2.0,<3.0` from the template and update the SA90 emission fixture in the same
-  change.
-
----
-
 ## 5. Entry-point × safeguard matrix
 
 Each cell names the layer that supplies the safeguard, or the finding ID where the entry point
@@ -451,8 +430,9 @@ Every empty cell is resolved with a finding ID or a stated reason.
   table covered by the runtime role's default privileges.
 - **dr_engine / backups** — clean. The SA198 translation is complete and the runner merges rather
   than replaces the environment (`primitives.py:153–155`).
-- **generator templates** — `build-system-requires-unpinned`. Settings templates and the
-  side-channel `local.py.j2`/compose/React-theme hunks are otherwise clean.
+- **generator templates** — clean after the generated `[build-system]` bound landed (SA210).
+  Settings templates and the side-channel `local.py.j2`/compose/React-theme hunks are otherwise
+  clean.
 - **quickscale_core apply** — clean. `env_sync.py` writes empty placeholders only.
 - **quickscale_cli / devtools** — clean. SA202 hunks are suppression-only; SA194 left no dangling
   caller.
@@ -623,3 +603,6 @@ only), X-generator.*
 - 2026-09-23 — `billing-stripe-api-version-drift`: fix decisions accepted by the team. A webhook
   whose `api_version` is a different named release is rejected with `BillingConfigurationError`
   (500, so Stripe retries). Matching is by named release (`dahlia`), not by exact date.
+- 2026-09-24 — `build-system-requires-unpinned`: resolved (SA210 closeout). Verified at
+  `pyproject.toml.j2:31`: generated projects emit `poetry-core>=2.0,<3.0`, and the SA90 emission
+  fixture pins the new `pyproject.toml` hashes in all three variants.
