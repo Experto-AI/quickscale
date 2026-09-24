@@ -37,14 +37,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA207 | Declare generated-project contract changes once and let adoption advance the recorded vintage | post-v88 | 2 | — | Deferred |
-| SA211 | Give every contract adoption step a stable identity and derive the watched template set | post-v88 | 2 | SA207 | Deferred |
+| SA211 | Give every contract adoption step a stable identity and derive the watched template set | post-v88 | 2 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA207 (in progress) ──► SA211
+Track 2: SA207 (landed) ──► SA211
 Track 3: SA208 (landed) ──► SA210 (landed)
                          critical path: SA191 → SA153
 ```
@@ -58,12 +57,13 @@ through `deploy railway`. SA153 builds the portal on the migrated project. SA204
 deferred to the SA153 go-live horizon. SA154 is an inventory, not work.
 
 **Ordering off the critical path.** SA208 has landed ahead of SA153, which it gates. SA204 follows
-SA153 in Track 1 and must land before any post-SA153 module schema change. SA209 has landed, so
-SA207 — which carries the facade adoption step SA206 left to it (see SA207) — is in progress on
-Track 2. The 2026-09-24 arch audit recommends step identity over release-keyed adoption; SA207 was
-already under way, so SA211 follows it on the same track rather than widening it mid-flight. SA211
-must land before the first release published after 0.89.0, and it should land before SA191
-records the migrated site's adoption state. SA210 has landed on Track 3, which has no queued work.
+SA153 in Track 1 and must land before any post-SA153 module schema change. SA207 — which carried
+the facade adoption step SA206 left to it — has landed on Track 2 with the project-level
+declaration and its step-identity record, and SA211 follows it there. The 2026-09-24 arch audit
+recommended step identity over release-keyed adoption, so SA211 carries the rest: module-owned
+steps, the SA208 and SA209 steps, and a watched set derived from the emission manifest. SA211 must
+land before the first release published after 0.89.0, and it should land before SA191 records the
+migrated site's adoption state. SA210 has landed on Track 3, which has no queued work.
 
 ### Track states
 
@@ -72,7 +72,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA207 (in progress) | yes | yes | yes | **yes** | no |
+| 2 | SA211 | yes | yes | yes | **yes** | no |
 | 3 | — | — | — | — | **yes** | no |
 
 ### Ownership and merge coordination
@@ -97,11 +97,11 @@ A track is **truly green** only when all three states are yes.
   Track 2).
 - **Cross-track edits.** SA206 shrank the donor-settings validator in Track 1's
   `beta_migration.py` and merged before SA191 starts, so the shrink landed before the tool is used
-  for real. SA204 and SA207 each add a registered gate; Track 2 reconciles its
-  `scripts/gate_registry.json` row with Track 1 at merge.
+  for real. SA204 adds a registered gate; SA207's `scripts/gate_registry.json` row reconciles
+  with Track 1 at merge.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
-  [decisions.md](decisions.md) (SA204, SA207, SA153). Each track resolves the shared set at its
+  [decisions.md](decisions.md) (SA204, SA153). Each track resolves the shared set at its
   own merge, after the previous merge lands, then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -280,55 +280,21 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA209 — Make billing work against the real Stripe SDK at API version `2026-06-24.dahlia`.**
 
-- [ ] **SA207 — Declare generated-project contract changes once and let adoption advance the recorded vintage.**
-
-  **Context:** the contract-vintage gate detects a project that is behind the template contract,
-  at `update`, `apply`, and `deploy railway`. Adoption, however, is prose copied by hand:
-  - One five-step block for SA192's shared design is pasted into the auth, billing, listings,
-    blog, and CRM manifests, and `RAILWAY_CONTRACT_VINTAGE` duplicates orgs' three steps.
-  - `project_contract` is written only when state is created, and acknowledgement is
-    per-invocation. A pre-0.89 project therefore passes `--acknowledge-contract-vintage` on every
-    mutating command for as long as it lives.
-  - SA200 and SA201 changed runtime contracts and declared no adoption step. SA201's gap fails
-    open. It moved billing's throttle scopes into the upgradable module, but a pre-SA201 `base.py`
-    assigns `REST_FRAMEWORK` wholesale with no throttle classes. So an existing project that
-    updates billing loses the checkout-loop bound silently.
-
-  (Arch audit `generated-file-ownership-unmodeled`, option 3 for what remains configuration.)
-
-  **Acceptance:**
-  - One project-level contract vintage declares each template contract change once, with its
-    adoption steps. The five manifest copies and the Railway duplicate are gone.
-  - It declares SA192's shared design, SA200's proxy trust, SA201's throttling, and SA206's
-    runtime settings facade adoption step.
-  - `update billing` on a project behind SA201's step refuses before mutation and names the step.
-    After adoption, the 31st checkout in an hour returns 429.
-  - `project_contract` advances when the user confirms adoption, so a project that has adopted
-    every step no longer needs the flag.
-  - A registered gate fails when `templates/project_name/settings/*`, `start.sh.j2`, or
-    `Dockerfile.j2` changes without a project-vintage edit, with controls in both directions.
-  - [decisions.md](decisions.md) § Release scope safeguards records the growth of
-    `INTENTIONALLY_UNMANAGED` from 78 to 89 entries, including the dispositions SA194 changed.
-    [generated_file_ownership.md](generated_file_ownership.md) gives a rationale for
-    `validateQuickScaleSeam.ts`, `FormsPage.tsx`, `SocialEmbedsPublicPage.tsx`, and
-    `SocialLinkTreePublicPage.tsx`.
-
-  **Surfaces:** `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
-  `deployment_commands.py`, the apply-state writer, the new gate and its registry row, decisions,
-  `generated_file_ownership.md`, and the arch audit.
+- [x] **SA207 — Declare generated-project contract changes once and let adoption advance the recorded vintage.**
 
 - [x] **SA210 — Bound the generated projects' `poetry-core` build requirement.**
 
 - [ ] **SA211 — Give every contract adoption step a stable identity and derive the watched template set.**
 
-  **Context:** SA207 declares each template contract change once in a project-level vintage. It
-  still keys adoption on a release version, and its gate watches a hand-listed set of paths. The
-  2026-09-24 arch audit (`generated-file-ownership-unmodeled`, option 2) shows both gaps in this
-  delta. SA209 appended its dahlia webhook step to billing's `manual_adoption_steps` under an
-  unchanged `minimum: "0.89.0"`, so the gate never shows it to a project recorded at `0.89.0`.
-  SA210 and SA209 changed `pyproject.toml.j2` and `OPERATIONS.md.j2`, and neither is in SA207's
-  watched set. 0.89.0 is unpublished, so at release the dahlia step reaches every pre-0.89 project.
-  After that release, any step added in a patch release reaches only projects below its `minimum`.
+  **Context:** SA207 declares each template contract change once in a project-level vintage and
+  landed the step-identity record for it: every declared step carries a stable id, applied state
+  records the adopted ids, and `update`, `apply`, and `deploy railway` refuse on exactly the
+  unadopted steps, so billing's SA209 dahlia webhook step is shown to a project recorded at
+  `0.89.0`. What remains: steps carry no owner, SA208's provider-ID classification is not declared
+  as an identified step, module manifests' step changes are not gated, and SA207's gate watches a
+  hand-listed set of paths rather than the generator's emission manifest. SA210 and SA209 changed
+  `pyproject.toml.j2` and `OPERATIONS.md.j2`, and neither is in SA207's watched set. 0.89.0 is
+  unpublished, so at release the dahlia step reaches every pre-0.89 project.
 
   **Acceptance:**
   - Each adoption step carries a stable id, an owner (project or module), and text.
@@ -359,8 +325,8 @@ stays contained by SA208 until its trigger fires. Watch items W2–W7 and the te
 not scheduled. The `bap-web` reseed question is
 settled: its data is reseeded rather than carried (2026-09-23), which defers SA204 to the SA153
 go-live horizon. The architecture audit's remaining open questions still apply: whether
-"regenerate and port" is the permanent upgrade model (which would reshape SA207 and SA191's donor
-adoption), and whether `experto-ai-web` migrates too.
+"regenerate and port" is the permanent upgrade model (which would reshape the project-level
+vintage machinery and SA191's donor adoption), and whether `experto-ai-web` migrates too.
 The standing scope
 rules, presence contracts, and resource safeguards live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).

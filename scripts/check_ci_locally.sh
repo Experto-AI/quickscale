@@ -475,6 +475,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Behavioural commits carry required testimony"
             LOCAL_GATE_FAILURE_LABEL="Commit Testimony Gate"
             ;;
+        check-project-contract-vintage)
+            LOCAL_GATE_DESCRIPTION="Running project contract vintage gate..."
+            LOCAL_GATE_SUCCESS="✓ Generated-template changes declare a project-vintage edit"
+            LOCAL_GATE_FAILURE_LABEL="Project Contract Vintage Gate"
+            ;;
         check-dependency-vulnerabilities)
             LOCAL_GATE_DESCRIPTION="Running dependency vulnerability gate..."
             LOCAL_GATE_SUCCESS="✓ Dependency vulnerability gate passed"
@@ -541,6 +546,9 @@ run_serial_conformance_gate() {
                 ;;
             check-commit-testimony)
                 echo "║   ✗ Commit Testimony Gate Failed        ║"
+                ;;
+            check-project-contract-vintage)
+                echo "║   ✗ Project Contract Vintage Failed     ║"
                 ;;
             check-dependency-vulnerabilities)
                 echo "║   ✗ Dependency Vulnerability Gate Failed║"

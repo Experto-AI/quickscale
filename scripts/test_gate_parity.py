@@ -1346,6 +1346,7 @@ class TestParserPrecision:
             "secret-scanning-gate": (),
             "csrf-exempt-gate": (),
             "commit-testimony-gate": (),
+            "project-contract-vintage-gate": (),
             "isolation-conformance": (
                 "backups-validation",
                 "module-manifest-contract",
@@ -1379,6 +1380,7 @@ class TestParserPrecision:
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
                 "commit-testimony-gate",
+                "project-contract-vintage-gate",
                 "check-gate-suites",
                 "dependency-vulnerabilities-gate",
                 "security-static-analysis-gate",
@@ -1426,6 +1428,12 @@ class TestParserPrecision:
             ("test", "make check-manifest-sync\n"),
             ("test", "make check-org-context-primitives\n"),
             ("test", "make check-csrf-exempt\n"),
+            (
+                "test",
+                "PROJECT_VINTAGE_BASE_REF=\"$(git describe --tags --abbrev=0 'HEAD^' "
+                '2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n 1)" '
+                "make check-project-contract-vintage\n",
+            ),
             ("test", "make check-dependency-vulnerabilities\n"),
             ("test", "make check-security-static-analysis\n"),
             ("test", "make check-beta-migration-smoke\n"),
@@ -3475,7 +3483,8 @@ class TestMakeRegistryDerivation:
         assert (
             "make check-core-compat check-module-core-imports check-manifest-sync "
             "check-module-app-declaration check-org-context-primitives "
-            "check-csrf-exempt check-commit-testimony check-gate-suites "
+            "check-csrf-exempt check-commit-testimony check-project-contract-vintage "
+            "check-gate-suites "
             "check-dependency-vulnerabilities check-security-static-analysis "
             "check-beta-migration-smoke check-generated-deploy-posture "
             "check-workflow-security check-secret-scanning check-gate-parity"
@@ -3522,7 +3531,8 @@ class TestMakeRegistryDerivation:
         assert (
             "make check-core-compat check-module-core-imports check-manifest-sync "
             "check-module-app-declaration check-org-context-primitives "
-            "check-csrf-exempt check-commit-testimony check-gate-suites "
+            "check-csrf-exempt check-commit-testimony check-project-contract-vintage "
+            "check-gate-suites "
             "check-dependency-vulnerabilities check-security-static-analysis "
             "check-beta-migration-smoke check-generated-deploy-posture "
             "check-workflow-security check-secret-scanning"
@@ -3578,6 +3588,7 @@ class TestHostedCiGateGeneration:
             "org-context-primitives-gate",
             "csrf-exempt-gate",
             "commit-testimony-gate",
+            "project-contract-vintage-gate",
             "check-gate-suites",
             "dependency-vulnerabilities-gate",
             "security-static-analysis-gate",
@@ -3666,7 +3677,8 @@ class TestHostedCiGateGeneration:
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
             "org-context-primitives-gate, "
-            "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
+            "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
+            "check-gate-suites, "
             "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate, beta-migration-smoke-gate, "
             "generated-deploy-posture-gate, workflow-security-gate, "
@@ -3721,7 +3733,8 @@ class TestHostedCiGateGeneration:
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
             "org-context-primitives-gate, "
-            "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
+            "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
+            "check-gate-suites, "
             "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate, beta-migration-smoke-gate, "
             "generated-deploy-posture-gate, workflow-security-gate, "
@@ -3763,7 +3776,8 @@ class TestHostedCiGateGeneration:
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
             "org-context-primitives-gate, "
-            "csrf-exempt-gate, commit-testimony-gate, check-gate-suites, "
+            "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
+            "check-gate-suites, "
             "dependency-vulnerabilities-gate, "
             "security-static-analysis-gate, beta-migration-smoke-gate, "
             "generated-deploy-posture-gate, workflow-security-gate, "

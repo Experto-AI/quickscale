@@ -339,6 +339,29 @@ class TestLedgerRoundTrip:
         assert loaded.step_progress is None
         assert loaded.applied_state.project.slug == "myapp"
 
+    def test_round_trip_preserves_contract_vintage_and_adopted_steps(
+        self, tmp_path: Path
+    ) -> None:
+        """SA207: a recovery resume must not lose the recorded contract."""
+        state = _minimal_state()
+        state.project.project_contract = "0.89.0"
+        state.project.adopted_contract_steps = ["sa201-throttling"]
+        ledger = RecoveryLedger(
+            applied_state=state,
+            step_progress=None,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
+        mgr = LedgerManager(tmp_path)
+
+        mgr.save(ledger)
+        loaded = mgr.load()
+
+        assert loaded is not None
+        assert loaded.applied_state.project.project_contract == "0.89.0"
+        assert loaded.applied_state.project.adopted_contract_steps == [
+            "sa201-throttling"
+        ]
+
     def test_round_trip_with_step_progress(self, tmp_path: Path) -> None:
         state = _minimal_state()
         sp = {

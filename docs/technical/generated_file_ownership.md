@@ -107,7 +107,8 @@ classified through ``FRESH_FIRST_IDENTITY_ROOT_FILES`` instead.
  ``frontend/src/index.css``,
  ``frontend/src/vite-env.d.ts``, ``frontend/src/posthog-js.d.ts``,
  ``frontend/src/lib/utils.ts``, ``frontend/src/lib/analytics.ts``,
- ``frontend/src/lib/csrf.ts``, ``frontend/src/test/setup.ts``,
+ ``frontend/src/lib/csrf.ts``, ``frontend/src/lib/validateQuickScaleSeam.ts``,
+ ``frontend/src/test/setup.ts``,
  ``frontend/src/test/App.test.tsx``,
  ``frontend/src/test/csrf.test.tsx``,
  ``frontend/src/test/RootDispatch.test.tsx``,
@@ -149,13 +150,17 @@ React theme.  Fresh-first copies donor-only pages via the hardcoded
 copy-custom-router-and-pages step, but individual pages are not
 migration-managed taxonomy entries.
 
-### Category U10 — Module-conditional pages (non-module-surface)
+### Category U10 — Module-owned pages (non-module-surface)
 ``frontend/src/pages/BlogPage.tsx``, ``frontend/src/pages/CrmPage.tsx``,
-``frontend/src/pages/ListingsPage.tsx``.
-Rationale: Emitted only when the gating module is selected at generation
-time.  After generation they are user-editable and are not structurally
-managed; donor-only copies may still be adopted through the explicit
-copy-if-missing walk, which never overwrites an existing user file.
+``frontend/src/pages/ListingsPage.tsx``, ``frontend/src/pages/FormsPage.tsx``,
+``frontend/src/pages/SocialLinkTreePublicPage.tsx``,
+``frontend/src/pages/SocialEmbedsPublicPage.tsx``.
+Rationale: All six pages are emitted unconditionally as dormant entries and
+gated at runtime by the installed-module flags (SA105); the gating module
+decides whether their routes render, never whether the file exists.  After
+generation they are user-editable and are not structurally managed; donor-only
+copies may still be adopted through the explicit copy-if-missing walk, which
+never overwrites an existing user file.
 
 ### Category U11 — Org pages (React theme)
 ``frontend/src/pages/orgs/OrgLayout.tsx``,

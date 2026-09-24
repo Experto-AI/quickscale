@@ -39,6 +39,7 @@ from quickscale_core.project_state import (
 )
 from quickscale_cli.commands.contract_vintage import (
     check_contract_vintage as _check_contract_vintage,
+    load_declared_project_steps,
     load_shipped_contract_manifests,
 )
 
@@ -322,9 +323,11 @@ def _display_version_drift_warnings(
 def _state_file_has_consolidated_sections(state_dir: Path) -> bool:
     """Check whether ``state.yml`` on disk has consolidated sections.
 
-    Returns True when the state file exists and contains either the
-    ``managed_files`` section or modules with consolidated tracking
-    fields (``prefix``/``branch``/``installed_at``).
+    Returns True when the state file exists and contains the
+    ``managed_files`` section, an explicit (even empty) ``modules`` key, or
+    modules with consolidated tracking fields
+    (``prefix``/``branch``/``installed_at``) — the same authoritative-state
+    markers ``ProjectStateManager`` uses.
     """
     state_file = state_dir / "state.yml"
     if not state_file.exists():
@@ -341,7 +344,12 @@ def _state_file_has_consolidated_sections(state_dir: Path) -> bool:
     if "managed_files" in data:
         return True
 
-    modules_data = data.get("modules", {})
+    modules_data = data.get("modules")
+    if modules_data is not None and isinstance(modules_data, dict) and not modules_data:
+        # An explicit empty ``modules: {}`` key records "no modules tracked"
+        # authoritatively; legacy config.yml must not be read through (SA207).
+        return True
+
     if isinstance(modules_data, dict):
         for _name, info in modules_data.items():
             if isinstance(info, dict) and (
@@ -496,7 +504,14 @@ def _compute_drift_diagnostics(
     vintage_manifests = (
         contract_manifests if contract_manifests is not None else manifests
     )
-    contract_vintage = _check_contract_vintage(project_contract, vintage_manifests)
+    contract_vintage = _check_contract_vintage(
+        project_contract,
+        vintage_manifests,
+        project_steps=load_declared_project_steps(),
+        adopted_steps=(
+            state.project.adopted_contract_steps if state is not None else None
+        ),
+    )
     contract_vintage["has_state"] = state is not None
 
     return {
@@ -568,14 +583,20 @@ def _display_managed_files(diagnostics: dict) -> None:
     """Display managed-file consolidation status."""
     if diagnostics["managed_files_consolidated"]:
         click.secho("   Managed files: ✅ consolidated in state.yml", fg="green")
+        return
+    legacy_hashes_present = FILE_HASHES_FILENAME in diagnostics["legacy_files_present"]
+    if legacy_hashes_present and diagnostics["legacy_compat_active"]:
+        click.secho(
+            f"   Managed files: ⚠️  using legacy {FILE_HASHES_FILENAME}",
+            fg="yellow",
+        )
+    elif legacy_hashes_present:
+        click.secho(
+            f"   Managed files: no records (legacy {FILE_HASHES_FILENAME} ignored)",
+            fg="yellow",
+        )
     else:
-        if FILE_HASHES_FILENAME in diagnostics["legacy_files_present"]:
-            click.secho(
-                f"   Managed files: ⚠️  using legacy {FILE_HASHES_FILENAME}",
-                fg="yellow",
-            )
-        else:
-            click.echo("   Managed files: no records")
+        click.echo("   Managed files: no records")
 
 
 def _display_filesystem_drift(diagnostics: dict) -> None:
@@ -639,6 +660,8 @@ def _display_contract_vintage(diagnostics: dict) -> None:
     module_count = cv.get("module_count", 0)
     behind_count = cv.get("modules_behind_count", 0)
     modules_behind = cv.get("modules_behind", [])
+    project_step_count = cv.get("project_step_count", 0)
+    project_steps_behind = cv.get("project_steps_behind", [])
     project_contract = cv.get("project_contract")
 
     click.echo("")
@@ -653,6 +676,32 @@ def _display_contract_vintage(diagnostics: dict) -> None:
         click.secho(msg, fg="yellow")
     else:
         click.echo(f"   Project contract: {project_contract}")
+
+    if project_step_count == 0:
+        click.echo("   Generated-project contract steps: none declared")
+    elif not project_steps_behind:
+        click.secho(
+            f"   Generated-project contract steps: {project_step_count}/"
+            f"{project_step_count} satisfied ✅",
+            fg="green",
+        )
+    else:
+        click.secho(
+            f"   Generated-project contract steps: "
+            f"{project_step_count - len(project_steps_behind)}/{project_step_count}"
+            f" satisfied — {len(project_steps_behind)} step(s) behind ⚠️",
+            fg="yellow",
+        )
+        for entry in project_steps_behind:
+            click.secho(
+                f"\n   • generated project ({entry['id']}) requires"
+                f" project_contract >= {entry['minimum']}",
+                fg="yellow",
+            )
+            if entry.get("title"):
+                click.echo(f"     {entry['title']}")
+            for step in entry.get("manual_adoption_steps", []):
+                click.echo(f"     {step}")
 
     if module_count == 0:
         click.echo("   Module vintage requirements: none declared")

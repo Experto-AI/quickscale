@@ -808,15 +808,22 @@ class TestProjectStateManagerReadThroughImport:
     def test_load_state_imports_legacy_file_hashes_when_no_consolidated(
         self, tmp_path: Path
     ) -> None:
-        """When state.yml lacks managed_files, import from file_hashes.yml."""
+        """When state.yml lacks consolidated sections, import file_hashes.yml."""
         manager = ProjectStateManager(tmp_path)
 
-        # Write legacy state.yml without managed_files.
-        state = QuickScaleState(
-            version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
+        # Write a legacy state.yml by hand: a save from the current CLI always
+        # writes the consolidated ``modules`` marker (SA207).
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_react\n"
+            "  created_at: '2025-12-01T10:00:00'\n"
+            "  last_applied: '2025-12-01T11:00:00'\n"
         )
-        manager.save_state(state)
 
         # Write legacy file_hashes.yml.
         manager.save_managed_file_hashes({"myapp/settings/modules.py": "abc123"})
@@ -837,12 +844,19 @@ class TestProjectStateManagerReadThroughImport:
         """If config.yml has a module not in state.yml, import it."""
         manager = ProjectStateManager(tmp_path)
 
-        # Write state.yml with no modules.
-        state = QuickScaleState(
-            version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
+        # Write a legacy state.yml by hand: a save from the current CLI always
+        # writes the consolidated ``modules`` marker (SA207).
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_react\n"
+            "  created_at: '2025-12-01T10:00:00'\n"
+            "  last_applied: '2025-12-01T11:00:00'\n"
         )
-        manager.save_state(state)
 
         # Write config.yml with a module.
         config = ModuleConfig(default_remote="https://example.com/r.git")
@@ -1482,6 +1496,48 @@ class TestMaterializeAuthoritativeState:
         assert result is not None
         assert result.project.slug == "myapp"
         assert "auth" in result.modules
+
+    def test_materialization_preserves_contract_and_adopted_steps(
+        self, tmp_path: Path
+    ) -> None:
+        """SA207: materialization must carry the recorded contract forward."""
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_react\n"
+            "modules: {}\n"
+        )
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_react\n"
+            "  project_contract: '0.89.0'\n"
+            "  adopted_contract_steps:\n"
+            "    - sa201-throttling\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+        )
+        (quickscale_dir / "config.yml").write_text(
+            "default_remote: https://github.com/Experto-AI/quickscale.git\n"
+            "modules: {}\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+
+        result = manager.materialize_authoritative_state()
+
+        assert result is not None
+        assert result.project.project_contract == "0.89.0"
+        assert result.project.adopted_contract_steps == ["sa201-throttling"]
+        reloaded = StateManager(tmp_path).load()
+        assert reloaded is not None
+        assert reloaded.project.project_contract == "0.89.0"
+        assert reloaded.project.adopted_contract_steps == ["sa201-throttling"]
 
     def test_materializes_from_quickscale_yml_and_legacy_config(
         self, tmp_path: Path

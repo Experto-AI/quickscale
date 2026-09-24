@@ -42,10 +42,10 @@ initial migration to install the exact pair required by isolation checks: one te
 policy and its `<base>_select` operator-read `FOR SELECT` policy. A project-owned `AbstractListing`
 subclass declares both the tenant-scoped and super-scope managers before running those checks.
 
-Existing projects that install or update auth, billing, blog, listings, or CRM must manually adopt
-the current generated `templates/base.html`, `templates/index.html`, generated
+Existing projects must manually adopt the current generated `templates/base.html`,
+`templates/index.html`, generated
 `templates/social/*.html` files, `frontend/vite.config.ts`, `<package>/settings/local.py`, and
-`docker-compose.yml` before acknowledging the v0.89.0 contract vintage. Together those files load
+`docker-compose.yml` before recording or acknowledging the v0.89.0 contract vintage. Together those files load
 the canonical token stylesheet, keep Django-owned static paths on Django, expose the browser-facing
 Vite port and optional full origin to Django, make React and module pages use the same live DEBUG
 stylesheet, reject malformed origins and requests outside the exact Host derived from the host port
@@ -79,9 +79,11 @@ The shared-design change is an existing-project generated-file compatibility bou
 template-override change. Module Python APIs, URLs, form fields, sessions, and settings consumed by
 the modules are unchanged, but DEBUG pages now require the generated shell, local Vite port/origin
 settings, Vite static routing, and Compose frontend workflow described under Adoption. Contract
-vintage enforcement blocks old or unknown projects before mutation; passing
-`--acknowledge-contract-vintage` confirms that the operator completed every listed manual step and
-does not update those files automatically. `QUICKSCALE_FRONTEND_HOST_PORT` must be a canonical
+vintage enforcement blocks old or unknown projects before mutation and names the outstanding
+generated-project steps; `--confirm-contract-adoption` records the adopted vintage in
+`.quickscale/state.yml`, while `--acknowledge-contract-vintage` confirms completion for that
+invocation only. Neither updates those files automatically.
+`QUICKSCALE_FRONTEND_HOST_PORT` must be a canonical
 decimal from 1 through 65535. A configured `QUICKSCALE_FRONTEND_ORIGIN` must be a
 canonical HTTP(S) origin; malformed values fail startup. When it is blank, Django and Vite derive
 `http://localhost:<QUICKSCALE_FRONTEND_HOST_PORT>`; Vite accepts only the effective origin's exact

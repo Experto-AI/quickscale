@@ -647,6 +647,7 @@ class TestMakefileGateTargetDerivation:
         "check-org-context-primitives",
         "check-csrf-exempt",
         "check-commit-testimony",
+        "check-project-contract-vintage",
         "check-gate-suites",
         "check-dependency-vulnerabilities",
         "check-security-static-analysis",

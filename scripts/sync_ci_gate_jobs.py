@@ -65,6 +65,7 @@ HOSTED_GATE_ORDER = (
     "check-org-context-primitives",
     "check-csrf-exempt",
     "check-commit-testimony",
+    "check-project-contract-vintage",
     "check-gate-suites",
     "check-dependency-vulnerabilities",
     "check-security-static-analysis",
@@ -171,6 +172,11 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     "check-commit-testimony": HostedJobSpec(
         "Behavioural Commit Testimony Gate (SA166)",
         "Verify behavioural commits carry a vNN roadmap reference",
+        full_history=True,
+    ),
+    "check-project-contract-vintage": HostedJobSpec(
+        "Project Contract Vintage Gate (SA207)",
+        "Verify generated-template contract changes edit the project-vintage declaration",
         full_history=True,
     ),
     "check-gate-suites": HostedJobSpec(
@@ -365,7 +371,7 @@ def _locate_hosted_jobs(
     jobs: dict[str, Any], label: str, *, allow_missing: bool = False
 ) -> dict[str, str]:
     """
-    Locate the fourteen hosted jobs by their static catalog display names.
+    Locate the fifteen hosted jobs by their static catalog display names.
 
     Display metadata is helper-owned and static, so the generated job IDs may
     be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
@@ -693,7 +699,7 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
 
 def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
     """
-    Locate the fourteen hosted job header lines by their display names.
+    Locate the fifteen hosted job header lines by their display names.
 
     Use static display metadata to find the (possibly stale) hosted job IDs;
     this permits a registry ``ci_job`` (F-005) or Make-target edit while

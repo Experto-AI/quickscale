@@ -20,6 +20,13 @@ from quickscale_core.manifest.schema import (
     ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
+    ProjectContractStep,
+    ProjectContractVintage,
+)
+
+#: Packaged generated-project contract declaration (SA207).
+PROJECT_CONTRACT_DECLARATION_PATH = (
+    Path(__file__).resolve().parents[1] / "data" / "project_contract.yml"
 )
 
 
@@ -495,6 +502,29 @@ def _parse_implies(data: dict[str, Any], module_name: str | None) -> list[Implie
 # ---------------------------------------------------------------------------
 
 
+def _validate_declared_minimum(
+    minimum: object,
+    label: str,
+    module_name: str | None = None,
+) -> str:
+    """Validate a declared dotted-numeric version string, failing closed.
+
+    A malformed value like ``"abc"`` would parse as ``(0,)`` via
+    ``parse_version_tuple`` and fail open, so it is rejected at load time.
+    """
+    if not isinstance(minimum, str) or not minimum:
+        raise ManifestError(f"{label} must be a non-empty string", module_name)
+    try:
+        core = minimum.split("-")[0]
+        [int(p) for p in core.split(".")]
+    except ValueError, AttributeError:
+        raise ManifestError(
+            f"{label} must be a valid dotted-numeric version string (e.g. '0.89.0')",
+            module_name,
+        )
+    return minimum
+
+
 def _parse_contract_vintage(
     data: dict[str, Any],
     module_name: str | None,
@@ -521,25 +551,11 @@ def _parse_contract_vintage(
     if not isinstance(raw, dict):
         raise ManifestError("'contract_vintage' must be a mapping", module_name)
 
-    minimum = raw.get("minimum")
-    if not isinstance(minimum, str) or not minimum:
-        raise ManifestError(
-            "'contract_vintage.minimum' must be a non-empty string",
-            module_name,
-        )
-
-    # Validate that minimum is a well-formed dotted-numeric version string.
-    # A malformed value like "abc" would parse as (0,) via parse_version_tuple
-    # and fail open, so we reject it early at load time.
-    try:
-        core = minimum.split("-")[0]
-        [int(p) for p in core.split(".")]
-    except ValueError, AttributeError:
-        raise ManifestError(
-            "'contract_vintage.minimum' must be a valid dotted-numeric "
-            "version string (e.g. '0.87.0')",
-            module_name,
-        )
+    minimum = _validate_declared_minimum(
+        raw.get("minimum"),
+        "'contract_vintage.minimum'",
+        module_name,
+    )
 
     steps_raw = raw.get("manual_adoption_steps", [])
     if steps_raw is None:
@@ -559,7 +575,115 @@ def _parse_contract_vintage(
             )
         steps.append(step)
 
-    return ContractVintage(minimum=minimum, manual_adoption_steps=steps)
+    vintage_id = raw.get("id")
+    if vintage_id is not None and (not isinstance(vintage_id, str) or not vintage_id):
+        raise ManifestError(
+            "'contract_vintage.id' must be a non-empty string",
+            module_name,
+        )
+
+    return ContractVintage(
+        minimum=minimum,
+        manual_adoption_steps=steps,
+        id=vintage_id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Project-contract vintage declaration parsing (SA207)
+# ---------------------------------------------------------------------------
+
+
+def _parse_project_contract_vintage(data: dict[str, Any]) -> ProjectContractVintage:
+    """Parse the packaged generated-project contract declaration.
+
+    The declaration is fail-closed: a missing, empty, or malformed ``steps``
+    list raises rather than silently disabling enforcement.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+
+    Returns:
+        :class:`ProjectContractVintage`.
+
+    Raises:
+        ManifestError: If the declaration is malformed.
+    """
+    steps_raw = data.get("steps")
+    if not isinstance(steps_raw, list) or not steps_raw:
+        raise ManifestError(
+            "'steps' must be a non-empty list in the project contract declaration"
+        )
+
+    steps: list[ProjectContractStep] = []
+    seen_ids: set[str] = set()
+    for i, raw_step in enumerate(steps_raw):
+        label = f"steps[{i}]"
+        if not isinstance(raw_step, dict):
+            raise ManifestError(f"'{label}' must be a mapping")
+
+        step_id = raw_step.get("id")
+        if not isinstance(step_id, str) or not step_id:
+            raise ManifestError(f"'{label}.id' must be a non-empty string")
+        if step_id in seen_ids:
+            raise ManifestError(f"'{label}.id' duplicates {step_id!r}")
+        seen_ids.add(step_id)
+
+        minimum = _validate_declared_minimum(
+            raw_step.get("minimum"), f"'{label}.minimum'"
+        )
+
+        title = raw_step.get("title")
+        if not isinstance(title, str) or not title:
+            raise ManifestError(f"'{label}.title' must be a non-empty string")
+
+        adoption_raw = raw_step.get("adoption_steps")
+        if not isinstance(adoption_raw, list) or not adoption_raw:
+            raise ManifestError(f"'{label}.adoption_steps' must be a non-empty list")
+        adoption_steps: list[str] = []
+        for j, step in enumerate(adoption_raw):
+            if not isinstance(step, str) or not step:
+                raise ManifestError(
+                    f"'{label}.adoption_steps[{j}]' must be a non-empty string"
+                )
+            adoption_steps.append(step)
+
+        steps.append(
+            ProjectContractStep(
+                id=step_id,
+                minimum=minimum,
+                title=title,
+                manual_adoption_steps=adoption_steps,
+            )
+        )
+
+    return ProjectContractVintage(steps=steps)
+
+
+def load_project_contract_vintage(
+    declaration_path: Path | None = None,
+) -> ProjectContractVintage:
+    """Load the packaged generated-project contract declaration.
+
+    Args:
+        declaration_path: Optional override path (tests); defaults to the
+            declaration shipped inside ``quickscale_core``.
+
+    Returns:
+        :class:`ProjectContractVintage`.
+
+    Raises:
+        ManifestError: If the file cannot be read or is malformed.
+    """
+    target = declaration_path or PROJECT_CONTRACT_DECLARATION_PATH
+    try:
+        content = target.read_text(encoding="utf-8")
+    except OSError as error:
+        raise ManifestError(
+            f"Unable to read the project contract declaration {target}: {error}"
+        ) from error
+    data = _parse_yaml_content(content, None)
+    return _parse_project_contract_vintage(data)
 
 
 def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleManifest:

@@ -1,0 +1,56 @@
+# Generated-project contract vintage declaration (SA207).
+#
+# Every change to a generated-project runtime contract is declared here once,
+# with the manual adoption steps an existing project follows to catch up.
+# Module manifests keep only module-specific boundaries; template contract
+# changes live here.
+#
+# Each step's `id` is recorded in `.quickscale/state.yml`
+# (`project.adopted_contract_steps`) when a project is generated or when its
+# operator confirms adoption, so a project generated before the step existed
+# cannot pass on a shared package version alone. `minimum` documents the
+# QuickScale version that introduced the contract. `apply`, `update`, and
+# `deploy railway` refuse while any declared step id is missing and name the
+# outstanding steps; confirming adoption records every declared id and the
+# highest declared minimum, so a caught-up project no longer needs the
+# per-invocation acknowledgement flag. A changed contract gets a new step id.
+#
+# `scripts/check_project_contract_vintage.py` fails when a commit changes a
+# generated-project settings template, `start.sh.j2`, or `Dockerfile.j2`
+# without editing this declaration.
+steps:
+  - id: sa192-shared-design
+    minimum: "0.89.0"
+    title: "Adopt the shared design across generated templates"
+    adoption_steps:
+      - "Compare and manually adopt the current templates/base.html, templates/index.html, and generated templates/social/*.html files so every DEBUG host loads the Vite-served /static/frontend/src/index.css, production loads frontend/assets/index.css, and the shell restores the persisted theme."
+      - "Compare and manually adopt the current frontend/vite.config.ts static proxy and exact HTTP/WebSocket Host enforcement so Vite serves /static/frontend/ directly and accepts only the effective browser Host: configured QUICKSCALE_FRONTEND_ORIGIN, or localhost:QUICKSCALE_FRONTEND_HOST_PORT when blank."
+      - "Compare and manually adopt the current <package>/settings/local.py QUICKSCALE_FRONTEND_HOST_PORT and validated QUICKSCALE_FRONTEND_ORIGIN settings so DEBUG React and module pages use the same browser-visible Vite stylesheet URL and malformed origins fail explicitly."
+      - "Compare and manually adopt the current docker-compose.yml frontend workflow so it builds assets before starting Vite, publishes ${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173, passes the port and optional full origin to Vite and Django, probes Vite with the effective Host, and waits for the Vite-served stylesheet."
+      - "Run pnpm dev alongside Django for DEBUG module pages; run pnpm build so static/frontend/assets/index.css exists before serving non-DEBUG module pages."
+
+  - id: sa200-proxy-trust
+    minimum: "0.89.0"
+    title: "Adopt the gated proxy-trust contract in production settings"
+    adoption_steps:
+      - "Compare and manually adopt the current settings/production.py proxy-trust contract: SECURE_PROXY_SSL_HEADER is set only while USE_X_FORWARDED_FOR is enabled, so a single-host deployment (USE_X_FORWARDED_FOR=False) never trusts a client-supplied X-Forwarded-Proto header for the HTTPS redirect or secure cookies."
+
+  - id: sa201-throttling
+    minimum: "0.89.0"
+    title: "Adopt the composed DRF throttling contract"
+    adoption_steps:
+      - "Compare and manually adopt the current settings/base.py REST_FRAMEWORK block: it composes module-supplied DRF configuration instead of replacing it, installs AnonRateThrottle, UserRateThrottle, and ScopedRateThrottle as the default throttle classes, and merges the conservative anon/user defaults with module-contributed scopes such as billing's billing_checkout and billing_portal rates. A wholesale REST_FRAMEWORK assignment with no throttle classes silently drops the checkout-loop bound."
+
+  - id: sa206-runtime-settings-facade
+    minimum: "0.89.0"
+    title: "Adopt the quickscale_core.runtime settings facade"
+    adoption_steps:
+      - "Compare and manually adopt the current settings/base.py and settings/production.py imports: generated settings import the client-identity and correlation-id middleware, the proxy-trust derivation, the privileged-command/runtime-database selection, and the SECRET_KEY guard from quickscale_core.runtime.settings, keeping only user configuration; remove any inline copy of those contracts and declare the bounded quickscale-core lockstep pin in pyproject.toml."
+
+  - id: runtime-role-contract
+    minimum: "0.89.0"
+    title: "Adopt the canonical runtime-role provisioning contract"
+    adoption_steps:
+      - "Compare and manually adopt the current settings/production.py runtime-role contract and settings/base.py RUNTIME_DB_ROLE default."
+      - "Compare and manually adopt the canonical quickscale_runtime role name and grants, including GRANT CONNECT, in db/init.sql and start.sh, plus the matching runtime-role URL in .env.example and docker-compose.yml; for an existing local database, run the role/grant SQL from OPERATIONS.md with <password> set to the password in the adopted local RUNTIME_DATABASE_URL, or reset the disposable Compose database volume before starting services; keep the migrate/createcachetable privileged-command set and unsupported-argv refusal unchanged."
+      - "Compare and manually adopt the current Dockerfile startup contract and OPERATIONS.md runtime-role guidance."

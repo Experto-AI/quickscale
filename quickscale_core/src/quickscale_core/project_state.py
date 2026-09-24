@@ -834,12 +834,29 @@ class ProjectStateManager:
             return None
         created_at, last_applied = timestamps
 
+        # The project contract and its adopted step ids are authoritative
+        # project state; materialization must carry them forward rather than
+        # erase them (SA207).
+        project_contract = (
+            existing_state.project.project_contract
+            if existing_state is not None
+            else None
+        )
+        adopted_contract_steps = (
+            list(existing_state.project.adopted_contract_steps)
+            if existing_state is not None
+            and existing_state.project.adopted_contract_steps is not None
+            else None
+        )
+
         state = QuickScaleState(
             version="1",
             project=ProjectState(
                 slug=slug,
                 package=package,
                 theme=theme,
+                project_contract=project_contract,
+                adopted_contract_steps=adopted_contract_steps,
                 created_at=created_at,
                 last_applied=last_applied,
             ),

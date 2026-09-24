@@ -6253,6 +6253,7 @@ class TestCR002PostLockGateReEvaluation:
         ctx.qs_config.docker.build = False
         ctx.has_pending_post_embed_recovery = False
         ctx.had_existing_state = True
+        ctx.confirm_contract_adoption = False
 
         with pytest.raises(click.Abort):
             _execute_apply_steps(

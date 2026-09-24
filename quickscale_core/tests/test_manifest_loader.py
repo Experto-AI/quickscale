@@ -8,6 +8,7 @@ from quickscale_core.manifest.loader import (
     load_manifest,
     load_manifest_from_path,
     get_manifest_for_module,
+    load_project_contract_vintage,
 )
 from quickscale_core.manifest.schema import ImpliesEntry
 
@@ -1558,6 +1559,33 @@ contract_vintage:
         assert manifest.contract_vintage.manual_adoption_steps[0] == "Step one: do this"
         assert manifest.contract_vintage.manual_adoption_steps[1] == "Step two: do that"
 
+    def test_contract_vintage_with_id(self) -> None:
+        """An optional step id is parsed for exact adoption tracking."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  id: sa999-step
+  minimum: "0.89.0"
+  manual_adoption_steps:
+    - "Step one"
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.id == "sa999-step"
+
+    def test_contract_vintage_empty_id_raises(self) -> None:
+        """An empty step id fails closed instead of tracking nothing."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  id: ""
+  minimum: "0.89.0"
+"""
+        with pytest.raises(ManifestError, match="contract_vintage.id"):
+            load_manifest(yaml_content, "mymod")
+
     def test_contract_vintage_not_mapping_raises(self) -> None:
         """contract_vintage that is not a mapping raises ManifestError."""
         yaml_content = (
@@ -1667,3 +1695,75 @@ contract_vintage:
         manifest = load_manifest(yaml_content, "mymod")
         assert manifest.contract_vintage is not None
         assert manifest.contract_vintage.minimum == "0"
+
+
+class TestLoadProjectContractVintage:
+    """Tests for the packaged generated-project contract declaration (SA207)."""
+
+    def test_packaged_declaration_loads(self) -> None:
+        """The shipped declaration parses with its template contract steps."""
+        declaration = load_project_contract_vintage()
+        step_ids = [step.id for step in declaration.steps]
+
+        assert step_ids[:4] == [
+            "sa192-shared-design",
+            "sa200-proxy-trust",
+            "sa201-throttling",
+            "sa206-runtime-settings-facade",
+        ]
+        assert all(step.minimum == "0.89.0" for step in declaration.steps)
+        assert all(step.title for step in declaration.steps)
+        assert all(step.manual_adoption_steps for step in declaration.steps)
+
+    def test_missing_declaration_raises(self, tmp_path: Path) -> None:
+        """A missing declaration file fails hard."""
+        with pytest.raises(ManifestError, match="Unable to read"):
+            load_project_contract_vintage(tmp_path / "missing.yml")
+
+    @pytest.mark.parametrize(
+        ("body", "match"),
+        [
+            ("steps: []\n", "non-empty list"),
+            ("steps: not_a_list\n", "non-empty list"),
+            ("steps:\n  - id: sa1\n    minimum: '0.89.0'\n", "title"),
+            (
+                "steps:\n  - id: sa1\n    minimum: '0.89.0'\n    title: t\n",
+                "adoption_steps",
+            ),
+            (
+                "steps:\n  - id: sa1\n    minimum: '0.89.0'\n"
+                "    title: t\n    adoption_steps: []\n",
+                "adoption_steps",
+            ),
+            (
+                "steps:\n  - id: ''\n    minimum: '0.89.0'\n"
+                "    title: t\n    adoption_steps: [s]\n",
+                "id",
+            ),
+            (
+                "steps:\n  - id: sa1\n    minimum: abc\n"
+                "    title: t\n    adoption_steps: [s]\n",
+                "dotted-numeric",
+            ),
+            (
+                "steps:\n  - id: sa1\n    minimum: '0.89.0'\n"
+                "    title: t\n    adoption_steps: [s]\n"
+                "  - id: sa1\n    minimum: '0.89.0'\n"
+                "    title: t\n    adoption_steps: [s]\n",
+                "duplicates",
+            ),
+            (
+                "steps:\n  - id: sa1\n    minimum: '0.89.0'\n"
+                "    title: t\n    adoption_steps: [1]\n",
+                "must be a non-empty string",
+            ),
+        ],
+    )
+    def test_malformed_declaration_fails_closed(
+        self, tmp_path: Path, body: str, match: str
+    ) -> None:
+        declaration_path = tmp_path / "project_contract.yml"
+        declaration_path.write_text(body, encoding="utf-8")
+
+        with pytest.raises(ManifestError, match=match):
+            load_project_contract_vintage(declaration_path)

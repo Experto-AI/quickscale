@@ -35,7 +35,8 @@ baselines. `decisions.md` § Clean-Break Migration History (`:986ff`) declares a
 2. SA153 builds the first property portal on it as a project-owned extension.
 3. SA204 freezes the module migration history at SA153's go-live horizon.
 
-Track 2 is **SA207**, the single project-level contract vintage, which is next (`roadmap.md:36-61`).
+Track 2 is **SA211**, the remainder of the contract-adoption work, after SA207 landed the
+project-level declaration and its step-identity record (`roadmap.md:36-61`).
 **Data sensitivity:** credentials, user PII, and Stripe billing identifiers; no regulatory regime
 is declared. **Cost driver:** flat Railway spend plus Stripe calls. **Out-of-repo architecture:**
 Railway proxy and service configuration, the Stripe account and its webhook endpoint versions, and
@@ -130,14 +131,14 @@ internals, or the DR orchestration are sound.
 | Tenant-model universe classified, refreshed, purged | Marker-derived classification, FORCE-RLS refresh, FK-ordered purge | Structural | unchanged |
 | Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard; exemption narrowed to the role check (SA203) | Structural | unchanged |
 | Privileged command set | Single declaration in `runtime/settings.py` (`KNOWN_PRIVILEGED_COMMANDS`) consumed by templates and the donor validator; `start.sh.j2` held equal by `test_privileged_command_contract.py` | Structural + gated | **strengthened** (SA206: the fifth station collapsed into the facade) |
-| Runtime security code reaches existing projects | Facade upgradable via lockstep pin; **existing projects must hand-adopt the import, and no manifest declares that step** | Structural for new projects; convention for existing | **strengthened** (SA206); adoption owed to SA207 |
+| Runtime security code reaches existing projects | Facade upgradable via lockstep pin; the generated-project declaration declares the facade adoption step and applied state records it (SA207) | Structural for new projects; declared and recorded for existing | **strengthened** (SA206, SA207); module-owner and SA208 steps owed to SA211 |
 | Schema and data survive a QuickScale upgrade | Clean-break rule; restore refuses an artifact with differing or absent `module_versions` (SA205); a bare `--file` restore is **not** compared (`recovery.py:287-288`) | Convention (explicit non-support) + one refusal gate | unchanged since SA205 |
-| Template ↔ upgradable-code contract compatibility | Detection keyed on the release version only; adoption is hand-copied prose; `project_contract` never advances | Detection gated at release granularity; adoption convention | **weakened**: SA209 added a step the gate cannot surface; finding 2 |
+| Template ↔ upgradable-code contract compatibility | One project-level declaration plus module-specific vintages; applied state records adopted step ids, confirmation advances the recorded vintage, and a registered gate requires a new step id when a watched template changes (SA207) | Gated: declaration, step-id adoption, and template coupling; the watched set is still a path list | **strengthened** (SA207); the emission-manifest-derived watch set is owed to SA211 |
 | Every emitted path has a migration disposition | Generator-derived conformance over a hand-authored taxonomy (89) | Membership gated | unchanged |
 | Module credential env vars reach `.env.example` | Declaration-driven managed-block renderer + conformance | Structural + gated | unchanged |
 | Org-removal obligations discharged | Central `ORGANIZATION_REMOVAL_OBLIGATIONS`; provider-ID system check over installed tenant models + purge refusal (SA208) | Inventory structural; conformance runtime | **strengthened** (SA208); finding 3 |
 | Stripe webhook API version agrees with the SDK pin | `STRIPE_API_VERSION` set on the SDK; mismatched events refused (fail closed); 4 operator-facing copies of the literal | Structural at runtime; operator copies convention | **new row** (SA209); W7 |
-| DRF throttling | Template defaults + module scopes merged via `setdefault` (`base.py.j2:250-286`) | Structural for fresh projects; undeclared for existing | unchanged |
+| DRF throttling | Template defaults + module scopes merged via `setdefault` (`base.py.j2:250-286`); declared for existing projects as the project-level `sa201-throttling` step (SA207) | Structural for fresh projects; declared for existing | **declared** (SA207) |
 | Generator template context complete | `StrictUndefined` + release-lane boot | Structural | unchanged |
 | Publishing supply chain | SHA-pinned actions, minimal permissions, zizmor and secret scanning; zizmor now preflighted | Gated | unchanged (tooling ergonomics only) |
 | CSRF-exempt endpoints have alternate integrity | AST gate + sanctioned bases | Structural + gated | unchanged |
@@ -147,7 +148,7 @@ internals, or the DR orchestration are sound.
 | Rank | ID | Title | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | Upgrades rewrite schema history with no data carry path | SA153 go-live | High / Medium | M | one-way door | Every release rewrites each module's only migration, and nothing carries a deployed project's data across it, yet SA153 brings the first tenant data that cannot be reseeded. |
-| 2 | `generated-file-ownership-unmodeled` | Existing projects receive template contract changes only as hand-copied prose | now | High | M | one-way door | Code-shaped contracts now ship through the facade (SA206). Adoption for existing projects is still prose, keyed only to the release version, never advanced, and invisible when a step is added inside a release. |
+| 2 | `generated-file-ownership-unmodeled` | Existing projects receive template contract changes only as declared adoption steps | now | High | M | one-way door | Code-shaped contracts ship through the facade (SA206) and adoption is declared once and recorded in state (SA207). Remaining: step owners, the SA208 provider-ID step, module-manifest step gating, and a watch set derived from the emission manifest (SA211). |
 | 3 | `deletion-invariants-per-boundary-reimplementation` | Org deletion obligations are declared centrally and executed per boundary | 6–18 months | High | M | two-way door | The obligation inventory lives in vendored `orgs` and names billing's fields as strings; each boundary orchestrates its own subset. |
 
 Rank changes: none. Finding 2's blast radius drops from High to Medium, because SA206 moved the
@@ -168,7 +169,7 @@ items:
                quickscale_devtools/src/quickscale_devtools/beta_migration.py],
      first_seen: 2026-09-23, last_verified: 2026-09-24}
   - {id: generated-file-ownership-unmodeled, status: open, rank: 2,
-     title: "Existing projects receive template contract changes only as hand-copied prose",
+     title: "Existing projects receive template contract changes only as declared adoption steps",
      lenses: [V, IX, XV, XIX], horizon: now, confidence: High, size: M,
      reversibility: one-way door, depends_on: [], amplifies: [],
      anchors: [quickscale_cli/src/quickscale_cli/commands/contract_vintage.py,
@@ -484,19 +485,23 @@ SA208's additive check. **Verdict: still exonerated.**
   deliberate one-way door. `test_runtime_settings_facade.py:25-41` asserts that the expected names
   are a subset of `__all__`, which is a partial API guard. It preserved the fail-closed
   privileged/runtime selection (`:238-280` tests). The adoption step for existing projects was
-  left to SA207 and is undeclared today. Finding 2 stays open, narrowed.
+  left to SA207, which declared it and records its adoption in state. Finding 2 stays open,
+  narrowed to SA211's remainder.
 - **SA208** (`1744355e`): containment as recorded; the fail direction is refusal. Sound; finding
   3 stays open.
 - **SA209** (`f1627c51`): replaced the hand-built Stripe fakes with real-SDK contract tests, and
   refuses mismatched-version events (fail closed). It **minted** a hand-synced version literal at
-  5 stations (W7), and a step the vintage gate cannot surface (finding 2).
+  5 stations (W7), and a step the vintage gate initially could not surface; SA207 gives it the id
+  `sa209-stripe-webhook-version` (finding 2).
 - **SA210** (`77350177`): a one-line template bound plus a fixture regeneration. No structural
-  commitment. It is a template change outside SA207's planned watch set (finding 2 evidence).
+  commitment. It is a template change outside SA207's watched path set, which SA211 derives from
+  the emission manifest (finding 2 evidence).
 
 ## Fix order and interactions
 
-- **SA207 should absorb finding 2's step-identity shape before it starts.** Otherwise it lands
-  option 3 and needs a second schema change later. This is independent of Track 1.
+- **SA207 absorbed finding 2's step-identity shape** for the project-level declaration. SA211
+  carries the remainder: step owners, the SA208 provider-ID step, module-manifest step gating,
+  and the emission-manifest-derived watch set. This is independent of Track 1.
 - **Finding 1's freeze (SA204) must land before any post-SA153 module schema change.** Deciding
   the freeze release early lets SA153 write `0002+` from the start.
 - **Finding 1 amplifies finding 3:** a failed data carry after SA153 would also strand removal
@@ -560,6 +565,16 @@ imminent data-loss condition was encountered.
 
 ## Reconciliation log
 
+- 2026-09-24 — `generated-file-ownership-unmodeled`: **SA207 landed** (merge reconciliation; not
+  audited by this pass). One project-level declaration now owns each generated-template contract
+  change with its adoption steps, the five SA192 manifest copies, orgs' block, and
+  `RAILWAY_CONTRACT_VINTAGE` are gone, applied state records the adopted step ids, `apply`/
+  `update`/`deploy railway` refuse on exactly the unadopted steps, confirmation advances the
+  recorded vintage, and the registered `check-project-contract-vintage` gate fails a template
+  change without a new adoption step id (range, staged, and merge-resolution cases; local, hosted,
+  and publish contexts). The finding stays open for what SA211 now carries: step owners, SA208's
+  provider-ID step, module-manifest step gating, and a watched set derived from the emission
+  manifest.
 - 2026-09-24 — `clean-break-schema-no-data-path`: **still-open**, rank 1. No migration changed in
   the delta. SA205 was audited from source: it is sound containment, with a documented bare-file
   edge.

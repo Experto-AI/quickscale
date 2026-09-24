@@ -656,7 +656,7 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
     ):
         apply_result = runner.invoke(
             apply,
-            ["quickscale.yml", "--no-docker"],
+            ["quickscale.yml", "--no-docker", "--acknowledge-contract-vintage"],
             input="y\n",
             catch_exceptions=False,
         )
