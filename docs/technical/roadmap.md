@@ -39,14 +39,14 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA209 | Make billing work against the real Stripe SDK at API version `2026-06-24.dahlia` | post-v88 | 2 | — | Deferred |
 | SA207 | Declare generated-project contract changes once and let adoption advance the recorded vintage | post-v88 | 2 | — | Deferred |
-| SA210 | Bound the generated projects' `poetry-core` build requirement | post-v88 | 2 | — | Deferred |
+| SA210 | Bound the generated projects' `poetry-core` build requirement | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA209 ──► SA207 ──► SA210
-Track 3: SA208 (landed)
+Track 2: SA209 ──► SA207
+Track 3: SA208 (landed) ──► SA210
                          critical path: SA191 → SA153
 ```
 
@@ -61,7 +61,7 @@ deferred to the SA153 go-live horizon. SA154 is an inventory, not work.
 **Ordering off the critical path.** SA208 has landed ahead of SA153, which it gates. SA204 follows
 SA153 in Track 1 and must land before any post-SA153 module schema change.
 SA209 is S1 and goes next on Track 2. SA207 carries the facade adoption step SA206 left to it
-(see SA207). SA210 is trivial and fills the Track 2 tail.
+(see SA207). SA210 is trivial and moved to the idle Track 3.
 
 ### Track states
 
@@ -71,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA209 | yes | yes | yes | **yes** | no |
-| 3 | — | — | — | — | **yes** | no |
+| 3 | SA210 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -81,7 +81,7 @@ A track is **truly green** only when all three states are yes.
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation.
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
-  every package and of the generated `pyproject.toml.j2`, `ruff.toml`, the module page templates
+  every package, `ruff.toml`, the module page templates
   and test-settings stubs, the generated `base.html`, the CLI apply/deploy/update commands and
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
@@ -90,8 +90,9 @@ A track is **truly green** only when all three states are yes.
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
-  `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, and the
-  blog rate limiter.
+  `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
+  blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block (SA210, moved from
+  Track 2).
 - **Cross-track edits.** SA206 shrank the donor-settings validator in Track 1's
   `beta_migration.py` and merged before SA191 starts, so the shrink landed before the tool is used
   for real. SA204 and SA207 each add a registered gate; Track 2 reconciles its
