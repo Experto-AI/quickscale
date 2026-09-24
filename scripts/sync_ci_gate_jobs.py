@@ -176,7 +176,7 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     ),
     "check-project-contract-vintage": HostedJobSpec(
         "Project Contract Vintage Gate (SA207)",
-        "Verify generated-template contract changes edit the project-vintage declaration",
+        "Verify generated-template and module-manifest contract changes declare a new step id",
         full_history=True,
     ),
     "check-gate-suites": HostedJobSpec(

@@ -16,8 +16,13 @@
 # per-invocation acknowledgement flag. A changed contract gets a new step id.
 #
 # `scripts/check_project_contract_vintage.py` fails when a commit changes a
-# generated-project settings template, `start.sh.j2`, or `Dockerfile.j2`
-# without editing this declaration.
+# template the generator emits into a generated project, a generator change
+# alters the emitted file set, or a module manifest's `contract_vintage` step
+# text changes without a new id. The watched template set derives from the
+# generator's emission mapping, not a hand-listed path set. A new id must be
+# unused by every other declaration: adopted ids share one namespace in
+# applied state, so a colliding id would make an adopted project pass a
+# different step.
 steps:
   - id: sa192-shared-design
     minimum: "0.89.0"

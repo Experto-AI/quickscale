@@ -477,7 +477,7 @@ describe_local_conformance_gate() {
             ;;
         check-project-contract-vintage)
             LOCAL_GATE_DESCRIPTION="Running project contract vintage gate..."
-            LOCAL_GATE_SUCCESS="✓ Generated-template changes declare a project-vintage edit"
+            LOCAL_GATE_SUCCESS="✓ Generated-project contract changes declare an adoption step id"
             LOCAL_GATE_FAILURE_LABEL="Project Contract Vintage Gate"
             ;;
         check-dependency-vulnerabilities)

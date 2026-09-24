@@ -41,8 +41,8 @@ repos:
         language: system
         stages: [commit-msg]
       - id: project-contract-vintage
-        name: generated-template contract vintage coupling
+        name: generated-project contract vintage coupling
         entry: poetry run python scripts/check_project_contract_vintage.py --staged
         language: system
-        files: ^quickscale_core/src/quickscale_core/(generator/templates/project_name/settings/|generator/templates/start\.sh\.j2|generator/templates/Dockerfile\.j2|data/project_contract\.yml)
+        files: ^(quickscale_core/src/quickscale_core/generator/|quickscale_core/src/quickscale_core/data/(project_contract\.yml|manifests/[^/]+/module\.yml)|quickscale_modules/[^/]+/module\.yml)
         pass_filenames: false

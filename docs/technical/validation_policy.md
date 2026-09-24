@@ -204,7 +204,7 @@ validated resources; preserve the runners' exact-scope cleanup contracts.
 ### Registered script-gate and isolation execution
 
 The registry-derived local and hosted conformance flow includes fifteen registered hosted
-gates, including the CSRF-exempt contract, behavioural-commit testimony, generated-template
+gates, including the CSRF-exempt contract, behavioural-commit testimony, generated-project
 contract-vintage coupling, blocking Trivy dependency-vulnerability, Bandit static-security,
 zizmor workflow-security, and gitleaks secret-scanning gates. `make check-gate-suites` is the owning execution context for all current
 `scripts/test_*.py` suites and invokes exactly:

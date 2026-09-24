@@ -1113,10 +1113,17 @@ docker:
 """
                 )
 
-            # Second apply should show delta
+            # Second apply should show delta.  Adding auth implies orgs, whose
+            # SA208 provider-ID adoption step this fixture has not recorded, so
+            # acknowledge the contract-vintage boundary to reach the delta.
             result2 = runner.invoke(
                 apply,
-                ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                [
+                    "testapp/quickscale.yml",
+                    "--no-modules",
+                    "--no-docker",
+                    "--acknowledge-contract-vintage",
+                ],
                 input="n\n",  # Decline to proceed
             )
 
