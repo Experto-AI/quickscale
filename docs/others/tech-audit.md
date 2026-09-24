@@ -388,3 +388,13 @@ only), X-generator.*
 - 2026-09-23 — `billing-stripe-api-version-drift`: fix decisions accepted by the team. A webhook
   whose `api_version` is a different named release is rejected with `BillingConfigurationError`
   (500, so Stripe retries). Matching is by named release (`dahlia`), not by exact date.
+- 2026-09-24 — `billing-stripe-objects-normalized-empty`: resolved (`f1627c51`, SA209). Verified at
+  `services.py:4235`: `_normalize_mapping` converts SDK objects with `to_dict()` before the mapping
+  check, and `test_stripe_contract.py` proves a locally signed body through the real
+  `StripeClient.construct_event` keeps its event id.
+- 2026-09-24 — `billing-stripe-api-version-drift`: resolved (`f1627c51`, SA209). Verified at
+  `services.py:42`, `:505`, `:1813`, `:3060`, `:3108`, `:3152`: `STRIPE_API_VERSION` is declared
+  once and set on the SDK, a webhook from a different named release is refused with
+  `BillingConfigurationError` (500) and its version is logged, invoice reads use
+  `parent.subscription_details`, line prices use `pricing.price_details.price`, and period bounds
+  come from agreeing subscription items without blanking known bounds.
