@@ -716,14 +716,23 @@ class TestStateFileHasConsolidatedSections:
         )
         assert _state_file_has_consolidated_sections(state_dir) is True
 
-    def test_not_consolidated(self, tmp_path):
-        """Return False when no consolidated sections present."""
+    def test_consolidated_via_empty_modules_marker(self, tmp_path):
+        """An explicit empty modules key is authoritative (SA207)."""
         state_dir = tmp_path / ".quickscale"
         state_dir.mkdir()
         (state_dir / "state.yml").write_text(
             "version: '1'\n"
             "project:\n  slug: x\n  package: x\n  theme: showcase_react\n"
             "modules: {}\n"
+        )
+        assert _state_file_has_consolidated_sections(state_dir) is True
+
+    def test_not_consolidated(self, tmp_path):
+        """Return False when no consolidated sections present."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        (state_dir / "state.yml").write_text(
+            "version: '1'\nproject:\n  slug: x\n  package: x\n  theme: showcase_react\n"
         )
         assert _state_file_has_consolidated_sections(state_dir) is False
 
@@ -778,7 +787,8 @@ class TestComputeDriftDiagnostics:
         (state_dir / "state.yml").write_text(
             "version: '1'\n"
             "project:\n  slug: x\n  package: x\n  theme: showcase_react\n"
-            "modules: {}\n"
+            "  created_at: '2025-01-01T00:00:00'\n"
+            "  last_applied: '2025-01-01T00:00:00'\n"
         )
         # Create a legacy config.yml.
         from quickscale_core.config import add_module

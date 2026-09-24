@@ -73,7 +73,7 @@
         version-check version-update bump-version \
         check-core-compat check-module-core-imports check-manifest-sync \
         check-module-app-declaration check-org-context-primitives \
-         check-csrf-exempt check-commit-testimony check-gate-suites isolation-conformance \
+         check-csrf-exempt check-commit-testimony check-project-contract-vintage check-gate-suites isolation-conformance \
          check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture security-negative-probes \
          check-workflow-security check-secret-scanning \
          check-gate-parity check-ci-gate-generation \
@@ -334,6 +334,7 @@ help:
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
 	@echo "  make check-commit-testimony       - Behavioural commits carry a vNN or vN.NN.N roadmap reference"
+	@echo "  make check-project-contract-vintage - Generated-template contract changes edit the project-vintage declaration"
 	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability scan"
 	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
 	@echo "  make check-beta-migration-smoke      - Exercise fresh-first beta migration on isolated generated fixtures"
@@ -1018,6 +1019,15 @@ check-csrf-exempt:
 # (v0.88.0). No ticket form or changelog entry substitutes for it.
 check-commit-testimony:
 	@$(PYTHON) scripts/check_commit_testimony.py
+
+# --- Project Contract Vintage Gate (SA207) ---
+
+# Inspect every non-merge commit in the selected base-to-head range.  A change
+# to templates/project_name/settings/*, start.sh.j2, or Dockerfile.j2 requires
+# an edit to the project contract declaration in the same commit, so a
+# generated-project contract change cannot ship without its adoption steps.
+check-project-contract-vintage:
+	@$(PYTHON) scripts/check_project_contract_vintage.py
 
 # --- SA123 Security Gates ---
 

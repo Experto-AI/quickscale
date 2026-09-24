@@ -156,6 +156,23 @@
             "trigger_inputs": []
         },
         {
+            "id": "check-project-contract-vintage",
+            "description": "Generated-template contract changes edit the project-vintage declaration",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-project-contract-vintage",
+                "ci_job": "project-contract-vintage-gate",
+                "local_ci_stage": 6
+            },
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
             "id": "frontend-proof",
             "description": "Render showcase_react and run pnpm install/type-check/build",
             "required_contexts": [

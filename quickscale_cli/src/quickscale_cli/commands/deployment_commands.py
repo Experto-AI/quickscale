@@ -7,9 +7,11 @@ from pathlib import Path
 
 import click
 
-from quickscale_cli.commands.contract_vintage import enforce_contract_vintage
+from quickscale_cli.commands.contract_vintage import (
+    enforce_shipped_contract_vintage,
+    record_confirmed_adoption,
+)
 from quickscale_core.generator.runtime_database import RUNTIME_DB_ROLE
-from quickscale_core.manifest import ContractVintage
 from quickscale_core.project_state import ProjectStateManager
 from quickscale_core.schema.state_schema import StateError
 
@@ -37,16 +39,6 @@ from quickscale_cli.utils.railway_utils import (
     verify_dockerfile,
     verify_railway_dependencies,
     verify_railway_json,
-)
-
-
-RAILWAY_CONTRACT_VINTAGE = ContractVintage(
-    minimum="0.89.0",
-    manual_adoption_steps=[
-        "Compare and manually adopt the current settings/production.py runtime-role contract and settings/base.py RUNTIME_DB_ROLE default.",
-        "Compare and manually adopt the canonical quickscale_runtime role name and grants, including GRANT CONNECT, in db/init.sql and start.sh, plus the matching runtime-role URL in .env.example and docker-compose.yml; for an existing local database, run the role/grant SQL from OPERATIONS.md with <password> set to the password in the adopted local RUNTIME_DATABASE_URL, or reset the disposable Compose database volume before starting services; keep the migrate/createcachetable privileged-command set and unsupported-argv refusal unchanged.",
-        "Compare and manually adopt the current Dockerfile startup contract and OPERATIONS.md runtime-role guidance.",
-    ],
 )
 
 
@@ -698,7 +690,19 @@ def _display_summary(
     is_flag=True,
     help="Proceed after manually adopting the required generated deployment files.",
 )
-def railway(project_name: str | None, acknowledge_contract_vintage: bool) -> None:
+@click.option(
+    "--confirm-contract-adoption",
+    is_flag=True,
+    help=(
+        "Record the generated-project contract adoption in .quickscale/state.yml "
+        "and proceed."
+    ),
+)
+def railway(
+    project_name: str | None,
+    acknowledge_contract_vintage: bool,
+    confirm_contract_adoption: bool,
+) -> None:
     """
     Deploy project to Railway with automated setup.
 
@@ -714,12 +718,11 @@ def railway(project_name: str | None, acknowledge_contract_vintage: bool) -> Non
         raise click.ClickException(
             f"Unable to read project state for the contract-vintage check: {error}"
         ) from error
-    enforce_contract_vintage(
+    enforce_shipped_contract_vintage(
         state,
-        None,
+        state.modules if state else (),
         operation="'quickscale deploy railway'",
-        acknowledged=acknowledge_contract_vintage,
-        requirements={"quickscale deploy railway": RAILWAY_CONTRACT_VINTAGE},
+        acknowledged=acknowledge_contract_vintage or confirm_contract_adoption,
     )
 
     click.echo("🚀 Deploying to Railway...")
@@ -731,6 +734,11 @@ def railway(project_name: str | None, acknowledge_contract_vintage: bool) -> Non
     # Step 0: Pre-flight checks
     click.echo("\n🔍 Running pre-flight checks...")
     _check_uncommitted_changes_step()
+    # Record the confirmed adoption after the uncommitted-changes check, so the
+    # operator is not warned about a change this command just made, and under
+    # the project lock so the write cannot overwrite a concurrent change (SA207).
+    if confirm_contract_adoption:
+        record_confirmed_adoption(project_path, operation="deploy")
     _verify_railway_files_step()
     _verify_dependencies_step()
     _check_poetry_lock_step()

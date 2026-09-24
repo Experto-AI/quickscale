@@ -50,9 +50,11 @@ from quickscale_core.manifest.implications import (
     resolve_module_implications,
 )
 from quickscale_core.manifest.loader import (
+    PROJECT_CONTRACT_DECLARATION_PATH,
     ManifestError,
     load_manifest,
     load_manifest_from_path,
+    load_project_contract_vintage,
 )
 from quickscale_core.manifest.required_modules import (
     check_required_module_versions,
@@ -94,6 +96,8 @@ from quickscale_core.manifest.schema import (
     ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
+    ProjectContractStep,
+    ProjectContractVintage,
     parse_version_tuple,
 )
 
@@ -116,6 +120,9 @@ __all__ = [
     "ModuleManifest",
     "NormalizationRule",
     "OptionDerivation",
+    "PROJECT_CONTRACT_DECLARATION_PATH",
+    "ProjectContractStep",
+    "ProjectContractVintage",
     "parse_required_module_entry",
     "parse_version_tuple",
     "PostResolutionHook",
@@ -141,6 +148,7 @@ __all__ = [
     "load_manifest",
     "load_manifest_from_path",
     "load_module_manifest",
+    "load_project_contract_vintage",
     "load_social_manifest",
     "normalize_social_provider",
     "normalize_social_url",

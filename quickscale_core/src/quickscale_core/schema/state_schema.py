@@ -108,12 +108,19 @@ class ProjectState:
     SA10.1 adds ``project_contract``: the QuickScale contract version that
     the project was generated (or last applied) against.  Absent on legacy
     state files — loaded as ``None`` for backward compatibility.
+
+    SA207 adds ``adopted_contract_steps``: the ids of the generated-project
+    contract steps this project has adopted.  A step that declares an id is
+    satisfied only when its id is recorded here, so a project generated
+    before the step existed cannot pass on a shared package version alone.
+    Absent on older state files — loaded as ``None``.
     """
 
     slug: str
     package: str
     theme: str
     project_contract: str | None = None
+    adopted_contract_steps: list[str] | None = None
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     last_applied: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -216,11 +223,27 @@ class StateManager:
             if not isinstance(project_theme, str) or not project_theme:
                 raise StateError("State file project.theme must be a non-empty string")
 
+            adopted_steps_raw = project_data.get("adopted_contract_steps")
+            if adopted_steps_raw is not None and (
+                not isinstance(adopted_steps_raw, list)
+                or any(
+                    not isinstance(step_id, str) or not step_id
+                    for step_id in adopted_steps_raw
+                )
+            ):
+                raise StateError(
+                    "State file project.adopted_contract_steps must be a list "
+                    "of non-empty strings"
+                )
+
             project = ProjectState(
                 slug=project_slug,
                 package=project_package,
                 theme=project_theme,
                 project_contract=project_data.get("project_contract"),
+                adopted_contract_steps=(
+                    list(adopted_steps_raw) if adopted_steps_raw is not None else None
+                ),
                 created_at=project_data.get("created_at", datetime.now().isoformat()),
                 last_applied=project_data.get(
                     "last_applied", datetime.now().isoformat()
@@ -305,40 +328,47 @@ class StateManager:
             self.state_dir.mkdir(parents=True, exist_ok=True)
 
             # Build state data
+            project_data: dict[str, Any] = {
+                "slug": state.project.slug,
+                "package": state.project.package,
+                "theme": state.project.theme,
+                "project_contract": state.project.project_contract,
+                "created_at": state.project.created_at,
+                "last_applied": state.project.last_applied,
+            }
+            if state.project.adopted_contract_steps is not None:
+                project_data["adopted_contract_steps"] = list(
+                    state.project.adopted_contract_steps
+                )
             data: dict[str, Any] = {
                 "version": state.version,
-                "project": {
-                    "slug": state.project.slug,
-                    "package": state.project.package,
-                    "theme": state.project.theme,
-                    "project_contract": state.project.project_contract,
-                    "created_at": state.project.created_at,
-                    "last_applied": state.project.last_applied,
-                },
+                "project": project_data,
             }
 
-            if state.modules:
-                data["modules"] = {
-                    name: {
-                        k: v
-                        for k, v in {
-                            "version": normalize_installed_version(module.version),
-                            "commit_sha": module.commit_sha,
-                            "embedded_at": module.embedded_at,
-                            "options": (
-                                sanitize_module_options(name, module.options)
-                                if module.options
-                                else None
-                            ),
-                            # Phase 2 consolidated tracking fields.
-                            "prefix": module.prefix,
-                            "branch": module.branch,
-                            "installed_at": module.installed_at,
-                        }.items()
-                        if v is not None
-                    }
-                    for name, module in state.modules.items()
+            # Phase 2: an explicit (even empty) ``modules`` key is the
+            # authoritative-state marker that stops legacy read-through
+            # import, so it is always written (SA207).
+            data["modules"] = {
+                name: {
+                    k: v
+                    for k, v in {
+                        "version": normalize_installed_version(module.version),
+                        "commit_sha": module.commit_sha,
+                        "embedded_at": module.embedded_at,
+                        "options": (
+                            sanitize_module_options(name, module.options)
+                            if module.options
+                            else None
+                        ),
+                        # Phase 2 consolidated tracking fields.
+                        "prefix": module.prefix,
+                        "branch": module.branch,
+                        "installed_at": module.installed_at,
+                    }.items()
+                    if v is not None
                 }
+                for name, module in state.modules.items()
+            }
 
             # Phase 2: write consolidated managed-file records when present.
             if state.managed_files:

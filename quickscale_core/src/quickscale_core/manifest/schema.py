@@ -106,10 +106,51 @@ class ContractVintage:
         manual_adoption_steps: Human-readable list of steps an existing
             project must follow to catch up to the module's current
             contract.  Empty when no specific manual action is required.
+        id: Optional stable step id (SA207).  When declared, the step is
+            satisfied only while the id is recorded in the project's
+            ``adopted_contract_steps``; the version comparison stays the
+            fallback for boundaries that landed at a release.
     """
 
     minimum: str
     manual_adoption_steps: list[str] = field(default_factory=list)
+    id: str | None = None
+
+
+@dataclass
+class ProjectContractStep:
+    """One generated-project contract change and its adoption steps.
+
+    SA207 declares every template contract change once, at the project
+    level, instead of copying adoption prose into each module manifest.
+
+    Attributes:
+        id: Stable identifier for the change (e.g. ``"sa201-throttling"``).
+        minimum: Minimum ``project_contract`` version that satisfies the
+            step.  A project below it is behind this step.
+        title: One-line summary shown before the adoption steps.
+        manual_adoption_steps: Human-readable steps an existing project
+            follows to catch up.
+    """
+
+    id: str
+    minimum: str
+    title: str
+    manual_adoption_steps: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ProjectContractVintage:
+    """The generated-project contract vintage declaration (SA207).
+
+    Declares each template contract change once, with its adoption steps.
+    Loaded from the packaged ``data/project_contract.yml``.
+
+    Attributes:
+        steps: Ordered declared contract steps.
+    """
+
+    steps: list[ProjectContractStep] = field(default_factory=list)
 
 
 @dataclass

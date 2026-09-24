@@ -400,6 +400,7 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "check-org-context-primitives": "Running org-context",
         "check-csrf-exempt": "Running CSRF",
         "check-commit-testimony": "Running behavioural commit testimony",
+        "check-project-contract-vintage": "Running project contract vintage",
         "check-gate-suites": "Running registered scripts",
         "check-dependency-vulnerabilities": "Running dependency vulnerability",
         "check-security-static-analysis": "Running security static-analysis",

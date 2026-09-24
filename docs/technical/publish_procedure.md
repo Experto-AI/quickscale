@@ -46,13 +46,16 @@ Note that `scripts/sync_module_manifests.py --sync` only copies a module-owned `
 core snapshot. It never derives a pin: syncing a stale pin leaves `make check-manifest-sync` green.
 Restamp with `make version-update`, not with `--sync`.
 
-`contract_vintage.minimum` is **not** a lockstep field. It is the adoption boundary for projects
-whose generation contract predates a module's vintage; leave it alone unless that module genuinely
-gained new manual adoption steps. Conversely, every change to a contract-bearing emitted file must
-move the vintage owned by each upgradable module or CLI command that depends on the new bytes and
-must list the manual adoption steps. Existing-project `update`, `apply`, and Railway deploy enforce
-those declarations before mutation; `--acknowledge-contract-vintage` is a one-invocation assertion
-that the operator completed the steps, not permission to omit the declaration.
+`contract_vintage.minimum` is **not** a lockstep field. It is the adoption boundary for
+module-specific contracts; leave it alone unless that module genuinely gained new manual adoption
+steps. Template contract changes are declared once in
+`quickscale_core/src/quickscale_core/data/project_contract.yml` (SA207): every change to
+`templates/project_name/settings/*`, `start.sh.j2`, or `Dockerfile.j2` must add its adoption step
+there under a new step id in the same commit, and `make check-project-contract-vintage` fails when
+it does not. A changed contract gets a new id so already-adopted projects are flagged again. Existing-project `update`, `apply`, and Railway deploy enforce the project-level steps
+and the module declarations before mutation; `--confirm-contract-adoption` records the adopted
+vintage in `.quickscale/state.yml`, and `--acknowledge-contract-vintage` is a one-invocation
+assertion that the operator completed the steps, not permission to omit the declaration.
 
 ### 1.2 Release-tier validation
 

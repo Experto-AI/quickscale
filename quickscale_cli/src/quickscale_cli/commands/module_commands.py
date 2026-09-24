@@ -67,7 +67,10 @@ from quickscale_core.utils.git_utils import (
 )
 from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 from .module_config import MODULE_CONFIGURATOR_REGISTRY
-from .contract_vintage import enforce_shipped_contract_vintage
+from .contract_vintage import (
+    enforce_shipped_contract_vintage,
+    record_contract_adoption,
+)
 from .module_output import (
     _print_installation_error,
     _report_local_pre_pull_guard_block,
@@ -1373,6 +1376,43 @@ def _update_single_module(
         return False
 
 
+def _commit_contract_adoption() -> None:
+    """Commit the recorded contract adoption so the tree stays clean.
+
+    ``git subtree pull`` refuses to run on a tree with tracked modifications,
+    so the adoption record is written only after the module mutations and
+    committed here; the next command's clean-tree check then passes too.
+    """
+    state_path = Path(".quickscale") / "state.yml"
+    commit_message = "chore: record generated-project contract adoption"
+    try:
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "add", str(state_path)],  # noqa: S607 - PATH-resolved executable by design
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        cached_diff = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],  # noqa: S607 - PATH-resolved executable by design
+            capture_output=True,
+            text=True,
+        )
+        if cached_diff.returncode == 0:
+            return
+        if cached_diff.returncode != 1:
+            raise GitError(
+                "Failed to inspect staged changes before recording contract adoption"
+            )
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "commit", "-m", commit_message],  # noqa: S607 - PATH-resolved executable by design
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to commit the recorded contract adoption: {e.stderr}")
+
+
 def _commit_module_update(module_name: str, module_prefix: str) -> None:
     """Create a commit for a successfully updated module."""
     tracked_paths = [module_prefix]
@@ -1432,7 +1472,19 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
     is_flag=True,
     help="Proceed after manually adopting every required generated-file contract.",
 )
-def update(no_preview: bool, acknowledge_contract_vintage: bool) -> None:
+@click.option(
+    "--confirm-contract-adoption",
+    is_flag=True,
+    help=(
+        "Record the generated-project contract adoption in .quickscale/state.yml "
+        "and proceed."
+    ),
+)
+def update(
+    no_preview: bool,
+    acknowledge_contract_vintage: bool,
+    confirm_contract_adoption: bool,
+) -> None:
     r"""
     Update all installed QuickScale modules to their latest versions.
 
@@ -1481,7 +1533,7 @@ def update(no_preview: bool, acknowledge_contract_vintage: bool) -> None:
             state,
             state.modules,
             operation="'quickscale update'",
-            acknowledged=acknowledge_contract_vintage,
+            acknowledged=acknowledge_contract_vintage or confirm_contract_adoption,
         )
 
         # Surface module version drift between state and legacy config.
@@ -1530,6 +1582,16 @@ def update(no_preview: bool, acknowledge_contract_vintage: bool) -> None:
                 ):
                     failed_modules.append(name)
                     break
+
+            # Record the confirmed adoption only after every module mutation
+            # (the subtree pulls need a clean tree) and while the advisory lock
+            # is still held, then commit it so the next command's clean-tree
+            # check still passes (SA207).
+            if confirm_contract_adoption and not failed_modules:
+                refreshed_state = ProjectStateManager(project_path).load_state()
+                if refreshed_state is not None:
+                    record_contract_adoption(refreshed_state, project_path)
+                    _commit_contract_adoption()
         finally:
             lock.release()
 

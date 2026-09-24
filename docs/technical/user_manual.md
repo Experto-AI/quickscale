@@ -359,18 +359,20 @@ project.
 
 **Contract-vintage enforcement.** Before `quickscale update`, an existing-project `quickscale
 apply`, or `quickscale deploy railway` can combine current code with generated files, QuickScale
-compares `.quickscale/state.yml`'s `project_contract` with the current module or command minimum.
-An old or unknown legacy contract stops before mutation and names each incompatible module or
-command, its minimum, and the manual adoption steps. Fresh projects without state keep the normal
-generation flow.
+compares the adopted contract steps recorded in `.quickscale/state.yml` with the current
+generated-project declaration and each installed module's declared step or minimum. An old or
+unknown legacy project stops before mutation and names each outstanding generated-project step and
+each incompatible module or command, with its minimum and manual adoption steps. Fresh projects
+without state keep the normal generation flow.
 
 After completing every named adoption step, repeat the command with
-`--acknowledge-contract-vintage`. The acknowledgement applies only to that invocation; it neither
-rewrites generated files nor advances `project_contract`. Review the steps again after a later
-vintage increase.
+`--confirm-contract-adoption` to record the adopted vintage in `.quickscale/state.yml`, or with
+`--acknowledge-contract-vintage` to proceed for that invocation only. Neither flag rewrites
+generated files; only the recording option advances `project_contract`, and once it does, the
+project needs no flag again until a later vintage increase.
 
-For the shared-design vintage used by auth, billing, blog, CRM, and listings, adopt all of the
-following project-owned generated-file changes before using
+For the shared-design step declared in the project-level contract, adopt all of the following
+project-owned generated-file changes before recording adoption or using
 `--acknowledge-contract-vintage`:
 
 1. Compare and adopt the current `templates/base.html`, `templates/index.html`, and generated

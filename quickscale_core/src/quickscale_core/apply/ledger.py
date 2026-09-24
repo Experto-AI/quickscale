@@ -297,15 +297,22 @@ class RecoveryLedger:
         from quickscale_core.config import normalize_installed_version
         from quickscale_core.contracts.module_options import sanitize_module_options
 
+        project_data: dict[str, Any] = {
+            "slug": state.project.slug,
+            "package": state.project.package,
+            "theme": state.project.theme,
+            "project_contract": state.project.project_contract,
+            "created_at": state.project.created_at,
+            "last_applied": state.project.last_applied,
+        }
+        if state.project.adopted_contract_steps is not None:
+            project_data["adopted_contract_steps"] = list(
+                state.project.adopted_contract_steps
+            )
+
         data: dict[str, Any] = {
             "version": state.version,
-            "project": {
-                "slug": state.project.slug,
-                "package": state.project.package,
-                "theme": state.project.theme,
-                "created_at": state.project.created_at,
-                "last_applied": state.project.last_applied,
-            },
+            "project": project_data,
         }
 
         if state.modules:
@@ -537,10 +544,26 @@ def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
             f"Recovery ledger project.theme must be a non-empty string, got {theme!r}"
         )
 
+    adopted_steps_raw = project_data.get("adopted_contract_steps")
+    if adopted_steps_raw is not None and (
+        not isinstance(adopted_steps_raw, list)
+        or any(
+            not isinstance(step_id, str) or not step_id for step_id in adopted_steps_raw
+        )
+    ):
+        raise LedgerError(
+            "Recovery ledger project.adopted_contract_steps must be a list "
+            "of non-empty strings"
+        )
+
     project = ProjectState(
         slug=slug,
         package=package,
         theme=theme,
+        project_contract=project_data.get("project_contract"),
+        adopted_contract_steps=(
+            list(adopted_steps_raw) if adopted_steps_raw is not None else None
+        ),
         created_at=project_data.get("created_at", datetime.now().isoformat()),
         last_applied=project_data.get("last_applied", datetime.now().isoformat()),
     )

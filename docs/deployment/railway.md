@@ -93,6 +93,9 @@ quickscale deploy railway --project-name myapp
 # Continue only after adopting the generated-file changes named by the refusal
 quickscale deploy railway --acknowledge-contract-vintage
 
+# Record the adopted contract so later commands no longer need a flag
+quickscale deploy railway --confirm-contract-adoption
+
 # View all options
 quickscale deploy railway --help
 ```
@@ -106,8 +109,9 @@ name the required `settings/production.py`, `settings/base.py`, `db/init.sql`, `
 local database, run the role/grant SQL from `OPERATIONS.md` with `<password>` set to the password in
 the adopted local `RUNTIME_DATABASE_URL`, or reset the disposable Compose database volume before
 starting services. After manually adopting every named surface, use
-`--acknowledge-contract-vintage` for that invocation. The flag does not update those files or
-advance the recorded contract.
+`--acknowledge-contract-vintage` for that invocation, or `--confirm-contract-adoption` to record
+the adoption in `.quickscale/state.yml`. Neither flag updates those files, and only the recording
+option advances the recorded contract so later commands no longer need a flag.
 
 ## Manual Deployment (Alternative)
 

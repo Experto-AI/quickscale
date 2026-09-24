@@ -716,6 +716,20 @@ The gate registry and module manifests retain one assigned owning track; do
 not spread their implementation across worktrees. New scope requires its own
 ticket rather than expansion of a cleanup delivery.
 
+**Recorded disposition drift (SA207).** `INTENTIONALLY_UNMANAGED` grew from 78
+to 89 entries across `e12e9867` (78→79) and SA194's closeout `45ca0c0a`
+(79→89) without an update here, and the 2026-09-23 architecture audit classifies
+that growth as decision-record drift against the paragraph above. The ten
+dispositions SA194 added are `.pre-commit-config.yaml`, `frontend/vite.config.ts`,
+`frontend/tsconfig.json`, `frontend/eslint.config.js`,
+`frontend/postcss.config.js`, `frontend/src/lib/validateQuickScaleSeam.ts`,
+`frontend/src/pages/FormsPage.tsx`,
+`frontend/src/pages/SocialLinkTreePublicPage.tsx`,
+`frontend/src/pages/SocialEmbedsPublicPage.tsx`, and
+`frontend/src/hooks/usePublicSocialSurface.ts`. Recording the drift here does
+not authorize further disposition changes; new scope still requires its own
+ticket.
+
 ## Unit/Integration Gate Split
 
 **Rule:** The test suite is split into two independent gates — a DB-free unit gate

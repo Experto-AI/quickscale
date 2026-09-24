@@ -107,11 +107,11 @@ runtime-contract seams, not its frontend or media carry-over.
 | Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` boot guard | Structural | **strengthened**: SA203 narrowed the privileged exemption to the role check only, so the last-owner backstop and isolation-check registration now run on every startup path (`aa5ff547`) |
 | Privileged Django command set | 3 frozensets + `start.sh.j2`, held equal by `test_privileged_command_contract.py`; a 5th copy in `beta_migration.py:3389-3396` is validated only through the fresh-first smoke gate, whose donor is always current-vintage | Gated, exact-member | unchanged. The station exists *because* `production.py` is donor-owned; now counted under finding 2 |
 | **Schema and data survive a QuickScale upgrade** | **Containment only.** Clean-break rule (`decisions.md:952-968`). Restore refuses an artifact whose recorded `module_versions` differ from the installed modules — or that records none — before `pg_restore` runs (SA205); engine, format, and PG majors are still checked. No tool carries data across a rewrite. Migration smoke gate is same-vintage with `migrate` shimmed | **Convention (explicit non-support), one refusal gate** | **strengthened**: SA205 added the restore vintage refusal; finding 1 |
-| **Template ↔ upgradable-code contract compatibility** | Detection: `project_contract` versus manifest vintages at `update`/`apply`/`deploy railway`. Adoption: prose steps, hand-copied (one block ×5, Railway ×2); `project_contract` never advances, so acknowledgement is per-invocation forever | **Detection gated; adoption content is convention** | **regressed**: SA200 and SA201 changed runtime contracts with no adoption step; finding 2 |
-| Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy | Membership gated both ways; disposition and doc mirror not gated | **weakened**: `INTENTIONALLY_UNMANAGED` grew **78 → 89**, and 4 entries have no rationale in `generated_file_ownership.md` |
+| **Template ↔ upgradable-code contract compatibility** | One project-level declaration plus module-specific vintages; enforcement compares recorded step ids at `update`/`apply`/`deploy railway`, confirmation advances the recorded vintage, and a registered gate requires a new adoption step id when a contract template changes (SA207) | **Gated: declaration, step-id adoption, and template coupling** | **strengthened**: SA207 landed the single project-level vintage, the step-id record, and `check-project-contract-vintage`; SA191's donor adoption is the remaining scope |
+| Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy | Membership gated both ways; disposition and doc mirror not gated | **weakened**: `INTENTIONALLY_UNMANAGED` grew **78 → 89**; SA207 recorded the growth in decisions and supplied the four missing `generated_file_ownership.md` rationales |
 | Module-declared credential env vars reach `.env.example` | One declaration-driven managed-block renderer plus conformance | Structural and gated | unchanged. The managed-block shape is the precedent for finding 2 |
 | Cross-domain org-removal obligations are discharged | `ORGANIZATION_REMOVAL_OBLIGATIONS` in `orgs/removal.py`; last-owner predicate plus `pre_delete` backstop; SA208 provider-ID system check plus model-level `provider_id_classification` | Obligation inventory structural; provider-ID conformance **runtime, over installed tenant models** | **strengthened**: SA208 landed the option-3 containment; finding 3 stays open |
-| DRF throttling | SA201: template defaults plus module-contributed scopes merged in `base.py.j2:390ff` | Structural for fresh projects; **undeclared for existing projects** | **new row**: see finding 2 |
+| DRF throttling | SA201: template defaults plus module-contributed scopes merged in `base.py.j2:390ff`; SA207 declares the throttling contract as the project-level `sa201-throttling` step | Structural for fresh projects; declared for existing projects | **declared** (SA207): see finding 2 |
 | Generator template context is complete | `StrictUndefined` (`generator.py:373`) plus release-lane boot of a generated project | Structural | **new** (SA196) |
 | Publishing supply chain | SHA-pinned actions, minimal `permissions:`, `check-workflow-security`, `check-secret-scanning` | Gated | **strengthened** (SA202) |
 | CSRF-exempt endpoints have alternate integrity checks | AST gate plus sanctioned endpoint bases | Structural and gated | unchanged |
@@ -123,7 +123,7 @@ runtime-contract seams, not its frontend or media carry-over.
 | Rank | ID | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | SA153 go-live | High (mechanism) / Medium (exact failure) | M | one-way door | Every release rewrites each module's only migration, and nothing carries a deployed project's data across that rewrite, yet SA153's go-live brings the first tenant data that cannot be reseeded. |
-| 2 | `generated-file-ownership-unmodeled` | now (regressed) | High | M | one-way door | QuickScale-owned runtime and security contracts live in template text that existing projects never receive. The vintage gate detects the gap but delivers only hand-copied prose that is already incomplete. |
+| 2 | `generated-file-ownership-unmodeled` | now (regressed) | High | M | one-way door | QuickScale-owned runtime and security contracts live in template text that existing projects never receive. SA207 landed the project-level declaration, the step-id adoption record, and the template-coupling gate; SA191's donor adoption remains. |
 | 3 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | two-way door | Org-removal obligations are declared centrally in vendored `orgs`, checked at runtime over installed tenant models, and executed per boundary. |
 
 Rank changes: finding 1 is new and takes rank 1 by blast radius — a production database — and by
@@ -332,11 +332,19 @@ validator checks the facade call instead of parsing an inline copy (see the reco
 The finding stays open for the remaining configuration surface and the migration path (SA207's
 single project-level vintage and template-change gate, SA191's donor adoption).
 
+**Status (2026-09-24):** SA207 landed the remaining declaration scope. One project-level
+contract vintage declares each template change once (SA192 shared design, SA200 proxy trust,
+SA201 throttling, SA206 facade, runtime-role contract), `project_contract` advances on
+confirmed adoption with the adopted step ids recorded in state, and the registered
+`check-project-contract-vintage` gate fails a settings-template, `start.sh.j2`, or
+`Dockerfile.j2` change that does not declare a new adoption step id. The finding stays open
+only for SA191's donor adoption.
+
 **Problem:** QuickScale's executable runtime and security contracts are emitted as template text
 inside files classified as user-owned (`settings/production.py`, `settings/base.py`, `start.sh`,
 `vite.config.ts`). Those files are never upgraded. The vintage mechanism that replaced the old
-finding detects the gap, but it delivers the fix only as hand-copied prose. It does not advance
-`project_contract`, and it cannot tell whether the prose is complete.
+finding detects the gap, but until SA207 it delivered the fix only as hand-copied prose, did not
+advance `project_contract`, and could not tell whether the prose was complete.
 
 **Evidence:**
 
@@ -698,6 +706,21 @@ is benign behind Railway and is recorded as finding-2 evidence, not as a red fla
 
 ## Reconciliation log
 
+- 2026-09-24 — `generated-file-ownership-unmodeled`: **remediation landed** (SA207). One
+  project-level contract vintage now declares each generated-template change once
+  (`quickscale_core/src/quickscale_core/data/project_contract.yml`: SA192 shared design, SA200
+  proxy trust, SA201 throttling, SA206 facade, and the runtime-role provisioning contract) with
+  its adoption steps; the five SA192 manifest copies, orgs' manifest block, and
+  `RAILWAY_CONTRACT_VINTAGE` are gone; `apply`, `update`, and `deploy railway` name the
+  outstanding steps, and `--confirm-contract-adoption` records the adopted step ids so the gate
+  can be satisfied rather than silenced per invocation. Step-id recording is what closes the
+  skew: a project generated from a pre-step tree shares the package version with a current one,
+  so version comparison alone could not distinguish them. A registered gate
+  (`check-project-contract-vintage`) fails when a settings template, `start.sh.j2`, or
+  `Dockerfile.j2` changes without declaring a new adoption step id in the declaration, from the
+  commit that introduces the declaration onward, and `decisions.md` § Release scope safeguards
+  records the 78→89 taxonomy growth with SA194's ten dispositions. Remaining scope: SA191's donor
+  adoption.
 - 2026-09-24 — `deletion-invariants-per-boundary-reimplementation`: **containment landed** (SA208,
   option 3). The provider-ID conformance walk runs as an orgs system check over
   `get_tenant_models()`; a project-owned model classifies each non-relational `*_id` field in its

@@ -668,8 +668,9 @@ class TestStatusM2DriftDiagnostics:
                             "slug": "testapp",
                             "package": "testapp",
                             "theme": "showcase_react",
+                            "created_at": "2025-01-01T00:00:00",
+                            "last_applied": "2025-01-01T00:00:00",
                         },
-                        "modules": {},
                     },
                     f,
                 )
@@ -777,8 +778,9 @@ class TestStatusM2DriftDiagnostics:
                             "slug": "testapp",
                             "package": "testapp",
                             "theme": "showcase_react",
+                            "created_at": "2025-01-01T00:00:00",
+                            "last_applied": "2025-01-01T00:00:00",
                         },
-                        "modules": {},
                     },
                     f,
                 )

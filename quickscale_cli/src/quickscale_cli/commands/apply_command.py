@@ -65,7 +65,12 @@ from quickscale_cli.commands.apply_support import (
     _report_theme_preflight_error,
 )
 from quickscale_cli.commands.apply_support import _resolve_apply_raw_root  # noqa: F401
-from quickscale_cli.commands.contract_vintage import enforce_shipped_contract_vintage
+from quickscale_cli.commands.contract_vintage import (
+    declared_adoption_step_ids,
+    enforce_shipped_contract_vintage,
+    record_confirmed_adoption,
+    record_contract_adoption,
+)
 from quickscale_cli.commands.module_commands import (
     APPLY_MODULE_EXECUTION_MODE,
     embed_module,
@@ -189,6 +194,7 @@ class ApplyContext:
     delta: ConfigDelta
     has_pending_post_embed_recovery: bool = False
     had_existing_state: bool = False
+    confirm_contract_adoption: bool = False
 
 
 @dataclass
@@ -2261,6 +2267,9 @@ def _build_project_state_snapshot(
                 package=qs_config.project.package,
                 theme=qs_config.project.theme,
                 project_contract=quickscale_version,
+                # A fresh generation carries the current templates, so it has
+                # adopted every declared step (SA207).
+                adopted_contract_steps=declared_adoption_step_ids(embedded_modules),
                 created_at=timestamp,
                 last_applied=timestamp,
             ),
@@ -3267,6 +3276,22 @@ def _execute_apply_steps(
         # Phase 3: Attempt bounded provenance repair before no-op detection
         _attempt_provenance_repair_if_needed(ctx)
 
+        # A confirmed adoption on a project with nothing else to apply is
+        # recorded here, under the lock, after any provenance repair, so the
+        # no-op gate below cannot discard the confirmation (SA207).
+        if (
+            ctx.confirm_contract_adoption
+            and not ctx.delta.has_changes
+            and not ctx.has_pending_post_embed_recovery
+        ):
+            current_state = ProjectStateManager(ctx.output_path).load_state()
+            record_contract_adoption(current_state, ctx.output_path)
+            click.secho(
+                "\n✅ Nothing else to do. Configuration matches applied state.",
+                fg="green",
+            )
+            return
+
         # Re-run top-level gate decisions with the refreshed state so that
         # stale pre-lock no-op / immutable-change / config-removal decisions
         # cannot continue mutating under the lock if another apply won the
@@ -3287,6 +3312,13 @@ def _execute_apply_steps(
             has_pending_post_embed_recovery=has_pending_post_embed_recovery,
             split_ref_overrides=split_ref_overrides,
         )
+
+        # Record the confirmed adoption after apply's own final state write,
+        # still under the lock, so the outer command never re-acquires it
+        # (SA207).
+        if ctx.confirm_contract_adoption:
+            current_state = ProjectStateManager(ctx.output_path).load_state()
+            record_contract_adoption(current_state, ctx.output_path)
     finally:
         lock.release()
 
@@ -3797,6 +3829,7 @@ def _enforce_apply_contract_vintage_preflight(
     output_path: Path,
     *,
     acknowledged: bool,
+    confirmed: bool = False,
 ) -> None:
     """Refuse incompatible existing projects before config normalization writes."""
     if not output_path.exists():
@@ -3832,8 +3865,13 @@ def _enforce_apply_contract_vintage_preflight(
         existing_state,
         module_names,
         operation="'quickscale apply'",
-        acknowledged=acknowledged,
+        acknowledged=acknowledged or confirmed,
     )
+
+
+def _record_confirmed_adoption(output_path: Path) -> None:
+    """Record a confirmed contract adoption under the apply advisory lock."""
+    record_confirmed_adoption(output_path, operation="apply")
 
 
 @click.command()
@@ -3884,6 +3922,14 @@ def _enforce_apply_contract_vintage_preflight(
     is_flag=True,
     help="Proceed after manually adopting every required generated-file contract.",
 )
+@click.option(
+    "--confirm-contract-adoption",
+    is_flag=True,
+    help=(
+        "Record the generated-project contract adoption in .quickscale/state.yml "
+        "and proceed."
+    ),
+)
 def apply(
     config: str,
     force: bool,
@@ -3893,6 +3939,7 @@ def apply(
     split_refs_from_branches: bool,
     verbose_docker: bool,
     acknowledge_contract_vintage: bool,
+    confirm_contract_adoption: bool,
 ) -> None:
     """
     Execute project configuration from quickscale.yml.
@@ -3945,16 +3992,18 @@ def apply(
         config_path,
         output_path,
         acknowledged=acknowledge_contract_vintage,
+        confirmed=confirm_contract_adoption,
     )
 
     # Prepare context
     ctx = _prepare_apply_context(config_path)
+    ctx.confirm_contract_adoption = confirm_contract_adoption
     enforce_shipped_contract_vintage(
         ctx.existing_state,
         set(ctx.qs_config.modules)
         | set(ctx.existing_state.modules if ctx.existing_state else ()),
         operation="'quickscale apply'",
-        acknowledged=acknowledge_contract_vintage,
+        acknowledged=acknowledge_contract_vintage or confirm_contract_adoption,
     )
     if split_refs_from_branches:
         split_ref_overrides = _expand_split_refs_from_branches(ctx)
@@ -3971,6 +4020,23 @@ def apply(
     # The actual repair is deferred to the locked path inside
     # _execute_apply_steps (CR-F26-001).
     has_pending_provenance_repair = _provenance_repair_might_be_needed(ctx)
+
+    # Adoption-only confirmation: a project whose configuration is unchanged
+    # still needs a path to record the confirmed adoption (SA207).  The record
+    # is written under the same advisory lock the mutating path uses.
+    if (
+        confirm_contract_adoption
+        and ctx.existing_state is not None
+        and not ctx.delta.has_changes
+        and not ctx.has_pending_post_embed_recovery
+        and not has_pending_provenance_repair
+    ):
+        _record_confirmed_adoption(ctx.output_path)
+        click.secho(
+            "\n✅ Nothing else to do. Configuration matches applied state.",
+            fg="green",
+        )
+        return
 
     # Handle delta and existing state
     _handle_delta_and_existing_state(

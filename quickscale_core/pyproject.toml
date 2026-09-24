@@ -27,6 +27,7 @@ packages = [{include = "quickscale_core", from = "src"}]
 include = [
     "src/quickscale_core/generator/templates/**/*",
     "src/quickscale_core/data/manifests/*/module.yml",
+    "src/quickscale_core/data/project_contract.yml",
 ]
 
 [tool.poetry.dependencies]

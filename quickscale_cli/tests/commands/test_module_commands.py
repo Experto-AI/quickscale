@@ -10,7 +10,10 @@ from contextlib import ExitStack
 
 from quickscale_core import __version__ as CORE_VERSION
 from quickscale_cli.commands.module_config import ModuleConfigurator
-from quickscale_core.manifest.loader import ManifestError
+from quickscale_core.manifest.loader import (
+    ManifestError,
+    load_project_contract_vintage,
+)
 from quickscale_core.utils.git_utils import GitError
 
 
@@ -34,6 +37,8 @@ from quickscale_cli.commands.module_commands import (
     push,
     update,
 )
+
+_ADOPTED_CONTRACT_STEPS = [step.id for step in load_project_contract_vintage().steps]
 
 
 @pytest.fixture(autouse=True)
@@ -2224,7 +2229,13 @@ class TestUpdateCommand:
             branch="splits/billing-module",
         )
         state = Mock(
-            project=Mock(project_contract=CORE_VERSION),
+            project=Mock(
+                project_contract=CORE_VERSION,
+                adopted_contract_steps=[
+                    *_ADOPTED_CONTRACT_STEPS,
+                    "sa209-stripe-webhook-version",
+                ],
+            ),
             modules={"billing": module_state},
         )
         mock_manager_cls.return_value.load_state.return_value = state
@@ -2256,7 +2267,10 @@ class TestUpdateCommand:
             branch="splits/auth-module",
         )
         state = Mock(
-            project=Mock(project_contract=CORE_VERSION),
+            project=Mock(
+                project_contract=CORE_VERSION,
+                adopted_contract_steps=list(_ADOPTED_CONTRACT_STEPS),
+            ),
             modules={"auth": module_state},
         )
         mock_manager_cls.return_value.load_state.return_value = state
@@ -2288,7 +2302,10 @@ class TestUpdateCommand:
             branch="splits/listings-module",
         )
         state = Mock(
-            project=Mock(project_contract=CORE_VERSION),
+            project=Mock(
+                project_contract=CORE_VERSION,
+                adopted_contract_steps=list(_ADOPTED_CONTRACT_STEPS),
+            ),
             modules={"auth": auth_state, "listings": listings_state},
         )
         mock_manager_cls.return_value.load_state.return_value = state
@@ -2328,7 +2345,10 @@ class TestUpdateCommand:
             version="v0.70.0", prefix="modules/auth", branch="splits/auth-module"
         )
         state = Mock(
-            project=Mock(project_contract=CORE_VERSION),
+            project=Mock(
+                project_contract=CORE_VERSION,
+                adopted_contract_steps=list(_ADOPTED_CONTRACT_STEPS),
+            ),
             modules={"auth": module_state},
         )
         mock_manager_cls.return_value.load_state.return_value = state
@@ -2451,7 +2471,10 @@ class TestUpdateVersionDriftWarning:
             branch="splits/auth-module",
         )
         state = Mock(
-            project=Mock(project_contract=CORE_VERSION),
+            project=Mock(
+                project_contract=CORE_VERSION,
+                adopted_contract_steps=list(_ADOPTED_CONTRACT_STEPS),
+            ),
             modules={"auth": module_state},
         )
         mock_manager_cls.return_value.load_state.return_value = state
