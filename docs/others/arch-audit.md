@@ -35,9 +35,6 @@ baselines. `decisions.md` § Clean-Break Migration History (`:986ff`) declares a
 2. SA153 builds the first property portal on it as a project-owned extension.
 3. SA204 freezes the module migration history at SA153's go-live horizon.
 
-Track 2's **SA211** landed the rest of the contract-adoption work after SA207's project-level
-declaration and step-identity record: the SA208 provider-ID step, module-manifest step identity,
-and the emission-manifest-derived gate coverage.
 **Data sensitivity:** credentials, user PII, and Stripe billing identifiers; no regulatory regime
 is declared. **Cost driver:** flat Railway spend plus Stripe calls. **Out-of-repo architecture:**
 Railway proxy and service configuration, the Stripe account and its webhook endpoint versions, and

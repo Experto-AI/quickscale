@@ -51,9 +51,7 @@ database, and redeploys through `deploy railway`. SA153 builds the portal on it.
 module migration history before any post-SA153 module schema change. SA154 is an inventory, not
 work.
 
-**Ordering off the critical path.** SA211 landed on Track 2 before SA191 records the migrated
-site's adoption state and before the first release published after 0.89.0. SA212 queues behind
-it because both edit `scripts/gate_registry.json` rows.
+**Off the critical path.** SA212 is independent of Track 1 and can merge at any point.
 
 ### Track states
 
@@ -84,10 +82,8 @@ A track is **truly green** only when all three states are yes.
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block.
-- **Cross-track edits.** SA213 moved billing's removal obligations into `billing/apps.py`
-  (Track 2's billing module); SA212 does not touch it. SA211 edited its gate's
-  `scripts/gate_registry.json` row (Track 1) and read Track 3's emission manifest without
-  changing it; both landed through the merge queue.
+- **Cross-track edits.** SA212 edits its Trivy gate's `scripts/gate_registry.json` row
+  (Track 1) through the merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md) (SA204, SA153). Each track resolves the shared set at its
@@ -127,11 +123,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   ref: no 0.89.0 tag exists yet, and a manifest also works in shallow CI clones. The freeze takes
   effect when SA204 merges, so any later `v89` change to a model-bearing module's models ships as
   a `0002`; confirm before merging that no module schema change shipped between SA191's rebuild
-  and this freeze. The
-  topology guard in `test_module_migration_topology.py` currently requires exactly one
+  and this freeze. The topology guard in `test_module_migration_topology.py` currently requires exactly one
   `0001_initial` and has a canary that rejects any `0002`; it changes to require a `0001_initial`
-  followed by an ordered chain, and that canary is inverted. Fix the freeze release before SA153
-  writes its first module-schema change, so that change ships as a `0002` from the start.
+  followed by an ordered chain, and that canary is inverted.
 
   **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
   documentation, `quickscale_core/tests/test_module_migration_topology.py`, and the arch audit.
@@ -255,8 +249,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [x] **SA211 — Give every contract adoption step a stable identity and derive the watched template set.**
-
 - [ ] **SA212 — Keep the CI supply-chain pins fresh and scan the generated container.**
 
   **Context:** every third-party action is SHA-pinned, but nothing proposes updates, so the pins
@@ -274,8 +266,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** `.github/`, `scripts/check_workflow_security.py`, the Trivy gate and its registry
   row, and the tech audit.
-
-- [x] **SA213 — Let each module declare its own organization-removal obligations.**
 
 ## Deferred constraints and references
 
