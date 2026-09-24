@@ -33,7 +33,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA211 | Give every contract adoption step a stable identity and derive the watched template set | post-v88 | 2 | — | Deferred |
 | SA212 | Keep the CI supply-chain pins fresh and scan the generated container | post-v88 | 2 | — | Deferred |
 | SA213 | Let each module declare its own organization-removal obligations | post-v88 | 3 | — | Deferred |
 
@@ -41,7 +40,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA211 ──► SA212
+Track 2: SA212
 Track 3: SA213
                          critical path: SA191 → SA153
 ```
@@ -53,11 +52,11 @@ database, and redeploys through `deploy railway`. SA153 builds the portal on it.
 module migration history before any post-SA153 module schema change. SA154 is an inventory, not
 work.
 
-**Ordering off the critical path.** SA211 should land before SA191 records the migrated site's
-adoption state, and must land before the first release published after 0.89.0. SA212 queues
-behind SA211 because both edit `scripts/gate_registry.json` rows. SA213 has no dependency; it
-should land before SA153 adds the first project-owned tenant tables, so those declare their
-obligations the new way from the start.
+**Ordering off the critical path.** SA211 landed on Track 2 before SA191 records the migrated
+site's adoption state and before the first release published after 0.89.0. SA212 queues behind
+it because both edit `scripts/gate_registry.json` rows. SA213 has no dependency; it should land
+before SA153 adds the first project-owned tenant tables, so those declare their obligations the
+new way from the start.
 
 ### Track states
 
@@ -66,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA211 | yes | yes | yes | **yes** | no |
+| 2 | SA212 | yes | yes | yes | **yes** | no |
 | 3 | SA213 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -89,8 +88,9 @@ A track is **truly green** only when all three states are yes.
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block.
 - **Cross-track edits.** SA213 moves billing's removal obligations into `billing/apps.py`
-  (Track 2's billing module); SA211 and SA212 do not touch it. SA211 edits its gate's `scripts/gate_registry.json` row (Track 1) and
-  reads Track 3's emission manifest without changing it; the row reconciles with Track 1 at merge.
+  (Track 2's billing module); SA211 and SA212 do not touch it. SA211 edited its gate's
+  `scripts/gate_registry.json` row (Track 1) and read Track 3's emission manifest without
+  changing it; both landed through the merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md) (SA204, SA153). Each track resolves the shared set at its
@@ -258,26 +258,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA211 — Give every contract adoption step a stable identity and derive the watched template set.**
-
-  **Context:** every declared adoption step (the project-level declaration and each module's
-  `contract_vintage` block) already has a stable id, applied state records adopted ids, and
-  `update`, `apply`, and `deploy railway` refuse on exactly the unadopted steps. Three gaps remain:
-  SA208's provider-ID classification is not a declared step, a module manifest's step text can
-  change without a new id, and the template-change gate watches a hand-listed path set that
-  misses `pyproject.toml.j2` and `OPERATIONS.md.j2`.
-
-  **Acceptance:**
-  - A declared step covers provider-ID classification, which fails `migrate` on an upgraded
-    project with an unclassified `*_id` field.
-  - The gate fails when a module manifest's step text changes without a new id, with controls in
-    both directions.
-  - The template-change gate derives its watched set from the generator's emission manifest. A
-    control proves a change to `pyproject.toml.j2` without a step fails.
-
-  **Surfaces:** `project_contract.yml`, the module manifests' `contract_vintage` blocks, the
-  `check-project-contract-vintage` gate and its registry row, and the arch audit. The emission
-  manifest is read, not changed; Track 3 owns the generator.
+- [x] **SA211 — Give every contract adoption step a stable identity and derive the watched template set.**
 
 - [ ] **SA212 — Keep the CI supply-chain pins fresh and scan the generated container.**
 

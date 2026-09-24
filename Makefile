@@ -334,7 +334,7 @@ help:
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
 	@echo "  make check-commit-testimony       - Behavioural commits carry a vNN or vN.NN.N roadmap reference"
-	@echo "  make check-project-contract-vintage - Generated-template contract changes edit the project-vintage declaration"
+	@echo "  make check-project-contract-vintage - Generated-project contract changes declare a fresh adoption step id"
 	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability scan"
 	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
 	@echo "  make check-beta-migration-smoke      - Exercise fresh-first beta migration on isolated generated fixtures"
@@ -1020,12 +1020,15 @@ check-csrf-exempt:
 check-commit-testimony:
 	@$(PYTHON) scripts/check_commit_testimony.py
 
-# --- Project Contract Vintage Gate (SA207) ---
+# --- Project Contract Vintage Gate (SA207, SA211) ---
 
 # Inspect every non-merge commit in the selected base-to-head range.  A change
-# to templates/project_name/settings/*, start.sh.j2, or Dockerfile.j2 requires
-# an edit to the project contract declaration in the same commit, so a
-# generated-project contract change cannot ship without its adoption steps.
+# to any template the generator emits (the watched set derives from the
+# generator's emission mapping), a generator change that alters the emitted
+# file set, or a module manifest step whose text changes without a new id
+# requires a fresh adoption step id in the same commit (the project
+# declaration or the module manifest), so a generated-project contract change
+# cannot ship without its adoption steps.
 check-project-contract-vintage:
 	@$(PYTHON) scripts/check_project_contract_vintage.py
 

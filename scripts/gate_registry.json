@@ -157,7 +157,7 @@
         },
         {
             "id": "check-project-contract-vintage",
-            "description": "Generated-template contract changes edit the project-vintage declaration",
+            "description": "Generated-template and module-manifest contract changes declare a new step id",
             "required_contexts": [
                 "local-serial",
                 "local-parallel",
