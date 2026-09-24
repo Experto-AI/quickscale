@@ -44,6 +44,8 @@ from quickscale_modules_orgs.tenancy import (
     apply_force_rls,
 )
 
+from tests.stripe_payloads import checkout_session_event
+
 # ---------------------------------------------------------------------------
 # Restricted role helpers (mirror the social module pattern)
 # ---------------------------------------------------------------------------
@@ -478,29 +480,23 @@ class TestWebhookEstablishesOrgContextInternally:
         plan = _make_plan()
         stripe_event_id = f"evt_rls_test_{uuid.uuid4().hex[:8]}"
 
-        # Build a minimal checkout.session.completed payload
-        event_payload: Mapping[str, Any] = {
-            "id": stripe_event_id,
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "id": f"cs_{uuid.uuid4().hex[:16]}",
-                    "mode": "payment",
-                    "payment_status": "paid",
-                    "customer": None,
-                    "client_reference_id": f"{user._meta.label_lower}:{user.pk}",
-                    "payment_intent": f"pi_{uuid.uuid4().hex[:16]}",
-                    "metadata": {
-                        "quickscale_user_reference": f"{user._meta.label_lower}:{user.pk}",
-                        "quickscale_org_reference": f"{organization._meta.label_lower}:{organization.pk}",
-                        "quickscale_plan_slug": plan.slug,
-                        "quickscale_plan_credits": str(plan.credits_per_period),
-                        "quickscale_plan_interval": Plan.BillingInterval.ONE_TIME,
-                        "stripe_price_id": plan.stripe_price_id,
-                    },
-                }
+        # Build a minimal checkout.session.completed payload from a real SDK object
+        event_payload: Mapping[str, Any] = checkout_session_event(
+            event_id=stripe_event_id,
+            event_type="checkout.session.completed",
+            checkout_session_id=f"cs_{uuid.uuid4().hex[:16]}",
+            customer_id="",
+            client_reference_id=f"{user._meta.label_lower}:{user.pk}",
+            payment_intent_id=f"pi_{uuid.uuid4().hex[:16]}",
+            metadata={
+                "quickscale_user_reference": f"{user._meta.label_lower}:{user.pk}",
+                "quickscale_org_reference": f"{organization._meta.label_lower}:{organization.pk}",
+                "quickscale_plan_slug": plan.slug,
+                "quickscale_plan_credits": str(plan.credits_per_period),
+                "quickscale_plan_interval": Plan.BillingInterval.ONE_TIME,
+                "stripe_price_id": plan.stripe_price_id,
             },
-        }
+        )
 
         mock_client = MagicMock()
         mock_client.construct_event.return_value = event_payload

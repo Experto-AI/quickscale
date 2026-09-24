@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import stripe
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
@@ -36,6 +37,11 @@ from quickscale_modules_billing.services import (
     reconcile_purchase_checkouts_for_removal,
 )
 from quickscale_modules_orgs.current_org import org_scope
+
+from tests.stripe_payloads import (
+    checkout_session_event,
+    normalize_stripe_object,
+)
 
 
 def _organization_reference(organization: Any) -> str:
@@ -90,21 +96,18 @@ def _checkout_session_completed_event(
     payment_status: str = "paid",
     mode: str = "payment",
 ) -> dict[str, Any]:
-    return {
-        "id": event_id,
-        "type": "checkout.session.completed",
-        "data": {
-            "object": {
-                "id": checkout_session_id,
-                "mode": mode,
-                "payment_status": payment_status,
-                "customer": customer_id,
-                "payment_intent": payment_intent_id,
-                "client_reference_id": client_reference_id,
-                "metadata": metadata,
-            }
-        },
-    }
+    """Build a dahlia checkout.session.completed event from a real SDK object."""
+    return checkout_session_event(
+        event_id=event_id,
+        event_type="checkout.session.completed",
+        checkout_session_id=checkout_session_id,
+        customer_id=customer_id,
+        metadata=metadata,
+        payment_intent_id=payment_intent_id,
+        mode=mode,
+        payment_status=payment_status,
+        client_reference_id=client_reference_id,
+    )
 
 
 @dataclass
@@ -131,7 +134,10 @@ class FakePurchaseStripeClient:
         organization_reference: str = "",
     ) -> list[dict[str, Any]]:
         self.searched_references.append(organization_reference or user_reference)
-        return list(self.customers)
+        return [
+            normalize_stripe_object(stripe.Customer, customer)
+            for customer in self.customers
+        ]
 
     def create_customer(
         self,
@@ -150,11 +156,14 @@ class FakePurchaseStripeClient:
         self.created_customers.append(
             {**customer, "idempotency_key": idempotency_key or ""}
         )
-        return customer
+        return normalize_stripe_object(stripe.Customer, customer)
 
     def retrieve_price(self, *, price_id: str) -> dict[str, Any]:
         self.retrieved_price_ids.append(price_id)
-        return dict(self.prices.get(price_id, {}))
+        return normalize_stripe_object(
+            stripe.Price,
+            dict(self.prices.get(price_id, {})),
+        )
 
     def create_checkout_session(
         self,
@@ -180,10 +189,13 @@ class FakePurchaseStripeClient:
                 "idempotency_key": idempotency_key or "",
             }
         )
-        return {
-            "id": "cs_test_123",
-            "url": "https://checkout.stripe.test/session/123",
-        }
+        return normalize_stripe_object(
+            stripe.checkout.Session,
+            {
+                "id": "cs_test_123",
+                "url": "https://checkout.stripe.test/session/123",
+            },
+        )
 
     def construct_event(
         self,
@@ -200,11 +212,14 @@ class FakePurchaseStripeClient:
             }
         )
         assert self.event is not None
-        return dict(self.event)
+        return normalize_stripe_object(stripe.Event, dict(self.event))
 
     def retrieve_payment_intent(self, *, payment_intent_id: str) -> dict[str, Any]:
         self.retrieved_payment_intent_ids.append(payment_intent_id)
-        return dict(self.payment_intents.get(payment_intent_id, {}))
+        return normalize_stripe_object(
+            stripe.PaymentIntent,
+            dict(self.payment_intents.get(payment_intent_id, {})),
+        )
 
     def retrieve_checkout_session(
         self,
@@ -212,7 +227,10 @@ class FakePurchaseStripeClient:
         checkout_session_id: str,
     ) -> dict[str, Any]:
         self.retrieved_checkout_session_ids.append(checkout_session_id)
-        return dict(self.checkout_sessions.get(checkout_session_id, {}))
+        return normalize_stripe_object(
+            stripe.checkout.Session,
+            dict(self.checkout_sessions.get(checkout_session_id, {})),
+        )
 
 
 @pytest.mark.django_db

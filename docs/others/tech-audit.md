@@ -55,8 +55,7 @@ Container and IaC scanning remain absent — a tooling gap, not coverage.
 10. **Billing targets the latest Stripe API version, `2026-06-24.dahlia`**, the version the
     pinned stripe-python 15.3.1 ships. Webhooks sent under a different named release are rejected
     rather than misparsed, and any monthly version within `dahlia` is accepted. These are team
-    decisions recorded 2026-09-23 and are not yet reflected in code; see
-    `billing-stripe-api-version-drift`.
+    decisions recorded 2026-09-23, now reflected in code and in the billing tests.
 
 **Data-sensitivity context (§2i).** R2 handles user credentials and session material; Stripe
 customer/subscription/invoice/checkout identifiers and a **credit ledger** (money-adjacent — Stripe
@@ -143,24 +142,8 @@ about those areas means *not looked at*, not *clean*.
 ## 2. Machine-readable finding index
 
 ```yaml
-- id: billing-stripe-objects-normalized-empty
-  severity: S1
-  category: "I. Correctness"
-  title: Billing normalizes every real Stripe SDK object to an empty dict
-  effort: Small
-  confidence: High
-  status: open
-  reality: R2
-  chain: [billing-stripe-api-version-drift]
-- id: billing-stripe-api-version-drift
-  severity: S1
-  category: "IX. Data handling"
-  title: Billing parses pre-2025 Stripe payload shapes; must target the pinned 2026-06-24.dahlia API
-  effort: Medium
-  confidence: High
-  status: open
-  reality: R2
-  chain: [billing-stripe-objects-normalized-empty]
+# No open findings; every prior ID is resolved — see the reconciliation log.
+[]
 ```
 
 ---
@@ -169,225 +152,16 @@ about those areas means *not looked at*, not *clean*.
 
 | ID | Sev | Category | Title | Effort | Conf | Status |
 |---|---|---|---|---|---|---|
-| `billing-stripe-objects-normalized-empty` | S1 | Correctness | Every Stripe SDK object normalizes to `{}` | Small | High | open |
-| `billing-stripe-api-version-drift` | S1 | Data handling | Retired payload shapes; must target `2026-06-24.dahlia` | Medium | High | open |
 
-**Counts:** S1 — 2 · S2 — 0 · S3 — 0 · S4 — 0 · total 2 open. Reconciliation: 12 prior IDs
-resolved and verified in code, 0 still open, 0 regressed, 2 new.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 0 · total 0 open. Reconciliation: 14 prior IDs
+resolved and verified in code, 0 still open, 0 regressed, 0 new.
 
 ---
 
 ## 4. Findings
 
-### Finding 1: Billing normalizes every real Stripe SDK object to an empty dict
-
-- **ID:** `billing-stripe-objects-normalized-empty`
-- **Severity:** **S1** — the billing module's primary function fails in every R2 deployment that
-  enables it: every signed Stripe webhook is rejected and every checkout attempt fails. No
-  precondition beyond `QUICKSCALE_BILLING_ENABLED` with real Stripe keys; generated projects cannot
-  install a Stripe SDK without the behaviour (the manifest pins `stripe>=15.3.1,<16.0.0`). Breaks
-  oracle 7 at its entry: no event reaches idempotent processing at all.
-- **Category:** I. Correctness (a broken contract with a pinned dependency's major version; §VII
-  angle noted).
-- **Confidence:** High — reproduced end to end against the installed SDK (empirical checks 2–3).
-- **Location:** `quickscale_modules/billing/src/quickscale_modules_billing/services.py:4142–4146`
-  `_normalize_mapping`; consumed by every `StripeClient` method, e.g. `construct_event` (`:499`),
-  `search_customers` (`:274`), `retrieve_price`, `retrieve_subscription`,
-  `retrieve_checkout_session` — 32 call sites. Pin: `quickscale_modules/billing/pyproject.toml:18`,
-  `quickscale_core/src/quickscale_core/data/manifests/billing/module.yml:45`.
-- **Defect:** Since stripe-python 13, `StripeObject` is neither a `dict` subclass nor a `Mapping`.
-  `_normalize_mapping` returns `{}` for anything that is not a `Mapping`, so every event, price,
-  customer, session, and subscription the SDK returns collapses to an empty dict before the
-  handlers read it.
-- **Failure scenario (reproducer):** In a generated project with billing enabled:
-  1. Stripe delivers `invoice.paid` with a valid `Stripe-Signature`. `StripeClient.construct_event`
-     verifies the signature, then returns `{}`. `handle_stripe_event` raises
-     `BillingWebhookError("Stripe event payload is missing an id.")` (`services.py:1803–1806`), and
-     `StripeWebhookView` answers **400** (`views.py:687–688`). No `WebhookEvent` row is written.
-     Stripe retries for about three days, then stops. Every event type is affected: credits,
-     subscription state, and checkout completion.
-  2. An organization owner POSTs to the checkout endpoint. `retrieve_price` returns `{}`, and
-     `_validate_stripe_price_parity` raises "Billing plan price does not match the referenced Stripe
-     price amount." (`services.py:641–642`, `:3626–3630`). The endpoint answers 400 for every plan.
-  3. The billing portal path creates the Stripe customer, which does happen at Stripe. It reads the
-     response as `{}` and fails with "Stripe customer creation did not return an id." It repeats on
-     every attempt, reusing the idempotency key.
-
-  Reproduced: a locally signed body through the real `handle_stripe_event` fails as in step 1.
-  **Chain:** fixing only this unmasks `billing-stripe-api-version-drift` on `invoice.paid`.
-- **Evidence:**
-  ```python
-  def _normalize_mapping(value: Any) -> dict[str, Any]:
-      if not isinstance(value, Mapping):
-          return {}
-  ```
-  `isinstance(stripe.Webhook.construct_event(...), Mapping)` → `False` under stripe 15.3.1.
-- **Refutation:** I looked for a layer-up conversion and found none:
-  - `get_stripe_client` hands `StripeClient` the raw `stripe` module (`services.py:524–540`), and
-    no `to_dict()` call exists anywhere in billing.
-  - Nothing pins the real-SDK behaviour. Every billing test injects `FakeStripeClient` or
-    `FakePurchaseStripeClient`, which return plain dicts (`tests/test_services.py:103`,
-    `tests/test_purchase.py:111`). No e2e lane runs stripe-mock.
-  - No configuration cell installs `stripe<13`.
-
-  I walked the scenario on paper, then executed it.
-- **Fix:** Convert SDK objects before the `Mapping` check, e.g.
-  `if hasattr(value, "to_dict"): value = value.to_dict()` (recursive in stripe ≥13), keeping the
-  JSON round-trip for plain mappings. Add a contract test module that builds real SDK objects with
-  `stripe.<Resource>.construct_from(...)` and signs a body for `stripe.Webhook.construct_event`, so
-  no network is needed. **Effort: Small.**
-- **Verification:** Promote empirical check 3 to a test. Sign `{"id": "evt_1", ...}` locally, call
-  `StripeClient(stripe_module=stripe, ...).construct_event(...)`, and assert `["id"] == "evt_1"`.
-  Also assert `_normalize_mapping(stripe.checkout.Session.construct_from({"id": "cs_1"}, "sk"))["id"]
-  == "cs_1"`.
-- **Fix risk:** it unmasks Finding 2. Dahlia-shaped `invoice.paid` events then fail at price
-  extraction instead of at the event id, so ship both together. No caller depends on the
-  empty-dict behaviour.
-- **Detection signal:** In the Stripe Dashboard, webhook deliveries return 400 with
-  `{"error": "Stripe event payload is missing an id."}`. The `WebhookEvent` table has zero rows
-  despite deliveries. The checkout API returns 400 "Billing plan price does not match…" for every
-  plan.
-- **Deliberate?** None found.
-- **Age:** present since the module's first commit `0f1a9e8f` (2026-05-15), which already required
-  `stripe>=15.3.1`. Billing has never worked against the real SDK; this is not a delta regression.
-
----
-
-### Finding 2: Billing parses pre-2025 Stripe payload shapes; it must target the pinned `2026-06-24.dahlia` API
-
-- **ID:** `billing-stripe-api-version-drift`
-- **Severity:** **S1** — recurring subscribers are charged each period and never credited, which is
-  a main-path correctness bug on money-adjacent state. **Decision (2026-09-23):** QuickScale
-  targets the latest Stripe API version, `2026-06-24.dahlia`, the version stripe-python 15.3.1
-  ships pinned. That makes the latest-version webhook endpoint the *supported configuration*, so
-  the endpoint-version precondition that held this at S2 no longer discounts it: the defect fires
-  on the configuration the project mandates. Reality R2. Chained behind Finding 1, which masks it
-  today.
-- **Category:** IX. Data handling (the code reads a retired payload schema), plus a VIII test lie.
-- **Confidence:** High — every field the billing code reads was checked against the SDK's dahlia
-  type definitions (empirical check 5), and the parser failure was reproduced with a legacy-shape
-  control (empirical check 4).
-- **Location:** `services.py`:
-  - `:3041–3071` `_extract_price_id` reads `lines.data[].price`, then falls back to top-level
-    `invoice.metadata["stripe_price_id"]`, which Stripe never populates. The key is written to
-    *subscription* metadata.
-  - `:2017`, `:2305`, `:2386` read top-level `invoice.subscription`: the paid path, the
-    payment-failed path, and the subscription back-fill retrieval.
-  - `:3158–3190` `_resolve_organization_for_invoice` / `_resolve_user_for_invoice` look for metadata
-    on top-level `subscription_details` and on `parent`. Neither exists; the metadata is at
-    `parent.subscription_details.metadata`.
-  - `:2541–2546` `_apply_subscription_payload` and `:1584–1589` `_persist_subscription_provider_snapshot`
-    read top-level `current_period_start/end`. The first writes the result unconditionally, so it
-    stores `None`.
-
-  Test fixtures encode the retired shape: `tests/test_subscriptions.py:76–90`,
-  `tests/test_services.py:2748–2759`, and the fake clients' `retrieve_subscription` payloads.
-- **Defect:** Under dahlia:
-  - the invoice's subscription and its metadata snapshot live at `invoice.parent.subscription_details`;
-  - a line item's price is the id string at `line.pricing.price_details.price`, with
-    `pricing.type == "price_details"`;
-  - billing-period bounds exist only on subscription *items*.
-
-  No API version is pinned in code, and nothing tells operators which version their webhook
-  endpoint must use.
-
-  **Field inventory (empirical check 5).** Everything else the module reads is present in dahlia
-  with a compatible type:
-  - Event: `id`, `type`, `data`, `api_version`
-  - Checkout Session: `id`, `mode`, `payment_status`, `payment_intent`, `customer`, `subscription`,
-    `metadata`, `client_reference_id`, `status`, `url`, `expires_at`
-  - Subscription: `id`, `status`, `customer`, `metadata`, `items`, `cancel_at_period_end`
-  - SubscriptionItem: `price`, `current_period_*`
-  - Price: `id`, `unit_amount`, `currency`, `type`, `recurring`
-  - PaymentIntent: `metadata`
-  - Invoice: `billing_reason`
-  - Customer and portal session ids and URLs
-
-  The subscription-status literals match `_STRIPE_TO_LOCAL_SUBSCRIPTION_STATUS`'s inputs. The only
-  gaps are the three field groups above.
-- **Failure scenario (reproducer):** With Finding 1 fixed and the webhook endpoint on dahlia:
-  1. A subscriber's `subscription_cycle` invoice is paid. `lines.data[0]` carries
-     `pricing.price_details.price` and no `price`, and `invoice.metadata` is empty.
-  2. `_extract_price_id` raises "Stripe invoice payload is missing a billing price id.", and the
-     webhook answers 400 on every retry.
-  3. The customer pays every period and never receives `credits_per_period`.
-
-  Separately, `invoice.payment_failed` cannot find its subscription through `invoice.subscription`.
-  Every `customer.subscription.*` event writes `NULL` into `current_period_start/end`, so the
-  dashboard and the subscription API lose the renewal date. Reproduced: the dahlia-shaped invoice
-  fails, and the identical legacy-shaped invoice returns `price_1`.
-- **Evidence:** In the dahlia SDK types, `Invoice` has `parent` and no `subscription` or
-  `subscription_details`; `Invoice.Parent.SubscriptionDetails` has `metadata`, `subscription`, and
-  `subscription_proration_date`; `InvoiceLineItem` has `pricing` and no `price`; `Subscription` has
-  no `current_period_start/end`, and `SubscriptionItem` does. `_extract_price_id(dahlia_invoice)`
-  raises.
-- **Refutation:**
-  - No `api_version`, `stripe_version`, or `Stripe-Version` appears in billing, core, CLI, or docs.
-  - No reader consults `pricing`, `parent.subscription_details`, or item-level periods.
-  - The tests pin the current behaviour only through fixtures in a shape the pinned SDK cannot
-    produce, so they are a wrong mock (§VIII), not a decision.
-- **Fix (proposed; latest version only, no legacy fallback):**
-  1. **Pin the version in code.** Declare one `STRIPE_API_VERSION = "2026-06-24.dahlia"` in billing
-     and set it on the SDK in `StripeClient._activate_api_key`, so requests no longer depend on the
-     SDK's default. Add a test that fails when the installed SDK's pinned version
-     (`stripe._api_version._ApiVersion.CURRENT`) moves to a different *named release*. A new
-     release (the successor to `dahlia`) then forces a deliberate payload review instead of arriving
-     silently with a `stripe` bump.
-  2. **Guard webhooks against version mismatch.** In `handle_stripe_event`, after signature
-     verification, compare `event["api_version"]` with the pinned version by named release (the
-     suffix after the date). Raise `BillingConfigurationError` on mismatch, naming the expected
-     version. The view already maps that to 500, so Stripe keeps retrying while the operator fixes
-     the endpoint, and nothing is misparsed. Log the exact version on every event.
-  3. **Read only the dahlia shapes.**
-     - One helper returns `invoice.parent.subscription_details`. The subscription id (sites
-       `:2017`, `:2305`, `:2386`) and the metadata source for organization and user resolution
-       (`:3158–3190`) both come from it.
-     - `_extract_price_id` takes the price from lines whose `pricing.type == "price_details"`, read
-       from `pricing.price_details.price` (an id string, so use `_stripe_object_id`). Its fallback
-       reads `parent.subscription_details.metadata["stripe_price_id"]`, which Stripe does populate,
-       instead of the always-empty `invoice.metadata`.
-     - Period bounds come from `items.data[]`. Require every item to agree, matching
-       `_extract_subscription_price_id`'s existing one-price rule.
-  4. **Stop writing `None` over known period bounds** in `_apply_subscription_payload`.
-     `_persist_subscription_provider_snapshot` already preserves them, but it must read item-level
-     periods too.
-  5. **Fixtures.** Rewrite the invoice, subscription, and fake-client builders to dahlia shapes, and
-     remove the legacy-shape fixtures. Build contract-test payloads from real SDK objects (the
-     Finding 1 tooling gap), so a future named release that changes shapes fails a test.
-  6. **Operator contract.** Document in the billing module docs and the generated `README`/
-     operations guide that the Stripe webhook endpoint must use API version `2026-06-24.dahlia`.
-     Existing deployments should create a new endpoint at that version and retire the old one. The
-     wiring step that prints webhook setup instructions should print the version too.
-
-  **Effort: Small–Medium.** The code change is contained in `services.py`; the fixture rewrite is
-  the bulk of the work.
-- **Verification:**
-  - Run a dahlia-shaped `invoice.paid` (`subscription_cycle`) through `handle_stripe_event` and
-    assert exactly one `PLAN` credit.
-  - A dahlia `customer.subscription.updated` must keep item-derived period bounds.
-  - An event whose `api_version` is `2025-03-31.basil` must raise `BillingConfigurationError` and
-    create no credit.
-  - The pinned-version test must fail when pointed at a different named release.
-- **Fix risk:**
-  - **Rejecting mismatched endpoints (decided 2026-09-23) is deliberate but disruptive.** A
-    deployment whose endpoint is on an older version stops processing *all* billing webhooks
-    (500s) until the endpoint is recreated, including event types whose shape did not change. The upgrade note must ship with
-    the change. Stripe retries for about three days, so an endpoint fixed within that window
-    replays what it missed. Anything older needs a manual resend from the Dashboard.
-  - Named-release matching (**decided 2026-09-23**) rests on Stripe's documented release model:
-    named releases are breaking, and the monthly versions within a release are additive. If a
-    monthly `dahlia` version ever changed a shape this module reads, the fixture contract tests are
-    the backstop.
-  - Subscription rows already holding `NULL` period bounds heal on their next subscription event.
-- **Detection signal:**
-  - Today: `WebhookEvent` rows for `invoice.paid` with `processed=False` and
-    `processing_error="Stripe invoice payload is missing a billing price id."`, and active
-    subscriptions with `NULL` `current_period_end`.
-  - After the fix: webhook 500s carrying the version-mismatch message identify a misconfigured
-    endpoint directly.
-- **Deliberate?** None found.
-- **Age:** the invoice parser dates to `0f1a9e8f`/`670e136c` (2026-05-15/16); the root lock has
-  carried stripe 15.x since `f0bd9072` (2026-06-17). Long-standing, masked by Finding 1.
+No open findings: SA209 resolved both billing findings and SA210 resolved
+`build-system-requires-unpinned`; each resolution is recorded in the reconciliation log.
 
 ---
 
@@ -398,9 +172,9 @@ fails. `n/a` means the safeguard does not apply to that entry point.
 
 | Entry point | AuthN | AuthZ | Input validation | Output encoding | Rate limit | Timeout | Idempotency | Error shape | Audit record |
 |---|---|---|---|---|---|---|---|---|---|
-| `StripeWebhookView` (billing) | HMAC via SDK `construct_event` | n/a (signature is authz) | **`billing-stripe-objects-normalized-empty`**, **`billing-stripe-api-version-drift`** | JSON | — (signature-gated) | implicit SDK timeout — Notes | per-event session advisory mutex + `WebhookEvent` unique id | 400/403/500 in view | `WebhookEvent` row |
+| `StripeWebhookView` (billing) | HMAC via SDK `construct_event` | n/a (signature is authz) | SDK objects converted before parsing; event API version enforced by named release | JSON | — (signature-gated) | implicit SDK timeout — Notes | per-event session advisory mutex + `WebhookEvent` unique id | 400/403/500 in view | `WebhookEvent` row |
 | `NotificationWebhookView` | HMAC + timestamp TTL, `compare_digest` | n/a | required-field checks + `validate_email` | JSON | — (signature-gated) | n/a | idempotency key + atomic | 400/403 | delivery event row |
-| Checkout / subscription-checkout / portal / cancel views | `SessionAuthentication` + explicit `is_authenticated` | `require_owner=True`, re-validated under the provider mutex (`_require_owner_provider_mutation_authorization`) | DRF serializer; provider response parsing **`billing-stripe-objects-normalized-empty`** | DRF JSON | `billing_checkout` / `billing_portal` 30/hour | implicit SDK timeout — Notes | reservation-derived Stripe idempotency keys | DRF | reservation rows |
+| Checkout / subscription-checkout / portal / cancel views | `SessionAuthentication` + explicit `is_authenticated` | `require_owner=True`, re-validated under the provider mutex (`_require_owner_provider_mutation_authorization`) | DRF serializer; provider responses converted before parsing | DRF JSON | `billing_checkout` / `billing_portal` 30/hour | implicit SDK timeout — Notes | reservation-derived Stripe idempotency keys | DRF | reservation rows |
 | Credit balance / transactions / subscription detail | session + explicit check | `require_owner=True` | n/a (GET) | DRF | `user` default | n/a | n/a | DRF | n/a |
 | `PlanListView`, `PricingPageView` | `AllowAny` — public catalog | n/a | n/a | DRF / autoescape | `anon`/`user` defaults | n/a | n/a | DRF | n/a |
 | Blog / listings publishing APIs | session (CSRF enforced) or constant-time token | staff + `_resolve_api_org` | request parsing | JSON | DB-atomic fixed-window counter after auth — Notes | n/a | slug conflict → 409 | JSON | n/a |
@@ -419,10 +193,10 @@ Every empty cell is resolved with a finding ID or a stated reason.
 
 ## 6. Per-subsystem verdicts
 
-- **billing** — `billing-stripe-objects-normalized-empty`, `billing-stripe-api-version-drift`.
-  The locking, idempotency, and transaction discipline introduced in `1270ed46` is sound. The
-  defects sit entirely in the provider-payload boundary. Wrapper, webhook pipeline, handlers,
-  ledger, mutex, and views read in full.
+- **billing** — clean. The locking, idempotency, and transaction discipline introduced in
+  `1270ed46` is sound; the provider-payload boundary now converts SDK objects before parsing,
+  pins one API version, and rejects deliveries from a different named release. Wrapper, webhook
+  pipeline, handlers, ledger, mutex, and views read in full.
 - **auth** — clean. `AccountDeleteView` read in full after the provider-I/O restructuring.
 - **orgs** — clean. `removal.py` and `purge_organization.py` read in full; middleware, the
   `current_org` delta, and the SA203 wiring read in full.
@@ -475,9 +249,8 @@ Every empty cell is resolved with a finding ID or a stated reason.
 - **No test tampering in the delta.** The only new skip markers are conditional
   `skipif(REAL_ZIZMOR is None)`, and zizmor is a pinned dev dependency. Every assertion removal
   tracks SA194's deliberate code removal.
-- **Chain pass (§3.10) ran.** Findings 1 and 2 chain: the first masks the second. The implicit
-  Stripe timeout plus the session advisory mutex bounds contention by the SDK's default timeout
-  (Notes). Nothing else combined above its parts.
+- **Chain pass (§3.10) ran.** No combination rose above its parts: the implicit Stripe timeout
+  plus the session advisory mutex bounds contention by the SDK's default timeout (Notes).
 
 ---
 
@@ -485,10 +258,9 @@ Every empty cell is resolved with a finding ID or a stated reason.
 
 *(candidate inputs for the companion architectural audit — one line each, not findings here)*
 
-- Stripe payload knowledge is spread across ~30 ad hoc `.get()` extractors over JSON-round-tripped
-  dicts, with no versioned payload boundary. An SDK major bump or an API-version change silently
-  changes what every handler sees, and test doubles bypass the wrapper entirely. This points at a
-  missing typed provider-adapter seam pinned to one API version.
+- Stripe payload knowledge is still spread across ad hoc `.get()` extractors over normalized
+  dicts, though the module now converts SDK objects centrally, pins one API version, and rejects
+  deliveries from a different named release. This points at a missing typed provider-adapter seam.
 - Provider serialization rests on **session-level** `pg_advisory_lock`. It is correct on direct
   connections, but a transaction-pooling proxy (PgBouncer `pool_mode=transaction`) would silently
   void the mutex. That is an undeclared deployment contract.
@@ -501,14 +273,14 @@ Every empty cell is resolved with a finding ID or a stated reason.
 
 ## 9. Tooling gaps
 
-- **A real-SDK contract test for the billing provider wrapper** — no network: build objects with
-  `stripe.<Resource>.construct_from(...)` and sign webhook bodies locally for
-  `stripe.Webhook.construct_event`, with fixtures at the SDK's pinned API version. It would have
-  prevented **`billing-stripe-objects-normalized-empty`** and **`billing-stripe-api-version-drift`**.
-  A stripe-mock service in the e2e lane would cover the same ground end to end.
-- **A named-release pin test for Stripe** — fails when the installed SDK's pinned API version
-  moves to a new named release, so a `stripe` bump cannot silently change payload shapes. It would
-  have surfaced **`billing-stripe-api-version-drift`** at the stripe 15.x adoption.
+- **A real-SDK contract test for the billing provider wrapper** — closed: `test_stripe_contract.py`
+  builds objects with `stripe.<Resource>.construct_from(...)`, signs webhook bodies locally for
+  `stripe.Webhook.construct_event`, and the fixture builders round-trip every payload through the
+  SDK at the pinned API version. A stripe-mock service in the e2e lane would still cover the same
+  ground end to end.
+- **A named-release pin test for Stripe** — closed: the contract test fails when the installed
+  SDK's pinned API version moves to a new named release, so a `stripe` bump cannot silently change
+  payload shapes.
 - **Container and IaC scanning** — still absent (carried).
 - **Dependabot (or equivalent) for `github-actions`** — the SHA pins from SA202 have no automated
   refresh path (carried follow-up).
@@ -603,6 +375,16 @@ only), X-generator.*
 - 2026-09-23 — `billing-stripe-api-version-drift`: fix decisions accepted by the team. A webhook
   whose `api_version` is a different named release is rejected with `BillingConfigurationError`
   (500, so Stripe retries). Matching is by named release (`dahlia`), not by exact date.
+- 2026-09-24 — `billing-stripe-objects-normalized-empty`: resolved (`f1627c51`, SA209). Verified at
+  `services.py:4235`: `_normalize_mapping` converts SDK objects with `to_dict()` before the mapping
+  check, and `test_stripe_contract.py` proves a locally signed body through the real
+  `StripeClient.construct_event` keeps its event id.
+- 2026-09-24 — `billing-stripe-api-version-drift`: resolved (`f1627c51`, SA209). Verified at
+  `services.py:42`, `:505`, `:1813`, `:3060`, `:3108`, `:3152`: `STRIPE_API_VERSION` is declared
+  once and set on the SDK, a webhook from a different named release is refused with
+  `BillingConfigurationError` (500) and its version is logged, invoice reads use
+  `parent.subscription_details`, line prices use `pricing.price_details.price`, and period bounds
+  come from agreeing subscription items without blanking known bounds.
 - 2026-09-24 — `build-system-requires-unpinned`: resolved (SA210 closeout). Verified at
   `pyproject.toml.j2:31`: generated projects emit `poetry-core>=2.0,<3.0`, and the SA90 emission
   fixture pins the new `pyproject.toml` hashes in all three variants.

@@ -76,3 +76,37 @@ def test_billing_production_targeted_requires_valid_runtime_contract() -> None:
         )
         is False
     )
+
+
+def test_apply_next_steps_name_the_required_stripe_endpoint_version(
+    capsys,
+    tmp_path,
+) -> None:
+    """The billing wiring output must state the required webhook endpoint version."""
+    from unittest.mock import Mock
+
+    from quickscale_cli.commands.apply_command import _display_next_steps
+
+    config = Mock()
+    config.project.slug = "myapp"
+    config.docker.start = False
+    config.modules = {
+        "billing": Mock(
+            options={
+                "enabled": True,
+                "publishable_key_env_var": "STRIPE_PUBLISHABLE_KEY",
+                "secret_key_env_var": "STRIPE_SECRET_KEY",
+                "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
+                "billing_currency": "usd",
+            }
+        )
+    }
+
+    _display_next_steps(tmp_path, config, False)
+    output = capsys.readouterr().out
+
+    assert "# Billing setup" in output
+    assert "2026-06-24.dahlia" in output
+    assert "OPS_BILLING_WEBHOOK_SECRET" in output
+    assert "/billing/webhooks/stripe/" in output
+    assert "older API version stops processing" in output
