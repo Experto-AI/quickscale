@@ -11,7 +11,7 @@ from importlib import import_module
 import json
 import logging
 import os
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from django.apps import apps
 from django.conf import settings
@@ -36,6 +36,10 @@ DEFAULT_BILLING_CURRENCY = "usd"
 DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"
 DEFAULT_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"  # noqa: S105 - environment-variable name constant, not a credential
 DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR = "QUICKSCALE_BILLING_WEBHOOK_SECRET"  # noqa: S105 - environment-variable name constant, not a credential
+# The Stripe API version this module is written against: the version
+# stripe-python 15.x ships pinned. It is set on the SDK before every call and
+# every webhook event must report the same named release.
+STRIPE_API_VERSION: Final[str] = "2026-06-24.dahlia"
 STRIPE_EVENT_TYPE_CHECKOUT_SESSION_COMPLETED = "checkout.session.completed"
 STRIPE_EVENT_TYPE_CHECKOUT_SESSION_EXPIRED = "checkout.session.expired"
 STRIPE_EVENT_TYPE_INVOICE_PAID = "invoice.paid"
@@ -501,6 +505,8 @@ class StripeClient:
     def _activate_api_key(self) -> None:
         if hasattr(self._stripe_module, "api_key"):
             setattr(self._stripe_module, "api_key", self._api_key)
+        if hasattr(self._stripe_module, "api_version"):
+            setattr(self._stripe_module, "api_version", STRIPE_API_VERSION)
 
     def _resolve_checkout_session_api(self) -> Any:
         checkout_module = getattr(self._stripe_module, "checkout", None)
@@ -1581,11 +1587,8 @@ def _persist_subscription_provider_snapshot(
     else:
         local_status = subscription.status
 
-    current_period_start = _stripe_timestamp_to_datetime(
-        updated_subscription.get("current_period_start")
-    )
-    current_period_end = _stripe_timestamp_to_datetime(
-        updated_subscription.get("current_period_end")
+    current_period_start, current_period_end = _extract_subscription_period_bounds(
+        updated_subscription
     )
 
     organization_model = apps.get_model(
@@ -1807,6 +1810,21 @@ def handle_stripe_event(
     if not event_type:
         raise BillingWebhookError("Stripe event payload is missing a type.")
 
+    event_api_version = str(event_payload.get("api_version") or "").strip()
+    logger.info(
+        "Stripe webhook event %s reports API version %s.",
+        event_id,
+        event_api_version or "<blank>",
+    )
+    if _stripe_named_release(event_api_version) != _stripe_named_release(
+        STRIPE_API_VERSION
+    ):
+        raise BillingConfigurationError(
+            f"Stripe webhook event API version {event_api_version or '<blank>'} does "
+            f"not match the required Stripe API version {STRIPE_API_VERSION}; "
+            f"recreate the webhook endpoint at {STRIPE_API_VERSION}."
+        )
+
     with _webhook_event_processing_lock(event_id):
         webhook_event, _ = WebhookEvent.objects.get_or_create(
             stripe_event_id=event_id,
@@ -2014,7 +2032,7 @@ def _process_invoice_paid_event(
     # Phase 1: resolve user + subscription in a short org scope.
     with org_scope(resolved_organization):
         resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
-        subscription_id = str(invoice_payload.get("subscription") or "").strip()
+        subscription_id = _invoice_subscription_id(invoice_payload)
         customer_id = str(invoice_payload.get("customer") or "").strip()
         subscription = _resolve_subscription_for_runtime_event(
             stripe_subscription_id=subscription_id,
@@ -2273,9 +2291,7 @@ def _apply_invoice_payment_failed_event(
         )
         resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
         subscription = _resolve_subscription_for_runtime_event(
-            stripe_subscription_id=str(
-                invoice_payload.get("subscription") or ""
-            ).strip(),
+            stripe_subscription_id=_invoice_subscription_id(invoice_payload),
             customer_id=str(invoice_payload.get("customer") or "").strip(),
             organization=resolved_organization,
             user=resolved_user,
@@ -2302,7 +2318,7 @@ def _apply_invoice_payment_failed_event(
         subscription.status = Subscription.Status.PAST_DUE
         update_fields: list[str] = ["status"]
         customer_id = str(invoice_payload.get("customer") or "").strip()
-        subscription_id = str(invoice_payload.get("subscription") or "").strip()
+        subscription_id = _invoice_subscription_id(invoice_payload)
         existing_customer_id = str(subscription.stripe_customer_id or "").strip()
         existing_subscription_id = str(
             subscription.stripe_subscription_id or ""
@@ -2383,7 +2399,7 @@ def _retrieve_subscription_for_paid_invoice(
     stripe_client: Any | None,
 ) -> dict[str, Any]:
     """Retrieve the invoice subscription before local lock/transaction work."""
-    stripe_subscription_id = str(invoice_payload.get("subscription") or "").strip()
+    stripe_subscription_id = _invoice_subscription_id(invoice_payload)
     if not stripe_subscription_id:
         raise BillingWebhookError(
             "Stripe invoice payload is missing a subscription id for local reconciliation."
@@ -2538,20 +2554,23 @@ def _apply_subscription_payload(
             subscription.save(update_fields=unique_fields)
         if organization is not None and customer_id:
             _sync_organization_customer_id(organization, customer_id)
-        subscription.current_period_start = _stripe_timestamp_to_datetime(
-            subscription_payload.get("current_period_start")
+        # Under the pinned API version period bounds exist only on subscription
+        # items. Known bounds are never overwritten with a missing value.
+        period_start, period_end = _extract_subscription_period_bounds(
+            subscription_payload
         )
-        subscription.current_period_end = _stripe_timestamp_to_datetime(
-            subscription_payload.get("current_period_end")
-        )
-        subscription.save(
-            update_fields=[
-                "current_period_start",
-                "current_period_end",
-            ]
-            if subscription.pk is not None
-            else None
-        )
+        period_update_fields: list[str] = []
+        if (
+            period_start is not None
+            and subscription.current_period_start != period_start
+        ):
+            subscription.current_period_start = period_start
+            period_update_fields.append("current_period_start")
+        if period_end is not None and subscription.current_period_end != period_end:
+            subscription.current_period_end = period_end
+            period_update_fields.append("current_period_end")
+        if period_update_fields:
+            subscription.save(update_fields=period_update_fields)
         return subscription
 
 
@@ -3038,6 +3057,23 @@ def _extract_event_object(event_payload: Mapping[str, Any]) -> dict[str, Any]:
     return _normalize_mapping(event_object)
 
 
+def _invoice_subscription_details(invoice_payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the dahlia ``invoice.parent.subscription_details`` mapping.
+
+    Under the pinned API version the invoice's subscription id and its
+    metadata snapshot live on the parent, never on the invoice itself.
+    """
+    parent = _normalize_mapping(invoice_payload.get("parent") or {})
+    return _normalize_mapping(parent.get("subscription_details") or {})
+
+
+def _invoice_subscription_id(invoice_payload: Mapping[str, Any]) -> str:
+    """Return the invoice's Stripe subscription id under the pinned version."""
+    return _stripe_object_id(
+        _invoice_subscription_details(invoice_payload).get("subscription")
+    )
+
+
 def _extract_price_id(invoice_payload: Mapping[str, Any]) -> str:
     line_items = invoice_payload.get("lines")
     line_item_data: list[Mapping[str, Any]] = []
@@ -3046,12 +3082,11 @@ def _extract_price_id(invoice_payload: Mapping[str, Any]) -> str:
         if isinstance(raw_data, list):
             line_item_data = [item for item in raw_data if isinstance(item, Mapping)]
 
-    price_ids = {
-        str(price_data.get("id") or "").strip()
-        for line_item in line_item_data
-        for price_data in [_normalize_mapping(line_item.get("price") or {})]
-        if str(price_data.get("id") or "").strip()
-    }
+    price_ids: set[str] = set()
+    for line_item in line_item_data:
+        price_id = _dahlia_line_item_price_id(line_item)
+        if price_id:
+            price_ids.add(price_id)
     if len(price_ids) == 1:
         return next(iter(price_ids))
     if len(price_ids) > 1:
@@ -3060,15 +3095,23 @@ def _extract_price_id(invoice_payload: Mapping[str, Any]) -> str:
         )
 
     fallback_price_id = str(
-        _normalize_mapping(invoice_payload.get("metadata") or {}).get(
-            "stripe_price_id",
-            "",
-        )
+        _normalize_mapping(
+            _invoice_subscription_details(invoice_payload).get("metadata") or {}
+        ).get(_PRICE_ID_METADATA_KEY, "")
     ).strip()
     if fallback_price_id:
         return fallback_price_id
 
     raise BillingWebhookError("Stripe invoice payload is missing a billing price id.")
+
+
+def _dahlia_line_item_price_id(line_item: Mapping[str, Any]) -> str:
+    """Return the price id from a dahlia invoice line item's pricing block."""
+    pricing = _normalize_mapping(line_item.get("pricing") or {})
+    if str(pricing.get("type") or "").strip() != "price_details":
+        return ""
+    price_details = _normalize_mapping(pricing.get("price_details") or {})
+    return _stripe_object_id(price_details.get("price"))
 
 
 def _extract_subscription_price_id(subscription_payload: Mapping[str, Any]) -> str:
@@ -3103,6 +3146,47 @@ def _extract_subscription_price_id(subscription_payload: Mapping[str, Any]) -> s
 
     raise BillingWebhookError(
         "Stripe subscription payload is missing a billing price id."
+    )
+
+
+def _extract_subscription_period_bounds(
+    subscription_payload: Mapping[str, Any],
+) -> tuple[datetime | None, datetime | None]:
+    """Return the subscription items' agreed billing-period bounds.
+
+    Under the pinned API version period bounds exist only on subscription
+    items. Every item that reports a bound must agree, matching the one-price
+    rule the subscription price extraction already enforces.
+    """
+    subscription_items = subscription_payload.get("items")
+    item_data: list[Mapping[str, Any]] = []
+    if isinstance(subscription_items, Mapping):
+        raw_data = subscription_items.get("data", [])
+        if isinstance(raw_data, list):
+            item_data = [item for item in raw_data if isinstance(item, Mapping)]
+
+    period_starts: set[int] = set()
+    period_ends: set[int] = set()
+    for item in item_data:
+        period_start = _normalize_integer(item.get("current_period_start"))
+        period_end = _normalize_integer(item.get("current_period_end"))
+        if period_start is not None and period_start > 0:
+            period_starts.add(period_start)
+        if period_end is not None and period_end > 0:
+            period_ends.add(period_end)
+    if len(period_starts) > 1:
+        raise BillingWebhookError(
+            "Stripe subscription items disagree on current_period_start."
+        )
+    if len(period_ends) > 1:
+        raise BillingWebhookError(
+            "Stripe subscription items disagree on current_period_end."
+        )
+    return (
+        _stripe_timestamp_to_datetime(next(iter(period_starts)))
+        if period_starts
+        else None,
+        _stripe_timestamp_to_datetime(next(iter(period_ends))) if period_ends else None,
     )
 
 
@@ -3167,8 +3251,7 @@ def _resolve_organization_for_invoice(
 
     metadata_sources = [
         invoice_payload,
-        _normalize_mapping(invoice_payload.get("subscription_details") or {}),
-        _normalize_mapping(invoice_payload.get("parent") or {}),
+        _invoice_subscription_details(invoice_payload),
     ]
     return _resolve_organization_from_metadata_sources(metadata_sources)
 
@@ -3184,8 +3267,7 @@ def _resolve_user_for_invoice(*, invoice_payload: Mapping[str, Any]) -> Any | No
 
     metadata_sources = [
         invoice_payload,
-        _normalize_mapping(invoice_payload.get("subscription_details") or {}),
-        _normalize_mapping(invoice_payload.get("parent") or {}),
+        _invoice_subscription_details(invoice_payload),
     ]
     return _resolve_user_from_metadata_sources(metadata_sources)
 
@@ -3917,6 +3999,17 @@ def _stripe_timestamp_to_datetime(value: Any) -> datetime | None:
     return datetime.fromtimestamp(normalized_timestamp, tz=dt_timezone.utc)
 
 
+def _stripe_named_release(api_version: str) -> str:
+    """Return the named release (the suffix after the date) of an API version."""
+    normalized_version = api_version.strip()
+    if not normalized_version:
+        return ""
+    _, separator, named_release = normalized_version.rpartition(".")
+    if separator and named_release:
+        return named_release
+    return normalized_version
+
+
 def _map_stripe_subscription_status(stripe_status: str) -> str:
     normalized_status = stripe_status.strip().lower()
     if normalized_status in _STRIPE_TO_LOCAL_SUBSCRIPTION_STATUS:
@@ -4140,6 +4233,15 @@ def _has_matching_business_reference(
 
 
 def _normalize_mapping(value: Any) -> dict[str, Any]:
+    """Return a JSON-safe mapping, converting Stripe SDK objects first.
+
+    Since stripe-python 13 a ``StripeObject`` is neither a ``dict`` subclass
+    nor a ``collections.abc.Mapping``, so an SDK response must be converted
+    with its own recursive ``to_dict()`` before the mapping check.
+    """
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        value = to_dict()
     if not isinstance(value, Mapping):
         return {}
     serialized = json.dumps(dict(value), default=str)

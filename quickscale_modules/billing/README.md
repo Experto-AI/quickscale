@@ -23,6 +23,14 @@ QuickScale billing is a credits-first org-backed module. Django owns plans, bala
 - Checkout success, cancel, and portal return URLs are server-owned; callers may not supply them in API requests
 - Stripe keys are resolved from environment variables at runtime and are never stored in the database
 
+## Stripe API Version Contract
+
+Billing targets the Stripe API version `2026-06-24.dahlia` — the version the pinned `stripe` SDK (`>=15.3.1,<16.0.0`) ships. The runtime sets that version on the SDK before every call, and every webhook event must report the same named release: `handle_stripe_event` rejects an event from a different named release with `BillingConfigurationError`, which the webhook view answers with `500` so Stripe retries, and it logs each event's reported version.
+
+The Stripe webhook endpoint for this module **must** use API version `2026-06-24.dahlia` and point at `/billing/webhooks/stripe/`.
+
+**Upgrade note:** a deployment whose webhook endpoint is on an older API version stops processing all billing webhooks (`500`s) until the endpoint is recreated at `2026-06-24.dahlia`. Events refused under the old version are not credited automatically, so reconcile them once the endpoint is on `2026-06-24.dahlia`: resend the event to that endpoint (Stripe Dashboard **Resend**, or `stripe events resend <event_id> --webhook-endpoint=<new_endpoint_id>`, up to 30 days) and confirm it is accepted; when an event is still refused or is outside the resend window, credit the affected invoice once through the module's `credit_user` service from a Django shell so the balance and ledger stay consistent.
+
 ## Credits-First Domain Contract
 
 - `Plan` stores QuickScale-owned display metadata plus the authoritative Stripe Price reference used for checkout validation

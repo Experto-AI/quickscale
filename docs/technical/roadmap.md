@@ -21,8 +21,8 @@ seal, or PyPI upload has happened. Publication stays a maintainer decision; this
 that it is owed: release-tier validation on the packaged bytes, the phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. The packaged bytes
 predate fixes now on `v89`; shipping any of them in 0.88.0 means repackaging. They also carry both
-S1 billing defects that SA209 fixes: with billing enabled against real Stripe keys, every webhook
-and every checkout fails.
+S1 billing defects the landed billing fix addresses: with billing enabled against real Stripe keys,
+every webhook and every checkout fails.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves history.
@@ -37,7 +37,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA209 | Make billing work against the real Stripe SDK at API version `2026-06-24.dahlia` | post-v88 | 2 | — | Deferred |
 | SA207 | Declare generated-project contract changes once and let adoption advance the recorded vintage | post-v88 | 2 | — | Deferred |
 | SA210 | Bound the generated projects' `poetry-core` build requirement | post-v88 | 3 | — | Deferred |
 
@@ -45,8 +44,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA209 ──► SA207
-Track 3: SA208 (landed) ──► SA210
+Track 2: SA207
+Track 3: SA210
                          critical path: SA191 → SA153
 ```
 
@@ -59,9 +58,9 @@ through `deploy railway`. SA153 builds the portal on the migrated project. SA204
 deferred to the SA153 go-live horizon. SA154 is an inventory, not work.
 
 **Ordering off the critical path.** SA208 has landed ahead of SA153, which it gates. SA204 follows
-SA153 in Track 1 and must land before any post-SA153 module schema change.
-SA209 is S1 and goes next on Track 2. SA207 carries the facade adoption step SA206 left to it
-(see SA207). SA210 is trivial and moved to the idle Track 3.
+SA153 in Track 1 and must land before any post-SA153 module schema change. SA209 has landed, so
+SA207 — which carries the facade adoption step SA206 left to it (see SA207) — goes next on Track 2.
+SA210 is trivial and fills the idle Track 3.
 
 ### Track states
 
@@ -70,7 +69,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA209 | yes | yes | yes | **yes** | no |
+| 2 | SA207 | yes | yes | yes | **yes** | no |
 | 3 | SA210 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -272,52 +271,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA209 — Make billing work against the real Stripe SDK at API version `2026-06-24.dahlia`.**
-
-  **Context:** two chained S1 defects (tech audit `billing-stripe-objects-normalized-empty` and
-  `billing-stripe-api-version-drift`) mean billing has never worked against the real SDK.
-  - Since stripe-python 13, `StripeObject` is not a `Mapping`, so `_normalize_mapping` turns every
-    event, price, customer, session, and subscription into `{}`. Every signed webhook gets a 400
-    ("missing an id"), and every checkout gets a 400 on price parity.
-  - Behind that, billing reads pre-2025 payload shapes: `invoice.subscription`,
-    `line.price`, and top-level `subscription.current_period_*`. Under dahlia these live at
-    `invoice.parent.subscription_details`, `line.pricing.price_details.price`, and on subscription
-    items. So subscribers are charged each period and never credited, and every subscription event
-    writes `NULL` period bounds.
-  - The tests pass only because the fakes return plain dicts in the retired shape.
-
-  Team decisions of 2026-09-23 apply: target the SDK's pinned `2026-06-24.dahlia`, keep no legacy
-  fallback, and reject a webhook from a different named release, matching by release name rather
-  than date. Ship both fixes together, because fixing only the first unmasks the second.
-
-  **Acceptance:**
-  - SDK objects are converted before normalization. A locally signed body through the real
-    `StripeClient.construct_event` yields its event id, and a `construct_from` checkout session
-    keeps its id.
-  - Billing declares one `STRIPE_API_VERSION` and sets it on the SDK. A test fails when the
-    installed SDK's pinned version moves to a different named release.
-  - `handle_stripe_event` rejects an event from a different named release with
-    `BillingConfigurationError` naming the expected version, which gives a 500 so Stripe retries.
-    It logs each event's version.
-  - Billing reads only dahlia shapes:
-    - The subscription id and resolution metadata come from `parent.subscription_details`.
-    - The price comes from `pricing.price_details.price`, falling back to the subscription-details
-      metadata.
-    - Period bounds come from subscription items, which must agree, and known bounds are never
-      overwritten with `None`.
-  - Fixtures and fake clients are rewritten to dahlia shapes built from real SDK objects, and the
-    legacy fixtures are removed.
-  - The following tests pass:
-    - a dahlia `invoice.paid` (`subscription_cycle`) grants exactly one plan credit;
-    - a dahlia `customer.subscription.updated` keeps item-derived bounds;
-    - a `2025-03-31.basil` event raises and creates no credit.
-  - The billing docs and the generated operations guidance state the required endpoint version,
-    and the webhook-wiring output prints it. The upgrade note says that an endpoint on an older
-    version stops processing until it is recreated.
-
-  **Surfaces:** `billing/services.py`, `billing/views.py`, the billing tests and fake clients, the
-  billing module docs and webhook-wiring output, the generated operations guidance, and the tech
-  audit.
+- [x] **SA209 — Make billing work against the real Stripe SDK at API version `2026-06-24.dahlia`.**
 
 - [ ] **SA207 — Declare generated-project contract changes once and let adoption advance the recorded vintage.**
 
