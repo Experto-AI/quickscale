@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import stripe
 from django.db import IntegrityError, connection, transaction
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
@@ -41,6 +42,13 @@ from quickscale_modules_billing.services import (
 )
 from quickscale_modules_orgs.models import Organization
 
+from tests.stripe_payloads import (
+    invoice_event,
+    normalize_stripe_object,
+    stripe_event,
+    subscription_object,
+)
+
 
 def _create_plan(*, price_id: str = "price_starter") -> Plan:
     return Plan.objects.create(
@@ -72,31 +80,17 @@ def _invoice_paid_event(
     billing_reason: str | None = "subscription_cycle",
     user_reference: str | None = None,
 ) -> dict[str, Any]:
-    metadata = {}
-    if user_reference:
-        metadata["quickscale_user_reference"] = user_reference
-    invoice_object: dict[str, Any] = {
-        "id": invoice_id,
-        "customer": customer_id,
-        "subscription": subscription_id,
-        "metadata": metadata,
-        "lines": {
-            "data": [
-                {
-                    "price": {
-                        "id": price_id,
-                    }
-                }
-            ]
-        },
-    }
-    if billing_reason is not None:
-        invoice_object["billing_reason"] = billing_reason
-    return {
-        "id": event_id,
-        "type": "invoice.paid",
-        "data": {"object": invoice_object},
-    }
+    """Build a dahlia invoice.paid event from a real SDK object."""
+    return invoice_event(
+        event_id=event_id,
+        event_type="invoice.paid",
+        invoice_id=invoice_id,
+        customer_id=customer_id,
+        price_id=price_id,
+        subscription_id=subscription_id,
+        billing_reason=billing_reason,
+        user_reference=user_reference,
+    )
 
 
 @dataclass
@@ -138,7 +132,10 @@ class FakeStripeClient:
         else:
             self.searched_references.append(user_reference)
             self.searched_reference_kinds.append("user")
-        return list(self.customers)
+        return [
+            normalize_stripe_object(stripe.Customer, customer)
+            for customer in self.customers
+        ]
 
     def create_customer(
         self,
@@ -199,7 +196,7 @@ class FakeStripeClient:
                 "idempotency_key": idempotency_key or "",
             }
         )
-        return created_customer
+        return normalize_stripe_object(stripe.Customer, created_customer)
 
     def construct_event(
         self,
@@ -218,7 +215,7 @@ class FakeStripeClient:
         if self.construct_error is not None:
             raise self.construct_error
         assert self.event is not None
-        return self.event
+        return normalize_stripe_object(stripe.Event, dict(self.event))
 
     def create_billing_portal_session(
         self,
@@ -233,8 +230,14 @@ class FakeStripeClient:
             }
         )
         if self.portal_session is not None:
-            return dict(self.portal_session)
-        return {"url": "https://billing.example.com/session"}
+            return normalize_stripe_object(
+                stripe.billing_portal.Session,
+                dict(self.portal_session),
+            )
+        return normalize_stripe_object(
+            stripe.billing_portal.Session,
+            {"url": "https://billing.example.com/session"},
+        )
 
     def cancel_subscription(
         self,
@@ -243,12 +246,18 @@ class FakeStripeClient:
     ) -> dict[str, Any]:
         self.canceled_subscription_calls.append(stripe_subscription_id)
         if self.canceled_subscription is not None:
-            return dict(self.canceled_subscription)
-        return {
-            "id": stripe_subscription_id,
-            "status": Subscription.Status.ACTIVE,
-            "cancel_at_period_end": True,
-        }
+            return normalize_stripe_object(
+                stripe.Subscription,
+                dict(self.canceled_subscription),
+            )
+        return normalize_stripe_object(
+            stripe.Subscription,
+            {
+                "id": stripe_subscription_id,
+                "status": Subscription.Status.ACTIVE,
+                "cancel_at_period_end": True,
+            },
+        )
 
     def resume_subscription(
         self,
@@ -257,12 +266,18 @@ class FakeStripeClient:
     ) -> dict[str, Any]:
         self.resumed_subscription_calls.append(stripe_subscription_id)
         if self.resumed_subscription is not None:
-            return dict(self.resumed_subscription)
-        return {
-            "id": stripe_subscription_id,
-            "status": Subscription.Status.ACTIVE,
-            "cancel_at_period_end": False,
-        }
+            return normalize_stripe_object(
+                stripe.Subscription,
+                dict(self.resumed_subscription),
+            )
+        return normalize_stripe_object(
+            stripe.Subscription,
+            {
+                "id": stripe_subscription_id,
+                "status": Subscription.Status.ACTIVE,
+                "cancel_at_period_end": False,
+            },
+        )
 
     def retrieve_subscription(
         self,
@@ -270,7 +285,10 @@ class FakeStripeClient:
         stripe_subscription_id: str,
     ) -> dict[str, Any]:
         self.retrieved_subscription_ids.append(stripe_subscription_id)
-        return dict(self.subscriptions.get(stripe_subscription_id, {}))
+        return normalize_stripe_object(
+            stripe.Subscription,
+            dict(self.subscriptions.get(stripe_subscription_id, {})),
+        )
 
 
 def test_billing_settings_snapshot_reads_defaults_and_environment(
@@ -917,14 +935,13 @@ def test_cancel_current_subscription_schedules_period_end_cancel_and_updates_loc
         current_period_end=current_period_end,
     )
     fake_client = FakeStripeClient(
-        canceled_subscription={
-            "id": "sub_cancel",
-            "status": Subscription.Status.ACTIVE,
-            "customer": "cus_cancel_updated",
-            "current_period_start": 1715817600,
-            "current_period_end": 1718409600,
-            "cancel_at_period_end": True,
-        }
+        canceled_subscription=subscription_object(
+            subscription_id="sub_cancel",
+            customer_id="cus_cancel_updated",
+            status=Subscription.Status.ACTIVE,
+            item_periods=[(1715817600, 1718409600)],
+            cancel_at_period_end=True,
+        )
     )
 
     updated_subscription = cancel_current_subscription(
@@ -1921,25 +1938,14 @@ def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org
     fake_client = FakeStripeClient(
         event=event,
         subscriptions={
-            "sub_123": {
-                "id": "sub_123",
-                "customer": "cus_org_runtime",
-                "status": "active",
-                "current_period_start": 1713225600,
-                "current_period_end": 1715817600,
-                "metadata": {
-                    "stripe_price_id": plan.stripe_price_id,
-                },
-                "items": {
-                    "data": [
-                        {
-                            "price": {
-                                "id": plan.stripe_price_id,
-                            }
-                        }
-                    ]
-                },
-            }
+            "sub_123": subscription_object(
+                subscription_id="sub_123",
+                customer_id="cus_org_runtime",
+                price_id=plan.stripe_price_id,
+                status="active",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+                item_periods=[(1713225600, 1715817600)],
+            )
         },
     )
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_org_runtime")
@@ -1991,25 +1997,14 @@ def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
     fake_client = FakeStripeClient(
         event=backfill_event,
         subscriptions={
-            "sub_123": {
-                "id": "sub_123",
-                "customer": "cus_metadata",
-                "status": "active",
-                "current_period_start": 1713225600,
-                "current_period_end": 1715817600,
-                "metadata": {
-                    "stripe_price_id": plan.stripe_price_id,
-                },
-                "items": {
-                    "data": [
-                        {
-                            "price": {
-                                "id": plan.stripe_price_id,
-                            }
-                        }
-                    ]
-                },
-            }
+            "sub_123": subscription_object(
+                subscription_id="sub_123",
+                customer_id="cus_metadata",
+                price_id=plan.stripe_price_id,
+                status="active",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+                item_periods=[(1713225600, 1715817600)],
+            )
         },
     )
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_metadata")
@@ -2173,11 +2168,12 @@ def test_handle_stripe_event_serializes_concurrent_duplicate_deliveries(
 
     from django.db import close_old_connections
 
-    event = {
-        "id": "evt_concurrent_duplicate",
-        "type": "invoice.paid",
-        "data": {"object": {"id": "in_concurrent_duplicate"}},
-    }
+    event = stripe_event(
+        event_id="evt_concurrent_duplicate",
+        event_type="invoice.paid",
+        object_type="invoice",
+        event_object={"id": "in_concurrent_duplicate"},
+    )
     fake_client = FakeStripeClient(event=event)
     first_handler_entered = threading.Event()
     release_first_handler = threading.Event()
@@ -2488,11 +2484,12 @@ def test_handle_stripe_event_marks_unknown_types_as_processed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_client = FakeStripeClient(
-        event={
-            "id": "evt_unknown",
-            "type": "customer.created",
-            "data": {"object": {"id": "cus_unknown"}},
-        }
+        event=stripe_event(
+            event_id="evt_unknown",
+            event_type="customer.created",
+            object_type="customer",
+            event_object={"id": "cus_unknown"},
+        )
     )
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unknown")
 
@@ -2607,8 +2604,12 @@ def test_handle_stripe_event_rejects_missing_event_object(
             signature="t=1,v1=test-signature",
             stripe_client=FakeStripeClient(
                 event={
-                    "id": "evt_missing_object",
-                    "type": "invoice.paid",
+                    **stripe_event(
+                        event_id="evt_missing_object",
+                        event_type="invoice.paid",
+                        object_type="invoice",
+                        event_object={"id": "in_missing_object"},
+                    ),
                     "data": {},
                 }
             ),
@@ -2629,8 +2630,14 @@ def test_handle_stripe_event_rejects_missing_event_data(
             signature="t=1,v1=test-signature",
             stripe_client=FakeStripeClient(
                 event={
-                    "id": "evt_missing_data",
-                    "type": "invoice.paid",
+                    key: value
+                    for key, value in stripe_event(
+                        event_id="evt_missing_data",
+                        event_type="invoice.paid",
+                        object_type="invoice",
+                        event_object={"id": "in_missing_data"},
+                    ).items()
+                    if key != "data"
                 }
             ),
         )
@@ -2659,9 +2666,9 @@ def test_handle_stripe_event_uses_metadata_price_fallback(
         price_id=plan.stripe_price_id,
     )
     fallback_event["data"]["object"]["lines"] = {"data": []}
-    fallback_event["data"]["object"]["metadata"]["stripe_price_id"] = (
-        plan.stripe_price_id
-    )
+    fallback_event["data"]["object"]["parent"]["subscription_details"]["metadata"][
+        "stripe_price_id"
+    ] = plan.stripe_price_id
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_fallback")
 
     result = handle_stripe_event(
@@ -2745,31 +2752,20 @@ def test_handle_stripe_event_uses_subscription_details_user_reference(
     event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
         _organization_reference(organization)
     )
-    event["data"]["object"]["subscription_details"] = {
-        "metadata": {"quickscale_user_reference": _user_reference(user)}
-    }
+    event["data"]["object"]["parent"]["subscription_details"]["metadata"][
+        "quickscale_user_reference"
+    ] = _user_reference(user)
     fake_client = FakeStripeClient(
         event=event,
         subscriptions={
-            "sub_123": {
-                "id": "sub_123",
-                "customer": "cus_subscription_details",
-                "status": "active",
-                "current_period_start": 1713225600,
-                "current_period_end": 1715817600,
-                "metadata": {
-                    "stripe_price_id": plan.stripe_price_id,
-                },
-                "items": {
-                    "data": [
-                        {
-                            "price": {
-                                "id": plan.stripe_price_id,
-                            }
-                        }
-                    ]
-                },
-            }
+            "sub_123": subscription_object(
+                subscription_id="sub_123",
+                customer_id="cus_subscription_details",
+                price_id=plan.stripe_price_id,
+                status="active",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+                item_periods=[(1713225600, 1715817600)],
+            )
         },
     )
     monkeypatch.setenv(
@@ -2815,8 +2811,18 @@ def test_handle_stripe_event_rejects_multiple_price_ids(
     )
     event["data"]["object"]["lines"] = {
         "data": [
-            {"price": {"id": "price_one"}},
-            {"price": {"id": "price_two"}},
+            {
+                "pricing": {
+                    "type": "price_details",
+                    "price_details": {"price": "price_one"},
+                }
+            },
+            {
+                "pricing": {
+                    "type": "price_details",
+                    "price_details": {"price": "price_two"},
+                }
+            },
         ]
     }
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_many_prices")
