@@ -230,8 +230,9 @@ class QuickscaleOrgsConfig(AppConfig):
 
         pre_delete.connect(_protect_last_owner_on_membership_delete)
 
-        # ---- SA1.3 — tenant-isolation system check -----------------------
-        # Import checks.py to register the check_tenant_isolation system
-        # check.  The @register decorator runs at import time, so importing
-        # the module is sufficient to register it.
+        # ---- SA1.3 / SA1.4 / SA208 — registered system checks ------------
+        # Import checks.py to register the check_tenant_isolation (SA1.3),
+        # check_model_classification (SA1.4), and check_provider_id_conformance
+        # (SA208) system checks.  The @register decorator runs at import time,
+        # so importing the module is sufficient to register them.
         import quickscale_modules_orgs.checks  # noqa: F401

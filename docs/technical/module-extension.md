@@ -107,6 +107,34 @@ human-readable output and JSON results should include the model. The shipped
 literal registry remains a CI parity oracle for shipped modules only; it is not
 an enrollment API for project-owned extensions.
 
+A project-owned model also classifies each of its non-relational `*_id` fields
+as provider-backed or not, from its own code:
+
+```python
+class ProjectListing(AbstractListing):
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
+
+    mls_id = models.CharField(max_length=64, blank=True, default="")
+
+    provider_id_classification = {
+        "mls_id": "provider-backed",
+    }
+```
+
+The orgs provider-ID system check walks the marker-derived tenant models and
+fails as an error — `manage.py check` and `migrate` refuse — on any
+non-relational `*_id` field that neither a central refuse-or-reconcile
+obligation nor a `provider_id_classification` entry covers. `provider-backed`
+marks an identifier of state held by an external provider:
+`purge_organization` refuses while any row of the organization carries a value,
+naming the field, until that value is cleared or reconciled.
+`not-provider-backed` marks a project-internal identifier that the purge
+deletes with its row. The two values are exported as `PROVIDER_BACKED` and
+`NOT_PROVIDER_BACKED` from `quickscale_modules_orgs.removal`; the literal
+strings are equivalent. Shipped module models keep their central declarations
+and need no model attribute.
+
 ## Module Categories
 
 | Module category | Preferred extension model | Example modules |

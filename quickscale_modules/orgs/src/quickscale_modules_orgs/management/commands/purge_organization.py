@@ -16,6 +16,8 @@ Contract rules enforced by this command:
 * System and personal orgs are guarded by default; ``--force`` overrides.
 * Current Stripe-backed subscriptions must be cancelled and hosted checkouts
   must be provider-terminal before any purge.
+* A row carrying a value in a ``provider_id_classification`` field declared
+  provider-backed refuses the purge, naming the field.
 * Ownership/count map always includes ``OrganizationInvitation`` rows.
 * Tombstone is created in the same transaction as the purge.
 * Every marker-derived tenant model, including project-owned models, is
@@ -33,6 +35,7 @@ from contextlib import nullcontext
 from heapq import heappop, heappush
 
 from django.apps import apps
+from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
@@ -53,6 +56,7 @@ from quickscale_modules_orgs.removal import (
     SOCIAL_CACHE_STATE,
     RemovalAction,
     RemovalBoundary,
+    declared_provider_backed_fields,
     require_removal_action,
 )
 from quickscale_modules_orgs.tenancy import (
@@ -242,6 +246,15 @@ def _get_qs(model: object, filter_kwargs: dict[str, object]) -> object:
         return model.objects.filter(**filter_kwargs)  # type: ignore[union-attr]
 
 
+def _carries_provider_value(field: models.Field, value: object) -> bool:
+    """Return whether *value* is set rather than an empty provider slot."""
+    if value is None:
+        return False
+    if isinstance(field, (models.CharField, models.TextField)) and value == "":
+        return False
+    return True
+
+
 class Command(BaseCommand):
     help = (
         "Purge an organization and all owned rows across all modules. "
@@ -394,6 +407,7 @@ class Command(BaseCommand):
                         organization,
                         provider_expired_checkout_id=provider_expired_checkout_id,
                     )
+                    self._guard_provider_backed_fields(organization)
                     ownership_map = self._build_ownership_map(organization)
                 finally:
                     reset_current_org_id()
@@ -441,6 +455,7 @@ class Command(BaseCommand):
                 set_current_org_for_context(org_id=organization.pk)
                 try:
                     self._guard_live_stripe_subscriptions(organization)
+                    self._guard_provider_backed_fields(organization)
 
                     # Build the map inside the atomic block so counts match
                     # the pre-delete snapshot with org context already active.
@@ -740,6 +755,59 @@ class Command(BaseCommand):
                 f"Cannot purge organization {organization.pk} while a Stripe "
                 "subscription checkout is pending. Complete or expire the "
                 "checkout before retrying."
+            )
+
+    def _guard_provider_backed_fields(self, organization: Organization) -> None:
+        """Refuse a purge while a row carries provider-backed state (SA208).
+
+        Project-owned models classify their non-relational ``*_id`` fields in
+        ``provider_id_classification``.  A field classified provider-backed
+        that holds a value is provider state the purge cannot reconcile, so
+        the purge refuses and names every such field.  The caller holds the
+        organization row lock and has established the RLS context for the
+        surrounding transaction.
+
+        Every existing row of the organization in each declared model is
+        locked for the rest of the purge transaction, so a concurrent update
+        cannot add a provider value after this read and before deletion.  A
+        row inserted concurrently is not covered by those row locks and is
+        deleted with the organization.
+        """
+        try:
+            declared_fields = declared_provider_backed_fields(get_tenant_models())
+        except ValueError as exc:
+            raise CommandError(
+                f"Cannot purge organization {organization.pk}: {exc}"
+            ) from exc
+
+        carried_fields: list[str] = []
+        for model, field_name in declared_fields:
+            if not has_organization_id_field(model):
+                continue
+            try:
+                field = model._meta.get_field(field_name)
+            except FieldDoesNotExist as exc:
+                raise CommandError(
+                    f"Cannot purge organization {organization.pk}: "
+                    f"{_model_key(model)}.{field_name} is declared "
+                    "provider-backed but is not a model field."
+                ) from exc
+            queryset = _get_qs(model, {"organization_id": organization.pk})
+            locked_rows = list(
+                queryset.select_for_update().only(field_name)  # type: ignore[attr-defined]
+            )
+            if any(
+                _carries_provider_value(field, getattr(row, field_name))
+                for row in locked_rows
+            ):
+                carried_fields.append(f"{_model_key(model)}.{field_name}")
+
+        if carried_fields:
+            joined_fields = ", ".join(sorted(carried_fields))
+            raise CommandError(
+                f"Cannot purge organization {organization.pk} while rows carry "
+                f"provider-backed values: {joined_fields}. Clear or reconcile "
+                "these fields before retrying."
             )
 
     def _check_tombstone(

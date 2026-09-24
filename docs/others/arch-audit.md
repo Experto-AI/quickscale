@@ -110,7 +110,7 @@ runtime-contract seams, not its frontend or media carry-over.
 | **Template ↔ upgradable-code contract compatibility** | Detection: `project_contract` versus manifest vintages at `update`/`apply`/`deploy railway`. Adoption: prose steps, hand-copied (one block ×5, Railway ×2); `project_contract` never advances, so acknowledgement is per-invocation forever | **Detection gated; adoption content is convention** | **regressed**: SA200 and SA201 changed runtime contracts with no adoption step; finding 2 |
 | Every emitted path has a migration disposition | Generator-derived conformance test over a hand-authored taxonomy | Membership gated both ways; disposition and doc mirror not gated | **weakened**: `INTENTIONALLY_UNMANAGED` grew **78 → 89**, and 4 entries have no rationale in `generated_file_ownership.md` |
 | Module-declared credential env vars reach `.env.example` | One declaration-driven managed-block renderer plus conformance | Structural and gated | unchanged. The managed-block shape is the precedent for finding 2 |
-| Cross-domain org-removal obligations are discharged | `ORGANIZATION_REMOVAL_OBLIGATIONS` in `orgs/removal.py`; last-owner predicate plus `pre_delete` backstop | Obligation inventory structural; provider-ID conformance **test-time only, inside the orgs suite** | **re-characterized**: finding 3 |
+| Cross-domain org-removal obligations are discharged | `ORGANIZATION_REMOVAL_OBLIGATIONS` in `orgs/removal.py`; last-owner predicate plus `pre_delete` backstop; SA208 provider-ID system check plus model-level `provider_id_classification` | Obligation inventory structural; provider-ID conformance **runtime, over installed tenant models** | **strengthened**: SA208 landed the option-3 containment; finding 3 stays open |
 | DRF throttling | SA201: template defaults plus module-contributed scopes merged in `base.py.j2:390ff` | Structural for fresh projects; **undeclared for existing projects** | **new row**: see finding 2 |
 | Generator template context is complete | `StrictUndefined` (`generator.py:373`) plus release-lane boot of a generated project | Structural | **new** (SA196) |
 | Publishing supply chain | SHA-pinned actions, minimal `permissions:`, `check-workflow-security`, `check-secret-scanning` | Gated | **strengthened** (SA202) |
@@ -124,7 +124,7 @@ runtime-contract seams, not its frontend or media carry-over.
 |---:|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | SA153 go-live | High (mechanism) / Medium (exact failure) | M | one-way door | Every release rewrites each module's only migration, and nothing carries a deployed project's data across that rewrite, yet SA153's go-live brings the first tenant data that cannot be reseeded. |
 | 2 | `generated-file-ownership-unmodeled` | now (regressed) | High | M | one-way door | QuickScale-owned runtime and security contracts live in template text that existing projects never receive. The vintage gate detects the gap but delivers only hand-copied prose that is already incomplete. |
-| 3 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | two-way door | Org-removal obligations are declared centrally in vendored `orgs`, checked only in orgs' own test suite, and executed per boundary. |
+| 3 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months | High | M | two-way door | Org-removal obligations are declared centrally in vendored `orgs`, checked at runtime over installed tenant models, and executed per boundary. |
 
 Rank changes: finding 1 is new and takes rank 1 by blast radius — a production database — and by
 irreversibility; its horizon moved to SA153's go-live when the reseed decision removed it from the
@@ -486,12 +486,13 @@ requirement is scheduled.
 new boundary, and SA153's scope names no provider ID. But see the last evidence bullet.
 
 **Problem:** Last-owner safety and the obligation inventory are structural, but the inventory is
-declared centrally in the vendored `orgs` module. Its only conformance check runs inside orgs' own
-test suite. Each boundary still orchestrates its own subset.
+declared centrally in the vendored `orgs` module. Its conformance check now runs as an orgs system
+check over installed tenant models (SA208), but each boundary still orchestrates its own subset.
 
-**Evidence (re-verified this pass; `removal.py` unchanged since `1270ed46`):**
+**Evidence (re-verified in the 2026-09-23 pass; `removal.py` was unchanged since `1270ed46` until
+SA208):**
 
-- `ORGANIZATION_REMOVAL_OBLIGATIONS` (`orgs/removal.py:62-125`) declares four obligations against
+- `ORGANIZATION_REMOVAL_OBLIGATIONS` (`orgs/removal.py:72-141`) declares four obligations against
   a hard-coded two-member `RemovalBoundary` enum (`:12-16`).
 - The billing obligation names **billing's** model labels and field names as strings
   (`quickscale_modules_billing.credittransaction`, `…subscription`, and others). The base module
@@ -499,26 +500,32 @@ test suite. Each boundary still orchestrates its own subset.
 - `cancel_current_subscription` has exactly two callers (`billing/views.py:320`,
   `auth/views.py:463`), unchanged. The last-owner predicate and the `pre_delete` backstop are
   unchanged. SA203 made the backstop install on the privileged startup path too (`aa5ff547`).
-- **Corrected from the prior pass:** `external_provider_obligation_mismatches` (`:202-266`) is
-  called only from `orgs/tests/test_removal.py:37`. It runs over orgs' test `INSTALLED_APPS`.
-  It never runs in a generated project, and it cannot see project-owned models. Its heuristic
-  (`:177-186`) treats any non-relational `*_id` field as a provider ID. So a SA153 property model
-  with, say, an `mls_id` would be purged without refusal or reconciliation. Declaring it would
-  require editing vendored `orgs/removal.py`, which SA153's acceptance forbids.
+- **Corrected from the prior pass:** `external_provider_obligation_mismatches` (`:261-373`) was
+  called only from `orgs/tests/test_removal.py:42`. It ran over orgs' test `INSTALLED_APPS`, never
+  in a generated project, and could not see project-owned models. Its heuristic
+  (`:187-196`) treated any non-relational `*_id` field as a provider ID, so a SA153 property model
+  with, say, an `mls_id` would have been purged without refusal or reconciliation. **SA208 landed
+  the option-3 containment:** the walk now runs as an orgs system check over
+  `get_tenant_models()`, including project-owned models; a project model classifies each of its
+  `*_id` fields in its own `provider_id_classification` without editing vendored `orgs` source;
+  and `purge_organization` refuses while a row carries a value in a field classified
+  provider-backed, naming the field.
 
 **Counter-evidence:**
 - Searched billing for `pre_delete`/`post_delete` receivers and model `delete()` hooks: none.
 - Live-subscription refusal is enforced before purge.
 - Account deletion records its deliberate skips (`skipped_removal_obligations`).
-- The prior pass's claim that provider-ID conformance "rejects a purged external ID" holds for
-  shipped modules at test time only; it is corrected above.
+- The prior pass's claim that provider-ID conformance "rejects a purged external ID" now holds at
+  runtime for installed tenant models, including project-owned ones (SA208).
 
 **Why it compounds:** each new obligation extends the central tuple and each boundary's handler.
 Each new boundary (bulk admin, GDPR erasure, `teams`) needs its own orchestration and a new enum
-member. Each project-owned provider ID has no declaration path at all.
+member. A project-owned provider ID now has a declaration path (SA208), but it discharges only the
+purge boundary: account deletion and any future boundary still have no declared handling for it.
 
-**Detection signal:** a project model with a `*_id` provider field purged without reconciliation;
-a new deletion boundary that does not consume the contract.
+**Detection signal:** a new deletion boundary that does not consume the contract. A project model's
+undeclared `*_id` field now fails the orgs system check, and a provider-backed value refuses the
+purge by name.
 
 **Steelman:** the two boundaries have genuinely different intents (remove a person versus tear
 down an organization). A coordinator before real tenants exist is premature, and a central tuple
@@ -546,8 +553,9 @@ is a retention or billing incident, diagnosed by hand.
 
 **Recommendation:** option 3's containment when SA153 starts, because it is cheap and puts the
 check where project models exist. Move to option 1 when the trigger fires. · **Size:** `M` ·
-**Reversibility:** `two-way door`. · **First step:** register
-`external_provider_obligation_mismatches` as an orgs system check over `get_tenant_models()`.
+**Reversibility:** `two-way door`. · **First step (done, SA208):** register
+`external_provider_obligation_mismatches` as an orgs system check over `get_tenant_models()`, with
+the model-level `provider_id_classification` declaration and the purge refusal.
 
 ---
 
@@ -690,6 +698,15 @@ is benign behind Railway and is recorded as finding-2 evidence, not as a red fla
 
 ## Reconciliation log
 
+- 2026-09-24 — `deletion-invariants-per-boundary-reimplementation`: **containment landed** (SA208,
+  option 3). The provider-ID conformance walk runs as an orgs system check over
+  `get_tenant_models()`; a project-owned model classifies each non-relational `*_id` field in its
+  own `provider_id_classification` without editing vendored `orgs` source; and
+  `purge_organization` refuses an organization while a row carries a value in a field classified
+  provider-backed, naming the field. The finding stays open with its trigger unchanged: the
+  containment refuses a project provider ID rather than reconciling it, so option 1 is owed when a
+  third destructive boundary, a durable-erasure requirement, or a project-owned tenant model with
+  an external provider ID arrives.
 - 2026-09-23 — `clean-break-schema-no-data-path`: horizon **moved** to SA153's go-live. Maintainer
   decision: `bap-web`'s data is reseeded rather than carried, so SA191's acceptance no longer
   requires a data path and SA204's freeze is deferred to the SA153 go-live horizon (roadmap
