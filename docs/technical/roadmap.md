@@ -37,13 +37,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-
+| SA211 | Give every contract adoption step a stable identity and derive the watched template set | post-v88 | 2 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA207 (landed)
+Track 2: SA207 (landed) ──► SA211
 Track 3: SA208 (landed) ──► SA210 (landed)
                          critical path: SA191 → SA153
 ```
@@ -58,8 +58,12 @@ deferred to the SA153 go-live horizon. SA154 is an inventory, not work.
 
 **Ordering off the critical path.** SA208 has landed ahead of SA153, which it gates. SA204 follows
 SA153 in Track 1 and must land before any post-SA153 module schema change. SA207 — which carried
-the facade adoption step SA206 left to it — has landed on Track 2, closing the track. SA210 has
-landed on Track 3.
+the facade adoption step SA206 left to it — has landed on Track 2 with the project-level
+declaration and its step-identity record, and SA211 follows it there. The 2026-09-24 arch audit
+recommended step identity over release-keyed adoption, so SA211 carries the rest: module-owned
+steps, the SA208 and SA209 steps, and a watched set derived from the emission manifest. SA211 must
+land before the first release published after 0.89.0, and it should land before SA191 records the
+migrated site's adoption state. SA210 has landed on Track 3, which has no queued work.
 
 ### Track states
 
@@ -68,7 +72,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
-| 2 | — | — | — | — | **yes** | no |
+| 2 | SA211 | yes | yes | yes | **yes** | no |
 | 3 | — | — | — | — | **yes** | no |
 
 ### Ownership and merge coordination
@@ -139,7 +143,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and this freeze — SA208 and SA209 change no module models. The
   topology guard in `test_module_migration_topology.py` currently requires exactly one
   `0001_initial` and has a canary that rejects any `0002`; it changes to require a `0001_initial`
-  followed by an ordered chain, and that canary is inverted.
+  followed by an ordered chain, and that canary is inverted. Fix the freeze release before SA153
+  writes its first module-schema change, so that change ships as a `0002` from the start.
 
   **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
   documentation, `quickscale_core/tests/test_module_migration_topology.py`, and the arch audit.
@@ -177,7 +182,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   carry over and behave as before. Its migrations are regenerated against the current
   `AbstractListing`. `.git`, `media/`, `.env`, and `poetry.lock` are not copied between the two
   trees. Every manual step the tool did not automate is recorded in the migration report and fed
-  back into the playbook, or into a tool fix when it is deterministic.
+  back into the playbook, or into a tool fix when it is deterministic. The carried `properties`
+  models pass SA208's provider-ID system check, which otherwise stops `start.sh` at `migrate`.
+  If billing is enabled, the Stripe webhook endpoint is recreated at `2026-06-24.dahlia` (SA209).
+  The vintage gate does not show that step to a project already recorded at `0.89.0`.
 
   The production data is reseeded, not carried. Rehearse first: restore a production dump into a
   scratch PostgreSQL 18 and confirm the expected history inconsistency with `migrate --plan`
@@ -276,11 +284,45 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA210 — Bound the generated projects' `poetry-core` build requirement.**
 
+- [ ] **SA211 — Give every contract adoption step a stable identity and derive the watched template set.**
+
+  **Context:** SA207 declares each template contract change once in a project-level vintage and
+  landed the step-identity record for it: every declared step carries a stable id, applied state
+  records the adopted ids, and `update`, `apply`, and `deploy railway` refuse on exactly the
+  unadopted steps, so billing's SA209 dahlia webhook step is shown to a project recorded at
+  `0.89.0`. What remains: steps carry no owner, SA208's provider-ID classification is not declared
+  as an identified step, module manifests' step changes are not gated, and SA207's gate watches a
+  hand-listed set of paths rather than the generator's emission manifest. SA210 and SA209 changed
+  `pyproject.toml.j2` and `OPERATIONS.md.j2`, and neither is in SA207's watched set. 0.89.0 is
+  unpublished, so at release the dahlia step reaches every pre-0.89 project.
+
+  **Acceptance:**
+  - Each adoption step carries a stable id, an owner (project or module), and text.
+  - Applied state records the adopted step ids, and `update`, `apply`, and `deploy railway` show
+    and refuse on exactly the unadopted steps. A project that recorded every step needs no flag.
+    A pre-SA211 state migrates to ids from its recorded vintage.
+  - Identified steps cover SA209's dahlia webhook recreation and SA208's provider-ID
+    classification, which fails `migrate` on an upgraded project with an unclassified `*_id`
+    field. They also cover every step SA207 declares.
+  - The gate fails when a step's text changes without a new id, or when a manifest's steps
+    change without an id. Controls run in both directions.
+  - SA207's template-change gate derives its watched set from the generator's emission manifest,
+    not a path list. A control proves a change to `pyproject.toml.j2` without a step fails.
+  - Before closing, verify the state migration on a copy of `bap-web`'s post-SA191 state if
+    SA191 has landed. The state schema change is a one-way door.
+
+  **Surfaces:** `contract_vintage.py`, the apply-state writer and reader, the module manifests'
+  `contract_vintage` blocks, `deployment_commands.py`, SA207's gate and its registry row, and the
+  arch audit. The emission manifest is read, not changed; Track 3 owns the generator.
+
 ## Deferred constraints and references
 
 The [architecture audit](../others/arch-audit.md) and [technical audit](../others/tech-audit.md) own
 deferred findings, watch notes, and their growth triggers; items stay there until a trigger fires.
-Every live finding of the 2026-09-23 passes is scheduled above. The `bap-web` reseed question is
+Every live finding of the 2026-09-24 passes is scheduled above or held behind its trigger. The
+tech audit has no open findings. Arch finding `deletion-invariants-per-boundary-reimplementation`
+stays contained by SA208 until its trigger fires. Watch items W2–W7 and the tech audit's notes are
+not scheduled. The `bap-web` reseed question is
 settled: its data is reseeded rather than carried (2026-09-23), which defers SA204 to the SA153
 go-live horizon. The architecture audit's remaining open questions still apply: whether
 "regenerate and port" is the permanent upgrade model (which would reshape the project-level
