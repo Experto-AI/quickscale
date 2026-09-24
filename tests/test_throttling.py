@@ -109,3 +109,38 @@ def test_billing_views_return_429_past_their_scope_rate(
 
     assert [response.status_code for response in responses[:2]] == [400, 400]
     assert responses[2].status_code == 429
+
+
+@pytest.mark.django_db
+def test_billing_checkout_refuses_the_thirty_first_request_in_an_hour(
+    client,
+    mock_org_resolution,
+    user,
+) -> None:
+    """SA207: once SA201's contract is adopted, the 31st checkout is 429.
+
+    The scope rate is the real ``30/hour`` the billing wiring contributes, so
+    the first thirty requests reach the serializer (400 for an unknown plan)
+    and the thirty-first is refused by the adopted throttle contract.
+    """
+    cache.clear()
+    client.force_login(user)
+    url = reverse("quickscale_billing:purchase-checkout")
+    payload = json.dumps({"plan_slug": "not-a-plan"})
+
+    with (
+        override_settings(
+            REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": BILLING_SCOPE_RATES}
+        ),
+        patch.object(
+            CreateCheckoutSessionView, "throttle_classes", [ScopedRateThrottle]
+        ),
+        patch.object(ScopedRateThrottle, "THROTTLE_RATES", BILLING_SCOPE_RATES),
+    ):
+        responses = [
+            client.post(url, data=payload, content_type="application/json")
+            for _ in range(31)
+        ]
+
+    assert [response.status_code for response in responses[:30]] == [400] * 30
+    assert responses[30].status_code == 429
