@@ -14,10 +14,16 @@ Covers every code path in ``check_model_classification()``:
 * W005 — exception during classification discovery
 * W005 — unclassified concrete model found
 * Happy path — all models classified, no warnings
+
+Covers the SA208 ``check_provider_id_conformance()`` paths:
+
+* E001 — exception during tenant-model discovery
+* E001 — undeclared ``*_id`` field, declared field, and the real installed walk
 """
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from pytest import MonkeyPatch
@@ -502,3 +508,101 @@ def test_sa182_tenant_excluded_wins_over_tenant_manager(
     assert is_tenant_model(ProjectListing) is False
     assert is_classified_in_registry(ProjectListing) is True
     assert ProjectListing not in get_tenant_models()
+
+
+# ---------------------------------------------------------------------------
+# SA208 — Provider-ID removal-conformance check (E001)
+# ---------------------------------------------------------------------------
+
+
+def _provider_model(
+    classification: dict[str, str] | None = None,
+) -> SimpleNamespace:
+    """Build a model-like object with one non-relational ``*_id`` field."""
+    model = SimpleNamespace(
+        _meta=SimpleNamespace(
+            label_lower="sa208_checks_app.tenantrecord",
+            get_fields=lambda: [
+                SimpleNamespace(name="acme_customer_id", is_relation=False)
+            ],
+        )
+    )
+    if classification is not None:
+        model.provider_id_classification = classification
+    return model
+
+
+class TestCheckProviderIdConformanceE001:
+    """An undeclared ``*_id`` field fails; classifying it passes."""
+
+    @patch("quickscale_modules_orgs.checks.get_tenant_models")
+    def test_returns_e001_on_discovery_exception(self, mock_get: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_provider_id_conformance
+
+        mock_get.side_effect = RuntimeError("Simulated discovery failure")
+
+        messages = check_provider_id_conformance(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.E001"
+        assert "Failed to discover tenant models" in messages[0].msg
+
+    @patch("quickscale_modules_orgs.checks.get_tenant_models")
+    def test_undeclared_provider_id_fails(self, mock_get: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_provider_id_conformance
+
+        mock_get.return_value = [_provider_model()]
+
+        messages = check_provider_id_conformance(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.E001"
+        assert "sa208_checks_app.tenantrecord.acme_customer_id" in messages[0].msg
+        assert "provider_id_classification" in messages[0].hint
+
+    @patch("quickscale_modules_orgs.checks.get_tenant_models")
+    def test_declared_provider_backed_field_passes(self, mock_get: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_provider_id_conformance
+        from quickscale_modules_orgs.removal import PROVIDER_BACKED
+
+        mock_get.return_value = [_provider_model({"acme_customer_id": PROVIDER_BACKED})]
+
+        assert check_provider_id_conformance(app_configs=None) == []
+
+    @patch("quickscale_modules_orgs.checks.get_tenant_models")
+    def test_declared_not_provider_backed_field_passes(
+        self, mock_get: MagicMock
+    ) -> None:
+        from quickscale_modules_orgs.checks import check_provider_id_conformance
+        from quickscale_modules_orgs.removal import NOT_PROVIDER_BACKED
+
+        mock_get.return_value = [
+            _provider_model({"acme_customer_id": NOT_PROVIDER_BACKED})
+        ]
+
+        assert check_provider_id_conformance(app_configs=None) == []
+
+
+def test_provider_id_conformance_passes_for_installed_models() -> None:
+    """Shipped modules and the classified fixture app pass the real walk."""
+    from quickscale_modules_orgs.checks import check_provider_id_conformance
+
+    assert check_provider_id_conformance(app_configs=None) == []
+
+
+def test_undeclared_project_field_fails_the_real_walk(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Removing a project model's declaration fails the check, naming fields."""
+    from quickscale_modules_orgs.checks import check_provider_id_conformance
+    from tests.sa208_project_app.models import ProjectProviderRecord
+
+    monkeypatch.delattr(ProjectProviderRecord, "provider_id_classification")
+
+    messages = check_provider_id_conformance(app_configs=None)
+
+    assert messages
+    assert all(message.id == "quickscale_modules_orgs.E001" for message in messages)
+    named = " ".join(message.msg for message in messages)
+    assert "sa208_project_app.projectproviderrecord.mls_id" in named
+    assert "sa208_project_app.projectproviderrecord.local_ref_id" in named

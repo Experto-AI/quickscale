@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "quickscale_modules_backups",
     "quickscale_modules_notifications",
     "tests.sa182_project_app.apps.SA182ProjectAppConfig",
+    "tests.sa208_project_app.apps.SA208ProjectAppConfig",
 ]
 
 MIDDLEWARE = [

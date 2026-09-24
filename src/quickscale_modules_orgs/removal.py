@@ -58,6 +58,16 @@ OWNED_TENANT_ROWS = "owned-tenant-rows"
 SOCIAL_CACHE_STATE = "social-cache-state"
 PURGE_TOMBSTONE = "purge-tombstone"
 
+#: Model-level ``provider_id_classification`` values (SA208). A model classifies
+#: each of its non-relational ``*_id`` fields with one of these so a project-owned
+#: app can declare its provider obligations without editing vendored orgs source.
+PROVIDER_BACKED = "provider-backed"
+NOT_PROVIDER_BACKED = "not-provider-backed"
+
+_PROVIDER_ID_CLASSIFICATIONS: frozenset[str] = frozenset(
+    {PROVIDER_BACKED, NOT_PROVIDER_BACKED}
+)
+
 
 ORGANIZATION_REMOVAL_OBLIGATIONS: tuple[OrganizationRemovalObligation, ...] = (
     OrganizationRemovalObligation(
@@ -199,10 +209,64 @@ def _structured_provider_id_fields(
     }
 
 
+def _provider_id_classification(
+    model: type[models.Model],
+) -> dict[str, str] | None:
+    """Return *model*'s ``provider_id_classification`` mapping, if declared.
+
+    ``None`` means the model declares no classification and its ``*_id``
+    fields must be covered by a central obligation instead.
+    """
+    declaration = getattr(model, "provider_id_classification", None)
+    if declaration is None:
+        return None
+    if not isinstance(declaration, dict):
+        raise ValueError(
+            f"{model._meta.label_lower} declares a non-mapping "
+            "provider_id_classification; expected a field-name-to-classification "
+            "mapping."
+        )
+    return declaration
+
+
+def declared_provider_backed_fields(
+    models: Iterable[type[models.Model]],
+) -> list[tuple[type[models.Model], str]]:
+    """Return every ``(model, field_name)`` classified provider-backed (SA208).
+
+    Raises:
+        ValueError: when a model's ``provider_id_classification`` is not a
+            mapping, or names a classification outside
+            ``{PROVIDER_BACKED, NOT_PROVIDER_BACKED}``.  Callers fail closed
+            rather than treating an unreadable declaration as "no provider
+            state".
+    """
+    declared: list[tuple[type[models.Model], str]] = []
+    for model in models:
+        declaration = _provider_id_classification(model)
+        if declaration is None:
+            continue
+        for field_name, classification in declaration.items():
+            if classification not in _PROVIDER_ID_CLASSIFICATIONS:
+                raise ValueError(
+                    f"{model._meta.label_lower}.{field_name} declares an unknown "
+                    f"provider_id_classification {classification!r}; expected "
+                    f"{PROVIDER_BACKED!r} or {NOT_PROVIDER_BACKED!r}."
+                )
+            if classification == PROVIDER_BACKED:
+                declared.append((model, field_name))
+    return declared
+
+
 def external_provider_obligation_mismatches(
     purged_models: Iterable[type[models.Model]],
 ) -> list[str]:
-    """Report uncovered or stale provider-ID declarations for purged models."""
+    """Report uncovered or stale provider-ID declarations for purged models.
+
+    A non-relational ``*_id`` field is covered when a central obligation
+    declares it or when its model classifies it in
+    ``provider_id_classification`` (the project-side declaration).
+    """
     models_by_label = {model._meta.label_lower: model for model in purged_models}
     discovered_scalar = {
         provider_field
@@ -238,9 +302,44 @@ def external_provider_obligation_mismatches(
         declared_scalar.update(scalar_fields)
         declared_structured.update(structured_fields)
 
+    model_declared: dict[tuple[str, str], str] = {}
+    model_declared_keys: set[tuple[str, str]] = set()
+    declaration_messages: list[str] = []
+    for model_label, model in sorted(models_by_label.items()):
+        try:
+            declaration = _provider_id_classification(model)
+        except ValueError:
+            declaration_messages.append(
+                f"{model_label} declares a non-mapping provider_id_classification; "
+                "expected a field-name-to-classification mapping"
+            )
+            continue
+        if declaration is None:
+            continue
+        for field_name, classification in sorted(declaration.items()):
+            key = (model_label, field_name)
+            if key not in discovered_scalar:
+                declaration_messages.append(
+                    f"{model_label}.{field_name} is declared in "
+                    "provider_id_classification but is not an installed "
+                    "non-relational *_id field"
+                )
+                continue
+            model_declared_keys.add(key)
+            if classification not in _PROVIDER_ID_CLASSIFICATIONS:
+                declaration_messages.append(
+                    f"{model_label}.{field_name} declares an unknown "
+                    f"provider_id_classification {classification!r}; expected "
+                    f"{PROVIDER_BACKED!r} or {NOT_PROVIDER_BACKED!r}"
+                )
+                continue
+            model_declared[key] = classification
+
     messages = [
         f"{model_label}.{field_name} has no refuse-or-reconcile obligation"
-        for model_label, field_name in sorted(discovered_scalar - declared_scalar)
+        for model_label, field_name in sorted(
+            discovered_scalar - declared_scalar - model_declared_keys
+        )
     ]
     messages.extend(
         f"{model_label}.{field_name} is declared but is not an installed provider ID"
@@ -263,4 +362,12 @@ def external_provider_obligation_mismatches(
         f"{name} covers provider IDs without a refuse-or-reconcile purge action"
         for name in sorted(invalid_actions)
     )
+    messages.extend(
+        f"{model_label}.{field_name} is classified {NOT_PROVIDER_BACKED!r} but a "
+        "central obligation declares it as provider state"
+        for (model_label, field_name), classification in sorted(model_declared.items())
+        if classification == NOT_PROVIDER_BACKED
+        and (model_label, field_name) in declared_scalar
+    )
+    messages.extend(sorted(declaration_messages))
     return messages

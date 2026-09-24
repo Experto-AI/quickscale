@@ -2862,6 +2862,195 @@ def test_purge_organization_deletes_project_owned_self_protected_rows() -> None:
     assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
 
 
+# ---------------------------------------------------------------------------
+# SA208 — Provider-backed project fields refuse the purge
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
+    """A declared provider-backed project value refuses dry-run and purge."""
+    from django.core.management.base import CommandError
+
+    from tests.sa208_project_app.models import ProjectProviderRecord
+
+    org = Organization.objects.create(
+        name="SA208 Provider Refusal",
+        slug="sa208-provider-refusal",
+    )
+    set_current_org_id(org.pk)
+    try:
+        ProjectProviderRecord.all_objects.create(
+            organization=org,
+            mls_id="MLS-9001",
+            local_ref_id="local-1",
+        )
+    finally:
+        reset_current_org_id()
+    org_id = org.pk
+
+    expected = (
+        r"provider-backed values: "
+        r"sa208_project_app\.projectproviderrecord\.mls_id"
+    )
+    with pytest.raises(CommandError, match=expected):
+        call_command(
+            "purge_organization",
+            organization_id=str(org_id),
+            dry_run=True,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    with pytest.raises(CommandError, match=expected):
+        call_command(
+            "purge_organization",
+            organization_id=str(org_id),
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    assert Organization.objects.filter(pk=org_id).exists()
+    set_current_org_id(org_id)
+    try:
+        assert (
+            ProjectProviderRecord.all_objects.filter(organization_id=org_id).count()
+            == 1
+        )
+    finally:
+        reset_current_org_id()
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).count() == 0
+
+
+@pytest.mark.django_db
+def test_purge_deletes_rows_without_provider_backed_values() -> None:
+    """An empty provider-backed field and a non-provider field do not refuse."""
+    from tests.sa208_project_app.models import ProjectProviderRecord
+
+    org = Organization.objects.create(
+        name="SA208 Local Only",
+        slug="sa208-local-only",
+    )
+    set_current_org_id(org.pk)
+    try:
+        ProjectProviderRecord.all_objects.create(
+            organization=org,
+            mls_id="",
+            local_ref_id="local-only",
+        )
+    finally:
+        reset_current_org_id()
+    org_id = org.pk
+
+    call_command(
+        "purge_organization",
+        organization_id=str(org_id),
+        stdout=StringIO(),
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    assert not Organization.objects.filter(pk=org_id).exists()
+    assert ProjectProviderRecord.all_objects.filter(organization_id=org_id).count() == 0
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_provider_backed_guard_serializes_concurrent_project_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A project update cannot add a provider value between guard and deletion."""
+    from django.db import close_old_connections, connection
+    from django.db.utils import OperationalError
+
+    from tests.sa208_project_app.models import ProjectProviderRecord
+
+    org = Organization.objects.create(
+        name="SA208 Provider Race",
+        slug="sa208-provider-race",
+    )
+    set_current_org_id(org.pk)
+    try:
+        record = ProjectProviderRecord.all_objects.create(
+            organization=org,
+            mls_id="",
+            local_ref_id="local-race",
+        )
+    finally:
+        reset_current_org_id()
+    org_id = org.pk
+    record_id = record.pk
+
+    guard_read = threading.Event()
+    release_purge = threading.Event()
+    original_build_ownership_map = Command._build_ownership_map
+
+    def pause_after_guard(
+        command: Command, organization: Organization
+    ) -> dict[str, int]:
+        guard_read.set()
+        if not release_purge.wait(timeout=10):
+            raise AssertionError("timed out waiting to release the purge")
+        return original_build_ownership_map(command, organization)
+
+    monkeypatch.setattr(Command, "_build_ownership_map", pause_after_guard)
+
+    update_outcome: list[tuple[str, object]] = []
+
+    def run_purge() -> None:
+        close_old_connections()
+        try:
+            call_command(
+                "purge_organization",
+                organization_id=str(org_id),
+                stdout=StringIO(),
+                stderr=StringIO(),
+                verbosity=0,
+            )
+        finally:
+            close_old_connections()
+
+    def run_concurrent_update() -> None:
+        close_old_connections()
+        set_current_org_id(org_id)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SET statement_timeout = '1000ms'")
+            try:
+                updated = ProjectProviderRecord.all_objects.filter(pk=record_id).update(
+                    mls_id="MLS-RACE"
+                )
+                update_outcome.append(("updated", updated))
+            except OperationalError as exc:
+                update_outcome.append(("blocked", str(exc)))
+        finally:
+            reset_current_org_id()
+            connection.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        purge_future = executor.submit(run_purge)
+        assert guard_read.wait(timeout=10)
+        update_future = executor.submit(run_concurrent_update)
+        update_future.result(timeout=10)
+        release_purge.set()
+        purge_future.result(timeout=10)
+
+    assert update_outcome, "the concurrent update produced no outcome"
+    assert update_outcome[0][0] == "blocked", (
+        "the concurrent update must block on the purge's row lock; got "
+        f"{update_outcome[0]!r}"
+    )
+    assert not Organization.objects.filter(pk=org_id).exists()
+    set_current_org_id(org_id)
+    try:
+        assert not ProjectProviderRecord.all_objects.filter(pk=record_id).exists()
+    finally:
+        reset_current_org_id()
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+
 @pytest.mark.django_db
 def test_purge_organization_deletes_blog_rows() -> None:
     """purge_organization must delete Post, Category, and Tag rows."""
@@ -3155,8 +3344,8 @@ def test_purge_tombstone_retry_heals_social_cache() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _sa182_expected_tenant_model_keys() -> set[tuple[str, str]]:
-    """Bind command expectations to shipped entries plus the project fixture."""
+def _expected_tenant_model_keys() -> set[tuple[str, str]]:
+    """Bind command expectations to shipped entries plus the project fixtures."""
     from django.apps import apps
 
     from quickscale_modules_orgs.tenancy import (
@@ -3166,7 +3355,8 @@ def _sa182_expected_tenant_model_keys() -> set[tuple[str, str]]:
 
     project_models = {
         (model._meta.app_label, model.__name__)
-        for model in apps.get_app_config("sa182_project_app").get_models()
+        for app_label in ("sa182_project_app", "sa208_project_app")
+        for model in apps.get_app_config(app_label).get_models()
     }
     shipped_keys = {
         (entry.app_label, entry.model_name)
@@ -3202,7 +3392,7 @@ def test_check_tenant_isolation_pass_on_current_models() -> None:
     # Should have discovered tenant models.
     assert "Discovered" in output
     assert "Result:" in output
-    expected_keys = _sa182_expected_tenant_model_keys()
+    expected_keys = _expected_tenant_model_keys()
     for app_label, model_name in expected_keys:
         assert f"{app_label}.{model_name}" in output
     assert f"Result: {len(expected_keys)} passed, 0 failed" in output
@@ -3232,7 +3422,7 @@ def test_check_tenant_isolation_json_output() -> None:
     assert "total" in data["tenant_models"]
     assert "passed" in data["tenant_models"]
     assert "results" in data["tenant_models"]
-    expected_keys = _sa182_expected_tenant_model_keys()
+    expected_keys = _expected_tenant_model_keys()
     actual_keys = {
         (result["app_label"], result["model_name"])
         for result in data["tenant_models"]["results"]
