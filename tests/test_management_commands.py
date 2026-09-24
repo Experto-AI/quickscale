@@ -3284,8 +3284,14 @@ def test_purge_cache_failure_happens_after_database_commit() -> None:
         atomic_depths.append(len(connection.atomic_blocks))
         raise RuntimeError("cache unavailable")
 
+    from quickscale_modules_orgs.apps import QuickscaleOrgsConfig
+
     with (
-        patch.object(Command, "_clear_social_cache", new=fail_cache_clear),
+        patch.object(
+            QuickscaleOrgsConfig,
+            "invalidate_organization_cache",
+            new=fail_cache_clear,
+        ),
         pytest.raises(RuntimeError, match="cache unavailable"),
     ):
         call_command(
