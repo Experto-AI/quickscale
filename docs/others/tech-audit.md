@@ -1,8 +1,9 @@
 # QuickScale — Deep Technical Audit (defect sweep)
 
-> **Audit snapshot:** 2026-09-23 at `1cf67cf7` (branch `v89`) · **Re-run of:** the 2026-09-17 pass at
-> `d2aee905` · **Delta swept:** `d2aee905..1cf67cf7` (34 commits, 97 first-party production files)
+Audited: cdb6223f (v89) · 2026-09-24 · working tree dirty (uncommitted `docs/others/arch-audit.md` only; not read as code) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-technical-audit v5
 
+> **Re-run of:** the 2026-09-23 pass at `1cf67cf7` · **Delta swept:** `1cf67cf7..cdb6223f`
+> (12 non-merge commits, 62 non-doc files)
 ---
 
 ## 1. Orientation summary
@@ -65,6 +66,37 @@ Secrets live in the environment and reach Railway over stdin. Logs are JSON to s
 no sensitive data beyond a local `.env` with `postgres:postgres` dev credentials.
 
 ### Coverage statement
+
+**2026-09-24 re-run (§2f).** Delta `1cf67cf7..cdb6223f` classified: review-tracked — SA205
+`58f58864`, SA206 `6b0aafa5`, SA208 `1744355e`, SA209 `f1627c51`, SA210 `77350177`, and the
+track-1 tooling commit `85d0311b`; housekeeping — roadmap/audit doc commits `c9915d62`, `4af38cbc`,
+`a823f0af`, `8d3ae50a`, `247a5c5c`, `9e082e13`. No unreviewed-behavioral commit; the two merge
+commits carry no hunks of their own beyond the reconciled docs.
+
+*Read in full this pass:* `runtime/settings.py` (SA206 facade) against the removed
+`base.py.j2`/`production.py.j2` bodies line by line — a verbatim move; the generated
+`pyproject.toml.j2` `quickscale-core` lockstep pin and `runtime_pins._core_lockstep_pin`;
+`runtime/__init__.py` (the new submodule import cannot trigger the lazy DR load during settings
+import); SA205 `recovery.py:209–395`, `:631–720`, `adapter.py:148–244`, and the orchestration
+wiring; SA208 `removal.py` classification path, `checks.py` E001, and
+`purge_organization._guard_provider_backed_fields` on both the dry-run and purge paths (both inside
+`transaction.atomic()` under the org row lock); `module_dependency_sync.sync_project_core_dependency`;
+`check_workflow_security.py`, `_qs_jobs.sh`, `test_integration.sh` deltas. *Sampled:* the
+`beta_migration.py` deletion (−2 000 lines, devtools) and the test hunks (no weakened assertion:
+the `test_beta_migration.py` removal tracks the deleted code). The SA209 billing delta was verified
+by the prior pass's closure lines and not re-read.
+
+*Empirical checks this pass:* none executed; all candidates were settled by reading. Killed on
+paper: (a) an installation with no QuickScale module would record an empty vintage and be refused
+forever — impossible, the DR surface requires `quickscale_modules_backups`, which is itself
+collected; (b) `select_for_update` in the purge dry run outside a transaction — it runs inside
+`transaction.atomic()` (`purge_organization.py:396`).
+
+*Category activation (this pass):* active: I–IV, VI–IX, X-generator, X-CLI · inert: V (no hot-path
+delta) · produced: none.
+
+*Prior pass statement follows.*
+
 
 **Re-run mode (§2f).** Prior HEAD `d2aee905`; delta `d2aee905..1cf67cf7` computed and the full
 first-party production diff read. Commits classified: review-tracked — SA193, SA194, SA196, SA198,
@@ -142,8 +174,15 @@ about those areas means *not looked at*, not *clean*.
 ## 2. Machine-readable finding index
 
 ```yaml
-# No open findings; every prior ID is resolved — see the reconciliation log.
-[]
+schema: tech-audit/v5
+audited: cdb6223fb8a9bf28abf2bdf5ca93031feffbe3f7
+items:
+  - {id: dr-restore-vintage-exact-match, status: watchlist, category: I,
+     title: "Restore refuses any backup after a module patch bump", reality: generated-app,
+     anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py], first_seen: 2026-09-24, last_verified: 2026-09-24}
+  - {id: orgs-provider-id-check-blocks-migrate, status: watchlist, category: VI,
+     title: "Unclassified tenant *_id field fails migrate on upgrade", reality: generated-app,
+     anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py], first_seen: 2026-09-24, last_verified: 2026-09-24}
 ```
 
 ---
@@ -204,6 +243,11 @@ Every empty cell is resolved with a finding ID or a stated reason.
   table covered by the runtime role's default privileges.
 - **dr_engine / backups** — clean. The SA198 translation is complete and the runner merges rather
   than replaces the environment (`primitives.py:153–155`).
+- **runtime settings facade (SA206)** — clean. A verbatim move of the proxy, correlation,
+  SECRET_KEY, and command-mode contracts into `quickscale_core.runtime.settings`; the generated
+  project pins `quickscale-core` to the generator's major.minor line.
+- **dr_engine restore vintage (SA205)** — clean; the exact-version refusal is a watch item.
+- **orgs provider-ID classification (SA208)** — clean; the migrate-blocking E001 is a watch item.
 - **generator templates** — clean after the generated `[build-system]` bound landed (SA210).
   Settings templates and the side-channel `local.py.j2`/compose/React-theme hunks are otherwise
   clean.
@@ -288,6 +332,15 @@ Every empty cell is resolved with a finding ID or a stated reason.
 ---
 
 ## 10. Notes (watch items)
+
+- **SA205 restore vintage is exact-match on every module `__version__`** (`recovery.py:237–262`).
+  A backup taken at 0.89.0 is refused after any module patch bump, and there is no override flag.
+  This is the recorded clean-break decision (arch-audit owns the design). Promote it if a patch
+  release ships without a migration change and operators need an older backup.
+- **SA208 E001 is an `ERROR` that fails `migrate`** (`orgs/checks.py:179`). An upgraded project
+  with an unclassified `*_id` field on a tenant model cannot deploy: `start.sh` stops at migrate.
+  This is deliberate and documented (orgs README, CHANGELOG). Promote it if a contract-vintage
+  adoption step does not list it.
 
 - **Stripe SDK request timeout is implicit** (`services.py:524–540`). stripe-python defaults to an
   80-second timeout. Since `1270ed46` every provider call runs while the per-organization session
@@ -388,3 +441,6 @@ only), X-generator.*
 - 2026-09-24 — `build-system-requires-unpinned`: resolved (SA210 closeout). Verified at
   `pyproject.toml.j2:31`: generated projects emit `poetry-core>=2.0,<3.0`, and the SA90 emission
   fixture pins the new `pyproject.toml` hashes in all three variants.
+- 2026-09-24 — re-run at `cdb6223f`: no prior ID was open and none is reopened; the SA209 and SA210
+  closures were re-checked at `services.py:4235` and `pyproject.toml.j2:31` and still hold. Watch
+  items carried (triggers not fired); two added (SA205 vintage, SA208 E001). New findings: 0.
