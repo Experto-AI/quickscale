@@ -158,9 +158,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Functionality.* Project-owned Django apps are detected, copied, registered, and URL-mounted
     without hand-patching QuickScale-owned settings; their migrations are regenerated against the
     current `AbstractListing`. Donor-added frontend dependencies merge, with conflicts reported.
-  - *Design system.* The `showcase_react` theme gains a project-owned design layer (tokens, Tailwind
-    preset, fonts, brand assets) that upgrades never overwrite, and the tool ports the donor's
-    design into it. The SA192 Django-rendered pages use the same tokens.
+  - *Design system.* The `showcase_react` theme gains a project-owned design layer: one folder
+    holding the tokens CSS, Tailwind preset, fonts, and brand assets. It is declared
+    never-overwritten in [generated_file_ownership.md](generated_file_ownership.md), and a test
+    proves an upgrade leaves it untouched. The tool ports the donor's design into it. The SA192
+    Django-rendered pages import the same tokens file.
   - *Handoff prompt.* The final phase writes `MIGRATION_PROMPT.md` into the recipient, generated
     from the report: what was migrated, every remaining item with paths, diffs, and the applicable
     rule, the hard constraints, and the exact done criteria. A coding assistant completes the
@@ -176,11 +178,20 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `listings` and `forms` ship a rewritten `0001_initial` that depends on `orgs` and a NOT NULL
   organization FK. Rehearse first: restore a production dump into a scratch PostgreSQL 18 and
   confirm the history inconsistency with `migrate --plan` against the recipient. The cutover
-  rebuilds a fresh database and reseeds the catalog through `bap-web`'s own seed command,
-  tenant-scoped to the site's organization under the restricted runtime role — not through the
-  privileged `migrate`/`createcachetable` exemption, and never under BYPASSRLS. Users are
+  rebuilds a fresh database. A new idempotent `orgs` command, `create_site_org <slug> <name>`,
+  creates the site's organization in the same privileged deploy step as `migrate`. The catalog is
+  then reseeded through `bap-web`'s own seed command, tenant-scoped to that organization under the
+  restricted runtime role — never under BYPASSRLS. Users are
   re-invited; form submissions and other transactional rows are not carried. Media is carried over
   separately and verified.
+
+  **Dependencies and ownership:** `bap-web-new` pins QuickScale as local path dependencies on the
+  `v89` checkout until a release is published, then repins before cutover. Billing stays
+  disabled. The gap ledger lives in
+  [beta-site-migration.md](../planning/beta-site-migration.md). An agent delivers everything up to
+  a deploy-ready recipient and a rehearsed cutover script. The maintainer supplies the production
+  dump, creates and archives the repositories, runs the Railway cutover, carries media, and
+  re-invites users.
 
   **Acceptance:**
   - A final iteration runs clean: no unclassified files, every ledger entry closed, and the handoff
@@ -191,20 +202,30 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - `bap-web-new` records the current QuickScale version in `quickscale.yml` and its lock, imports
     the SA206 facade, and hand-patches no QuickScale-owned contract. `.git`, `media/`, `.env`, and
     `poetry.lock` are not copied between trees.
-  - Automated parity, no manual QA: the donor's pytest and Vitest suites pass in the recipient, the
-    donor's Playwright e2e suite passes against both old and new, and screenshot diffs of home,
-    catalog, detail, and contact match.
+  - Automated parity, no manual QA: the donor's pytest and Vitest suites pass in the recipient.
+    The "old" side of every comparison is the live site, `https://buenosairesproperties.com` on
+    Railway; the donor is not deployed locally. The donor's Playwright e2e suite passes against
+    the live site and the local recipient, but only its read-only specs run against production;
+    specs that submit forms or write data run only against the recipient. Screenshot diffs of home,
+    catalog, detail, and contact differ by under 1% of pixels at desktop and mobile widths, with
+    animations off. The recipient is seeded to show the same listings as the live catalog, and
+    regions that show content the two sites don't share are masked, with each mask recorded in
+    the ledger. The live baseline screenshots are captured and kept before cutover, because the
+    cutover replaces that site. A donor test that asserts the v0.62 layout
+    (`tests/test_project_infrastructure.py`) or targets the live site (`e2e/forms.live.spec.ts`)
+    may be adapted or excluded only with a ledger entry saying why.
   - The carried `properties` models pass SA208's provider-ID system check. The FORCE-RLS table and
     policy counts equal a fresh project's with the same modules, and `check_tenant_isolation` passes.
   - `bap-web-new` becomes a new repository and redeploys through `deploy railway`; the old
-    repository is archived. If billing is enabled, the Stripe webhook endpoint is recreated at
-    `2026-06-24.dahlia`. The pre-cutover database is retained until the reseeded site is verified,
+    repository is archived. The pre-cutover database is retained until the reseeded site is verified,
     and the written rollback restores the previous deploy *and* that database.
   - No property-portal features (SA153) and no frontend stack change.
 
   **Surfaces:** `quickscale_devtools/.../beta_migration.py`, its tests and smoke gate; the migration
-  playbook and gap ledger; the `showcase_react` theme and generator (design layer); the `forms`
-  module for upstreamed customizations; the new `bap-web-new` repository and its reseed step.
+  playbook and gap ledger; the `showcase_react` theme, generator, and
+  `generated_file_ownership.md` (design layer); the `forms` module for upstreamed customizations;
+  the `orgs` `create_site_org` command (a Track 3 surface, through the serialized merge queue); the
+  new `bap-web-new` repository and its reseed step.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
