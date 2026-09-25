@@ -132,54 +132,80 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale with the fresh-first migration tool.**
 
-  Use `make beta-migrate-fresh` with `bap-web` as donor and a fresh scaffold generated with the same
-  slug as recipient, continuing manually only where the tool emits `pending_manual_actions`.
+  Two goals, delivered together: harden the fresh-first migration process into the standard way to
+  move a QuickScale project onto the current release, and use it to migrate `bap-web` into a new
+  repository at `/home/victor/code/bap-web-new`. `experto-ai-web` is out of scope.
 
-  **Context:** `bap-web` is the beta site behind the property portal. It already runs `listings`, `forms`, and a
-  project-owned `properties` app with concrete models, a catalog seed command, a public
-  `/api/properties/` endpoint, and React property pages. It was generated on an older QuickScale, so
-  building the portal on it first requires catching it up to the current release.
+  **Context:** `bap-web` is the beta site behind the property portal, generated 2026-03-05 on
+  v0.62.0 with the `showcase_react` theme and `auth`, `listings`, and `forms`. It carries a
+  project-owned `properties` app (models on `AbstractListing`, a catalog seed command, a public
+  `/api/properties/` endpoint), a heavily customized React design, and in-place edits under the
+  vendored `modules/forms`. Today `make beta-migrate-fresh` ports the router, pages, components,
+  and six package files, but silently drops design tokens, `components/ui`, template overrides,
+  project-owned Django apps and their migrations, `settings/base.py` changes, in-place module edits,
+  and donor-added frontend dependencies.
 
-  Every point where the tool stops safely becomes a playbook step or a deterministic tool fix.
+  **Iterative loop.** Each iteration regenerates the recipient from scratch with `quickscale plan`
+  and `quickscale apply` (same slug, `showcase_react`, the donor's modules), runs
+  `make beta-migrate-fresh` with `bap-web` as read-only donor, verifies, and triages every gap into
+  a gap ledger (tool fix, playbook step, project decision, or upstream to a module). Fixes land in
+  QuickScale and the loop restarts. The recipient is never hand-edited before the final iteration.
+  The ledger is the acceptance evidence.
 
-  Its data cannot move by backup and restore alone. The production database records `listings`
-  0001–0003, `forms` 0001–0003, and `auth` 0001–0002 as applied and has no `orgs`. Current
-  `listings` and `forms` ship only a rewritten `0001_initial` that depends on `orgs`, and
-  `AbstractListing` now carries a NOT NULL organization FK. Running current code on a restored copy
-  violates Django's migration-history consistency, and restore refuses it. The database is
-  rebuilt and reseeded instead: the catalog through `bap-web`'s own seed command, users by
-  re-invitation.
+  **Tool scope.** The tool migrates everything that can be done deterministically:
+  - *Classification.* Every donor file lands in exactly one class — generated-untouched,
+    generated-customized, project-owned, module-edited, or build artifact. An unclassified file is a
+    blocker, never a silent drop.
+  - *Functionality.* Project-owned Django apps are detected, copied, registered, and URL-mounted
+    without hand-patching QuickScale-owned settings; their migrations are regenerated against the
+    current `AbstractListing`. Donor-added frontend dependencies merge, with conflicts reported.
+  - *Design system.* The `showcase_react` theme gains a project-owned design layer (tokens, Tailwind
+    preset, fonts, brand assets) that upgrades never overwrite, and the tool ports the donor's
+    design into it. The SA192 Django-rendered pages use the same tokens.
+  - *Handoff prompt.* The final phase writes `MIGRATION_PROMPT.md` into the recipient, generated
+    from the report: what was migrated, every remaining item with paths, diffs, and the applicable
+    rule, the hard constraints, and the exact done criteria. A coding assistant completes the
+    remainder from it. Work the assistant repeats every iteration is a tool-fix candidate, so the
+    prompt shrinks across iterations.
 
-  **Acceptance:** the migrated project records the current QuickScale version in `quickscale.yml`
-  and its lock, and passes its own test suite and local verification stack. Its settings import the
-  SA206 facade; no QuickScale-owned contract is hand-patched into the donor. The project-owned
-  `properties` app, its catalog seed, forms and contact customizations, content, and frontend pages
-  carry over and behave as before. Its migrations are regenerated against the current
-  `AbstractListing`. `.git`, `media/`, `.env`, and `poetry.lock` are not copied between the two
-  trees. Every manual step the tool did not automate is recorded in the migration report and fed
-  back into the playbook, or into a tool fix when it is deterministic. The carried `properties`
-  models pass SA208's provider-ID system check, which otherwise stops `start.sh` at `migrate`.
-  If billing is enabled, the Stripe webhook endpoint is recreated at `2026-06-24.dahlia`.
+  **`forms` carry-over.** Every in-place `modules/forms` customization carries over, either
+  upstreamed into the `forms` module when generic or re-expressed as project-owned configuration or
+  extension. The recipient has no edits under vendored module source.
 
-  The production data is reseeded, not carried. Rehearse first: restore a production dump into a
-  scratch PostgreSQL 18 and confirm the expected history inconsistency with `migrate --plan`
-  against the recipient; that result is the evidence the old database cannot run current code.
-  The cutover rebuilds a fresh database on current code and reseeds the catalog through
-  `bap-web`'s own seed command, tenant-scoped to the site's organization under the restricted
-  runtime role — not through the privileged `migrate`/`createcachetable` exemption, and never
-  under BYPASSRLS; users are re-invited, and form submissions and other transactional rows are
-  not carried.
-  The pre-cutover database is retained until the reseeded site is verified. The FORCE-RLS table
-  and policy counts equal those of a fresh project with the same modules, and
-  `check_tenant_isolation` passes. Media is carried over separately and verified.
+  **Data.** It cannot move by backup and restore. The production database records `listings`
+  0001–0003, `forms` 0001–0003, and `auth` 0001–0002 as applied and has no `orgs`, while current
+  `listings` and `forms` ship a rewritten `0001_initial` that depends on `orgs` and a NOT NULL
+  organization FK. Rehearse first: restore a production dump into a scratch PostgreSQL 18 and
+  confirm the history inconsistency with `migrate --plan` against the recipient. The cutover
+  rebuilds a fresh database and reseeds the catalog through `bap-web`'s own seed command,
+  tenant-scoped to the site's organization under the restricted runtime role — not through the
+  privileged `migrate`/`createcachetable` exemption, and never under BYPASSRLS. Users are
+  re-invited; form submissions and other transactional rows are not carried. Media is carried over
+  separately and verified.
 
-  The migrated project replaces the old repository and redeploys through `deploy railway`. The
-  written rollback restores the previous deploy *and* the retained pre-cutover database, not code
-  alone. No property-portal features, frontend stack change, or module-source edits.
+  **Acceptance:**
+  - A final iteration runs clean: no unclassified files, every ledger entry closed, and the handoff
+    prompt's remaining items completed and recorded.
+  - Tool tests cover each ledger fix with a fixture donor holding a project-owned app, customized
+    tokens, and a module edit; the handoff prompt has a snapshot test; the beta-migration smoke gate
+    passes; the playbook points at the tool instead of duplicating it as shell snippets.
+  - `bap-web-new` records the current QuickScale version in `quickscale.yml` and its lock, imports
+    the SA206 facade, and hand-patches no QuickScale-owned contract. `.git`, `media/`, `.env`, and
+    `poetry.lock` are not copied between trees.
+  - Automated parity, no manual QA: the donor's pytest and Vitest suites pass in the recipient, the
+    donor's Playwright e2e suite passes against both old and new, and screenshot diffs of home,
+    catalog, detail, and contact match.
+  - The carried `properties` models pass SA208's provider-ID system check. The FORCE-RLS table and
+    policy counts equal a fresh project's with the same modules, and `check_tenant_isolation` passes.
+  - `bap-web-new` becomes a new repository and redeploys through `deploy railway`; the old
+    repository is archived. If billing is enabled, the Stripe webhook endpoint is recreated at
+    `2026-06-24.dahlia`. The pre-cutover database is retained until the reseeded site is verified,
+    and the written rollback restores the previous deploy *and* that database.
+  - No property-portal features (SA153) and no frontend stack change.
 
-  **Surfaces:** the `bap-web` repository and its reseed step; the migration playbook, including its
-  data and rollback steps; and, for deterministic gaps found,
-  `quickscale_devtools/.../beta_migration.py` and its tests.
+  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, its tests and smoke gate; the migration
+  playbook and gap ledger; the `showcase_react` theme and generator (design layer); the `forms`
+  module for upstreamed customizations; the new `bap-web-new` repository and its reseed step.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
