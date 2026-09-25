@@ -133,6 +133,12 @@ environment-variable options, the static notifications block left the template, 
 fresh-generation `.env.example` bytes for every variant, so the hash row below is the current
 emission; the other rows are the SA195/SA192 delivery's.
 
+The frontend-startup resilience change followed later on the same line: the generated
+`docker-compose.yml` frontend service now passes `--config.fetch-retries=5` to its `pnpm install`,
+so a single stalled registry request does not abort the dev install and leave `quickscale up` with
+a failed-to-start frontend. That changes the fresh-generation `docker-compose.yml` bytes for every
+variant, so its hash row is also the current emission.
+
 The exact-emission hashes below apply identically to `react_default`, `react_empty`, and
 `react_selected`; all paths not listed remain unchanged in those manifests.
 
@@ -140,7 +146,7 @@ The exact-emission hashes below apply identically to `react_default`, `react_emp
 |---|---|
 | `.env.example` | `e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265` |
 | `README.md` | `1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387` |
-| `docker-compose.yml` | `d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3` |
+| `docker-compose.yml` | `147671e902ac3123931e8b9be1ccff80247db08f8a83211ed904a81519329148` |
 | `frontend/src/test/viteAssetRouting.test.ts` | `c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016` |
 | `frontend/vite.config.ts` | `f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e` |
 | `templates/base.html` | `dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668` |

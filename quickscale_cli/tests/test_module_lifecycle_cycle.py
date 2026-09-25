@@ -1492,7 +1492,11 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
                 return_value=True,
             ),
         ):
-            result = runner.invoke(update, ["--no-preview"], catch_exceptions=False)
+            result = runner.invoke(
+                update,
+                ["--no-preview", "--acknowledge-contract-vintage"],
+                catch_exceptions=False,
+            )
     finally:
         os.chdir(original_cwd)
 

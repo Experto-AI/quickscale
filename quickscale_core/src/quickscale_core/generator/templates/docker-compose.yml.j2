@@ -41,7 +41,12 @@ services:
       - QUICKSCALE_FRONTEND_ORIGIN=${QUICKSCALE_FRONTEND_ORIGIN:-}
     # Use corepack without `enable` because this container runs as non-root.
     # `corepack enable` writes to /usr/local/bin and fails with EACCES.
-    command: sh -c "corepack pnpm install --no-frozen-lockfile && corepack pnpm run build && corepack pnpm run dev --host 0.0.0.0"
+    #
+    # Raise pnpm's fetch retry budget for the same network resilience the
+    # Dockerfile's frontend-builder stage documents: a single stalled registry
+    # request otherwise aborts the entire install, leaving `quickscale up`
+    # with a failed-to-start frontend on constrained links.
+    command: sh -c "corepack pnpm install --no-frozen-lockfile --config.fetch-retries=5 && corepack pnpm run build && corepack pnpm run dev --host 0.0.0.0"
     volumes:
       - .:/app
     ports:

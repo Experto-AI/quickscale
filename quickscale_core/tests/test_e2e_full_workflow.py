@@ -307,11 +307,28 @@ class TestGeneratedProjectDependencyInstallSmoke:
             sync_project_module_dependencies,
         )
         from quickscale_core.generator import ProjectGenerator
+        from test_generated_project_runtime import _pin_project_core_dependency
 
         project_name = "forms_install_smoke"
         project_path = tmp_path / project_name
 
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+        # The checkout's core version is unpublished until release, so the
+        # bounded lockstep pin cannot resolve from PyPI.  Pin it to the local
+        # wheel (the development-install path) before refreshing the lock.
+        _pin_project_core_dependency(project_path)
+        lock_result = subprocess.run(
+            ["poetry", "lock"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=build_isolated_poetry_env(),
+        )
+        assert lock_result.returncode == 0, (
+            "Poetry lock failed after pinning core to the local wheel: "
+            f"{lock_result.stderr}"
+        )
         assert (project_path / "poetry.lock").exists()
 
         embedded_module_path = project_path / "modules" / "forms"
@@ -380,7 +397,6 @@ class TestGeneratedProjectDependencyInstallSmoke:
         project_path = tmp_path / project_name
 
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
-        assert (project_path / "poetry.lock").exists()
 
         initial_pyproject = tomllib.loads((project_path / "pyproject.toml").read_text())
         initial_dependencies = initial_pyproject["tool"]["poetry"]["dependencies"]
@@ -490,6 +506,10 @@ class TestGeneratedProjectDependencyInstallSmoke:
             )
 
         assert _run_poetry_lock(project_path) is True
+        # The lock assertion belongs here, after the local-artifact rewrite
+        # above: the lockstep core pin is unpublished until release, so
+        # generation alone cannot produce a resolvable lock.
+        assert (project_path / "poetry.lock").exists()
         assert _run_poetry_install(project_path) is True
 
         verification_code = (
@@ -2293,11 +2313,15 @@ class TestDockerIntegration:
     def test_sa142_backend_image_reuse_and_warm_build(self, tmp_path, docker_available):
         """Measure one cold/no-cache start against two plain warm starts."""
         from quickscale_core.generator import ProjectGenerator
+        from test_generated_project_runtime import _pin_project_core_dependency
 
         helper = TestFullE2EWorkflow()
         project_name = "sa142_warm_build"
         project_path = tmp_path / project_name
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+        # The checkout's core version is unpublished, so the lockstep pin must
+        # resolve from the local wheel before the image build can install it.
+        _pin_project_core_dependency(project_path)
 
         scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "sa142-warm-build")
         port, frontend_port = _e2e_host_ports(helper._find_free_port)
@@ -2354,11 +2378,15 @@ class TestDockerIntegration:
     def test_sa142_no_cleanup_diagnostic_probe(self, tmp_path, docker_available):
         """Retain labelled resources and readable logs only in no-cleanup mode."""
         from quickscale_core.generator import ProjectGenerator
+        from test_generated_project_runtime import _pin_project_core_dependency
 
         helper = TestFullE2EWorkflow()
         project_name = "sa142_no_cleanup_probe"
         project_path = tmp_path / project_name
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+        # The checkout's core version is unpublished, so the lockstep pin must
+        # resolve from the local wheel before the image build can install it.
+        _pin_project_core_dependency(project_path)
         scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "sa142-no-cleanup")
         port, frontend_port = _e2e_host_ports(helper._find_free_port)
         env = {

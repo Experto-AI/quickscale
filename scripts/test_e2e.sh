@@ -287,10 +287,15 @@ memory_preflight_guard
 # means a wedged/stuck lane (see the heartbeat's quiet-time reporting), which
 # is an unrelated condition.  Conflating the two has already misdirected one
 # diagnosis.
-#   QS_E2E_INTEGRATION_REF  ref to measure out-of-dateness against (default v87)
+#   QS_E2E_INTEGRATION_REF  ref to measure out-of-dateness against (default: the
+#                           highest local vN release branch)
 print_provenance() {
     local head_sha dirty="" behind="" integration_ref
-    integration_ref="${QS_E2E_INTEGRATION_REF:-v87}"
+    integration_ref="${QS_E2E_INTEGRATION_REF:-}"
+    if [ -z "$integration_ref" ]; then
+        integration_ref="$(git -C "$PROJECT_ROOT" for-each-ref --format='%(refname:short)' 'refs/heads/v[0-9]*' 2>/dev/null \
+            | grep -E '^v[0-9]+$' | sort -V | tail -n 1)"
+    fi
 
     if ! git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
         echo "Checkout: $PROJECT_ROOT (not a git checkout)"

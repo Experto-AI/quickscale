@@ -155,7 +155,9 @@ class TestReactThemeUserWorkflow:
         """Create CLI runner for tests"""
         return CliRunner()
 
-    def test_plan_apply_react_theme_workflow(self, tmp_path, runner):
+    def test_plan_apply_react_theme_workflow(
+        self, tmp_path, runner, local_core_wheelhouse_env
+    ):
         """
         Test complete user workflow: plan → apply with React theme.
 
@@ -754,7 +756,9 @@ class TestReactThemeDockerIntegration:
         if result.returncode != 0:
             pytest.skip("Docker is not running")
 
-    def test_dockerfile_builds_with_react(self, tmp_path, docker_available):
+    def test_dockerfile_builds_with_react(
+        self, tmp_path, docker_available, pin_generated_project_core
+    ):
         """
         Verify Dockerfile builds successfully with React frontend and ships
         PostgreSQL client tooling in the built image.
@@ -774,6 +778,11 @@ class TestReactThemeDockerIntegration:
         image_ref = f"quickscale-react-e2e:{resource_scope}"
 
         generator.generate(project_name, project_path)
+
+        # The development checkout's core version is unpublished, so the
+        # generated lockstep pin must resolve from the local wheel before the
+        # Docker build can install project dependencies.
+        pin_generated_project_core(project_path)
 
         repo_root = Path(__file__).resolve().parents[2]
         with _scoped_react_docker_image(repo_root, resource_scope):
@@ -917,7 +926,9 @@ class TestReactThemeVerboseDockerOption:
         assert result.exit_code == 0
         assert "--verbose-docker" in result.output
 
-    def test_apply_accepts_verbose_docker_flag(self, tmp_path, runner):
+    def test_apply_accepts_verbose_docker_flag(
+        self, tmp_path, runner, local_core_wheelhouse_env
+    ):
         """Verify apply command accepts --verbose-docker flag"""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             # Create plan first with inputs:

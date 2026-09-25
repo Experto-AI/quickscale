@@ -1,6 +1,8 @@
 """Pytest configuration for quickscale_cli tests."""
 
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -29,6 +31,88 @@ for _module_entry in sorted((_REPO_ROOT / "quickscale_modules").iterdir()):
         _src_str = str(_module_src.resolve())
         if _src_str not in sys.path:
             sys.path.insert(0, _src_str)
+
+
+@pytest.fixture(scope="session")
+def local_core_wheelhouse(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Return a wheelhouse holding the repository's own quickscale-core wheel.
+
+    The repository version is unpublished while it is still in development, so a
+    generated project's bounded ``quickscale-core`` lockstep pin cannot resolve
+    from PyPI.  E2E tests must exercise the same local-artifact path a
+    development install uses: ``make install`` stages ``<venv>/quickscale_wheels``
+    (read by ``quickscale_cli.utils.module_dependency_sync``) and every generated
+    project resolves its own unpublished core from those wheels.  The wheel is
+    built once per session from the source under test.
+    """
+    from quickscale_core.utils.poetry_env import build_isolated_poetry_env
+
+    version = (_REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    source_copy = tmp_path_factory.mktemp("quickscale-core-wheel") / "quickscale_core"
+    shutil.copytree(
+        _REPO_ROOT / "quickscale_core",
+        source_copy,
+        ignore=shutil.ignore_patterns(
+            ".venv", "dist", "__pycache__", ".pytest_cache", "*.pyc", "*.pyo"
+        ),
+    )
+    build_result = subprocess.run(
+        ["poetry", "build", "--format", "wheel"],
+        cwd=source_copy,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env=build_isolated_poetry_env(),
+    )
+    assert build_result.returncode == 0, (
+        "Local quickscale-core wheel build failed:\n"
+        f"stdout: {build_result.stdout}\nstderr: {build_result.stderr}"
+    )
+    wheelhouse = source_copy / "dist"
+    wheels = sorted(wheelhouse.glob("quickscale_core-*.whl"))
+    assert len(wheels) == 1, (
+        "Expected exactly one local quickscale-core wheel, got "
+        f"{[wheel.name for wheel in wheels]}"
+    )
+    assert wheels[0].name.startswith(f"quickscale_core-{version}-"), (
+        f"Local core wheel does not match VERSION {version}: {wheels[0].name}"
+    )
+    return wheelhouse
+
+
+@pytest.fixture
+def local_core_wheelhouse_env(
+    local_core_wheelhouse: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Point the CLI's wheelhouse resolution at the local core wheel.
+
+    Apply-side dependency sync reads ``QUICKSCALE_LOCAL_WHEELHOUSE`` and pins
+    the generated project to the matching wheel, exactly as a locally installed
+    CLI does for an unpublished development version.
+    """
+    monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(local_core_wheelhouse))
+    return local_core_wheelhouse
+
+
+@pytest.fixture
+def pin_generated_project_core(local_core_wheelhouse: Path):
+    """Return a callable that pins a generated project to the local core wheel.
+
+    Project generation runs before any CLI dependency sync, so tests that build
+    or install a generated project directly must apply the same local-artifact
+    pin themselves.
+    """
+    from quickscale_cli.utils.module_dependency_sync import (
+        sync_project_core_dependency,
+    )
+
+    def _pin(project_path: Path) -> None:
+        assert sync_project_core_dependency(project_path, local_core_wheelhouse), (
+            "the generated project should declare the bounded quickscale-core "
+            "lockstep pin that the local wheel replaces"
+        )
+
+    return _pin
 
 
 @pytest.fixture(autouse=True)

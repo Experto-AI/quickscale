@@ -43,7 +43,8 @@
       "sa193": "Regenerated 2026-09-23 — the static notifications managed block left `.env.example.j2`. `quickscale apply` now renders one managed block per enabled credential-bearing module from that module's declared `*_env_var` options (notifications, analytics, billing, storage, backups); a fresh generation carries no module-managed block until apply syncs it.",
       "sa200": "Regenerated 2026-09-23 — generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py.",
       "sa206": "Regenerated 2026-09-23 — the generated settings import the executable runtime contracts (middleware, proxy-trust derivation, privileged-command/runtime-database selection, SECRET_KEY guard) from the versioned quickscale_core.runtime settings facade; pyproject.toml declares the bounded quickscale-core lockstep pin (SA206). Hashes updated per variant: pyproject.toml, testproject/settings/base.py, testproject/settings/production.py.",
-      "sa210": "Regenerated 2026-09-24 — pyproject.toml.j2 emits a bounded poetry-core build requirement (poetry-core>=2.0,<3.0) into every generated project (SA210). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative."
+      "sa210": "Regenerated 2026-09-24 — pyproject.toml.j2 emits a bounded poetry-core build requirement (poetry-core>=2.0,<3.0) into every generated project (SA210). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative.",
+      "compose-frontend-install-retries": "Regenerated 2026-09-25 — docker-compose.yml frontend startup raises pnpm's fetch retry budget (--config.fetch-retries=5) so a single stalled registry request does not abort the dev install and leave `quickscale up` with a failed-to-start frontend. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -105,7 +106,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3"
+      "sha256": "147671e902ac3123931e8b9be1ccff80247db08f8a83211ed904a81519329148"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -575,7 +576,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3"
+      "sha256": "147671e902ac3123931e8b9be1ccff80247db08f8a83211ed904a81519329148"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -1045,7 +1046,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "d5aa48c237cb4148e87a6fa0bfc8e0395160be18c4f0b9da1d512d58dc24dfc3"
+      "sha256": "147671e902ac3123931e8b9be1ccff80247db08f8a83211ed904a81519329148"
     },
     "frontend/.prettierignore": {
       "mode": "664",

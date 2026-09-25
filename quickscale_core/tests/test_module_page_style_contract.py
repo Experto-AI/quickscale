@@ -283,6 +283,7 @@ def test_generated_debug_workflows_keep_vite_available(
     readme = (generated_project_path / "README.md").read_text()
 
     assert "corepack pnpm run build && corepack pnpm run dev --host 0.0.0.0" in compose
+    assert "--config.fetch-retries=5" in compose
     assert '"${QUICKSCALE_FRONTEND_HOST_PORT:-5173}:5173"' in compose
     assert (
         compose.count(

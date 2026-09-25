@@ -562,20 +562,38 @@ class TestDevelopmentCommandsE2E:
 
     @staticmethod
     def _wait_for_http_text(
-        url: str, timeout: float = 30.0, interval: float = 1.0
+        url: str,
+        timeout: float = 30.0,
+        interval: float = 1.0,
+        expected: str | None = None,
     ) -> str:
-        """Return one generated-project response after a bounded readiness poll."""
+        """Return one generated-project response after a bounded readiness poll.
+
+        When ``expected`` is given, a 200 response is not enough on its own:
+        a resource whose bytes depend on a just-written file (Vite's watched
+        stylesheet) can still be served from the previous compilation, so keep
+        polling until the body contains ``expected``.  Without it the helper
+        keeps its original readiness-only behavior.
+        """
         elapsed = 0.0
         last_error: Exception | None = None
+        last_body = ""
         while elapsed < timeout:
             try:
                 with urllib.request.urlopen(url, timeout=5.0) as response:
                     assert response.status == 200
-                    return response.read().decode()
+                    body = response.read().decode()
+                    if expected is None or expected in body:
+                        return body
+                    last_body = body
             except (AssertionError, OSError, urllib.error.URLError) as error:
                 last_error = error
             time.sleep(interval)
             elapsed += interval
+        if expected is not None and last_body:
+            raise RuntimeError(
+                f"{url} did not contain {expected!r} within {timeout:g}s"
+            )
         raise RuntimeError(f"{url} did not return HTTP 200: {last_error}")
 
     @staticmethod
@@ -655,13 +673,19 @@ class TestDevelopmentCommandsE2E:
             raise RuntimeError(f"labelled pre-test cleanup failed: {error}") from error
 
     @pytest.fixture
-    def test_project(self, tmp_path):
+    def test_project(self, tmp_path, pin_generated_project_core):
         """Generate a test project and return its path."""
         generator = ProjectGenerator(theme="showcase_react")
         project_name = _stable_test_project_slug()
         project_path = tmp_path / project_name
 
         generator.generate(project_name, project_path)
+
+        # The development checkout's core version is unpublished, so the
+        # generated lockstep pin cannot resolve from PyPI.  Pin it to the local
+        # wheel the way a development install does, or `up` cannot build the
+        # project's image.
+        pin_generated_project_core(project_path)
 
         # Verify project was created
         assert (project_path / "manage.py").exists()
@@ -788,7 +812,9 @@ class TestDevelopmentCommandsE2E:
             token_source.write_text(
                 f"{token_source.read_text()}\n:root {{ {token_probe} }}\n"
             )
-            assert token_probe in self._wait_for_http_text(live_token_url)
+            assert token_probe in self._wait_for_http_text(
+                live_token_url, expected=token_probe
+            )
 
             rendered_shell = runner.invoke(
                 cli,
@@ -847,7 +873,7 @@ class TestDevelopmentCommandsE2E:
             os.chdir(original_cwd)
 
     def test_apply_with_docker_runs_migrations_in_container(
-        self, tmp_path, ensure_docker_running
+        self, tmp_path, ensure_docker_running, local_core_wheelhouse_env
     ):
         """Apply with Docker auto-start should run migrations via backend container."""
         runner = CliRunner()
