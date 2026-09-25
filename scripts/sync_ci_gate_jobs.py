@@ -394,6 +394,35 @@ def _locate_hosted_jobs(
     return located
 
 
+_PINNED_REF_RE = re.compile(r"[0-9a-f]{40}")
+
+
+def _pins_same_action(actual: Any, expected_ref: str) -> bool:
+    """
+    Return True when *actual* pins the same action as *expected_ref* to a SHA.
+
+    Pre-edit projection tolerates a stale commit SHA — the catalog refresh is
+    projected by ``--write`` — but not a different action, a missing pin, or a
+    mutable ref.
+    """
+    if not isinstance(actual, str) or "@" not in actual:
+        return False
+    actual_repo, _, actual_ref = actual.rpartition("@")
+    expected_repo, _, _ = expected_ref.rpartition("@")
+    return actual_repo == expected_repo and _PINNED_REF_RE.fullmatch(actual_ref) is not None
+
+
+def _step_matches(actual: Any, expected: dict[str, Any], *, strict: bool) -> bool:
+    """Compare one job step; outside strict mode a stale action ref is tolerated."""
+    if not isinstance(actual, dict):
+        return False
+    if strict:
+        return actual == expected
+    return {key: value for key, value in actual.items() if key != "uses"} == {
+        key: value for key, value in expected.items() if key != "uses"
+    }
+
+
 def _validate_workflow_projection(
     text: str, gates: list[dict[str, Any]], *, strict: bool = True
 ) -> dict[str, Any]:
@@ -404,7 +433,10 @@ def _validate_workflow_projection(
     IDs, ``needs`` lists, and check commands.  ``strict=False`` (pre-edit)
     locates the hosted jobs by their static catalog display names so a registry
     ``ci_job`` (F-005) or Make-target edit can be projected by ``--write``;
-    static display and step metadata is validated identically in both modes.
+    static display and step metadata is validated identically in both modes
+    except that a stale action pin is tolerated pre-edit, exactly like a stale
+    ``needs`` list or check command, so ``--write`` can project a catalog
+    refresh into the marked region.
     """
     workflow = _parse_workflow(text, "ci.yml")
     jobs = workflow.get("jobs")
@@ -440,37 +472,54 @@ def _validate_workflow_projection(
         steps = _job_steps(job, job_id)
         if len(steps) != 5:
             raise GeneratorError(f"ci.yml: jobs.{job_id} must retain exactly five steps")
-        expected_uses = (
+        expected_refs = (
             CHECKOUT_REF,
             SETUP_PYTHON_REF,
             INSTALL_POETRY_REF,
         )
-        actual_uses = tuple(step.get("uses") for step in steps if "uses" in step)
-        if actual_uses != expected_uses:
-            raise GeneratorError(f"ci.yml: jobs.{job_id} action versions/ordering drifted")
+        if strict:
+            actual_uses = tuple(step.get("uses") for step in steps if "uses" in step)
+            if actual_uses != expected_refs:
+                raise GeneratorError(f"ci.yml: jobs.{job_id} action versions/ordering drifted")
+        else:
+            # Pre-edit, an action pin one release behind the catalog is projected
+            # by --write rather than rejected; the action identity and its pinned
+            # shape must still hold, and post-generation validation requires the
+            # catalog's exact refs.
+            for step, expected_ref in zip(steps, expected_refs):
+                if not _pins_same_action(step.get("uses"), expected_ref):
+                    raise GeneratorError(f"ci.yml: jobs.{job_id} action versions/ordering drifted")
         expected_checkout: dict[str, Any] = {
             "name": "Checkout code",
             "uses": CHECKOUT_REF,
         }
         if spec.full_history:
             expected_checkout["with"] = {"fetch-depth": "0"}
-        if steps[0] != expected_checkout:
+        if not _step_matches(steps[0], expected_checkout, strict=strict):
             raise GeneratorError(f"ci.yml: jobs.{job_id} checkout step drifted")
-        if steps[1] != {
-            "name": "Set up Python 3.14",
-            "uses": SETUP_PYTHON_REF,
-            "with": {"python-version": "3.14"},
-        }:
-            raise GeneratorError(f"ci.yml: jobs.{job_id} Python setup step drifted")
-        if steps[2] != {
-            "name": "Install Poetry",
-            "uses": INSTALL_POETRY_REF,
-            "with": {
-                "version": POETRY_VERSION,
-                "virtualenvs-create": "true",
-                "virtualenvs-in-project": "true",
+        if not _step_matches(
+            steps[1],
+            {
+                "name": "Set up Python 3.14",
+                "uses": SETUP_PYTHON_REF,
+                "with": {"python-version": "3.14"},
             },
-        }:
+            strict=strict,
+        ):
+            raise GeneratorError(f"ci.yml: jobs.{job_id} Python setup step drifted")
+        if not _step_matches(
+            steps[2],
+            {
+                "name": "Install Poetry",
+                "uses": INSTALL_POETRY_REF,
+                "with": {
+                    "version": POETRY_VERSION,
+                    "virtualenvs-create": "true",
+                    "virtualenvs-in-project": "true",
+                },
+            },
+            strict=strict,
+        ):
             raise GeneratorError(f"ci.yml: jobs.{job_id} Poetry setup step drifted")
         if steps[3] != {"name": "Install dependencies", "run": "poetry install --with dev\n"}:
             raise GeneratorError(f"ci.yml: jobs.{job_id} dependency step drifted")

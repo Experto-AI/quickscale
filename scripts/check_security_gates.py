@@ -57,6 +57,15 @@ BANDIT_VERSION = "1.9.4"
 LOCK_NAME = "poetry.lock"
 SUPPRESSIONS_PATH = ROOT / "scripts" / "security_suppressions.json"
 PROBES_PATH = ROOT / "scripts" / "security_probe_cases.json"
+# The generated Dockerfile only; the generated project's other config files are
+# outside this gate's surface.
+GENERATED_PROJECT_SLUG = "generated-dockerfile-probe"
+# "High-severity findings" means high and above.
+MISCONFIG_SEVERITIES = ("HIGH", "CRITICAL")
+# A deliberately root-user Dockerfile: Trivy's dockerfile checks flag the last
+# USER as root at high severity, so the negative probe proves the
+# misconfiguration scan fails a known-bad file.
+BAD_DOCKERFILE_PROBE = "FROM ubuntu:latest\nUSER root\n"
 COMMAND_TIMEOUT = 180.0
 
 SOURCE_ROOTS = (
@@ -391,6 +400,122 @@ def _trivy_scan(
     }
 
 
+def _generated_dockerfile(destination: Path) -> Path:
+    """
+    Render one fresh generated project and return its Dockerfile path.
+
+    The misconfiguration scan judges the artifact a generated project ships,
+    not the Jinja source: rendering through the generator keeps the scanned
+    file on the generator's own context and emission mapping.
+    """
+    try:
+        from quickscale_core.generator import ProjectGenerator
+    except ImportError as exc:
+        raise GateError(f"quickscale_core is not importable: {exc}") from exc
+    previous_skip = os.environ.get("QS_SKIP_POETRY_LOCK")
+    os.environ["QS_SKIP_POETRY_LOCK"] = "1"
+    try:
+        project = destination / GENERATED_PROJECT_SLUG
+        ProjectGenerator(theme="showcase_react").generate(GENERATED_PROJECT_SLUG, project)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise GateError(f"could not generate the Dockerfile fixture: {exc}") from exc
+    finally:
+        if previous_skip is None:
+            os.environ.pop("QS_SKIP_POETRY_LOCK", None)
+        else:
+            os.environ["QS_SKIP_POETRY_LOCK"] = previous_skip
+    dockerfile = project / "Dockerfile"
+    if not dockerfile.is_file():
+        raise GateError(f"generated project did not emit a Dockerfile: {dockerfile}")
+    return dockerfile
+
+
+def _misconfig_command(trivy: Path, dockerfile: Path) -> list[str]:
+    """Return the pinned Trivy misconfiguration command for one Dockerfile."""
+    return [
+        str(trivy),
+        "config",
+        "--misconfig-scanners",
+        "dockerfile",
+        # Embedded checks keep the scan deterministic: the gate must not
+        # drift with a downloaded checks bundle.
+        "--skip-check-update",
+        "--severity",
+        ",".join(MISCONFIG_SEVERITIES),
+        "--format",
+        "json",
+        "--exit-code",
+        "1",
+        str(dockerfile),
+    ]
+
+
+def _trivy_misconfig_scan(
+    trivy: Path, dockerfile: Path
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Scan one generated Dockerfile and return blocking findings plus evidence."""
+    result = run_command(_misconfig_command(trivy, dockerfile))
+    if result.returncode not in (0, 1):
+        raise GateError(
+            "Trivy misconfiguration scan infrastructure failure: exit "
+            f"{result.returncode}: {result.stderr.strip()}"
+        )
+    report = strict_json(result.stdout, source="Trivy misconfiguration scan")
+    if not isinstance(report, dict) or report.get("SchemaVersion") != 2:
+        raise GateError("unexpected Trivy misconfiguration JSON schema")
+    metadata = report.get("Trivy")
+    if not isinstance(metadata, dict) or metadata.get("Version") != TRIVY_VERSION:
+        raise GateError("Trivy misconfiguration JSON version mismatch")
+    artifact = report.get("ArtifactName")
+    if not isinstance(artifact, str) or Path(artifact).resolve() != dockerfile.resolve():
+        raise GateError(f"Trivy misconfiguration scan read the wrong artifact: {artifact!r}")
+    results = report.get("Results")
+    if (
+        not isinstance(results, list)
+        or not results
+        or any(not isinstance(item, dict) for item in results)
+    ):
+        raise GateError("Trivy misconfiguration report contains no valid results")
+    evaluated = 0
+    findings: list[dict[str, Any]] = []
+    for item in results:
+        summary = item.get("MisconfSummary")
+        if not isinstance(summary, dict):
+            raise GateError("Trivy misconfiguration report has no check summary")
+        for key in ("Successes", "Failures"):
+            count = summary.get(key)
+            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                raise GateError(f"Trivy misconfiguration summary has an invalid {key}")
+            evaluated += count
+        entries = item.get("Misconfigurations") or []
+        if not isinstance(entries, list) or any(not isinstance(entry, dict) for entry in entries):
+            raise GateError("Trivy misconfiguration report has invalid entries")
+        for entry in entries:
+            severity = entry.get("Severity")
+            if entry.get("Status") != "FAIL" or severity not in MISCONFIG_SEVERITIES:
+                continue
+            findings.append(
+                {
+                    "scanner": "trivy",
+                    "project": "generated-dockerfile",
+                    "target": Path(str(item.get("Target", dockerfile.name))).name,
+                    "finding_id": str(entry.get("ID", "")),
+                    "severity": str(severity),
+                    "title": str(entry.get("Title", "")),
+                }
+            )
+    if evaluated <= 0:
+        raise GateError("Trivy misconfiguration scan evaluated no checks")
+    if (result.returncode == 1) != bool(findings):
+        raise GateError("Trivy misconfiguration exit status disagrees with its report")
+    return findings, {
+        "project": "generated-dockerfile",
+        "target": str(dockerfile),
+        "checks_evaluated": evaluated,
+        "blocking_findings": len(findings),
+    }
+
+
 def _bandit_project(path: Path) -> str:
     relative = path.relative_to(ROOT)
     return relative.parts[0] if relative.parts else "root"
@@ -611,8 +736,13 @@ def _trivy_finding(item: dict[str, Any], project: str) -> dict[str, Any]:
     }
 
 
-def dependency_gate() -> int:
-    trivy = acquire_trivy()
+def _run_dependency_gate(trivy: Path, dockerfile: Path) -> int:
+    """
+    Run the dependency gate against one acquired Trivy and one Dockerfile.
+
+    Split from :func:`dependency_gate` so the negative-probe control can drive
+    the same adjudication with a known-bad Dockerfile.
+    """
     findings: list[dict[str, Any]] = []
     evidence: list[dict[str, Any]] = []
     # The root lock is the only committed lockfile; it resolves every package
@@ -622,14 +752,21 @@ def dependency_gate() -> int:
         findings.extend(_trivy_finding(item, project) for item in project_findings)
         evidence.append(scan_evidence)
     unsuppressed, suppressed = _adjudicate(findings, executed_scanners={"trivy"})
-    if unsuppressed:
-        raise FindingsError(json.dumps({"unsuppressed": unsuppressed}, sort_keys=True))
+    misconfigurations, misconfiguration_evidence = _trivy_misconfig_scan(trivy, dockerfile)
+    if unsuppressed or misconfigurations:
+        raise FindingsError(
+            json.dumps(
+                {"unsuppressed": unsuppressed, "misconfigurations": misconfigurations},
+                sort_keys=True,
+            )
+        )
     print(
         json.dumps(
             {
                 "gate": "dependency",
                 "trivy_version": TRIVY_VERSION,
                 "scans": evidence,
+                "misconfiguration_scan": misconfiguration_evidence,
                 "suppressed_findings": len(suppressed),
                 "unsuppressed_findings": 0,
             },
@@ -637,6 +774,11 @@ def dependency_gate() -> int:
         )
     )
     return 0
+
+
+def dependency_gate() -> int:
+    dockerfile = _generated_dockerfile(_new_temp_dir("quickscale-generated-dockerfile-"))
+    return _run_dependency_gate(acquire_trivy(), dockerfile)
 
 
 def static_gate() -> int:
@@ -691,18 +833,31 @@ def negative_probes() -> int:
     if not isinstance(probes, dict) or probes.get("schema_version") != 1:
         raise GateError("invalid security probe case schema")
     trivy_probe = probes.get("trivy")
+    trivy_config_probe = probes.get("trivy_config")
     bandit_probe = probes.get("bandit")
-    if not isinstance(trivy_probe, dict) or not isinstance(bandit_probe, dict):
-        raise GateError("security probe cases must contain Trivy and Bandit records")
+    if (
+        not isinstance(trivy_probe, dict)
+        or not isinstance(trivy_config_probe, dict)
+        or not isinstance(bandit_probe, dict)
+    ):
+        raise GateError("security probe cases must contain Trivy, Trivy-config, and Bandit records")
     required_trivy = {"scanner_version", "package", "version", "advisory"}
+    required_trivy_config = {"scanner_version", "check_id", "severity"}
     required_bandit = {"version", "test_id", "line"}
-    if not required_trivy <= set(trivy_probe) or not required_bandit <= set(bandit_probe):
+    if (
+        not required_trivy <= set(trivy_probe)
+        or not required_trivy_config <= set(trivy_config_probe)
+        or not required_bandit <= set(bandit_probe)
+    ):
         raise GateError("security probe cases omit required finding identities")
     if (
         trivy_probe.get("scanner_version") != TRIVY_VERSION
+        or trivy_config_probe.get("scanner_version") != TRIVY_VERSION
         or bandit_probe.get("version") != BANDIT_VERSION
     ):
         raise GateError("security probe scanner versions do not match the pinned tools")
+    if trivy_config_probe.get("severity") not in MISCONFIG_SEVERITIES:
+        raise GateError("security probe misconfiguration severity is not blocking")
     trivy = acquire_trivy()
     probe_dir = _new_temp_dir("quickscale-security-probes-")
     lock_path = probe_dir / LOCK_NAME
@@ -767,15 +922,42 @@ def negative_probes() -> int:
         item.get("test_id") == bandit_probe["test_id"] for item in bandit_report.get("results", [])
     ):
         raise GateError("Bandit negative probe identity was not observed")
+    bad_dockerfile = probe_dir / "Dockerfile"
+    bad_dockerfile.write_text(BAD_DOCKERFILE_PROBE, encoding="utf-8")
+    misconfig_result = run_command(_misconfig_command(trivy, bad_dockerfile))
+    if misconfig_result.returncode != 1:
+        raise GateError(
+            "Trivy misconfiguration negative probe did not return findings exit 1: "
+            f"{misconfig_result.returncode}"
+        )
+    try:
+        _run_dependency_gate(trivy, bad_dockerfile)
+    except FindingsError as exc:
+        observed = strict_json(str(exc), source="dependency-gate negative probe")
+        misconfigurations = (
+            observed.get("misconfigurations") if isinstance(observed, dict) else None
+        )
+        if not isinstance(misconfigurations, list) or not any(
+            item.get("finding_id") == trivy_config_probe["check_id"]
+            and item.get("severity") == trivy_config_probe["severity"]
+            for item in misconfigurations
+            if isinstance(item, dict)
+        ):
+            raise GateError(
+                "Trivy misconfiguration negative probe identity was not observed"
+            ) from exc
+    else:
+        raise GateError("known-bad Dockerfile passed the dependency gate")
     print(
         json.dumps(
             {
                 "gate": "negative-probes",
                 "trivy_version": TRIVY_VERSION,
                 "trivy_advisory": trivy_probe["advisory"],
+                "trivy_config_check_id": trivy_config_probe["check_id"],
                 "bandit_version": BANDIT_VERSION,
                 "bandit_test_id": bandit_probe["test_id"],
-                "underlying_exit_codes": {"trivy": 1, "bandit": 1},
+                "underlying_exit_codes": {"trivy": 1, "trivy_config": 1, "bandit": 1},
                 "cleanup": "armed-before-temporary-creation",
             },
             sort_keys=True,

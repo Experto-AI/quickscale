@@ -28,25 +28,28 @@ Failure policy: a missing ``zizmor`` executable, an unparseable report, or a
 report that disagrees with the process exit status fails closed as
 infrastructure exit 2.  Findings fail as exit 1.  A clean tree exits 0.
 
-``zizmor`` is a Poetry dev dependency pinned to ``1.30.1``; a worktree whose
-``.venv`` predates that pin (or was never re-synced after ``poetry.lock``
-changed) is missing it. This gate itself fails immediately on that, before
-running zizmor, with the exact remediation (``poetry install``) rather than a
-bare "not found on PATH" -- and `make check` additionally preflights this same
-resolution as its very first step, so an unsynced worktree fails before lint,
-typecheck, or any of the other repository gates run. A resolved executable
-outside the current Python environment (a stray global install shadowing the
-unsynced Poetry env) is flagged as an advisory warning, since it may not be
-the pinned version.
+``zizmor`` is a Poetry dev dependency pinned in ``pyproject.toml``; this gate
+reads that pin instead of carrying its own copy, so a bump cannot leave the
+gate reporting a stale version. A worktree whose ``.venv`` predates the pin
+(or was never re-synced after ``poetry.lock`` changed) is missing zizmor. This
+gate itself fails immediately on that, before running zizmor, with the exact
+remediation (``poetry install``) rather than a bare "not found on PATH" -- and
+`make check` additionally preflights this same resolution as its very first
+step, so an unsynced worktree fails before lint, typecheck, or any of the
+other repository gates run. A resolved executable outside the current Python
+environment (a stray global install shadowing the unsynced Poetry env) is
+flagged as an advisory warning, since it may not be the pinned version.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
 import sysconfig
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -54,9 +57,10 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WORKFLOWS = ROOT / ".github" / "workflows"
+PYPROJECT_PATH = ROOT / "pyproject.toml"
 EXECUTABLE = "zizmor"
-PINNED_VERSION = "1.30.1"  # Must track the `zizmor` pin in pyproject.toml.
 INSTALL_REMEDIATION = "poetry install"
+EXACT_VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 # The two named conditions of SA202 live at or above this floor; everything
 # below it is advisory and must not block the pipeline.
 FLOOR_ARGS = ("--min-severity", "medium", "--min-confidence", "medium")
@@ -132,12 +136,39 @@ def _missing_top_level_permissions(target: Path) -> list[Path]:
     return missing
 
 
+def _pinned_version() -> str:
+    """
+    Read the exact ``zizmor`` pin from ``pyproject.toml``.
+
+    The gate must not carry its own copy of the version: a hand copy silently
+    drifts when the dependency is bumped. A missing, unreadable, or non-exact
+    pin fails closed as infrastructure instead of reporting a guessed version.
+    """
+    try:
+        document = tomllib.loads(PYPROJECT_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise GateError(f"could not read {PYPROJECT_PATH}: {exc}") from exc
+    section: Any = document
+    for key in ("tool", "poetry", "group", "dev", "dependencies"):
+        if not isinstance(section, dict):
+            section = None
+            break
+        section = section.get(key)
+    version = section.get(EXECUTABLE) if isinstance(section, dict) else None
+    if not isinstance(version, str) or EXACT_VERSION_RE.fullmatch(version) is None:
+        raise GateError(
+            f"{PYPROJECT_PATH} must pin {EXECUTABLE} to an exact version under "
+            "[tool.poetry.group.dev.dependencies]"
+        )
+    return version
+
+
 def _resolve_zizmor() -> str | None:
     """Locate ``zizmor`` on ``PATH``."""
     return shutil.which(EXECUTABLE)
 
 
-def _warn_if_outside_project_environment(executable: str) -> None:
+def _warn_if_outside_project_environment(executable: str, pinned_version: str) -> None:
     """
     Flag a resolved ``zizmor`` that is not this interpreter's own environment.
 
@@ -164,7 +195,7 @@ def _warn_if_outside_project_environment(executable: str) -> None:
         print(
             f"⚠ zizmor resolved from {resolved}, outside this interpreter's "
             f"environment ({project_scripts_dir}). The {EXECUTABLE} "
-            f"{PINNED_VERSION} pinned by pyproject.toml may not be installed "
+            f"{pinned_version} pinned by pyproject.toml may not be installed "
             f"here — if findings look stale or wrong, run: {INSTALL_REMEDIATION}",
             file=sys.stderr,
         )
@@ -199,22 +230,23 @@ def main(argv: list[str] | None = None) -> int:
     if preflight_only:
         args = [arg for arg in args if arg != "--preflight"]
     executable = _resolve_zizmor()
+    pinned_version = _pinned_version()
     if executable is None:
         raise GateError(
             f"{EXECUTABLE} executable not found on PATH. pyproject.toml pins "
-            f"{EXECUTABLE} {PINNED_VERSION} as a Poetry dev dependency — run: {INSTALL_REMEDIATION}"
+            f"{EXECUTABLE} {pinned_version} as a Poetry dev dependency — run: {INSTALL_REMEDIATION}"
         )
     if preflight_only:
         # `make check`'s first step: prove zizmor resolves before running any
         # other (slower) repository gate, so an unsynced worktree fails here
         # instead of after lint/typecheck/the other dozen check-* targets.
-        _warn_if_outside_project_environment(executable)
+        _warn_if_outside_project_environment(executable, pinned_version)
         print(f"zizmor preflight ok: {executable}")
         return 0
     workflows = Path(args[0]) if args else DEFAULT_WORKFLOWS
     if not workflows.exists():
         raise GateError(f"workflow target not found: {workflows}")
-    _warn_if_outside_project_environment(executable)
+    _warn_if_outside_project_environment(executable, pinned_version)
     returncode, stdout, stderr = _run_zizmor(executable, workflows)
     try:
         findings = json.loads(stdout)

@@ -127,20 +127,42 @@ commit and the `X.Y.Z` tag both live there, and it is the `<integration-branch>`
 [Phase 7](#phase-7--close-out). Merge with a merge commit or fast-forward, never squash or rebase —
 either rewrites the tagged commit, leaving the published tag outside `main`'s history.
 
+Refresh the supply-chain pins before stamping — the refresh mutates tracked files, so it belongs in
+the release commit whose bytes [Part 1](#part-1--publish-quality-check) validates below:
+
+```bash
+make refresh-action-pins     # CHECK=1 reports stale pins without writing anything
+git diff .github/workflows scripts/sync_ci_gate_jobs.py
+```
+
+Every third-party `uses:` in `.github/workflows/` is pinned to a commit SHA, so the pins are only as
+fresh as the last release that refreshed them. The tool resolves each action's latest release, moves
+the generated hosted jobs' pins through `scripts/sync_ci_gate_jobs.py`'s constants and its
+regenerated region, and rewrites every other pin in place; review the diff, since a major-version
+move can change action inputs. It needs network access and is not a registered gate, so no CI
+context runs it.
+
+Then stamp the version:
+
 ```bash
 make bump-version X.Y.Z
 ```
 
 This writes `VERSION` and propagates it to every package, module manifest, core snapshot, and
 `quickscale-core` lockstep pin ([§1.1](#11-version-and-manifest-integrity)). Review
-`contract_vintage.minimum` if a module genuinely gained manual adoption steps, then commit the
-release state with the conventional subject:
+`contract_vintage.minimum` if a module genuinely gained manual adoption steps. Stage every tracked
+change — the refreshed pins and the version stamp must both be in this commit — inspect the staged
+set, and commit the release state with the conventional subject:
 
 ```bash
+git add --update
+git diff --cached --stat
 git commit -m "vX.Y.Z: QuickScale X.Y.Z"
 ```
 
-Run [Part 1](#part-1--publish-quality-check) now. Do not proceed on a red gate.
+Confirm `git status --short` is empty before running
+[Part 1](#part-1--publish-quality-check): its verdicts and the Phase 2 tag both belong to this exact
+commit, so an unstaged refresh would ship the old pins. Do not proceed on a red gate.
 
 ### Phase 2 — Create the core tag locally
 

@@ -74,7 +74,7 @@
         check-core-compat check-module-core-imports check-manifest-sync \
         check-module-app-declaration check-org-context-primitives \
          check-csrf-exempt check-commit-testimony check-project-contract-vintage check-gate-suites isolation-conformance \
-         check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture security-negative-probes \
+         check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture security-negative-probes refresh-action-pins \
          check-workflow-security check-secret-scanning \
          check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
@@ -335,13 +335,14 @@ help:
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
 	@echo "  make check-commit-testimony       - Behavioural commits carry a vNN or vN.NN.N roadmap reference"
 	@echo "  make check-project-contract-vintage - Generated-project contract changes declare a fresh adoption step id"
-	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability scan"
+	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability and generated Dockerfile misconfiguration scan"
 	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
 	@echo "  make check-beta-migration-smoke      - Exercise fresh-first beta migration on isolated generated fixtures"
 	@echo "  make check-generated-deploy-posture  - Run Django's deployment checks on a freshly generated project in both forwarding cells"
 	@echo "  make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
 	@echo "  make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
-	@echo "  make security-negative-probes     - Verify scanner finding exit contracts"
+	@echo "  make security-negative-probes     - Verify scanner finding exit contracts and the known-bad Dockerfile gate control"
+	@echo "  make refresh-action-pins          - Operator: refresh SHA-pinned actions to their latest releases (CHECK=1 reports only)"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
 	@echo "  make isolation-conformance         - Run the PostgreSQL isolation-conformance suite"
 	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
@@ -1069,6 +1070,14 @@ check-secret-scanning:
 
 security-negative-probes:
 	@$(PYTHON) scripts/check_security_gates.py security-negative-probes
+
+# Release-time operator tool (SA212).  It resolves every SHA-pinned action's
+# latest release and rewrites the pins; catalog-owned refs move through the
+# scripts/sync_ci_gate_jobs.py constants and its regeneration.  It is not a
+# registered gate and no CI context runs it, because it needs network access.
+# CHECK=1 reports stale pins and exits 1 without writing anything.
+refresh-action-pins:
+	@$(PYTHON) scripts/refresh_action_pins.py $(if $(CHECK),--check,)
 
 # Run every scripts/test_*.py suite without pytest cache artifacts or product
 # coverage.  ``make check`` reaches this target through the registry-derived

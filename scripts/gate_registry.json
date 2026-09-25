@@ -235,7 +235,7 @@
         },
         {
             "id": "check-dependency-vulnerabilities",
-            "description": "Blocking Trivy scan of root and quickscale_core Poetry locks including development dependencies",
+            "description": "Blocking Trivy scan of root and quickscale_core Poetry locks including development dependencies, plus a high-severity misconfiguration scan of a freshly generated project's Dockerfile",
             "required_contexts": [
                 "local-serial",
                 "local-parallel",

@@ -30,9 +30,10 @@ generated `start.sh`/`Dockerfile` launchers. R3: tag-triggered workflow dispatch
 **Tooling baseline.** Ruff (E/W/F/I/N/UP/D plus `S` for maintained source), mypy with
 django-stubs, pytest + pytest-cov + pytest-django + pytest-timeout, vulture/radon/pylint. Security
 tooling, all **failing the build** on findings: Trivy dependency scan against `poetry.lock` (SA123),
-Bandit (SA123), gitleaks v8.30.1 fetched checksum-pinned with traversal-safe extraction (SA202),
-zizmor 1.30.1 at medium severity/confidence for `unpinned-uses` and `excessive-permissions` (SA202).
-Container and IaC scanning remain absent — a tooling gap, not coverage.
+Trivy misconfiguration scan of a freshly generated project's `Dockerfile` (SA212), Bandit (SA123),
+gitleaks v8.30.1 fetched checksum-pinned with traversal-safe extraction (SA202), zizmor 1.30.1 at
+medium severity/confidence for `unpinned-uses` and `excessive-permissions` (SA202). Image-layer and
+broader IaC scanning remain absent — a tooling gap, not coverage.
 
 **Oracle list (declared invariants, §2g).**
 
@@ -325,9 +326,15 @@ Every empty cell is resolved with a finding ID or a stated reason.
 - **A named-release pin test for Stripe** — closed: the contract test fails when the installed
   SDK's pinned API version moves to a new named release, so a `stripe` bump cannot silently change
   payload shapes.
-- **Container and IaC scanning** — still absent; the generated `Dockerfile` scan is SA212.
-- **Dependabot (or equivalent) for `github-actions`** — the SHA pins from SA202 have no automated
-  refresh path; scheduled as SA212.
+- **Container and IaC scanning** — closed for the generated container's configuration (SA212): the
+  dependency gate renders a fresh project and fails on high-severity Trivy misconfiguration
+  findings in its `Dockerfile`, with a negative probe proving a known-bad Dockerfile is rejected.
+  Image-layer and broader IaC scanning remain absent.
+- **Dependabot (or equivalent) for `github-actions`** — closed (SA212): `make refresh-action-pins`
+  re-resolves every SHA-pinned action to its latest release at release time, and
+  `publish_procedure.md` runs it before release-tier validation. Dependabot *security alerts* remain
+  enabled as the repository-level safety net between releases; no configuration file is committed
+  for them.
 
 ---
 

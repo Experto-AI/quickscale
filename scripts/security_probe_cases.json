@@ -8,6 +8,14 @@
     "fixed_version": "0.6.0",
     "source": "Trivy v0.74.0 DB output observed during Phase A binding"
   },
+  "trivy_config": {
+    "scanner_version": "0.74.0",
+    "check_id": "DS-0002",
+    "severity": "HIGH",
+    "title": "Image user should not be 'root'",
+    "source": "FROM ubuntu:latest\nUSER root",
+    "source_observation": "Trivy v0.74.0 JSON output observed while binding this control"
+  },
   "bandit": {
     "version": "1.9.4",
     "test_id": "B602",

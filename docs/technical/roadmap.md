@@ -33,13 +33,12 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale with the fresh-first migration tool | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA212 | Keep the CI supply-chain pins fresh and scan the generated container | post-v88 | 2 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA212
+Track 2: idle
 Track 3: idle
                          critical path: SA191 → SA153
 ```
@@ -51,7 +50,7 @@ database, and redeploys through `deploy railway`. SA153 builds the portal on it.
 module migration history before any post-SA153 module schema change. SA154 is an inventory, not
 work.
 
-**Off the critical path.** SA212 is independent of Track 1 and can merge at any point.
+**Off the critical path.** Tracks 2 and 3 are idle.
 
 ### Track states
 
@@ -60,7 +59,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA212 | yes | yes | yes | **yes** | no |
+| 2 | — (idle) | — | — | — | **yes** | no |
 | 3 | — (idle) | — | — | — | **yes** | no |
 
 ### Ownership and merge coordination
@@ -82,8 +81,8 @@ A track is **truly green** only when all three states are yes.
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block.
-- **Cross-track edits.** SA212 edits its Trivy gate's `scripts/gate_registry.json` row
-  (Track 1) through the merge queue.
+- **Cross-track edits.** No queued ticket edits another track's surfaces; a ticket that does lands
+  through the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md) (SA204, SA153). Each track resolves the shared set at its
@@ -249,23 +248,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA212 — Keep the CI supply-chain pins fresh and scan the generated container.**
-
-  **Context:** every third-party action is SHA-pinned, but nothing proposes updates, so the pins
-  age silently. `scripts/check_workflow_security.py` hard-codes `PINNED_VERSION = "1.30.1"`, a
-  hand copy of the `zizmor` pin in `pyproject.toml`. Dependency scanning covers `poetry.lock`, but
-  no scan covers the generated `Dockerfile` (tech audit, tooling gaps).
-
-  **Acceptance:**
-  - `.github/dependabot.yml` opens weekly update PRs for `github-actions`.
-  - `check_workflow_security.py` reads the `zizmor` version from `pyproject.toml`; the literal is
-    gone.
-  - The existing Trivy gate also runs a misconfiguration scan over a generated project's
-    `Dockerfile` and fails on high-severity findings, with a control proving a known-bad
-    `Dockerfile` fails.
-
-  **Surfaces:** `.github/`, `scripts/check_workflow_security.py`, the Trivy gate and its registry
-  row, and the tech audit.
+- [x] **SA212 — Keep the CI supply-chain pins fresh and scan the generated container.**
 
 ## Deferred constraints and references
 

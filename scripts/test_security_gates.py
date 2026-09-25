@@ -296,3 +296,150 @@ def test_main_rejects_conflicting_mode_selectors() -> None:
     """Contradictory positional and option modes must fail instead of winning by order."""
     with pytest.raises(SystemExit, match="2"):
         gates.main(["static", "--mode", "dependency"])
+
+
+def test_generated_dockerfile_is_a_real_generated_project(tmp_path: Path) -> None:
+    """The misconfiguration target is the Dockerfile a fresh project emits."""
+    dockerfile = gates._generated_dockerfile(tmp_path)
+    assert dockerfile.is_file()
+    assert dockerfile.read_text(encoding="utf-8").startswith("# syntax=docker/dockerfile:1")
+
+
+def _misconfig_payload(dockerfile: Path, *, misconfigurations: list[dict]) -> str:
+    return json.dumps(
+        {
+            "SchemaVersion": 2,
+            "Trivy": {"Version": "0.74.0"},
+            "ArtifactName": str(dockerfile),
+            "Results": [
+                {
+                    "Target": dockerfile.name,
+                    "Type": "dockerfile",
+                    "MisconfSummary": {"Successes": 20, "Failures": len(misconfigurations)},
+                    "Misconfigurations": misconfigurations,
+                }
+            ],
+        }
+    )
+
+
+def test_misconfig_scan_accepts_a_clean_generated_dockerfile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A clean generated Dockerfile returns no findings and check evidence."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.14-slim\n", encoding="utf-8")
+    monkeypatch.setattr(
+        gates,
+        "run_command",
+        lambda *_args, **_kwargs: gates.Completed(
+            0, _misconfig_payload(dockerfile, misconfigurations=[]), ""
+        ),
+    )
+    findings, evidence = gates._trivy_misconfig_scan(Path("trivy"), dockerfile)
+    assert findings == []
+    assert evidence["checks_evaluated"] == 20
+
+
+def test_misconfig_scan_reports_high_severity_findings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A high-severity finding is returned as a blocking record."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM ubuntu:latest\nUSER root\n", encoding="utf-8")
+    finding = {"ID": "DS-0002", "Severity": "HIGH", "Status": "FAIL", "Title": "root user"}
+    monkeypatch.setattr(
+        gates,
+        "run_command",
+        lambda *_args, **_kwargs: gates.Completed(
+            1, _misconfig_payload(dockerfile, misconfigurations=[finding]), ""
+        ),
+    )
+    findings, evidence = gates._trivy_misconfig_scan(Path("trivy"), dockerfile)
+    assert [item["finding_id"] for item in findings] == ["DS-0002"]
+    assert evidence["blocking_findings"] == 1
+
+
+def test_misconfig_scan_rejects_exit_status_report_disagreement(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An exit status that disagrees with the report fails closed."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.14-slim\n", encoding="utf-8")
+    monkeypatch.setattr(
+        gates,
+        "run_command",
+        lambda *_args, **_kwargs: gates.Completed(
+            1, _misconfig_payload(dockerfile, misconfigurations=[]), ""
+        ),
+    )
+    with pytest.raises(GateError, match="disagrees with its report"):
+        gates._trivy_misconfig_scan(Path("trivy"), dockerfile)
+
+
+def test_misconfig_scan_rejects_the_wrong_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A report about another file fails closed."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.14-slim\n", encoding="utf-8")
+    payload = json.loads(_misconfig_payload(dockerfile, misconfigurations=[]))
+    payload["ArtifactName"] = str(tmp_path / "other" / "Dockerfile")
+    monkeypatch.setattr(
+        gates,
+        "run_command",
+        lambda *_args, **_kwargs: gates.Completed(0, json.dumps(payload), ""),
+    )
+    with pytest.raises(GateError, match="wrong artifact"):
+        gates._trivy_misconfig_scan(Path("trivy"), dockerfile)
+
+
+def test_misconfig_scan_rejects_infrastructure_exit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Unexpected scanner exits are infrastructure failures, not findings."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.14-slim\n", encoding="utf-8")
+    monkeypatch.setattr(
+        gates,
+        "run_command",
+        lambda *_args, **_kwargs: gates.Completed(2, "", "checks bundle unavailable"),
+    )
+    with pytest.raises(GateError, match="infrastructure failure"):
+        gates._trivy_misconfig_scan(Path("trivy"), dockerfile)
+
+
+def test_probe_cases_bind_a_blocking_misconfiguration_control() -> None:
+    """The misconfiguration control names a blocking check at the pinned version."""
+    probes = json.loads(gates.PROBES_PATH.read_text(encoding="utf-8"))
+    probe = probes["trivy_config"]
+    assert probe["scanner_version"] == gates.TRIVY_VERSION
+    assert probe["severity"] in gates.MISCONFIG_SEVERITIES
+    assert probe["check_id"] == "DS-0002"
+
+
+def test_dependency_gate_propagates_misconfiguration_findings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A blocking misconfiguration finding fails the dependency gate itself."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM ubuntu:latest\nUSER root\n", encoding="utf-8")
+    finding = {
+        "scanner": "trivy",
+        "project": "generated-dockerfile",
+        "target": "Dockerfile",
+        "finding_id": "DS-0002",
+        "severity": "HIGH",
+        "title": "Image user should not be 'root'",
+    }
+    monkeypatch.setattr(gates, "_new_temp_dir", lambda _prefix: tmp_path)
+    monkeypatch.setattr(gates, "_generated_dockerfile", lambda _destination: dockerfile)
+    monkeypatch.setattr(gates, "acquire_trivy", lambda: Path("trivy"))
+    monkeypatch.setattr(gates, "_trivy_scan", lambda *_args: ([], {"project": "root"}))
+    monkeypatch.setattr(
+        gates,
+        "_trivy_misconfig_scan",
+        lambda *_args: ([finding], {"project": "generated-dockerfile"}),
+    )
+    with pytest.raises(gates.FindingsError, match="DS-0002"):
+        gates.dependency_gate()

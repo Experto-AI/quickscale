@@ -107,6 +107,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Generated projects bound their build backend.** A newly generated project's `pyproject.toml`
     declares `requires = ["poetry-core>=2.0,<3.0"]` in `[build-system]`, matching the repository's
     own packages.
+  - **Supply-chain pins stay fresh and the generated container is scanned.** `make refresh-action-pins`
+    rewrites every SHA-pinned third-party action to its latest release — moving the generated
+    `ci.yml` pins through `scripts/sync_ci_gate_jobs.py`'s constants and its regeneration — and
+    `publish_procedure.md` runs it before release-tier validation, with Dependabot security alerts
+    staying enabled as the between-release safety net. The workflow-security gate reads the pinned
+    `zizmor` version from `pyproject.toml` instead of a hand copy, and the dependency gate renders a
+    fresh project and fails on high-severity Trivy misconfiguration findings in its `Dockerfile`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

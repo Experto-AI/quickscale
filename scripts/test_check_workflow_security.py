@@ -16,14 +16,21 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
 
+import scripts.check_workflow_security as workflow_gate
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKER = REPO_ROOT / "scripts" / "check_workflow_security.py"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 REAL_ZIZMOR = shutil.which("zizmor")
+PINNED_ZIZMOR = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"]["poetry"]["group"][
+    "dev"
+]["dependencies"]["zizmor"]
 
 PINNED_CHECKOUT = "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0"
 
@@ -121,7 +128,39 @@ def test_missing_tool_names_the_exact_remediation(tmp_path: Path) -> None:
     completed = _run([], str(empty))
     assert completed.returncode == 2
     assert "poetry install" in completed.stderr
-    assert "1.30.1" in completed.stderr
+    assert PINNED_ZIZMOR in completed.stderr
+
+
+def test_pinned_version_is_read_from_pyproject() -> None:
+    """The version the gate reports is pyproject.toml's pin, not a local copy."""
+    assert workflow_gate._pinned_version() == PINNED_ZIZMOR
+
+
+def test_pinned_version_fails_closed_without_an_exact_pin(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A missing zizmor pin or a non-exact requirement is infrastructure failure."""
+    pyproject = tmp_path / "pyproject.toml"
+    monkeypatch.setattr(workflow_gate, "PYPROJECT_PATH", pyproject)
+    for body in (
+        '[tool.poetry]\nname = "probe"\n',
+        '[tool.poetry.group.dev.dependencies]\nzizmor = "^1.30"\n',
+        "tool = 1\n",
+    ):
+        pyproject.write_text(body, encoding="utf-8")
+        with pytest.raises(workflow_gate.GateError, match="exact version"):
+            workflow_gate._pinned_version()
+
+
+def test_pinned_version_fails_closed_on_an_unreadable_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A pyproject.toml that is not valid UTF-8 is infrastructure failure."""
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_bytes(b"\xff\xfe\x00not utf-8")
+    monkeypatch.setattr(workflow_gate, "PYPROJECT_PATH", pyproject)
+    with pytest.raises(workflow_gate.GateError, match="could not read"):
+        workflow_gate._pinned_version()
 
 
 def test_resolved_outside_project_environment_warns_but_still_runs(tmp_path: Path) -> None:

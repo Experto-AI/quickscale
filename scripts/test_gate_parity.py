@@ -59,6 +59,7 @@ from check_gate_parity import (
     _validate_registry,
 )
 from sync_ci_gate_jobs import (
+    CHECKOUT_REF,
     DEFAULT_E2E_WORKFLOW,
     DEFAULT_REGISTRY,
     DEFAULT_WORKFLOW,
@@ -3616,6 +3617,37 @@ class TestHostedCiGateGeneration:
         generated = expected_workflow_text(workflow_text, registry)
         assert expected_workflow_text(generated, registry) == generated
         assert self._projection(generated) == self._projection(workflow_text)
+
+    def test_stale_action_pin_is_projected_by_generation(self) -> None:
+        """A pin one release behind the catalog is regenerated, not rejected."""
+        workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        marker = workflow_text.index(JOB_BEGIN)
+        stale = workflow_text[:marker] + workflow_text[marker:].replace(
+            CHECKOUT_REF, f"actions/checkout@{'0' * 40}", 1
+        )
+        assert stale != workflow_text
+        assert expected_workflow_text(stale, registry) == workflow_text
+
+    def test_different_action_identity_still_fails_closed(self) -> None:
+        """Pre-edit projection tolerates a stale SHA, never a different action."""
+        workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        marker = workflow_text.index(JOB_BEGIN)
+        wrong = workflow_text[:marker] + workflow_text[marker:].replace(
+            CHECKOUT_REF, f"actions/cache@{'1' * 40}", 1
+        )
+        with pytest.raises(GeneratorError, match="action versions/ordering drifted"):
+            expected_workflow_text(wrong, registry)
+
+    def test_changed_step_shape_still_fails_closed(self) -> None:
+        """A stale ref is tolerated pre-edit; a changed step shape is not."""
+        workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        changed = workflow_text.replace("        fetch-depth: 0\n", "", 1)
+        assert changed != workflow_text
+        with pytest.raises(GeneratorError, match="checkout step drifted"):
+            expected_workflow_text(changed, registry)
 
     def test_malformed_marker_fails_closed(self) -> None:
         """An incomplete generated pair is an invalid input, not drift."""

@@ -354,7 +354,7 @@ SA208's additive check. **Verdict: still exonerated.**
 ## Rejected candidates
 
 - **`85d0311b`'s `PINNED_VERSION` literal in `check_workflow_security.py`:** advisory warning
-  text only, flat cost. A ticket.
+  text only, flat cost. A ticket; SA212 replaced the literal with a `pyproject.toml` read.
 - **SA209's 500 on a mismatched webhook version:** a deliberate fail-closed choice with a
   documented replay path. It is a sound decision, not a finding.
 - **SA205's bare `--file` edge:** documented, operator-supplied input, and covered by finding 1's
