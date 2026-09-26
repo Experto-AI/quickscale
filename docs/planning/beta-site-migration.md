@@ -50,23 +50,27 @@ make publish-modules           # push current module code to the splits/<module>
 
 ### One iteration
 
-`apply` writes into `<cwd>/<slug>`. Generate in a staging directory so the recipient lands at the
-target path with the donor's slug:
+`apply` generates the project in the directory named after the slug, and never writes
+`quickscale.yml` itself: the file `plan` wrote is the only copy and the migration requires it in
+the recipient root. So run `plan` without `-o` from a staging directory, `apply` from the
+`<slug>` directory it creates, and move that whole directory to the target path:
 
 ```bash
 STAGE=/home/victor/code/.bap-web-new.stage
 RECIPIENT=/home/victor/code/bap-web-new
 rm -rf "$STAGE" "$RECIPIENT" && mkdir -p "$STAGE" && cd "$STAGE"
-quickscale plan bap-web        # same theme and modules as the donor's quickscale.yml; no Docker
+quickscale plan bap-web        # writes bap-web/quickscale.yml; donor's theme and modules; no Docker
 cd bap-web && quickscale apply --split-refs-from-branches
 mv "$STAGE/bap-web" "$RECIPIENT" && rm -rf "$STAGE"
+rm -rf "$RECIPIENT/.venv"      # a moved virtualenv keeps its old path; the verification stack reinstalls it
+test -f "$RECIPIENT/quickscale.yml"
 cd /home/victor/code/quickscale
 make beta-migrate-fresh DONOR=/home/victor/code/bap-web RECIPIENT="$RECIPIENT"
 ```
 
 Check the iteration by the run report, the remaining items in `$RECIPIENT/MIGRATION_PROMPT.md`,
 and the donor's pytest and Vitest suites run in the recipient. Live-site Playwright and screenshot
-parity run in the final iteration only. SA191 replaces this block with one non-interactive
+parity run in the final iteration only. SA214 replaces this block with one non-interactive
 `make beta-migrate-iterate` target.
 
 ### After a fix
@@ -89,6 +93,7 @@ The final iteration runs with every row closed.
 
 | ID | Found in iteration | Gap | Kind | Resolution | Evidence | Status |
 |---|---|---|---|---|---|---|
+| G-001 | 0 (2026-09-26) | The fresh-first preflight blocks: donor `bap_web/settings/production.py` (generated on v0.62.0) predates the SA206 runtime settings facade and selects its database inline. The donor is read-only, so the block cannot be cleared on the donor side. | tool fix | The tool stops treating an old donor's `production.py` as authoritative: it ports only the donor's real customizations onto the recipient's generated, facade-based `production.py` (or rewrites the donor's database block onto the facade), and reports each carried customization. | — | open |
 
 - **ID** — `G-NNN`, never reused.
 - **Kind** — `tool fix`, `playbook step`, `project decision`, or `upstream to module`.
