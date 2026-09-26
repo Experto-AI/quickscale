@@ -232,6 +232,11 @@ Django's permission groups are global — a user in the "Admin" group is an admi
 
 Django's `is_staff` and `is_superuser` flags continue to control access to the Django admin panel. They have no relationship to org roles.
 
+> **SA215** ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 19): module
+> back offices (blog, listings, crm, forms) stop checking `is_staff` / `IsAdminUser` and check the
+> org role through this module's `permissions`, including a DRF `HasOrgRole(min_role)` that
+> delegates to `user_has_org_role`. Until then those surfaces are staff-only.
+
 ### Permission Checking Pattern
 
 Views check org membership and minimum role via a decorator or mixin:

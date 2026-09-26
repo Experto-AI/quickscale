@@ -5,7 +5,9 @@ This is a one-off, prompt-driven migration; the fresh-first tool (SA214) is not 
 
 **Parked until SA215 lands.** SA215 renames module settings, app labels, URL namespaces, and
 commands ([decisions.md § Module Conventions](../technical/decisions.md#module-conventions)).
-Before handing this over, regenerate `bap-web-new` from the post-SA215 checkout and update the
+SA215 also moves module back offices (blog, listings, crm, forms) from `is_staff` to org roles
+(rule 19), so the port gives `bap-web`'s editors an org role (`admin` or as the module README
+states), never `is_staff`. Before handing this over, regenerate `bap-web-new` from the post-SA215 checkout and update the
 version numbers below; the current `bap-web-new` was generated before the renames.
 
 ---

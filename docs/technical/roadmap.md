@@ -122,7 +122,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   fixed file set, uneven tenant-isolation tests, and twelve README outlines. A third pass found option
 checks in four places (including per-module validators in core and the CLI), three ways to build a
 tenant model, uneven reverse names on shared models, receivers in `signals.py`, destructive commands
-without `--dry-run`, and a placeholder module directory. The rules are recorded in
+without `--dry-run`, and a placeholder module directory. A fourth pass (D22–D27) found tenant
+modules authorizing with the site-wide `is_staff` instead of org roles, a second email sender in
+forms, write side effects not tied to commit, feature events owned by analytics, and an
+undeclared `services.py` surface. The rules are recorded in
   [decisions.md § Module Conventions](decisions.md#module-conventions); this ticket is the code.
 
   **Scope,** in module-sized slices through the serialized merge queue:
@@ -188,9 +191,18 @@ without `--dry-run`, and a placeholder module directory. The rules are recorded 
     `CommandError` instead of calling `sys.exit()`; orgs and social gain `[tool.mypy]` and
     fix what it reports; `quickscale_modules/teams/` is deleted (README to
     `docs/planning/teams.md`) with core's placeholder handling.
-  - *Enforcement.* The rule 19 conformance test, covering rules 1–18, with a control case per rule.
+  - *Authorization, email, effects, events, service surface* (rules 19–24). blog, listings, crm,
+    and forms authorize by org role through orgs' `permissions` (new DRF `HasOrgRole`); forms'
+    fallback email sender goes and forms and orgs require notifications; write effects (forms'
+    submission effects, orgs' invitation, crm's bootstrap receiver, social's cache purge) move to
+    `transaction.on_commit` with a rollback test each; analytics keeps only `capture_event`, forms
+    owns `forms_submitted` (release note: renames `form_submit`), and the unused
+    `capture_social_link_click` goes; every `services.py`
+    gains `__all__`, keyword-only signatures, and `<Module>Error` on failure; backups and blog gain
+    `py.typed`; storage uses `timezone.now()`; social's cache keys become `quickscale_social:*`.
+  - *Enforcement.* The rule 25 conformance test, covering rules 1–24, with a control case per rule.
 
-  **Acceptance:** every inventory drift item (sections 1–20) is fixed or recorded as an accepted exception with
+  **Acceptance:** every inventory drift item (sections 1–26) is fixed or recorded as an accepted exception with
   its reason; the conformance test passes and rejects a violation of each rule; a project
   generated before SA215 fails `apply` and startup with messages naming each new name; a freshly
   generated project with all twelve modules passes `make ci-e2e`; the `auth ↔ orgs` cycle is gone;

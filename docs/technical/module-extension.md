@@ -433,7 +433,8 @@ disable_error_code = var-annotated
   written in Python. Hand-build a `ResolverResult` only when the module needs a custom
   post-hook — and even then, source `apps` from the manifest, never as a literal.
   A missing or unimportable adapter raises `ImproperlyConfigured`; there is no fallback.
-- [ ] `services.py` — **Required.** The module's public surface for other modules, including `is_enabled()`
+- [ ] `services.py` — **Required.** The module's public surface for other modules, including `is_enabled()`; `__all__` lists it, public functions take keyword-only parameters after at most one subject, and failures raise the module's `<Name>Error` (Module Conventions rule 23)
+- [ ] `py.typed` — **Required** (rule 24)
 - [ ] `checks.py` — configuration and invariant checks, run from `ready()` through the core helper (when the module has checks)
 - [ ] `exceptions.py` — one `<Name>Error` base for the module's own errors (when it raises any)
 - [ ] `poetry.toml` and `README.md` — README headings as listed in Module Conventions rule 11
@@ -519,6 +520,9 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] Tenant models subclass `TenantModel` (directly or through a module base) with a `Meta` that inherits the base's — the only tenant marker; relations to other modules' models use a `<name>_<plural|singular>` `related_name`; concrete models define `__str__` and `Meta.ordering` (rules 13–14)
 - [ ] `__init__.py` holds only `__version__`; `signals.py` holds only sent signals and receivers live in `receivers.py` (rules 15–16)
 - [ ] Commands raise `CommandError` on expected failure (no `print()` or `sys.exit()`); data-destroying commands take `--dry-run` (rule 17)
+- [ ] Views managing tenant data check the org role through orgs' `permissions` (`require_org_role`, `OrgRoleMixin`, `HasOrgRole`), never `is_staff` / `is_superuser` / `IsAdminUser` (rule 19)
+- [ ] Email goes through notifications' `send_notification` with `notifications` in `required_modules` (rule 20); emails, analytics events, vendor calls, and cache purges caused by a write run in `transaction.on_commit`, with a test that rolls the write back and sees no effect (rule 21)
+- [ ] Analytics events are named `<module>_<event>` in the module's own `services.py` and sent with analytics' `capture_event` (rule 22); cache keys are `quickscale_<module>:<name>` and the current time is `timezone.now()` (rule 24)
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**

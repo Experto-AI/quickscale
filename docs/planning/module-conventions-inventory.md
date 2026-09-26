@@ -3,7 +3,10 @@
 > **Status:** decisions D1–D9 (first pass) and D10–D14 (second pass: URLs, templates, APIs,
 > checks and errors, package files) are taken; D15–D21 (third pass: manifest option schema, tenant
 > models, model basics, `__init__.py`, signals, command behavior, package tooling; sections 14–20)
-> are decided, as decisions.md rules 12–18 (D15 → 12, D16 → 13, … D21 → 18; enforcement is rule 19).
+> are decided, as decisions.md rules 12–18 (D15 → 12, D16 → 13, … D21 → 18; enforcement was rule 19, now 25).
+> D22–D27 (fourth pass: authorization, email, effects on commit, analytics events, service
+> surface, small leftovers; sections 21–26) are decided, as decisions.md rules 19–24 (D22 → 19, …
+> D27 → 24); enforcement moves to rule 25.
 > Two D15 details and one D20 item were settled during review (marked in place). Section 14 also covers core and CLI code, not only `quickscale_modules/`. All are recorded in
 > [decisions.md § Module Conventions](../technical/decisions.md#module-conventions), which wins on any
 > conflict with this file. Evidence for SA215, taken 2026-09-26 from `v89` (`quickscale_modules/*/module.yml`
@@ -416,6 +419,108 @@ non-zero.
 **Drift**
 - orgs, the most security-sensitive module, and social are not type-checked with the others.
 - Any whole-module check has to special-case `teams/` without a recorded reason.
+
+## 21. Authorization: who may manage a module's data
+
+Fourth pass. How a view decides that the requesting user may create, edit, or read back-office data.
+
+| Module | Check used for management views and APIs |
+|---|---|
+| orgs | its own org roles: `require_org_role`, `OrgRoleMixin`, `OrgApiBaseView`; `is_superuser` for operator paths |
+| billing | orgs' `user_has_org_role` (imported lazily in `views.py`) |
+| blog | `is_staff` (dashboard, `publish_post_api`, `upload_media_api`) |
+| listings | `is_staff` (JSON API) |
+| crm | `is_staff` in `dispatch()` (dashboard), DRF `IsAdminUser` (API) |
+| forms | DRF `IsAdminUser`, plus `is_superuser` to see every organization's forms |
+| analytics | `is_staff` / `is_superuser` only to exclude staff traffic (`EXCLUDE_STAFF`), not to authorize |
+
+"Logged in" is spelled three ways: `LoginRequiredMixin` / `login_required` (auth, billing, orgs),
+and a hand-written `redirect_to_login` in `dispatch()` (crm).
+
+**Drift**
+- blog, listings, crm, and forms are tenant modules (rule 13), yet they authorize with Django's
+  `is_staff`, a flag that is global to the site, not to an organization. In `saas` mode a staff
+  user of one organization passes the check for data of every organization they can select; only
+  RLS and `TenantManager` scoping stand between them and it. The org role that orgs and billing
+  use is never consulted.
+- A project cannot give an organization's own admin (org role `admin`) access to its blog or CRM
+  without also making that person platform staff.
+- Four spellings of the same two questions ("logged in?", "allowed?"), none in the public surface.
+
+## 22. Outbound email
+
+| Module | How it sends |
+|---|---|
+| notifications | `EmailMultiAlternatives` inside `send_notification`, tracked (`NotificationDelivery`), after commit |
+| orgs | invitation email through `notifications.services` (orgs implies notifications) |
+| forms | `notifications.services.send_notification` when notifications is installed and on; otherwise its own untracked `EmailMultiAlternatives` path (`forms/notifications.py`), chosen by reading `QUICKSCALE_NOTIFICATIONS_ENABLED` with `getattr(..., True)` |
+| auth | django-allauth's own mail (verification, reset), through `EMAIL_BACKEND` |
+
+**Drift**
+- forms carries a second email sender so that it works without notifications, reads another
+  module's setting with a code default (rules 3 and 4 forbid both), and imports notifications by
+  name with `import_module` instead of declaring it. The two paths differ in tracking, retries, and
+  templates.
+- `forms/notifications.py` is a one-off file named after another module (rule 11).
+
+## 23. Side effects of a write
+
+External effects a write triggers — an email, an analytics event, a vendor API call.
+
+| Where | When the effect runs |
+|---|---|
+| notifications `send_notification` | `transaction.on_commit(...)` |
+| forms submission | after its own `with transaction.atomic()` block, in the view |
+| orgs invitation, crm bootstrap receiver, social cache purge (`models.py` `save`) | inline, wherever the caller is |
+| billing checkout | Stripe call before the write — not an effect of it |
+
+orgs' middleware holds no request-long transaction, so today the forms ordering is correct; it
+stops being correct as soon as a caller wraps the view or service in `atomic()` (tests, `operator_access`
+paths, a project's own view).
+
+**Drift**
+- Only one module makes "effect only if the write commits" a property of the code rather than of
+  the caller. An email or analytics event for a row that was rolled back is a real, silent defect.
+
+## 24. Analytics events
+
+| Aspect | Observed |
+|---|---|
+| Vocabulary | `analytics/events.py`: `$pageview`, `form_submit`, `social_link_click` |
+| Helpers | analytics' `services.py` has `capture_event` plus `capture_form_submit` and `capture_social_link_click`, each shaping another module's payload |
+| Callers | forms calls `capture_form_submit`; nothing calls `capture_social_link_click` (social never emits it) |
+
+**Drift**
+- analytics (layer 2) knows the events of forms and social (layer 3), one of them dead: every new
+  feature event is an edit to analytics, the same inversion rule 5 removes for imports. Event names have no rule, so the
+  next module picks its own shape.
+
+## 25. Public service surface
+
+| Aspect | Observed |
+|---|---|
+| `__all__` in `services.py` | analytics, billing, social; not backups, crm, notifications |
+| Keyword-only parameters | 8 of 51 public service functions (backups 1, billing 2, notifications 3); the rest take positional arguments, including ones with several same-typed parameters (`capture_event(distinct_id, event, properties)`) |
+| Return and error shape | booleans, `None`, dicts, and model instances; failures are raised in billing and notifications and swallowed-and-logged in analytics |
+
+**Drift**
+- Rule 4 makes `services.py` the public surface but nothing lists what is in it, so the conformance
+  test cannot tell a public function from a helper that happens to lack an underscore.
+- Positional calls across modules break silently when a parameter is added or reordered.
+
+## 26. Small leftovers
+
+| Aspect | Observed |
+|---|---|
+| `py.typed` | present in ten modules; missing in backups and blog |
+| Current time | `django.utils.timezone.now()` in 16 files; storage's `helpers.py` uses `datetime.now(tz=timezone.utc)` |
+| Cache keys | only social caches, with keys `quickscale_modules_social:*` — the old package stem, not rule 2's `quickscale_social` |
+| Data migrations | every `RunPython` in `0001_initial` has a `reverse_code` (`noop`) — consistent |
+| Loggers | no log call formats an email address or username — consistent |
+
+**Drift**
+- backups' and blog's type hints are invisible to a project's mypy.
+- The cache key is a name a project and a shared Redis see, so it belongs in rule 2's identity table.
 
 ## What is already consistent (keep)
 
@@ -1187,3 +1292,75 @@ module's receivers as a side effect.
   handling (catalog entry, discovery and constraint-validation skips). Every directory under
   `quickscale_modules/` must then have a `module.yml` (rejected: listing `teams` as an allowed
   placeholder, which keeps the hand-maintained name list decisions.md already calls a smell).
+
+### D22 — Authorization: org roles for tenant data, `is_staff` for the platform — decided (fourth pass)
+
+Options:
+- **A (chosen)** — a view or API that manages a tenant model's data authorizes by org role
+  through orgs' published `permissions` (`require_org_role`, `OrgRoleMixin`, and a DRF permission
+  class `HasOrgRole(min_role)` added beside them for DRF views). Each module states its minimum role
+  per action in code (for example read `viewer`, write `admin`) and in its README.
+  `is_staff` / `is_superuser` stay for Django admin and `operator_access` paths only; "logged in" is
+  `LoginRequiredMixin` / `login_required` / DRF `IsAuthenticated`, never hand-written.
+- **B** — keep `is_staff`, document that module back offices are platform-operator tools. Cheaper,
+  but in `saas` mode the product cannot give a customer's admin their own blog or CRM.
+- **C** — Django model permissions (`has_perm`) per module. Global like `is_staff`, so it has B's
+  tenancy problem, plus a permission-assignment UI no module ships.
+
+Why A: tenant data should be authorized by the tenant's own roles; orgs already publishes the
+bases, billing already uses them, and the RLS layer stays the second line rather than the only one.
+Consequences: blog, listings, crm, and forms swap their `is_staff` / `IsAdminUser` checks;
+forms' `is_superuser` "see all organizations" branch moves under `operator_access`; the conformance
+test rejects `is_staff`, `is_superuser`, `IsAdminUser`, and `redirect_to_login` in a module's
+`views.py` except in listed operator paths. SA191 consequence: `bap-web`'s editors are given the
+right org role, not staff.
+
+### D23 — One email sender: notifications — decided (fourth pass)
+
+Every email a module sends goes through `quickscale_modules_notifications.services.send_notification`;
+auth's allauth mail is the listed exception (allauth sends it). A module that emails lists
+`notifications` in `required_modules` (it is layer 1, so every sender may). forms loses its
+untracked path, its `QUICKSCALE_NOTIFICATIONS_ENABLED` read, and `import_module`; `forms/notifications.py`
+becomes `forms/services.py` code or private `_email.py`. When notifications is switched off
+(its setting or its `NotificationSettings` row), `send_notification` raises
+`NotificationDisabledError` — one behavior for every sender; a sender for which email is optional
+checks `is_enabled()` first. orgs' `implies: notifications` becomes `required_modules`.
+Rejected: keeping a fallback sender per module (two paths, two behaviors, rule 6's "one way").
+
+### D24 — External effects run on commit — decided (fourth pass)
+
+An email, analytics event, vendor call, or cache purge triggered by a database write is scheduled
+with `transaction.on_commit(...)` by the code that performs the write (the service), not ordered by
+hand in the view. notifications already does this; forms, orgs' invitation, and crm's bootstrap
+receiver move to it. Vendor calls that must succeed *before* the write (Stripe checkout session
+creation) are not triggered by a write and are exempt. The test cannot prove this statically;
+it is a review rule plus one test per module that rolls back a write and asserts no effect.
+
+### D25 — Analytics owns capture, senders own events — decided (fourth pass)
+
+analytics publishes `capture_event(*, distinct_id, event, properties)` only. Each module names its
+events in its own `services.py` as `<module>_<event>` in snake_case (`forms_submitted`) and calls `capture_event` guarded as rule 4 requires. `capture_form_submit`,
+`capture_social_link_click` (no caller), and the two feature names in `analytics/events.py` go; `$pageview`
+stays (PostHog's name). Event names are recorded in each module's README under Public surface —
+a renamed event breaks dashboards, so it is a release-note item like a moved URL (rule 7).
+This renames one live event (`form_submit`; `social_link_click` is never sent); accepted because no deployed site depends on
+them yet (SA191 has not landed).
+
+### D26 — `services.py` declares its surface — decided (fourth pass)
+
+- `services.py` defines `__all__`; the conformance test treats exactly that list as the module's
+  public surface (rule 4) and rejects a cross-module import of a name not in it.
+- Public service functions take keyword-only arguments after at most one leading subject
+  (`send_notification(*, template_key, recipients, context)` already does), so adding a parameter never breaks a
+  caller silently.
+- A service that cannot do what it was asked raises the module's `<Module>Error` (rule 10); the
+  "is this optional thing on and configured?" question is `is_enabled()`, so callers no longer rely
+  on swallowed failures. analytics' capture stays best-effort by design (a vendor outage must not
+  break a request) and says so in its docstring — the one listed exception.
+
+### D27 — Small leftovers — decided (fourth pass)
+
+- backups and blog gain `py.typed`; rule 11's file list adds it.
+- The current time is `django.utils.timezone.now()`; storage's `datetime.now(tz=...)` changes.
+- Cache keys are `quickscale_<module>:<name>` and join rule 2's identity table (social's
+  `quickscale_modules_social:*` renames; the cache is disposable, so no migration step).

@@ -477,7 +477,8 @@ Authoring mechanics:
 **Rule:** Every first-party module follows one convention for its settings, its identity names,
 how it reads configuration, how it depends on and talks to other modules, how it exposes URLs,
 templates, APIs, checks, errors, files, tests, and docs, and how it declares options, tenant models,
-model basics, signals, and management commands. A conformance test
+model basics, signals, and management commands, and how it authorizes, sends email, runs write
+effects, names analytics events, and declares its service surface. A conformance test
 enforces each rule. Evidence and the options weighed:
 [module-conventions-inventory.md](../planning/module-conventions-inventory.md).
 
@@ -526,6 +527,7 @@ settings read but never declared, and every default written twice. Renames are a
 | URL namespace (`app_name`) | `quickscale_<module>` |
 | Template folder | `templates/quickscale_<module>/` |
 | Management command | `quickscale_<module>_<action>` |
+| Cache key | `quickscale_<module>:<name>` |
 
 - ✅ The Python package stays `quickscale_modules_<module>`; only developers see it.
 - ✅ Tables use the app-label default; no module sets `db_table`.
@@ -555,7 +557,7 @@ settings read but never declared, and every default written twice. Renames are a
 **public surface**:
 
 - every module: `services.py` — operations and questions (`send_notification`,
-  `capture_form_submit`, `is_enabled`);
+  `capture_event`, `is_enabled`);
 - a foundation (layer 1, rule 5) additionally publishes the extension bases other modules build
   on. For orgs these are the ones modules use today: `models` (`Organization`, `TenantModel`),
   `managers` (`TenantManager`), `admin` (`TenantModelAdmin`), `current_org`, `tenancy`, `removal`,
@@ -673,7 +675,7 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
 
 **11. Package files, tests, models, docs.**
 - ✅ Every module ships `apps.py`, `adapter.py`, `services.py` with `is_enabled()`, `module.yml`,
-  `pyproject.toml`, `poetry.toml`, and `README.md`; one-off public files (`contracts.py`,
+  `pyproject.toml`, `poetry.toml`, `py.typed`, and `README.md`; one-off public files (`contracts.py`,
   `helpers.py`, `constants.py`) fold into these or become private. allauth's adapter file is
   `allauth_adapter.py`, so no module has both `adapter.py` and `adapters.py`.
 - ✅ Required tests: `test_apps.py`, `test_services.py`, `test_migrations.py` when the module has
@@ -793,8 +795,65 @@ public surface is `services.py` (rule 4).
   skips in module discovery and constraint validation) goes with it. The **Teams tie-breaker**
   note above describes the shipped state until SA215 lands.
 
-**19. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–18: names, suffixes and types, `_ENABLED`
+**19. Authorization.**
+- ✅ A view or API that manages a tenant model's data authorizes by org role through orgs'
+  published `permissions` (`require_org_role`, `OrgRoleMixin`, and the DRF permission class
+  `HasOrgRole(min_role)` beside them, delegating to the same `user_has_org_role` that
+  `OrgApiBaseView`'s `min_org_role` uses, so rule 9's base keeps its logic and there is one role
+  check). Each module fixes the minimum role per action in code and lists it in its README under
+  Public surface. This extends [organizations.md](organizations.md)'s "no tenant should ever have
+  `is_staff`" (org administration happens through org roles) to module back offices.
+- ✅ "Logged in" is `LoginRequiredMixin`, `login_required`, or DRF `IsAuthenticated`.
+- ✅ `is_staff` / `is_superuser` gate only Django admin and `operator_access` paths; forms' "every
+  organization" branch moves under `operator_access`. analytics' `EXCLUDE_STAFF` reads `is_staff`
+  to filter traffic, not to authorize, and is a listed exception.
+- ❌ `is_staff`, `is_superuser`, `IsAdminUser`, or a hand-written `redirect_to_login` in a module's
+  views, outside the listed operator paths.
+
+**20. Email.**
+- ✅ Every email a module sends goes through notifications' `send_notification`; a module that
+  emails lists `notifications` in `required_modules` (orgs' `implies: notifications` becomes a
+  requirement). Listed exception: auth's django-allauth mail.
+- ✅ Notifications can still be off at runtime (its `NotificationSettings` row); `send_notification`
+  then raises `NotificationDisabledError` (rule 23), and a sender for which email is optional checks
+  `is_enabled()` first instead of catching it.
+- ❌ A module's own `EmailMessage` / `send_mail` path, or a fallback sender when notifications is
+  absent or off.
+
+**21. Effects of a write.**
+- ✅ An email, analytics event, vendor call, or cache purge triggered by a database write is
+  scheduled with `transaction.on_commit(...)` by the code that performs the write, not ordered by
+  hand in the caller. A vendor call that must succeed before the write (Stripe checkout session
+  creation) is not triggered by it and is exempt.
+- ✅ Each module that has such an effect has a test that rolls the write back and asserts no effect.
+  A static test cannot prove this rule; it is also a review rule.
+
+**22. Analytics events.**
+- ✅ analytics publishes `capture_event(*, distinct_id, event, properties)` and no per-event helper.
+- ✅ The sending module names its events in its own `services.py` as `<module>_<event>` in
+  snake_case (`forms_submitted`), calls `capture_event` guarded as rule 4
+  requires, and lists them in its README under Public surface. Listed exception: `$pageview`
+  (PostHog's name).
+- ✅ Renaming an event is a breaking change recorded in the release notes, like a moved URL (rule 7).
+
+**23. Service surface.**
+- ✅ `services.py` defines `__all__`; exactly that list is the module's public service surface
+  (rule 4).
+- ✅ A public service function takes keyword-only parameters after at most one leading subject
+  (`send_notification(*, template_key, recipients, context)` already does).
+- ✅ A service that cannot do what it was asked raises the module's `<Module>Error` (rule 10);
+  whether an optional module is usable is `is_enabled()`. Listed exception: analytics' capture is
+  best-effort (a vendor outage must not fail a request) and says so in its docstring.
+- ❌ Returning `None` / `False` to signal a failure, or a cross-module import of a name not in
+  `__all__`.
+
+**24. Small conventions.**
+- ✅ Every module ships `py.typed` (added to rule 11's file list).
+- ✅ The current time is `django.utils.timezone.now()`.
+- ✅ Cache keys are `quickscale_<module>:<name>` (added to rule 2's identity table).
+
+**25. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
+and the CLI's option handling fails on each of rules 1–24: names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
@@ -803,7 +862,10 @@ ports, option fields and validation, per-module option code in core or the CLI, 
 tenant-model base,
 `Meta` inheritance, and admin, primary keys, `related_name`, `__str__` and ordering, `gettext`,
 `__init__.py` content, receivers outside `receivers.py`, command output, `CommandError`, and
-`--dry-run`, `pyproject.toml` sections, and a module directory without `module.yml` — with a
+`--dry-run`, `pyproject.toml` sections, a module directory without `module.yml`, `is_staff` and
+hand-written login checks in views, email sent outside notifications, per-event analytics helpers and
+event names, `services.py` `__all__` and keyword-only signatures, `py.typed`, `datetime.now`, and
+cache-key prefixes — with a
 control case proving each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
@@ -831,7 +893,8 @@ code before it works is not shippable.
 - ✅ Module code MUST read configurable values from settings, never hardcode them
 - ✅ Settings, identity names, module-to-module use, URLs, templates, APIs, checks, errors,
   package files, required tests, README outline, option schema, tenant models, model basics,
-  package root, signals, management commands, and package tooling follow §[Module Conventions](#module-conventions)
+  package root, signals, management commands, package tooling, authorization, email, write effects,
+  analytics events, and the service surface follow §[Module Conventions](#module-conventions)
 - ✅ A module's server-rendered templates **extend the project's `base.html`** and
   never emit their own `<html>` document. Child templates fill a module-named
   block (`<module>_content`); the module base owns `{% block content %}`. A module
