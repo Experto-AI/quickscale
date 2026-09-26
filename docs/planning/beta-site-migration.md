@@ -25,6 +25,79 @@ Rules for the current maintainer tool:
 
 ---
 
+## Running a migration iteration
+
+One iteration regenerates the recipient from scratch, migrates the donor into it, checks the
+result, and records every gap in the [gap ledger](#gap-ledger). The recipient is never hand-edited
+between iterations; a gap is fixed in QuickScale and the next iteration picks the fix up.
+
+### Before a release is published
+
+Build the recipient from the unreleased checkout. Run every command from the QuickScale repo root
+unless a step says otherwise.
+
+```bash
+make install                   # CLI + local quickscale-core wheelhouse at the checkout's VERSION
+git tag X.Y.Z -m "vX.Y.Z: QuickScale X.Y.Z"  # local only — NEVER push: a pushed version tag starts PyPI publication
+make publish-modules           # push current module code to the splits/<module>-module branches and every branch reports up to date
+```
+
+`make publish-modules` refuses to run unless `HEAD` carries the local `X.Y.Z` tag matching
+`VERSION`, and it needs a clean working tree: commit or stash first. Each published module adds a
+`--rejoin` merge commit, so afterwards re-point the tag with
+`git tag -f X.Y.Z -m "vX.Y.Z: QuickScale X.Y.Z"`. Split tags are not sealed;
+`apply --split-refs-from-branches` embeds from the branches.
+
+### One iteration
+
+`apply` writes into `<cwd>/<slug>`. Generate in a staging directory so the recipient lands at the
+target path with the donor's slug:
+
+```bash
+STAGE=/home/victor/code/.bap-web-new.stage
+RECIPIENT=/home/victor/code/bap-web-new
+rm -rf "$STAGE" "$RECIPIENT" && mkdir -p "$STAGE" && cd "$STAGE"
+quickscale plan bap-web        # same theme and modules as the donor's quickscale.yml; no Docker
+cd bap-web && quickscale apply --split-refs-from-branches
+mv "$STAGE/bap-web" "$RECIPIENT" && rm -rf "$STAGE"
+cd /home/victor/code/quickscale
+make beta-migrate-fresh DONOR=/home/victor/code/bap-web RECIPIENT="$RECIPIENT"
+```
+
+Check the iteration by the run report, the remaining items in `$RECIPIENT/MIGRATION_PROMPT.md`,
+and the donor's pytest and Vitest suites run in the recipient. Live-site Playwright and screenshot
+parity run in the final iteration only. SA191 replaces this block with one non-interactive
+`make beta-migrate-iterate` target.
+
+### After a fix
+
+| Fix lands in | Before the next iteration |
+|---|---|
+| migration tool, generator, theme, CLI | `make install` |
+| a module under `quickscale_modules/` | `make install`, commit, `git tag -f X.Y.Z -m "vX.Y.Z: QuickScale X.Y.Z"`, `make publish-modules` |
+| playbook only | nothing |
+
+### After the release
+
+Sealed tags exist and the published CLI resolves them: drop `--split-refs-from-branches` and the
+local tag steps, and repin the recipient to the release before cutover.
+
+## Gap ledger
+
+Every gap an iteration finds gets one row, and a row is closed only by the evidence it names.
+The final iteration runs with every row closed.
+
+| ID | Found in iteration | Gap | Kind | Resolution | Evidence | Status |
+|---|---|---|---|---|---|---|
+
+- **ID** — `G-NNN`, never reused.
+- **Kind** — `tool fix`, `playbook step`, `project decision`, or `upstream to module`.
+- **Evidence** — a test name, commit, or iteration whose check shows the gap gone. A masked
+  screenshot region or an adapted or excluded donor test is a `project decision` row that says why.
+- **Status** — `open` or `closed`.
+
+---
+
 ## One approach for a major catch-up
 
 | Approach | Working directory | What gets copied | Use when |

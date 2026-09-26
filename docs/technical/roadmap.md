@@ -151,6 +151,22 @@ suite, and merge only the reviewed delivery through the serialized queue.
   QuickScale and the loop restarts. The recipient is never hand-edited before the final iteration.
   The ledger is the acceptance evidence.
 
+  **Running an iteration.** The playbook's "Running a migration iteration" section is the
+  procedure. Before the release, the recipient is built from the unreleased checkout: `make install`,
+  an unpushed local annotated `0.89.0` tag on `HEAD` (the playbook gives the message format), a
+  clean tree, `make publish-modules`, then
+  `quickscale apply --split-refs-from-branches`; the tag is never pushed, because pushing it
+  starts PyPI publication. `apply` writes into `<cwd>/<slug>`, so the recipient is generated in a
+  staging directory and moved to `bap-web-new`. A tool fix needs only `make install`; a module fix
+  also needs a commit, a re-pointed tag, and `make publish-modules`. An iteration's check is the run
+  report, the handoff prompt's remaining items, and the donor's pytest and Vitest suites in the
+  recipient; live-site Playwright and screenshot parity run in the final iteration only.
+
+  **Slice order.** Iteration zero comes first: one non-interactive `make beta-migrate-iterate`
+  target (reads slug, theme, and modules from the donor's `quickscale.yml`; stages, regenerates,
+  moves, migrates, and runs the iteration check) and its first run against `bap-web`, whose gaps
+  seed the ledger. Classification, functionality, and the design layer follow in ledger order.
+
   **Tool scope.** The tool migrates everything that can be done deterministically:
   - *Classification.* Every donor file lands in exactly one class — generated-untouched,
     generated-customized, project-owned, module-edited, or build artifact. An unclassified file is a
@@ -186,8 +202,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   re-invited; form submissions and other transactional rows are not carried. Media is carried over
   separately and verified.
 
-  **Dependencies and ownership:** `bap-web-new` pins QuickScale as local path dependencies on the
-  `v89` checkout until a release is published, then repins before cutover. Billing stays
+  **Dependencies and ownership:** Until a release is published, `bap-web-new` resolves
+  `quickscale-core` from the local wheelhouse staged by `make install` and embeds modules from the
+  published `splits/<module>-module` branches; it repins to the sealed release before cutover.
+  Billing stays
   disabled. The gap ledger lives in
   [beta-site-migration.md](../planning/beta-site-migration.md). An agent delivers everything up to
   a deploy-ready recipient and a rehearsed cutover script. The maintainer supplies the production
