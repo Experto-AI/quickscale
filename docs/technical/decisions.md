@@ -283,6 +283,8 @@ The accepted desired-config contract is:
 Already-written `.quickscale/state.yml` snapshots and state-derived managed
 wiring remain tolerant of legacy auth keys during load/reapply so older
 projects can preserve historical state while new desired config fails hard.
+SA215 removes this tolerance: under §[Module Conventions](#module-conventions)
+rule 6, retired keys fail hard in state as well.
 
 **Storage URL rule:** `modules.storage.public_base_url` is the sole
 public media URL setting for storage-backed assets. Helper-built blog/storage
@@ -461,6 +463,228 @@ Authoring mechanics:
 [module-extension.md §Building a Module](./module-extension.md#building-a-module-authoring-checklist).
 
 
+### Module Conventions (SA215) {#module-conventions}
+
+**Rule:** Every first-party module follows one convention for its settings, its identity names,
+how it reads configuration, how it depends on and talks to other modules, and how it exposes URLs,
+templates, APIs, checks, errors, files, tests, and docs. A conformance test
+enforces each rule. Evidence and the options weighed:
+[module-conventions-inventory.md](../planning/module-conventions-inventory.md).
+
+**Why.** The modules grew one at a time and each invented its own naming, settings reader, and
+cross-module coupling. The recorded boundary rules cover core ↔ module only; nothing governed
+module ↔ module, which produced an `auth ↔ orgs` import cycle, modules reading each other's settings,
+settings read but never declared, and every default written twice. Renames are a clean break
+(§[Module Version Lockstep](#module-version-lockstep)) and cost least before
+§[Clean-Break Migration History](#migration-squash-decision) is frozen.
+
+**1. Settings names.**
+- ✅ Every first-party setting is `QUICKSCALE_<MODULE>_<NAME>`, `<MODULE>` being the module name in
+  upper case (`QUICKSCALE_BLOG_POSTS_PER_PAGE`, `QUICKSCALE_ORGS_MODE`).
+- ✅ A setting read by Django or a third-party library keeps the name that library reads; the
+  exceptions are listed, not implied: auth's `ACCOUNT_ALLOW_REGISTRATION`,
+  `ACCOUNT_EMAIL_VERIFICATION`, `SESSION_COOKIE_AGE`; storage's `MEDIA_URL` and django-storages
+  `AWS_*`. Adding one needs a decision edit.
+- ✅ The manifest option key equals the setting suffix in lower case and never repeats the module
+  name (`QUICKSCALE_CRM_API_ENABLED` ↔ `api_enabled`).
+- ✅ Standard suffixes, each with a fixed type:
+
+  | Suffix | Meaning | Type |
+  |---|---|---|
+  | `_ENABLED` | turns a module or a feature on or off | boolean |
+  | `_API_ENABLED` | turns the module's REST API on or off (name the API only if there are several) | boolean |
+  | `<THING>_PER_PAGE` | page size; name the thing unless it is the module's own name | integer |
+  | `_RATE_LIMIT` | throttle, `"<count>/<period>"`, parsed by DRF's throttle (rule 9) | string |
+  | `_RETENTION_DAYS` | days before deletion or anonymization; `0` keeps forever | integer |
+  | `_TTL_SECONDS` | lifetime of a cache entry or signed token | integer |
+  | `_ENV_VAR` | the *name* of an environment variable holding a secret, never the secret | string |
+
+  Booleans that describe behavior rather than switch a feature keep a descriptive name
+  (`QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG`).
+- ✅ Every module has `QUICKSCALE_<MODULE>_ENABLED`. Off means installed, data untouched, public
+  surfaces (URLs, pages, API, scheduled jobs) disabled; admin stays. `apply` refuses to switch a
+  module off while an installed module lists it in `required_modules`.
+- ✅ Vendor credentials default to the vendor's variable name (`STRIPE_SECRET_KEY`,
+  `RESEND_API_KEY`, `AWS_ACCESS_KEY_ID`); secrets QuickScale itself defines use
+  `QUICKSCALE_<MODULE>_<NAME>`.
+
+**2. Identity names.** One stem, `quickscale_<module>`, for everything a project or database sees:
+
+| Name | Form |
+|---|---|
+| Django app label (and so table, content-type, and permission names) | `quickscale_<module>` |
+| URL namespace (`app_name`) | `quickscale_<module>` |
+| Template folder | `templates/quickscale_<module>/` |
+| Management command | `quickscale_<module>_<action>` |
+
+- ✅ The Python package stays `quickscale_modules_<module>`; only developers see it.
+- ✅ Tables use the app-label default; no module sets `db_table`.
+- ✅ Template folders required by other software stay as listed exceptions: `templates/account/`
+  (django-allauth) and `templates/admin/` (Django admin).
+
+**3. Reading settings.**
+- ✅ Values reach a running site only through `quickscale apply`, which writes every declared
+  setting (the operator's value, else the manifest default) into the managed `settings/modules.py`,
+  together with a `MODULE_SETTINGS_SCHEMA` holding each setting's type and the manifest's
+  validation rules.
+- ✅ Module code reads `settings.QUICKSCALE_<MODULE>_<NAME>` directly, with no default. The
+  manifest default is the only default and is applied by `apply`, never at runtime.
+- ✅ Each module calls the generic startup check from `quickscale_core.runtime` for its own
+  label in `AppConfig.ready()` (rule 10). The check validates every declared setting against the schema,
+  with the same validation vocabulary `plan`/`apply` use (`ValidationRule`), without coercion, and
+  fails startup naming the setting, the rule, and "run `quickscale apply`". Core holds no
+  per-module names; the schema comes from the project.
+- ✅ Module test settings define every declared setting; they may be generated from the manifest.
+- ✅ Database-backed settings (backups' `BackupPolicy`, notifications' `NotificationSettings`) keep
+  their models; only their initial values come from settings.
+- ❌ `getattr(settings, NAME, default)`, per-module settings readers, or defaults written in code.
+- ❌ Reading a setting the module's manifest does not declare, or another module's setting.
+- ❌ A runtime accessor, generated per-module settings file, or Pydantic-style second schema.
+
+**4. How one module uses another.** A module imports another module only through that module's
+**public surface**:
+
+- every module: `services.py` — operations and questions (`send_notification`,
+  `capture_form_submit`, `is_enabled`);
+- a foundation (layer 1, rule 5) additionally publishes the extension bases other modules build
+  on. For orgs these are the ones modules use today: `models` (`Organization`, `TenantModel`),
+  `managers` (`TenantManager`), `admin` (`TenantModelAdmin`), `current_org`, `tenancy`, `removal`,
+  `sanitization`, `public_context`, `permissions`, and `signals`. The list is part of this decision
+  and changes only by editing it.
+
+Each interaction uses the mechanism that fits it:
+
+| Interaction | Mechanism |
+|---|---|
+| A module asks one it may depend on (rule 5) to do something or answer something | call the lower module's `services.py`, guarded by `apps.is_installed(...)` and that module's `services.is_enabled()` when it is optional |
+| A module builds on a foundation (tenant models, admin, org context) | import the foundation's published extension bases |
+| A module announces an event and does not care who reacts | a Django signal defined in the sender |
+| A module needs every installed module that depends on it to act | a capability declared on the dependent module's `AppConfig` and collected by one core helper (generalizing the SA213 removal obligations) |
+
+- ❌ Importing anything of another module outside its public surface (migrations referencing
+  another module's models excepted).
+- ❌ Reading another module's settings.
+- This narrows the "no service registries" prohibition: `AppConfig`-declared capabilities collected
+  by one helper, and the listed core ports (rule 10), are allowed; a general registry,
+  lookup-by-name, or DI container stays forbidden.
+- How a *project* extends a module is unchanged and stays governed by
+  [module-extension.md](module-extension.md); this rule covers module-to-module use only.
+
+**5. Dependency direction.** A module may import only from its own layer or lower ones, and its
+`required_modules` includes every module it imports (it may list more, such as a module whose
+models it references only by string, like orgs relying on auth's user model). The layers are fixed by the table below,
+not by a manifest key: a `module.yml` key read only by a test would break the "no parsed but
+unprojected manifest keys" prohibition. Moving a module between layers is a decision edit.
+
+| Layer | Modules |
+|---|---|
+| 0 — core | `quickscale_core` (imports no module; already gated) |
+| 1 — foundations | orgs, auth, storage, notifications |
+| 2 — platform | analytics, backups |
+| 3 — features | billing, blog, crm, forms, listings, social |
+
+- ✅ Within a layer, imports go one way only; no cycles. `orgs` does not import `auth`: auth owns the
+  single allauth adapter and collects post-login redirects that orgs declares as a capability.
+- ✅ Upward needs use a capability (rule 4): billing declares account-deletion handlers that auth
+  collects; social declares org-scoped cache keys that orgs' purge collects.
+- ✅ Core never names a module's settings: backups reads its own settings and passes a policy to
+  the `dr_engine` call.
+
+**6. No legacy names.** Renames land in one release, in modules, core, CLI, generator templates,
+tests, fixtures, and docs together — including names quoted elsewhere in this file, which describe
+the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
+`quickscale_modules_<module>` labels).
+- ❌ Aliases, `LegacyKeyAlias` entries, or fallback reads for a renamed option or setting.
+- ✅ `apply` refuses a retired option key — in `quickscale.yml` and in `.quickscale/state.yml` — and
+  the startup check refuses a retired setting, each naming its replacement.
+
+**7. URLs.**
+- ✅ The manifest's `url_includes` sets a module's mount (`blog/`, `accounts/` for auth, `orgs/`
+  for orgs) and is the only place; a module's `urls.py` holds no prefix and `adapter.py` declares
+  no URL include. The site root belongs to the project; no module mounts at `""`.
+- ✅ Moving a public URL is a breaking change recorded in the release notes, with the operator
+  step it needs (webhook endpoints registered with Stripe and Resend move with their module).
+- ✅ APIs at `<mount>api/<resource>/`; webhooks at `<mount>webhooks/<vendor>/`.
+- ✅ Route names are snake_case and never repeat the module (`quickscale_blog:post_list`).
+
+**8. Templates, static files, template tags.**
+- ✅ One module base, `templates/quickscale_<module>/base.html`; it extends `base.html` and owns
+  `{% block content %}`; every page extends it and fills `<module>_content`. No module template
+  emits `<html>` or fills the project's `content` block directly. Templates under the rule 2
+  folder exceptions (`account/`, `admin/`) follow the software that loads them.
+- ✅ Email templates under `templates/quickscale_<module>/email/`.
+- ✅ Static files under `static/quickscale_<module>/{css,js,img}/`.
+- ✅ Template-tag libraries are named `quickscale_<module>`, or `quickscale_<module>_<purpose>`
+  for a separate one (`quickscale_orgs_debug`).
+
+**9. HTTP APIs.**
+- ✅ Every JSON endpoint is a DRF view on one of the two bases of
+  §[JSON API Endpoint Base Contract](#json-api-endpoint-base-contract). `OrgApiBaseView` is rebased
+  on DRF's `APIView` and keeps its org-role logic as it is (it is not rewritten as a permission
+  class). Signature-verified webhooks keep that contract's exemption.
+- ✅ Every error has one QuickScale shape, with the HTTP status carrying the class of error:
+
+  ```json
+  {"error": {"code": "validation_error", "message": "Invalid input.",
+             "fields": {"title": ["This field is required."]}}}
+  ```
+
+  `code` is a stable snake_case string (DRF's error code, or the module's own); `message` is
+  human-readable; `fields` appears only for validation errors. One generic exception handler in
+  `quickscale_core.runtime` produces it and names no module; the generated `settings/base.py`
+  sets it as `REST_FRAMEWORK["EXCEPTION_HANDLER"]` in the existing composed `REST_FRAMEWORK`
+  block. Module code raises DRF exceptions (or its `<Module>Error`, mapped by rule 10's
+  `exceptions.py`) and builds no error body itself; the theme's API client parses the one shape.
+- ✅ Lists page with `PageNumberPagination` sized by the module's `<THING>_PER_PAGE`; throttles are
+  DRF throttles fed by the module's `_RATE_LIMIT` setting.
+- ❌ `JsonResponse` APIs, error bodies built in module code, a third-party error-format library, hand-written rate
+  parsers, per-module token schemes (blog's `BLOG_API_TOKENS` is removed; a shared token scheme is
+  SA154 inventory).
+
+**10. Startup checks, errors, core ports.**
+- ✅ A module's configuration and invariant checks are functions in its `checks.py`. From
+  `ready()`, the module passes them to the generic helper in `quickscale_core.runtime`, which runs
+  them with rule 3's schema check and raises one `ImproperlyConfigured` listing every failure —
+  so every process refuses to start, including the WSGI server, which does not run Django system
+  checks — and also registers them as system checks tagged with the module label, so
+  `manage.py check` reports them. orgs' always-on RLS boot guard
+  (§[Multi-tenant SaaS Architecture](#multitenant-saas-architecture), RLS enforcement rule) is one such check and keeps its
+  exemptions.
+- ✅ Invalid configuration fails startup; an unreachable vendor (PostHog, Resend, Stripe) does not —
+  it is logged and handled when the module is used.
+- ✅ A module's own exceptions live in `exceptions.py` under one `<Module>Error` base;
+  `services.py` re-exports those callers catch.
+- ✅ **Core port:** core defines a `Protocol` for something it needs, exactly one module
+  implements it and registers it from `ready()` through `quickscale_core.runtime`, and a second
+  or missing registration fails hard. The allowed ports are listed here:
+  `register_backup_persistence` (backups). Adding one needs a decision edit.
+- ❌ A hand-written `raise` or check in `ready()` outside the helper, or catching and logging a
+  configuration failure (Fail-Hard Principle).
+
+**11. Package files, tests, models, docs.**
+- ✅ Every module ships `apps.py`, `adapter.py`, `services.py` with `is_enabled()`, `module.yml`,
+  `pyproject.toml`, `poetry.toml`, and `README.md`; one-off public files (`contracts.py`,
+  `helpers.py`, `constants.py`) fold into these or become private. allauth's adapter file is
+  `allauth_adapter.py`, so no module has both `adapter.py` and `adapters.py`.
+- ✅ Required tests: `test_apps.py`, `test_services.py`, `test_migrations.py` when the module has
+  models, and `test_isolation.py` plus `test_rls_boundary.py` for a module with tenant models.
+- ✅ Model choices are `TextChoices`/`IntegerChoices`, and code compares against their members,
+  not string literals. ❌ `*_CHOICES` tuple lists.
+- ✅ README headings, in order: Overview, Configuration (every manifest option), Public surface,
+  URLs, Management commands, Operations, Extending. No versions in headings. The test checks the
+  headings only.
+
+**12. Enforcement.** A conformance test over every `module.yml` and every module's source fails on
+each rule above (names, suffixes and types, `_ENABLED` presence, undeclared and cross-module
+settings reads, defaults in code, import targets and layers, `required_modules` against imports,
+identity names, `db_table`, retired names, URL mounts and route names, template and static paths,
+non-DRF JSON and hand-built error bodies, checks outside `checks.py` or swallowed, required files and tests,
+README headings, choice lists, unlisted core ports), with a control case proving each rule rejects a
+violation. The layer table and each foundation's published extension bases live in one
+test-owned mapping that mirrors this section.
+
+---
+
 ### Module Implementation Requirements {#module-implementation-checklist}
 
 **Rule:** Every QuickScale module must be complete, embeddable, and usable
@@ -480,6 +704,8 @@ code before it works is not shippable.
   test settings file is a Database Policy violation
 - ✅ 90% overall mean + 80% per-file minimum coverage (CI enforced)
 - ✅ Module code MUST read configurable values from settings, never hardcode them
+- ✅ Settings, identity names, module-to-module use, URLs, templates, APIs, checks, errors,
+  package files, required tests, and README outline follow §[Module Conventions](#module-conventions)
 - ✅ A module's server-rendered templates **extend the project's `base.html`** and
   never emit their own `<html>` document. Child templates fill a module-named
   block (`<module>_content`); the module base owns `{% block content %}`. A module
@@ -945,6 +1171,11 @@ alias.
 - ✅ **`OrgApiBaseView`** — for endpoints that need organization-role/membership scoping specifically. Chosen as a second sanctioned base rather than reimplementing org-role checks as a DRF permission class, because that logic is tenant-isolation-adjacent (see §multitenant-saas-architecture) and rewriting working, tested code for stylistic consistency alone carries regression risk for no user-visible benefit.
 - ❌ A plain-`View` + `@csrf_exempt` + manual `_enforce_csrf()` idiom is not a third sanctioned option and is not grandfathered as legacy — this project removes workarounds rather than permanently tolerating them alongside the sanctioned shape.
 - ❌ Signature-verified webhooks (Stripe, etc.) are a different trust class and are exempt from this rule — they use `csrf_exempt` because the calling party cannot present a CSRF token; verified instead by the pairing gate (`scripts/check_csrf_exempt_gate.py`).
+
+**SA215 changes this section** (§[Module Conventions](#module-conventions) rule 9): `OrgApiBaseView`
+is rebased on DRF's `APIView`, so both bases are DRF views; the plain-`View` idiom is gone from
+modules, and the blog exception below is retired with `BLOG_API_TOKENS`. The text below describes
+the shipped state until SA215 lands.
 
 **Narrow documented exception — blog dual-auth function views:** The blog module ships two function views (`upload_media_api` and `publish_post_api` in `quickscale_modules_blog.views`) that use `@_typed_csrf_exempt` (a type-preserving wrapper around `csrf_exempt`) paired with `authenticate_blog_api_request()` for session-or-Bearer-token authentication. This path is not a class-based view and does not subclass either sanctioned base; it is a deliberately narrow exception justified by the function-view architecture and the dual auth model (session + token). The CSRF CI gate (`scripts/check_csrf_exempt_gate.py`) explicitly recognizes `authenticate_blog_api_request` as an approved verification helper, so this exception is enforced rather than silent. No new function-view endpoints may use this exception without explicit approval.
 
@@ -1689,7 +1920,8 @@ gate exit-status inputs. The retained baseline sections are `dead_code`,
 
 **Architecture & Patterns:**
 - ❌ Runtime dynamic `INSTALLED_APPS` modifications
-- ❌ DI frameworks or service registries (direct imports in production)
+- ❌ DI frameworks or service registries (direct imports in production); `AppConfig`-declared capabilities collected by one core helper and the listed core ports are the allowed forms — see §[Module Conventions](#module-conventions)
+- ❌ Module settings read with a code default, a per-module reader, or across modules; module-to-module imports outside the target's public surface or against the layer order — see §[Module Conventions](#module-conventions)
 - ❌ Custom abstract provider interfaces or app-defined multi-provider contracts (use Django's email path plus `django-anymail` for the approved provider rather than building a generic provider layer)
 - ❌ Custom database table naming (use Django's `app_label` default)
 - ❌ Core fallback adapters, compat shims, or silent degradation paths — see §[Fail-Hard Principle](#fail-hard-principle). This includes any "compatibility fallback" wiring path for bundled/installed contexts: an unimportable managed adapter raises, it does not degrade (AF7 **G4**)

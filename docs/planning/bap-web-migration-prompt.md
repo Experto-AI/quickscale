@@ -3,6 +3,11 @@
 Hand everything below the line to a coding assistant, started in `/home/victor/code/bap-web-new`.
 This is a one-off, prompt-driven migration; the fresh-first tool (SA214) is not used for it.
 
+**Parked until SA215 lands.** SA215 renames module settings, app labels, URL namespaces, and
+commands ([decisions.md § Module Conventions](../technical/decisions.md#module-conventions)).
+Before handing this over, regenerate `bap-web-new` from the post-SA215 checkout and update the
+version numbers below; the current `bap-web-new` was generated before the renames.
+
 ---
 
 You are migrating the QuickScale beta site `bap-web` onto current QuickScale (v0.89.0, unreleased,

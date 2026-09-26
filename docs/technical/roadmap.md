@@ -5,9 +5,13 @@
 
 ## Goal and finish line
 
-The next goal is the first useful property portal (SA153) in a project-owned extension, built on
-`bap-web` after a one-off port moves it onto current QuickScale (SA191).
-Capabilities are generalized only after that project proves their value.
+The immediate goal is one convention across all modules (SA215): settings and identity names, how
+a module reads its configuration, and how modules depend on and use each other, as recorded in
+[decisions.md § Module Conventions](decisions.md#module-conventions). The migration and portal work (SA191, SA153, SA204, SA214) is
+parked behind it, so `bap-web` is ported once, onto the standardized names. After that, the goal is
+the first useful property portal (SA153) in a project-owned extension, built on `bap-web` after a
+one-off port moves it onto current QuickScale (SA191). Capabilities are generalized only after that
+project proves their value.
 
 SA191 is the first QuickScale upgrade of a site holding real production state. That state is
 **reseeded, not carried**, so SA204's migration-history freeze waits for SA153's go-live.
@@ -29,24 +33,28 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | — | Deferred |
+| SA215 | Standardize conventions across modules | post-v88 | 1 | — | Deferred |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
+| SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | SA215 | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: idle
 Track 3: idle
-                         critical path: SA191 → SA153
+                         critical path: SA215 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA191 migrates `bap-web` onto current QuickScale, rebuilds and reseeds its
+**Critical path.** SA215 fixes one convention across modules first, while renames are still
+cheap: `bap-web` has not been ported onto the current names, and SA204 has not frozen the module
+migration history that the app-label rename rewrites.
+SA191 then migrates `bap-web` onto current QuickScale, rebuilds and reseeds its
 database, and redeploys through `deploy railway`. SA153 builds the portal on it. SA204 freezes
 module migration history before any post-SA153 module schema change. SA214 hardens the migration
 tool off the critical path. SA154 is an inventory, not work.
@@ -59,7 +67,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA215 | yes | yes | yes | **yes** | **yes** |
 | 2 | — (idle) | — | — | — | **yes** | no |
 | 3 | — (idle) | — | — | — | **yes** | no |
 
@@ -99,6 +107,76 @@ reset/checkout destructively. Merge `v89` into the worktree, resolve there, run 
 suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
+
+- [ ] **SA215 — Standardize conventions across modules.**
+
+  **Context:** the twelve modules grew one at a time and follow different conventions, and neither
+  audit checks cross-module consistency. The evidence is
+  [module-conventions-inventory.md](../planning/module-conventions-inventory.md): two settings
+  families (`QUICKSCALE_<MODULE>_*` and bare `<MODULE>_*`), three spellings of a boolean flag, eight
+  independently written settings readers with defaults duplicated from the manifests, settings read
+  but never declared, modules reading other modules' settings, an `auth ↔ orgs` import cycle, core
+  reading `backups` settings, and URL, template, table, and management-command names that do not
+  follow one stem. A second pass found URL prefixes set in three places, two API frameworks and
+  error shapes, templates breaking the recorded base-template rule, four startup-check styles, no
+  fixed file set, uneven tenant-isolation tests, and twelve README outlines. The rules are recorded in
+  [decisions.md § Module Conventions](decisions.md#module-conventions); this ticket is the code.
+
+  **Scope,** in module-sized slices through the serialized merge queue:
+  - *Settings names.* Every first-party setting and option key follows rules 1 and 6 (the
+    inventory's D1 table, including `QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`); every module gains
+    `QUICKSCALE_<MODULE>_ENABLED`; undeclared settings are declared or removed.
+  - *Identity names.* App labels become `quickscale_<module>`, so tables, migrations, content types,
+    permissions, `AUTH_USER_MODEL`, and orgs' RLS table lists change; `db_table` overrides go; URL
+    namespaces, template folders, and management commands take the same stem.
+  - *Settings reading.* `apply` also writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
+    one generic startup check in `quickscale_core.runtime`, registered by each module, validates
+    every declared setting; per-module readers and code defaults are removed.
+  - *Dependencies.* `orgs` stops importing `auth` and `social`, `auth` stops importing `billing`,
+    `blog` stops reading storage's setting, and `dr_engine` stops reading backups' settings,
+    through `services.py` and `AppConfig` capabilities; `required_modules` covers every import.
+  - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
+    check refuses retired settings, each naming the replacement. Generated templates, docs, and
+    `.env.example` use only the new names.
+  - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
+    `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
+    route names become snake_case without the module name.
+  - *Templates and static.* One flat module base per module (orgs, analytics, forms gain one; orgs
+    stops emitting `<html>`); emails under `email/`; static under `static/quickscale_<module>/`;
+    template-tag libraries renamed `quickscale_<module>[_<purpose>]`.
+  - *APIs.* blog's and listings' function-view APIs become DRF views; `OrgApiBaseView` is rebased
+    on DRF's `APIView`; errors take the one QuickScale shape from a generic handler in `quickscale_core.runtime`
+    (generated `REST_FRAMEWORK` block, DRF dependency in every module with an API, the theme's `useApi.ts` and
+    orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception in the JSON API Endpoint
+    Base Contract, and its hand-written rate parser go. Signature-verified webhooks stay exempt.
+  - *Checks and errors.* Hand-written `ready()` checks move to `checks.py`, run from `ready()` by
+    one core helper that fails every process and also registers them as system checks, orgs' RLS
+    boot guard included; analytics
+    fails on invalid configuration and tolerates only an unreachable vendor; exceptions move to
+    `exceptions.py` under one base; `register_backup_persistence` stays as the listed core port.
+  - *Files, tests, docs.* Every module gains `services.py` with `is_enabled()` and `poetry.toml`;
+    auth's `adapters.py` → `allauth_adapter.py`; one-off files fold in; missing required tests
+    (`test_apps`, `test_services`, `test_migrations`, tenant isolation and RLS) are added;
+    READMEs follow the rule 11 headings; the 14 tuple choice lists become `TextChoices`.
+  - *Enforcement.* The rule 12 conformance test, with a control case per rule.
+
+  **Acceptance:** every inventory drift item (sections 1–13) is fixed or recorded as an accepted exception with
+  its reason; the conformance test passes and rejects a violation of each rule; a project
+  generated before SA215 fails `apply` and startup with messages naming each new name; a freshly
+  generated project with all twelve modules passes `make ci-e2e`; the `auth ↔ orgs` cycle is gone;
+  the release notes list every moved public URL with its operator step (Stripe and Resend webhook
+  endpoints);
+  decisions.md names quoted from the shipped state are updated; the inventory is marked resolved.
+
+  **Surfaces:** every module (manifests and core manifest copies, settings reads, `AppConfig`,
+  migrations, URLs, templates, static files, template tags, APIs, `checks.py`, `exceptions.py`,
+  tests, READMEs); `quickscale_core` (the startup check, capability helper, and API exception handler in `runtime`, the
+  `dr_engine` backups call, generator settings including the `REST_FRAMEWORK` block, and theme
+  templates including the React API client);
+  `quickscale_cli` apply (schema writing, retired-key refusal); `.env.example`; decisions,
+  [module-extension.md](module-extension.md), and user docs. It touches Track 2 (CLI apply,
+  manifests' `contract_vintage` blocks, `.env.example`, `dr_engine`) and Track 3 (orgs, settings
+  templates, `auth/views.py`) surfaces.
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 

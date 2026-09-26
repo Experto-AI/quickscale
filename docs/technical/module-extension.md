@@ -15,6 +15,10 @@ Define a standard, Django-native way for QuickScale modules to be extended in ge
 
 ## Decision
 
+This contract covers how a **project** extends a module. How one module uses another — public
+surfaces, signals, `AppConfig` capabilities, and dependency layers — is governed by
+[decisions.md § Module Conventions](decisions.md#module-conventions).
+
 QuickScale standardizes on a **layered Django-native extension contract**:
 
 1. **Project-owned extension app, when a project uses one,** as the canonical place for signal registration, admin customization, orchestration, project-only service wrappers, and glue code that must survive module updates.
@@ -307,6 +311,11 @@ Every module README should include a required section using this taxonomy:
 
 ## Building a Module (Authoring Checklist) {#building-a-module-authoring-checklist}
 
+> **Conventions.** Names, file set, URLs, templates, APIs, checks, and tests follow
+> [decisions.md § Module Conventions](decisions.md#module-conventions), enforced by its conformance
+> test. Names below that use the `quickscale_modules_<name>` app label or template folder describe
+> the shipped state until SA215 renames them to `quickscale_<name>`.
+
 Mechanics for creating a new `quickscale_modules/<name>` package. The *rules* this
 checklist serves are authoritative elsewhere and this document does not restate them:
 
@@ -400,7 +409,7 @@ disable_error_code = var-annotated
 - [ ] `apps.py` — Django AppConfig with proper `name` and `label`
 - [ ] `models.py` — **Concrete model(s)** for immediate use (required for domain modules; not required for explicitly approved service-style/integration-only modules)
 - [ ] `views.py` — Views with `model` attribute set (required when the module ships routed views)
-- [ ] `urls.py` — URL patterns with `app_name` for namespacing (required when the module ships routed views)
+- [ ] `urls.py` — URL patterns with `app_name` for namespacing, no path prefix, snake_case route names (required when the module ships routed views); the mount is set only in `module.yml`'s `url_includes`
 - [ ] `admin.py` — Admin registration for concrete models or operational surfaces (required only when the module ships an admin surface)
 - [ ] `migrations/0001_initial.py` — **Initial migration for concrete models** (not required for explicitly approved service-style/integration-only modules)
 - [ ] `migrations/__init__.py` — Migrations package init (only when migrations exist)
@@ -411,6 +420,10 @@ disable_error_code = var-annotated
   written in Python. Hand-build a `ResolverResult` only when the module needs a custom
   post-hook — and even then, source `apps` from the manifest, never as a literal.
   A missing or unimportable adapter raises `ImproperlyConfigured`; there is no fallback.
+- [ ] `services.py` — **Required.** The module's public surface for other modules, including `is_enabled()`
+- [ ] `checks.py` — configuration and invariant checks, run from `ready()` through the core helper (when the module has checks)
+- [ ] `exceptions.py` — one `<Name>Error` base for the module's own errors (when it raises any)
+- [ ] `poetry.toml` and `README.md` — README headings as listed in Module Conventions rule 11
 
 **2.1. module.yml Wiring Block:**
 
@@ -434,7 +447,8 @@ derivation:
 ```
 
 **3. Templates (if applicable):**
-- [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates
+- [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates, with one `base.html` that the pages extend (emails under `email/`)
+- [ ] Static files under `static/quickscale_<name>/{css,js,img}/`; template-tag library named `quickscale_<name>`
 - [ ] Templates must work immediately after embed (no user customization required)
 
 **4. Discovery and CLI Integration (quickscale_cli):**
@@ -487,6 +501,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
 - [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
 - [ ] Tests use concrete models (not abstract stubs)
+- [ ] Required test files: `test_apps.py`, `test_services.py`, `test_migrations.py` (with models), and `test_isolation.py` plus `test_rls_boundary.py` (with tenant models)
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**
