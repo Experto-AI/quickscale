@@ -3602,3 +3602,231 @@ def test_patch_module_path_dependencies_rejects_invalid_splice(
 
     # The file must not have been modified.
     assert pyproject_path.read_text() == module_pyproject
+
+
+# ---------------------------------------------------------------------------
+# SA191: the completed run writes the recipient handoff prompt
+# ---------------------------------------------------------------------------
+
+_HANDOFF_PROMPT_SNAPSHOT_PATH = Path(__file__).parent / "fixtures" / "handoff_prompt.md"
+
+
+def _write_handoff_prompt_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """Create the same-slug donor/recipient pair used by the handoff prompt tests."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="bap-web",
+        package="bap_web",
+        marker="donor",
+        modules=("auth", "social"),
+        path_dependencies=("quickscale-module-auth", "quickscale-module-social"),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="bap-web",
+        package="bap_web",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    (recipient / "modules" / "social").mkdir(parents=True)
+
+    donor_package_dir = donor / "bap_web"
+    (donor / "frontend" / "src" / "App.tsx").write_text(
+        "export default function App() { return 'donor-app'; }\n"
+    )
+    (donor / "frontend" / "src" / "pages" / "About.tsx").write_text(
+        "export default 'donor-about';\n"
+    )
+    (donor / "frontend" / "src" / "components" / "layout" / "Nav.tsx").write_text(
+        "export default 'donor-layout';\n"
+    )
+    (donor / "frontend" / "src" / "assets").mkdir(parents=True, exist_ok=True)
+    (donor / "frontend" / "src" / "assets" / "logo.txt").write_text("donor-logo\n")
+    (recipient / "frontend" / "src" / "assets").mkdir(parents=True, exist_ok=True)
+    (recipient / "frontend" / "src" / "assets" / "logo.txt").write_text(
+        "recipient-logo\n"
+    )
+    (donor_package_dir / "urls.py").write_text("# donor-urls-marker\n")
+    (donor_package_dir / "views.py").write_text("# donor-views-marker\n")
+    (donor_package_dir / "context_processors.py").write_text(
+        "# donor-context-processors-marker\n"
+    )
+    return donor, recipient
+
+
+def test_run_fresh_first_writes_handoff_prompt_matching_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The completed run writes a snapshot-stable handoff prompt into the recipient."""
+    donor, recipient = _write_handoff_prompt_fixture(tmp_path)
+    _install_verification_success_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    prompt_path = recipient / "MIGRATION_PROMPT.md"
+    assert prompt_path.is_file()
+    assert str(prompt_path) in report.changed_files
+    assert any(step.step == "write-handoff-prompt" for step in report.completed_steps)
+
+    actions = {action.action: action for action in report.pending_manual_actions}
+    assert actions["run-local-smoke-checks"].paths == ["."]
+    assert actions["set-module-env-vars"].paths == ["modules/auth"]
+    assert all(action.rule for action in report.pending_manual_actions)
+
+    rendered = prompt_path.read_text()
+    assert str(recipient) not in rendered
+    normalized = rendered.replace(str(donor), "<DONOR>")
+    assert normalized == _HANDOFF_PROMPT_SNAPSHOT_PATH.read_text()
+
+
+def test_handoff_prompt_requires_completed_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dry-run and partial runs must not write the recipient handoff prompt."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="beta-site",
+        package="beta_site",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    prompt_path = recipient / "MIGRATION_PROMPT.md"
+
+    dry_run_report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+    assert dry_run_report.status == "ready", dry_run_report.blockers
+    assert not prompt_path.exists()
+
+    def failing_verification(command, **kwargs):
+        return subprocess.CompletedProcess(
+            tuple(command), 1, stdout="nonzero stdout", stderr="nonzero stderr"
+        )
+
+    monkeypatch.setattr(subprocess, "run", failing_verification)
+    partial_report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert partial_report.status == "blocked"
+    assert partial_report.phase == "fresh-first-partial"
+    assert not prompt_path.exists()
+    assert any(
+        step.step == "write-handoff-prompt" for step in partial_report.skipped_steps
+    )
+
+
+@pytest.mark.parametrize("link_kind", ["symlink", "hardlink"])
+def test_handoff_prompt_write_does_not_reach_a_linked_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    link_kind: str,
+) -> None:
+    """An existing prompt link must be replaced, never written through."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="beta-site",
+        package="beta_site",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    donor_target = donor / "notes.txt"
+    donor_target.write_text("donor-owned\n")
+    prompt_path = recipient / "MIGRATION_PROMPT.md"
+    if link_kind == "symlink":
+        prompt_path.symlink_to(donor_target)
+    else:
+        os.link(donor_target, prompt_path)
+
+    _install_verification_success_stub(monkeypatch)
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    assert donor_target.read_text() == "donor-owned\n"
+    assert not prompt_path.is_symlink()
+    assert prompt_path.stat().st_nlink == 1
+    assert "## Remaining work" in prompt_path.read_text()
+
+
+def test_handoff_prompt_never_claims_readiness_when_report_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed CLI report write must not leave the prompt claiming readiness."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="beta-site",
+        package="beta_site",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    _install_verification_success_stub(monkeypatch)
+    stdout = io.StringIO()
+
+    exit_code = run_beta_migration_cli(
+        [
+            "fresh-first",
+            "--donor",
+            str(donor),
+            "--recipient",
+            str(recipient),
+            # A directory cannot receive the JSON report, so the CLI fails closed
+            # after the execution phase already wrote the recipient prompt.
+            "--report-path",
+            str(recipient),
+        ],
+        stdout=stdout,
+    )
+
+    assert exit_code == 1
+    _summary, json_payload = stdout.getvalue().strip().split("\n\n", maxsplit=1)
+    parsed = json.loads(json_payload)
+    assert parsed["status"] == "blocked"
+    assert any("Failed to write report" in blocker for blocker in parsed["blockers"])
+
+    prompt_text = (recipient / "MIGRATION_PROMPT.md").read_text()
+    assert "## Remaining work" in prompt_text
+    assert "- Status: ready" not in prompt_text

@@ -164,10 +164,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     proves an upgrade leaves it untouched. The tool ports the donor's design into it. The SA192
     Django-rendered pages import the same tokens file.
   - *Handoff prompt.* The final phase writes `MIGRATION_PROMPT.md` into the recipient, generated
-    from the report: what was migrated, every remaining item with paths, diffs, and the applicable
-    rule, the hard constraints, and the exact done criteria. A coding assistant completes the
-    remainder from it. Work the assistant repeats every iteration is a tool-fix candidate, so the
-    prompt shrinks across iterations.
+    from the report: what was migrated, the remaining manual actions with their paths and the
+    applicable rule, the hard constraints, and the exact done criteria; a snapshot test pins the
+    rendered prompt. Each remaining file item will also carry its diff once classification lands. A
+    coding assistant completes the remainder from it. Work the assistant repeats every iteration is
+    a tool-fix candidate, so the prompt shrinks across iterations.
 
   **`forms` carry-over.** Every in-place `modules/forms` customization carries over, either
   upstreamed into the `forms` module when generic or re-expressed as project-owned configuration or

@@ -318,6 +318,20 @@ def _assert_successful_execution(
         "fresh-first execution did not complete the verification stack: "
         f"{report['verification_results']}",
     )
+    prompt_path = recipient / "MIGRATION_PROMPT.md"
+    _require(
+        prompt_path.is_file(),
+        "fresh-first execution did not write the recipient handoff prompt",
+    )
+    prompt_text = prompt_path.read_text()
+    _require(
+        "## Remaining work" in prompt_text and "## Hard constraints" in prompt_text,
+        "fresh-first handoff prompt is missing its remaining-work or constraints section",
+    )
+    _require(
+        str(recipient) not in prompt_text,
+        "fresh-first handoff prompt leaked the recipient root path",
+    )
 
 
 def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) -> None:
@@ -342,7 +356,10 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
         report["identity_reconciliation_required"] is True,
         "fresh-first identity reconciliation was not planned",
     )
-    _require(len(report["planned_actions"]) == 8, "fresh-first plan did not contain eight actions")
+    _require(
+        len(report["planned_actions"]) == 9,
+        "fresh-first plan did not contain nine actions",
+    )
     _require(
         report["runtime_provenance"]
         == {

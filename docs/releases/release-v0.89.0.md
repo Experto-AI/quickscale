@@ -112,10 +112,11 @@ URL after `quickscale deploy railway`, which rewrites the runtime URL on service
 
 This maintenance release also adds maintainer-only beta-migration compatibility validation and
 effective runtime provenance to report output; incompatible launcher, settings, and package
-combinations now fail before recipient mutation, and fresh-first identity changes reconcile raw
-and derived slug/package values across the generated scaffold. Those beta-migration-only additions
-do not themselves change generated-project output, public package APIs, or upgrade requirements;
-the shared-design generated-file boundary is described above.
+combinations now fail before recipient mutation, fresh-first identity changes reconcile raw and
+derived slug/package values across the generated scaffold, and a run that completes its
+verification stack writes a report-derived `MIGRATION_PROMPT.md` handoff into the recipient. Those
+beta-migration-only additions do not themselves change generated-project output, public package
+APIs, or upgrade requirements; the shared-design generated-file boundary is described above.
 
 ## Delivery provenance
 

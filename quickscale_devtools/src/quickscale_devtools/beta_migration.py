@@ -39,6 +39,10 @@ from quickscale_core.utils.theme_validation import (
     validate_theme_preflight,
 )
 
+from .handoff_prompt import (
+    HANDOFF_PROMPT_FILENAME,
+    write_handoff_prompt,
+)
 from .report_rendering import (
     render_report_json,
     render_report_summary,
@@ -295,10 +299,17 @@ class PreflightCheck:
 
 @dataclass(frozen=True)
 class PendingManualAction:
-    """A manual follow-up action preserved in the report handoff."""
+    """A manual follow-up action preserved in the report handoff.
+
+    ``paths`` are recipient-relative locations the action touches (``.`` is the
+    recipient root) and ``rule`` is the constraint that governs how the action
+    must be done.
+    """
 
     action: str
     detail: str
+    paths: list[str] = field(default_factory=list)
+    rule: str = ""
 
 
 @dataclass(frozen=True)
@@ -1087,6 +1098,14 @@ def _fresh_first_actions(
             targets=[str(recipient.path)],
         ),
         PlannedAction(
+            step="write-handoff-prompt",
+            description=(
+                "Write MIGRATION_PROMPT.md into the recipient from the run report so a coding "
+                "assistant can complete the remaining work."
+            ),
+            targets=[str(recipient.path / HANDOFF_PROMPT_FILENAME)],
+        ),
+        PlannedAction(
             step="manual-handoff",
             description=(
                 "After local verification succeeds, keep smoke testing, repo replacement, PR/merge, "
@@ -1103,12 +1122,21 @@ def _build_pending_manual_actions(
 ) -> list[PendingManualAction]:
     """Build pending manual actions based on the current report state."""
     actions: list[PendingManualAction] = []
+    module_paths = (
+        [f"modules/{module}" for module in report.recipient.modules]
+        if report.recipient is not None
+        else []
+    )
 
     if report.blockers:
         actions.append(
             PendingManualAction(
                 action="clear-blockers-and-rerun",
                 detail="Resolve the reported blockers and rerun the maintainer workflow from Make.",
+                rule=(
+                    "Every blocker fails closed before mutation; nothing further runs until "
+                    "all of them are cleared."
+                ),
             )
         )
         if report.changed_files:
@@ -1118,6 +1146,11 @@ def _build_pending_manual_actions(
                     detail=(
                         "Resume from the last completed deterministic step using completed_steps, "
                         "skipped_steps, changed_files, and verification_results instead of rerunning "
+                        "earlier file mutations."
+                    ),
+                    paths=["."],
+                    rule=(
+                        "Resume from the last completed deterministic step instead of rerunning "
                         "earlier file mutations."
                     ),
                 )
@@ -1134,10 +1167,20 @@ def _build_pending_manual_actions(
                 PendingManualAction(
                     action="review-fresh-first-plan",
                     detail="Review the planned fresh-first copy order and protected-file boundaries.",
+                    paths=["."],
+                    rule=(
+                        "Protected recipient-managed files are never overwritten by donor "
+                        "content; the planned action list is the binding copy boundary."
+                    ),
                 ),
                 PendingManualAction(
                     action="run-fresh-first-without-dry-run",
                     detail="Rerun the maintainer workflow without --dry-run to mutate the throwaway recipient and execute local verification.",
+                    paths=["."],
+                    rule=(
+                        "A dry run mutates nothing and executes no verification; only a run "
+                        "that completes its verification stack writes the handoff prompt."
+                    ),
                 ),
             ]
         )
@@ -1148,26 +1191,55 @@ def _build_pending_manual_actions(
             PendingManualAction(
                 action="run-local-smoke-checks",
                 detail="Start the verified recipient, confirm the home page, admin, custom routes, and any installed public module pages.",
+                paths=["."],
+                rule=(
+                    "Smoke-check every surface the live site serves before replacing any "
+                    "repository."
+                ),
             ),
             PendingManualAction(
                 action="replace-existing-repository",
                 detail="Copy the verified recipient into the real beta-site repository while excluding .git, media, .env, and poetry.lock.",
+                paths=["."],
+                rule=(
+                    "Never copy `.git`, `media/`, `.env`, or `poetry.lock` between the donor "
+                    "and the real repository."
+                ),
             ),
             PendingManualAction(
                 action="create-pr-and-merge",
                 detail="Commit in the real repository, open a PR, review the diff, and merge after approval.",
+                paths=["."],
+                rule=(
+                    "Merge exactly the reviewed and verified recipient; do not hand-edit past "
+                    "the reviewed tip."
+                ),
             ),
             PendingManualAction(
                 action="set-module-env-vars",
                 detail="Configure any required Railway environment variables for newly adopted modules without storing secret values in the report.",
+                paths=module_paths,
+                rule=(
+                    "Set only the modules' declared environment variables; never store secret "
+                    "values in the report or the repository."
+                ),
             ),
             PendingManualAction(
                 action="deploy-and-verify",
                 detail="Deploy through the existing repo workflow, confirm migrations in logs, and run production smoke checks.",
+                paths=["."],
+                rule=(
+                    "Confirm the deployment logs show the migrations applying before running "
+                    "production smoke checks."
+                ),
             ),
             PendingManualAction(
                 action="keep-rollback-reference",
                 detail="Keep the previous git and Railway deployment reference available until the new release is validated.",
+                rule=(
+                    "Retain the previous git and Railway deployment reference until the "
+                    "reseeded site is verified."
+                ),
             ),
         ]
     )
@@ -4541,6 +4613,24 @@ def _execute_verification_stack(report: BetaMigrationReport) -> None:
     )
 
 
+def _execute_write_handoff_prompt(report: BetaMigrationReport) -> None:
+    """Write the report-derived handoff prompt into the recipient."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    report.pending_manual_actions = _build_pending_manual_actions(report)
+    prompt_path = write_handoff_prompt(report)
+    _record_changed_file(report, prompt_path)
+    _append_completed_step(
+        report,
+        step="write-handoff-prompt",
+        detail=(
+            f"Wrote {HANDOFF_PROMPT_FILENAME} into the recipient with "
+            f"{len(report.pending_manual_actions)} remaining manual actions."
+        ),
+    )
+
+
 def _execute_fresh_first(report: BetaMigrationReport) -> BetaMigrationReport:
     """Execute the deterministic fresh-first workflow on the recipient."""
     step_handlers: list[tuple[str, Any]] = [
@@ -4554,6 +4644,7 @@ def _execute_fresh_first(report: BetaMigrationReport) -> BetaMigrationReport:
         ("sync-missing-path-dependencies", _execute_sync_missing_path_dependencies),
         ("preserve-managed-recipient-files", _execute_preserve_managed_recipient_files),
         ("run-verification-stack", _execute_verification_stack),
+        ("write-handoff-prompt", _execute_write_handoff_prompt),
     ]
 
     report.phase = "fresh-first-executed"

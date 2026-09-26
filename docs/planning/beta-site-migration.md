@@ -17,6 +17,7 @@ Rules for the current maintainer tool:
 - `make beta-migrate-fresh` runs deterministic file mutation on the throwaway recipient and executes the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutating files
 - implemented in `quickscale_devtools.beta_migration`; `scripts/beta_migrate.py` is only the thin maintainer wrapper, not a QuickScale module or public `quickscale` CLI command
 - reports which project's `settings/production.py`, `start.sh`, and `Dockerfile` form the effective runtime, rejects unresolved command settings or launcher/package skew before mutation, and keeps fresh-first `.quickscale/state.yml` identity metadata aligned with the reconciled scaffold
+- a run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient — what was migrated, every remaining manual action with its paths and governing rule, the hard constraints, and the done criteria — for a coding assistant to complete the remainder; dry runs and runs blocked before or during execution write no prompt
 - `DONOR` and `RECIPIENT` are the only required operator inputs and must be provided explicitly on every run
 - prefer deterministic Python transforms over bash-heavy pipelines
 - if a step cannot be resolved safely, stop and emit a partial report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions` for a maintainer or AI coding assistant to continue
@@ -647,7 +648,7 @@ Use this when the maintainer tool is only partially implemented or stops before 
 
 1. Read this playbook, the current [v0.89.0 release note](../releases/release-v0.89.0.md), and the historical [v0.81.0 tooling note](../releases/release-v0.81.0.md) before changing the automation behavior.
 2. Treat the provided `DONOR` and `RECIPIENT` values as authoritative rather than inferring roles from directory names.
-3. Resume from the last completed deterministic step in the tool's report instead of rerunning earlier destructive steps.
+3. Resume from the last completed deterministic step in the tool's report — and from `MIGRATION_PROMPT.md` in the recipient after a completed run — instead of rerunning earlier destructive steps.
 4. Fresh-first continuation order: field-aware identity fix (including locked authoritative state reconciliation and `start.sh`) → frontend copies → Django file copies → path dependencies → local verification → manual repo handoff.
 5. If a step would require guessing about module adoption, deploy timing, or secrets, stop, record the skipped work in `skipped_steps`, and leave the operator follow-up in `pending_manual_actions`.
 6. The minimum handoff payload for partial automation is `mode`, `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions`.
