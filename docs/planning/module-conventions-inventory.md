@@ -1,7 +1,10 @@
 # Module Conventions Inventory
 
 > **Status:** decisions D1–D9 (first pass) and D10–D14 (second pass: URLs, templates, APIs,
-> checks and errors, package files) are taken and recorded in
+> checks and errors, package files) are taken; D15–D21 (third pass: manifest option schema, tenant
+> models, model basics, `__init__.py`, signals, command behavior, package tooling; sections 14–20)
+> are decided, as decisions.md rules 12–18 (D15 → 12, D16 → 13, … D21 → 18; enforcement is rule 19).
+> Two D15 details and one D20 item were settled during review (marked in place). Section 14 also covers core and CLI code, not only `quickscale_modules/`. All are recorded in
 > [decisions.md § Module Conventions](../technical/decisions.md#module-conventions), which wins on any
 > conflict with this file. Evidence for SA215, taken 2026-09-26 from `v89` (`quickscale_modules/*/module.yml`
 > and module source under `src/quickscale_modules_<name>/`). It records what exists; the convention
@@ -167,7 +170,8 @@ Top-level keys beyond `name`, `version`, `description`, `config`, `derivation`:
 - forms, blog, and listings depend on orgs in code (section 5); blog and listings declare
   `required_modules`, forms does not.
 - Immutable options exist only in auth (`authentication_method`) and storage
-  (`private_media_enabled`), and neither maps to a setting.
+  (`private_media_enabled`), and neither maps to a setting — as decisions.md § Module Manifest
+  Architecture requires (immutable options must not have `django_setting`), so this is not drift.
 
 ## 8. Extension surfaces
 
@@ -274,6 +278,145 @@ share one global namespace across all installed apps.
 - What a module must test is decided module by module, so tenant isolation is proven unevenly.
 - READMEs do not tell an operator the same things in the same place, and some are stale.
 
+## 14. Manifest option schema
+
+Every option's entry in `config.mutable` / `config.immutable`.
+
+| Aspect | Observed |
+|---|---|
+| `immutable:` block | present (often `{}`) in auth, blog, crm, forms, orgs, storage; absent in analytics, backups, billing, listings, notifications, social |
+| Per-option `validation:` block | 5 options in 4 modules (auth, backups, orgs, storage), all `choices`. Loaded into `ConfigOption.validation` and **read by nothing** in core or the CLI |
+| `derivation.validation_rules` list (`ValidationRule`, enforced by the manifest resolver) | listings only: `listings_per_page` matches `^\d+$`, which accepts `0` although its message says "positive integer" |
+| Per-module option code in core and the CLI | `quickscale_core.contracts.resolvers` has `validate_/resolve_/normalize_/default_<module>_module_options` for nine modules plus 8 `DEFAULT_*` constants; `contracts.module_options` repeats five of the validators plus 19 `DEFAULT_*` constants; `schema.config_schema` has auth's and billing's; the CLI's `module_config` has backups'. `LEGACY_AUTH_ALLOW_REGISTRATION_OPTION`, `LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION`, and `LEGACY_CRM_DEFAULT_PIPELINE_STAGES_OPTION` are legacy option names. `contracts.imperative_inventory` catalogs them for the migration that decisions.md § Module Derivation Schema records as "separate work" (Track 2 phases T2.3–T2.5), which no current ticket carries |
+| Setting projection | every mutable option names its setting in `config` (`django_setting`); in analytics, billing, blog, crm, forms, and listings every one of them is named again in `derivation.option_derivations.<option>.derived_settings` (25 options, all direct 1:1), and blog, crm, forms, and listings repeat 10 of the defaults there |
+| Missing checks | no manifest check on any `*_per_page`, `*_rate_limit`, `*_retention_days`, `*_ttl_seconds`, or enum-like string (`analytics.provider`, `social.layout_variant`); some exist only in the core code above |
+| `description:` | every option except one in storage |
+| Top-level key order | eight different orders (`implies` before or after `dependencies`, `contract_vintage` in three positions) |
+| `dependencies:` | missing in social only |
+
+**Drift**
+- Option checks live in four places (an unread manifest block, a manifest list one module uses,
+  core, the CLI), and core and the CLI name modules — against
+  [decisions.md § Module Wiring Authority](../technical/decisions.md#module-wiring-authority) and rule 3's
+  "the manifest default is the only default". Rule 3's startup check reads the manifest, so it would
+  miss every check that lives in code, and `0` passes listings' only manifest rule.
+- Inside the manifest, a setting's name and default are written twice in six modules, against
+  rule 3's "the manifest default is the only default".
+- Legacy option names survive in core, against rule 6. The first and second passes missed all of
+  this because they inventoried `quickscale_modules/` only.
+- Two ways to say "no immutable options", and no fixed key order to diff manifests by eye.
+
+## 15. Tenant models
+
+How a model becomes organization-scoped.
+
+| Pattern | Modules |
+|---|---|
+| subclass orgs' `TenantModel` (field + both managers inherited) | blog, crm |
+| `models.Model` + `tenant_org_fk(...)` + hand-declared `objects`/`all_objects = TenantManager(...)` | billing (4), forms (4), listings, social |
+| `models.Model` + `OneToOneField(Organization)` + hand-declared managers | billing `CreditBalance` (one row per org) |
+
+Every tenant model does end up with `Meta.base_manager_name = "all_objects"`, in three ways:
+inherited through `class Meta(TenantModel.Meta)` (crm), inherited through a module's own abstract
+base's `Meta` (social's `BaseSocialItem`, listings' `AbstractListing` for `Listing`), or typed
+again in a `Meta` that does not inherit (blog, billing, forms). orgs detects tenant models by
+either marker, `TenantModel` inheritance or a `TenantManager` as `objects`
+(`tenancy.is_tenant_model`), and module-extension.md documents the manager form as the supported
+way for a project to add a tenant model. blog subclasses `TenantModel` and still overrides
+`organization` with `tenant_org_fk(related_name=…)` to keep its reverse names.
+Admin: every tenant model is registered on `TenantModelAdmin`; every non-tenant model on
+`admin.ModelAdmin`; all through `@admin.register` — consistent.
+
+**Drift**
+- Three spellings of "this model belongs to an organization". Nothing is missing today, but in
+  the retyped-`Meta` and hand-built cases each model repeats the contract, so a change to it must
+  be made in every copy, and a new model that forgets one piece is not caught.
+  (Correction: the first write-up of this pass said the hand-built models lack
+  `base_manager_name`; they do not.)
+
+## 16. Models: fields, relations, meta
+
+| Aspect | Observed |
+|---|---|
+| Timestamps | `created_at` / `updated_at` everywhere (21 / 14), events as `<event>_at` (`submitted_at`, `joined_at`, `purged_at`) — consistent |
+| Primary keys | `BigAutoField` in every module; orgs uses `UUIDField` for `Organization`, `OrganizationTombstone`, and the invitation token |
+| User references | `settings.AUTH_USER_MODEL` everywhere — consistent |
+| `related_name` on relations to `User` | three styles: module-prefixed (`blog_posts`, `billing_subscriptions`, `quickscale_backup_artifacts`), unprefixed (`author_profile`, `credit_balance`, `credit_transactions`, `owned_deals`, `created_forms`, `organization_memberships`), and missing (crm's `created_by` on `ContactNote` and `DealNote`, so `User` gets `contactnote_set` and `dealnote_set`) |
+| `related_name` on `organization` | `TenantModel`'s `%(app_label)s_%(class)s_set` (crm, social), hand-picked (`blog_posts`, `forms`, `subscriptions`, `%(class)s_listings`); no code reads any of them as an attribute |
+| `__str__`, `Meta.ordering` | present on every concrete model (listings and social inherit them from their abstract bases), except ordering on `FormFieldValue`; absent by design on singletons and one-per-parent models (`BackupPolicy`, `NotificationSettings`, `CreditBalance`) |
+| Choice lists | 15 literal tuple lists: the second pass's 14 plus social's `SOCIAL_EMBED_RESOLUTION_CHOICES` (in `contracts.py`). orgs' `INVITABLE_ORG_ROLE_CHOICES` (a subset of `OrgRole`) and social's `SOCIAL_PROVIDER_CHOICES` (from its provider catalog) are derived, not literals |
+| Translation | no module calls `gettext`; `verbose_name` appears 30 times across 8 modules with no pattern — no i18n anywhere |
+
+**Drift**
+- Reverse accessors on `User` and `Organization` are a namespace every installed module shares;
+  without a module prefix two modules collide (`notes`, `deals`, `tags` are generic).
+- A model without ordering pages non-deterministically; `FormFieldValue` is the one case.
+  (Correction: the first write-up of this pass listed `Listing`, `SocialLink`, and `SocialEmbed`
+  as missing `__str__` and ordering; they inherit both.)
+
+## 17. Package `__init__.py`
+
+| Module | Content |
+|---|---|
+| analytics, backups, billing, notifications, orgs, social | `__version__` and `__all__ = ["__version__"]` |
+| auth, blog, crm, listings | `__version__` and `default_app_config` (removed in Django 4.1; dead) |
+| forms | `__version__` only |
+| storage | `__version__`, a lazy `__getattr__` re-export, and a computed `__all__` |
+
+**Drift**
+- A dead Django setting in four modules, and storage is the only package importable as a public API
+  from its root.
+
+## 18. Signals and receivers
+
+| Module | Defines signals | Receivers live in | Connected by |
+|---|---|---|---|
+| orgs | `signals.py` (`organization_created`, …) | `signals.py` and `apps.py` | `ready()` calls `.connect()` |
+| auth | — | `signals.py` (`@receiver(user_signed_up)`) | `ready()` imports `signals` |
+| crm | — | `signals.py` (`@receiver(organization_created)`) | `ready()` imports `signals` |
+
+**Drift**
+- `signals.py` means "signals I send" in orgs and "things I listen to" in auth and crm. Rule 4
+  makes a sender's `signals.py` part of its public surface, so a module importing `crm.signals`
+  would get receivers, not signals.
+
+## 19. Management commands: behavior
+
+Names are section 6. Behavior:
+
+| Command | Changes data | `--dry-run` | Failure handling |
+|---|---|---|---|
+| `purge_organization`, `backups_sync_media`, `backups_restore` | deletes or overwrites | yes | `CommandError` |
+| `backups_prune`, `forms_anonymize_submissions` | deletes or anonymizes | **no** | prune `CommandError`; anonymize has no expected failure path |
+| `promote_to_saas` | rewrites personal-org slugs | **no** | no expected failure path |
+| `migrate_billing_to_orgs` (retired recovery command) | writes | **no** | `CommandError` |
+| `check_tenant_isolation` | read-only | — | **`sys.exit()`** instead of `CommandError` |
+| `forms_seed_presets` | creates missing presets only | — | no expected failure path |
+| all other backups commands | — | — | `CommandError` |
+
+Every command writes through `self.stdout`; none calls `print()`. An unexpected exception still exits
+non-zero.
+
+**Drift**
+- Four of seven data-changing commands cannot be previewed, including a retired one the RLS
+  section still names as a recovery path.
+- One command exits with `sys.exit()`, bypassing Django's error handling and `call_command()`.
+  (Correction: the first write-up said three commands exit 0 on failure; they have no expected
+  failure path, and an unexpected one exits non-zero.)
+
+## 20. Package tooling
+
+| Aspect | Observed |
+|---|---|
+| Build backend, pytest config, `--cov-fail-under=90`, ruff sections | same in all twelve — consistent |
+| `[tool.mypy]` | missing in orgs and social |
+| Test settings | `tests/settings.py` in all; billing adds `settings_auth_parity.py` |
+| `teams/` | README-only placeholder in `quickscale_modules/`; nothing says a checker must skip it |
+
+**Drift**
+- orgs, the most security-sensitive module, and social are not type-checked with the others.
+- Any whole-module check has to special-case `teams/` without a recorded reason.
+
 ## What is already consistent (keep)
 
 - Package, `AppConfig`, and app-label naming.
@@ -283,6 +426,10 @@ share one global namespace across all installed apps.
 - Python and Django version constraints across modules (`check_module_python_constraints`,
   `check_module_django_constraints`).
 - Every module version in lockstep with core (`0.89.0`).
+- `created_at` / `updated_at` timestamps, `settings.AUTH_USER_MODEL` references, and
+  `@admin.register` (third pass; D17 and D16 now enforce them).
+- `logging.getLogger(__name__)` and no f-string log messages.
+- Build backend, pytest and coverage settings across `pyproject.toml` files.
 
 ## Module independence: what is already decided
 
@@ -900,3 +1047,143 @@ Required files in every module: `apps.py`, `adapter.py`, `services.py` (with `is
   and labels produce no migration.
 - README headings, in order: Overview, Configuration, Public surface, URLs, Management commands,
   Operations, Extending. No versions in headings; the test checks headings only.
+
+### D15 — Manifest option schema — decided (third pass)
+
+- Every option has `type`, `default`, and `description`; a mutable option has `django_setting`, an
+  immutable one has none and is read by the module's own `adapter.py` at apply time (auth's
+  `authentication_method`, storage's `private_media_enabled`; the test checks that the adapter
+  reads it). This is the recorded Module Manifest Architecture rule, not a new one.
+- Every option whose type admits invalid values carries `validation`: integers a `range` minimum
+  (`*_PER_PAGE` ≥ 1, `*_RETENTION_DAYS` ≥ 0, `*_TTL_SECONDS` ≥ 1); `*_RATE_LIMIT` the DRF rate
+  pattern `^\d+/(second|minute|hour|day)$`; closed-set strings a `choices` list. Booleans and free
+  text are exempt. Without this, rule 3's startup check has nothing to check.
+- Decided in review (option A of two): the checks live in the per-option `validation` block (the form four
+  modules already use, next to the option it checks), which core starts reading; the
+  `derivation.validation_rules` list goes. Rejected: keeping `derivation.validation_rules` as the
+  one form (already enforced, but far from the option and used by one module).
+- Decided in review (option B of four): a check spanning options uses one of two declarative keys
+  in the option's `validation` block — `required_when` and `any_of` — which cover every
+  cross-option check in core and the CLI today (backups: remote mode, automation schedule,
+  endpoint-or-region; storage: cloud-backend credentials). `plan`, `apply`, and the startup check
+  run them from the same schema. A new kind of check needs a decision edit. Rejected: a Python
+  `validate_options()` in each `adapter.py` (not visible in the manifest, not run at startup
+  without extra wiring, and single-option checks could drift back into code); keeping the checks
+  in core (names modules); startup-only checks in `checks.py` (found after deploy).
+- Decided in review: the Module Derivation Schema decision is amended, not overridden — `module.yml`
+  stays the single source; checks are authored on the option and compiled into the same
+  `ValidationRule` engine. Rejected: moving checks into `derivation.option_derivations` (verbose,
+  far from the option).
+- Decided in review (option 1 of three): `django_setting` is the only one-to-one projection;
+  `derived_settings` only for computed or transformed settings, with no default. The 25 duplicate
+  `derived_settings` entries and 10 repeated defaults go. Rejected: `derived_settings` only
+  (contradicts "mutable options MUST specify `django_setting`", about six lines per setting);
+  keeping both with a test that they agree (duplication stays).
+- Core's and the CLI's per-module option code (section 14) is removed with its `DEFAULT_*` and
+  `LEGACY_*` constants and `contracts.imperative_inventory`.
+- `config` always has both `mutable` and `immutable` (`{}` when empty); `dependencies` is always
+  present (`[]` when empty).
+- Top-level key order is not a rule (considered; cosmetic, not worth a test).
+
+Rejected: validation in module code (duplicates the manifest, D4); a JSON-Schema file per module
+(a second schema, which rule 3 forbids).
+
+### D16 — One tenant-model base — decided (third pass): option A2
+
+Options weighed (the tenant contract is the `organization` field, the `objects` / `all_objects`
+`TenantManager` pair, and `Meta.base_manager_name = "all_objects"`):
+
+- **A1** — every module tenant model inherits `TenantModel`; orgs still also recognizes the
+  manager-only form for projects.
+- **A2 (chosen)** — inheritance is the only form, for modules and projects; a `TenantManager` on a
+  model that does not inherit `TenantModel` fails startup.
+- **B** — delete `TenantModel`; every model spells the contract out and the test checks each piece.
+- **C** — allow both forms; the test checks completeness.
+
+Why A2: the security-critical question "is this model tenant-isolated?" gets one answer and one
+code path in `tenancy.is_tenant_model`; a half-built tenant model fails startup instead of going
+unenrolled; it fits rule 4 (`TenantModel` is a published extension base), rule 6 (one way), and
+D17's `related_name` rule (the base's `%(app_label)s_%(class)s_set` reverse name is module-prefixed by construction);
+and it is cheapest now, before the `bap-web` port (SA191) and the migration freeze (SA204).
+Rejected: A1 and C keep two forms; B makes every model easy to get wrong and removes a published
+base. Accepted cost: project tenant models must inherit `TenantModel` or a module base; no
+project uses the manager-only form yet.
+
+Consequences:
+- billing, forms, listings (`AbstractListing`), and social (`BaseSocialItem`) move onto
+  `TenantModel`; every `Meta` inherits the base's `Meta`; retyped `base_manager_name` lines go.
+- blog's, billing's, forms', and listings' `related_name` overrides on `organization` go; no code
+  reads those reverse accessors (checked for attribute access; ORM lookups across them must be
+  checked when implementing). Abstract bases are not recorded in migrations, so the expected
+  migration change is reverse names only (model state, no SQL) — confirm with
+  `makemigrations --check`.
+- `CreditBalance` redeclares `organization` as a `PROTECT` `OneToOneField`.
+- `is_tenant_model` drops the manager branch; a new orgs check rejects a stray `TenantManager`.
+- module-extension.md's project example inherits `AbstractListing` with no manager lines.
+- Tenant models register on `TenantModelAdmin`, others on `admin.ModelAdmin`, both with
+  `@admin.register` (already true; now enforced).
+
+### D17 — Model basics — decided (third pass)
+
+- Timestamps `created_at` / `updated_at`, events `<event>_at` (codifies what exists).
+- Primary keys `BigAutoField`; `UUIDField` only for an identifier shown outside the site (orgs'
+  public ids and tokens). Listed exception: orgs.
+- References to users use `settings.AUTH_USER_MODEL` (codifies what exists).
+- Every relation to a model of another module (`User`, `Organization`, another module's model) sets
+  `related_name="<module>_<name>"`, plural for a foreign key or many-to-many and singular for a
+  one-to-one; `+` is allowed when no reverse access is wanted. The tenant `organization` field is
+  governed by D16.
+- Every concrete model defines `__str__`; every concrete model defines `Meta.ordering`, except a
+  singleton or one-per-parent model, which the test recognizes by a `unique` / `OneToOneField`
+  scope and otherwise by a listed name.
+- No translation: QuickScale ships English only and modules do not call `gettext`; `verbose_name`
+  is set only when Django's default reads wrong. i18n, if ever wanted, is a separate decision.
+- The literal choice-list count is 15, not 14 (see section 16); tuples derived from `TextChoices`
+  members or a data catalog are allowed.
+
+### D18 — `__init__.py` holds only the version — decided (third pass)
+
+`__version__` and `__all__ = ["__version__"]`, nothing else. `default_app_config` is deleted from
+auth, blog, crm, listings; storage's root re-export moves behind `services.py` (rule 4).
+
+### D19 — `signals.py` sends, `receivers.py` listens — decided (third pass)
+
+- `signals.py` holds only `Signal()` objects the module sends; it is public (rule 4).
+- `receivers.py` holds the module's receivers, private, connected by importing it once in `ready()`
+  (`@receiver` decorators); no `.connect()` calls in `apps.py` except for Django's own backend
+  signals (`connection_created`), which orgs' RLS guard needs before any receiver module loads.
+- auth's and crm's `signals.py` become `receivers.py`; orgs' receivers move to `receivers.py`.
+
+Rejected: one `signals.py` for both — importing a sender's public signals would register another
+module's receivers as a side effect.
+
+### D20 — Management-command behavior — decided (third pass)
+
+- Every command subclasses `BaseCommand`, writes through `self.stdout` / `self.stderr` with
+  `self.style`, and reports an expected failure by raising `CommandError` — never `sys.exit()`.
+- A command that deletes, anonymizes, or overwrites data (`purge`, `prune`, `anonymize`, `restore`,
+  …) takes `--dry-run`, which reports what would change and writes nothing; database-only work runs
+  in `transaction.atomic()`.
+- Operators schedule commands; modules ship no scheduler (rejected: Celery beat or django-q, a
+  core cron helper). Each command a site should schedule is listed under the README's Operations
+  heading with a suggested interval. backups' `schedule` and `automation_enabled` options are
+  already documentation-only and stay so.
+- Applies to `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas` (gain
+  `--dry-run`) and `check_tenant_isolation` (`sys.exit()` → `CommandError`).
+- Decided in review (option A of three): the retired `migrate_billing_to_orgs` is deleted. Its
+  2026-09-16 retirement already says current installs cannot hold the shape it repairs; it is the
+  last named reason to run with RLS bypassed; `bap-web` is ported fresh (SA191), not upgraded in
+  place. Rejected: adding `--dry-run` (more code for an impossible state); a listed exception.
+  Accepted cost: a site still on the pre-0.86 billing shape has no in-place path, as lockstep and
+  clean-break already imply.
+
+### D21 — Package tooling and placeholders — decided (third pass)
+
+- Every module's `pyproject.toml` has the same tool sections (`[tool.pytest.ini_options]` with
+  `--cov-fail-under=90`, `[tool.mypy]`, `[tool.ruff]`); the test compares their keys, not values.
+  orgs and social gain `[tool.mypy]` and fix what it reports.
+- One `tests/settings.py` per module; extra settings files are named `tests/settings_<purpose>.py`.
+- `teams/` is deleted and its README moves to `docs/planning/teams.md`, with core's placeholder
+  handling (catalog entry, discovery and constraint-validation skips). Every directory under
+  `quickscale_modules/` must then have a `module.yml` (rejected: listing `teams` as an allowed
+  placeholder, which keeps the hand-maintained name list decisions.md already calls a smell).

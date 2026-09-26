@@ -91,6 +91,19 @@ class ProjectListing(AbstractListing):
         base_manager_name = "all_objects"
 ```
 
+> **After SA215** ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 13):
+> `AbstractListing` inherits `TenantModel`, inheritance is the only tenant marker, and a
+> `TenantManager` on a model that does not inherit `TenantModel` fails startup. The example
+> becomes:
+>
+> ```python
+> class ProjectListing(AbstractListing):
+>     class Meta(AbstractListing.Meta):
+>         abstract = False
+> ```
+>
+> The text above and below describes the shipped marker-or-manager contract until then.
+
 The project app must be installed and its initial migration must create the
 concrete table and call `apply_force_rls()` to install the exact two-policy
 contract: one tenant-only `FOR ALL` base policy with identical current-org
@@ -502,6 +515,10 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
 - [ ] Tests use concrete models (not abstract stubs)
 - [ ] Required test files: `test_apps.py`, `test_services.py`, `test_migrations.py` (with models), and `test_isolation.py` plus `test_rls_boundary.py` (with tenant models)
+- [ ] Every `module.yml` option has `type`, `default`, `description`, `django_setting`, and its own `validation` block where invalid values exist; checks spanning options use only `required_when` / `any_of`; core and the CLI hold no code for the module's options (Module Conventions rule 12)
+- [ ] Tenant models subclass `TenantModel` (directly or through a module base) with a `Meta` that inherits the base's — the only tenant marker; relations to other modules' models use a `<name>_<plural|singular>` `related_name`; concrete models define `__str__` and `Meta.ordering` (rules 13–14)
+- [ ] `__init__.py` holds only `__version__`; `signals.py` holds only sent signals and receivers live in `receivers.py` (rules 15–16)
+- [ ] Commands raise `CommandError` on expected failure (no `print()` or `sys.exit()`); data-destroying commands take `--dry-run` (rule 17)
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**

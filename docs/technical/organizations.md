@@ -313,6 +313,12 @@ class TenantModel(models.Model):
         base_manager_name = "all_objects"
 ```
 
+> **SA215** ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 13): every
+> tenant-scoped model, in a module or a project, inherits `TenantModel` (directly or through a
+> module's abstract base) with a `Meta` that inherits the base's; inheritance becomes the only
+> tenant marker, and a `TenantManager` on a model that does not inherit `TenantModel` fails
+> startup. The manager-only form described elsewhere on this page is the shipped state until then.
+
 The shipped repo-enrolled surface currently covers CRM, blog, forms, listings, billing, and social. Cross-module migration dependency ordering must be documented in the organizations release note when new tenant tables join the contract.
 
 ---
@@ -400,6 +406,10 @@ def crm_index(request): ...
 This decorator resolves the current organization's active subscription through the billing ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent.
 
 ### Migration Path from User-Scoped Billing
+
+> **SA215 deletes `migrate_billing_to_orgs`** ([decisions.md § Module Conventions](decisions.md#module-conventions)
+> rule 17). Current installs cannot contain user-scoped billing rows; this section describes the
+> shipped state until SA215 lands.
 
 For historical deployments that still contain user-scoped billing data, `migrate_billing_to_orgs` remains available as an idempotent recovery command. It reuses a sole existing organization when one is already resolvable for the billing user; otherwise it creates a personal org via the standard helper, migrates authoritative `Subscription`, `CreditBalance`, and `CreditTransaction` ownership to that organization, syncs a sole globally unowned Stripe customer id when safe, and aborts ambiguous or cross-org collision cases instead of guessing. Current installs already require organization ownership, so normal deployments do not run it. The launcher and CLI do not grant this retired command a privileged database connection automatically.
 
@@ -758,7 +768,7 @@ For a generated project that already exists and is adding structural isolation:
 1. **Add `quickscale_modules_orgs` to `INSTALLED_APPS`** and run its migrations.
 2. **Add `TenantMiddleware`** to the middleware stack and configure `QUICKSCALE_MODE` (see [Deployment Mode](#deployment-mode-solo-vs-saas-organizations) above).
 3. **Wire URL routing** — load org-scoped or solo URL patterns conditionally based on `QUICKSCALE_MODE`.
-4. **Add the shared manager contract** to every tenant-scoped model that does not already have it — `objects = TenantManager()` and `all_objects = TenantManager(super_scope=True)` (or inherit from `TenantModel`, which provides that contract).
+4. **Add the shared manager contract** to every tenant-scoped model that does not already have it — `objects = TenantManager()` and `all_objects = TenantManager(super_scope=True)` (or inherit from `TenantModel`, which provides that contract). After SA215, inheriting `TenantModel` is the only accepted form (see the note under [TenantModel Abstract Base](#tenantmodel-abstract-base)).
 5. **Backfill `organization_id`** on existing rows — the FK is required for new rows; existing rows may need a data migration to assign an org.
 6. **Switch views and services** — remove `.for_org(...)` chaining and rely on middleware-established org context for request paths; for non-request paths, enter scope explicitly with `org_scope(...)` / `tenant_context(...)` / `set_current_org_for_context(...)` before using `objects`.
 7. **Switch admin classes** — change parent class from `admin.ModelAdmin` to `TenantModelAdmin` (from `quickscale_modules_orgs.admin`). `TenantModelAdmin` auto-scopes querysets to the resolved org and wraps all standard views in org context. Add an `organization` column and list filter for org-aware filtering.

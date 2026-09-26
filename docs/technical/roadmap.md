@@ -119,7 +119,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   reading `backups` settings, and URL, template, table, and management-command names that do not
   follow one stem. A second pass found URL prefixes set in three places, two API frameworks and
   error shapes, templates breaking the recorded base-template rule, four startup-check styles, no
-  fixed file set, uneven tenant-isolation tests, and twelve README outlines. The rules are recorded in
+  fixed file set, uneven tenant-isolation tests, and twelve README outlines. A third pass found option
+checks in four places (including per-module validators in core and the CLI), three ways to build a
+tenant model, uneven reverse names on shared models, receivers in `signals.py`, destructive commands
+without `--dry-run`, and a placeholder module directory. The rules are recorded in
   [decisions.md § Module Conventions](decisions.md#module-conventions); this ticket is the code.
 
   **Scope,** in module-sized slices through the serialized merge queue:
@@ -157,10 +160,37 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Files, tests, docs.* Every module gains `services.py` with `is_enabled()` and `poetry.toml`;
     auth's `adapters.py` → `allauth_adapter.py`; one-off files fold in; missing required tests
     (`test_apps`, `test_services`, `test_migrations`, tenant isolation and RLS) are added;
-    READMEs follow the rule 11 headings; the 14 tuple choice lists become `TextChoices`.
-  - *Enforcement.* The rule 12 conformance test, with a control case per rule.
+    READMEs follow the rule 11 headings; the 15 literal tuple choice lists become `TextChoices`.
+  - *Manifests and option checks (rule 12).* Every option gains `type`/`description`/`validation`
+    as required, in the per-option `validation` block, which core starts reading (today it is
+    parsed and ignored); listings' `derivation.validation_rules` moves there; the 25 one-to-one
+    `derived_settings` entries that repeat an option's `django_setting` (analytics, billing, blog,
+    crm, forms, listings), with their 10 repeated defaults, go; empty
+    `immutable`/`dependencies` blocks are written out. Core's and the CLI's per-module option code
+    goes — the `validate_/resolve_/normalize_/default_<module>_module_options` functions and
+    `DEFAULT_*` / `LEGACY_*` constants in `quickscale_core.contracts.resolvers`,
+    `contracts.module_options`, `schema.config_schema`, and the CLI's `module_config`, with the
+    `contracts.imperative_inventory` that tracked them — and cross-option checks become the
+    manifest's `required_when` / `any_of` keys, run by `plan`, `apply`, and the startup check.
+  - *Models (rules 13–14).* billing, forms, listings (`AbstractListing`), and social
+    (`BaseSocialItem`) models subclass `TenantModel` instead of `tenant_org_fk` plus hand-declared
+    managers, every tenant `Meta` inherits the base's, and `organization` keeps the base's reverse
+    name (`CreditBalance` alone overrides it, as a one-to-one); `is_tenant_model` recognizes
+    inheritance only and an orgs check fails startup on a stray `TenantManager`; relations to other modules' models get
+    `<module>_<name>` `related_name`s (crm's two `created_by` fields have none; backups, billing,
+    blog, crm, forms, and orgs rename the rest, with their callers); `FormFieldValue` gains an
+    ordering.
+  - *Package root, signals, commands, tooling (rules 15–18).* `default_app_config` and storage's
+    root re-export go; auth's and crm's `signals.py` become `receivers.py` and orgs' receivers move
+    there; `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas` gain `--dry-run`,
+    the retired `migrate_billing_to_orgs` is deleted with its recovery docs, and
+    `check_tenant_isolation` raises
+    `CommandError` instead of calling `sys.exit()`; orgs and social gain `[tool.mypy]` and
+    fix what it reports; `quickscale_modules/teams/` is deleted (README to
+    `docs/planning/teams.md`) with core's placeholder handling.
+  - *Enforcement.* The rule 19 conformance test, covering rules 1–18, with a control case per rule.
 
-  **Acceptance:** every inventory drift item (sections 1–13) is fixed or recorded as an accepted exception with
+  **Acceptance:** every inventory drift item (sections 1–20) is fixed or recorded as an accepted exception with
   its reason; the conformance test passes and rejects a violation of each rule; a project
   generated before SA215 fails `apply` and startup with messages naming each new name; a freshly
   generated project with all twelve modules passes `make ci-e2e`; the `auth ↔ orgs` cycle is gone;
@@ -168,13 +198,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   endpoints);
   decisions.md names quoted from the shipped state are updated; the inventory is marked resolved.
 
-  **Surfaces:** every module (manifests and core manifest copies, settings reads, `AppConfig`,
+  **Surfaces:** every module (manifests and core manifest copies, `adapter.py`, settings reads, `AppConfig`,
   migrations, URLs, templates, static files, template tags, APIs, `checks.py`, `exceptions.py`,
-  tests, READMEs); `quickscale_core` (the startup check, capability helper, and API exception handler in `runtime`, the
+  tests, READMEs); orgs' tenant classification (`tenancy.is_tenant_model`, a new stray-`TenantManager` check);
+  `quickscale_core` (per-module option code in `contracts` and `schema` removed; placeholder
+  handling in module discovery and the catalog; the startup check, capability helper, and API exception handler in `runtime`, the
   `dr_engine` backups call, generator settings including the `REST_FRAMEWORK` block, and theme
   templates including the React API client);
-  `quickscale_cli` apply (schema writing, retired-key refusal); `.env.example`; decisions,
-  [module-extension.md](module-extension.md), and user docs. It touches Track 2 (CLI apply,
+  `quickscale_cli` apply (schema writing, retired-key refusal) and `module_config` (per-module
+  option checks removed; prompts read the manifest); `.env.example`; decisions,
+  [module-extension.md](module-extension.md), [organizations.md](organizations.md) (tenant models,
+  billing recovery section), railway.md, and user docs. It touches Track 2 (CLI apply,
   manifests' `contract_vintage` blocks, `.env.example`, `dr_engine`) and Track 3 (orgs, settings
   templates, `auth/views.py`) surfaces.
 

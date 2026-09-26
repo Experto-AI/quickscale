@@ -373,6 +373,15 @@ normalisation and validation knowledge. `module.yml` — not imperative helpers 
 is authoritative for how a configuration option normalises, validates, and
 projects into a Django setting.
 
+**SA215 amendment** (§[Module Conventions](#module-conventions) rule 12): within
+`module.yml`, an option's checks are written in its own `validation` block under
+`config` and compiled into the derivation schema's `ValidationRule`s — one engine,
+authored next to the option; `derivation.option_derivations.<option>.validation_rules`
+is no longer written. A direct one-to-one projection is the option's `django_setting`
+alone; `derived_settings` is only for a setting computed from several options or
+transformed, and carries no default (the option's `default` is the only one). The
+derivation section keeps normalisation, those computed settings, and wiring.
+
 **Constraints:**
 - ✅ Derivation types are frozen dataclasses and all field types are YAML-safe
   (scalars, lists, dicts), so `module.yml` `derivation:` sections round-trip
@@ -466,8 +475,9 @@ Authoring mechanics:
 ### Module Conventions (SA215) {#module-conventions}
 
 **Rule:** Every first-party module follows one convention for its settings, its identity names,
-how it reads configuration, how it depends on and talks to other modules, and how it exposes URLs,
-templates, APIs, checks, errors, files, tests, and docs. A conformance test
+how it reads configuration, how it depends on and talks to other modules, how it exposes URLs,
+templates, APIs, checks, errors, files, tests, and docs, and how it declares options, tenant models,
+model basics, signals, and management commands. A conformance test
 enforces each rule. Evidence and the options weighed:
 [module-conventions-inventory.md](../planning/module-conventions-inventory.md).
 
@@ -669,19 +679,134 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
 - ✅ Required tests: `test_apps.py`, `test_services.py`, `test_migrations.py` when the module has
   models, and `test_isolation.py` plus `test_rls_boundary.py` for a module with tenant models.
 - ✅ Model choices are `TextChoices`/`IntegerChoices`, and code compares against their members,
-  not string literals. ❌ `*_CHOICES` tuple lists.
+  not string literals. A tuple derived from those members or from a data catalog (orgs'
+  `INVITABLE_ORG_ROLE_CHOICES`, social's `SOCIAL_PROVIDER_CHOICES`) is allowed.
+  ❌ `*_CHOICES` tuple lists written out as literals.
 - ✅ README headings, in order: Overview, Configuration (every manifest option), Public surface,
   URLs, Management commands, Operations, Extending. No versions in headings. The test checks the
   headings only.
 
-**12. Enforcement.** A conformance test over every `module.yml` and every module's source fails on
-each rule above (names, suffixes and types, `_ENABLED` presence, undeclared and cross-module
-settings reads, defaults in code, import targets and layers, `required_modules` against imports,
-identity names, `db_table`, retired names, URL mounts and route names, template and static paths,
-non-DRF JSON and hand-built error bodies, checks outside `checks.py` or swallowed, required files and tests,
-README headings, choice lists, unlisted core ports), with a control case proving each rule rejects a
-violation. The layer table and each foundation's published extension bases live in one
-test-owned mapping that mirrors this section.
+**12. Manifest option schema.**
+- ✅ Every option has `type`, `default`, and `description`. A mutable option has `django_setting`;
+  an immutable one has none and is read by the module's `adapter.py` at apply time (auth's
+  `authentication_method`, storage's `private_media_enabled`), as
+  §[Module Manifest Architecture](#module-manifest-architecture) already requires.
+- ✅ The manifest is the only place option values are checked (rule 3). Each option carries its
+  checks in its own `validation` block (the authoring form §[Module Derivation
+  Schema](#module-derivation-schema) records) — `choices`, `min` / `max`, or `pattern` — parsed into the
+  `ValidationRule` kinds `choices`, `range`, and `pattern`. `plan`, `apply`, and the startup check read that block; the
+  `derivation.validation_rules` list is removed (listings is its only user).
+- ✅ Every option whose type admits invalid values has a check: `<THING>_PER_PAGE` a range from 1,
+  `_RETENTION_DAYS` from 0, or from 1 where the module offers no keep-forever (backups),
+  `_TTL_SECONDS` from 1; `_RATE_LIMIT` the pattern
+  `^\d+/(second|minute|hour|day)$`; a closed set of strings its `choices`. Booleans and free text
+  are exempt.
+- ✅ A check that spans options uses one of two declarative keys in the same block, and no others:
+  `required_when: {<option>: <value or list>}` (the option must be set when another has that
+  value — backups' `private_remote` mode needs its bucket and credential env-var names, storage's
+  `s3` / `r2` backends need theirs, `automation_enabled` needs `schedule`) and
+  `any_of: [<option>, …]` (at least one is set — backups' `endpoint_url` or `region_name`), two new
+  `ValidationRule` kinds. The
+  schema `apply` writes carries them, so `plan`, `apply`, and the startup check run the same checks.
+  A check neither key can express needs a decision edit before it is added.
+- ✅ A mutable option's `django_setting` is its only projection when the setting equals the option
+  value; `derivation.option_derivations.<option>.derived_settings` is only for a setting computed
+  from several options or transformed, and never repeats a setting name or a default. The
+  option's `default` is the manifest's only default (rule 3).
+- ✅ `config` always has `mutable` and `immutable` (`{}` when empty); `dependencies` is always
+  present (`[]` when empty). Top-level key order is not a rule.
+- ❌ Option checks, defaults, or legacy option names written for a named module in core or the CLI
+  (today `quickscale_core.contracts.resolvers`, `contracts.module_options`,
+  `schema.config_schema`, and the CLI's `module_config`); option validation in module code — a
+  module's `checks.py` (rule 10) checks what options cannot express (the database role, installed
+  apps, cross-module invariants), never an option's value; a second schema file. The CLI's interactive plan-time prompts stay where
+  [module-extension.md](module-extension.md) puts them, taking defaults and choices from the manifest.
+
+**13. Tenant models.**
+- ✅ Every organization-scoped model — in a module or in a project — subclasses orgs' `TenantModel`,
+  directly or through a module's abstract base (`AbstractListing`, `BaseSocialItem`), which owns
+  the `organization` field, the `objects` / `all_objects` `TenantManager` pair, and
+  `base_manager_name`. A subclass's `Meta` inherits `TenantModel.Meta` (or its module base's
+  `Meta`), so Django does not drop `base_manager_name`.
+- ✅ Inheritance is the only tenant marker: `tenancy.is_tenant_model` answers by `issubclass(…,
+  TenantModel)` alone, and a model with a `TenantManager` that does not inherit `TenantModel` fails
+  startup through orgs' `checks.py` (rule 10) instead of being left unenrolled. `tenant_excluded`
+  keeps its meaning.
+- ✅ The `organization` field keeps the base's reverse name, `%(app_label)s_%(class)s_set`
+  (module-prefixed by construction; rule 14's `related_name` rule is met). The one allowed override
+  is a one-per-organization model (billing's `CreditBalance`), which redeclares `organization` as a
+  `PROTECT` `OneToOneField` and keeps everything else.
+- ✅ Tenant models are registered on `TenantModelAdmin`, other models on `admin.ModelAdmin`, both
+  with `@admin.register`.
+- ❌ `tenant_org_fk(...)` or `TenantManager()` in a model outside `TenantModel`; a retyped
+  `base_manager_name`; the manager-only ("dual-manager") tenant form.
+
+**14. Model basics.**
+- ✅ Timestamps `created_at` / `updated_at`; other moments `<event>_at`.
+- ✅ Primary keys are the `BigAutoField` default; a `UUIDField` key only for an identifier shown
+  outside the site. Listed exception: orgs (`Organization`, `OrganizationTombstone`, invitation
+  token).
+- ✅ Users are referenced as `settings.AUTH_USER_MODEL`.
+- ✅ Every relation to another module's model (`User` and `Organization` included) sets
+  `related_name="<module>_<name>"` — plural for a foreign key or many-to-many, singular for a
+  one-to-one (`blog_posts`, `blog_author_profile`) — or `"+"` when no reverse access is wanted;
+  the tenant `organization` field is covered by rule 13. Reverse accessors on shared models are
+  one namespace for every installed module.
+- ✅ Every concrete model defines `__str__` and `Meta.ordering`; a singleton or one-per-parent model
+  (a `OneToOneField` owner, or `BackupPolicy`, `NotificationSettings`) may omit the ordering.
+- ✅ English only: modules do not call `gettext`, and set `verbose_name` only where Django's default
+  reads wrong. Adding translation is a separate decision.
+
+**15. Package root.** `__init__.py` holds `__version__` and `__all__ = ["__version__"]` and nothing
+else. ❌ `default_app_config` (removed in Django 4.1), re-exports from the package root — the
+public surface is `services.py` (rule 4).
+
+**16. Signals.**
+- ✅ `signals.py` holds only the `Signal()` objects the module sends; it is public (rule 4).
+- ✅ `receivers.py` holds the module's receivers, private, as `@receiver` functions, imported once
+  in `ready()`. Only receivers of Django's database-backend signals (orgs' `connection_created`
+  RLS guard) may be connected in `apps.py`.
+- ❌ Receivers in `signals.py`: importing a sender's public signals must not register another
+  module's receivers.
+
+**17. Management commands.**
+- ✅ A command subclasses `BaseCommand`, writes through `self.stdout` / `self.stderr` with
+  `self.style`, and reports an expected failure by raising `CommandError` (a clean message and a
+  non-zero exit).
+- ✅ A command that deletes, anonymizes, or overwrites data takes `--dry-run`, which reports what
+  would change and writes nothing; database-only work runs in `transaction.atomic()`.
+- ✅ Modules ship no scheduler. A command a site should run periodically is listed under the
+  README's Operations heading with a suggested interval; the operator's cron or platform scheduler
+  runs it (backups' `schedule` and `automation_enabled` options already only document this).
+- ✅ A retired command is deleted, not kept behind a guard (rule 6). `migrate_billing_to_orgs`
+  goes in SA215: its 2026-09-16 retirement already states current installs cannot hold the shape
+  it repairs.
+- ❌ `print()`, `sys.exit()`, or returning normally after a failure.
+
+**18. Package tooling.**
+- ✅ Every module's `pyproject.toml` has `[tool.pytest.ini_options]` (with `--cov-fail-under=90`),
+  `[tool.mypy]`, and `[tool.ruff]`; the test compares section keys, not values.
+- ✅ Test settings are `tests/settings.py`; an additional file is `tests/settings_<purpose>.py`.
+- ✅ Every directory under `quickscale_modules/` is a module with a `module.yml`; there are no
+  placeholder directories. The `teams` placeholder is deleted, its README moves to
+  `docs/planning/teams.md`, and core's placeholder handling (the catalog's `teams` entry and the
+  skips in module discovery and constraint validation) goes with it. The **Teams tie-breaker**
+  note above describes the shipped state until SA215 lands.
+
+**19. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
+and the CLI's option handling fails on each of rules 1–18: names, suffixes and types, `_ENABLED`
+presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
+`required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
+names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
+`checks.py` or swallowed, required files and tests, README headings, choice lists, unlisted core
+ports, option fields and validation, per-module option code in core or the CLI, duplicated setting names or defaults in a manifest,
+tenant-model base,
+`Meta` inheritance, and admin, primary keys, `related_name`, `__str__` and ordering, `gettext`,
+`__init__.py` content, receivers outside `receivers.py`, command output, `CommandError`, and
+`--dry-run`, `pyproject.toml` sections, and a module directory without `module.yml` — with a
+control case proving each rule rejects a violation. The layer table, each
+foundation's published extension bases, and every listed exception live in one test-owned
+mapping that mirrors this section.
 
 ---
 
@@ -705,7 +830,8 @@ code before it works is not shippable.
 - ✅ 90% overall mean + 80% per-file minimum coverage (CI enforced)
 - ✅ Module code MUST read configurable values from settings, never hardcode them
 - ✅ Settings, identity names, module-to-module use, URLs, templates, APIs, checks, errors,
-  package files, required tests, and README outline follow §[Module Conventions](#module-conventions)
+  package files, required tests, README outline, option schema, tenant models, model basics,
+  package root, signals, management commands, and package tooling follow §[Module Conventions](#module-conventions)
 - ✅ A module's server-rendered templates **extend the project's `base.html`** and
   never emit their own `<html>` document. Child templates fill a module-named
   block (`<module>_content`); the module base owns `{% block content %}`. A module
@@ -1068,6 +1194,9 @@ operator sets ``QUICKSCALE_ALLOW_BYPASSRLS=1``, explicitly selects
 ``RUNTIME_DATABASE_URL="$DATABASE_URL"``, and the connected PostgreSQL role is
 actually ``BYPASSRLS`` or ``SUPERUSER``; the exact reviewed invocations live in
 [organizations.md](./organizations.md#migration-path-from-user-scoped-billing).
+**SA215** deletes the command (§[Module Conventions](#module-conventions) rule 17); the two-command
+set and the stations' refusals are unchanged, and `QUICKSCALE_ALLOW_BYPASSRLS` keeps only its
+development and single-tenant use.
 
 **Related:** [Fail-Hard Principle](#fail-hard-principle) (the mutual-exclusion
 check and missing-arg validation follow fail-hard); [Multi-tenant SaaS
@@ -1217,6 +1346,15 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - Runtime-role provisioning is not a third privileged Django command: when `RUNTIME_DB_PASSWORD` is set (as `quickscale deploy railway` does), `start.sh` creates or updates the `NOSUPERUSER/NOBYPASSRLS` role with a direct superuser `DATABASE_URL` connection *before* Django boots, so the guard and the two-command contract are untouched. It refuses a role that is the superuser login or an existing superuser
 
 **Isolation architecture rules (permanent):**
+
+> **SA215 also deletes `migrate_billing_to_orgs`** (rule 17), so the "retired billing recovery
+> invocation" and "retired `migrate_billing_to_orgs` mode" below describe the shipped state until then.
+>
+> **SA215 changes tenant classification** (§[Module Conventions](#module-conventions) rule 13):
+> `TenantModel` inheritance becomes the only positive marker, and a `TenantManager` on a model that
+> does not inherit it fails startup. The "`TenantManager`/`TenantModel` detection" and
+> "marker/dual-manager contract" wording below describes the shipped state until SA215 lands.
+
 - Runtime tenant classification and membership: `is_classified_in_registry()` classifies installed concrete project models from explicit ``tenant_excluded`` markers, ``TenantManager``/``TenantModel`` detection, and implicit M2M-through inference. `is_tenant_model()` and `get_tenant_models()` derive only the positively enrolled tenant-model set from ``TenantManager``/``TenantModel`` detection; ``tenant_excluded`` wins over every enrollment signal. Classification and FORCE-RLS refresh must not fall back to or consult the literal ``TENANT_TABLE_REGISTRY``. The literal remains only a shipped-module CI parity oracle. Its 22 shipped ENROLLED models (CRM 7, Forms 4, Billing 4, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and the exact two-policy FORCE-RLS contract rendered by ``apply_force_rls``.
 - Project-owned tenant extensions: a concrete model in an installed project app may join the runtime tenant set through the same marker/dual-manager contract without a shipped-registry entry or vendored-module edit. Its initial migration owns the table and calls ``apply_force_rls`` to install exactly one tenant-only ``FOR ALL`` base policy plus its ``<base>_select`` operator-read ``FOR SELECT`` policy. Both policies are permissive and apply to ``PUBLIC``; the base policy has identical current-organization ``USING`` and ``WITH CHECK`` predicates, while the select policy has the rendered current-organization-or-operator ``USING`` predicate and no ``WITH CHECK``. Runtime refresh resolves each existing table's unique base policy from ``pg_policies`` before any DDL; missing or ambiguous policy metadata fails before mutation. The base name remains migration-owned rather than inferred from model metadata, but the companion must be named ``<base>_select``. The isolation checks reject a missing, extra, misnamed companion, restrictive, role-limited, or predicate-weakened policy.
 - Child tables: every tenant-owned child/detail table must denormalize `organization_id` directly onto the row and use a direct FORCE-RLS policy referencing that column; parent-join RLS policies are not used. This is the project default for all future tables.

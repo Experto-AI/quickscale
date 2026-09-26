@@ -30,7 +30,7 @@ The current QuickScale contract is implementation-led:
 
 - **Generator**: `quickscale plan`, then entering the generated directory and running `quickscale apply`, produces a standalone Django project with production foundations.
 - **Starter themes**: `showcase_react` is the sole frontend theme (the former `showcase_html` server-rendered secondary option was removed in SA94).
-- **First-party modules**: The shipped module line now spans analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs (organizations/multi-tenancy), social, and storage. (`teams` is a README-only placeholder — not scoped, designed, or scheduled.)
+- **First-party modules**: The shipped module line now spans analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs (organizations/multi-tenancy), social, and storage. (`teams` is a README-only placeholder — not scoped, designed, or scheduled; SA215 moves it out of `quickscale_modules/` into `docs/planning/teams.md`.)
 - **Billing and multi-tenancy**: Stripe-backed billing (one-time credits and subscriptions) ships in the billing module, and the orgs module provides organization-based multi-tenancy with Solo and SaaS runtime modes, org-scoped RBAC, and an invitation flow. These are shipped capabilities, not roadmap items.
 - **Update model**: Modules follow the documented git-subtree workflow, while generated theme files remain user-owned code.
 
