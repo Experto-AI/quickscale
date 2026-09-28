@@ -54,9 +54,6 @@ select = ["E4", "E7", "E9", "F", "S"]
 module = "markdownx.*"
 ignore_missing_imports = true
 
-[tool.mypy]
-plugins = ["mypy_django_plugin.main"]
-
 [tool.django-stubs]
 django_settings_module = "tests.settings"
 
