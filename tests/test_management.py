@@ -13,13 +13,13 @@ from quickscale_modules_orgs.models import Organization, OrganizationTombstone
 
 @pytest.mark.django_db
 class TestFormsSeedPresets:
-    """Tests for the forms_seed_presets management command"""
+    """Tests for the quickscale_forms_seed_presets management command"""
 
     def test_seed_presets_creates_four_forms(self):
         """Command creates all four preset forms"""
         from quickscale_modules_orgs.current_org import operator_access
 
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
         with operator_access(reason="test: verify all four presets created"):
             slugs = list(Form.all_objects.values_list("slug", flat=True))
         assert "contact" in slugs
@@ -34,7 +34,7 @@ class TestFormsSeedPresets:
             org_scope,
         )
 
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
         with operator_access(reason="test: lookup preset form"):
             form = Form.all_objects.get(slug="contact")
         # Enter org scope so that form.fields (via all_objects base
@@ -54,7 +54,7 @@ class TestFormsSeedPresets:
             org_scope,
         )
 
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
         with operator_access(reason="test: lookup preset form"):
             form = Form.all_objects.get(slug="newsletter")
         # Enter org scope so that form.fields (via all_objects base
@@ -66,8 +66,8 @@ class TestFormsSeedPresets:
         """Running the command twice does not create duplicate forms"""
         from quickscale_modules_orgs.current_org import operator_access
 
-        call_command("forms_seed_presets", verbosity=0)
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
         with operator_access(reason="test: verify idempotent count"):
             assert Form.all_objects.filter(slug="contact").count() == 1
 
@@ -84,7 +84,7 @@ class TestFormsSeedPresets:
         with org_scope(system_org):
             Form.objects.all().delete()
 
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
 
         # Scope the assertion to System org — pre-existing forms in other
         # orgs (e.g. from other test modules) must not affect the check.
@@ -103,14 +103,14 @@ class TestFormsSeedPresets:
             org_scope,
         )
 
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
         with operator_access(reason="test: lookup form to customise retention"):
             form = Form.all_objects.get(slug="contact")
         form.data_retention_days = 14
         with org_scope(form.organization):
             form.save(update_fields=["data_retention_days"])
 
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
 
         with operator_access(reason="test: verify retention days preserved"):
             assert Form.all_objects.get(slug="contact").data_retention_days == 14
@@ -122,7 +122,7 @@ class TestFormsSeedPresets:
             org_scope,
         )
 
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
         with operator_access(reason="test: lookup feedback form"):
             form = Form.all_objects.get(slug="feedback")
         # Enter org scope so that form.fields (via all_objects base
@@ -134,7 +134,7 @@ class TestFormsSeedPresets:
         """Support preset has a priority select field with three options"""
         from quickscale_modules_orgs.current_org import operator_access
 
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
         with operator_access(reason="test: lookup priority field"):
             priority_field = FormField.all_objects.get(
                 form__slug="support", name="priority"
@@ -169,7 +169,7 @@ class TestFormsSeedPresets:
             )
 
         # Run seed — should NOT reuse the tenant row.
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
 
         # The System org should now have a "contact" preset.
         with operator_access(reason="test: lookup system contact"):
@@ -205,8 +205,8 @@ class TestFormsSeedPresets:
             )
 
         # Run seed twice.
-        call_command("forms_seed_presets", verbosity=0)
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
 
         # System-org presets must exist exactly once.
         with operator_access(reason="test: verify system contact count"):
@@ -224,7 +224,7 @@ class TestFormsSeedPresets:
 
 @pytest.mark.django_db
 class TestFormsAnonymizeSubmissions:
-    """Tests for the forms_anonymize_submissions management command"""
+    """Tests for the quickscale_forms_anonymize_submissions management command"""
 
     def test_anonymize_does_not_touch_recent_submissions(self, form):
         """Submissions newer than data_retention_days are not anonymized"""
@@ -236,7 +236,7 @@ class TestFormsAnonymizeSubmissions:
                 organization=form.organization,
                 ip_address="192.168.1.1",
             )
-        call_command("forms_anonymize_submissions", verbosity=0)
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
         with org_scope(form.organization):
             sub.refresh_from_db()
         assert sub.ip_address == "192.168.1.1"
@@ -259,7 +259,7 @@ class TestFormsAnonymizeSubmissions:
         with org_scope(form.organization):
             FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
 
-        call_command("forms_anonymize_submissions", verbosity=0)
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
         with org_scope(form.organization):
             sub.refresh_from_db()
         assert sub.ip_address is None
@@ -289,7 +289,7 @@ class TestFormsAnonymizeSubmissions:
         cutoff = timezone.now() - timedelta(days=9999)
         with org_scope(system_org):
             FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
-        call_command("forms_anonymize_submissions", verbosity=0)
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
         with org_scope(system_org):
             sub.refresh_from_db()
         # ip_address must NOT be nulled because retention_days=0 means keep forever
@@ -308,7 +308,7 @@ class TestFormsAnonymizeSubmissions:
             cutoff = timezone.now() - timedelta(days=form.data_retention_days + 1)
             FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
         # Should not raise
-        call_command("forms_anonymize_submissions", verbosity=0)
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
         with org_scope(form.organization):
             sub.refresh_from_db()
         assert sub.ip_address is None
@@ -343,7 +343,7 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
             cutoff = timezone.now() - timedelta(days=31)
             FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
 
-        call_command("forms_anonymize_submissions", verbosity=0)
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
         with org_scope(system_org):
             sub.refresh_from_db()
         assert sub.ip_address is None
@@ -353,7 +353,7 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
         """Command iterates Form.all_objects.all() (operator manager)."""
         with patch.object(Form, "all_objects") as mock_mgr:
             mock_mgr.all.return_value = Form.objects.none()
-            call_command("forms_anonymize_submissions", verbosity=0)
+            call_command("quickscale_forms_anonymize_submissions", verbosity=0)
             mock_mgr.all.assert_called_once()
 
     # CR-SA85-REV-006: two-org repeated anonymization test.
@@ -422,8 +422,8 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
             )
 
         # Run anonymize twice.
-        call_command("forms_anonymize_submissions", verbosity=0)
-        call_command("forms_anonymize_submissions", verbosity=0)
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
 
         # Verify old submissions are anonymized in both orgs.
         with org_scope(org_a):
@@ -449,16 +449,16 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
 
 
 # ---------------------------------------------------------------------------
-# T1.17 — purge_organization integration test for forms delete branch
+# T1.17 — quickscale_orgs_purge_organization integration test for forms delete branch
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestPurgeOrganization:
-    """purge_organization must delete form rows owned by the purged org."""
+    """quickscale_orgs_purge_organization must delete form rows owned by the purged org."""
 
     def test_purge_deletes_org_forms(self):
-        """Form and FormSubmission rows are deleted by purge_organization."""
+        """Form and FormSubmission rows are deleted by quickscale_orgs_purge_organization."""
         from io import StringIO
 
         from quickscale_modules_orgs.current_org import (
@@ -472,7 +472,7 @@ class TestPurgeOrganization:
         org_id = org.pk
 
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),

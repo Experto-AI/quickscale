@@ -44,7 +44,7 @@ def seeded_contact_form(db):
     because PG RLS requires ``app.current_org_id`` for SELECT even when
     using ``all_objects`` (super_scope bypasses only Django-level filtering).
     """
-    call_command("forms_seed_presets", verbosity=0)
+    call_command("quickscale_forms_seed_presets", verbosity=0)
     from quickscale_modules_orgs.current_org import org_scope
     from quickscale_modules_orgs.models import Organization
 
@@ -113,7 +113,7 @@ class TestContactFormE2EWorkflow:
     # ------------------------------------------------------------------
 
     def test_seed_creates_contact_form_with_required_fields(self, seeded_contact_form):
-        """forms_seed_presets creates the contact form with all five expected fields."""
+        """quickscale_forms_seed_presets creates the contact form with all five expected fields."""
         from quickscale_modules_orgs.current_org import org_scope
 
         with org_scope(seeded_contact_form.organization):
@@ -128,12 +128,12 @@ class TestContactFormE2EWorkflow:
             assert expected in field_names, f"Expected field '{expected}' not found"
 
     def test_seed_is_idempotent(self, db):
-        """Running forms_seed_presets twice does not create duplicate forms."""
+        """Running quickscale_forms_seed_presets twice does not create duplicate forms."""
         from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
-        call_command("forms_seed_presets", verbosity=0)
-        call_command("forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
+        call_command("quickscale_forms_seed_presets", verbosity=0)
         system_org = Organization.objects.get_system_org()
         with org_scope(system_org):
             assert Form.all_objects.filter(slug="contact").count() == 1

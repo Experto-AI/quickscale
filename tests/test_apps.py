@@ -17,7 +17,7 @@ from quickscale_modules_forms.apps import QuickscaleFormsConfig
 def test_app_config_exposes_expected_metadata() -> None:
     """AppConfig should expose the expected Forms module metadata."""
     assert QuickscaleFormsConfig.name == "quickscale_modules_forms"
-    assert QuickscaleFormsConfig.label == "quickscale_modules_forms"
+    assert QuickscaleFormsConfig.label == "quickscale_forms"
     assert QuickscaleFormsConfig.verbose_name == "QuickScale Forms"
     assert QuickscaleFormsConfig.default_auto_field == "django.db.models.BigAutoField"
 

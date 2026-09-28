@@ -24,10 +24,10 @@ from quickscale_modules_forms.models import Form
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
 _FORMS_TABLES = (
-    "quickscale_modules_forms_form",
-    "quickscale_modules_forms_formfield",
-    "quickscale_modules_forms_formsubmission",
-    "quickscale_modules_forms_formfieldvalue",
+    "quickscale_forms_form",
+    "quickscale_forms_formfield",
+    "quickscale_forms_formsubmission",
+    "quickscale_forms_formfieldvalue",
 )
 
 
@@ -121,7 +121,7 @@ class TestFormsRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(bogus_org)])
-                cursor.execute("SELECT COUNT(*) FROM quickscale_modules_forms_form")
+                cursor.execute("SELECT COUNT(*) FROM quickscale_forms_form")
                 (count,) = cursor.fetchone()
                 assert count == 0, (
                     "RLS should block all forms with a non-matching org context"
@@ -162,18 +162,14 @@ class TestFormsRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(org_a.id)])
-                cursor.execute(
-                    "SELECT title FROM quickscale_modules_forms_form ORDER BY title"
-                )
+                cursor.execute("SELECT title FROM quickscale_forms_form ORDER BY title")
                 titles = [r[0] for r in cursor.fetchall()]
                 assert titles == ["Org A Form"], (
                     f"Expected only Org A Form, got {titles}"
                 )
 
                 cursor.execute("SET app.current_org_id = %s", [str(org_b.id)])
-                cursor.execute(
-                    "SELECT title FROM quickscale_modules_forms_form ORDER BY title"
-                )
+                cursor.execute("SELECT title FROM quickscale_forms_form ORDER BY title")
                 titles = [r[0] for r in cursor.fetchall()]
                 assert titles == ["Org B Form"], (
                     f"Cross-org: expected only Org B Form, got {titles}"
@@ -204,7 +200,7 @@ class TestFormsRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("RESET app.current_org_id")
-                cursor.execute("SELECT COUNT(*) FROM quickscale_modules_forms_form")
+                cursor.execute("SELECT COUNT(*) FROM quickscale_forms_form")
                 (count,) = cursor.fetchone()
                 assert count == 0, (
                     "RLS should block all forms when org context is unset (fail-closed)"

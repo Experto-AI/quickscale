@@ -74,18 +74,17 @@ class Form(models.Model):
     all_objects = TenantManager(super_scope=True)
 
     class Meta:
-        app_label = "quickscale_modules_forms"
-        db_table = "quickscale_modules_forms_form"
+        app_label = "quickscale_forms"
         ordering = ["title"]
         base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],
-                name="quickscale_modules_forms_form_slug_organization_unique",
+                name="quickscale_forms_form_slug_organization_unique",
             ),
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="forms_form_id_org_unique",
+                name="quickscale_forms_form_id_org_unique",
             ),
         ]
 
@@ -155,15 +154,17 @@ class FormField(models.Model):
     all_objects = TenantManager(super_scope=True)
 
     class Meta:
-        app_label = "quickscale_modules_forms"
-        db_table = "quickscale_modules_forms_formfield"
+        app_label = "quickscale_forms"
         ordering = ["order"]
         base_manager_name = "all_objects"
-        unique_together = [["form", "name"]]
         constraints = [
             models.UniqueConstraint(
+                fields=("form", "name"),
+                name="quickscale_forms_formfield_form_name_unique",
+            ),
+            models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="forms_formfield_id_org_unique",
+                name="quickscale_forms_formfield_id_org_unique",
             ),
         ]
 
@@ -202,14 +203,13 @@ class FormSubmission(models.Model):
     all_objects = TenantManager(super_scope=True)
 
     class Meta:
-        app_label = "quickscale_modules_forms"
-        db_table = "quickscale_modules_forms_formsubmission"
+        app_label = "quickscale_forms"
         ordering = ["-submitted_at"]
         base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="forms_formsubmission_id_org_unique",
+                name="quickscale_forms_formsubmission_id_org_unique",
             ),
         ]
 
@@ -243,8 +243,7 @@ class FormFieldValue(models.Model):
     all_objects = TenantManager(super_scope=True)
 
     class Meta:
-        app_label = "quickscale_modules_forms"
-        db_table = "quickscale_modules_forms_formfieldvalue"
+        app_label = "quickscale_forms"
         base_manager_name = "all_objects"
 
     def __str__(self) -> str:

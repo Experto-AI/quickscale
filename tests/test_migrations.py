@@ -25,7 +25,7 @@ pytestmark = [
     pytest.mark.django_db(transaction=True),
 ]
 
-APP_LABEL = "quickscale_modules_forms"
+APP_LABEL = "quickscale_forms"
 MIG_0001 = "0001_initial"
 
 
@@ -112,9 +112,7 @@ class TestFormsBootstrapFromMigration:
 
         with _system_org_scope():
             with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT slug FROM quickscale_modules_forms_form ORDER BY slug"
-                )
+                cursor.execute("SELECT slug FROM quickscale_forms_form ORDER BY slug")
                 slugs = [row[0] for row in cursor.fetchall()]
         assert len(slugs) == 4, f"Expected 4 presets, got {len(slugs)}: {slugs}"
         for entry in _EXPECTED_PRESETS:
@@ -126,9 +124,7 @@ class TestFormsBootstrapFromMigration:
 
         with _system_org_scope():
             with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT COUNT(*) FROM quickscale_modules_forms_formfield"
-                )
+                cursor.execute("SELECT COUNT(*) FROM quickscale_forms_formfield")
                 total = cursor.fetchone()[0]
         assert total == 16, f"Expected 16 fields total, got {total}"
 
@@ -140,8 +136,8 @@ class TestFormsBootstrapFromMigration:
             for preset in _EXPECTED_PRESETS:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "SELECT name FROM quickscale_modules_forms_formfield "
-                        "WHERE form_id = (SELECT id FROM quickscale_modules_forms_form "
+                        "SELECT name FROM quickscale_forms_formfield "
+                        "WHERE form_id = (SELECT id FROM quickscale_forms_form "
                         'WHERE slug = %s) ORDER BY "order"',
                         [preset["slug"]],
                     )
@@ -162,13 +158,13 @@ class TestFormsBootstrapFromMigration:
         with _system_org_scope():
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT id FROM quickscale_modules_orgs_organization "
+                    "SELECT id FROM quickscale_orgs_organization "
                     "WHERE is_system = true AND slug = '__system__'"
                 )
                 system_pk = cursor.fetchone()[0]
 
                 cursor.execute(
-                    "SELECT DISTINCT organization_id FROM quickscale_modules_forms_form"
+                    "SELECT DISTINCT organization_id FROM quickscale_forms_form"
                 )
                 form_orgs = {row[0] for row in cursor.fetchall()}
                 assert form_orgs == {system_pk}, (
@@ -176,8 +172,7 @@ class TestFormsBootstrapFromMigration:
                 )
 
                 cursor.execute(
-                    "SELECT DISTINCT organization_id FROM "
-                    "quickscale_modules_forms_formfield"
+                    "SELECT DISTINCT organization_id FROM quickscale_forms_formfield"
                 )
                 field_orgs = {row[0] for row in cursor.fetchall()}
                 assert field_orgs == {system_pk}, (
@@ -192,16 +187,16 @@ class TestFormsBootstrapFromMigration:
             with connection.cursor() as cursor:
                 # Contact preset: textarea for project_context
                 cursor.execute(
-                    "SELECT field_type FROM quickscale_modules_forms_formfield ff "
-                    "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
+                    "SELECT field_type FROM quickscale_forms_formfield ff "
+                    "JOIN quickscale_forms_form f ON f.id = ff.form_id "
                     "WHERE f.slug = 'contact' AND ff.name = 'project_context'"
                 )
                 assert cursor.fetchone()[0] == "textarea"
 
                 # Feedback preset: select rating with 5 options
                 cursor.execute(
-                    "SELECT field_type FROM quickscale_modules_forms_formfield ff "
-                    "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
+                    "SELECT field_type FROM quickscale_forms_formfield ff "
+                    "JOIN quickscale_forms_form f ON f.id = ff.form_id "
                     "WHERE f.slug = 'feedback' AND ff.name = 'rating'"
                 )
                 row = cursor.fetchone()
@@ -210,8 +205,8 @@ class TestFormsBootstrapFromMigration:
 
                 # Support preset: priority select with 3 options
                 cursor.execute(
-                    "SELECT field_type FROM quickscale_modules_forms_formfield ff "
-                    "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
+                    "SELECT field_type FROM quickscale_forms_formfield ff "
+                    "JOIN quickscale_forms_form f ON f.id = ff.form_id "
                     "WHERE f.slug = 'support' AND ff.name = 'priority'"
                 )
                 row = cursor.fetchone()
@@ -220,8 +215,8 @@ class TestFormsBootstrapFromMigration:
 
                 # Newsletter preset: 2 fields only
                 cursor.execute(
-                    "SELECT COUNT(*) FROM quickscale_modules_forms_formfield ff "
-                    "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
+                    "SELECT COUNT(*) FROM quickscale_forms_formfield ff "
+                    "JOIN quickscale_forms_form f ON f.id = ff.form_id "
                     "WHERE f.slug = 'newsletter'"
                 )
                 assert cursor.fetchone()[0] == 2
@@ -260,7 +255,7 @@ class TestFormsBootstrapIdempotent:
 
         with _system_org_scope():
             with connection.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM quickscale_modules_forms_form")
+                cursor.execute("SELECT COUNT(*) FROM quickscale_forms_form")
                 count = cursor.fetchone()[0]
         assert count == 4, f"Expected 4 preset forms after second seed, got {count}"
 
@@ -271,7 +266,7 @@ class TestFormsBootstrapIdempotent:
 
 
 def test_form_parent_unique_constraint_exists() -> None:
-    """The named ``forms_form_id_org_unique`` constraint exists on the
+    """The named ``quickscale_forms_form_id_org_unique`` constraint exists on the
     form table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -281,13 +276,13 @@ def test_form_parent_unique_constraint_exists() -> None:
 
     constraints = Form._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "forms_form_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint forms_form_id_org_unique on Form"
+    assert "quickscale_forms_form_id_org_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_forms_form_id_org_unique on Form"
     )
 
 
 def test_formfield_parent_unique_constraint_exists() -> None:
-    """The named ``forms_formfield_id_org_unique`` constraint exists on the
+    """The named ``quickscale_forms_formfield_id_org_unique`` constraint exists on the
     formfield table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -297,13 +292,13 @@ def test_formfield_parent_unique_constraint_exists() -> None:
 
     constraints = FormField._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "forms_formfield_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint forms_formfield_id_org_unique on FormField"
+    assert "quickscale_forms_formfield_id_org_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_forms_formfield_id_org_unique on FormField"
     )
 
 
 def test_formsubmission_parent_unique_constraint_exists() -> None:
-    """The named ``forms_formsubmission_id_org_unique`` constraint exists on the
+    """The named ``quickscale_forms_formsubmission_id_org_unique`` constraint exists on the
     formsubmission table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -313,8 +308,8 @@ def test_formsubmission_parent_unique_constraint_exists() -> None:
 
     constraints = FormSubmission._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "forms_formsubmission_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint forms_formsubmission_id_org_unique "
+    assert "quickscale_forms_formsubmission_id_org_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_forms_formsubmission_id_org_unique "
         "on FormSubmission"
     )
 
@@ -340,30 +335,30 @@ class TestFormsCompositeFkCatalogProofs:
 
     EXPECTED_FKS: list[dict[str, Any]] = [
         {
-            "constraint_name": "forms_formfield_form_org_fk",
-            "child_table": "quickscale_modules_forms_formfield",
-            "parent_table": "quickscale_modules_forms_form",
+            "constraint_name": "quickscale_forms_formfield_form_org_fk",
+            "child_table": "quickscale_forms_formfield",
+            "parent_table": "quickscale_forms_form",
             "child_fk_column": "form_id",
             "on_delete": "c",  # CASCADE
         },
         {
-            "constraint_name": "forms_formsubmission_form_org_fk",
-            "child_table": "quickscale_modules_forms_formsubmission",
-            "parent_table": "quickscale_modules_forms_form",
+            "constraint_name": "quickscale_forms_formsubmission_form_org_fk",
+            "child_table": "quickscale_forms_formsubmission",
+            "parent_table": "quickscale_forms_form",
             "child_fk_column": "form_id",
             "on_delete": "r",  # RESTRICT
         },
         {
-            "constraint_name": "forms_formfieldvalue_submission_org_fk",
-            "child_table": "quickscale_modules_forms_formfieldvalue",
-            "parent_table": "quickscale_modules_forms_formsubmission",
+            "constraint_name": "quickscale_forms_formfieldvalue_submission_org_fk",
+            "child_table": "quickscale_forms_formfieldvalue",
+            "parent_table": "quickscale_forms_formsubmission",
             "child_fk_column": "submission_id",
             "on_delete": "c",  # CASCADE
         },
         {
-            "constraint_name": "forms_formfieldvalue_field_org_fk",
-            "child_table": "quickscale_modules_forms_formfieldvalue",
-            "parent_table": "quickscale_modules_forms_formfield",
+            "constraint_name": "quickscale_forms_formfieldvalue_field_org_fk",
+            "child_table": "quickscale_forms_formfieldvalue",
+            "parent_table": "quickscale_forms_formfield",
             "child_fk_column": "field_id",
             "on_delete": "n",  # SET NULL
         },
@@ -601,14 +596,14 @@ def test_force_rls_installed_on_all_forms_tables() -> None:
     executor.migrate([(APP_LABEL, MIG_0001)])
 
     expected_policies = {
-        ("quickscale_modules_forms_form", "forms_form_org_isolation"),
-        ("quickscale_modules_forms_formfield", "forms_formfield_org_isolation"),
+        ("quickscale_forms_form", "forms_form_org_isolation"),
+        ("quickscale_forms_formfield", "forms_formfield_org_isolation"),
         (
-            "quickscale_modules_forms_formsubmission",
+            "quickscale_forms_formsubmission",
             "forms_formsubmission_org_isolation",
         ),
         (
-            "quickscale_modules_forms_formfieldvalue",
+            "quickscale_forms_formfieldvalue",
             "forms_formfieldvalue_org_isolation",
         ),
     }
@@ -619,7 +614,7 @@ def test_force_rls_installed_on_all_forms_tables() -> None:
             SELECT c.relname, pc.polname
             FROM pg_policy pc
             JOIN pg_class c ON c.oid = pc.polrelid
-            WHERE c.relname LIKE 'quickscale_modules_forms_%'
+            WHERE c.relname LIKE 'quickscale_forms_%'
             """,
         )
         found_policies = set(cursor.fetchall())
@@ -645,10 +640,10 @@ def test_forms_tables_have_force_rls_enabled() -> None:
     executor.migrate([(APP_LABEL, MIG_0001)])
 
     tables = [
-        "quickscale_modules_forms_form",
-        "quickscale_modules_forms_formfield",
-        "quickscale_modules_forms_formsubmission",
-        "quickscale_modules_forms_formfieldvalue",
+        "quickscale_forms_form",
+        "quickscale_forms_formfield",
+        "quickscale_forms_formsubmission",
+        "quickscale_forms_formfieldvalue",
     ]
 
     with connection.cursor() as cursor:
@@ -778,10 +773,10 @@ def test_forms_rls_policy_has_org_predicate() -> None:
     executor.migrate([(APP_LABEL, MIG_0001)])
 
     tables = [
-        "quickscale_modules_forms_form",
-        "quickscale_modules_forms_formfield",
-        "quickscale_modules_forms_formsubmission",
-        "quickscale_modules_forms_formfieldvalue",
+        "quickscale_forms_form",
+        "quickscale_forms_formfield",
+        "quickscale_forms_formsubmission",
+        "quickscale_forms_formfieldvalue",
     ]
 
     with connection.cursor() as cursor:
@@ -1204,7 +1199,7 @@ class TestCompositeFkFormFieldValueDeletePath:
         # Delete the FormField via raw SQL to fire DB-level ON DELETE SET NULL.
         with connection.cursor() as cursor:
             cursor.execute(
-                "DELETE FROM quickscale_modules_forms_formfield WHERE id = %s",
+                "DELETE FROM quickscale_forms_formfield WHERE id = %s",
                 [field.pk],
             )
 
@@ -1292,7 +1287,7 @@ class TestCompositeFkFormFieldValueDeletePath:
 
         with connection.cursor() as cursor:
             cursor.execute(
-                "DELETE FROM quickscale_modules_forms_formfield WHERE id = %s",
+                "DELETE FROM quickscale_forms_formfield WHERE id = %s",
                 [field_a.pk],
             )
 

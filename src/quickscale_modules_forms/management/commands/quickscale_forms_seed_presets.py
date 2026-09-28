@@ -206,7 +206,7 @@ class Command(BaseCommand):
             # it lets us see cross-tenant rows without elevating write
             # privilege.
             with operator_access(
-                reason="forms_seed_presets: lookup existing preset slugs"
+                reason="quickscale_forms_seed_presets: lookup existing preset slugs"
             ):
                 existing_slugs = set(
                     Form.all_objects.filter(
