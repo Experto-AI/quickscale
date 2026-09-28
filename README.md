@@ -85,23 +85,23 @@ Admin capabilities include:
 ### Create a backup
 
 ```bash
-python manage.py backups_create
-python manage.py backups_create --scheduled
+python manage.py quickscale_backups_create
+python manage.py quickscale_backups_create --scheduled
 ```
 
 ### Validate an artifact
 
 ```bash
-python manage.py backups_validate 12
+python manage.py quickscale_backups_validate 12
 ```
 
-`backups_validate` only accepts the recorded artifact id. It does not accept a
+`quickscale_backups_validate` only accepts the recorded artifact id. It does not accept a
 file path and it does not use `--confirm`.
 
 ### Prune expired artifacts
 
 ```bash
-python manage.py backups_prune
+python manage.py quickscale_backups_prune
 ```
 
 ### Restore an artifact
@@ -113,18 +113,18 @@ operator-supplied dump file path. JSON artifacts remain export-only and are
 not a supported restore input for generated PostgreSQL projects.
 
 ```bash
-python manage.py backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
-python manage.py backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump --dry-run
-python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run
+python manage.py quickscale_backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
+python manage.py quickscale_backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump --dry-run
+python manage.py quickscale_backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run
 ```
 
 Rules to remember:
 
-- `backups_restore` requires exactly one restore source: either `artifact_id`,
+- `quickscale_backups_restore` requires exactly one restore source: either `artifact_id`,
   `--snapshot-id SNAPSHOT_ID`, or `--file PATH`
 - `--confirm` is always required for restore and must exactly match the backup
   filename or the supplied file basename
-- `backups_validate` and `backups_restore` are separate commands; only restore
+- `quickscale_backups_validate` and `quickscale_backups_restore` are separate commands; only restore
   uses `--confirm`
 - BackupPolicy-admin restore accepts either an eligible recorded artifact that
   is already on disk or a staff-uploaded PostgreSQL custom dump that must
@@ -145,9 +145,9 @@ explicit environment gate:
 
 ```bash
 export QUICKSCALE_BACKUPS_ALLOW_RESTORE=true
-python manage.py backups_restore 12 --confirm BACKUP_FILENAME.dump
-python manage.py backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump
-python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump
+python manage.py quickscale_backups_restore 12 --confirm BACKUP_FILENAME.dump
+python manage.py quickscale_backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump
+python manage.py quickscale_backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump
 ```
 
 ### Local Docker wrapper examples
@@ -156,11 +156,11 @@ If you are using a generated QuickScale project with Docker and the development
 wrapper commands, the same flows look like this:
 
 ```bash
-quickscale manage backups_create
-quickscale manage backups_validate 12
-quickscale manage backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
-quickscale manage backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump --dry-run
-quickscale manage backups_restore --file /app/.quickscale/backups/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run
+quickscale manage quickscale_backups_create
+quickscale manage quickscale_backups_validate 12
+quickscale manage quickscale_backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
+quickscale manage quickscale_backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump --dry-run
+quickscale manage quickscale_backups_restore --file /app/.quickscale/backups/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run
 ```
 
 For an actual restore outside local DEBUG mode, `quickscale manage` does not
@@ -168,9 +168,9 @@ inject extra environment variables into `docker exec`, so use a shell command
 that sets the guard explicitly inside the backend container:
 
 ```bash
-quickscale shell -c 'QUICKSCALE_BACKUPS_ALLOW_RESTORE=true python manage.py backups_restore 12 --confirm BACKUP_FILENAME.dump'
-quickscale shell -c 'QUICKSCALE_BACKUPS_ALLOW_RESTORE=true python manage.py backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump'
-quickscale shell -c 'QUICKSCALE_BACKUPS_ALLOW_RESTORE=true python manage.py backups_restore --file /app/.quickscale/backups/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump'
+quickscale shell -c 'QUICKSCALE_BACKUPS_ALLOW_RESTORE=true python manage.py quickscale_backups_restore 12 --confirm BACKUP_FILENAME.dump'
+quickscale shell -c 'QUICKSCALE_BACKUPS_ALLOW_RESTORE=true python manage.py quickscale_backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump'
+quickscale shell -c 'QUICKSCALE_BACKUPS_ALLOW_RESTORE=true python manage.py quickscale_backups_restore --file /app/.quickscale/backups/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump'
 ```
 
 When you use `quickscale manage` or `quickscale shell`, file paths are resolved

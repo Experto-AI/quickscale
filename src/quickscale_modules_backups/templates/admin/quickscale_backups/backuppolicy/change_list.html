@@ -43,7 +43,7 @@
 {% block object-tools-items %}
 {% if show_create_prune_controls %}
 <li>
-    <form action="{% url 'admin:quickscale_modules_backups_backuppolicy_create' %}" method="post">
+    <form action="{% url 'admin:quickscale_backups_backuppolicy_create' %}" method="post">
         {% csrf_token %}
         <button type="submit">Create backup now</button>
     </form>
@@ -51,12 +51,12 @@
 {% endif %}
 {% if show_restore_control %}
 <li>
-    <a href="{% url 'admin:quickscale_modules_backups_backuppolicy_restore' %}">Restore backup</a>
+    <a href="{% url 'admin:quickscale_backups_backuppolicy_restore' %}">Restore backup</a>
 </li>
 {% endif %}
 {% if show_create_prune_controls %}
 <li>
-    <form action="{% url 'admin:quickscale_modules_backups_backuppolicy_prune' %}" method="post">
+    <form action="{% url 'admin:quickscale_backups_backuppolicy_prune' %}" method="post">
         {% csrf_token %}
         <button type="submit">Prune expired backups</button>
     </form>

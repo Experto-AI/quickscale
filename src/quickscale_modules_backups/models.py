@@ -78,8 +78,7 @@ class BackupPolicy(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_modules_backups"
-        db_table = "quickscale_modules_backups_policy"
+        app_label = "quickscale_backups"
         verbose_name = "Backup policy"
         verbose_name_plural = "Backup policies"
 
@@ -181,8 +180,7 @@ class BackupArtifact(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_modules_backups"
-        db_table = "quickscale_modules_backups_artifact"
+        app_label = "quickscale_backups"
         ordering = ["-created_at"]
         verbose_name = "Backup artifact"
         verbose_name_plural = "Backup artifacts"
@@ -272,8 +270,7 @@ class BackupSnapshot(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_modules_backups"
-        db_table = "quickscale_modules_backups_snapshot"
+        app_label = "quickscale_backups"
         ordering = ["-created_at"]
         verbose_name = "Backup snapshot"
         verbose_name_plural = "Backup snapshots"

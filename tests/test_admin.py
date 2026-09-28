@@ -98,7 +98,7 @@ def _make_staff_user(username: str, *permission_codenames: str) -> AbstractBaseU
     if permission_codenames:
         permissions = [
             Permission.objects.get(
-                content_type__app_label="quickscale_modules_backups",
+                content_type__app_label="quickscale_backups",
                 codename=codename,
             )
             for codename in permission_codenames
@@ -176,7 +176,7 @@ class TestBackupPolicyAdmin:
     ) -> None:
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_backups_backuppolicy_change",
+                "admin:quickscale_backups_backuppolicy_change",
                 args=[backup_policy.pk],
             )
         )
@@ -195,7 +195,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
     ) -> None:
         response = admin_client.get(
-            reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+            reverse("admin:quickscale_backups_backuppolicy_changelist")
         )
 
         content = response.content.decode("utf-8")
@@ -204,13 +204,9 @@ class TestBackupPolicyAdmin:
         assert "Create backup now" in content
         assert "Restore backup" in content
         assert "Prune expired backups" in content
-        assert (
-            reverse("admin:quickscale_modules_backups_backuppolicy_create") in content
-        )
-        assert (
-            reverse("admin:quickscale_modules_backups_backuppolicy_restore") in content
-        )
-        assert reverse("admin:quickscale_modules_backups_backuppolicy_prune") in content
+        assert reverse("admin:quickscale_backups_backuppolicy_create") in content
+        assert reverse("admin:quickscale_backups_backuppolicy_restore") in content
+        assert reverse("admin:quickscale_backups_backuppolicy_prune") in content
 
     def test_policy_changelist_hides_change_only_controls_for_view_only_user(
         self,
@@ -225,7 +221,7 @@ class TestBackupPolicyAdmin:
         client.force_login(user)
 
         response = client.get(
-            reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+            reverse("admin:quickscale_backups_backuppolicy_changelist")
         )
 
         content = response.content.decode("utf-8")
@@ -234,9 +230,7 @@ class TestBackupPolicyAdmin:
         assert "Create backup now" not in content
         assert "Prune expired backups" not in content
         assert "Restore backup" in content
-        assert (
-            reverse("admin:quickscale_modules_backups_backuppolicy_restore") in content
-        )
+        assert reverse("admin:quickscale_backups_backuppolicy_restore") in content
 
     def test_restore_page_renders_guarded_local_restore_workflow(
         self,
@@ -246,7 +240,7 @@ class TestBackupPolicyAdmin:
     ) -> None:
         del backup_policy
         response = admin_client.get(
-            reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+            reverse("admin:quickscale_backups_backuppolicy_restore"),
             {"artifact_id": str(postgresql_backup_artifact.pk)},
         )
 
@@ -286,7 +280,7 @@ class TestBackupPolicyAdmin:
         client.force_login(user)
 
         response = client.get(
-            reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+            reverse("admin:quickscale_backups_backuppolicy_restore"),
             {"artifact_id": str(postgresql_backup_artifact.pk)},
         )
 
@@ -327,7 +321,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.admin.restore_backup_artifact"
         ) as mocked_restore:
             response = client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT,
                     "artifact_id": str(postgresql_backup_artifact.pk),
@@ -369,7 +363,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_recorded_restore,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -405,9 +399,7 @@ class TestBackupPolicyAdmin:
         client = Client()
         client.force_login(user)
 
-        response = client.get(
-            reverse("admin:quickscale_modules_backups_backuppolicy_restore")
-        )
+        response = client.get(reverse("admin:quickscale_backups_backuppolicy_restore"))
 
         assert response.status_code == 403
 
@@ -428,7 +420,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.admin.restore_backup_artifact"
         ) as mocked_restore:
             response = client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -444,19 +436,19 @@ class TestBackupPolicyAdmin:
         [
             (
                 "create",
-                "admin:quickscale_modules_backups_backuppolicy_create",
+                "admin:quickscale_backups_backuppolicy_create",
                 "quickscale_modules_backups.admin.dispatch_background_create",
                 False,
             ),
             (
                 "prune",
-                "admin:quickscale_modules_backups_backuppolicy_prune",
+                "admin:quickscale_backups_backuppolicy_prune",
                 "quickscale_modules_backups.admin.dispatch_background_prune",
                 False,
             ),
             (
                 "download",
-                "admin:quickscale_modules_backups_backupartifact_download",
+                "admin:quickscale_backups_backupartifact_download",
                 "quickscale_modules_backups.admin.download_backup_path",
                 True,
             ),
@@ -516,7 +508,7 @@ class TestBackupPolicyAdmin:
 
         with patch(patched_symbol) as mocked_operation:
             response = client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_changelist"),
+                reverse("admin:quickscale_backups_backuppolicy_changelist"),
                 {
                     "action": action_name,
                     admin.helpers.ACTION_CHECKBOX_NAME: [str(backup_policy.pk)],
@@ -531,11 +523,11 @@ class TestBackupPolicyAdmin:
         ("url_name", "patched_symbol"),
         [
             (
-                "admin:quickscale_modules_backups_backuppolicy_create",
+                "admin:quickscale_backups_backuppolicy_create",
                 "quickscale_modules_backups.admin.dispatch_background_create",
             ),
             (
-                "admin:quickscale_modules_backups_backuppolicy_prune",
+                "admin:quickscale_backups_backuppolicy_prune",
                 "quickscale_modules_backups.admin.dispatch_background_prune",
             ),
         ],
@@ -552,7 +544,7 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 302
         assert response.url == reverse(
-            "admin:quickscale_modules_backups_backuppolicy_changelist"
+            "admin:quickscale_backups_backuppolicy_changelist"
         )
         mocked_operation.assert_not_called()
 
@@ -599,14 +591,14 @@ class TestBackupPolicyAdmin:
             return_value=MagicMock(),
         ) as mocked_popen:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_create"),
+                reverse("admin:quickscale_backups_backuppolicy_create"),
                 follow=True,
             )
 
         assert response.status_code == 200
         mocked_popen.assert_called_once()
         popen_args = mocked_popen.call_args[0][0]
-        assert "backups_create" in popen_args
+        assert "quickscale_backups_create" in popen_args
         assert "--trigger" in popen_args
         trigger_index = popen_args.index("--trigger")
         assert trigger_index + 1 < len(popen_args)
@@ -636,7 +628,7 @@ class TestBackupPolicyAdmin:
     ) -> None:
         del backup_policy
         response = admin_client.post(
-            reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+            reverse("admin:quickscale_backups_backuppolicy_restore"),
             {
                 "artifact_id": str(postgresql_backup_artifact.pk),
                 "confirmation": f"{postgresql_backup_artifact.filename}-wrong",
@@ -695,7 +687,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.admin.restore_backup_artifact"
         ) as mocked_restore:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -726,7 +718,7 @@ class TestBackupPolicyAdmin:
             return_value=MagicMock(),
         ) as mocked_popen:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -743,7 +735,7 @@ class TestBackupPolicyAdmin:
 
         mocked_popen.assert_called_once()
         popen_args = mocked_popen.call_args[0][0]
-        assert "backups_restore" in popen_args
+        assert "quickscale_backups_restore" in popen_args
         assert str(postgresql_backup_artifact.pk) in popen_args
         assert "--confirm" in popen_args
         assert postgresql_backup_artifact.filename in popen_args
@@ -766,7 +758,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.admin.dispatch_background_create",
         ) as mocked_create:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_create"),
+                reverse("admin:quickscale_backups_backuppolicy_create"),
                 follow=True,
             )
 
@@ -788,7 +780,7 @@ class TestBackupPolicyAdmin:
             ),
         ) as mocked_create:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_create"),
+                reverse("admin:quickscale_backups_backuppolicy_create"),
                 follow=True,
             )
 
@@ -814,7 +806,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.admin.dispatch_background_prune",
         ) as mocked_prune:
             response = client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_prune"),
+                reverse("admin:quickscale_backups_backuppolicy_prune"),
                 follow=True,
             )
 
@@ -839,7 +831,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.admin.dispatch_background_create",
         ) as mocked_create:
             response = client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_changelist"),
+                reverse("admin:quickscale_backups_backuppolicy_changelist"),
                 {
                     "action": "create_backup_now",
                     admin.helpers.ACTION_CHECKBOX_NAME: [str(backup_policy.pk)],
@@ -859,9 +851,7 @@ class TestBackupPolicyAdmin:
         admin_client: Client,
         backup_policy: BackupPolicy,
     ) -> None:
-        changelist_url = reverse(
-            "admin:quickscale_modules_backups_backuppolicy_changelist"
-        )
+        changelist_url = reverse("admin:quickscale_backups_backuppolicy_changelist")
 
         with patch(
             "quickscale_modules_backups.admin.dispatch_background_prune",
@@ -891,7 +881,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.admin.dispatch_background_prune",
         ) as mocked_prune:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_prune"),
+                reverse("admin:quickscale_backups_backuppolicy_prune"),
                 follow=True,
             )
 
@@ -949,7 +939,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -972,7 +962,7 @@ class TestBackupPolicyAdmin:
 
         mocked_popen.assert_called_once()
         popen_args = mocked_popen.call_args[0][0]
-        assert "backups_restore" in popen_args
+        assert "quickscale_backups_restore" in popen_args
         assert str(postgresql_backup_artifact.pk) in popen_args
         assert "--file" not in popen_args  # artifact-id, not --file
         assert "--confirm" in popen_args
@@ -1003,7 +993,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.admin.restore_backup_artifact"
         ) as mocked_restore:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": "unknown.dump",
@@ -1065,7 +1055,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
                     "confirmation": (postgresql_backup_artifact.filename),
@@ -1104,7 +1094,7 @@ class TestBackupPolicyAdmin:
             side_effect=OSError("manage.py not found"),
         ) as mocked_popen:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1161,7 +1151,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1219,7 +1209,7 @@ class TestBackupPolicyAdmin:
             side_effect=_simulate_fast_child_first,
         ) as mocked_popen:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1289,7 +1279,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1341,7 +1331,7 @@ class TestBackupPolicyAdmin:
             side_effect=OSError("manage.py not found"),
         ) as mocked_popen:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1413,7 +1403,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1462,7 +1452,7 @@ class TestBackupPolicyAdmin:
             side_effect=OSError("manage.py not found"),
         ) as mocked_popen:
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1531,7 +1521,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1600,7 +1590,7 @@ class TestBackupPolicyAdmin:
             ),
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1659,7 +1649,7 @@ class TestBackupPolicyAdmin:
             ),
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1732,7 +1722,7 @@ class TestBackupPolicyAdmin:
             ),
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1817,7 +1807,7 @@ class TestBackupPolicyAdmin:
             ),
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1879,7 +1869,7 @@ class TestBackupPolicyAdmin:
             return_value=MagicMock(),
         ):
             response1 = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1897,7 +1887,7 @@ class TestBackupPolicyAdmin:
             "quickscale_modules_backups.services.subprocess.Popen",
         ) as mocked_popen2:
             response2 = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1960,7 +1950,7 @@ class TestBackupPolicyAdmin:
             ),
         ):
             response1 = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -1999,7 +1989,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen2,
         ):
             response2 = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
                     "confirmation": postgresql_backup_artifact.filename,
@@ -2056,7 +2046,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -2103,7 +2093,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "artifact_id": str(postgresql_backup_artifact.pk),
                     "confirmation": postgresql_backup_artifact.filename,
@@ -2172,7 +2162,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
                     "confirmation": (postgresql_backup_artifact.filename),
@@ -2242,7 +2232,7 @@ class TestBackupPolicyAdmin:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
                     "confirmation": (postgresql_backup_artifact.filename),
@@ -2282,7 +2272,7 @@ class TestBackupArtifactAdmin:
         client.force_login(user)
 
         response = client.get(
-            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+            reverse("admin:quickscale_backups_backupartifact_changelist")
         )
 
         assert response.status_code == 302
@@ -2317,7 +2307,7 @@ class TestBackupArtifactAdmin:
         )
 
         response = admin_client.get(
-            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+            reverse("admin:quickscale_backups_backupartifact_changelist")
         )
 
         content = response.content.decode("utf-8")
@@ -2345,16 +2335,14 @@ class TestBackupArtifactAdmin:
         client.force_login(user)
 
         response = client.get(
-            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+            reverse("admin:quickscale_backups_backupartifact_changelist")
         )
 
         content = response.content.decode("utf-8")
 
         assert response.status_code == 200
         assert "Create backup now" in content
-        assert (
-            reverse("admin:quickscale_modules_backups_backupartifact_create") in content
-        )
+        assert reverse("admin:quickscale_backups_backupartifact_create") in content
 
     def test_artifact_changelist_hides_create_button_without_policy_change_permission(
         self,
@@ -2368,17 +2356,14 @@ class TestBackupArtifactAdmin:
         client.force_login(user)
 
         response = client.get(
-            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+            reverse("admin:quickscale_backups_backupartifact_changelist")
         )
 
         content = response.content.decode("utf-8")
 
         assert response.status_code == 200
         assert "Create backup now" not in content
-        assert (
-            reverse("admin:quickscale_modules_backups_backupartifact_create")
-            not in content
-        )
+        assert reverse("admin:quickscale_backups_backupartifact_create") not in content
 
     def test_artifact_create_endpoint_runs_with_policy_change_permission(
         self,
@@ -2395,7 +2380,7 @@ class TestBackupArtifactAdmin:
             "quickscale_modules_backups.admin.dispatch_background_create",
         ) as mocked_create:
             response = client.post(
-                reverse("admin:quickscale_modules_backups_backupartifact_create"),
+                reverse("admin:quickscale_backups_backupartifact_create"),
                 follow=True,
             )
 
@@ -2420,7 +2405,7 @@ class TestBackupArtifactAdmin:
             "quickscale_modules_backups.admin.dispatch_background_create",
         ) as mocked_create:
             response = client.post(
-                reverse("admin:quickscale_modules_backups_backupartifact_create")
+                reverse("admin:quickscale_backups_backupartifact_create")
             )
 
         assert response.status_code == 403
@@ -2436,7 +2421,7 @@ class TestBackupArtifactAdmin:
         _place_artifact_in_authoritative_root(backup_artifact)
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_backups_backupartifact_change",
+                "admin:quickscale_backups_backupartifact_change",
                 args=[backup_artifact.pk],
             )
         )
@@ -2583,7 +2568,7 @@ class TestBackupArtifactAdmin:
 
         response = client.get(
             reverse(
-                "admin:quickscale_modules_backups_backupartifact_download",
+                "admin:quickscale_backups_backupartifact_download",
                 args=[backup_artifact.pk],
             )
         )
@@ -2607,7 +2592,7 @@ class TestBackupArtifactAdmin:
 
         response = client.get(
             reverse(
-                "admin:quickscale_modules_backups_backupartifact_download",
+                "admin:quickscale_backups_backupartifact_download",
                 args=[backup_artifact.pk],
             )
         )
@@ -2631,7 +2616,7 @@ class TestBackupArtifactAdmin:
 
         assert response.status_code == 302
         assert response.url == reverse(
-            "admin:quickscale_modules_backups_backupartifact_change",
+            "admin:quickscale_backups_backupartifact_change",
             args=[backup_artifact.pk],
         )
         assert [message.message for message in get_messages(request)] == [
@@ -2695,7 +2680,7 @@ class TestBackupArtifactAdmin:
 
         assert response.status_code == 302
         assert response.url == reverse(
-            "admin:quickscale_modules_backups_backupartifact_change",
+            "admin:quickscale_backups_backupartifact_change",
             args=[backup_artifact.pk],
         )
         mocked.assert_not_called()
@@ -2722,7 +2707,7 @@ class TestBackupArtifactAdmin:
 
         assert response.status_code == 302
         assert response.url == reverse(
-            "admin:quickscale_modules_backups_backupartifact_change",
+            "admin:quickscale_backups_backupartifact_change",
             args=[backup_artifact.pk],
         )
         mocked.assert_called_once()
@@ -2805,7 +2790,7 @@ class TestBackupArtifactAdminStaleRestore:
         """The stale warning column renders on the changelist."""
         self._make_stale_artifact(backup_artifact, stale=True)
         response = admin_client.get(
-            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+            reverse("admin:quickscale_backups_backupartifact_changelist")
         )
         content = response.content.decode("utf-8")
         assert response.status_code == 200
@@ -2820,9 +2805,7 @@ class TestBackupArtifactAdminStaleRestore:
         """The admin action resets a stale STATUS_RESTORING to FAILED."""
         self._make_stale_artifact(backup_artifact, stale=True)
 
-        changelist_url = reverse(
-            "admin:quickscale_modules_backups_backupartifact_changelist"
-        )
+        changelist_url = reverse("admin:quickscale_backups_backupartifact_changelist")
         response = admin_client.post(
             changelist_url,
             {
@@ -2846,9 +2829,7 @@ class TestBackupArtifactAdminStaleRestore:
         """The admin action skips a recent STATUS_RESTORING artifact."""
         self._make_stale_artifact(backup_artifact, stale=False)
 
-        changelist_url = reverse(
-            "admin:quickscale_modules_backups_backupartifact_changelist"
-        )
+        changelist_url = reverse("admin:quickscale_backups_backupartifact_changelist")
         response = admin_client.post(
             changelist_url,
             {
@@ -2963,7 +2944,7 @@ class TestBackupPolicyAdminStaleRestore:
             ) as mocked_popen,
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
                     "confirmation": (postgresql_backup_artifact.filename),
@@ -3031,7 +3012,7 @@ class TestBackupPolicyAdminStaleRestore:
             ),
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
                     "confirmation": (postgresql_backup_artifact.filename),
@@ -3093,7 +3074,7 @@ class TestBackupPolicyAdminStaleRestore:
             ),
         ):
             response = admin_client.post(
-                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                reverse("admin:quickscale_backups_backuppolicy_restore"),
                 {
                     "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
                     "confirmation": (postgresql_backup_artifact.filename),

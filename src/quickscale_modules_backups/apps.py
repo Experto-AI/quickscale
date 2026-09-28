@@ -10,7 +10,7 @@ class QuickscaleBackupsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_backups"
-    label = "quickscale_modules_backups"
+    label = "quickscale_backups"
     verbose_name = "QuickScale Backups"
 
     def ready(self) -> None:

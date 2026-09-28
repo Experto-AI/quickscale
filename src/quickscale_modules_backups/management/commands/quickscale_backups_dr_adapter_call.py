@@ -6,8 +6,8 @@ operation.  The CLI passes the adapter function name and its keyword
 arguments as JSON via stdin (SA31); this command dispatches to the
 adapter and writes the JSON result to stdout.
 
-Management commands for admin/manual use (``backups_create``,
-``backups_report``, etc.) remain as thin Django-facing surfaces and
+Management commands for admin/manual use (``quickscale_backups_create``,
+``quickscale_backups_report``, etc.) remain as thin Django-facing surfaces and
 are *not* affected by this bridge.
 """
 

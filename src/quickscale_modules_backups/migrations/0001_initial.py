@@ -105,7 +105,6 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Backup policy",
                 "verbose_name_plural": "Backup policies",
-                "db_table": "quickscale_modules_backups_policy",
             },
         ),
         migrations.CreateModel(
@@ -216,7 +215,6 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Backup artifact",
                 "verbose_name_plural": "Backup artifacts",
-                "db_table": "quickscale_modules_backups_artifact",
                 "ordering": ["-created_at"],
             },
         ),
@@ -271,14 +269,13 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="authoritative_snapshot",
-                        to="quickscale_modules_backups.backupartifact",
+                        to="quickscale_backups.backupartifact",
                     ),
                 ),
             ],
             options={
                 "verbose_name": "Backup snapshot",
                 "verbose_name_plural": "Backup snapshots",
-                "db_table": "quickscale_modules_backups_snapshot",
                 "ordering": ["-created_at"],
             },
         ),

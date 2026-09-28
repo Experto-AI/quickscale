@@ -43,7 +43,7 @@
 {% block object-tools-items %}
 {% if show_create_backup_control %}
 <li>
-    <form action="{% url 'admin:quickscale_modules_backups_backupartifact_create' %}" method="post">
+    <form action="{% url 'admin:quickscale_backups_backupartifact_create' %}" method="post">
         {% csrf_token %}
         <button type="submit">Create backup now</button>
     </form>

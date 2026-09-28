@@ -37,7 +37,7 @@ def test_backups_report_command_requests_sidecar_payloads() -> None:
         {"fetch_snapshot_report": mock_report},
     ):
         call_command(
-            "backups_report",
+            "quickscale_backups_report",
             "snap-report",
             "--json",
             "--sidecar-payload",
@@ -64,7 +64,7 @@ def test_backups_record_verification_command_records_route_report() -> None:
         {"record_verification": mock_record},
     ):
         call_command(
-            "backups_record_verification",
+            "quickscale_backups_record_verification",
             "snap-verify",
             "--route",
             "local-to-railway-develop",
@@ -110,7 +110,7 @@ def test_backups_sync_media_command_outputs_json_result() -> None:
         {"sync_media": mock_sync},
     ):
         call_command(
-            "backups_sync_media",
+            "quickscale_backups_sync_media",
             "snap-media",
             "--dry-run",
             "--json",
@@ -144,7 +144,7 @@ def test_backups_pin_command_validates_arguments(
 ) -> None:
     with pytest.raises(CommandError, match=message):
         call_command(
-            "backups_pin",
+            "quickscale_backups_pin",
             *command_args,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -169,7 +169,7 @@ def test_backups_pin_command_outputs_json_report() -> None:
         {"set_rollback_pin": mock_pin},
     ):
         call_command(
-            "backups_pin",
+            "quickscale_backups_pin",
             "snap-pin",
             "--hours",
             "6",
@@ -203,7 +203,7 @@ def test_backups_pin_command_wraps_service_errors() -> None:
     ):
         with pytest.raises(CommandError, match="clear exploded"):
             call_command(
-                "backups_pin",
+                "quickscale_backups_pin",
                 "snap-pin",
                 "--clear",
                 stdout=StringIO(),
@@ -217,7 +217,7 @@ def test_backups_pin_command_wraps_service_errors() -> None:
     ):
         with pytest.raises(CommandError, match="set exploded"):
             call_command(
-                "backups_pin",
+                "quickscale_backups_pin",
                 "snap-pin",
                 "--hours",
                 "6",
@@ -234,7 +234,7 @@ def test_backups_record_verification_command_rejects_non_object_payload(
 ) -> None:
     with pytest.raises(CommandError, match="--payload-json must be a JSON object."):
         call_command(
-            "backups_record_verification",
+            "quickscale_backups_record_verification",
             "snap-verify",
             "--route",
             "local-to-railway-develop",
@@ -264,7 +264,7 @@ def test_backups_record_verification_command_outputs_json_report() -> None:
         {"record_verification": mock_record},
     ):
         call_command(
-            "backups_record_verification",
+            "quickscale_backups_record_verification",
             "snap-verify",
             "--route",
             "local-to-railway-develop",
@@ -301,7 +301,7 @@ def test_backups_record_verification_command_wraps_service_errors() -> None:
     ):
         with pytest.raises(CommandError, match="verification exploded"):
             call_command(
-                "backups_record_verification",
+                "quickscale_backups_record_verification",
                 "snap-verify",
                 "--route",
                 "local-to-railway-develop",
@@ -372,7 +372,7 @@ def test_backups_sync_media_command_renders_summary(
         {"sync_media": mock_sync},
     ):
         call_command(
-            "backups_sync_media",
+            "quickscale_backups_sync_media",
             "snap-media",
             *command_args,
             stdout=stdout,
@@ -395,7 +395,7 @@ def test_backups_sync_media_command_wraps_service_errors() -> None:
     ):
         with pytest.raises(CommandError, match="media sync exploded"):
             call_command(
-                "backups_sync_media",
+                "quickscale_backups_sync_media",
                 "snap-media",
                 "--dry-run",
                 stdout=StringIO(),

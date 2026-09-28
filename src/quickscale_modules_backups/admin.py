@@ -239,10 +239,8 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         ),
     ]
     actions = ["create_backup_now", "prune_expired_backups_now"]
-    change_list_template = (
-        "admin/quickscale_modules_backups/backuppolicy/change_list.html"
-    )
-    restore_template_name = "admin/quickscale_modules_backups/backuppolicy/restore.html"
+    change_list_template = "admin/quickscale_backups/backuppolicy/change_list.html"
+    restore_template_name = "admin/quickscale_backups/backuppolicy/restore.html"
 
     def get_urls(self) -> list[Any]:
         """Add explicit operator endpoints for backup creation, restore, and pruning."""
@@ -251,17 +249,17 @@ class BackupPolicyAdmin(admin.ModelAdmin):
             path(
                 "ops/create/",
                 self.admin_site.admin_view(self.create_backup_view),
-                name="quickscale_modules_backups_backuppolicy_create",
+                name="quickscale_backups_backuppolicy_create",
             ),
             path(
                 "ops/restore/",
                 self.admin_site.admin_view(self.restore_backup_view),
-                name="quickscale_modules_backups_backuppolicy_restore",
+                name="quickscale_backups_backuppolicy_restore",
             ),
             path(
                 "ops/prune/",
                 self.admin_site.admin_view(self.prune_expired_backups_view),
-                name="quickscale_modules_backups_backuppolicy_prune",
+                name="quickscale_backups_backuppolicy_prune",
             ),
         ]
         return custom_urls + urls
@@ -332,11 +330,11 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         self._require_change_permission(request)
         if request.method != "POST":
             return HttpResponseRedirect(
-                reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+                reverse("admin:quickscale_backups_backuppolicy_changelist")
             )
         self.create_backup_now(request, BackupPolicy.objects.none())
         return HttpResponseRedirect(
-            reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+            reverse("admin:quickscale_backups_backuppolicy_changelist")
         )
 
     def prune_expired_backups_view(self, request: HttpRequest) -> HttpResponseRedirect:
@@ -344,11 +342,11 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         self._require_change_permission(request)
         if request.method != "POST":
             return HttpResponseRedirect(
-                reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+                reverse("admin:quickscale_backups_backuppolicy_changelist")
             )
         self.prune_expired_backups_now(request, BackupPolicy.objects.none())
         return HttpResponseRedirect(
-            reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+            reverse("admin:quickscale_backups_backuppolicy_changelist")
         )
 
     def restore_backup_view(self, request: HttpRequest) -> HttpResponse:
@@ -458,7 +456,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                 )
 
                             redirect_url = reverse(
-                                "admin:quickscale_modules_backups_backuppolicy_restore"
+                                "admin:quickscale_backups_backuppolicy_restore"
                             )
                             if selected_artifact is not None:
                                 redirect_url = (
@@ -515,7 +513,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                             )
                             return HttpResponseRedirect(
                                 reverse(
-                                    "admin:quickscale_modules_backups_backuppolicy_changelist"
+                                    "admin:quickscale_backups_backuppolicy_changelist"
                                 )
                             )
         else:
@@ -536,7 +534,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                 )
 
         change_url = reverse(
-            "admin:quickscale_modules_backups_backuppolicy_change",
+            "admin:quickscale_backups_backuppolicy_change",
             args=[policy.pk],
         )
         context = {
@@ -547,7 +545,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
             "policy": policy,
             "change_url": change_url,
             "changelist_url": reverse(
-                "admin:quickscale_modules_backups_backuppolicy_changelist"
+                "admin:quickscale_backups_backuppolicy_changelist"
             ),
             "can_view_restore_artifacts": can_view_restore_artifacts,
             "eligible_artifacts": eligible_artifacts,
@@ -672,7 +670,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
     def command_driven_notice(self, obj: BackupPolicy) -> str:
         return (
             "Scheduled execution remains command-driven only. Use platform cron or "
-            "scheduled jobs that call 'python manage.py backups_create --scheduled'."
+            "scheduled jobs that call 'python manage.py quickscale_backups_create --scheduled'."
         )
 
     @admin.display(description="Restore safety")
@@ -843,9 +841,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         ),
     ]
     actions = ["validate_selected_backups", "reset_stale_restore_action"]
-    change_list_template = (
-        "admin/quickscale_modules_backups/backupartifact/change_list.html"
-    )
+    change_list_template = "admin/quickscale_backups/backupartifact/change_list.html"
 
     def get_queryset(self, request: HttpRequest) -> Any:
         """Load related user and snapshot data for provenance projections."""
@@ -869,12 +865,12 @@ class BackupArtifactAdmin(admin.ModelAdmin):
             path(
                 "ops/create/",
                 self.admin_site.admin_view(self.create_backup_view),
-                name="quickscale_modules_backups_backupartifact_create",
+                name="quickscale_backups_backupartifact_create",
             ),
             path(
                 "<int:artifact_id>/download/",
                 self.admin_site.admin_view(self.download_view),
-                name="quickscale_modules_backups_backupartifact_download",
+                name="quickscale_backups_backupartifact_download",
             ),
         ]
         return custom_urls + urls
@@ -962,7 +958,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         self._require_policy_change_permission(request)
         if request.method != "POST":
             return HttpResponseRedirect(
-                reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+                reverse("admin:quickscale_backups_backupartifact_changelist")
             )
 
         policy_admin = self._get_policy_admin()
@@ -971,7 +967,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
 
         policy_admin.create_backup_now(request, BackupPolicy.objects.none())
         return HttpResponseRedirect(
-            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+            reverse("admin:quickscale_backups_backupartifact_changelist")
         )
 
     def _has_downloadable_local_file(self, obj: BackupArtifact) -> bool:
@@ -1035,7 +1031,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
             return "Unavailable"
 
         url = reverse(
-            "admin:quickscale_modules_backups_backupartifact_download",
+            "admin:quickscale_backups_backupartifact_download",
             args=[obj.pk],
         )
         return format_html('<a class="button" href="{}">Download</a>', url)
@@ -1101,8 +1097,8 @@ class BackupArtifactAdmin(admin.ModelAdmin):
             "This BackupArtifact admin page remains download/validate-focused. For "
             "eligible row-backed local PostgreSQL dump artifacts already present on "
             "disk, use the guarded restore flow on the BackupPolicy admin page. Use "
-            "'python manage.py backups_restore <id> --confirm <filename>' or "
-            "'python manage.py backups_restore --file /path/to/backup.dump --confirm "
+            "'python manage.py quickscale_backups_restore <id> --confirm <filename>' or "
+            "'python manage.py quickscale_backups_restore --file /path/to/backup.dump --confirm "
             "backup.dump' for artifact-id and operator-supplied file-path restores "
             "outside that admin surface."
         )
@@ -1204,7 +1200,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
                 request, "Backup artifact not found.", level=messages.ERROR
             )
             return HttpResponseRedirect(
-                reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+                reverse("admin:quickscale_backups_backupartifact_changelist")
             )
 
         if not self._has_downloadable_local_file(artifact):
@@ -1215,7 +1211,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
             )
             return HttpResponseRedirect(
                 reverse(
-                    "admin:quickscale_modules_backups_backupartifact_change",
+                    "admin:quickscale_backups_backupartifact_change",
                     args=[artifact.pk],
                 )
             )
@@ -1228,7 +1224,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
             )
             return HttpResponseRedirect(
                 reverse(
-                    "admin:quickscale_modules_backups_backupartifact_change",
+                    "admin:quickscale_backups_backupartifact_change",
                     args=[artifact.pk],
                 )
             )

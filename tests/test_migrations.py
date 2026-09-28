@@ -13,15 +13,15 @@ pytestmark = [
 
 
 def test_fresh_initial_contains_the_final_backup_schema() -> None:
-    target = ("quickscale_modules_backups", "0001_initial")
+    target = ("quickscale_backups", "0001_initial")
 
     executor = MigrationExecutor(connection)
     executor.migrate([target])
     historical_apps = executor.loader.project_state([target]).apps
 
-    policy = historical_apps.get_model("quickscale_modules_backups", "BackupPolicy")
-    artifact = historical_apps.get_model("quickscale_modules_backups", "BackupArtifact")
-    snapshot = historical_apps.get_model("quickscale_modules_backups", "BackupSnapshot")
+    policy = historical_apps.get_model("quickscale_backups", "BackupPolicy")
+    artifact = historical_apps.get_model("quickscale_backups", "BackupArtifact")
+    snapshot = historical_apps.get_model("quickscale_backups", "BackupSnapshot")
 
     assert {field.name for field in policy._meta.local_fields} == {
         "id",
@@ -96,7 +96,7 @@ def test_fresh_initial_contains_the_final_backup_schema() -> None:
     )
     assert snapshot._meta.get_field("authoritative_dump").unique is True
     assert set(connection.introspection.table_names()) >= {
-        "quickscale_modules_backups_policy",
-        "quickscale_modules_backups_artifact",
-        "quickscale_modules_backups_snapshot",
+        "quickscale_backups_policy",
+        "quickscale_backups_artifact",
+        "quickscale_backups_snapshot",
     }
