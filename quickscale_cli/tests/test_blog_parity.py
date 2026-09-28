@@ -1,267 +1,197 @@
-"""Parity/regression tests for the manifest-driven blog path.
+"""Contract tests for the blog module's manifest-owned configuration.
 
-These tests encode the *legacy* ``_blog_wiring`` behaviour as gold
-expectations and verify that the manifest-driven replacement
-(``blog_manifest.py``) produces identical results for every public
-entry point.
-
-The gold values below were recovered from the blog ``module.yml`` manifest
-and the ``blog_manifest.py`` adapter.
-
-Scope
------
-* Default option values
-* api_rate_limit normalisation (strip + blank fallback)
-* Resolution (defaults + normalised overrides, idempotency)
-* posts_per_page int coercion
-* enable_rss bool coercion
-* Validation messages
+The blog module's option defaults, normalization, and validation are declared
+in ``quickscale_modules/blog/module.yml`` and enforced through the shared
+manifest engine, and its CLI configurator reads the manifest.  These tests pin
+that contract and the operator-facing behaviour it produces.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from unittest.mock import patch
 
 import pytest
 
-from quickscale_core.contracts.resolvers import (
-    BLOG_MODULE_OPTION_KEYS,
-    DEFAULT_BLOG_API_RATE_LIMIT,
-    DEFAULT_BLOG_ENABLE_RSS,
-    DEFAULT_BLOG_POSTS_PER_PAGE,
-    default_blog_module_options,
-    normalize_blog_module_options,
-    resolve_blog_module_options,
-    validate_blog_module_options,
+from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
+from quickscale_cli.commands.plan_command import _configure_selected_modules
+from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
+from quickscale_core.manifest.option_validation import (
+    collect_option_validation_issues,
+    validate_module_options,
 )
 
-# ---------------------------------------------------------------------------
-# Gold expectations recovered from the legacy _blog_wiring + module.yml
-# ---------------------------------------------------------------------------
-
-_LEGACY_DEFAULTS: dict[str, Any] = {
+_EXPECTED_DEFAULTS: dict[str, object] = {
     "posts_per_page": 10,
     "enable_rss": True,
     "api_rate_limit": "5/hour",
 }
 
 
-# ===========================================================================
-# 1. Default values parity
-# ===========================================================================
-
-
-class TestDefaultsParity:
-    """The manifest-driven defaults must match the legacy hardcoded dict."""
-
-    def test_default_options_match_legacy(self) -> None:
-        defaults = default_blog_module_options()
-        assert defaults == _LEGACY_DEFAULTS
-
-    def test_default_options_keys_are_stable(self) -> None:
-        defaults = default_blog_module_options()
-        assert set(defaults.keys()) == set(_LEGACY_DEFAULTS.keys())
-
-    def test_default_posts_per_page_is_10(self) -> None:
-        defaults = default_blog_module_options()
-        assert defaults["posts_per_page"] == DEFAULT_BLOG_POSTS_PER_PAGE
-        assert defaults["posts_per_page"] == 10
-
-    def test_default_enable_rss_is_true(self) -> None:
-        defaults = default_blog_module_options()
-        assert defaults["enable_rss"] is DEFAULT_BLOG_ENABLE_RSS
-        assert defaults["enable_rss"] is True
-
-    def test_default_api_rate_limit(self) -> None:
-        defaults = default_blog_module_options()
-        assert defaults["api_rate_limit"] == DEFAULT_BLOG_API_RATE_LIMIT
-        assert defaults["api_rate_limit"] == "5/hour"
+def _manifest():
+    return load_module_manifest_with_fallback("blog")
 
 
 # ===========================================================================
-# 2. Constants parity
+# 1. Manifest contract
 # ===========================================================================
 
 
-class TestConstantsParity:
-    """Public constants must match the legacy values."""
+class TestBlogManifestContract:
+    """The manifest declares the defaults, settings, and constraints."""
 
-    def test_default_posts_per_page_constant(self) -> None:
-        assert DEFAULT_BLOG_POSTS_PER_PAGE == 10
+    def test_manifest_declares_exactly_the_contract_options(self) -> None:
+        assert set(_manifest().get_defaults()) == set(_EXPECTED_DEFAULTS)
 
-    def test_default_enable_rss_constant(self) -> None:
-        assert DEFAULT_BLOG_ENABLE_RSS is True
+    def test_manifest_defaults_match_contract(self) -> None:
+        assert _manifest().get_defaults() == _EXPECTED_DEFAULTS
 
-    def test_default_api_rate_limit_constant(self) -> None:
-        assert DEFAULT_BLOG_API_RATE_LIMIT == "5/hour"
-
-    def test_module_option_keys_frozenset(self) -> None:
-        assert BLOG_MODULE_OPTION_KEYS == frozenset(
-            {"posts_per_page", "enable_rss", "api_rate_limit"}
+    def test_django_settings_are_declared(self) -> None:
+        manifest = _manifest()
+        assert (
+            manifest.get_option("posts_per_page").django_setting
+            == "BLOG_POSTS_PER_PAGE"
+        )
+        assert manifest.get_option("enable_rss").django_setting == "BLOG_ENABLE_RSS"
+        assert (
+            manifest.get_option("api_rate_limit").django_setting
+            == "BLOG_API_RATE_LIMIT"
         )
 
-
-# ===========================================================================
-# 3. Normalisation parity
-# ===========================================================================
-
-
-class TestNormalizationParity:
-    """Normalisation must behave identically to the legacy contract."""
-
-    def test_api_rate_limit_strip(self) -> None:
-        normalized = normalize_blog_module_options({"api_rate_limit": "  10/minute  "})
-        assert normalized["api_rate_limit"] == "10/minute"
-
-    def test_api_rate_limit_blank_passes_through(self) -> None:
-        normalized = normalize_blog_module_options({"api_rate_limit": "  "})
-        assert normalized["api_rate_limit"] == ""
-
-    def test_api_rate_limit_empty_passes_through(self) -> None:
-        normalized = normalize_blog_module_options({"api_rate_limit": ""})
-        assert normalized["api_rate_limit"] == ""
-
-    def test_none_options_returns_empty_dict(self) -> None:
-        normalized = normalize_blog_module_options(None)
-        assert normalized == {}
-
-    def test_empty_options_returns_empty_dict(self) -> None:
-        normalized = normalize_blog_module_options({})
-        assert normalized == {}
-
-    def test_untouched_keys_pass_through(self) -> None:
-        normalized = normalize_blog_module_options({"enable_rss": False})
-        assert normalized["enable_rss"] is False
-        assert "posts_per_page" not in normalized
+    def test_manifest_declares_the_option_types(self) -> None:
+        manifest = _manifest()
+        assert manifest.get_option("posts_per_page").option_type == "integer"
+        assert manifest.get_option("enable_rss").option_type == "boolean"
+        assert manifest.get_option("api_rate_limit").option_type == "string"
 
 
 # ===========================================================================
-# 4. Resolution parity (defaults + normalised overrides)
+# 2. Validation engine behaviour
 # ===========================================================================
 
 
-class TestResolutionParity:
-    """resolve_blog_module_options must merge defaults + overrides."""
-
-    def test_no_overrides_returns_defaults(self) -> None:
-        resolved = resolve_blog_module_options(None)
-        assert resolved == _LEGACY_DEFAULTS
-
-    def test_empty_overrides_returns_defaults(self) -> None:
-        resolved = resolve_blog_module_options({})
-        assert resolved == _LEGACY_DEFAULTS
-
-    def test_partial_override_preserves_other_defaults(self) -> None:
-        resolved = resolve_blog_module_options({"enable_rss": False})
-        expected = dict(_LEGACY_DEFAULTS)
-        expected["enable_rss"] = False
-        assert resolved == expected
-
-    def test_posts_per_page_override(self) -> None:
-        resolved = resolve_blog_module_options({"posts_per_page": 20})
-        assert resolved["posts_per_page"] == 20
-
-    def test_posts_per_page_string_is_coerced_to_int(self) -> None:
-        """Legacy _blog_wiring uses int(), so string "5" should resolve to 5."""
-        resolved = resolve_blog_module_options({"posts_per_page": "5"})
-        assert resolved["posts_per_page"] == 5
-        assert isinstance(resolved["posts_per_page"], int)
-
-    def test_enable_rss_coerced_to_bool(self) -> None:
-        resolved = resolve_blog_module_options({"enable_rss": True})
-        assert resolved["enable_rss"] is True
-        assert isinstance(resolved["enable_rss"], bool)
-
-    def test_enable_rss_false_override(self) -> None:
-        resolved = resolve_blog_module_options({"enable_rss": False})
-        assert resolved["enable_rss"] is False
-
-    def test_api_rate_limit_strip_in_resolve(self) -> None:
-        resolved = resolve_blog_module_options({"api_rate_limit": "  10/minute  "})
-        assert resolved["api_rate_limit"] == "10/minute"
-
-    def test_api_rate_limit_blank_passes_through_in_resolve(self) -> None:
-        """SA27: blank api_rate_limit passes through instead of coercing to default."""
-        resolved = resolve_blog_module_options({"api_rate_limit": ""})
-        assert resolved["api_rate_limit"] == ""
-
-    def test_resolution_is_idempotent(self) -> None:
-        resolved = resolve_blog_module_options(
-            {"posts_per_page": 5, "api_rate_limit": "  10/minute  "}
-        )
-        assert resolve_blog_module_options(resolved) == resolved
-
-    def test_resolved_keys_match_legacy(self) -> None:
-        resolved = resolve_blog_module_options({"enable_rss": False})
-        assert set(resolved.keys()) == set(_LEGACY_DEFAULTS.keys())
-
-
-# ===========================================================================
-# 5. Validation parity
-# ===========================================================================
-
-
-class TestValidationParity:
-    """validate_blog_module_options must produce legacy-compatible issues."""
+class TestBlogValidation:
+    """The shared engine enforces the manifest's declared constraints."""
 
     def test_defaults_pass_validation(self) -> None:
-        issues = validate_blog_module_options(None)
-        assert issues == []
+        assert validate_module_options(_manifest(), None) == []
 
     def test_valid_overrides_pass_validation(self) -> None:
-        issues = validate_blog_module_options(
-            {
-                "posts_per_page": 20,
-                "enable_rss": False,
-                "api_rate_limit": "10/minute",
-            }
+        assert (
+            validate_module_options(
+                _manifest(),
+                {
+                    "posts_per_page": 20,
+                    "enable_rss": False,
+                    "api_rate_limit": "10/minute",
+                },
+            )
+            == []
         )
-        assert issues == []
-
-    def test_blank_api_rate_limit_is_invalid(self) -> None:
-        """SA27: blank api_rate_limit is now detected instead of silently coerced."""
-        issues = validate_blog_module_options({"api_rate_limit": ""})
-        assert any("api_rate_limit cannot be blank" in i for i in issues)
 
     @pytest.mark.parametrize("bad_value", [0, -1, -100])
-    def test_non_positive_posts_per_page_fails(self, bad_value: int) -> None:
-        issues = validate_blog_module_options({"posts_per_page": bad_value})
-        assert any("posts_per_page" in i for i in issues)
-
-    def test_multiple_issues_collected(self) -> None:
-        issues = validate_blog_module_options({"posts_per_page": -1})
-        assert len(issues) >= 1
-
-
-# ===========================================================================
-# 6. Wiring-field values parity
-# ===========================================================================
-
-
-class TestWiringFieldsParity:
-    """Resolved options must project to the exact wiring field values
-    that ``_blog_wiring`` would have computed from the same input."""
-
-    def test_default_wiring_fields(self) -> None:
-        resolved = resolve_blog_module_options(None)
-        # Mirrors _blog_wiring local variable assignments with defaults
-        assert resolved["posts_per_page"] == 10
-        assert resolved["enable_rss"] is True
-        assert resolved["api_rate_limit"] == "5/hour"
-
-    def test_custom_wiring_fields(self) -> None:
-        resolved = resolve_blog_module_options(
-            {
-                "posts_per_page": 5,
-                "enable_rss": False,
-                "api_rate_limit": "10/minute",
-            }
+    def test_non_positive_posts_per_page_is_refused(self, bad_value: int) -> None:
+        issues = collect_option_validation_issues(
+            _manifest(), {"posts_per_page": bad_value}
         )
-        assert resolved["posts_per_page"] == 5
-        assert resolved["enable_rss"] is False
-        assert resolved["api_rate_limit"] == "10/minute"
+        assert any(
+            issue.option_name == "posts_per_page"
+            and "BLOG_POSTS_PER_PAGE" in issue.message
+            for issue in issues
+        )
 
-    def test_resolved_contains_all_wiring_keys(self) -> None:
-        resolved = resolve_blog_module_options(None)
-        wiring_keys = {"posts_per_page", "enable_rss", "api_rate_limit"}
-        assert wiring_keys.issubset(set(resolved.keys()))
+    @pytest.mark.parametrize("bad_value", ["", "   ", "5", "5/week"])
+    def test_invalid_api_rate_limit_is_refused(self, bad_value: str) -> None:
+        issues = collect_option_validation_issues(
+            _manifest(), {"api_rate_limit": bad_value}
+        )
+        assert any(issue.option_name == "api_rate_limit" for issue in issues)
+
+    def test_non_boolean_enable_rss_is_refused(self) -> None:
+        issues = collect_option_validation_issues(
+            _manifest(),
+            {"enable_rss": "yes"},
+            supplied={"enable_rss": "yes"},
+        )
+        assert any(
+            issue.option_name == "enable_rss" and "boolean" in issue.message
+            for issue in issues
+        )
+
+
+# ===========================================================================
+# 3. CLI configurator behaviour
+# ===========================================================================
+
+
+class TestBlogConfigurator:
+    """The CLI configurator's prompts and defaults come from the manifest."""
+
+    def test_defaults_factory_reads_the_manifest(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
+        assert entry.get_defaults() == _EXPECTED_DEFAULTS
+
+    def test_non_interactive_configuration_uses_manifest_defaults(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
+        assert entry.configure(non_interactive=True) == _EXPECTED_DEFAULTS
+
+    def test_existing_declared_values_are_kept(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
+        config = entry.configure(
+            non_interactive=True,
+            existing_config={"posts_per_page": 20, "enable_rss": False},
+        )
+        assert config["posts_per_page"] == 20
+        assert config["enable_rss"] is False
+        assert config["api_rate_limit"] == "5/hour"
+
+    def test_undeclared_existing_keys_are_dropped(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
+        config = entry.configure(
+            non_interactive=True,
+            existing_config={"retired_key": "value"},
+        )
+        assert "retired_key" not in config
+        assert config == _EXPECTED_DEFAULTS
+
+    def test_existing_values_are_returned_in_canonical_form(self) -> None:
+        """A padded rate limit is stored the way the manifest canonicalizes it."""
+        entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
+        config = entry.configure(
+            non_interactive=True,
+            existing_config={"api_rate_limit": "  10/minute  "},
+        )
+        assert config["api_rate_limit"] == "10/minute"
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_interactive_values_are_returned_in_canonical_form(
+        self, mock_confirm, mock_prompt
+    ) -> None:
+        """A padded interactive answer is stored in its canonical form."""
+        mock_confirm.return_value = True
+        mock_prompt.side_effect = [20, "  10/minute  "]
+
+        entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
+        config = entry.configure(non_interactive=False)
+
+        assert config["api_rate_limit"] == "10/minute"
+        assert config["posts_per_page"] == 20
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_planner_persists_the_canonical_blog_rate(
+        self, mock_confirm, mock_prompt
+    ) -> None:
+        """The planner's own output carries the canonical rate limit."""
+        mock_confirm.return_value = True
+        mock_prompt.side_effect = [20, "  10/minute  "]
+
+        configured = _configure_selected_modules(
+            ["blog"],
+            {},
+            new_modules=None,
+            allow_reconfigure_existing=False,
+        )
+
+        assert configured["blog"]["api_rate_limit"] == "10/minute"
+        assert configured["blog"]["posts_per_page"] == 20

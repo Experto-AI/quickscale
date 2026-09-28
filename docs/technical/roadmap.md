@@ -142,15 +142,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA217 — Read the manifest option schema in core and check settings at startup.**
 
   **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. `plan`/`apply`
-  enforce each manifest option's `validation` block; per-module option code and settings readers
-  remain.
+  enforce each manifest option's `validation` block; blog and listings are fully manifest-owned
+  (their per-module option functions are gone and their CLI configurators read the manifest); the
+  other ten modules still carry per-module option code and settings readers.
 
   **Scope:**
   - *Option code.* Core's and the CLI's per-module option code goes: the
     `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
     `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
     `schema.config_schema`, and the CLI's `module_config`, with `contracts.imperative_inventory`.
-    The adapter path runs through the engine, and CLI prompts read the manifest.
+    One generic manifest-driven CLI configurator now reads the manifest (blog and listings use it);
+    the other modules convert to it, the adapter path still needs auth, orgs, backups, and
+    notifications, and CRM's retired `default_pipeline_stages` key needs a manifest-declared home.
   - *Settings reading (last).* `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
     one generic startup check in `quickscale_core.runtime`, run through the shared checks helper
     and registered by each module, validates every declared setting; per-module readers and code

@@ -42,7 +42,6 @@ from quickscale_core.contracts.resolvers import (
     resolve_billing_module_options,
     validate_analytics_module_options,
     validate_billing_module_options,
-    validate_blog_module_options,
     validate_crm_module_options,
     validate_forms_module_options,
     validate_orgs_module_options,
@@ -1292,25 +1291,6 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     _abort_for_not_ready_modules(
         list(qs_config.modules.keys()), source="quickscale.yml"
     )
-
-    blog_config = qs_config.modules.get("blog")
-    if blog_config is not None:
-        blog_issues = validate_blog_module_options(blog_config.options or {})
-        if blog_issues:
-            click.secho(
-                "\n❌ Blog module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in blog_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the blog option values. "
-                "Blog apply requires valid posts_per_page, enable_rss, and api_rate_limit.",
-                err=True,
-            )
-            raise click.Abort()
 
     forms_config = qs_config.modules.get("forms")
     if forms_config is not None:

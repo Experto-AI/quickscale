@@ -386,86 +386,6 @@ def billing_production_targeted(options: Mapping[str, Any] | None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Blog
-# ---------------------------------------------------------------------------
-
-DEFAULT_BLOG_POSTS_PER_PAGE = 10
-DEFAULT_BLOG_ENABLE_RSS = True
-DEFAULT_BLOG_API_RATE_LIMIT = "5/hour"
-
-BLOG_MODULE_OPTION_KEYS = frozenset(
-    {
-        "posts_per_page",
-        "enable_rss",
-        "api_rate_limit",
-    }
-)
-
-
-def _load_blog_manifest() -> Any:
-    return load_module_manifest_with_fallback("blog")
-
-
-def _build_blog_derivation_schema() -> ModuleDerivationSchema:
-    return ModuleDerivationSchema(
-        module_name="blog",
-        version="1",
-        option_derivations={
-            "api_rate_limit": OptionDerivation(
-                option_key="api_rate_limit",
-                normalization_rules=[
-                    NormalizationRule(
-                        source_key="api_rate_limit",
-                        target_key="api_rate_limit",
-                        rule_type="strip",
-                    )
-                ],
-            ),
-        },
-    )
-
-
-def default_blog_module_options() -> dict[str, Any]:
-    manifest = _load_blog_manifest()
-    return dict(manifest.get_defaults())
-
-
-def normalize_blog_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    normalized = dict(options or {})
-    if "api_rate_limit" in normalized:
-        normalized["api_rate_limit"] = str(normalized["api_rate_limit"]).strip()
-    return normalized
-
-
-def resolve_blog_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    manifest = _load_blog_manifest()
-    schema = _build_blog_derivation_schema()
-    result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
-    resolved = dict(result.resolved)
-    resolved["posts_per_page"] = int(resolved["posts_per_page"])
-    resolved["enable_rss"] = bool(resolved["enable_rss"])
-    resolved["api_rate_limit"] = str(resolved.get("api_rate_limit", "")).strip()
-    return resolved
-
-
-def validate_blog_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    resolved = resolve_blog_module_options(options)
-    issues: list[str] = []
-    posts = resolved.get("posts_per_page")
-    try:
-        if int(posts) <= 0:  # type: ignore[arg-type]
-            issues.append("modules.blog.posts_per_page must be a positive integer")
-    except TypeError, ValueError:
-        issues.append("modules.blog.posts_per_page must be a positive integer")
-    if not isinstance(resolved.get("enable_rss"), bool):
-        issues.append("modules.blog.enable_rss must be a boolean")
-    rate = str(resolved.get("api_rate_limit", "")).strip()
-    if not rate:
-        issues.append("modules.blog.api_rate_limit cannot be blank")
-    return issues
-
-
-# ---------------------------------------------------------------------------
 # CRM
 # ---------------------------------------------------------------------------
 
@@ -1696,15 +1616,6 @@ __all__ = [
     "validate_billing_currency",
     "validate_billing_env_var_reference",
     "validate_billing_module_options",
-    # Blog
-    "BLOG_MODULE_OPTION_KEYS",
-    "DEFAULT_BLOG_API_RATE_LIMIT",
-    "DEFAULT_BLOG_ENABLE_RSS",
-    "DEFAULT_BLOG_POSTS_PER_PAGE",
-    "default_blog_module_options",
-    "normalize_blog_module_options",
-    "resolve_blog_module_options",
-    "validate_blog_module_options",
     # CRM
     "LEGACY_CRM_DEFAULT_PIPELINE_STAGES_OPTION",
     "default_crm_module_options",

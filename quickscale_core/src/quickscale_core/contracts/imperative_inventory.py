@@ -123,20 +123,12 @@ BILLING_MANIFEST: Final[list[tuple[str, str, str]]] = [
     ("billing_production_targeted", ADAPTER_ONLY, "T2.5"),
 ]
 
-BLOG_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Declarative targets
-    ("DEFAULT_BLOG_POSTS_PER_PAGE", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_BLOG_ENABLE_RSS", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_BLOG_API_RATE_LIMIT", DECLARATIVE_TARGET, "T2.4"),
-    ("BLOG_MODULE_OPTION_KEYS", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_blog_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_blog_module_options", ADAPTER_ONLY, "T2.5"),
-    ("normalize_blog_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_blog_module_options", ADAPTER_ONLY, "T2.5"),
-    ("validate_blog_module_options", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: Blog imperative inventory cleared — the manifest owns its option
+# defaults, normalization, and validation, its adapter runs through the
+# manifest engine, and its CLI configurator reads the manifest.  The blog
+# key remains in MANIFEST_INVENTORY with an empty list so that callers of
+# get_manifest_inventory("blog") continue to succeed.
+BLOG_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 CRM_MANIFEST: Final[list[tuple[str, str, str]]] = [
     # Shared helpers — relocated to quickscale_core.contracts.module_options
