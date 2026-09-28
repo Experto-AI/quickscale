@@ -1,4 +1,8 @@
-"""Signal handlers for authentication events"""
+"""Signal receivers for the QuickScale auth module.
+
+Connected once by ``QuickscaleAuthConfig.ready()``; ``signals.py`` is reserved
+for the signal objects a module sends (Module Conventions rule 16).
+"""
 
 from typing import Any
 

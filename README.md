@@ -143,7 +143,7 @@ ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"  # Set to "mandatory" or "optional" as needed
 ACCOUNT_ALLOW_REGISTRATION = True  # Set to False to disable signups
-ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"
+ACCOUNT_ADAPTER = "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
 ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"
 LOGIN_REDIRECT_URL = "/accounts/profile/"
 LOGOUT_REDIRECT_URL = "/"
@@ -236,7 +236,7 @@ To add custom fields to the User model:
 
 ### Signal Handlers
 
-The module provides a post-registration signal handler in `signals.py`. Customize it to add your own logic:
+The module provides a post-registration signal receiver in `receivers.py`. Customize it to add your own logic:
 
 ```python
 @receiver(user_signed_up)
