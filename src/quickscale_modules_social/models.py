@@ -168,7 +168,7 @@ class SocialLink(BaseSocialItem):
     cache_keys = (SOCIAL_LINKS_CACHE_KEY,)
 
     class Meta(BaseSocialItem.Meta):
-        app_label = "quickscale_modules_social"
+        app_label = "quickscale_social"
         verbose_name = "Social link"
         verbose_name_plural = "Social links"
 
@@ -279,6 +279,6 @@ class SocialEmbed(BaseSocialItem):
         self.refresh_resolution_metadata()
 
     class Meta(BaseSocialItem.Meta):
-        app_label = "quickscale_modules_social"
+        app_label = "quickscale_social"
         verbose_name = "Social embed"
         verbose_name_plural = "Social embeds"
