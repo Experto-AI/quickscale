@@ -130,7 +130,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="%(class)s_listings",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -257,7 +257,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="project_listing_images",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -289,7 +289,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="project_folders",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),

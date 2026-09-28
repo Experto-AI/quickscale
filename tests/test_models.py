@@ -883,7 +883,7 @@ class ConcreteTenantResource(TenantModel):
         app_label = "quickscale_orgs"
 
 
-class ForwardFKChild(models.Model):
+class ForwardFKChild(TenantModel):
     """Test-only model with a FK to ConcreteTenantResource for FK traversal tests.
 
     Test-only model — not a real tenant table.
@@ -895,10 +895,6 @@ class ForwardFKChild(models.Model):
         "not a real tenant table."
     )
 
-    organization: models.ForeignKey = models.ForeignKey(
-        "quickscale_orgs.Organization",
-        on_delete=models.PROTECT,
-    )
     parent: models.ForeignKey = models.ForeignKey(
         ConcreteTenantResource,
         on_delete=models.CASCADE,
@@ -906,17 +902,12 @@ class ForwardFKChild(models.Model):
     )
     name: models.CharField = models.CharField(max_length=100)
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_orgs"
-        base_manager_name = "all_objects"
 
 
 def test_concrete_tenant_model_has_scoped_default_manager() -> None:
     """Concrete TenantModel subclass should inherit a TenantManager as objects."""
-    from quickscale_modules_orgs.managers import TenantManager
 
     assert isinstance(ConcreteTenantResource.objects, TenantManager)
     assert ConcreteTenantResource.objects._super_scope is False
@@ -924,7 +915,6 @@ def test_concrete_tenant_model_has_scoped_default_manager() -> None:
 
 def test_concrete_tenant_model_has_unfiltered_all_objects_manager() -> None:
     """Concrete TenantModel subclass should have all_objects (super-scope bypass)."""
-    from quickscale_modules_orgs.managers import TenantManager
 
     assert isinstance(ConcreteTenantResource.all_objects, TenantManager)
     assert ConcreteTenantResource.all_objects._super_scope is True

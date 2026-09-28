@@ -1318,7 +1318,7 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
     FormField.all_objects.create(
         organization=org,
         form=form,
-        field_type=FormField.FIELD_TYPE_TEXT,
+        field_type=FormField.FieldType.TEXT,
         label="Name",
         name="name",
         order=1,

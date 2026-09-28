@@ -121,12 +121,12 @@ class OrganizationMembership(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="organization_memberships",
+        related_name="quickscale_orgs_organization_memberships",
     )
     organization = models.ForeignKey(
         "quickscale_orgs.Organization",
         on_delete=models.CASCADE,
-        related_name="memberships",
+        related_name="quickscale_orgs_memberships",
     )
     role = models.CharField(
         max_length=20,
@@ -138,7 +138,7 @@ class OrganizationMembership(models.Model):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="invited_organization_memberships",
+        related_name="quickscale_orgs_invited_organization_memberships",
     )
     joined_at = models.DateTimeField(auto_now_add=True)
 
@@ -370,7 +370,7 @@ class OrganizationInvitation(models.Model):
     organization = models.ForeignKey(
         "quickscale_orgs.Organization",
         on_delete=models.CASCADE,
-        related_name="invitations",
+        related_name="quickscale_orgs_invitations",
     )
     email = models.EmailField()
     role = models.CharField(
@@ -381,7 +381,7 @@ class OrganizationInvitation(models.Model):
     invited_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="sent_organization_invitations",
+        related_name="quickscale_orgs_sent_organization_invitations",
     )
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = models.DateTimeField()

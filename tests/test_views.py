@@ -1618,7 +1618,7 @@ def test_solo_pre_home_root_route_renders_org_dashboard(client, settings) -> Non
     assert "Organization dashboard" in response.content.decode()
     assert Organization.objects.filter(
         is_personal=True,
-        memberships__user=user,
+        quickscale_orgs_memberships__user=user,
     ).exists()
 
 
