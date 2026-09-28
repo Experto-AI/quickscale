@@ -1,38 +1,29 @@
-"""Tests for the storage package's lazy public exports."""
+"""Tests for the storage package root contract (Module Conventions rule 15)."""
 
 from __future__ import annotations
 
 import quickscale_modules_storage as package
-import pytest
 
-from quickscale_modules_storage import helpers
-
-
-def test_lazy_exports_are_runtime_bound_and_cached(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Resolve every public export and retain its first resolved identity."""
-    for name in package.__all__:
-        monkeypatch.delitem(package.__dict__, name, raising=False)
-        helper_value = getattr(helpers, name)
-
-        assert getattr(package, name) is helper_value
-        assert package.__dict__[name] is helper_value
-
-        replacement = object()
-        monkeypatch.setattr(helpers, name, replacement)
-        assert getattr(package, name) is helper_value
+# The helper symbols the package root used to re-export; they now live in
+# ``quickscale_modules_storage.helpers`` and are reached through that module.
+FORMER_ROOT_EXPORTS = (
+    "StorageBackendSelection",
+    "ValidatedUpload",
+    "build_public_media_url",
+    "build_upload_path",
+    "make_cache_friendly_name",
+    "select_storage_backend",
+    "validate_file_upload",
+)
 
 
-def test_unknown_lazy_export_raises_without_caching(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Reject names outside the runtime export authority without caching them."""
-    unknown_name = "__quickscale_storage_unknown_export__"
-    assert unknown_name not in package.__all__
-    monkeypatch.delitem(package.__dict__, unknown_name, raising=False)
+def test_package_root_exports_only_the_version() -> None:
+    """``__init__.py`` holds ``__version__`` and ``__all__`` and nothing else."""
+    assert package.__all__ == ["__version__"]
+    assert isinstance(package.__version__, str)
 
-    with pytest.raises(AttributeError):
-        getattr(package, unknown_name)
 
-    assert unknown_name not in package.__dict__
+def test_former_lazy_exports_are_no_longer_package_attributes() -> None:
+    """The removed root re-exports stay gone — the public surface is services."""
+    for name in FORMER_ROOT_EXPORTS:
+        assert not hasattr(package, name), f"{name} leaked back onto the package root"
