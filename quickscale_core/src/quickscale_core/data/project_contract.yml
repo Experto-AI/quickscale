@@ -84,7 +84,7 @@ steps:
       - "Compare and manually adopt the current docker-compose.yml backend environment list: it forwards STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY, QUICKSCALE_BILLING_WEBHOOK_SECRET, RESEND_API_KEY, QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET, POSTHOG_API_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID, and QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass."
   - id: sa225-vendor-secret-build-placeholders
     minimum: "0.89.0"
-    title: "Adopt the Dockerfile build-time vendor placeholder credentials"
+    title: "Superseded Dockerfile placeholder-credential step — adopt the skip-based contract instead"
     adoption_steps:
       - "Superseded: this step's placeholder-credential Dockerfile contract was replaced before adoption by the one-shot QUICKSCALE_SKIP_MODULE_CHECKS=all declared in the sa225-vendor-secret-route-generic step. Adopt that final contract; do not add placeholder credentials to the Dockerfile."
   - id: sa225-vendor-secret-route-generic
