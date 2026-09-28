@@ -15,30 +15,38 @@ config:
       default: 25
       django_setting: FORMS_PER_PAGE
       description: "Number of submissions shown per page in admin."
+      validation:
+        min: 1
 
     spam_protection_enabled:
       type: boolean
       default: true
       django_setting: FORMS_SPAM_PROTECTION
       description: "Enable honeypot spam protection globally for forms that also keep their per-form flag enabled."
+      validation: {}
 
     rate_limit:
       type: string
       default: "5/hour"
       django_setting: FORMS_RATE_LIMIT
       description: "Throttle rate for form submissions (per IP). Format: '<count>/<period>'."
+      validation:
+        pattern: ^\d+/(second|minute|hour|day)$
 
     data_retention_days:
       type: integer
       default: 365
       django_setting: FORMS_DATA_RETENTION_DAYS
       description: "Default days assigned to newly created forms before anonymization (0 = keep forever); existing forms keep their stored value."
+      validation:
+        min: 0
 
     submissions_api_enabled:
       type: boolean
       default: true
       django_setting: FORMS_SUBMISSIONS_API
       description: "Enable REST API endpoints for admin submission management."
+      validation: {}
 
   # Immutable options - locked at embed time, require remove + re-embed to change
   immutable: {}
@@ -70,51 +78,9 @@ derivation:
       description: "Forms URL includes"
 
   option_derivations:
-    forms_per_page:
-      derived_settings:
-        - setting_key: FORMS_PER_PAGE
-          source_options: [forms_per_page]
-          derivation_type: direct
-          expression:
-            option: forms_per_page
-          default: 25
-          description: "Number of forms per page"
-
-    spam_protection_enabled:
-      derived_settings:
-        - setting_key: FORMS_SPAM_PROTECTION
-          source_options: [spam_protection_enabled]
-          derivation_type: direct
-          expression:
-            option: spam_protection_enabled
-          default: true
-          description: "Enable honeypot spam protection"
-
     rate_limit:
-      derived_settings:
-        - setting_key: FORMS_RATE_LIMIT
-          source_options: [rate_limit]
-          derivation_type: direct
-          expression:
-            option: rate_limit
-          description: "Throttle rate for form submissions"
-
-    data_retention_days:
-      derived_settings:
-        - setting_key: FORMS_DATA_RETENTION_DAYS
-          source_options: [data_retention_days]
-          derivation_type: direct
-          expression:
-            option: data_retention_days
-          default: 365
-          description: "Data retention period in days"
-
-    submissions_api_enabled:
-      derived_settings:
-        - setting_key: FORMS_SUBMISSIONS_API
-          source_options: [submissions_api_enabled]
-          derivation_type: direct
-          expression:
-            option: submissions_api_enabled
-          default: true
-          description: "Enable REST API for submission management"
+      normalization_rules:
+        - source_key: rate_limit
+          target_key: rate_limit
+          rule_type: strip
+          description: "Strip whitespace from rate_limit"
