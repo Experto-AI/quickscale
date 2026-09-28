@@ -359,7 +359,7 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
             (
                 "quickscale_modules/blog/src/quickscale_modules_blog/views.py",
                 "_get_blog_api_rate_limit_ident",
-                297,
+                282,
             ),
         ]
     )

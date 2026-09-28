@@ -1,9 +1,10 @@
 """SA68 Phase 1 — RLS boot guard unit tests.
 
-Tests for ``quickscale_modules_orgs.apps._check_rls_role`` — the
-standalone function called by ``QuickscaleOrgsConfig.ready()`` that
-raises ``ImproperlyConfigured`` when the connected PostgreSQL role has
-BYPASSRLS or SUPERUSER (either alone suffices to fail the guard).
+Tests for ``quickscale_modules_orgs.checks.check_rls_role`` — the function
+run by ``QuickscaleOrgsConfig.ready()`` through
+``quickscale_core.runtime.register_module_checks`` that fails startup when the
+connected PostgreSQL role has BYPASSRLS or SUPERUSER (either alone suffices
+to fail the guard).
 
 The guard is always active (regardless of ``QUICKSCALE_MODE`` or
 ``DEBUG``) with two narrow exemptions:
@@ -27,9 +28,9 @@ fail closed under BYPASSRLS or SUPERUSER.  The old ``sys.argv``-based
 ``_is_migrate_command`` has been replaced by the explicit env-var
 contract (SA68 Phase 1).
 
-SA203 — the ``ready()`` exemption narrows to ``_check_rls_role()`` alone:
-the AF9 priming install, the SA70 ``pre_delete`` last-owner backstop, and
-the SA1.3 check registration install on every startup path, including a
+SA203 — the privileged-command exemption narrows to ``check_rls_role()``
+alone: the AF9 priming install, the SA70 ``pre_delete`` last-owner backstop,
+and the check registration install on every startup path, including a
 privileged command.
 """
 
@@ -41,16 +42,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management import call_command
+from django.core.management.base import SystemCheckError
+from django.core.management.commands import migrate, runserver
 from django.db.backends.signals import connection_created
 from django.db.models.signals import pre_delete
 
 import quickscale_modules_orgs
 from quickscale_modules_orgs.apps import (
-    _PRIVILEGED_COMMANDS,
     QuickscaleOrgsConfig,
-    _check_rls_role,
     _install_priming_on_connection,
+)
+from quickscale_modules_orgs.checks import (
+    _PRIVILEGED_COMMANDS,
     _is_privileged_command,
+    check_rls_role,
 )
 from quickscale_modules_orgs.models import OrganizationMembership
 from quickscale_modules_orgs.signals import (
@@ -65,8 +71,7 @@ def _clear_escape_hatch(monkeypatch: pytest.MonkeyPatch) -> None:
     The env var is a shell-level opt-in (set before running
     pytest — no module test code primes it).  This autouse
     fixture clears it before every test so that tests
-    exercising the guard (expecting ``ImproperlyConfigured``)
-    work correctly without the env var interfering.
+    exercising the guard work correctly without the env var interfering.
     """
     monkeypatch.delenv("QUICKSCALE_ALLOW_BYPASSRLS", raising=False)
 
@@ -87,23 +92,29 @@ def _mock_postgres_connection(rolbypassrls: bool, rolsuper: bool = False) -> Mag
     return mock_conn
 
 
+def _assert_reports(messages: list, *fragments: str) -> None:
+    """Assert the guard reported a failure whose text carries *fragments*."""
+    assert messages, "expected the guard to report a failure"
+    text = " ".join(str(message.msg) for message in messages)
+    for fragment in fragments:
+        assert fragment in text
+
+
 # ---------------------------------------------------------------------------
-# Raise: saas + DEBUG=False + PostgreSQL + rolbypassrls = true
+# Report: saas + DEBUG=False + PostgreSQL + rolbypassrls = true
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_for_bypassrls_role(settings: Any) -> None:
-    """Saas + DEBUG=False + PostgreSQL + BYPASSRLS role raises."""
+def test_rls_guard_reports_bypassrls_role(settings: Any) -> None:
+    """Saas + DEBUG=False + PostgreSQL + BYPASSRLS role reports a failure."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with pytest.raises(ImproperlyConfigured) as exc_info:
-            _check_rls_role()
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        messages = check_rls_role()
 
-    assert "BYPASSRLS" in str(exc_info.value)
-    assert "NOBYPASSRLS" in str(exc_info.value)
+    _assert_reports(messages, "BYPASSRLS", "NOBYPASSRLS")
 
 
 # ---------------------------------------------------------------------------
@@ -117,67 +128,61 @@ def test_rls_guard_passes_for_nobypassrls_role(settings: Any) -> None:
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=False)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        _check_rls_role()  # must not raise
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        assert check_rls_role() == []
 
 
 # ---------------------------------------------------------------------------
-# Raise: SA58 — rolsuper=True + rolbypassrls=False also raises
+# Report: SA58 — rolsuper=True + rolbypassrls=False also reports
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_for_superuser_role(settings: Any) -> None:
-    """SUPERUSER role without BYPASSRLS must also raise."""
+def test_rls_guard_reports_superuser_role(settings: Any) -> None:
+    """SUPERUSER role without BYPASSRLS must also report a failure."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=False, rolsuper=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with pytest.raises(ImproperlyConfigured) as exc_info:
-            _check_rls_role()
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        messages = check_rls_role()
 
-    assert "SUPERUSER" in str(exc_info.value)
-    assert "NOSUPERUSER" in str(exc_info.value)
+    _assert_reports(messages, "SUPERUSER", "NOSUPERUSER")
 
 
 # ---------------------------------------------------------------------------
-# Raise: solo mode (SA2.1 — always-on, no longer exempt)
+# Report: solo mode (SA2.1 — always-on, no longer exempt)
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_in_solo_mode(settings: Any) -> None:
-    """Solo mode must now raise with a BYPASSRLS role."""
+def test_rls_guard_reports_in_solo_mode(settings: Any) -> None:
+    """Solo mode must now report a failure with a BYPASSRLS role."""
     settings.QUICKSCALE_MODE = "solo"
     settings.DEBUG = False
 
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with pytest.raises(ImproperlyConfigured) as exc_info:
-            _check_rls_role()
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        messages = check_rls_role()
 
-    assert "BYPASSRLS" in str(exc_info.value)
-    assert "NOBYPASSRLS" in str(exc_info.value)
+    _assert_reports(messages, "BYPASSRLS", "NOBYPASSRLS")
 
 
 # ---------------------------------------------------------------------------
-# Raise: DEBUG=True (SA2.1 — always-on, no longer exempt)
+# Report: DEBUG=True (SA2.1 — always-on, no longer exempt)
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_when_debug_true(settings: Any) -> None:
-    """DEBUG=True must now raise with a BYPASSRLS role."""
+def test_rls_guard_reports_when_debug_true(settings: Any) -> None:
+    """DEBUG=True must now report a failure with a BYPASSRLS role."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = True
 
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with pytest.raises(ImproperlyConfigured) as exc_info:
-            _check_rls_role()
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        messages = check_rls_role()
 
-    assert "BYPASSRLS" in str(exc_info.value)
-    assert "NOBYPASSRLS" in str(exc_info.value)
+    _assert_reports(messages, "BYPASSRLS", "NOBYPASSRLS")
 
 
 # ---------------------------------------------------------------------------
@@ -193,8 +198,8 @@ def test_rls_guard_noop_on_sqlite(settings: Any) -> None:
     mock_conn = MagicMock()
     mock_conn.vendor = "sqlite"
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        _check_rls_role()  # must not raise
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        assert check_rls_role() == []
 
 
 # ---------------------------------------------------------------------------
@@ -210,8 +215,8 @@ def test_rls_guard_escape_hatch_bypasses_in_saas_prod(settings: Any) -> None:
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
     with patch.dict(os.environ, {"QUICKSCALE_ALLOW_BYPASSRLS": "1"}):
-        with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-            _check_rls_role()  # must not raise
+        with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+            assert check_rls_role() == []
 
 
 def test_rls_guard_escape_hatch_bypasses_in_solo(settings: Any) -> None:
@@ -222,8 +227,8 @@ def test_rls_guard_escape_hatch_bypasses_in_solo(settings: Any) -> None:
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
     with patch.dict(os.environ, {"QUICKSCALE_ALLOW_BYPASSRLS": "1"}):
-        with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-            _check_rls_role()  # must not raise
+        with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+            assert check_rls_role() == []
 
 
 def test_rls_guard_escape_hatch_bypasses_with_debug(settings: Any) -> None:
@@ -234,8 +239,8 @@ def test_rls_guard_escape_hatch_bypasses_with_debug(settings: Any) -> None:
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
     with patch.dict(os.environ, {"QUICKSCALE_ALLOW_BYPASSRLS": "1"}):
-        with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-            _check_rls_role()  # must not raise
+        with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+            assert check_rls_role() == []
 
 
 def test_rls_guard_escape_hatch_exact_value(settings: Any) -> None:
@@ -247,11 +252,10 @@ def test_rls_guard_escape_hatch_exact_value(settings: Any) -> None:
 
     # Value "0" must NOT bypass
     with patch.dict(os.environ, {"QUICKSCALE_ALLOW_BYPASSRLS": "0"}):
-        with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-            with pytest.raises(ImproperlyConfigured) as exc_info:
-                _check_rls_role()
+        with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+            messages = check_rls_role()
 
-    assert "BYPASSRLS" in str(exc_info.value)
+    _assert_reports(messages, "BYPASSRLS")
 
 
 def test_rls_guard_escape_hatch_empty_value_does_not_bypass(settings: Any) -> None:
@@ -262,30 +266,27 @@ def test_rls_guard_escape_hatch_empty_value_does_not_bypass(settings: Any) -> No
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
     with patch.dict(os.environ, {"QUICKSCALE_ALLOW_BYPASSRLS": ""}):
-        with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-            with pytest.raises(ImproperlyConfigured) as exc_info:
-                _check_rls_role()
+        with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+            messages = check_rls_role()
 
-    assert "BYPASSRLS" in str(exc_info.value)
+    _assert_reports(messages, "BYPASSRLS")
 
 
 # ---------------------------------------------------------------------------
-# Raise: unset QUICKSCALE_MODE (SA2.1 — always-on, no longer exempt)
+# Report: unset QUICKSCALE_MODE (SA2.1 — always-on, no longer exempt)
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_when_mode_unset(settings: Any) -> None:
-    """Unset QUICKSCALE_MODE must now raise with a BYPASSRLS role."""
+def test_rls_guard_reports_when_mode_unset(settings: Any) -> None:
+    """Unset QUICKSCALE_MODE must now report a failure with a BYPASSRLS role."""
     settings.DEBUG = False
 
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with pytest.raises(ImproperlyConfigured) as exc_info:
-            _check_rls_role()
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        messages = check_rls_role()
 
-    assert "BYPASSRLS" in str(exc_info.value)
-    assert "NOBYPASSRLS" in str(exc_info.value)
+    _assert_reports(messages, "BYPASSRLS", "NOBYPASSRLS")
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +381,7 @@ def test_ready_skips_check_for_migration_command(settings: Any) -> None:
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
         with patch.dict(
             os.environ,
             {"QUICKSCALE_PRIVILEGED_COMMAND": "migrate"},
@@ -400,7 +401,7 @@ def test_ready_skips_check_for_createcachetable_command(settings: Any) -> None:
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
         with patch.dict(
             os.environ,
             {"QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable"},
@@ -413,7 +414,7 @@ def test_ready_skips_check_for_createcachetable_command(settings: Any) -> None:
 
 
 def test_ready_installs_backstops_under_privileged_command(settings: Any) -> None:
-    """SA203: a privileged command skips only ``_check_rls_role()``.
+    """SA203: a privileged command skips only ``check_rls_role()``.
 
     ``ready()`` must still connect the SA70 last-owner ``pre_delete``
     backstop and the AF9 ``connection_created`` priming install when
@@ -432,7 +433,7 @@ def test_ready_installs_backstops_under_privileged_command(settings: Any) -> Non
     pre_delete.disconnect(_protect_last_owner_on_membership_delete)
     connection_created.disconnect(_install_priming_on_connection)
     try:
-        with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+        with patch("quickscale_modules_orgs.checks.connection", mock_conn):
             with patch.dict(
                 os.environ,
                 {"QUICKSCALE_PRIVILEGED_COMMAND": "migrate"},
@@ -469,7 +470,7 @@ def test_ready_rejects_retired_billing_backfill_under_bypassrls(settings: Any) -
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
         with patch.dict(
             os.environ,
             {
@@ -490,7 +491,7 @@ def test_ready_raises_for_runserver_command(settings: Any) -> None:
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
         with patch.dict(os.environ, {}, clear=True):
             config = QuickscaleOrgsConfig(
                 "quickscale_modules_orgs", quickscale_modules_orgs
@@ -508,7 +509,7 @@ def test_ready_raises_for_collectstatic_command(settings: Any) -> None:
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
         with patch.dict(os.environ, {}, clear=True):
             config = QuickscaleOrgsConfig(
                 "quickscale_modules_orgs", quickscale_modules_orgs
@@ -526,7 +527,7 @@ def test_ready_raises_for_gunicorn_startup(settings: Any) -> None:
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
         with patch.dict(os.environ, {}, clear=True):
             config = QuickscaleOrgsConfig(
                 "quickscale_modules_orgs", quickscale_modules_orgs
@@ -536,6 +537,24 @@ def test_ready_raises_for_gunicorn_startup(settings: Any) -> None:
 
     assert "BYPASSRLS" in str(exc_info.value)
     assert "NOBYPASSRLS" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_bypassrls_role_fails_check_migrate_and_runserver(settings: Any) -> None:
+    """The registered guard fails ``manage.py check``, ``migrate``, and
+    ``runserver`` alike while the role has BYPASSRLS."""
+    settings.QUICKSCALE_MODE = "saas"
+    settings.DEBUG = False
+    mock_conn = _mock_postgres_connection(rolbypassrls=True)
+
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(SystemCheckError, match="BYPASSRLS"):
+                call_command("check")
+            with pytest.raises(SystemCheckError, match="BYPASSRLS"):
+                migrate.Command().check()
+            with pytest.raises(SystemCheckError, match="BYPASSRLS"):
+                runserver.Command().check()
 
 
 # ---------------------------------------------------------------------------
@@ -556,5 +575,5 @@ def test_rls_guard_noop_when_query_returns_none(settings: Any) -> None:
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
 
-    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        _check_rls_role()  # must not raise
+    with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+        assert check_rls_role() == []

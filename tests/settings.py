@@ -21,6 +21,14 @@ SECRET_KEY = "test-secret-key-for-orgs-module"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
+# This suite installs billing and notifications enabled; their rule 35
+# startup checks need the Stripe and Resend webhook secrets to resolve.
+os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_orgs_suite")
+os.environ.setdefault("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_orgs_suite")
+os.environ.setdefault(
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET", "whsec_notifications_orgs_suite"
+)
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
