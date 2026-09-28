@@ -68,8 +68,8 @@ from quickscale_modules_orgs.tenancy import (
 _PURGE_ORDER_OVERRIDES: tuple[tuple[str, str], ...] = ()
 
 _LABEL_PREFIXES = {
-    "quickscale_modules_blog": "Blog",
-    "quickscale_modules_crm": "CRM",
+    "quickscale_blog": "Blog",
+    "quickscale_crm": "CRM",
 }
 
 
@@ -672,7 +672,7 @@ class Command(BaseCommand):
         """Run billing's provider adapter before opening the purge transaction."""
         if not apps.is_installed("quickscale_modules_billing"):
             return ""
-        app_config = apps.get_app_config("quickscale_modules_billing")
+        app_config = apps.get_app_config("quickscale_billing")
         reconcile = getattr(
             app_config,
             "reconcile_organization_removal_provider_state",
@@ -695,7 +695,7 @@ class Command(BaseCommand):
         """Hold billing's provider mutex through reconciliation and purge."""
         if not apps.is_installed("quickscale_modules_billing"):
             return nullcontext()
-        app_config = apps.get_app_config("quickscale_modules_billing")
+        app_config = apps.get_app_config("quickscale_billing")
         lock_factory = getattr(
             app_config,
             "organization_removal_provider_mutation_lock",
@@ -724,9 +724,7 @@ class Command(BaseCommand):
         RLS context for the surrounding transaction.
         """
         try:
-            subscription_model = apps.get_model(
-                "quickscale_modules_billing", "Subscription"
-            )
+            subscription_model = apps.get_model("quickscale_billing", "Subscription")
         except LookupError:
             return
 

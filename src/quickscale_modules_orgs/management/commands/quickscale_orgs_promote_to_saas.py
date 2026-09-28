@@ -99,7 +99,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"promote_to_saas updated {updated_count} personal organizations."
+                f"quickscale_orgs_promote_to_saas updated {updated_count} personal organizations."
             )
         )
         self.stdout.write("Required settings change: QUICKSCALE_MODE = 'saas'")

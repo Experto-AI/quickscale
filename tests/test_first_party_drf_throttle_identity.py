@@ -97,7 +97,7 @@ class _SourceInventory(ast.NodeVisitor):
             for imported in node.names:
                 if imported.name == "get_client_ip":
                     self.get_client_ip_aliases.add(imported.asname or imported.name)
-        elif module == "quickscale_modules_orgs":
+        elif module == "quickscale_orgs":
             for imported in node.names:
                 if imported.name == "current_org":
                     self.current_org_module_aliases.add(

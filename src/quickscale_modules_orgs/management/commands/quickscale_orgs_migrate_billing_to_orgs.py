@@ -24,13 +24,13 @@ def _require_explicit_recovery_connection() -> None:
     """Refuse to run unless the operator selected a bypassing role explicitly."""
     if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") != "1":
         raise CommandError(
-            "migrate_billing_to_orgs is a retired recovery command and requires "
+            "quickscale_orgs_migrate_billing_to_orgs is a retired recovery command and requires "
             "the explicit QUICKSCALE_ALLOW_BYPASSRLS=1 acknowledgement. See the "
             "organizations guide for the reviewed recovery invocation."
         )
     if connection.vendor != "postgresql":
         raise CommandError(
-            "migrate_billing_to_orgs requires an explicit PostgreSQL recovery "
+            "quickscale_orgs_migrate_billing_to_orgs requires an explicit PostgreSQL recovery "
             "connection with BYPASSRLS or SUPERUSER privilege."
         )
 
@@ -46,7 +46,7 @@ def _require_explicit_recovery_connection() -> None:
 
     if role_flags is None or not any(role_flags):
         raise CommandError(
-            "migrate_billing_to_orgs refuses the restricted runtime role because "
+            "quickscale_orgs_migrate_billing_to_orgs refuses the restricted runtime role because "
             "RLS can hide historical rows with null organization ownership. Set "
             "RUNTIME_DATABASE_URL to DATABASE_URL explicitly for this reviewed "
             "recovery invocation; automatic privilege is not available."
@@ -104,7 +104,7 @@ def _resolve_authoritative_organization(
 
 
 def _billing_model(model_name: str):
-    return apps.get_model("quickscale_modules_billing", model_name)
+    return apps.get_model("quickscale_billing", model_name)
 
 
 def _billing_user_ids() -> list[int]:
@@ -511,6 +511,6 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"migrate_billing_to_orgs completed for {len(migration_plan)} billing users."
+                f"quickscale_orgs_migrate_billing_to_orgs completed for {len(migration_plan)} billing users."
             )
         )

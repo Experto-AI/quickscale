@@ -6,7 +6,7 @@
         {% debug_as_active as is_debug_active %}
         {% if is_debug_active %}
         <li>
-            <form method="post" action="{% url 'admin:quickscale_modules_orgs_organization_debug-exit' %}">
+            <form method="post" action="{% url 'admin:quickscale_orgs_organization_debug-exit' %}">
                 {% csrf_token %}
                 <button type="submit" class="button" style="background: #dc2626; color: #fff; border: none; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; font-weight: 600;">
                     Exit VIEW-AS
@@ -14,7 +14,7 @@
             </form>
         </li>
         {% endif %}
-        {% include "quickscale_modules_orgs/_debug_banner.html" %}
+        {% include "quickscale_orgs/_debug_banner.html" %}
     {% endif %}
     {{ block.super }}
 {% endblock %}

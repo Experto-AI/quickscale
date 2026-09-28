@@ -49,7 +49,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_filter = ["is_personal"]
     search_fields = ["name", "slug", "stripe_customer_id"]
     ordering = ["name"]
-    change_list_template = "quickscale_modules_orgs/admin/org_change_list.html"
+    change_list_template = "quickscale_orgs/admin/org_change_list.html"
 
     # ------------------------------------------------------------------
     # VIEW-AS admin affordances — direct session set/clear
@@ -70,7 +70,7 @@ class OrganizationAdmin(admin.ModelAdmin):
             self.message_user(
                 request, "VIEW-AS is superuser-only.", level=messages.ERROR
             )
-            return redirect("admin:quickscale_modules_orgs_organization_changelist")
+            return redirect("admin:quickscale_orgs_organization_changelist")
 
         organization = get_object_or_404(Organization, slug=org_slug)
         set_debug_as_org(request, organization)
@@ -89,11 +89,11 @@ class OrganizationAdmin(admin.ModelAdmin):
             self.message_user(
                 request, "VIEW-AS is superuser-only.", level=messages.ERROR
             )
-            return redirect("admin:quickscale_modules_orgs_organization_changelist")
+            return redirect("admin:quickscale_orgs_organization_changelist")
 
         clear_debug_as_org(request)
         self.message_user(request, "VIEW-AS debug mode exited.", level=messages.SUCCESS)
-        return redirect("admin:quickscale_modules_orgs_organization_changelist")
+        return redirect("admin:quickscale_orgs_organization_changelist")
 
     # ------------------------------------------------------------------
     # VIEW-AS button column for the change list
@@ -103,7 +103,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     def view_as_button(self, obj: Organization) -> str:
         """Render a VIEW-AS link button for each org row."""
         url = reverse(
-            "admin:quickscale_modules_orgs_organization_debug-view-as",
+            "admin:quickscale_orgs_organization_debug-view-as",
             kwargs={"org_slug": obj.slug},
         )
         return format_html(

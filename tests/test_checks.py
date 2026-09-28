@@ -68,7 +68,7 @@ class TestCheckTenantIsolationW001:
         messages = check_tenant_isolation(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.W001"
+        assert messages[0].id == "quickscale_orgs.W001"
         assert "Failed to discover tenant models" in messages[0].msg
 
 
@@ -82,7 +82,7 @@ class TestCheckTenantIsolationW002:
         messages = check_tenant_isolation(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.W002"
+        assert messages[0].id == "quickscale_orgs.W002"
         assert "No tenant models discovered" in messages[0].msg
 
 
@@ -111,7 +111,7 @@ class TestCheckTenantIsolationW003:
         messages = check_tenant_isolation(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.W003"
+        assert messages[0].id == "quickscale_orgs.W003"
         assert "missing an 'organization_id' field" in messages[0].msg
 
 
@@ -140,7 +140,7 @@ class TestCheckTenantIsolationW004:
         messages = check_tenant_isolation(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.W004"
+        assert messages[0].id == "quickscale_orgs.W004"
         assert "does not match the FORCE RLS policy contract" in messages[0].msg
         assert "Remove any extra or misnamed policies" in messages[0].hint
 
@@ -214,8 +214,8 @@ class TestCheckTenantIsolationMultiModel:
 
         assert len(messages) == 2
         message_ids = {m.id for m in messages}
-        assert "quickscale_modules_orgs.W003" in message_ids
-        assert "quickscale_modules_orgs.W004" in message_ids
+        assert "quickscale_orgs.W003" in message_ids
+        assert "quickscale_orgs.W004" in message_ids
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +235,7 @@ class TestCheckModelClassificationW005Exception:
         messages = check_model_classification(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.W005"
+        assert messages[0].id == "quickscale_orgs.W005"
         assert "Failed to discover concrete project models" in messages[0].msg
 
 
@@ -252,7 +252,7 @@ class TestCheckModelClassificationW005Unclassified:
         messages = check_model_classification(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.W005"
+        assert messages[0].id == "quickscale_orgs.W005"
         assert "UnclassifiedModel" in messages[0].msg
         assert "not classified" in messages[0].msg
 
@@ -391,7 +391,7 @@ class TestW005HintIncludesRemediationGuidance:
         messages = check_model_classification(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.W005"
+        assert messages[0].id == "quickscale_orgs.W005"
         msg = messages[0].msg
         hint = messages[0].hint
         assert "MyModel" in msg
@@ -552,7 +552,7 @@ class TestCheckProviderIdConformanceE001:
         messages = check_provider_id_conformance(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.E001"
+        assert messages[0].id == "quickscale_orgs.E001"
         assert "Failed to discover tenant models" in messages[0].msg
 
     @patch("quickscale_modules_orgs.checks.get_tenant_models")
@@ -564,7 +564,7 @@ class TestCheckProviderIdConformanceE001:
         messages = check_provider_id_conformance(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.E001"
+        assert messages[0].id == "quickscale_orgs.E001"
         assert "sa208_checks_app.tenantrecord.acme_customer_id" in messages[0].msg
         assert "provider_id_classification" in messages[0].hint
 
@@ -610,7 +610,7 @@ def test_undeclared_project_field_fails_the_real_walk(
     messages = check_provider_id_conformance(app_configs=None)
 
     assert messages
-    assert all(message.id == "quickscale_modules_orgs.E001" for message in messages)
+    assert all(message.id == "quickscale_orgs.E001" for message in messages)
     named = " ".join(message.msg for message in messages)
     assert "sa208_project_app.projectproviderrecord.mls_id" in named
     assert "sa208_project_app.projectproviderrecord.local_ref_id" in named
@@ -635,7 +635,7 @@ class TestCheckRemovalObligationDischargeE002:
         messages = check_removal_obligation_discharge(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.E002"
+        assert messages[0].id == "quickscale_orgs.E002"
         assert "Failed to discover organization-removal obligations" in messages[0].msg
 
     @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
@@ -658,7 +658,7 @@ class TestCheckRemovalObligationDischargeE002:
         messages = check_removal_obligation_discharge(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.E002"
+        assert messages[0].id == "quickscale_orgs.E002"
         assert "acme-registry-state" in messages[0].msg
         assert "'purge'" in messages[0].msg
         assert "'reconcile'" in messages[0].msg
@@ -716,7 +716,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
         messages = checks.check_removal_obligation_discharge(app_configs=None)
 
         assert messages
-        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        assert all(message.id == "quickscale_orgs.E002" for message in messages)
         joined = " ".join(message.msg for message in messages)
         assert "does not route these stages through the shared coordinator" in joined
         assert "never calls RemovalCoordinator.finish" in joined
@@ -738,7 +738,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
         messages = checks.check_removal_obligation_discharge(app_configs=None)
 
         assert messages
-        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        assert all(message.id == "quickscale_orgs.E002" for message in messages)
         joined = " ".join(message.msg for message in messages)
         assert "does not route these stages through the shared coordinator" in joined
         assert "never calls RemovalCoordinator.finish" in joined
@@ -762,7 +762,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
         messages = checks.check_removal_obligation_discharge(app_configs=None)
 
         assert messages
-        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        assert all(message.id == "quickscale_orgs.E002" for message in messages)
         joined = " ".join(message.msg for message in messages)
         assert "does not route these stages through the shared coordinator" in joined
         assert "never calls RemovalCoordinator.finish" in joined
@@ -786,7 +786,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
         messages = checks.check_removal_obligation_discharge(app_configs=None)
 
         assert messages
-        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        assert all(message.id == "quickscale_orgs.E002" for message in messages)
         joined = " ".join(message.msg for message in messages)
         assert "does not route these stages through the shared coordinator" in joined
         assert "never calls RemovalCoordinator.finish" in joined
@@ -810,7 +810,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
         messages = checks.check_removal_obligation_discharge(app_configs=None)
 
         assert messages
-        assert all(message.id == "quickscale_modules_orgs.E002" for message in messages)
+        assert all(message.id == "quickscale_orgs.E002" for message in messages)
         joined = " ".join(message.msg for message in messages)
         assert "does not route these stages through the shared coordinator" in joined
         assert "never calls RemovalCoordinator.finish" in joined
@@ -834,7 +834,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
                 account_delete_skip_reason="Account deletion retains the rows.",
                 external_provider_fields=(
                     ExternalProviderField(
-                        "quickscale_modules_billing.plan",
+                        "quickscale_billing.plan",
                         "stripe_price_id",
                     ),
                 ),
@@ -844,7 +844,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
         messages = check_removal_obligation_discharge(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.E002"
+        assert messages[0].id == "quickscale_orgs.E002"
         assert "not organization-scoped" in messages[0].msg
 
     @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
@@ -872,7 +872,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
         messages = check_removal_obligation_discharge(app_configs=None)
 
         assert len(messages) == 1
-        assert messages[0].id == "quickscale_modules_orgs.E002"
+        assert messages[0].id == "quickscale_orgs.E002"
         assert "'account-delete'" in messages[0].msg
         assert "no boundary guard reconciles" in messages[0].msg
 

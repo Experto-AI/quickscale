@@ -135,7 +135,7 @@ def _get_active_org_subscription(organization: Organization) -> Any | None:
 
     try:
         subscription_model = apps.get_model(
-            "quickscale_modules_billing",
+            "quickscale_billing",
             "Subscription",
         )
     except LookupError:

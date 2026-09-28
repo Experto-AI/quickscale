@@ -172,7 +172,7 @@ def test_not_provider_backed_conflicts_with_central_obligation() -> None:
     """A model cannot contradict a central provider-state obligation."""
     model = _classified_model(
         {"stripe_customer_id": NOT_PROVIDER_BACKED},
-        label="quickscale_modules_billing.subscription",
+        label="quickscale_billing.subscription",
         fields=[
             SimpleNamespace(name="stripe_subscription_id", is_relation=False),
             SimpleNamespace(name="stripe_customer_id", is_relation=False),
@@ -181,7 +181,7 @@ def test_not_provider_backed_conflicts_with_central_obligation() -> None:
     )
 
     assert external_provider_obligation_mismatches([model]) == [
-        "quickscale_modules_billing.subscription.stripe_customer_id is classified "
+        "quickscale_billing.subscription.stripe_customer_id is classified "
         "'not-provider-backed' but a declared obligation covers it as provider state"
     ]
 
@@ -221,13 +221,13 @@ def test_each_installed_app_declares_its_own_obligations() -> None:
     from django.apps import apps
 
     billing_obligations = declared_removal_obligations(
-        apps.get_app_config("quickscale_modules_billing")
+        apps.get_app_config("quickscale_billing")
     )
     assert [obligation.name for obligation in billing_obligations] == [
         BILLING_PROVIDER_STATE
     ]
     orgs_obligations = declared_removal_obligations(
-        apps.get_app_config("quickscale_modules_orgs")
+        apps.get_app_config("quickscale_orgs")
     )
     assert [obligation.name for obligation in orgs_obligations] == [
         OWNED_TENANT_ROWS,

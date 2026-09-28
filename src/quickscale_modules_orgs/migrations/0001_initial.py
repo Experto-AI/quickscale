@@ -85,12 +85,12 @@ class Migration(migrations.Migration):
                     models.UniqueConstraint(
                         condition=models.Q(("is_system", True)),
                         fields=("is_system",),
-                        name="unique_system_org",
+                        name="quickscale_orgs_organization_unique_system_org",
                     ),
                     models.UniqueConstraint(
                         condition=models.Q(("stripe_customer_id", ""), _negated=True),
                         fields=("stripe_customer_id",),
-                        name="unique_nonempty_org_stripe_customer",
+                        name="quickscale_orgs_organization_unique_nonempty_stripe_customer",
                     ),
                 ],
             },
@@ -140,7 +140,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="invitations",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -189,7 +189,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="memberships",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
                 (
@@ -203,7 +203,12 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ["organization_id", "user_id"],
-                "unique_together": {("user", "organization")},
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("user", "organization"),
+                        name="quickscale_orgs_organizationmembership_user_organization_unique",
+                    ),
+                ],
             },
         ),
     ]

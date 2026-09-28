@@ -93,7 +93,7 @@ SITE_ID = 1
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_ALLOW_REGISTRATION = True
 ACCOUNT_ADAPTER = "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
-AUTH_USER_MODEL = "quickscale_modules_auth.User"
+AUTH_USER_MODEL = "quickscale_auth.User"
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",

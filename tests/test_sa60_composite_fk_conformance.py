@@ -2,7 +2,7 @@
 
 This test lives in the orgs test suite because ``orgs/tests/settings.py``
 is the smallest truthful cross-module harness: it includes crm, forms,
-and all other ``quickscale_modules_*`` apps.  This ensures all Option C
+and all other ``quickscale_*`` apps.  This ensures all Option C
 composite FKs (the child-table ``organization_id`` + local-key pair) are
 visible for a single ``pg_constraint`` query.
 
@@ -22,17 +22,17 @@ from django.db import connection
 #: ``test_tenant_table_conformance.py:_AF12_COMPOSITE_FK_PAIRS`` — this is a
 #: focused subset for deferability-only checking.
 _SA60_COMPOSITE_FKS: tuple[tuple[str, str], ...] = (
-    ("quickscale_modules_crm_contactnote", "crm_contactnote_contact_org_fk"),
-    ("quickscale_modules_crm_dealnote", "crm_dealnote_deal_org_fk"),
-    ("quickscale_modules_forms_formfield", "forms_formfield_form_org_fk"),
-    ("quickscale_modules_forms_formsubmission", "forms_formsubmission_form_org_fk"),
+    ("quickscale_crm_contactnote", "quickscale_crm_contactnote_contact_org_fk"),
+    ("quickscale_crm_dealnote", "quickscale_crm_dealnote_deal_org_fk"),
+    ("quickscale_forms_formfield", "quickscale_forms_formfield_form_org_fk"),
+    ("quickscale_forms_formsubmission", "quickscale_forms_formsubmission_form_org_fk"),
     (
-        "quickscale_modules_forms_formfieldvalue",
-        "forms_formfieldvalue_submission_org_fk",
+        "quickscale_forms_formfieldvalue",
+        "quickscale_forms_formfieldvalue_submission_org_fk",
     ),
     (
-        "quickscale_modules_forms_formfieldvalue",
-        "forms_formfieldvalue_field_org_fk",
+        "quickscale_forms_formfieldvalue",
+        "quickscale_forms_formfieldvalue_field_org_fk",
     ),
 )
 

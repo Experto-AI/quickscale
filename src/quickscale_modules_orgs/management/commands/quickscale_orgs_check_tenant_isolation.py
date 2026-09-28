@@ -11,9 +11,9 @@ each has:
 
 Usage::
 
-    python manage.py check_tenant_isolation
-    python manage.py check_tenant_isolation --postgres-only
-    python manage.py check_tenant_isolation --format json
+    python manage.py quickscale_orgs_check_tenant_isolation
+    python manage.py quickscale_orgs_check_tenant_isolation --postgres-only
+    python manage.py quickscale_orgs_check_tenant_isolation --format json
 
 Exit codes:
 
