@@ -8,8 +8,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db import models, transaction
 
-from quickscale_modules_orgs.managers import TenantManager
-from quickscale_modules_orgs.tenancy import tenant_org_fk
+from quickscale_modules_orgs.models import TenantModel
 
 
 CURRENT_SUBSCRIPTION_STATUSES = (
@@ -84,17 +83,17 @@ class Plan(models.Model):
         return self.name
 
 
-class CreditBalance(models.Model):
+class CreditBalance(TenantModel):
     """Current credit balance snapshot for a single organization."""
 
     organization = models.OneToOneField(
         "quickscale_orgs.Organization",
-        related_name="credit_balance",
+        related_name="quickscale_billing_credit_balance",
         on_delete=models.PROTECT,
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        related_name="credit_balance",
+        related_name="quickscale_billing_credit_balances",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -102,12 +101,8 @@ class CreditBalance(models.Model):
     balance = models.IntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_billing"
-        base_manager_name = "all_objects"
 
     @classmethod
     def get_or_create_for_org(cls, organization: Any) -> tuple["CreditBalance", bool]:
@@ -131,7 +126,7 @@ class CreditBalance(models.Model):
         return f"{self.organization} ({self.balance} credits)"
 
 
-class CreditTransaction(models.Model):
+class CreditTransaction(TenantModel):
     """Immutable audit log entry for a credit balance mutation."""
 
     external_provider_reference_fields = {
@@ -147,17 +142,12 @@ class CreditTransaction(models.Model):
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        related_name="credit_transactions",
+        related_name="quickscale_billing_credit_transactions",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
     )
-    organization = tenant_org_fk(
-        related_name="credit_transactions",
-    )
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
     amount = models.IntegerField()
     transaction_type = models.CharField(max_length=20, choices=TransactionType.choices)
     stripe_event_id = models.CharField(max_length=255, blank=True, db_index=True)
@@ -167,9 +157,8 @@ class CreditTransaction(models.Model):
     balance_after = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_billing"
-        base_manager_name = "all_objects"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -184,7 +173,7 @@ class CreditTransaction(models.Model):
         return f"{actor} {self.transaction_type} {self.amount}"
 
 
-class PurchaseCheckout(models.Model):
+class PurchaseCheckout(TenantModel):
     """Local lifecycle reservation for one Stripe one-time Checkout Session."""
 
     class Status(models.TextChoices):
@@ -193,12 +182,9 @@ class PurchaseCheckout(models.Model):
         COMPLETED = "completed", "Completed"
         EXPIRED = "expired", "Expired"
 
-    organization = tenant_org_fk(
-        related_name="purchase_checkouts",
-    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        related_name="billing_purchase_checkouts",
+        related_name="quickscale_billing_purchase_checkouts",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -222,12 +208,8 @@ class PurchaseCheckout(models.Model):
     checkout_expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_billing"
-        base_manager_name = "all_objects"
         ordering = ["-id"]
 
     def __str__(self) -> str:
@@ -244,7 +226,7 @@ class SubscriptionQuerySet(models.QuerySet["Subscription"]):
         return self.filter(current_subscription_status_q())
 
 
-class Subscription(models.Model):
+class Subscription(TenantModel):
     """Local snapshot of a user's recurring billing state."""
 
     class Status(models.TextChoices):
@@ -259,12 +241,9 @@ class Subscription(models.Model):
 
     CURRENT_STATUSES = CURRENT_SUBSCRIPTION_STATUSES
 
-    organization = tenant_org_fk(
-        related_name="subscriptions",
-    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        related_name="billing_subscriptions",
+        related_name="quickscale_billing_subscriptions",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -295,12 +274,8 @@ class Subscription(models.Model):
     current_period_start = models.DateTimeField(null=True, blank=True)
     current_period_end = models.DateTimeField(null=True, blank=True)
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_billing"
-        base_manager_name = "all_objects"
         ordering = ["-id"]
         constraints = [
             models.UniqueConstraint(
