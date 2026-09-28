@@ -131,7 +131,7 @@ def create_published_listing_from_payload(
             description=description_text,
             location=location.strip() if isinstance(location, str) else "",
             price=parsed_price,
-            status="published",
+            status=Listing.Status.PUBLISHED,
             organization=organization,
         )
     except IntegrityError as exc:
@@ -267,7 +267,7 @@ class ListingListView(ListingsPublicReadMixin, ListView):
         via ``org_scope()``, so the default tenant-scoped manager automatically
         filters to the correct organization.
         """
-        queryset = self.model.objects.filter(status="published")
+        queryset = self.model.objects.filter(status=self.model.Status.PUBLISHED)
         filterset_class = self.get_filterset_class()
         self.filterset = filterset_class(
             data=self.request.GET or None,
@@ -302,7 +302,7 @@ class ListingDetailView(ListingsPublicReadMixin, DetailView):
         via ``org_scope()``, so the default tenant-scoped manager automatically
         filters to the correct organization.
         """
-        return self.model.objects.filter(status="published")
+        return self.model.objects.filter(status=self.model.Status.PUBLISHED)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         """Add rendered markdown description to context"""
