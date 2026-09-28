@@ -287,6 +287,32 @@ def _validate_existing_project_notifications_or_abort(
     raise click.Abort()
 
 
+def _validate_existing_project_config_or_abort(config: QuickScaleConfig) -> str:
+    """Validate an updated existing-project configuration before it is saved.
+
+    Runs the notifications prerequisite check, renders the desired-state YAML,
+    and validates it through the same :func:`validate_config` the new-project
+    flow uses — including each selected module's manifest-declared option
+    checks.  An invalid value fails the planner instead of being written.
+
+    Returns:
+        The validated YAML text to preview and save.
+    """
+    _validate_existing_project_notifications_or_abort(config)
+    yaml_content = generate_yaml(config)
+
+    try:
+        validate_config(yaml_content)
+    except Exception as error:
+        click.secho(
+            "\n❌ Configuration validation failed:", fg="red", err=True, bold=True
+        )
+        click.echo(f"  • {error}", err=True)
+        raise click.Abort()
+
+    return yaml_content
+
+
 def _detect_existing_project(
     *,
     strict_config_validation: bool = False,
@@ -656,8 +682,7 @@ def _handle_add_modules(
         existing_options,
     )
 
-    _validate_existing_project_notifications_or_abort(config)
-    yaml_content = generate_yaml(config)
+    yaml_content = _validate_existing_project_config_or_abort(config)
     _preview_and_save_added_config(project_path, yaml_content, new_modules)
 
 
@@ -825,10 +850,8 @@ def _handle_reconfigure(
         ),
     )
 
-    _validate_existing_project_notifications_or_abort(config)
-
-    # Generate YAML
-    yaml_content = generate_yaml(config)
+    # Validate the assembled configuration and generate YAML
+    yaml_content = _validate_existing_project_config_or_abort(config)
 
     # Preview configuration
     click.echo("\n" + "=" * 50)

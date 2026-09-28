@@ -16,6 +16,7 @@ through this path and eventually retire the per-module contract files.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +27,7 @@ from quickscale_core.manifest.derivation import (
     NormalizationRule,
     ValidationRule,
     WiringProjection,
+    build_schema_from_manifest,
 )
 from quickscale_core.manifest.schema import ManagedFileDeclaration, ModuleManifest
 
@@ -586,6 +588,48 @@ def _project_all_wiring(
 # ---------------------------------------------------------------------------
 
 
+def normalize_module_option_values(
+    manifest: ModuleManifest,
+    overrides: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return declared option defaults merged with *overrides*, canonicalized.
+
+    Applies the manifest's per-option normalization rules to every declared
+    option, exactly as :func:`resolve_module_config` does, without validating or
+    projecting anything.  Callers that need an option's canonical value — the
+    option-validation engine, for example — share this one implementation
+    instead of re-deriving it.
+
+    Only names the manifest declares are considered; undeclared keys are
+    another layer's concern.
+
+    Args:
+        manifest: The loaded module manifest.
+        overrides: Optional supplied option values.
+
+    Returns:
+        A mapping of every declared option name to its canonical value.
+    """
+    schema = build_schema_from_manifest(
+        manifest_name=manifest.name,
+        option_derivations=manifest.option_derivations,
+    )
+    resolved: dict[str, Any] = manifest.get_defaults()
+    if overrides:
+        for key, value in overrides.items():
+            if key in resolved:
+                resolved[key] = value
+    for option_key in list(resolved.keys()):
+        option_derivation = schema.get_option_derivation(option_key)
+        resolved[option_key] = _normalize_value(
+            resolved[option_key],
+            option_key,
+            option_derivation,
+            schema.shared_normalization_rules,
+        )
+    return resolved
+
+
 def resolve_module_config(
     manifest: ModuleManifest,
     derivation_schema: ModuleDerivationSchema,
@@ -683,6 +727,7 @@ def resolve_module_config(
 
 __all__ = [
     "ResolverResult",
+    "normalize_module_option_values",
     "resolve_module_config",
     "_project_wiring_contribution",
     "_project_all_wiring",

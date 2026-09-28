@@ -43,3 +43,15 @@ derivation:
         value:
           - quickscale_modules_orgs
       description: "Orgs Django app label"
+
+  option_derivations:
+    mode:
+      normalization_rules:
+        - source_key: mode
+          target_key: mode
+          rule_type: strip
+          description: "Strip whitespace from mode"
+        - source_key: mode
+          target_key: mode
+          rule_type: lowercase
+          description: "Canonicalize mode to lowercase"

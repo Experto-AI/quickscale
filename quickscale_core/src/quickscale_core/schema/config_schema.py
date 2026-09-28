@@ -481,6 +481,41 @@ def _validate_docker_section(data: dict, yaml_content: str) -> DockerConfig:
     )
 
 
+def _manifest_option_issue(
+    module_name: str,
+    module_options: dict[str, Any],
+) -> Any:
+    """Return the first manifest-declared option issue for *module_name*.
+
+    Loads the module's manifest through the source-then-bundled resolution
+    contract (AF7) and runs the same option-validation engine the generated
+    project's startup check will use, so a ``quickscale.yml`` value is judged
+    by the constraints authored next to the option.  Values are first put
+    through the module's canonicalization (``sanitize_module_options``), the
+    same step ``ModuleConfig`` applies, so an alias or casing the CLI accepts
+    is not rejected for a spelling the manifest names in canonical form.
+    """
+    from quickscale_core.contracts.resolvers import (
+        load_module_manifest_with_fallback,
+    )
+    from quickscale_core.manifest.option_validation import (
+        collect_option_validation_issues,
+    )
+
+    manifest = load_module_manifest_with_fallback(module_name)
+    try:
+        normalized = sanitize_module_options(module_name, module_options)
+    except ConfigValidationError:
+        # A retired key is the module normalizer's to name; the module's own
+        # validator reports it with its authored guidance.  Check the values
+        # that are still declared without its translation.
+        normalized = dict(module_options)
+    issues = collect_option_validation_issues(
+        manifest, normalized, supplied=module_options
+    )
+    return issues[0] if issues else None
+
+
 def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, ModuleConfig]:
     """Validate modules section and return dict of ModuleConfig.
 
@@ -526,6 +561,21 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
             raise ConfigValidationError(
                 f"Module '{module_name}' options must be a mapping or empty",
                 line=line,
+            )
+
+        manifest_issue = _manifest_option_issue(module_name, module_options)
+        if manifest_issue is not None:
+            line = _find_line_number(yaml_content, manifest_issue.option_name)
+            if line is None:
+                line = _find_line_number(yaml_content, module_name)
+            raise ConfigValidationError(
+                manifest_issue.message,
+                line=line,
+                suggestion=(
+                    f"Fix modules.{module_name}.{manifest_issue.option_name} in "
+                    "quickscale.yml; the module manifest declares the allowed "
+                    "values."
+                ),
             )
 
         if module_name == "auth":

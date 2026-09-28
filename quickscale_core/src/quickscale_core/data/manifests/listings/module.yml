@@ -12,6 +12,10 @@ config:
       default: 12
       django_setting: LISTINGS_PER_PAGE
       description: "Number of listings per page"
+      validation:
+        min: 1
+
+  immutable: {}
 
 required_modules:
   - orgs>=0.86.0
@@ -54,16 +58,3 @@ derivation:
           target_key: listings_per_page
           rule_type: strip
           description: "Strip whitespace from listings_per_page"
-      validation_rules:
-        - option_key: listings_per_page
-          rule_type: pattern
-          pattern: ^\d+$
-          description: "modules.listings.listings_per_page must be a positive integer"
-      derived_settings:
-        - setting_key: LISTINGS_PER_PAGE
-          source_options: [listings_per_page]
-          derivation_type: direct
-          expression:
-            option: listings_per_page
-          default: 12
-          description: "Number of listings per page"
