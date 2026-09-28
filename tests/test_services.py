@@ -1078,3 +1078,14 @@ def test_build_social_embeds_payload_scoped_to_org() -> None:
         assert payload_b["embeds"][0]["title"] == "Org B Embed"
     finally:
         set_current_org_id(None)
+
+
+def test_service_surface_re_exports_the_module_exceptions() -> None:
+    """``services.py`` re-exports the module's own exception surface."""
+    import quickscale_modules_social.services as services_module
+
+    assert "SocialError" in services_module.__all__
+    assert "SocialConfigurationError" in services_module.__all__
+    assert issubclass(
+        services_module.SocialConfigurationError, services_module.SocialError
+    )
