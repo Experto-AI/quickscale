@@ -3898,17 +3898,35 @@ class TestDockerfileContent:
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render({**test_context, "theme": theme})
 
-        collectstatic_line = next(
-            line.strip()
-            for line in output.splitlines()
-            if "python manage.py collectstatic --noinput" in line
+        lines = output.splitlines()
+        collectstatic_start = next(
+            index
+            for index, line in enumerate(lines)
+            if "Collecting static files" in line
         )
+        collectstatic_block: list[str] = []
+        for line in lines[collectstatic_start:]:
+            collectstatic_block.append(line)
+            if not line.rstrip().endswith("\\"):
+                break
+        collectstatic_line = " ".join(line.strip() for line in collectstatic_block)
 
         assert "QUICKSCALE_NON_DB_COMMAND=collectstatic" in collectstatic_line, (
             "Dockerfile collectstatic must include QUICKSCALE_NON_DB_COMMAND (SA68 Phase 1)"
         )
         assert 'SECRET_KEY="$(python -c' in collectstatic_line
         assert "token_urlsafe(50)" in collectstatic_line
+        for variable in (
+            "STRIPE_PUBLISHABLE_KEY",
+            "STRIPE_SECRET_KEY",
+            "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+            "RESEND_API_KEY",
+            "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+            "POSTHOG_API_KEY",
+        ):
+            assert f"{variable}=" in collectstatic_line, (
+                f"Dockerfile collectstatic must carry the build-time {variable} placeholder"
+            )
         assert "ENV SECRET_KEY" not in output
 
     def test_healthcheck(

@@ -189,8 +189,11 @@ USER django
 # QUICKSCALE_NON_DB_COMMAND signals to production.py that no DB is needed.
 # The one-shot BYPASSRLS opt-out prevents the orgs startup guard from probing
 # that deliberately absent database; neither variable persists at runtime.
+# Enabled modules' empty-secret startup checks also run here, so this build
+# step carries one-shot placeholder credentials; the values are command-scoped
+# and never persist, and runtime still requires real secrets.
 RUN echo "📦 Collecting static files..." && \
-    QUICKSCALE_NON_DB_COMMAND=collectstatic QUICKSCALE_ALLOW_BYPASSRLS=1 SECRET_KEY="$(python -c 'from secrets import token_urlsafe; print(token_urlsafe(50))')" python manage.py collectstatic --noinput && \
+    QUICKSCALE_NON_DB_COMMAND=collectstatic QUICKSCALE_ALLOW_BYPASSRLS=1 SECRET_KEY="$(python -c 'from secrets import token_urlsafe; print(token_urlsafe(50))')" STRIPE_PUBLISHABLE_KEY="pk_build_placeholder" STRIPE_SECRET_KEY="sk_build_placeholder" QUICKSCALE_BILLING_WEBHOOK_SECRET="whsec_build_placeholder" RESEND_API_KEY="re_build_placeholder" QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET="whsec_build_placeholder" POSTHOG_API_KEY="ph_build_placeholder" python manage.py collectstatic --noinput && \
     echo "✅ Static files collected: $(ls -lh /app/staticfiles | wc -l) files"
 
 # Expose port

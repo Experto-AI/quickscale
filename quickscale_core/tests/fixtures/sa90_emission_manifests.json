@@ -47,7 +47,8 @@
       "compose-frontend-install-retries": "Regenerated 2026-09-25 — docker-compose.yml frontend startup raises pnpm's fetch retry budget (--config.fetch-retries=5) so a single stalled registry request does not abort the dev install and leave `quickscale up` with a failed-to-start frontend. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa221": "Regenerated 2026-09-28 — module identity rename (SA221): admin templates, React admin links, and generated Makefile/ci.yml now use the quickscale_<module> app labels.",
       "sa218": "Regenerated 2026-09-28 — generated settings install quickscale_core.runtime.conventions.exception_handler as REST_FRAMEWORK[EXCEPTION_HANDLER] (SA218). 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa225": "Regenerated 2026-09-28 — docker-compose.yml backend environment forwards the default vendor credential variables (Stripe, Resend, PostHog, AWS, backups remote) from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative."
+      "sa225": "Regenerated 2026-09-28 — docker-compose.yml backend environment forwards the default vendor credential variables (Stripe, Resend, PostHog, AWS, backups remote) from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa225-build-placeholders": "Regenerated 2026-09-28 — the Dockerfile collectstatic step carries command-scoped placeholder credentials for the enabled modules' empty-secret startup checks, so an all-module image build succeeds while runtime still requires the real secrets. 1 fixture hash updated per variant: Dockerfile. All unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -89,7 +90,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "f867e39863ae6ed5a97a5a187896ee08ef8bce9d9db2a45dee3ed1ace061164a"
+      "sha256": "2373558ca5406b8abd43dc7e6fbae8a66ae734d23989780fda0fa6f4751faef7"
     },
     "Makefile": {
       "mode": "664",
@@ -559,7 +560,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "f867e39863ae6ed5a97a5a187896ee08ef8bce9d9db2a45dee3ed1ace061164a"
+      "sha256": "2373558ca5406b8abd43dc7e6fbae8a66ae734d23989780fda0fa6f4751faef7"
     },
     "Makefile": {
       "mode": "664",
@@ -1029,7 +1030,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "f867e39863ae6ed5a97a5a187896ee08ef8bce9d9db2a45dee3ed1ace061164a"
+      "sha256": "2373558ca5406b8abd43dc7e6fbae8a66ae734d23989780fda0fa6f4751faef7"
     },
     "Makefile": {
       "mode": "664",
