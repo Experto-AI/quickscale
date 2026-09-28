@@ -20,6 +20,10 @@ from quickscale_cli.commands.apply_command import (
 )
 from quickscale_core.contracts.resolvers import default_notifications_module_options
 from quickscale_core.manifest.schema import ModuleManifest
+from quickscale_core.schema.config_schema import (
+    ConfigValidationError,
+    validate_config,
+)
 
 
 def _make_apply_context(project_path, *, package_name="myapp"):
@@ -262,28 +266,30 @@ modules:
     # ------------------------------------------------------------------
 
     @pytest.mark.parametrize(
-        ("options", "expected_marker"),
+        ("module_options_yaml", "expected_marker"),
         [
-            (
-                {"api_rate_limit": ""},
-                "api_rate_limit cannot be blank",
-            ),
-            (
-                {"posts_per_page": -1},
-                "posts_per_page must be a positive integer",
-            ),
+            ('    api_rate_limit: ""', "must match pattern"),
+            ("    posts_per_page: -1", "must be >= 1"),
         ],
     )
-    def test_apply_blog_prerequisites_fail(self, options, expected_marker, capsys):
-        """Blog apply preflight should report contract issues."""
-        qs_config = SimpleNamespace(modules={"blog": SimpleNamespace(options=options)})
+    def test_apply_blog_option_errors_fail_config_validation(
+        self, module_options_yaml, expected_marker
+    ):
+        """Blog option errors are refused when quickscale.yml is validated."""
+        yaml_content = (
+            'version: "1"\n'
+            "project:\n"
+            "  slug: demo\n"
+            "  package: demo\n"
+            "modules:\n"
+            "  blog:\n"
+            f"{module_options_yaml}\n"
+        )
 
-        with pytest.raises(click.Abort):
-            _validate_module_prerequisites(qs_config)
+        with pytest.raises(ConfigValidationError) as excinfo:
+            validate_config(yaml_content)
 
-        error_output = capsys.readouterr().err
-        assert "Blog module configuration is incomplete for apply" in error_output
-        assert expected_marker in error_output
+        assert expected_marker in str(excinfo.value)
 
     def test_apply_blog_valid_options_pass(self, capsys):
         """Blog with valid options must pass preflight."""

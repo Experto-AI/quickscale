@@ -141,15 +141,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA217 — Read the manifest option schema in core and check settings at startup.**
 
   **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. `plan`/`apply`
-  enforce each manifest option's `validation` block; per-module option code and settings readers
-  remain.
+  enforce each manifest option's `validation` block; blog and listings are fully manifest-owned
+  (their per-module option functions are gone and their CLI configurators read the manifest); the
+  other ten modules still carry per-module option code and settings readers.
 
   **Scope:**
   - *Option code.* Core's and the CLI's per-module option code goes: the
     `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
     `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
     `schema.config_schema`, and the CLI's `module_config`, with `contracts.imperative_inventory`.
-    The adapter path runs through the engine, and CLI prompts read the manifest.
+    One generic manifest-driven CLI configurator now reads the manifest (blog and listings use it);
+    the other modules convert to it, the adapter path still needs auth, orgs, backups, and
+    notifications, and CRM's retired `default_pipeline_stages` key needs a manifest-declared home.
   - *Settings reading (last).* `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
     one generic startup check in `quickscale_core.runtime`, run through the shared checks helper
     and registered by each module, validates every declared setting; per-module readers and code
@@ -309,13 +312,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   rule 28.
 
   **Scope:**
-  - *Commands and tooling.* `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas`
-    gain `--dry-run`; the retired `migrate_billing_to_orgs` is deleted with its recovery docs;
-    `check_tenant_isolation` raises `CommandError` instead of calling `sys.exit()`; each module's
-    root `mypy.ini` section relaxes at most module-extension.md's standard override, so orgs (98
-    errors under it), billing (15), forms (9), notifications (7), and social fix what the tighter
-    sections report (rule 36); `quickscale_modules/teams/` is deleted (README to
-    `docs/planning/teams.md`) with core's placeholder handling.
+  - *Commands and tooling.* The retired `migrate_billing_to_orgs` is deleted with its recovery
+    docs; each module's root `mypy.ini` section relaxes at most module-extension.md's standard
+    override, so orgs (98 errors under it), billing (15), forms (9), notifications (7), and
+    social fix what the tighter sections report (rule 36); `quickscale_modules/teams/` is deleted
+    (README to `docs/planning/teams.md`) with core's placeholder handling.
   - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
     isolation and RLS) are added; orgs' eight ticket-numbered test files and two ticket-numbered
     test apps are renamed by subject, with the docs that cite them (decisions rule 27 cites the

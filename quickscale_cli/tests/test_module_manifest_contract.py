@@ -11,7 +11,6 @@ from packaging.version import Version
 
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
-    get_default_blog_config,
 )
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 from quickscale_core.manifest.entry_point import (
@@ -334,7 +333,7 @@ def test_blog_api_rate_limit_default_matches_manifest_contract() -> None:
     """Blog API rate-limit defaults should stay aligned across CLI and manifest."""
     manifest = load_manifest_from_path(_manifest_path("blog"))
     option = manifest.get_all_options()["api_rate_limit"]
-    defaults = get_default_blog_config()
+    defaults = MODULE_CONFIGURATOR_REGISTRY["blog"].get_defaults()
 
     assert option.django_setting == "BLOG_API_RATE_LIMIT"
     assert option.default == defaults["api_rate_limit"] == "5/hour"

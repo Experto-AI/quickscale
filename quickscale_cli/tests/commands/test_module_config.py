@@ -4,9 +4,7 @@ from unittest.mock import patch
 
 from quickscale_cli.commands.module_config import (
     configure_auth_module,
-    configure_blog_module,
     get_default_auth_config,
-    get_default_blog_config,
     MODULE_CONFIGURATOR_REGISTRY,
     ModuleConfigurator,
 )
@@ -47,11 +45,11 @@ class TestAuthModuleConfig:
 
 
 class TestBlogModuleConfig:
-    """Tests for blog module configuration functions."""
+    """Blog configuration is read from the module manifest."""
 
     def test_get_default_blog_config(self):
         """Test default blog configuration."""
-        config = get_default_blog_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["blog"].get_defaults()
 
         assert config["enable_rss"] is True
         assert config["posts_per_page"] == 10
@@ -59,7 +57,7 @@ class TestBlogModuleConfig:
 
     def test_configure_blog_module_non_interactive(self):
         """Test non-interactive blog configuration."""
-        config = configure_blog_module(non_interactive=True)
+        config = MODULE_CONFIGURATOR_REGISTRY["blog"].configure(non_interactive=True)
 
         assert config["enable_rss"] is True
         assert config["posts_per_page"] == 10
@@ -72,7 +70,7 @@ class TestBlogModuleConfig:
         mock_confirm.return_value = False
         mock_prompt.side_effect = [20, "10/minute"]
 
-        config = configure_blog_module(non_interactive=False)
+        config = MODULE_CONFIGURATOR_REGISTRY["blog"].configure(non_interactive=False)
 
         assert config["enable_rss"] is False
         assert config["posts_per_page"] == 20

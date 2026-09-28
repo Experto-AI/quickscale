@@ -1845,11 +1845,25 @@ def prune_expired_backups(
     policy: BackupPolicySnapshot | None = None,
     now: datetime | None = None,
     remote_deleter: _RemoteDeleter | None = None,
+    dry_run: bool = False,
 ) -> int:
-    """Delete expired backup files and mark their metadata records as deleted."""
-    resolved_policy = policy or _load_active_policy_snapshot()
+    """Delete expired backup files and mark their metadata records as deleted.
+
+    With ``dry_run=True``, report how many records would be deleted and write
+    nothing.
+    """
+    resolved_policy = policy or _load_active_policy_snapshot(ensure_default=not dry_run)
     prune_started_at = now or datetime.now(timezone.utc)
     cutoff = prune_started_at - timedelta(days=resolved_policy.retention_days)
+
+    if dry_run:
+        expired_snapshot_count = sum(
+            1
+            for snapshot in iter_expired_snapshots(cutoff)
+            if not snapshot.has_active_rollback_pin(now=prune_started_at)
+        )
+        expired_orphan_count = sum(1 for _ in iter_expired_unlinked_artifacts(cutoff))
+        return expired_snapshot_count + expired_orphan_count
 
     deleted_count = 0
     deleted_at = django_timezone.now()
@@ -2182,11 +2196,14 @@ def get_backup_snapshot(snapshot_id: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _load_active_policy_snapshot() -> BackupPolicySnapshot:
+def _load_active_policy_snapshot(
+    *, ensure_default: bool = True
+) -> BackupPolicySnapshot:
     """Load the active runtime policy snapshot with managed settings precedence.
 
     SA89b Phase 1: policy introspection is routed through the persistence
-    provider seam.
+    provider seam.  ``ensure_default=False`` skips the default-policy
+    reconciliation so a dry run can resolve the policy without writing.
     """
     from quickscale_core.dr_engine.persistence import (
         ensure_default_policy,
@@ -2197,7 +2214,8 @@ def _load_active_policy_snapshot() -> BackupPolicySnapshot:
     if not has_any_policy():
         return settings_snapshot
 
-    ensure_default_policy()
+    if ensure_default:
+        ensure_default_policy()
     return settings_snapshot
 
 

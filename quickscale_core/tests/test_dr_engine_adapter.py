@@ -389,7 +389,7 @@ class TestPruneBackups:
 
         result = prune_backups()
         assert result == {"deleted_count": 3}
-        mock_orch.prune_expired_backups.assert_called_once_with()
+        mock_orch.prune_expired_backups.assert_called_once_with(dry_run=False)
 
     def test_zero_deleted(
         self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
@@ -399,6 +399,16 @@ class TestPruneBackups:
 
         result = prune_backups()
         assert result == {"deleted_count": 0}
+
+    def test_dry_run_delegates_without_writes(
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
+    ) -> None:
+        mock_orch, _, _ = _mock_orch_and_backups
+        mock_orch.prune_expired_backups.return_value = 2
+
+        result = prune_backups(dry_run=True)
+        assert result == {"deleted_count": 2}
+        mock_orch.prune_expired_backups.assert_called_once_with(dry_run=True)
 
 
 # ===================================================================

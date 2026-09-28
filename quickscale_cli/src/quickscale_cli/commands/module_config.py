@@ -6,6 +6,7 @@ managed-wiring manager for operational work.
 """
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Mapping
 
 import click
@@ -56,6 +57,9 @@ from quickscale_core.contracts.resolvers import (
     resolve_social_module_options,
     validate_social_module_options,
 )
+from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
+from quickscale_core.manifest.option_validation import validate_module_options
+from quickscale_core.manifest.resolver import normalize_module_option_values
 
 
 def _merge_existing_config(
@@ -145,67 +149,6 @@ def _normalize_auth_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized.setdefault("social_providers", [])
     normalized.setdefault("session_cookie_age", 1209600)
     return normalized
-
-
-# ============================================================================
-# BLOG MODULE CONFIGURATION
-# ============================================================================
-
-
-DEFAULT_BLOG_API_RATE_LIMIT = "5/hour"
-
-
-def get_default_blog_config() -> dict[str, Any]:
-    """Get default configuration for blog module (non-interactive mode)"""
-    return {
-        "posts_per_page": 10,
-        "enable_rss": True,
-        "api_rate_limit": DEFAULT_BLOG_API_RATE_LIMIT,
-    }
-
-
-def configure_blog_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Interactive configuration for blog module"""
-    defaults = _merge_existing_config(get_default_blog_config(), existing_config)
-
-    if non_interactive:
-        click.echo("\n⚙️  Using default blog module configuration...")
-        config = defaults
-        click.echo(f"  • Posts per page: {config['posts_per_page']}")
-        click.echo(f"  • RSS feed: {'Enabled' if config['enable_rss'] else 'Disabled'}")
-        click.echo(f"  • API rate limit: {config['api_rate_limit']}")
-        return config
-
-    click.echo("\n⚙️  Configuring blog module...")
-    click.echo("The blog module will be configured with default settings.\n")
-
-    config = {
-        "posts_per_page": click.prompt(
-            "Posts per page",
-            type=int,
-            default=int(defaults["posts_per_page"]),
-        ),
-        "enable_rss": click.confirm(
-            "Enable RSS feed?",
-            default=bool(defaults["enable_rss"]),
-        ),
-        "api_rate_limit": click.prompt(
-            "Blog API rate limit (e.g. 5/hour, 10/minute)",
-            default=str(defaults["api_rate_limit"]),
-        ).strip()
-        or DEFAULT_BLOG_API_RATE_LIMIT,
-    }
-
-    return config
-
-
-# SA6.2: Listings no longer needs a configurator triad — its
-# defaults/normalization/validation now come from module.yml's
-# derivation section.  The manifest-driven path in entry_point.py
-# handles the wiring directly.
 
 
 # ============================================================================
@@ -332,45 +275,6 @@ def configure_forms_module(
         ),
     }
     _raise_for_invalid_forms_config(config)
-    return config
-
-
-# ============================================================================
-# LISTINGS MODULE CONFIGURATION
-# ============================================================================
-
-
-def get_default_listings_config() -> dict[str, Any]:
-    """Return default configuration for the listings module."""
-    return {
-        "listings_per_page": 12,
-    }
-
-
-def configure_listings_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Interactive configuration for the listings module."""
-    defaults = _merge_existing_config(get_default_listings_config(), existing_config)
-
-    if non_interactive:
-        click.echo("\n\u2699\ufe0f  Using default listings module configuration...")
-        config = defaults
-        click.echo(f"  \u2022 Listings per page: {config['listings_per_page']}")
-        return config
-
-    click.echo("\n\u2699\ufe0f  Configuring listings module...")
-    click.echo("The listings module will be configured with default settings.\n")
-
-    config = {
-        "listings_per_page": click.prompt(
-            "Listings per page",
-            type=int,
-            default=int(defaults["listings_per_page"]),
-        ),
-    }
-    click.echo(f"  \u2022 Listings per page: {config['listings_per_page']}")
     return config
 
 
@@ -1206,6 +1110,117 @@ def get_default_orgs_config() -> dict[str, Any]:
 
 
 # ============================================================================
+# MANIFEST-DRIVEN MODULE CONFIGURATION
+# ============================================================================
+
+
+def _declared_config(
+    manifest: Any,
+    existing_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge manifest defaults with the existing values the manifest declares."""
+    merged = dict(manifest.get_defaults())
+    for option_name, value in dict(existing_config or {}).items():
+        if option_name in merged:
+            merged[option_name] = value
+    return merged
+
+
+def default_module_config_from_manifest(module_name: str) -> dict[str, Any]:
+    """Return a module's manifest-declared option defaults.
+
+    This is the non-interactive default factory for every module whose
+    desired-option configuration the manifest owns.
+    """
+    return dict(load_module_manifest_with_fallback(module_name).get_defaults())
+
+
+def _prompt_for_manifest_option(option: Any, current: Any) -> Any:
+    """Prompt once for one manifest-declared option, by its declared shape."""
+    description = option.description or option.name
+    validation = option.validation or {}
+
+    if option.option_type == "boolean":
+        return click.confirm(description, default=bool(current))
+
+    if option.option_type == "integer":
+        return click.prompt(description, type=int, default=int(current))
+
+    choices = validation.get("choices")
+    if option.option_type == "string" and isinstance(choices, list) and choices:
+        return click.prompt(
+            description,
+            type=click.Choice(
+                [str(choice) for choice in choices], case_sensitive=False
+            ),
+            default=str(current),
+            show_choices=True,
+        )
+
+    if option.option_type == "list":
+        rendered = click.prompt(
+            description,
+            default=", ".join(str(value) for value in current or []),
+            show_default=bool(current),
+        )
+        return [part.strip() for part in rendered.split(",") if part.strip()]
+
+    return click.prompt(description, default=str(current), show_default=bool(current))
+
+
+def _raise_for_invalid_manifest_config(
+    module_name: str,
+    manifest: Any,
+    config: Mapping[str, Any],
+) -> None:
+    """Abort with actionable messaging when a manifest-owned config is invalid."""
+    issues = validate_module_options(manifest, dict(config), supplied=dict(config))
+    if not issues:
+        return
+
+    click.secho(f"\n❌ Invalid {module_name} module configuration:", fg="red", err=True)
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    raise click.Abort()
+
+
+def configure_module_from_manifest(
+    module_name: str,
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Configure a module from the options its ``module.yml`` declares.
+
+    The manifest owns the prompt set, the defaults, and the validation: each
+    option is prompted by its declared ``type`` (and its declared ``choices``
+    when it is a closed set), and the collected values go through the same
+    option-validation engine ``plan`` and ``apply`` use, so a wrong type or a
+    violated cross-option rule names the setting before it is written.  The
+    returned values are the manifest's canonical forms, so what the caller
+    writes to ``quickscale.yml`` is what the engine and the wiring see.
+    """
+    manifest = load_module_manifest_with_fallback(module_name)
+    defaults = _declared_config(manifest, existing_config)
+
+    if non_interactive:
+        click.echo(f"\n⚙️  Using default {module_name} module configuration...")
+        for option in manifest.get_all_options().values():
+            click.echo(
+                f"  • {option.description or option.name}: {defaults[option.name]}"
+            )
+        _raise_for_invalid_manifest_config(module_name, manifest, defaults)
+        return normalize_module_option_values(manifest, defaults)
+
+    click.echo(f"\n⚙️  Configuring {module_name} module...")
+    config = {
+        option_name: _prompt_for_manifest_option(option, defaults[option_name])
+        for option_name, option in manifest.get_all_options().items()
+    }
+    _raise_for_invalid_manifest_config(module_name, manifest, config)
+    return normalize_module_option_values(manifest, config)
+
+
+# ============================================================================
 # MODULE CONFIGURATORS REGISTRY
 # ============================================================================
 
@@ -1245,8 +1260,8 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
         ),
         ModuleConfigurator(
             name="blog",
-            configure=configure_blog_module,
-            get_defaults=get_default_blog_config,
+            configure=partial(configure_module_from_manifest, "blog"),
+            get_defaults=partial(default_module_config_from_manifest, "blog"),
         ),
         ModuleConfigurator(
             name="crm",
@@ -1260,8 +1275,8 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
         ),
         ModuleConfigurator(
             name="listings",
-            configure=configure_listings_module,
-            get_defaults=get_default_listings_config,
+            configure=partial(configure_module_from_manifest, "listings"),
+            get_defaults=partial(default_module_config_from_manifest, "listings"),
         ),
         ModuleConfigurator(
             name="storage",

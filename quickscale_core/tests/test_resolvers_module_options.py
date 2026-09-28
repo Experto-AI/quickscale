@@ -34,15 +34,6 @@ from quickscale_core.contracts.resolvers import (
     validate_billing_env_var_reference,
     validate_billing_currency,
     validate_billing_module_options,
-    # Blog
-    BLOG_MODULE_OPTION_KEYS,
-    DEFAULT_BLOG_API_RATE_LIMIT,
-    DEFAULT_BLOG_ENABLE_RSS,
-    DEFAULT_BLOG_POSTS_PER_PAGE,
-    default_blog_module_options,
-    normalize_blog_module_options,
-    resolve_blog_module_options,
-    validate_blog_module_options,
     # CRM
     LEGACY_CRM_DEFAULT_PIPELINE_STAGES_OPTION,
     default_crm_module_options,
@@ -368,68 +359,6 @@ class TestResolversBilling:
             is True
         )
         assert billing_production_targeted({"enabled": False}) is False
-
-
-# ===================================================================
-# Blog
-# ===================================================================
-
-
-class TestResolversBlog:
-    """Tests for blog module option functions."""
-
-    def test_constants(self) -> None:
-        assert DEFAULT_BLOG_POSTS_PER_PAGE == 10
-        assert DEFAULT_BLOG_ENABLE_RSS is True
-        assert DEFAULT_BLOG_API_RATE_LIMIT == "5/hour"
-        assert "posts_per_page" in BLOG_MODULE_OPTION_KEYS
-
-    def test_normalize_blog_keeps_api_rate_limit(self) -> None:
-        result = normalize_blog_module_options({"api_rate_limit": "  10/minute  "})
-        assert result["api_rate_limit"] == "10/minute"
-
-    def test_normalize_blog_empty_api_rate_limit_passes_through(self) -> None:
-        result = normalize_blog_module_options({"api_rate_limit": "  "})
-        assert result["api_rate_limit"] == ""
-
-    def test_normalize_blog_none_returns_empty(self) -> None:
-        assert normalize_blog_module_options(None) == {}
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_default_blog(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest(
-            "blog",
-            {"posts_per_page": 10, "enable_rss": True, "api_rate_limit": "5/hour"},
-        )
-        result = default_blog_module_options()
-        assert result["posts_per_page"] == 10
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_blog(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest(
-            "blog",
-            {"posts_per_page": 10, "enable_rss": True, "api_rate_limit": "5/hour"},
-        )
-        result = resolve_blog_module_options({"posts_per_page": 20})
-        assert result["posts_per_page"] == 20
-        assert result["enable_rss"] is True
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_blog_valid(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest(
-            "blog",
-            {"posts_per_page": 10, "enable_rss": True, "api_rate_limit": "5/hour"},
-        )
-        assert validate_blog_module_options(None) == []
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_blog_invalid_posts(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest(
-            "blog",
-            {"posts_per_page": -1, "enable_rss": True, "api_rate_limit": "5/hour"},
-        )
-        issues = validate_blog_module_options(None)
-        assert any("posts_per_page" in i for i in issues)
 
 
 # ===================================================================

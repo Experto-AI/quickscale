@@ -296,14 +296,17 @@ def sync_media(
 
 
 @_register
-def prune_backups() -> dict[str, Any]:
+def prune_backups(*, dry_run: bool = False) -> dict[str, Any]:
     """Prune expired backup artifacts per the active retention policy.
+
+    With ``dry_run=True``, report how many artifacts would be deleted and
+    write nothing.
 
     Adapter replacement for the ``quickscale_backups_prune`` management command.
     """
     from quickscale_core.dr_engine.orchestration import prune_expired_backups
 
-    deleted_count = prune_expired_backups()
+    deleted_count = prune_expired_backups(dry_run=dry_run)
     return {"deleted_count": deleted_count}
 
 

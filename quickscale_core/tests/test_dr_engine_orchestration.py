@@ -705,6 +705,60 @@ class TestPruneAndDelete:
         assert orphan.status == "deleted"
         assert expired.authoritative_dump.status == "deleted"
 
+    def test_prune_dry_run_counts_without_writing(self) -> None:
+        expired = _snapshot(
+            snapshot_id="expired", has_active_rollback_pin=lambda now=None: False
+        )
+        pinned = _snapshot(
+            snapshot_id="pinned", has_active_rollback_pin=lambda now=None: True
+        )
+        orphan = _artifact(deleted_at=None)
+        with (
+            patch(
+                f"{_ORCH}.iter_expired_snapshots",
+                return_value=iter([expired, pinned]),
+            ),
+            patch(
+                f"{_ORCH}.iter_expired_unlinked_artifacts", return_value=iter([orphan])
+            ),
+            patch(f"{_ORCH}._delete_snapshot_storage") as delete_storage,
+            patch(f"{_ORCH}.delete_artifact_files") as delete_files,
+            patch(f"{_ORCH}.save_snapshot") as save_snapshot,
+            patch(f"{_ORCH}.save_artifact") as save_artifact,
+        ):
+            count = orch.prune_expired_backups(policy=_policy(), now=_NOW, dry_run=True)
+
+        assert count == 2
+        delete_storage.assert_not_called()
+        delete_files.assert_not_called()
+        save_snapshot.assert_not_called()
+        save_artifact.assert_not_called()
+        assert expired.status == "pending"
+        assert orphan.status == "pending"
+
+    def test_prune_dry_run_does_not_reconcile_default_policy(self) -> None:
+        with (
+            patch(
+                f"{_ORCH}._build_policy_snapshot_from_settings",
+                return_value=_policy(),
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.has_any_policy",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.ensure_default_policy"
+            ) as ensure_default,
+            patch(f"{_ORCH}.iter_expired_snapshots", return_value=iter([])),
+            patch(f"{_ORCH}.iter_expired_unlinked_artifacts", return_value=iter([])),
+            patch(f"{_ORCH}.django_timezone.now", return_value=_NOW),
+        ):
+            assert orch.prune_expired_backups(now=_NOW, dry_run=True) == 0
+            ensure_default.assert_not_called()
+
+            assert orch.prune_expired_backups(now=_NOW) == 0
+            ensure_default.assert_called_once_with()
+
     def test_prune_uses_retention_cutoff_and_does_not_delete_pinned_remote(
         self,
     ) -> None:
