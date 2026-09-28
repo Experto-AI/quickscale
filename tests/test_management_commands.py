@@ -226,8 +226,27 @@ def test_backups_prune_command_reports_deleted_count() -> None:
     ):
         call_command("quickscale_backups_prune", stdout=stdout, stderr=StringIO())
 
-    mock_prune.assert_called_once_with()
+    mock_prune.assert_called_once_with(dry_run=False)
     assert stdout.getvalue() == "Pruned 3 expired backup artifact(s)\n"
+
+
+def test_backups_prune_command_dry_run_reports_without_deleting() -> None:
+    stdout = StringIO()
+    mock_prune = MagicMock(return_value={"deleted_count": 3})
+
+    with patch.dict(
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
+        {"prune_backups": mock_prune},
+    ):
+        call_command(
+            "quickscale_backups_prune",
+            "--dry-run",
+            stdout=stdout,
+            stderr=StringIO(),
+        )
+
+    mock_prune.assert_called_once_with(dry_run=True)
+    assert stdout.getvalue() == "Would prune 3 expired backup artifact(s)\n"
 
 
 def test_backups_prune_command_wraps_backup_errors() -> None:
