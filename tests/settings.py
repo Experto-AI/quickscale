@@ -28,3 +28,7 @@ ROOT_URLCONF = "tests.urls"
 USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 MEDIA_URL = "/media/"
+
+# The storage module's rule 35 startup check reads the backend selection, so
+# the suite declares the module's required backend setting.
+QUICKSCALE_STORAGE_BACKEND = "local"
