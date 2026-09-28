@@ -219,6 +219,20 @@ class TestUploadPathAndNaming:
         assert path.startswith("blog/uploads/2026/03/")
         assert path.endswith(".png")
 
+    def test_build_upload_path_defaults_to_django_timezone_now(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without ``now``, the date segment comes from django.utils.timezone.now()."""
+        frozen = datetime(2031, 5, 6, 12, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(
+            "quickscale_modules_storage.helpers.timezone.now", lambda: frozen
+        )
+
+        path = build_upload_path("blog", "uploads", "hero.png", content=b"abc")
+
+        assert path.startswith("blog/uploads/2031/05/")
+        assert path.endswith(".png")
+
 
 class TestPublicUrlHelpers:
     class _Request:
