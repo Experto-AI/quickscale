@@ -173,7 +173,7 @@ class TestStageModel:
         assert field.blank is True
         assert field.editable is False
         assert field.unique is False
-        assert list(field.choices) == Stage.TERMINAL_SEMANTIC_CHOICES
+        assert list(field.choices) == Stage.TerminalSemantic.choices
 
     def test_stage_terminal_semantic_must_be_unique_when_present(self, org_a):
         """Only one stage per terminal semantic should be allowed per org."""
@@ -185,7 +185,7 @@ class TestStageModel:
             Stage.all_objects.create(
                 name="Closed-Won",
                 order=3,
-                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                terminal_semantic=Stage.TerminalSemantic.WON,
                 organization=org_a,
             )
             Stage.all_objects.create(name="Negotiation", order=2, organization=org_a)
@@ -196,7 +196,7 @@ class TestStageModel:
                     Stage.all_objects.create(
                         name="Deal Signed",
                         order=9,
-                        terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                        terminal_semantic=Stage.TerminalSemantic.WON,
                         organization=org_a,
                     )
 
@@ -220,14 +220,14 @@ class TestStageModel:
             stage_a = Stage.all_objects.create(
                 name="Closed-Won",
                 order=3,
-                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                terminal_semantic=Stage.TerminalSemantic.WON,
                 organization=org_a,
             )
         with org_scope(org_b):
             stage_b = Stage.all_objects.create(
                 name="Deal Signed",
                 order=9,
-                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                terminal_semantic=Stage.TerminalSemantic.WON,
                 organization=org_b,
             )
         assert stage_a.pk != stage_b.pk

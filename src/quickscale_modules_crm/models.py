@@ -76,13 +76,12 @@ class Company(TenantModel):
 class Contact(TenantModel):
     """Contact person (lead, prospect, customer)"""
 
-    STATUS_CHOICES = [
-        ("new", "New"),
-        ("contacted", "Contacted"),
-        ("in_discussion", "In Discussion"),
-        ("pending_response", "Pending Response"),
-        ("inactive", "Inactive"),
-    ]
+    class Status(models.TextChoices):
+        NEW = "new", "New"
+        CONTACTED = "contacted", "Contacted"
+        IN_DISCUSSION = "in_discussion", "In Discussion"
+        PENDING_RESPONSE = "pending_response", "Pending Response"
+        INACTIVE = "inactive", "Inactive"
 
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
@@ -91,8 +90,8 @@ class Contact(TenantModel):
     title = models.CharField(max_length=100, blank=True, help_text="Job title")
     status = models.CharField(
         max_length=50,
-        choices=STATUS_CHOICES,
-        default="new",
+        choices=Status.choices,
+        default=Status.NEW,
     )
     last_contacted_at = models.DateTimeField(
         null=True,
@@ -130,18 +129,15 @@ class Contact(TenantModel):
 class Stage(TenantModel):
     """Pipeline stage for deal tracking"""
 
-    TERMINAL_SEMANTIC_WON = "won"
-    TERMINAL_SEMANTIC_LOST = "lost"
-    TERMINAL_SEMANTIC_CHOICES = [
-        (TERMINAL_SEMANTIC_WON, "Won"),
-        (TERMINAL_SEMANTIC_LOST, "Lost"),
-    ]
+    class TerminalSemantic(models.TextChoices):
+        WON = "won", "Won"
+        LOST = "lost", "Lost"
 
     name = models.CharField(max_length=100)
     order = models.PositiveIntegerField(default=0)
     terminal_semantic = models.CharField(
         max_length=20,
-        choices=TERMINAL_SEMANTIC_CHOICES,
+        choices=TerminalSemantic.choices,
         null=True,
         blank=True,
         editable=False,
@@ -200,7 +196,7 @@ class Deal(TenantModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="owned_deals",
+        related_name="quickscale_crm_owned_deals",
     )
     tags = models.ManyToManyField(Tag, blank=True, related_name="deals")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -238,6 +234,7 @@ class ContactNote(TenantModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name="quickscale_crm_contact_notes",
     )
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -281,6 +278,7 @@ class DealNote(TenantModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name="quickscale_crm_deal_notes",
     )
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
