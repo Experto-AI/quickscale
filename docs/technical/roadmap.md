@@ -11,11 +11,9 @@ all three tracks and SA215's conformance test closes it. `bap-web` is then porte
 standardized names (SA191), and carries the first property portal in a project-owned extension
 (SA153). Capabilities are generalized only after that project proves their value.
 
-**Release status — v0.88.0 packaged, not published.** Publication is a maintainer decision; it
-still owes release-tier validation on the packaged bytes, the phases in
-[publish_procedure.md](publish_procedure.md), and the release PR into `main`. The packaged bytes
-carry two S1 billing defects fixed on `v89` (with real Stripe keys, every webhook and every
-checkout fails), so shipping 0.88.0 means repackaging from `v89`.
+**Release status.** 0.88.0 is published and carries two S1 billing defects fixed on `v89` (with
+real Stripe keys, every webhook and every checkout fails); the fix ships in 0.89.0, which is not
+published yet ([publish_procedure.md](publish_procedure.md)).
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves history.
@@ -45,7 +43,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA221 ──► SA222 ──► SA227 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA227 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA217 ──► SA219 ──► SA223 ──► SA224
 Track 3: SA225 ──► SA220 ──► SA226 ──► SA216 (after SA215)
      critical path: SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
@@ -54,16 +52,14 @@ Track 3: SA225 ──► SA220 ──► SA226 ──► SA216 (after SA215)
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
-ported, and SA204 has not frozen the migration history the app-label rename rewrites. SA217's
-startup check runs through SA218's checks helper, SA219's renames and refusals run through SA217's
-check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's org-role authorization needs
-SA220's capabilities and SA223's DRF views. SA221 and SA222 both rewrite each module's
-`0001_initial`, so they share a track. SA204 freezes migration history before any post-SA153
-module schema change. SA154 is an inventory, not work.
+ported, and SA204 has not frozen the migration history. SA219's renames and refusals run through
+SA217's startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's org-role
+authorization needs SA220's capabilities and SA223's DRF views. SA204 freezes migration history
+before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** Track 1's SA221, SA222, and SA227 have slack until SA215. Track 3's
-SA225 fills the wait for SA219 between SA218 and SA220; SA216 waits for SA215 because both change
-auth's views, orgs' removal path, and the user-referencing models.
+**Off the critical path.** Track 1's SA227 has slack until SA215. Track 3's SA225 fills the wait
+for SA219; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
+user-referencing models.
 
 ### Track states
 
@@ -82,7 +78,7 @@ A track is **truly green** only when all three states are yes.
   migration-history freeze gate and `decisions.md` § Clean-Break Migration History, the `bap-web`
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation, and, for the conventions, module identities, models and their
-  `0001_initial`, and module package files, commands, tests, and READMEs (SA221, SA222, SA227).
+  `0001_initial`, and module package files, commands, tests, and READMEs (SA227).
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
   every package, `ruff.toml`, the module page templates
   and test-settings stubs, the generated `base.html`, the CLI apply/deploy/update commands and
@@ -98,12 +94,12 @@ A track is **truly green** only when all three states are yes.
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py`, `exceptions.py`, and
-  `services.py`, and orgs' `permissions` (SA218, SA225, SA220, SA226).
+  `services.py`, and orgs' `permissions` (SA225, SA220, SA226).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
-  SA217–SA227) touch every module and cross every track, so each lands in module-sized slices
-  through that queue, merging `v89` before each slice; a slice edits another convention ticket's
-  surface only where its own rule forces it (a rename's callers, for example).
+  SA217, SA219, SA220, SA223–SA227) touch every module and cross every track, so each lands in
+  module-sized slices through that queue, merging `v89` before each slice; a slice edits another
+  convention ticket's surface only where its own rule forces it (a rename's callers, for example).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md) (SA204, SA153, and the convention tickets, which update the names it
@@ -130,15 +126,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and this ticket closes them. Where other documents say "SA215 renames…", they mean the whole
   change, which SA215 lands last.
 
-  **Scope:** the rule 40 conformance test, covering rules 1–39, with a control case per rule;
-  the proof that a pre-SA215 project fails `apply` and startup naming each new name; the release
-  notes; the inventory's closing pass. Code changes are in SA217–SA227; a drift item none of them
-  fixed is fixed here or recorded as an accepted exception.
+  **Scope:** the rule 40 conformance test, covering rules 1–39, with a control case per rule; the
+  release notes; the inventory's closing pass. Code changes are in SA217–SA227 (SA219 owns
+  refusing retired names); a drift item none of them fixed is fixed here or recorded as an accepted
+  exception.
 
-  **Acceptance:** every inventory drift item (sections 1–41) is fixed or recorded as an accepted exception with
-  its reason; the conformance test passes and rejects a violation of each rule; a project
-  generated before SA215 fails `apply` and startup with messages naming each new name; a freshly
-  generated project with all twelve modules passes `make ci-e2e`; the release notes list every
+  **Acceptance:** every inventory drift item (sections 1–41) is fixed or recorded as an accepted
+  exception with its reason; the conformance test passes and rejects a violation of each rule; a
+  freshly generated project with all twelve modules passes `make ci-e2e`; the release notes list every
   moved public URL with its operator step (Stripe and Resend webhook endpoints); decisions.md
   names quoted from the shipped state are updated; the inventory is marked resolved.
 
@@ -146,39 +141,28 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA217 — Read the manifest option schema in core and check settings at startup.**
 
-  **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. Option checks live in four places and the
-  manifests' per-option `validation` block is parsed and ignored.
+  **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. `plan`/`apply`
+  enforce each manifest option's `validation` block; per-module option code and settings readers
+  remain.
 
   **Scope:**
-  - *Manifests and option checks — manifest half landed.* Every option declares
-    `type`/`description`/`validation`; core reads the block (`choices`, `min`/`max`, `pattern`,
-    `required_when`, `any_of`) and `plan`/`apply` enforce it on canonicalized options, naming the
-    setting; listings' rule moved to the option; the 25 one-to-one `derived_settings` went; empty
-    `immutable`/`dependencies` blocks are written out. **Remaining:** core's and the CLI's
-    per-module option code goes — the `validate_/resolve_/normalize_/default_<module>_module_options`
-    functions and `DEFAULT_*` / `LEGACY_*` constants in `quickscale_core.contracts.resolvers`,
-    `contracts.module_options`, `schema.config_schema`, and the CLI's `module_config`, with the
-    `contracts.imperative_inventory` that tracked them — routing the adapter path through the
-    engine once normalization is manifest-owned, and making CLI prompts read the manifest.
-  - *Settings reading.* `apply` also writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
-    one generic startup check in `quickscale_core.runtime`, run through SA218's checks helper and
-    registered by each module, validates every declared setting; per-module readers and code
-    defaults are removed.
-  - *Order.* The startup check comes last, once the settings schema is written and the engine
-    compiles the manifest block for it.
+  - *Option code.* Core's and the CLI's per-module option code goes: the
+    `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
+    `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
+    `schema.config_schema`, and the CLI's `module_config`, with `contracts.imperative_inventory`.
+    The adapter path runs through the engine, and CLI prompts read the manifest.
+  - *Settings reading (last).* `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
+    one generic startup check in `quickscale_core.runtime`, run through the shared checks helper
+    and registered by each module, validates every declared setting; per-module readers and code
+    defaults go.
 
-  **Acceptance:** a setting of the wrong type or a violated `required_when` fails `plan` and
-  `apply` with the setting's name (landed), and startup once the settings reading lands; no module
-  keeps its own settings reader or code default; no per-module option function remains in core or
-  the CLI; CLI prompts read the manifest.
+  **Acceptance:** a setting of the wrong type or a violated `required_when` fails startup with the
+  setting's name; no module keeps its own settings reader or code default; no per-module option
+  function remains in core or the CLI; CLI prompts read the manifest.
 
   **Surfaces:** every manifest and core manifest copy; `quickscale_core` `contracts`, `schema`,
   `runtime`; `quickscale_cli` apply and `module_config`; module settings reads. Track 2 surfaces
   plus the `runtime` facade (Track 3), through the serialized queue.
-
-- [x] **SA218 — Add the shared runtime helpers modules build their conventions on.**
-
-- [x] **SA221 — Rename module identities to `quickscale_<module>`.**
 
 - [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
@@ -242,7 +226,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Dependencies.* `orgs` stops importing `auth` and `social`, `auth` stops importing `billing`,
     `blog` stops reading storage's setting and importing `storage.helpers` (and lists `storage` in
     `required_modules`), and `dr_engine` stops reading backups' settings,
-    through `services.py` and SA218's `AppConfig` capabilities; `required_modules` covers every
+    through `services.py` and the shared `AppConfig` capabilities; `required_modules` covers every
     import.
   - *References by name* (rule 34). orgs' `require_org_feature` moves to billing's published
     surface; the purge command's billing steps and `removal.BOUNDARY_GUARDED_OBLIGATIONS` become
@@ -262,8 +246,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** auth, orgs, billing, blog, storage, backups, every `services.py`;
   `quickscale_core/dr_engine/` (Track 2); `auth/views.py`.
 
-- [x] **SA222 — Put every tenant model on `TenantModel` and align model basics.**
-
 - [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
   **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
@@ -275,8 +257,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
     route names become snake_case without the module name.
   - *APIs.* blog's and listings' function-view APIs become DRF views; `OrgApiBaseView` is rebased
-    on DRF's `APIView`; errors take SA218's shape (DRF dependency in every module with an API, the
-    theme's `useApi.ts` and orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception
+    on DRF's `APIView`; errors take the shared error shape (DRF dependency in every module with an
+    API, the theme's `useApi.ts` and orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception
     in the JSON API Endpoint Base Contract, and its hand-written rate parser go, with the raw-SQL
     counter table `quickscale_modules_blog_api_throttle_counter` it writes.
   - *Throttles and shared settings.* Throttle scopes become `quickscale_<module>_<purpose>`, each
@@ -336,35 +318,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
 
-  **Landed:** the package-shape slice — `__init__.py` reduced to `__version__`/`__all__` (auth,
-  blog, crm, listings, forms; storage's root re-export removed), `receivers.py` split from
-  `signals.py` (auth, crm; orgs' `pre_delete` backstop moved, `connection_created` stays in
-  `apps.py`), `poetry.toml` (analytics, notifications, storage), `allauth_adapter.py` (auth) and
-  `_debug.py` (orgs), storage's `timezone.now()`, `quickscale_social:*` cache keys, the dead
-  `[tool.mypy]` blocks gone, and crm's empty command package and listings' no-op `ready()` deleted.
-  **Remaining:** command behavior (`--dry-run` ×3, `CommandError`, `migrate_billing_to_orgs` with
-  its recovery docs), the mypy caps and the module-local mypy overrides (orgs measures 98 errors
-  under the standard override; billing 15, forms 9, notifications 7, social 0), teams with core's
-  placeholder handling, the test renames/ticket-mention sweep/missing tests, discovery-derived
-  module lists, and the READMEs.
-
   **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
-  rules 11, 15–18, 24, 28, 29, and 36–38.
+  rules 11, 15–18, 24, 28, 29, and 36–38. Package roots, receivers, and file names already follow
+  rule 28.
 
   **Scope:**
-  - *Package root, signals, commands, tooling.* `default_app_config` and storage's root re-export
-    go; auth's and crm's `signals.py` become `receivers.py` and orgs' receivers move there;
-    `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas` gain `--dry-run`, the
-    retired `migrate_billing_to_orgs` is deleted with its recovery docs, and
+  - *Commands and tooling.* `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas`
+    gain `--dry-run`; the retired `migrate_billing_to_orgs` is deleted with its recovery docs;
     `check_tenant_isolation` raises `CommandError` instead of calling `sys.exit()`; each module's
-    root `mypy.ini` section relaxes at most module-extension.md's standard override, so orgs
-    (twelve disabled codes), social, forms, notifications, and billing fix what the tighter sections
-    report, and the unread `[tool.mypy]` blocks in blog, listings, and storage go (rule 36);
-    `quickscale_modules/teams/` is deleted (README to
-    `docs/planning/teams.md`) with core's placeholder handling; storage uses `timezone.now()`;
-    social's cache keys become `quickscale_social:*`.
-  - *Files.* analytics, notifications, and storage gain `poetry.toml`; auth's `adapters.py` → `allauth_adapter.py`; orgs'
-    `debug_helpers.py` → `_debug.py`; one-off files fold in.
+    root `mypy.ini` section relaxes at most module-extension.md's standard override, so orgs (98
+    errors under it), billing (15), forms (9), notifications (7), and social fix what the tighter
+    sections report (rule 36); `quickscale_modules/teams/` is deleted (README to
+    `docs/planning/teams.md`) with core's placeholder handling.
   - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
     isolation and RLS) are added; orgs' eight ticket-numbered test files and two ticket-numbered
     test apps are renamed by subject, with the docs that cite them (decisions rule 27 cites the
@@ -589,8 +554,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `account_deletion_user_reference_organization_ids()` lookup, the `RemovalCoordinator`'s
   `ACCOUNT_DELETE` boundary, and billing reconciliation before the row can go. Deleting the row is
   also what erasure requests are assumed to need. They need the personal data gone, not the row.
-  This ticket keeps the row, disables it, and scrubs the personal data, so records stay attributed
-  to "Deleted user" and the account can be restored during a grace period.
+  This ticket keeps the row, disables it, and scrubs the personal data at once, so records stay
+  attributed to "Deleted user #<id>" (as Django admin shows it).
 
   **Personal data about a user today** (from the models on `v89`; the first slice confirms it,
   including third-party tables):
@@ -606,24 +571,21 @@ suite, and merge only the reviewed delivery through the serialized queue.
   | notifications `NotificationMessage` / `NotificationDelivery` | `recipient_email`, rendered text and context sent to them (matched by address; there is no user link) | scrub the address and the rendered body; keep status for delivery statistics |
   | billing `Subscription`, `CreditBalance`, `CreditTransaction`, `PurchaseCheckout` | the user as actor | keep the link (it now points at "Deleted user"); the organization's Stripe customer email belongs to the org owner and changes only with ownership |
   | crm `ContactNote` / `DealNote`, `Deal.owner`, forms `Form.created_by`, blog `Post.author`, backups actor | the user as actor | keep the link; nothing to scrub on the row |
-  | analytics (PostHog) | events under the user's `distinct_id` | outside the database: request deletion through PostHog's API or document it as the operator's step |
+  | analytics (PostHog) | events under the user's `distinct_id` | outside the database: documented as the operator's deletion step |
 
   Out of scope: data about people who are *not* users (crm `Contact`, forms submissions with their
-  IP and user agent). Those belong to the organization and keep their own retention settings.
+  IP and user agent), which belong to the organization; a restore grace period; a data export.
 
   **Scope:**
   - *Inventory first.* The table above becomes a checked list, one entry per model field holding
     personal data, including third-party apps. An unlisted field fails a test.
   - *Anonymize capability.* Each module that holds personal data about a user declares an
     anonymize handler on its `AppConfig` (Module Conventions rule 4's capability mechanism, extending
-    SA213's removal obligations in orgs' `removal.py` with an `ANONYMIZE` `RemovalAction`); auth collects and runs them in one transaction. Effects
-    outside the database (file deletion, the PostHog request) run on commit (Module Conventions rule 21).
+    the removal obligations in orgs' `removal.py` with an `ANONYMIZE` `RemovalAction`); auth
+    collects and runs them in one transaction. File deletion runs on commit (Module Conventions
+    rule 21).
   - *auth.* `AccountDeleteView` disables and scrubs instead of calling `delete()`; the last-owner
     guard and billing's checks before deletion stay. The person can sign up again with the same email.
-  - *Grace period (if chosen).* Step one only disables the login and marks the account pending; an
-    operator-run `quickscale_auth_anonymize_accounts` command (rule 17: `--dry-run`, listed under
-    Operations with a suggested interval) scrubs accounts past the period. Signing in during
-    the period restores the account.
   - *Simplify.* The cross-organization null-out lookup
     (`account_deletion_user_reference_organization_ids`, in orgs' `current_org` and billing) is
     called only by auth's delete view; it goes if nothing else deletes users through self-service,
@@ -632,13 +594,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Docs.* decisions.md records the account-removal model; organizations.md's account deletion
     section and auth's README change with it.
 
-  **Decisions to take before implementation:**
-  - Grace period or immediate anonymization, and how many days.
-  - Whether scrubbed accounts appear in Django admin, and how ("Deleted user #42").
-  - Whether a data export ("download my data") ships first; erasure and export usually go together.
-  - PostHog: delete through its API (a vendor call and a stored credential) or document it as an
-    operator step.
-
   **Acceptance:**
   - After account removal, no table (module or third-party) holds the person's email, name, or
     free text written about them as a user, as a test that walks the inventory proves; files are gone
@@ -646,14 +601,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - Their posts, deals, notes, and billing records remain, attributed to "Deleted user", and each
     organization's data is otherwise untouched.
   - The same email can register again; the old account cannot sign in.
-  - With a grace period: signing in inside it restores the account; the command scrubs after it and
-    `--dry-run` reports without writing.
   - A rolled-back removal leaves no effect (Module Conventions rule 21); operator hard delete still passes SA35's gate.
 
-  **Surfaces:** auth (`views.py`, `AppConfig`, a new command, README); orgs (`removal.py`, the
+  **Surfaces:** auth (`views.py`, `AppConfig`, README); orgs (`removal.py`, the
   account-deletion lookup, memberships, invitations); blog, notifications, billing, crm, forms,
-  backups (anonymize handlers where the inventory lists them); analytics (optional PostHog
-  deletion); decisions.md and [organizations.md](organizations.md). These are Track 3 surfaces
+  backups (anonymize handlers where the inventory lists them); decisions.md and [organizations.md](organizations.md). These are Track 3 surfaces
   (`auth/views.py`, orgs' removal path) plus module code that SA215 also edits, hence the dependency;
   billing is a Track 2 surface, so SA216 lands through the serialized merge queue.
 

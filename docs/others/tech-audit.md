@@ -344,7 +344,7 @@ Every empty cell is resolved with a finding ID or a stated reason.
   A backup taken at 0.89.0 is refused after any module patch bump, and there is no override flag.
   This is the recorded clean-break decision (arch-audit owns the design). Promote it if a patch
   release ships without a migration change and operators need an older backup.
-- **SA208 E001 is an `ERROR` that fails `migrate`** (`orgs/checks.py:179`). An upgraded project
+- **SA208 E001 is an `ERROR` that fails `migrate`** (`orgs/checks.py:274`). An upgraded project
   with an unclassified `*_id` field on a tenant model cannot deploy: `start.sh` stops at migrate.
   This is deliberate and documented (orgs README, CHANGELOG). Promote it if a contract-vintage
   adoption step does not list it.
@@ -355,7 +355,7 @@ Every empty cell is resolved with a finding ID or a stated reason.
   therefore parks every other billing mutation for that organization for up to the SDK timeout.
   Bounded, so not promoted. Set an explicit client timeout if latency ever bites.
 - **SA203's sender-free `pre_delete` receiver disables Django's fast-delete path for every model**
-  (`orgs/apps.py:231`). This is an accepted, documented trade-off: first-party code has no bulk
+  (`orgs/receivers.py:19`). This is an accepted, documented trade-off: first-party code has no bulk
   hot-path deletes, and `clearsessions` is not scheduled. Re-check if a scheduled bulk
   `QuerySet.delete()` (session cleanup, retention pruning) is ever added. It would now materialize
   every row in memory.
