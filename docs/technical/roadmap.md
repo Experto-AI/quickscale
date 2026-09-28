@@ -149,27 +149,27 @@ suite, and merge only the reviewed delivery through the serialized queue.
   manifests' per-option `validation` block is parsed and ignored.
 
   **Scope:**
+  - *Manifests and option checks — manifest half landed.* Every option declares
+    `type`/`description`/`validation`; core reads the block (`choices`, `min`/`max`, `pattern`,
+    `required_when`, `any_of`) and `plan`/`apply` enforce it on canonicalized options, naming the
+    setting; listings' rule moved to the option; the 25 one-to-one `derived_settings` went; empty
+    `immutable`/`dependencies` blocks are written out. **Remaining:** core's and the CLI's
+    per-module option code goes — the `validate_/resolve_/normalize_/default_<module>_module_options`
+    functions and `DEFAULT_*` / `LEGACY_*` constants in `quickscale_core.contracts.resolvers`,
+    `contracts.module_options`, `schema.config_schema`, and the CLI's `module_config`, with the
+    `contracts.imperative_inventory` that tracked them — routing the adapter path through the
+    engine once normalization is manifest-owned, and making CLI prompts read the manifest.
   - *Settings reading.* `apply` also writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
     one generic startup check in `quickscale_core.runtime`, run through SA218's checks helper and
-    registered by each module, validates
-    every declared setting; per-module readers and code defaults are removed.
-  - *Manifests and option checks.* Every option gains `type`/`description`/`validation`
-    as required, in the per-option `validation` block, which core starts reading; listings'
-    `derivation.validation_rules` moves there; the 25 one-to-one `derived_settings` entries that
-    repeat an option's `django_setting` (analytics, billing, blog, crm, forms, listings), with
-    their 10 repeated defaults, go; empty `immutable`/`dependencies` blocks are written out. Core's
-    and the CLI's per-module option code goes — the
-    `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
-    `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
-    `schema.config_schema`, and the CLI's `module_config`, with the
-    `contracts.imperative_inventory` that tracked them — and cross-option checks become the
-    manifest's `required_when` / `any_of` keys, run by `plan`, `apply`, and the startup check.
-  - *Order.* The manifest half needs nothing from SA218; the startup check comes last, once
-    SA218's checks helper has merged.
+    registered by each module, validates every declared setting; per-module readers and code
+    defaults are removed.
+  - *Order.* The startup check comes last, once the settings schema is written and the engine
+    compiles the manifest block for it.
 
-  **Acceptance:** a setting of the wrong type or a violated `required_when` fails `plan`, `apply`,
-  and startup with the setting's name; no module keeps its own settings reader or code default; no
-  per-module option function remains in core or the CLI; CLI prompts read the manifest.
+  **Acceptance:** a setting of the wrong type or a violated `required_when` fails `plan` and
+  `apply` with the setting's name (landed), and startup once the settings reading lands; no module
+  keeps its own settings reader or code default; no per-module option function remains in core or
+  the CLI; CLI prompts read the manifest.
 
   **Surfaces:** every manifest and core manifest copy; `quickscale_core` `contracts`, `schema`,
   `runtime`; `quickscale_cli` apply and `module_config`; module settings reads. Track 2 surfaces
@@ -321,6 +321,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** orgs `permissions`; blog, listings, crm, forms, orgs, social, analytics.
 
 - [ ] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
+
+  **Landed:** the package-shape slice — `__init__.py` reduced to `__version__`/`__all__` (auth,
+  blog, crm, listings, forms; storage's root re-export removed), `receivers.py` split from
+  `signals.py` (auth, crm; orgs' `pre_delete` backstop moved, `connection_created` stays in
+  `apps.py`), `poetry.toml` (analytics, notifications, storage), `allauth_adapter.py` (auth) and
+  `_debug.py` (orgs), storage's `timezone.now()`, `quickscale_social:*` cache keys, the dead
+  `[tool.mypy]` blocks gone, and crm's empty command package and listings' no-op `ready()` deleted.
+  **Remaining:** command behavior (`--dry-run` ×3, `CommandError`, `migrate_billing_to_orgs` with
+  its recovery docs), the mypy caps and the module-local mypy overrides (orgs measures 98 errors
+  under the standard override; billing 15, forms 9, notifications 7, social 0), teams with core's
+  placeholder handling, the test renames/ticket-mention sweep/missing tests, discovery-derived
+  module lists, and the READMEs.
 
   **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
   rules 11, 15–18, 24, 28, 29, and 36–38.

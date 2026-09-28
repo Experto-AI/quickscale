@@ -30,12 +30,14 @@ config:
       default: true
       django_setting: ACCOUNT_ALLOW_REGISTRATION
       description: Allow new user signups
+      validation: {}
 
   immutable:
     authentication_method:
       type: string
       default: email_username
       description: How users authenticate
+      validation: {}
 """
         manifest = load_manifest(yaml_content, "auth")
 
@@ -81,6 +83,8 @@ config:
     some_option:
       type: boolean
       default: true
+      description: An option missing its django_setting
+      validation: {}
       # Missing django_setting - should error
 """
         with pytest.raises(ManifestError) as exc_info:
@@ -198,13 +202,178 @@ description: Module without name
 
         assert manifest.required_modules == ["orgs"]
 
-    def test_load_manifest_option_none_value_allowed(self) -> None:
-        """A config option with null/None value is accepted."""
+    def test_load_manifest_option_null_payload_raises(self) -> None:
+        """A config option with a null payload cannot declare its required fields."""
         yaml_content = (
             "name: mymod\nversion: '1.0.0'\nconfig:\n  immutable:\n    my_option:\n"
         )
-        manifest = load_manifest(yaml_content, "mymod")
-        assert "my_option" in manifest.immutable_options
+        with pytest.raises(ManifestError, match="'type'"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_missing_type_raises(self) -> None:
+        """An option without a declared type fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+        )
+        with pytest.raises(ManifestError, match="non-empty 'type'"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_unknown_type_raises(self) -> None:
+        """An option with an unsupported type fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: decimal\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+        )
+        with pytest.raises(ManifestError, match="unsupported type"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_missing_description_raises(self) -> None:
+        """An option without a description fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      validation: {}\n"
+        )
+        with pytest.raises(ManifestError, match="non-empty 'description'"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_missing_validation_raises(self) -> None:
+        """An option without a validation mapping fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+        )
+        with pytest.raises(ManifestError, match="'validation' mapping"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_missing_default_raises(self) -> None:
+        """An option without a default fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+        )
+        with pytest.raises(ManifestError, match="must declare a 'default'"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_null_default_raises(self) -> None:
+        """A null default fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      default:\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+        )
+        with pytest.raises(ManifestError, match="'default' must not be null"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_default_type_mismatch_raises(self) -> None:
+        """A default that does not match the declared type fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: integer\n"
+            "      default: not-a-number\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+        )
+        with pytest.raises(ManifestError, match="must match its declared type"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_unknown_validation_key_raises(self) -> None:
+        """A validation block with an unrecognised key fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        required: true\n"
+        )
+        with pytest.raises(ManifestError, match="unknown key 'required'"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_invalid_bound_raises(self) -> None:
+        """A non-numeric min bound fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: integer\n"
+            "      default: 1\n"
+            "      description: A description\n"
+            "      validation:\n        min: low\n"
+        )
+        with pytest.raises(ManifestError, match="validation.min must be a number"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_invalid_pattern_raises(self) -> None:
+        """An uncompilable pattern fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        pattern: '[unclosed'\n"
+        )
+        with pytest.raises(ManifestError, match="not a valid"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_required_when_is_single_entry(self) -> None:
+        """required_when must be a single-entry mapping."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        required_when:\n"
+            "          first: true\n          second: true\n"
+        )
+        with pytest.raises(ManifestError, match="single-entry mapping"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_required_when_needs_scalar_or_list(self) -> None:
+        """A required_when value must be a scalar or a list, not a mapping."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        required_when:\n"
+            "          other: {nested: true}\n"
+        )
+        with pytest.raises(ManifestError, match="scalar value or a list"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_reference_must_exist(self) -> None:
+        """required_when and any_of may only reference declared options."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        required_when:\n"
+            "          missing_option: true\n"
+        )
+        with pytest.raises(ManifestError, match="unknown option 'missing_option'"):
+            load_manifest(yaml_content, "mymod")
 
 
 class TestLoadManifestFromPath:
@@ -221,6 +390,8 @@ config:
       type: boolean
       default: true
       django_setting: TEST_ENABLED
+      description: Whether the test switch is on
+      validation: {}
 """
         manifest_path = tmp_path / "module.yml"
         manifest_path.write_text(yaml_content)
@@ -283,6 +454,8 @@ config:
       type: string
       default: "test"
       django_setting: TEST_SETTING
+      description: A test setting
+      validation: {}
 """
         manifest_path = modules_dir / "module.yml"
         manifest_path.write_text(yaml_content)
@@ -1053,8 +1226,9 @@ managed_files:
     def test_managed_files_entry_with_none_value_accepted(self) -> None:
         """A managed_files entry with null value is treated as empty mapping.
 
-        This matches the config option behavior where null values are
-        accepted as empty mappings.
+        This matches managed-file entry handling only: every config option
+        must declare its own ``type``, ``description``, ``validation``, and
+        ``default``, so a null config-option payload is rejected.
         """
         yaml_content = """
 name: mymod

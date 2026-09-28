@@ -27,5 +27,5 @@ class QuickscaleAuthConfig(AppConfig):
 
         register_module_checks(self, [check_required_settings])
 
-        # Import signal handlers when app is ready
-        import_module("quickscale_modules_auth.signals")
+        # Import signal receivers when app is ready
+        import_module("quickscale_modules_auth.receivers")

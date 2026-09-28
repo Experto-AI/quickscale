@@ -140,7 +140,7 @@ modules:
 
         message = str(exc.value)
         assert "modules.auth.email_verification" in message
-        assert "none, optional, mandatory" in message
+        assert "must be a string" in message
 
     def test_config_with_empty_modules(self):
         """Test config with modules section but empty options"""

@@ -173,6 +173,40 @@ class TestPlanReconfigureWithState:
             assert "sender_email cannot use the default placeholder" in result.output
             assert not Path("quickscale.yml").exists()
 
+    def test_plan_reconfigure_aborts_for_invalid_manifest_option(self) -> None:
+        """A manifest-invalid option fails the planner before quickscale.yml is written."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_react",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "listings": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {"listings_per_page": 0},
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            # Don't add modules (n), docker start (n)
+            result = runner.invoke(plan, ["--reconfigure"], input="n\nn\n")
+
+            assert result.exit_code != 0
+            assert "LISTINGS_PER_PAGE" in result.output
+            assert not Path("quickscale.yml").exists()
+
 
 class TestPlanReconfigureShowsModules:
     """Tests for module display in reconfigure"""

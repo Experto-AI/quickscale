@@ -137,6 +137,22 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `migrate`, and `manage.py check` alike. Each module's own errors derive from one
     `<Module>Error` base in its `exceptions.py`, while `services.py` keeps re-exporting them.
 
+  - **Module packages follow one file layout.** Package roots export only their version,
+    signal receivers live in `receivers.py` while `signals.py` holds the signals a module sends,
+    every module ships `poetry.toml`, and auth's allauth adapter (`allauth_adapter.py`), orgs'
+    debug helpers (`_debug.py`), social's cache keys (`quickscale_social:*`), and storage's
+    timestamps and root exports take their standard names and homes. An import of
+    `quickscale_modules_storage.<helper>` moves to `quickscale_modules_storage.helpers` or the
+    module's `services.py`, and the retired `default_app_config` declarations and unread
+    per-module `[tool.mypy]` blocks are gone.
+
+  - **Manifest option checks are enforced where options are validated.** Every `module.yml` option
+    declares `type`, `description`, and a `validation` block — `choices`, `min`/`max`, `pattern`, or
+    the cross-option `required_when`/`any_of` keys — and `quickscale plan`/`apply` fail with the
+    setting's name when a supplied value violates one. A mutable option's `django_setting` is its
+    only one-to-one projection, so the duplicate `derived_settings` entries are gone and a
+    transformed or computed setting carries no default.
+
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
   - **`ClientIdentityMiddleware` in generated projects.** A first-position middleware aligns ordinary DRF request identity with the canonical resolver, so a short forwarded chain cannot be trusted by one consumer and rejected by another. Proxy configuration is validated before mutation and the production proxy count is derived rather than guessed.

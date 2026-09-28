@@ -6,7 +6,7 @@ import hashlib
 import posixpath
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlparse
@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import UploadedFile
+from django.utils import timezone
 from django.utils.text import slugify
 from PIL import Image, UnidentifiedImageError
 
@@ -207,7 +208,7 @@ def list_s3_compatible_media_inventory(
             last_modified = entry.get("LastModified")
             if isinstance(last_modified, datetime):
                 inventory_item["modified_at"] = last_modified.astimezone(
-                    timezone.utc
+                    dt_timezone.utc
                 ).isoformat()
 
             inventory.append(inventory_item)
@@ -247,7 +248,7 @@ def build_upload_path(
     version: str | None = None,
 ) -> str:
     """Build a cache-friendly upload path segmented by module and year/month."""
-    timestamp = now or datetime.now(tz=timezone.utc)
+    timestamp = now or timezone.now()
     module_segment = slugify(module_name) or "module"
     kind_segment = slugify(asset_kind) or "asset"
     extension = Path(filename).suffix.lower() or ".bin"

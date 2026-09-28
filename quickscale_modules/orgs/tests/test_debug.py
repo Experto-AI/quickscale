@@ -14,7 +14,7 @@ from quickscale_modules_orgs.constants import (
     ACTIVE_ORG_SESSION_KEY,
     DEBUG_AS_ORG_SESSION_KEY,
 )
-from quickscale_modules_orgs.debug_helpers import (
+from quickscale_modules_orgs._debug import (
     clear_debug_as_org,
     get_debug_as_org,
     is_debug_as_active,
@@ -30,7 +30,7 @@ from tests.urls import home_view
 
 
 # ---------------------------------------------------------------------------
-# debug_helpers — session activation / deactivation
+# _debug — session activation / deactivation
 # ---------------------------------------------------------------------------
 
 
@@ -128,7 +128,7 @@ class TestClearDebugAsOrg:
 
 
 # ---------------------------------------------------------------------------
-# debug_helpers — get_debug_as_org
+# _debug — get_debug_as_org
 # ---------------------------------------------------------------------------
 
 
@@ -211,7 +211,7 @@ class TestGetDebugAsOrg:
 
 
 # ---------------------------------------------------------------------------
-# debug_helpers — is_debug_as_active
+# _debug — is_debug_as_active
 # ---------------------------------------------------------------------------
 
 

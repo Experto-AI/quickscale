@@ -1,4 +1,4 @@
-"""Tests for auth module signals"""
+"""Tests for the auth module's signal receivers"""
 
 from importlib import import_module
 
@@ -29,7 +29,7 @@ class TestSignals:
         assert User.objects.filter(username="newuser").exists()
 
     def test_app_ready_surfaces_signal_import_errors(self, monkeypatch):
-        """Startup should surface signal import failures instead of swallowing them."""
+        """Startup should surface receiver import failures instead of swallowing them."""
         app_module = import_module("quickscale_modules_auth")
         app_config = QuickscaleAuthConfig("quickscale_modules_auth", app_module)
 
@@ -40,5 +40,7 @@ class TestSignals:
             "quickscale_modules_auth.apps.import_module", raise_import_error
         )
 
-        with pytest.raises(ImportError, match="boom: quickscale_modules_auth.signals"):
+        with pytest.raises(
+            ImportError, match="boom: quickscale_modules_auth.receivers"
+        ):
             app_config.ready()

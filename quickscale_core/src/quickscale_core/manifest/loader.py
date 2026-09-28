@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import posixpath
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
 
 from quickscale_core import __version__ as _core_version
+from quickscale_core.manifest.option_validation import (
+    ALLOWED_VALIDATION_KEYS,
+    OPTION_TYPE_LABELS,
+    option_type_matches,
+)
 from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
@@ -168,40 +174,223 @@ def assert_manifest_version_matches_core(
         )
 
 
+def _validate_numeric_bound(
+    validation: dict[str, Any],
+    bound: str,
+    option_name: str,
+    module_name: str | None,
+) -> None:
+    """Validate a ``min`` / ``max`` numeric bound in a validation block."""
+    value = validation[bound]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ManifestError(
+            f"Option '{option_name}' validation.{bound} must be a number",
+            module_name,
+        )
+
+
+def _validate_validation_block(
+    validation: dict[str, Any], option_name: str, module_name: str | None
+) -> None:
+    """Validate the shape of one option's ``validation`` block.
+
+    The block may be empty, but every key it does carry must be one the
+    option-validation engine understands, with a shape that engine can apply.
+    Structural errors fail the load so an unread declaration cannot ship.
+    """
+    for key in validation:
+        if key not in ALLOWED_VALIDATION_KEYS:
+            allowed = ", ".join(sorted(ALLOWED_VALIDATION_KEYS))
+            raise ManifestError(
+                f"Option '{option_name}' validation declares unknown key "
+                f"'{key}' (allowed: {allowed})",
+                module_name,
+            )
+
+    if "choices" in validation:
+        choices = validation["choices"]
+        if not isinstance(choices, list) or not choices:
+            raise ManifestError(
+                f"Option '{option_name}' validation.choices must be a non-empty list",
+                module_name,
+            )
+
+    if "min" in validation:
+        _validate_numeric_bound(validation, "min", option_name, module_name)
+    if "max" in validation:
+        _validate_numeric_bound(validation, "max", option_name, module_name)
+
+    if "pattern" in validation:
+        pattern = validation["pattern"]
+        if not isinstance(pattern, str) or not pattern:
+            raise ManifestError(
+                f"Option '{option_name}' validation.pattern must be a non-empty string",
+                module_name,
+            )
+        try:
+            re.compile(pattern)
+        except re.error as error:
+            raise ManifestError(
+                f"Option '{option_name}' validation.pattern is not a valid "
+                f"regular expression: {error}",
+                module_name,
+            ) from error
+
+    if "required_when" in validation:
+        required_when = validation["required_when"]
+        if not isinstance(required_when, dict) or len(required_when) != 1:
+            raise ManifestError(
+                f"Option '{option_name}' validation.required_when must be a "
+                "single-entry mapping of another option to its value",
+                module_name,
+            )
+        for condition_option, expected in required_when.items():
+            if not isinstance(condition_option, str) or not condition_option:
+                raise ManifestError(
+                    f"Option '{option_name}' validation.required_when keys "
+                    "must be non-empty option names",
+                    module_name,
+                )
+            if isinstance(expected, list):
+                if not expected:
+                    raise ManifestError(
+                        f"Option '{option_name}' validation.required_when."
+                        f"{condition_option} must be a value or a non-empty list",
+                        module_name,
+                    )
+            elif isinstance(expected, (dict, type(None))):
+                raise ManifestError(
+                    f"Option '{option_name}' validation.required_when."
+                    f"{condition_option} must be a scalar value or a list",
+                    module_name,
+                )
+
+    if "any_of" in validation:
+        any_of = validation["any_of"]
+        if not isinstance(any_of, list) or not any_of:
+            raise ManifestError(
+                f"Option '{option_name}' validation.any_of must be a non-empty list",
+                module_name,
+            )
+        for entry in any_of:
+            if not isinstance(entry, str) or not entry:
+                raise ManifestError(
+                    f"Option '{option_name}' validation.any_of entries must be "
+                    "non-empty option names",
+                    module_name,
+                )
+
+
+def _validate_option_references(
+    mutable_options: dict[str, ConfigOption],
+    immutable_options: dict[str, ConfigOption],
+    module_name: str | None,
+) -> None:
+    """Reject validation blocks that reference an undeclared option."""
+    declared = set(mutable_options) | set(immutable_options)
+    for section in (mutable_options, immutable_options):
+        for option_name, option in section.items():
+            validation = option.validation or {}
+            references: list[str] = []
+            required_when = validation.get("required_when")
+            if isinstance(required_when, dict):
+                references.extend(key for key in required_when if isinstance(key, str))
+            any_of = validation.get("any_of")
+            if isinstance(any_of, list):
+                references.extend(entry for entry in any_of if isinstance(entry, str))
+            for reference in references:
+                if reference not in declared:
+                    raise ManifestError(
+                        f"Option '{option_name}' validation references unknown "
+                        f"option '{reference}'",
+                        module_name,
+                    )
+
+
 def _parse_config_option(
-    name: str, data: dict[str, Any], mutability: str
+    name: str, data: dict[str, Any], mutability: str, module_name: str | None
 ) -> ConfigOption:
     """Parse a single config option from manifest data"""
+    option_type = data.get("type")
+    if not isinstance(option_type, str) or not option_type:
+        raise ManifestError(
+            f"Option '{name}' must declare a non-empty 'type'",
+            module_name,
+        )
+    if option_type not in OPTION_TYPE_LABELS:
+        allowed = ", ".join(sorted(OPTION_TYPE_LABELS))
+        raise ManifestError(
+            f"Option '{name}' declares unsupported type '{option_type}' "
+            f"(allowed: {allowed})",
+            module_name,
+        )
+
+    description = data.get("description")
+    if not isinstance(description, str) or not description:
+        raise ManifestError(
+            f"Option '{name}' must declare a non-empty 'description'",
+            module_name,
+        )
+
+    validation = data.get("validation")
+    if not isinstance(validation, dict):
+        raise ManifestError(
+            f"Option '{name}' must declare a 'validation' mapping "
+            "(use '{}' when the option has no constraint)",
+            module_name,
+        )
+    _validate_validation_block(validation, name, module_name)
+
+    if "default" not in data:
+        raise ManifestError(
+            f"Option '{name}' must declare a 'default'",
+            module_name,
+        )
+    default = data["default"]
+    if default is None:
+        raise ManifestError(
+            f"Option '{name}' 'default' must not be null",
+            module_name,
+        )
+    if not option_type_matches(option_type, default):
+        raise ManifestError(
+            f"Option '{name}' 'default' must match its declared type '{option_type}'",
+            module_name,
+        )
+
     return ConfigOption(
         name=name,
-        option_type=data.get("type", "string"),
-        default=data.get("default"),
+        option_type=option_type,
+        default=default,
         django_setting=data.get("django_setting"),
-        description=data.get("description", ""),
+        description=description,
         mutability=mutability,  # type: ignore[arg-type]
-        validation=data.get("validation", {}),
+        validation=dict(validation),
     )
 
 
 def _parse_config_section(
-    config_data: dict[str, Any], section: str
+    config_data: dict[str, Any], section: str, module_name: str | None
 ) -> dict[str, ConfigOption]:
     """Parse a config section (mutable or immutable)"""
     options = {}
     section_data = config_data.get(section, {})
 
     if not isinstance(section_data, dict):
-        raise ManifestError(f"config.{section} must be a mapping")
+        raise ManifestError(f"config.{section} must be a mapping", module_name)
 
     for option_name, option_data in section_data.items():
         if option_data is None:
             option_data = {}
         elif not isinstance(option_data, dict):
             raise ManifestError(
-                f"config.{section}.{option_name} must be a mapping or empty"
+                f"config.{section}.{option_name} must be a mapping or empty",
+                module_name,
             )
 
-        options[option_name] = _parse_config_option(option_name, option_data, section)
+        options[option_name] = _parse_config_option(
+            option_name, option_data, section, module_name
+        )
 
     return options
 
@@ -711,9 +900,10 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     if not isinstance(config_data, dict):
         raise ManifestError("'config' must be a mapping", module_name)
 
-    mutable_options = _parse_config_section(config_data, "mutable")
-    immutable_options = _parse_config_section(config_data, "immutable")
+    mutable_options = _parse_config_section(config_data, "mutable", module_name)
+    immutable_options = _parse_config_section(config_data, "immutable", module_name)
     _validate_mutable_options(mutable_options, module_name)
+    _validate_option_references(mutable_options, immutable_options, module_name)
 
     # Parse list fields
     required_modules = _validate_list_field(data, "required_modules", module_name)
