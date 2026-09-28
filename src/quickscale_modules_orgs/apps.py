@@ -157,6 +157,7 @@ class QuickscaleOrgsConfig(AppConfig):
             check_quickscale_mode,
             check_removal_obligation_discharge,
             check_rls_role,
+            check_tenant_manager_inheritance,
         )
 
         register_module_checks(
@@ -164,6 +165,7 @@ class QuickscaleOrgsConfig(AppConfig):
             [
                 check_quickscale_mode,
                 check_rls_role,
+                check_tenant_manager_inheritance,
                 check_provider_id_conformance,
                 check_removal_obligation_discharge,
             ],

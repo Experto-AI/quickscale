@@ -835,7 +835,7 @@ class TestCompositeFkFormFieldValueDeletePath:
             field = FormField.all_objects.create(
                 organization=org,
                 form=form,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Name",
                 name="name",
                 order=1,
@@ -918,7 +918,7 @@ class TestCompositeFkFormFieldValueDeletePath:
             field_a = FormField.all_objects.create(
                 organization=org,
                 form=form,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Name",
                 name="name",
                 order=1,
@@ -926,7 +926,7 @@ class TestCompositeFkFormFieldValueDeletePath:
             field_b = FormField.all_objects.create(
                 organization=org,
                 form=form,
-                field_type=FormField.FIELD_TYPE_EMAIL,
+                field_type=FormField.FieldType.EMAIL,
                 label="Email",
                 name="email",
                 order=2,
