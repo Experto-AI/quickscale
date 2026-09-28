@@ -26,14 +26,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA217 | Read the manifest option schema in core and check settings at startup | post-v88 | 2 | SA218 | Deferred |
-| SA218 | Add the shared runtime helpers modules build their conventions on | post-v88 | 3 | — | Deferred |
+| SA217 | Read the manifest option schema in core and check settings at startup | post-v88 | 2 | — | Deferred |
 | SA221 | Rename module identities to `quickscale_<module>` | post-v88 | 1 | — | Deferred |
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
-| SA225 | Move startup checks and exceptions onto the shared helpers | post-v88 | 3 | SA218 | Deferred |
-| SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA218, SA219 | Deferred |
+| SA225 | Move startup checks and exceptions onto the shared helpers | post-v88 | 3 | — | Deferred |
+| SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA219 | Deferred |
 | SA222 | Put every tenant model on `TenantModel` and align model basics | post-v88 | 1 | SA221 | Deferred |
-| SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 2 | SA218, SA221 | Deferred |
+| SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 2 | SA221 | Deferred |
 | SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | SA221 | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
 | SA227 | Standardize package files, commands, tooling, tests, and READMEs | post-v88 | 1 | SA221 | Deferred |
@@ -49,9 +48,9 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA221 ──► SA222 ──► SA227 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA217 (after SA218) ──► SA219 ──► SA223 ──► SA224
-Track 3: SA218 ──► SA225 ──► SA220 ──► SA226 ──► SA216 (after SA215)
-     critical path: SA218 → SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
+Track 2: SA217 ──► SA219 ──► SA223 ──► SA224
+Track 3: SA225 ──► SA220 ──► SA226 ──► SA216 (after SA215)
+     critical path: SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -75,8 +74,8 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA221 (in progress) | yes | yes | yes | **yes** | no |
-| 2 | SA217 | yes (manifest half) | no (SA218's checks helper) | no (SA218's checks helper) | no | **yes** |
-| 3 | SA218 (in progress) | yes | yes | yes | **yes** | **yes** |
+| 2 | SA217 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA225 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -179,24 +178,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `runtime`; `quickscale_cli` apply and `module_config`; module settings reads. Track 2 surfaces
   plus the `runtime` facade (Track 3), through the serialized queue.
 
-- [ ] **SA218 — Add the shared runtime helpers modules build their conventions on.**
-
-  **Context:** D5, D12, D13; Module Conventions rules 4, 9, and 10. Later tickets need one way to declare a capability, run checks, and
-  answer API errors; today each module hand-writes its own.
-
-  **Scope:** in `quickscale_core.runtime`: the `AppConfig` capability helper (a module declares
-  what it provides, a consumer asks core for every installed provider); the checks helper that
-  runs a module's `checks.py` from `ready()`, fails every process, and also registers the checks as
-  system checks; the generic DRF exception handler emitting the one QuickScale error shape, with
-  the generated `REST_FRAMEWORK` block that installs it.
-  `register_backup_persistence` stays as the listed core port. The checks helper merges first:
-  SA217 waits only on it.
-
-  **Acceptance:** each helper has unit tests and a control proving failure is loud; a generated
-  project installs the handler; no module adopts them yet beyond one pilot each.
-
-  **Surfaces:** `quickscale_core.runtime`, the generated settings templates, decisions' named
-  helpers.
+- [x] **SA218 — Add the shared runtime helpers modules build their conventions on.**
 
 - [ ] **SA221 — Rename module identities to `quickscale_<module>`.**
 

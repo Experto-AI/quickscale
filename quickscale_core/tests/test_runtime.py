@@ -192,12 +192,14 @@ class TestRuntimeAllExport:
             "build_database_plan",
             "capture_snapshot",
             "clear_backup_snapshot_rollback_pin",
+            "collect_capabilities",
             "create_artifact",
             "create_backup",
             "create_snapshot",
             "delete_artifact_files",
             "download_backup_path",
             "ensure_default_policy",
+            "exception_handler",
             "execute_database_restore",
             "fetch_snapshot_report",
             "get_backup_artifact",
@@ -215,6 +217,7 @@ class TestRuntimeAllExport:
             "record_backup_snapshot_verification",
             "record_verification",
             "register_backup_persistence",
+            "register_module_checks",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",
@@ -356,6 +359,16 @@ class TestRuntimeSymbolTypes:
                 f"runtime.{name} is not a string"
             )
 
+    def test_convention_helpers_are_callable(self) -> None:
+        for name in (
+            "collect_capabilities",
+            "exception_handler",
+            "register_module_checks",
+        ):
+            symbol = getattr(runtime, name, None)
+            assert symbol is not None, f"runtime.{name} is None"
+            assert callable(symbol), f"runtime.{name} is not callable"
+
     # ------------------------------------------------------------------
     # Persistence surface types
     # ------------------------------------------------------------------
@@ -407,6 +420,8 @@ class TestRuntimeImportable:
             "assemble_wiring_spec",
             "build_database_plan",
             "capture_snapshot",
+            "collect_capabilities",
+            "exception_handler",
             "execute_database_restore",
             "fetch_snapshot_report",
             "iter_expired_snapshots",
@@ -415,6 +430,7 @@ class TestRuntimeImportable:
             "load_social_manifest",
             "record_verification",
             "register_backup_persistence",
+            "register_module_checks",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",

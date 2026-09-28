@@ -2,7 +2,7 @@
 QuickScale runtime API facade — combined re-export surface.
 
 This is the public import path for generated-project code and module-owned
-adapters.  It re-exports all symbols from two sub-modules:
+adapters.  It re-exports all symbols from three sub-modules:
 
 * ``runtime.dr`` — DR adapter functions, primitives, and all backup-dependent
   symbols (orchestration, recovery, persistence, verification).  The sub-module
@@ -10,6 +10,9 @@ adapters.  It re-exports all symbols from two sub-modules:
   symbol is requested.
 * ``runtime.manifest`` — manifest resolver, assembler, social-manifest path
   constants, renderers, and wiring types.
+* ``runtime.conventions`` — the shared module-convention helpers (capability
+  collection, startup checks, the one DRF error shape).  Loaded only when one
+  of its symbols is requested, so a process without Django never imports it.
 
 Module-owned adapters (e.g. ``quickscale_modules_social.adapter``) should
 import from ``quickscale_core.runtime.manifest`` directly to avoid pulling
@@ -18,7 +21,7 @@ in the DR surface at import time and triggering circular imports.
 Backward-compatible: all existing imports from ``quickscale_core.runtime``
 continue to work through this combined facade.
 
-``__all__`` is a hardcoded literal (union of both sub-module exports) so
+``__all__`` is a hardcoded literal (union of the sub-module exports) so
 the SA9.2 module-core compatibility checker's static analysis can resolve
 all symbols without Python import-time side effects.
 """
@@ -34,14 +37,26 @@ import typing
 # eager inside dr.py and are loaded on first access through _load_dr().
 from quickscale_core.runtime import manifest as _manifest  # noqa: F401
 
+#: Symbols served lazily by ``runtime.conventions`` (SA218).  The facade
+#: resolves them without importing the DR sub-module, so a Django process that
+#: only needs a convention helper never pays for the DR surface.
+_LAZY_CONVENTIONS_SYMBOLS: frozenset[str] = frozenset(
+    {
+        "collect_capabilities",
+        "exception_handler",
+        "register_module_checks",
+    }
+)
+
 # ---------------------------------------------------------------------------
-# Public API — complete hardcoded literal union of dr.__all__ and
-# manifest.__all__.  Kept as a literal so the SA9.2 static-analysis
-# checker (check_module_core_compatibility.py) can resolve every
-# symbol without importing the sub-modules.
+# Public API — complete hardcoded literal union of dr.__all__,
+# manifest.__all__, and conventions.__all__.  Kept as a literal so the
+# SA9.2 static-analysis checker (check_module_core_compatibility.py) can
+# resolve every symbol without importing the sub-modules.
 #
-# When adding a new public symbol to dr.py or manifest.py, add it
-# here too.  The compatibility checker will catch any mismatch.
+# When adding a new public symbol to dr.py, manifest.py, or
+# conventions.py, add it here too.  The compatibility checker will catch
+# any mismatch.
 # ---------------------------------------------------------------------------
 __all__ = [
     # DR adapter surface (from dr)
@@ -148,6 +163,10 @@ __all__ = [
     "render_social_managed_views_module",
     "resolve_social_module_options",
     "social_provider_supports_embeds",
+    # Module-convention helpers (from conventions)
+    "collect_capabilities",
+    "exception_handler",
+    "register_module_checks",
 ]
 
 
@@ -156,12 +175,21 @@ def _load_dr() -> typing.Any:
     return importlib.import_module("quickscale_core.runtime.dr")
 
 
+def _load_conventions() -> typing.Any:
+    """Load and return the convention helpers on first convention access."""
+    return importlib.import_module("quickscale_core.runtime.conventions")
+
+
 def __getattr__(name: str) -> typing.Any:
-    """Resolve attribute from ``manifest`` or the lazily loaded ``dr`` module."""
+    """Resolve an attribute from the manifest, conventions, or lazy DR surface."""
     if name == "manifest":
         return _manifest
     if hasattr(_manifest, name):
         return getattr(_manifest, name)
+    if name == "conventions":
+        return _load_conventions()
+    if name in _LAZY_CONVENTIONS_SYMBOLS:
+        return getattr(_load_conventions(), name)
     dr_module = _load_dr()
     if name == "dr":
         return dr_module

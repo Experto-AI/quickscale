@@ -1457,6 +1457,72 @@ class TestDrfPermissionBaseline:
             "Default must not be AllowAny — explicit IsAuthenticated fail-closed"
         )
 
+    def test_exception_handler_is_installed(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The composed block installs the one QuickScale error handler."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        assert "EXCEPTION_HANDLER" in output
+        assert "quickscale_core.runtime.conventions.exception_handler" in output
+
+    def test_exception_handler_resolves_in_executed_settings(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The installed handler path must import from the shipped core."""
+        from django.utils.module_loading import import_string
+
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=base_output,
+            target_module_name="base",
+            config_values={},
+            module_settings={},
+        )
+
+        rest_framework = namespace["REST_FRAMEWORK"]
+        assert isinstance(rest_framework, dict)
+        handler_path = rest_framework["EXCEPTION_HANDLER"]
+        assert handler_path == "quickscale_core.runtime.conventions.exception_handler"
+        assert callable(import_string(handler_path))
+
+    def test_module_supplied_exception_handler_wins_composition(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A module-supplied error handler wins over the template default."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=base_output,
+            target_module_name="base",
+            config_values={},
+            module_settings={
+                "REST_FRAMEWORK": {"EXCEPTION_HANDLER": "myproject.errors.handler"},
+            },
+        )
+
+        rest_framework = namespace["REST_FRAMEWORK"]
+        assert isinstance(rest_framework, dict)
+        assert rest_framework["EXCEPTION_HANDLER"] == "myproject.errors.handler"
+
     def test_rest_framework_set_after_module_settings(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
