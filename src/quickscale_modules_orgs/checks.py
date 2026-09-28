@@ -11,7 +11,9 @@ Registers five system checks with the ``quickscale_orgs`` app:
    model has no marker-derived tenant classification.
 3. ``check_tenant_manager_inheritance`` — errors when a model carries a
    ``TenantManager`` without inheriting ``TenantModel``, because inheritance
-   is the only tenant marker.
+   is the only tenant marker. Unlike the checks around it, this one runs
+   eagerly from ``ready()`` through the shared ``register_module_checks``
+   helper (rule 10), so a WSGI server refuses to start too.
 4. ``check_provider_id_conformance`` (SA208) — errors when a tenant model's
    non-relational ``*_id`` field is neither covered by a declared
    refuse-or-reconcile obligation nor classified by the model's own
@@ -91,7 +93,7 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
             Warning(
                 "No tenant models discovered by marker detection. "
                 "If tenant isolation is expected, ensure at least one "
-                "model uses TenantManager or inherits TenantModel.",
+                "model inherits TenantModel.",
                 hint="See quickscale_modules_orgs.tenancy.get_tenant_models()",
                 id="quickscale_orgs.W002",
             )
@@ -195,18 +197,21 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Stray tenant-manager system check
+# Stray tenant-manager check
 # ---------------------------------------------------------------------------
+# This check is run eagerly from ``ready()`` through the shared
+# ``register_module_checks`` helper (Module Conventions rule 10), so every
+# process refuses to start — including a WSGI server, which never runs Django
+# system checks. The helper registers it as a system check too.
 
 
-@register("quickscale_orgs")
 def check_tenant_manager_inheritance(app_configs: object, **kwargs: object) -> list:
     """Error when a model carries a ``TenantManager`` without ``TenantModel``.
 
     Inheritance is the only tenant marker: runtime classification and
     FORCE-RLS refresh answer by inheritance alone, so the manager-only form
     would leave a model half-enrolled. A stray manager therefore fails
-    ``manage.py check``, ``migrate``, and startup instead of being ignored.
+    startup in every process instead of being ignored.
 
     Returns:
         A list of ``Error`` instances, one per model with a stray manager.

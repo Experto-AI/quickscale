@@ -39,6 +39,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
 from pytest import MonkeyPatch
 
 from quickscale_modules_orgs.checks import check_tenant_isolation
@@ -566,11 +567,47 @@ class TestCheckTenantManagerInheritance:
         ):
             assert check_tenant_manager_inheritance(app_configs=None) == []
 
+    def test_stray_manager_fails_eager_startup(self) -> None:
+        """The shared checks helper turns E003 into a startup refusal."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        from quickscale_core.runtime import register_module_checks
+
+        from quickscale_modules_orgs.checks import check_tenant_manager_inheritance
+        from quickscale_modules_orgs.managers import TenantManager
+
+        class StrayControl:
+            _meta = SimpleNamespace(
+                abstract=False,
+                proxy=False,
+                app_label="stray_control",
+                managers=[TenantManager()],
+            )
+
+        app_config = SimpleNamespace(label="stray_control")
+        with patch(
+            "quickscale_modules_orgs.checks.apps.get_models",
+            return_value=[StrayControl],
+        ):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                register_module_checks(app_config, [check_tenant_manager_inheritance])
+
+        message = str(excinfo.value)
+        assert "StrayControl" in message
+        assert "quickscale_orgs.E003" in message
+
     def test_installed_models_pass_the_real_walk(self) -> None:
         """Every shipped tenant model inherits ``TenantModel``."""
+        from django.core.checks import registry as check_registry
+
         from quickscale_modules_orgs.checks import check_tenant_manager_inheritance
 
         assert check_tenant_manager_inheritance(app_configs=None) == []
+        # The eager run registered the same callable for ``manage.py check``.
+        assert (
+            check_tenant_manager_inheritance
+            in check_registry.registry.registered_checks
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -313,3 +313,12 @@ class QuickscaleOrgsConfig(AppConfig):
         # (SA208) system checks.  The @register decorator runs at import time,
         # so importing the module is sufficient to register them.
         import quickscale_modules_orgs.checks  # noqa: F401
+        from quickscale_core.runtime import register_module_checks
+
+        from quickscale_modules_orgs.checks import check_tenant_manager_inheritance
+
+        # The stray-manager check runs eagerly through the shared helper so
+        # every process refuses to start — including a WSGI server, which
+        # never runs Django system checks — and the same call registers it
+        # for ``manage.py check`` (Module Conventions rule 10).
+        register_module_checks(self, [check_tenant_manager_inheritance])
