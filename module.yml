@@ -9,30 +9,37 @@ config:
       default: true
       django_setting: QUICKSCALE_BILLING_ENABLED
       description: "Enable the billing runtime and Stripe-backed services."
+      validation: {}
 
     publishable_key_env_var:
       type: string
       default: "STRIPE_PUBLISHABLE_KEY"
       django_setting: QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR
       description: "Environment-variable name containing the Stripe publishable key used by billing checkout flows."
+      validation: {}
 
     secret_key_env_var:
       type: string
       default: "STRIPE_SECRET_KEY"
       django_setting: QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR
       description: "Environment-variable name containing the Stripe secret key for server-side API calls."
+      validation: {}
 
     webhook_secret_env_var:
       type: string
       default: "QUICKSCALE_BILLING_WEBHOOK_SECRET"
       django_setting: QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR
       description: "Environment-variable name containing the Stripe webhook signing secret."
+      validation: {}
 
     billing_currency:
       type: string
       default: "usd"
       django_setting: QUICKSCALE_BILLING_CURRENCY
       description: "ISO 4217 billing currency code used for plan metadata and Checkout validation."
+      validation: {}
+
+  immutable: {}
 
 required_modules:
   - orgs>=0.86.0
@@ -69,49 +76,3 @@ derivation:
           - - ""
             - quickscale_modules_billing.urls
       description: "Billing URL includes"
-
-  option_derivations:
-    enabled:
-      derived_settings:
-        - setting_key: QUICKSCALE_BILLING_ENABLED
-          source_options: [enabled]
-          derivation_type: direct
-          expression:
-            option: enabled
-          description: "Whether billing is enabled"
-
-    publishable_key_env_var:
-      derived_settings:
-        - setting_key: QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR
-          source_options: [publishable_key_env_var]
-          derivation_type: direct
-          expression:
-            option: publishable_key_env_var
-          description: "Env-var name for Stripe publishable key"
-
-    secret_key_env_var:
-      derived_settings:
-        - setting_key: QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR
-          source_options: [secret_key_env_var]
-          derivation_type: direct
-          expression:
-            option: secret_key_env_var
-          description: "Env-var name for Stripe secret key"
-
-    webhook_secret_env_var:
-      derived_settings:
-        - setting_key: QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR
-          source_options: [webhook_secret_env_var]
-          derivation_type: direct
-          expression:
-            option: webhook_secret_env_var
-          description: "Env-var name for Stripe webhook secret"
-
-    billing_currency:
-      derived_settings:
-        - setting_key: QUICKSCALE_BILLING_CURRENCY
-          source_options: [billing_currency]
-          derivation_type: direct
-          expression:
-            option: billing_currency
-          description: "ISO 4217 billing currency code"
