@@ -3,17 +3,20 @@ SA1.4 — Default-deny classification system check.
 SA208 — Provider-ID removal-conformance system check.
 SA213 — Removal-obligation discharge system check.
 
-Registers four system checks with the ``quickscale_orgs`` app:
+Registers five system checks with the ``quickscale_orgs`` app:
 
 1. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
    ``organization_id`` or the exact FORCE-RLS policy contract.
 2. ``check_model_classification`` (SA1.4) — warns when a concrete project
    model has no marker-derived tenant classification.
-3. ``check_provider_id_conformance`` (SA208) — errors when a tenant model's
+3. ``check_tenant_manager_inheritance`` — errors when a model carries a
+   ``TenantManager`` without inheriting ``TenantModel``, because inheritance
+   is the only tenant marker.
+4. ``check_provider_id_conformance`` (SA208) — errors when a tenant model's
    non-relational ``*_id`` field is neither covered by a declared
    refuse-or-reconcile obligation nor classified by the model's own
    ``provider_id_classification`` declaration.
-4. ``check_removal_obligation_discharge`` (SA213) — errors when a declared
+5. ``check_removal_obligation_discharge`` (SA213) — errors when a declared
    obligation demands an action its removal boundary has no shared-coordinator
    route for, because only a boundary that bypasses the coordinator could
    discharge it.
@@ -103,8 +106,8 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
                     f"Tenant model {result['app_label']}.{result['model_name']} "
                     f"is missing an 'organization_id' field.",
                     hint=(
-                        "Add organization = tenant_org_fk() or inherit "
-                        "TenantModel to the model."
+                        "Inherit TenantModel, directly or through a module's "
+                        "abstract base, so the model carries the tenant contract."
                     ),
                     id="quickscale_orgs.W003",
                 )
@@ -161,9 +164,9 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
 
     for model in unclassified:
         hint_parts: list[str] = [
-            "Declare the tenant contract with objects = TenantManager() and "
-            "all_objects = TenantManager(super_scope=True), or inherit "
-            "TenantModel.",
+            "Inherit TenantModel, directly or through a module's abstract "
+            "base (for example AbstractListing or BaseSocialItem), so the "
+            "model carries the tenant contract.",
         ]
         if not model._meta.auto_created:
             hint_parts.append(
@@ -188,6 +191,52 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
             )
         )
 
+    return messages
+
+
+# ---------------------------------------------------------------------------
+# Stray tenant-manager system check
+# ---------------------------------------------------------------------------
+
+
+@register("quickscale_orgs")
+def check_tenant_manager_inheritance(app_configs: object, **kwargs: object) -> list:
+    """Error when a model carries a ``TenantManager`` without ``TenantModel``.
+
+    Inheritance is the only tenant marker: runtime classification and
+    FORCE-RLS refresh answer by inheritance alone, so the manager-only form
+    would leave a model half-enrolled. A stray manager therefore fails
+    ``manage.py check``, ``migrate``, and startup instead of being ignored.
+
+    Returns:
+        A list of ``Error`` instances, one per model with a stray manager.
+    """
+    from quickscale_modules_orgs.managers import TenantManager
+    from quickscale_modules_orgs.models import TenantModel
+
+    messages: list = []
+    for model in apps.get_models():
+        if model._meta.abstract or model._meta.proxy:
+            continue
+        try:
+            inherits_tenant_model = issubclass(model, TenantModel)
+        except TypeError:
+            inherits_tenant_model = False
+        if inherits_tenant_model:
+            continue
+        if any(isinstance(manager, TenantManager) for manager in model._meta.managers):
+            messages.append(
+                Error(
+                    f"Model {model._meta.app_label}.{model.__name__} declares a "
+                    "TenantManager but does not inherit TenantModel.",
+                    hint=(
+                        "Inherit TenantModel directly or through a module's "
+                        "abstract base (for example AbstractListing or "
+                        "BaseSocialItem); the tenant contract lives on the base."
+                    ),
+                    id="quickscale_orgs.E003",
+                )
+            )
     return messages
 
 

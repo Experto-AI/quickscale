@@ -462,10 +462,11 @@ def tenant_org_fk(
 ) -> models.ForeignKey:
     """Return a NOT NULL, PROTECT-guarded ForeignKey to Organization.
 
-    This is the canonical owned-model contract for all tenant-scoped models.
-    Use this instead of a bare ForeignKey to Organization.  D3 enforces
-    ``on_delete=PROTECT`` — accidental cascade is not possible; teardown is
-    always explicit via ``quickscale_orgs_purge_organization`` (T1.17).
+    This implementation detail backs ``TenantModel.organization``; models
+    inherit the tenant contract from ``TenantModel`` rather than calling this
+    helper directly.  D3 enforces ``on_delete=PROTECT`` — accidental cascade
+    is not possible; teardown is always explicit via
+    ``quickscale_orgs_purge_organization`` (T1.17).
 
     Args:
         related_name: Standard Django related_name for the FK reverse
@@ -723,10 +724,10 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
     template changes (e.g. the SA14.5 ``operator_access`` OR clause) take
     effect on existing policies.
 
-    The function discovers tenant models from their marker-derived
-    ``TenantManager``/``TenantModel`` contract, resolves each physical table
-    from the installed model metadata, and reads that table's unique ``FOR
-    ALL`` policy name from PostgreSQL before issuing any DDL. The migration
+    The function discovers tenant models from their ``TenantModel``
+    inheritance, resolves each physical table from the installed model
+    metadata, and reads that table's unique ``FOR ALL`` policy name from
+    PostgreSQL before issuing any DDL. The migration
     that created the table owns that policy identity; refresh must not invent
     or normalize a name from the model or app label.
 
@@ -1449,7 +1450,7 @@ def is_classified_in_registry(model: type[models.Model]) -> bool:
 
     A model is considered classified when:
     * It declares the ``tenant_excluded`` class attribute marker, **or**
-    * It is a tenant model identified by ``TenantManager``/``TenantModel``,
+    * It is a tenant model identified by ``TenantModel`` inheritance,
       **or**
     * It is an auto-created implicit ManyToMany through model whose
       project-owned endpoints are marker-classified (SA15.1 — Option A).
@@ -1500,7 +1501,7 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
 # A model's status is determined as follows:
 #   1. ``tenant_excluded`` marker → ``EXCLUDED_REVIEWED``
 #   2. Auto-created implicit M2M through model → ``EXCLUDED_REVIEWED``
-#   3. ``TenantManager`` / ``TenantModel`` owner → ``ENROLLED``
+#   3. ``TenantModel`` subclass → ``ENROLLED``
 #   4. Otherwise → not included in the marker-driven overview.
 #
 # The derived overview uses ``_is_classified_by_marker_only`` — a marker-only
@@ -1599,8 +1600,8 @@ def get_derived_registry_overview() -> list[TenantTableEntry]:
 
     * :func:`has_tenant_excluded_marker` for explicit exclusion markers.
     * :func:`_is_implicit_m2m_through` for auto-created M2M through tables.
-    * :func:`is_tenant_model` for ENROLLED detection via ``TenantManager``
-      or ``TenantModel`` inheritance.
+    * :func:`is_tenant_model` for ENROLLED detection via ``TenantModel``
+      inheritance.
 
     This is the **derived** alternative to the shipped-module
     ``TENANT_TABLE_REGISTRY`` literal. A cross-check test asserts that the
@@ -1662,18 +1663,14 @@ def get_derived_registry_overview() -> list[TenantTableEntry]:
 # Tenant-model detection helpers (SA1.3)
 # ---------------------------------------------------------------------------
 # These helpers discover tenant-owned models across **all** installed app
-# labels by marker rather than by app-label prefix.  A model is considered
-# a tenant model if either:
-#
-#   1. Its default ``objects`` manager is an instance of ``TenantManager``, or
-#   2. It is a subclass of ``TenantModel`` (directly or through MRO).
-#
-# This dual-detection approach works regardless of whether a module has
-# already been migrated to inherit ``TenantModel`` (SA1.1/SA1.2) or still
-# uses the hand-rolled ``objects = TenantManager()`` pattern.
+# labels by marker rather than by app-label prefix.  A model is a tenant
+# model when it is a subclass of ``TenantModel`` (directly, through a
+# module's abstract base, or through MRO).  The manager-only form is not a
+# tenant marker: a ``TenantManager`` on a model that does not inherit
+# ``TenantModel`` fails startup through the system check in ``checks.py``.
 #
 # These helpers are imported by ``check_tenant_isolation`` management command
-# (SA1.3), the Django system check in ``checks.py`` (SA1.3), and the
+# (SA1.3), the Django system checks in ``checks.py`` (SA1.3), and the
 # conformance gate tests.  They intentionally do **not** depend on
 # ``TENANT_TABLE_REGISTRY``, which covers only the ``quickscale_modules_*``
 # prefix; SA1.3 detection is app-label-agnostic.
@@ -1683,13 +1680,12 @@ def get_derived_registry_overview() -> list[TenantTableEntry]:
 def is_tenant_model(model: type[models.Model]) -> bool:
     """Return ``True`` if *model* is a tenant-scoped model.
 
-    A model is considered tenant-scoped when:
-
-    * Its default ``objects`` manager is a ``TenantManager`` instance, **or**
-    * It inherits from ``TenantModel``.
+    A model is tenant-scoped when it inherits from ``TenantModel``, directly
+    or through a module's abstract base (``AbstractListing``,
+    ``BaseSocialItem``).
 
     A model that carries a truthy ``tenant_excluded`` marker is never
-    considered tenant-scoped, regardless of manager or class hierarchy.
+    considered tenant-scoped, regardless of class hierarchy.
 
     Args:
         model: A Django ``Model`` subclass.
@@ -1701,26 +1697,15 @@ def is_tenant_model(model: type[models.Model]) -> bool:
     if has_tenant_excluded_marker(model):
         return False
 
-    from quickscale_modules_orgs.managers import TenantManager
-
-    # Check by manager marker first (works before TenantModel adoption).
-    objects = getattr(model, "objects", None)
-    if isinstance(objects, TenantManager):
-        return True
-
-    # Check by class hierarchy (works after TenantModel adoption).
     from quickscale_modules_orgs.models import TenantModel
 
     try:
-        if issubclass(model, TenantModel):
-            return True
+        return issubclass(model, TenantModel)
     except TypeError:
         # Callers that inspect a model-like object (for example, system-check
         # diagnostics and their unit tests) may not provide a Django model
         # class. Such an object cannot satisfy the class-hierarchy marker.
         return False
-
-    return False
 
 
 def get_tenant_models() -> list[type[models.Model]]:
