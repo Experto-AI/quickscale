@@ -337,7 +337,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="created_forms",
+                        related_name="quickscale_forms_created_forms",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),
@@ -345,7 +345,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="forms",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -423,7 +423,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="form_fields",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -478,7 +478,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="form_submissions",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -529,12 +529,13 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="form_field_values",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
             ],
             options={
+                "ordering": ["submission_id", "pk"],
                 "base_manager_name": "all_objects",
             },
             managers=[

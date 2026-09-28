@@ -3,8 +3,7 @@
 from django.conf import settings
 from django.db import models
 
-from quickscale_modules_orgs.managers import TenantManager
-from quickscale_modules_orgs.tenancy import tenant_org_fk
+from quickscale_modules_orgs.models import TenantModel
 
 DEFAULT_FORM_DATA_RETENTION_DAYS = 365
 HONEYPOT_FIELD_NAME = "_hp_name"
@@ -39,10 +38,9 @@ def is_form_spam_protection_enabled(form: "Form") -> bool:
     )
 
 
-class Form(models.Model):
+class Form(TenantModel):
     """Top-level form definition — defines structure, metadata, and notification settings"""
 
-    organization = tenant_org_fk(related_name="forms")
     title = models.CharField(max_length=200)
     slug = models.SlugField()
     description = models.TextField(blank=True)
@@ -64,19 +62,14 @@ class Form(models.Model):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="created_forms",
+        related_name="quickscale_forms_created_forms",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # T1.7: shared tenant contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_forms"
         ordering = ["title"]
-        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],
@@ -92,48 +85,29 @@ class Form(models.Model):
         return self.title
 
 
-class FormField(models.Model):
+class FormField(TenantModel):
     """An individual field belonging to a form"""
 
-    FIELD_TYPE_TEXT = "text"
-    FIELD_TYPE_EMAIL = "email"
-    FIELD_TYPE_TEXTAREA = "textarea"
-    FIELD_TYPE_SELECT = "select"
-    FIELD_TYPE_CHECKBOX = "checkbox"
-    FIELD_TYPE_RADIO = "radio"
-    FIELD_TYPE_NUMBER = "number"
-    FIELD_TYPE_URL = "url"
-    FIELD_TYPE_TEL = "tel"
-    FIELD_TYPE_DATE = "date"
-    FIELD_TYPE_HIDDEN = "hidden"
+    class FieldType(models.TextChoices):
+        TEXT = "text", "Text"
+        EMAIL = "email", "Email"
+        TEXTAREA = "textarea", "Textarea"
+        SELECT = "select", "Select"
+        CHECKBOX = "checkbox", "Checkbox"
+        RADIO = "radio", "Radio"
+        NUMBER = "number", "Number"
+        URL = "url", "URL"
+        TEL = "tel", "Telephone"
+        DATE = "date", "Date"
+        HIDDEN = "hidden", "Hidden"
 
-    FIELD_TYPE_CHOICES = [
-        (FIELD_TYPE_TEXT, "Text"),
-        (FIELD_TYPE_EMAIL, "Email"),
-        (FIELD_TYPE_TEXTAREA, "Textarea"),
-        (FIELD_TYPE_SELECT, "Select"),
-        (FIELD_TYPE_CHECKBOX, "Checkbox"),
-        (FIELD_TYPE_RADIO, "Radio"),
-        (FIELD_TYPE_NUMBER, "Number"),
-        (FIELD_TYPE_URL, "URL"),
-        (FIELD_TYPE_TEL, "Telephone"),
-        (FIELD_TYPE_DATE, "Date"),
-        (FIELD_TYPE_HIDDEN, "Hidden"),
-    ]
+    class LayoutHint(models.TextChoices):
+        FULL = "full", "Full width"
+        HALF_LEFT = "half_left", "Half width (left)"
+        HALF_RIGHT = "half_right", "Half width (right)"
 
-    LAYOUT_FULL = "full"
-    LAYOUT_HALF_LEFT = "half_left"
-    LAYOUT_HALF_RIGHT = "half_right"
-
-    LAYOUT_HINT_CHOICES = [
-        (LAYOUT_FULL, "Full width"),
-        (LAYOUT_HALF_LEFT, "Half width (left)"),
-        (LAYOUT_HALF_RIGHT, "Half width (right)"),
-    ]
-
-    organization = tenant_org_fk(related_name="form_fields")
     form = models.ForeignKey(Form, related_name="fields", on_delete=models.CASCADE)
-    field_type = models.CharField(max_length=20, choices=FIELD_TYPE_CHOICES)
+    field_type = models.CharField(max_length=20, choices=FieldType.choices)
     label = models.CharField(max_length=200)
     name = models.SlugField(max_length=100)
     placeholder = models.CharField(max_length=200, blank=True)
@@ -145,18 +119,13 @@ class FormField(models.Model):
     # Validation rules e.g. {"min_length": 10, "max_length": 500, "regex": "^[a-z]+$"}
     validation_rules = models.JSONField(default=dict, blank=True)
     layout_hint = models.CharField(
-        max_length=20, choices=LAYOUT_HINT_CHOICES, default=LAYOUT_FULL
+        max_length=20, choices=LayoutHint.choices, default=LayoutHint.FULL
     )
     is_active = models.BooleanField(default=True)
 
-    # T1.7: shared tenant contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_forms"
         ordering = ["order"]
-        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=("form", "name"),
@@ -172,22 +141,15 @@ class FormField(models.Model):
         return f"{self.form.title} — {self.label}"
 
 
-class FormSubmission(models.Model):
+class FormSubmission(TenantModel):
     """A single form fill event"""
 
-    STATUS_PENDING = "pending"
-    STATUS_READ = "read"
-    STATUS_REPLIED = "replied"
-    STATUS_ARCHIVED = "archived"
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        READ = "read", "Read"
+        REPLIED = "replied", "Replied"
+        ARCHIVED = "archived", "Archived"
 
-    STATUS_CHOICES = [
-        (STATUS_PENDING, "Pending"),
-        (STATUS_READ, "Read"),
-        (STATUS_REPLIED, "Replied"),
-        (STATUS_ARCHIVED, "Archived"),
-    ]
-
-    organization = tenant_org_fk(related_name="form_submissions")
     form = models.ForeignKey(Form, related_name="submissions", on_delete=models.PROTECT)
     # Anonymized to null when data_retention_days expires
     ip_address = models.GenericIPAddressField(null=True, blank=True)
@@ -195,17 +157,12 @@ class FormSubmission(models.Model):
     submitted_at = models.DateTimeField(auto_now_add=True)
     is_spam = models.BooleanField(default=False)
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
+        max_length=20, choices=Status.choices, default=Status.PENDING
     )
 
-    # T1.7: shared tenant contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_forms"
         ordering = ["-submitted_at"]
-        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["id", "organization"],
@@ -217,10 +174,9 @@ class FormSubmission(models.Model):
         return f"Submission #{self.pk} for {self.form.title} ({self.status})"
 
 
-class FormFieldValue(models.Model):
+class FormFieldValue(TenantModel):
     """The value for a single field in a submission — preserves historical snapshots"""
 
-    organization = tenant_org_fk(related_name="form_field_values")
     submission = models.ForeignKey(
         FormSubmission, related_name="values", on_delete=models.CASCADE
     )
@@ -238,13 +194,9 @@ class FormFieldValue(models.Model):
     field_label = models.CharField(max_length=200)
     value = models.TextField()
 
-    # T1.7: shared tenant contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_forms"
-        base_manager_name = "all_objects"
+        ordering = ["submission_id", "pk"]
 
     def __str__(self) -> str:
         return f"{self.field_label}: {self.value[:50]}"
