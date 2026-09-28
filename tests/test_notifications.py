@@ -130,7 +130,7 @@ class TestNotifySubmission:
             field = FormField.all_objects.create(
                 form=form,
                 organization=form.organization,
-                field_type=FormField.FIELD_TYPE_TEXTAREA,
+                field_type=FormField.FieldType.TEXTAREA,
                 label="Message",
                 name="message",
                 order=10,
@@ -192,7 +192,7 @@ class TestNotifySubmissionOrgScope:
             field = FormField.all_objects.create(
                 form=form,
                 organization=org,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Message",
                 name="message",
                 order=1,
@@ -249,7 +249,7 @@ class TestNotifySubmissionOrgScope:
             field = FormField.all_objects.create(
                 form=form,
                 organization=org,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Full Name",
                 name="full_name",
                 order=1,
@@ -325,7 +325,7 @@ class TestNotifySubmissionNoContext:
             field = FormField.all_objects.create(
                 form=form,
                 organization=org,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Full Name",
                 name="full_name",
                 required=True,
@@ -416,7 +416,7 @@ class TestNotifySubmissionTransactionTrue:
             field = FormField.all_objects.create(
                 form=form,
                 organization=org,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Full Name",
                 name="full_name",
                 required=True,
@@ -519,7 +519,7 @@ class TestNotifySubmissionFormFkInScope:
             field = FormField.all_objects.create(
                 form=form,
                 organization=org,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Full Name",
                 name="full_name",
                 required=True,

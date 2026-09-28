@@ -163,7 +163,7 @@ class TestFormSubmissionAdminActions:
             sub_admin_instance.mark_as_read(request, queryset)
         with org_scope(submission.organization):
             submission.refresh_from_db()
-        assert submission.status == FormSubmission.STATUS_READ
+        assert submission.status == FormSubmission.Status.READ
 
 
 @pytest.mark.django_db
@@ -381,7 +381,7 @@ class TestAdminSubmissionExportViewAllObjects:
             field_a = FormField.all_objects.create(
                 form=form_a,
                 organization=org_a,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Department",
                 name="department",
                 order=1,
@@ -409,7 +409,7 @@ class TestAdminSubmissionExportViewAllObjects:
             field_b = FormField.all_objects.create(
                 form=form_b,
                 organization=org_b,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Department",
                 name="department",
                 order=1,
@@ -671,7 +671,7 @@ class TestAdminSubmissionExportViewAllObjects:
             _phone_field = FormField.all_objects.create(
                 form=form,
                 organization=form.organization,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Phone",
                 name="phone",
                 required=False,

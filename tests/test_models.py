@@ -251,7 +251,7 @@ class TestFormSubmissionModel:
             submission = FormSubmission.all_objects.create(
                 form=form, organization=form.organization
             )
-        assert submission.status == FormSubmission.STATUS_PENDING
+        assert submission.status == FormSubmission.Status.PENDING
 
     def test_formsubmission_is_spam_defaults_to_false(self, form):
         """is_spam defaults to False"""
