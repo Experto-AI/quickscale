@@ -141,14 +141,14 @@ def check_quickscale_mode(
                 "quickscale_orgs is installed. "
                 "Set it to 'solo' for single-tenant or 'saas' for "
                 "multi-tenant mode.",
-                id="quickscale_orgs.E003",
+                id="quickscale_orgs.E005",
             )
         ]
     if mode not in ("solo", "saas"):
         return [
             Error(
                 f"QUICKSCALE_MODE must be 'solo' or 'saas', got {mode!r}.",
-                id="quickscale_orgs.E003",
+                id="quickscale_orgs.E005",
             )
         ]
     return []
