@@ -1,5 +1,6 @@
 """Tests for Forms module management commands"""
 
+from io import StringIO
 from unittest.mock import patch
 
 import pytest
@@ -264,6 +265,38 @@ class TestFormsAnonymizeSubmissions:
             sub.refresh_from_db()
         assert sub.ip_address is None
         assert sub.user_agent == ""
+
+    def test_anonymize_dry_run_reports_without_writing(self, form):
+        """--dry-run reports the submissions it would anonymize and changes none."""
+        from datetime import timedelta
+
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            sub = FormSubmission.objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="10.0.0.9",
+                user_agent="DryRun/1.0",
+            )
+            cutoff = timezone.now() - timedelta(days=form.data_retention_days + 1)
+            FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
+
+        stdout = StringIO()
+        call_command(
+            "quickscale_forms_anonymize_submissions",
+            "--dry-run",
+            stdout=stdout,
+            stderr=StringIO(),
+            verbosity=0,
+        )
+        with org_scope(form.organization):
+            sub.refresh_from_db()
+
+        assert sub.ip_address == "10.0.0.9"
+        assert sub.user_agent == "DryRun/1.0"
+        assert "Would anonymize 1 submissions" in stdout.getvalue()
+        assert "would be anonymized: 1" in stdout.getvalue()
 
     def test_anonymize_skips_forms_with_zero_retention_days(self):
         """Forms with data_retention_days=0 (keep forever) are skipped"""
