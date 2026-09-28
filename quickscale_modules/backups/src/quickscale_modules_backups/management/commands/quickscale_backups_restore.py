@@ -1,8 +1,8 @@
 """
 Validate or execute a guarded backup restore.
 
-SA20: When an artifact carries STATUS_RESTORING, the command persists
-restore_started_at on entry and transitions to STATUS_FAILED + restore_error
+SA20: When an artifact carries Status.RESTORING, the command persists
+restore_started_at on entry and transitions to Status.FAILED + restore_error
 on failure. Admin-triggered background restores are observable through
 the artifact's status and error fields.
 
@@ -11,12 +11,12 @@ CR-SA20-006: The ``--local-only`` flag forces
 back to remote materialization even when the local file disappears
 after enqueue.
 
-CR-SA20-007: The admin parent now persists STATUS_RESTORING before
+CR-SA20-007: The admin parent now persists Status.RESTORING before
 Popen (not after), so a fast child terminal update is never missed or
 overwritten.  The failure handler here catches all ``Exception``
 subclasses (not just ``BackupError``) so that fast failures and
-non-BackupError crashes record ``STATUS_FAILED`` instead of
-stranding ``STATUS_RESTORING``.  The handler refreshes DB state
+non-BackupError crashes record ``Status.FAILED`` instead of
+stranding ``Status.RESTORING``.  The handler refreshes DB state
 unconditionally before writing to handle concurrent state changes.
 """
 
@@ -100,13 +100,13 @@ class Command(BaseCommand):
                 "Choose exactly one restore source: an artifact id, --snapshot-id, or --file PATH."
             )
 
-        # SA20: If this artifact was marked STATUS_RESTORING by the admin
+        # SA20: If this artifact was marked Status.RESTORING by the admin
         # dispatch, track the lifecycle.
         artifact = None
         if artifact_id is not None:
             try:
                 artifact = BackupArtifact.objects.get(pk=artifact_id)
-                if artifact.status == BackupArtifact.STATUS_RESTORING:
+                if artifact.status == BackupArtifact.Status.RESTORING:
                     if artifact.restore_started_at is None:
                         artifact.restore_started_at = django_timezone.now()
                         artifact.save(
@@ -130,7 +130,7 @@ class Command(BaseCommand):
                 resolution_mode=resolution_mode,
             )
         except Exception as exc:
-            # SA20 / CR-SA20-007: Record failure for STATUS_RESTORING
+            # SA20 / CR-SA20-007: Record failure for Status.RESTORING
             # artifacts on any exception (BackupError, fast failures,
             # generic crashes) so the status is never stranded.
             # Refresh DB state unconditionally before writing to handle
@@ -138,8 +138,8 @@ class Command(BaseCommand):
             if artifact is not None:
                 try:
                     artifact.refresh_from_db()
-                    if artifact.status == BackupArtifact.STATUS_RESTORING:
-                        artifact.status = BackupArtifact.STATUS_FAILED
+                    if artifact.status == BackupArtifact.Status.RESTORING:
+                        artifact.status = BackupArtifact.Status.FAILED
                         artifact.restore_error = str(exc)
                         artifact.save(
                             update_fields=[

@@ -36,7 +36,7 @@ def test_model_string_representations(notification_settings_row) -> None:
         idempotency_key="abc123",
         event_type="delivered",
         provider_message_id="provider-1",
-        status_after=NotificationDelivery.STATUS_DELIVERED,
+        status_after=NotificationDelivery.Status.DELIVERED,
         payload_json={},
     )
 

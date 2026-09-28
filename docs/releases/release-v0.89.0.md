@@ -40,10 +40,11 @@ pipeline, and the template-inheritance rule — is documented in `docs/technical
 
 ## Adoption
 
-A project-owned model declares the tenant-manager contract and calls `apply_force_rls()` from its
-initial migration to install the exact pair required by isolation checks: one tenant-only `FOR ALL`
-policy and its `<base>_select` operator-read `FOR SELECT` policy. A project-owned `AbstractListing`
-subclass declares both the tenant-scoped and super-scope managers before running those checks.
+A project-owned model inherits `TenantModel` (directly or through a module's abstract base) and
+calls `apply_force_rls()` from its initial migration to install the exact pair required by
+isolation checks: one tenant-only `FOR ALL` policy and its `<base>_select` operator-read
+`FOR SELECT` policy. A `TenantManager` on a model that does not inherit `TenantModel` fails
+startup.
 
 Existing projects must manually adopt the current generated `templates/base.html`,
 `templates/index.html`, generated
@@ -66,8 +67,11 @@ override left on the wrong block can parse without error and render no page cont
 ## Compatibility
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps
-existing organization ownership and FORCE RLS requirements in place without changing package APIs
-or upgrade requirements. Organization purge adds a fail-closed precondition but no new command-line
+existing organization ownership and FORCE RLS requirements in place, but this release does rename
+model-facing names: every organization-scoped model now inherits `TenantModel` (a `TenantManager` on
+a model that does not inherit it fails startup), cross-module reverse accessors take the
+`quickscale_<module>_<name>` form, and model choice constants become `TextChoices` members. A
+project that reads an old reverse accessor or choice constant updates to the new name. Organization purge adds a fail-closed precondition but no new command-line
 option; cancelled subscriptions remain purgeable, while any current row without a Stripe
 subscription ID blocks purge and dry run until reconciled. An incomplete subscription or one-time
 purchase Checkout reservation must reach provider-confirmed expiry first. Reconciliation runs

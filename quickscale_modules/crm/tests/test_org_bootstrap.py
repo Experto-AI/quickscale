@@ -49,7 +49,7 @@ def test_solo_personal_org_has_stages_at_creation(client, staff_user) -> None:
     client.force_login(staff_user)
 
     organization = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
     # Stages are seeded at org creation — they exist before any CRM access.
     assert Stage.all_objects.filter(organization=organization).count() == 4

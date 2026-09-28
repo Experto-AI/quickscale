@@ -44,7 +44,7 @@ from quickscale_modules_social.admin import (
     _persist_org_to_session,
     _resolve_active_org_id,
 )
-from quickscale_modules_social.contracts import SOCIAL_EMBED_RESOLUTION_RESOLVED
+from quickscale_modules_social.contracts import SocialEmbedResolution
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
 # ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ class TestSocialAdminAddViews:
         finally:
             set_current_org_id(None)
 
-        assert embed.resolution_status == SOCIAL_EMBED_RESOLUTION_RESOLVED
+        assert embed.resolution_status == SocialEmbedResolution.RESOLVED
         assert embed.resolved_embed_url == "https://www.youtube.com/embed/abc123?rel=0"
         assert embed.last_resolution_attempt_at is not None
 

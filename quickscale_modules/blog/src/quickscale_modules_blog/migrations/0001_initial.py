@@ -95,7 +95,7 @@ class Migration(migrations.Migration):
                     "user",
                     models.OneToOneField(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="author_profile",
+                        related_name="quickscale_blog_author_profile",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),
@@ -151,7 +151,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="uploaded_blog_media_assets",
+                        related_name="quickscale_blog_media_assets",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),
@@ -159,7 +159,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="blog_media_assets",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -189,7 +189,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="blog_categories",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -222,7 +222,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="blog_tags",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -295,7 +295,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="blog_posts",
+                        related_name="quickscale_blog_posts",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),
@@ -321,7 +321,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="blog_posts",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),

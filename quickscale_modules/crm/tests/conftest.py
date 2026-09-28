@@ -68,7 +68,7 @@ def staff_user(db):
     Organization.objects.create_personal_for(staff_user)
     # Set contextvar to personal org for TenantManager auto-scoping.
     personal_org = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
     set_current_org_id(personal_org.id)
     return staff_user
@@ -77,7 +77,9 @@ def staff_user(db):
 @pytest.fixture
 def staff_personal_org(staff_user):
     """Return the personal org for the staff user."""
-    return Organization.objects.get(is_personal=True, memberships__user=staff_user)
+    return Organization.objects.get(
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
+    )
 
 
 @pytest.fixture
@@ -119,7 +121,7 @@ def authenticated_client(staff_user):
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
     personal_org_id = personal_org.id
 
@@ -168,7 +170,7 @@ def tag(db, staff_user):
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
     with org_scope(personal_org):
         return Tag.objects.create(name="VIP", organization=personal_org)
@@ -185,7 +187,7 @@ def company(db, staff_user):
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
     with org_scope(personal_org):
         return Company.objects.create(
@@ -228,7 +230,7 @@ def stage(db, staff_user):
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
     with org_scope(personal_org):
         return Stage.objects.create(
@@ -246,7 +248,7 @@ def closed_won_stage(db, staff_user):
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
     with org_scope(personal_org):
         return Stage.objects.create(
@@ -264,7 +266,7 @@ def closed_lost_stage(db, staff_user):
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
+        is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
     with org_scope(personal_org):
         return Stage.objects.create(

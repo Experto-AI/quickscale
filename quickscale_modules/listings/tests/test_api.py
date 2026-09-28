@@ -283,7 +283,7 @@ class TestPublishListingApi:
 
         # Get the personal org from the staff user so both listings share it.
         personal_org = Organization.objects.get(
-            memberships__user=staff_user, is_personal=True
+            quickscale_orgs_memberships__user=staff_user, is_personal=True
         )
         with org_scope(personal_org):
             Listing.objects.create(

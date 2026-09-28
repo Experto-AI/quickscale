@@ -30,12 +30,11 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
 | SA225 | Move startup checks and exceptions onto the shared helpers | post-v88 | 3 | — | Deferred |
 | SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA219 | Deferred |
-| SA222 | Put every tenant model on `TenantModel` and align model basics | post-v88 | 1 | — | Deferred |
 | SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 2 | — | Deferred |
 | SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | — | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
 | SA227 | Standardize package files, commands, tooling, tests, and READMEs | post-v88 | 1 | — | Deferred |
-| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA222, SA223, SA224, SA225, SA226, SA227 | Deferred |
+| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA224, SA225, SA226, SA227 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -72,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA222 | yes | yes | yes | **yes** | no |
+| 1 | SA227 | yes | yes | yes | **yes** | no |
 | 2 | SA217 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA225 | yes | yes | yes | **yes** | **yes** |
 
@@ -263,24 +262,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** auth, orgs, billing, blog, storage, backups, every `services.py`;
   `quickscale_core/dr_engine/` (Track 2); `auth/views.py`.
 
-- [ ] **SA222 — Put every tenant model on `TenantModel` and align model basics.**
-
-  **Context:** inventory §§ 15, 16, 35; D16, D17, D36; rules 13, 14, and 33. Three ways to build a tenant model.
-
-  **Scope:** billing, forms, listings (`AbstractListing`), and social (`BaseSocialItem`) models
-  subclass `TenantModel` instead of `tenant_org_fk` plus hand-declared managers, every tenant
-  `Meta` inherits the base's, and `organization` keeps the base's reverse name (`CreditBalance`
-  alone overrides it, as a one-to-one); `is_tenant_model` recognizes inheritance only and an orgs
-  check fails startup on a stray `TenantManager`; relations to other modules' models get
-  `quickscale_<module>_<name>` `related_name`s (crm's two `created_by` fields have none; backups,
-  billing, blog, crm, forms, and orgs rename the rest, with their callers); `FormFieldValue` gains an
-  ordering; the 15 literal tuple choice lists become `TextChoices`.
-
-  **Acceptance:** tenant classification and purge plans are unchanged for a fresh project; the
-  stray-manager check has a control; `check_tenant_isolation` passes.
-
-  **Surfaces:** model-bearing modules' models and `0001_initial`; `orgs` `tenancy`;
-  [organizations.md](organizations.md) (tenant models).
+- [x] **SA222 — Put every tenant model on `TenantModel` and align model basics.**
 
 - [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 

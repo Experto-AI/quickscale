@@ -48,7 +48,7 @@ def _get_admin_uploaded_restore_artifact_trust_issue(
     """Return why one checksum-matched artifact is not trusted for admin upload."""
     from quickscale_modules_backups.models import BackupArtifact, BackupSnapshot
 
-    if artifact.status == BackupArtifact.STATUS_DELETED:
+    if artifact.status == BackupArtifact.Status.DELETED:
         return "matching recorded artifact has been deleted"
     if artifact.is_export_only() or artifact.backup_format != "pg_dump_custom":
         return (
@@ -56,8 +56,8 @@ def _get_admin_uploaded_restore_artifact_trust_issue(
             "restore candidate"
         )
     if artifact.effective_restore_scope() not in {
-        BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
-        BackupArtifact.RESTORE_SCOPE_PORTABLE,
+        BackupArtifact.RestoreScope.LOCAL_ONLY,
+        BackupArtifact.RestoreScope.PORTABLE,
     }:
         return (
             "matching recorded artifact is not classified as an eligible "
@@ -72,7 +72,7 @@ def _get_admin_uploaded_restore_artifact_trust_issue(
     snapshot = _get_authoritative_snapshot_for_artifact(artifact)
     if snapshot is None:
         return "matching recorded artifact is not linked to an authoritative snapshot"
-    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+    if snapshot.status == BackupSnapshot.Status.DELETED:
         return "matching authoritative snapshot has been deleted or pruned"
 
     full_backup_contract = _build_snapshot_full_backup_contract(snapshot)
@@ -277,7 +277,7 @@ class _BackupArtifactPersistenceProvider:
 
         try:
             updated_rows = BackupArtifact.objects.filter(pk=artifact.pk).update(
-                status=BackupArtifact.STATUS_RESTORED,
+                status=BackupArtifact.Status.RESTORED,
                 restored_at=restored_at,
                 updated_at=restored_at,
             )
@@ -312,7 +312,7 @@ class _BackupArtifactPersistenceProvider:
                 ),
             )
 
-        artifact.status = BackupArtifact.STATUS_RESTORED
+        artifact.status = BackupArtifact.Status.RESTORED
         artifact.restored_at = restored_at
         return ()
 
@@ -386,7 +386,7 @@ class _BackupArtifactPersistenceProvider:
 
         yield from BackupSnapshot.objects.filter(
             created_at__lt=cutoff,
-        ).exclude(status=BackupSnapshot.STATUS_DELETED)
+        ).exclude(status=BackupSnapshot.Status.DELETED)
 
 
 # ---------------------------------------------------------------------------

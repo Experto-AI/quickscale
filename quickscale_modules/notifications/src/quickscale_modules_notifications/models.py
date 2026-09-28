@@ -50,16 +50,11 @@ class NotificationMessage(models.Model):
     #: send-request lifecycle across recipients, not tenant-scoped data.
     tenant_excluded = "System-wide notification send-request — not tenant-scoped."
 
-    STATUS_QUEUED = "queued"
-    STATUS_SENT = "sent"
-    STATUS_PARTIAL = "partial"
-    STATUS_FAILED = "failed"
-    STATUS_CHOICES = [
-        (STATUS_QUEUED, "Queued"),
-        (STATUS_SENT, "Sent"),
-        (STATUS_PARTIAL, "Partial failure"),
-        (STATUS_FAILED, "Failed"),
-    ]
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        SENT = "sent", "Sent"
+        PARTIAL = "partial", "Partial failure"
+        FAILED = "failed", "Failed"
 
     template_key = models.CharField(max_length=100)
     subject = models.CharField(max_length=255)
@@ -73,8 +68,8 @@ class NotificationMessage(models.Model):
     metadata_json = models.JSONField(default=dict, blank=True)
     status = models.CharField(
         max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_QUEUED,
+        choices=Status.choices,
+        default=Status.QUEUED,
     )
     last_error = models.TextField(blank=True)
     dispatched_at = models.DateTimeField(null=True, blank=True)
@@ -99,20 +94,13 @@ class NotificationDelivery(models.Model):
     #: operational data, not tenant-scoped application data.
     tenant_excluded = "Recipient delivery tracking — not tenant-scoped."
 
-    STATUS_QUEUED = "queued"
-    STATUS_SENT = "sent"
-    STATUS_DELIVERED = "delivered"
-    STATUS_FAILED = "failed"
-    STATUS_BOUNCED = "bounced"
-    STATUS_COMPLAINED = "complained"
-    STATUS_CHOICES = [
-        (STATUS_QUEUED, "Queued"),
-        (STATUS_SENT, "Sent"),
-        (STATUS_DELIVERED, "Delivered"),
-        (STATUS_FAILED, "Failed"),
-        (STATUS_BOUNCED, "Bounced"),
-        (STATUS_COMPLAINED, "Complained"),
-    ]
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        SENT = "sent", "Sent"
+        DELIVERED = "delivered", "Delivered"
+        FAILED = "failed", "Failed"
+        BOUNCED = "bounced", "Bounced"
+        COMPLAINED = "complained", "Complained"
 
     message = models.ForeignKey(
         NotificationMessage,
@@ -123,8 +111,8 @@ class NotificationDelivery(models.Model):
     provider_message_id = models.CharField(max_length=255, blank=True, db_index=True)
     status = models.CharField(
         max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_QUEUED,
+        choices=Status.choices,
+        default=Status.QUEUED,
     )
     last_event_type = models.CharField(max_length=64, blank=True)
     failure_reason = models.TextField(blank=True)

@@ -4,8 +4,7 @@ from django.conf import settings
 from django.db import models
 
 from quickscale_modules_listings.models import AbstractListing
-from quickscale_modules_orgs.managers import TenantManager
-from quickscale_modules_orgs.tenancy import tenant_org_fk
+from quickscale_modules_orgs.models import TenantModel
 
 
 class ProjectListing(AbstractListing):
@@ -19,12 +18,8 @@ class ProjectListing(AbstractListing):
         related_name="project_listings",
     )
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
     class Meta(AbstractListing.Meta):
         abstract = False
-        base_manager_name = "all_objects"
         verbose_name = "Project listing"
         verbose_name_plural = "Project listings"
         indexes = [
@@ -43,10 +38,9 @@ class ProjectListing(AbstractListing):
         ]
 
 
-class ProjectListingImage(models.Model):
+class ProjectListingImage(TenantModel):
     """Project-owned tenant child used to prove derived purge ordering."""
 
-    organization = tenant_org_fk(related_name="project_listing_images")
     listing = models.ForeignKey(
         ProjectListing,
         on_delete=models.PROTECT,
@@ -54,19 +48,14 @@ class ProjectListingImage(models.Model):
     )
     image_url = models.URLField()
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
-        base_manager_name = "all_objects"
+    class Meta(TenantModel.Meta):
         verbose_name = "Project listing image"
         verbose_name_plural = "Project listing images"
 
 
-class ProjectFolder(models.Model):
+class ProjectFolder(TenantModel):
     """Project-owned tenant tree used to prove self-PROTECT purge handling."""
 
-    organization = tenant_org_fk(related_name="project_folders")
     parent = models.ForeignKey(
         "self",
         blank=True,
@@ -76,10 +65,6 @@ class ProjectFolder(models.Model):
     )
     name = models.CharField(max_length=100)
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
-        base_manager_name = "all_objects"
+    class Meta(TenantModel.Meta):
         verbose_name = "Project folder"
         verbose_name_plural = "Project folders"

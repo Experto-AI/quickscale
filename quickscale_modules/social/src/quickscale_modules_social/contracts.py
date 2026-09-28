@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from django.conf import settings
+from django.db import models
 
 from quickscale_modules_social.exceptions import SocialConfigurationError
 
@@ -35,14 +36,15 @@ SOCIAL_PAYLOAD_HTTP_STATUS = {
     SOCIAL_STATUS_DISABLED: 200,
     SOCIAL_STATUS_ERROR: 503,
 }
-SOCIAL_EMBED_RESOLUTION_PENDING = "pending"
-SOCIAL_EMBED_RESOLUTION_RESOLVED = "resolved"
-SOCIAL_EMBED_RESOLUTION_ERROR = "error"
-SOCIAL_EMBED_RESOLUTION_CHOICES = (
-    (SOCIAL_EMBED_RESOLUTION_PENDING, "Pending"),
-    (SOCIAL_EMBED_RESOLUTION_RESOLVED, "Resolved"),
-    (SOCIAL_EMBED_RESOLUTION_ERROR, "Error"),
-)
+
+
+class SocialEmbedResolution(models.TextChoices):
+    """Resolution lifecycle of a curated social embed."""
+
+    PENDING = "pending", "Pending"
+    RESOLVED = "resolved", "Resolved"
+    ERROR = "error", "Error"
+
 
 _SCHEMELESS_URL_PATTERN = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}(?:[:/].*)?$"
@@ -560,10 +562,7 @@ __all__ = [
     "ResolvedSocialEmbedMetadata",
     "SOCIAL_EMBEDS_CACHE_KEY",
     "SOCIAL_EMBEDS_PATH",
-    "SOCIAL_EMBED_RESOLUTION_CHOICES",
-    "SOCIAL_EMBED_RESOLUTION_ERROR",
-    "SOCIAL_EMBED_RESOLUTION_PENDING",
-    "SOCIAL_EMBED_RESOLUTION_RESOLVED",
+    "SocialEmbedResolution",
     "SOCIAL_INTEGRATION_BASE_PATH",
     "SOCIAL_INTEGRATION_EMBEDS_PATH",
     "SOCIAL_LAYOUT_VARIANTS",

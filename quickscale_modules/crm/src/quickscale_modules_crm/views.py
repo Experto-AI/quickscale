@@ -67,9 +67,9 @@ def _get_bulk_deal_queryset(
     return Deal.all_objects.filter(organization_id=org.id, id__in=deal_ids)
 
 
-_TERMINAL_STAGE_DEFAULTS = {
-    Stage.TERMINAL_SEMANTIC_WON: ("Closed-Won", 3),
-    Stage.TERMINAL_SEMANTIC_LOST: ("Closed-Lost", 4),
+_TERMINAL_STAGE_DEFAULTS: dict[str, tuple[str, int]] = {
+    Stage.TerminalSemantic.WON: ("Closed-Won", 3),
+    Stage.TerminalSemantic.LOST: ("Closed-Lost", 4),
 }
 
 
@@ -452,7 +452,7 @@ class DealViewSet(OrgScopedReadMixin):
         deal_ids = serializer.validated_data["deal_ids"]
 
         org = _resolve_active_org(request)
-        won_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_WON, org.id)
+        won_stage = _resolve_terminal_stage(Stage.TerminalSemantic.WON, org.id)
         if won_stage is None:
             return Response({"updated": 0}, status=status.HTTP_200_OK)
 
@@ -475,7 +475,7 @@ class DealViewSet(OrgScopedReadMixin):
         deal_ids = serializer.validated_data["deal_ids"]
 
         org = _resolve_active_org(request)
-        lost_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_LOST, org.id)
+        lost_stage = _resolve_terminal_stage(Stage.TerminalSemantic.LOST, org.id)
         if lost_stage is None:
             return Response({"updated": 0}, status=status.HTTP_200_OK)
 
