@@ -10,8 +10,3 @@ class QuickscaleListingsConfig(AppConfig):
     name = "quickscale_modules_listings"
     label = "quickscale_listings"
     verbose_name = "QuickScale Listings"
-
-    def ready(self) -> None:
-        """Import signal handlers when app is ready"""
-        # No signals needed for listings module yet
-        pass
