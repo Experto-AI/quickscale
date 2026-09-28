@@ -3916,17 +3916,9 @@ class TestDockerfileContent:
         )
         assert 'SECRET_KEY="$(python -c' in collectstatic_line
         assert "token_urlsafe(50)" in collectstatic_line
-        for variable in (
-            "STRIPE_PUBLISHABLE_KEY",
-            "STRIPE_SECRET_KEY",
-            "QUICKSCALE_BILLING_WEBHOOK_SECRET",
-            "RESEND_API_KEY",
-            "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
-            "POSTHOG_API_KEY",
-        ):
-            assert f"{variable}=" in collectstatic_line, (
-                f"Dockerfile collectstatic must carry the build-time {variable} placeholder"
-            )
+        assert "QUICKSCALE_SKIP_MODULE_CHECKS=all" in collectstatic_line, (
+            "Dockerfile collectstatic must exempt the build from the eager module checks"
+        )
         assert "ENV SECRET_KEY" not in output
 
     def test_healthcheck(
@@ -4034,9 +4026,11 @@ class TestDockerComposeContent:
     def test_backend_forwards_vendor_credential_variables(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Compose forwards the default vendor credentials a module check needs."""
+        """Compose routes vendor credentials through .env and default names."""
         output = _render_template(jinja_env, "docker-compose.yml.j2", test_context)
 
+        assert "env_file:" in output
+        assert "- .env" in output
         for variable in (
             "STRIPE_PUBLISHABLE_KEY",
             "STRIPE_SECRET_KEY",

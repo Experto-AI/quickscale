@@ -97,7 +97,14 @@ def test_check_reports_empty_api_key_for_live_analytics(settings, monkeypatch) -
 
 @pytest.mark.parametrize(
     "malformed_host",
-    ["not-a-url", "https://:443", "ftp://example.com", "https://example.com:bad"],
+    [
+        "not-a-url",
+        "https://:443",
+        "ftp://example.com",
+        "https://example.com:bad",
+        "https://example.com:0",
+        "https://example.com:65536",
+    ],
 )
 def test_check_reports_malformed_posthog_host(
     settings, monkeypatch, malformed_host

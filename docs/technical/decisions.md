@@ -682,6 +682,11 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
   implements it and registers it from `ready()` through `quickscale_core.runtime`, and a second
   or missing registration fails hard. The allowed ports are listed here:
   `register_backup_persistence` (backups). Adding one needs a decision edit.
+- ✅ **Build-time check skip:** the generated image build may set the one-shot
+  `QUICKSCALE_SKIP_MODULE_CHECKS=all` (comma-separated labels, or `all`) so its credential-free
+  `collectstatic` step does not run the eager checks — a configured credential name cannot be known
+  statically at build. The callables stay registered, and the launcher never sets the variable, so
+  every serving process still runs and enforces the checks.
 - ❌ A hand-written `raise` or check in `ready()` outside the helper, or catching and logging a
   configuration failure (Fail-Hard Principle).
 

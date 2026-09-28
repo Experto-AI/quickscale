@@ -298,6 +298,59 @@ class TestRegisterModuleChecks:
         with pytest.raises(ValueError, match="instead of CheckMessage"):
             conventions.register_module_checks(app_config, [bad_check])
 
+    def test_skip_env_var_skips_the_eager_run_but_registers(
+        self, system_check_registry, monkeypatch
+    ) -> None:
+        """``all`` skips the eager refusal and still registers the checks."""
+        from django.core.checks import Error
+
+        app_config = _FakeAppConfig("quickscale_test_module")
+
+        def failing_check(app_configs: object = None, **kwargs: object) -> list:
+            return [Error("boom", id="quickscale_test_module.E001")]
+
+        monkeypatch.setenv("QUICKSCALE_SKIP_MODULE_CHECKS", "all")
+
+        conventions.register_module_checks(app_config, [failing_check])
+
+        assert failing_check in system_check_registry.registered_checks
+
+    def test_skip_env_var_accepts_a_comma_list(
+        self, system_check_registry, monkeypatch
+    ):
+        """A label list skips only the named module."""
+        from django.core.checks import Error
+
+        app_config = _FakeAppConfig("quickscale_test_module")
+
+        def failing_check(app_configs: object = None, **kwargs: object) -> list:
+            return [Error("boom", id="quickscale_test_module.E001")]
+
+        monkeypatch.setenv(
+            "QUICKSCALE_SKIP_MODULE_CHECKS",
+            "quickscale_other_module, quickscale_test_module",
+        )
+
+        conventions.register_module_checks(app_config, [failing_check])
+
+        assert failing_check in system_check_registry.registered_checks
+
+    def test_skip_env_var_for_another_module_still_fails_startup(
+        self, system_check_registry, monkeypatch
+    ) -> None:
+        """A skip that does not name this label leaves the eager run in force."""
+        from django.core.checks import Error
+
+        app_config = _FakeAppConfig("quickscale_test_module")
+
+        def failing_check(app_configs: object = None, **kwargs: object) -> list:
+            return [Error("boom", id="quickscale_test_module.E001")]
+
+        monkeypatch.setenv("QUICKSCALE_SKIP_MODULE_CHECKS", "quickscale_other_module")
+
+        with pytest.raises(ImproperlyConfigured):
+            conventions.register_module_checks(app_config, [failing_check])
+
 
 # ===================================================================
 # exception_handler — rule 9

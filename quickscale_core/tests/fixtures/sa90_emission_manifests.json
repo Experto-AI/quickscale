@@ -90,7 +90,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "2373558ca5406b8abd43dc7e6fbae8a66ae734d23989780fda0fa6f4751faef7"
+      "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
     },
     "Makefile": {
       "mode": "664",
@@ -110,7 +110,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "6139cf3bc71d866eabae16e2f94e423c26027af53add608c6a564515930bf890"
+      "sha256": "73c329212e4952ca04a870bb6568e9925ae903cc0c1151fa552ae8e1f9c8e998"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -560,7 +560,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "2373558ca5406b8abd43dc7e6fbae8a66ae734d23989780fda0fa6f4751faef7"
+      "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
     },
     "Makefile": {
       "mode": "664",
@@ -580,7 +580,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "6139cf3bc71d866eabae16e2f94e423c26027af53add608c6a564515930bf890"
+      "sha256": "73c329212e4952ca04a870bb6568e9925ae903cc0c1151fa552ae8e1f9c8e998"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -1030,7 +1030,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "2373558ca5406b8abd43dc7e6fbae8a66ae734d23989780fda0fa6f4751faef7"
+      "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
     },
     "Makefile": {
       "mode": "664",
@@ -1050,7 +1050,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "6139cf3bc71d866eabae16e2f94e423c26027af53add608c6a564515930bf890"
+      "sha256": "73c329212e4952ca04a870bb6568e9925ae903cc0c1151fa552ae8e1f9c8e998"
     },
     "frontend/.prettierignore": {
       "mode": "664",

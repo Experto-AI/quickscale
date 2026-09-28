@@ -26,6 +26,8 @@ call, so a project without a DRF-embedding module never imports
 
 from __future__ import annotations
 
+import os
+
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
@@ -51,6 +53,13 @@ CheckCallable = Callable[..., Sequence[CheckMessage] | None]
 
 #: What Django's check registry accepts: the same call without the ``None``.
 _RegisteredCheck = Callable[..., Sequence[CheckMessage]]
+
+#: One-shot escape hatch naming modules (comma-separated labels, or ``all``)
+#: whose eager startup run is skipped.  The generated image build sets it so
+#: ``collectstatic`` can run without runtime credentials; registration still
+#: happens, and every serving process still runs the checks.  The launcher
+#: never sets it.
+_SKIP_EAGER_CHECKS_ENV_VAR = "QUICKSCALE_SKIP_MODULE_CHECKS"
 
 _VALIDATION_ERROR_CODE = "validation_error"
 _VALIDATION_ERROR_MESSAGE = "Invalid input."
@@ -145,6 +154,15 @@ def _declared_capabilities(
         ) from exc
 
 
+def _eager_run_is_skipped(label: str) -> bool:
+    """Return whether the one-shot skip names *label* (or ``all``)."""
+    declared = os.environ.get(_SKIP_EAGER_CHECKS_ENV_VAR, "").strip()
+    if not declared:
+        return False
+    entries = {entry.strip() for entry in declared.split(",") if entry.strip()}
+    return "all" in entries or label in entries
+
+
 def register_module_checks(
     app_config: AppConfig,
     checks: Iterable[CheckCallable],
@@ -164,6 +182,12 @@ def register_module_checks(
     checks tagged with ``app_config.label``, so ``manage.py check`` reports
     them (including warning-level messages, which do not block startup).
 
+    A one-shot ``QUICKSCALE_SKIP_MODULE_CHECKS`` naming this label (or
+    ``all``) skips the eager run and only registers the callables.  The
+    generated image build sets it for its credential-free ``collectstatic``
+    step; the launcher never sets it, so every serving process still runs and
+    enforces the checks.
+
     Args:
         app_config: The module's app config; its label is the system-check tag
             and the name failure messages carry.
@@ -177,13 +201,18 @@ def register_module_checks(
     """
     label = app_config.label
     check_functions = tuple(checks)
-    failures: list[str] = []
     for check in check_functions:
         if not callable(check):
             raise ValueError(
                 f"{label!r} passes {check!r} to register_module_checks(); expected "
                 "a check callable."
             )
+    if _eager_run_is_skipped(label):
+        for check in check_functions:
+            register(label)(cast("_RegisteredCheck", check))
+        return
+    failures: list[str] = []
+    for check in check_functions:
         try:
             result: object = check(app_configs=None)
         except Exception as exc:  # A raising check is one aggregated failure.

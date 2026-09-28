@@ -84,6 +84,13 @@ services:
       - media_volume:/app/media
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
+    # Load the project's .env into the container so a credential under any
+    # configured *_env_var name reaches it; the environment entries below keep
+    # the default names available from a shell export and take precedence over
+    # env_file.  A blank value keeps an enabled module's startup check failing
+    # on purpose until the operator supplies the credential.
+    env_file:
+      - .env
     environment:
       - DJANGO_SETTINGS_MODULE={{ package_name }}.settings.local
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ package_name }}
@@ -91,10 +98,6 @@ services:
       - PORT=${PORT:-8000}
       - QUICKSCALE_FRONTEND_HOST_PORT=${QUICKSCALE_FRONTEND_HOST_PORT:-5173}
       - QUICKSCALE_FRONTEND_ORIGIN=${QUICKSCALE_FRONTEND_ORIGIN:-}
-      # Vendor credentials reach an enabled module from the environment this
-      # Compose run sees (a shell export or the project .env it substitutes),
-      # so an operator has a route to the secret a module's startup check
-      # requires; blank keeps that check failing on purpose.
       - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - QUICKSCALE_BILLING_WEBHOOK_SECRET=${QUICKSCALE_BILLING_WEBHOOK_SECRET:-}
