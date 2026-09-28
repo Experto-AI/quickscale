@@ -5,25 +5,17 @@
 
 ## Goal and finish line
 
-The immediate goal is one convention across all modules (SA215): settings and identity names, how
-a module reads its configuration, and how modules depend on and use each other, as recorded in
-[decisions.md § Module Conventions](decisions.md#module-conventions), delivered as SA217–SA227
-across all three tracks and closed by SA215's conformance test. The migration and portal work (SA191, SA153, SA204, SA214) is
-parked behind it, so `bap-web` is ported once, onto the standardized names. After that, the goal is
-the first useful property portal (SA153) in a project-owned extension, built on `bap-web` after a
-one-off port moves it onto current QuickScale (SA191). Capabilities are generalized only after that
-project proves their value.
+The immediate goal is one convention across all modules, as recorded in
+[decisions.md § Module Conventions](decisions.md#module-conventions): SA217–SA227 deliver it across
+all three tracks and SA215's conformance test closes it. `bap-web` is then ported once, onto the
+standardized names (SA191), and carries the first property portal in a project-owned extension
+(SA153). Capabilities are generalized only after that project proves their value.
 
-SA191 is the first QuickScale upgrade of a site holding real production state. That state is
-**reseeded, not carried**, so SA204's migration-history freeze waits for SA153's go-live.
-
-**Release status — v0.88.0 packaged, not published.** No core tag, split-branch republication,
-seal, or PyPI upload has happened. Publication stays a maintainer decision; this planner tracks only
-that it is owed: release-tier validation on the packaged bytes, the phases in
+**Release status — v0.88.0 packaged, not published.** Publication is a maintainer decision; it
+still owes release-tier validation on the packaged bytes, the phases in
 [publish_procedure.md](publish_procedure.md), and the release PR into `main`. The packaged bytes
-predate fixes now on `v89` and carry two S1 billing defects: with billing enabled against real
-Stripe keys, every webhook and every checkout fails. Shipping any `v89` fix in 0.88.0 means
-repackaging.
+carry two S1 billing defects fixed on `v89` (with real Stripe keys, every webhook and every
+checkout fails), so shipping 0.88.0 means repackaging from `v89`.
 
 The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves history.
@@ -63,24 +55,17 @@ Track 3: SA218 ──► SA225 ──► SA220 ──► SA226 ──► SA216 (
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** The module conventions land first, while renames are still
-cheap: `bap-web` has not been ported onto the current names, and SA204 has not frozen the module
-migration history that the app-label rename rewrites. SA215 names the whole change; SA217–SA227
-deliver it in slices and SA215 closes it with the conformance test. SA218 adds the runtime
-helpers every slice builds on and is small, so it goes first; SA221 renames identities in
-parallel. SA217's startup settings check runs through SA218's checks helper, SA219's renames and
-refusals run through SA217's check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's
-org-role authorization needs SA220's capabilities and SA223's DRF views. SA221 and SA222 both
-rewrite each module's `0001_initial`, so they share a track. SA191 then migrates `bap-web` onto current QuickScale, rebuilds and reseeds its
-database, and redeploys through `deploy railway`. SA153 builds the portal on it. SA204 freezes
-module migration history before any post-SA153 module schema change. SA214 hardens the migration
-tool off the critical path. SA154 is an inventory, not work.
+**Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
+ported, and SA204 has not frozen the migration history the app-label rename rewrites. SA217's
+startup check runs through SA218's checks helper, SA219's renames and refusals run through SA217's
+check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's org-role authorization needs
+SA220's capabilities and SA223's DRF views. SA221 and SA222 both rewrite each module's
+`0001_initial`, so they share a track. SA204 freezes migration history before any post-SA153
+module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** Track 1's SA221, SA222, and SA227 have slack until SA215; SA223
-needs SA221 before Track 2 reaches it. Track 2's SA223 and SA224 follow its critical SA217 and
-SA219. Track 3's SA225 fills the wait for SA219 between SA218 and SA220. Track 3 ends with SA216,
-which waits for SA215 because both change auth's views, orgs' removal path, and the
-user-referencing models.
+**Off the critical path.** Track 1's SA221, SA222, and SA227 have slack until SA215. Track 3's
+SA225 fills the wait for SA219 between SA218 and SA220; SA216 waits for SA215 because both change
+auth's views, orgs' removal path, and the user-referencing models.
 
 ### Track states
 
@@ -89,8 +74,8 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA222 | yes | yes | yes | **yes** | no |
-| 2 | SA217 | yes | no (SA218) | no (SA218) | no | **yes** |
-| 3 | SA218 | yes | yes | yes | **yes** | **yes** |
+| 2 | SA217 | yes (manifest half) | no (SA218's checks helper) | no (SA218's checks helper) | no | **yes** |
+| 3 | SA218 (in progress) | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -140,35 +125,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA215 — Enforce module conventions and close the inventory.**
 
-  **Context:** the twelve modules grew one at a time and follow different conventions, and neither
-  audit checks cross-module consistency. The evidence is
-  [module-conventions-inventory.md](../planning/module-conventions-inventory.md): two settings
-  families (`QUICKSCALE_<MODULE>_*` and bare `<MODULE>_*`), three spellings of a boolean flag, eight
-  independently written settings readers with defaults duplicated from the manifests, settings read
-  but never declared, modules reading other modules' settings, an `auth ↔ orgs` import cycle, core
-  reading `backups` settings, and URL, template, table, and management-command names that do not
-  follow one stem. A second pass found URL prefixes set in three places, two API frameworks and
-  error shapes, templates breaking the recorded base-template rule, four startup-check styles, no
-  fixed file set, uneven tenant-isolation tests, and twelve README outlines. A third pass found option
-  checks in four places (including per-module validators in core and the CLI), three ways to build a
-  tenant model, uneven reverse names on shared models, receivers in `signals.py`, destructive commands
-  without `--dry-run`, and a placeholder module directory. A fourth pass (D22–D27) found tenant
-  modules authorizing with the site-wide `is_staff` instead of org roles, a second email sender in
-  forms, write side effects not tied to commit, feature events owned by analytics, and an
-  undeclared `services.py` surface. A fifth pass (D28–D32) found five constraint-naming styles
-  (two orgs names with no prefix at all), webhooks answering with hand-built `{"error": str(exc)}`
-  bodies and `403`, the user-FK `on_delete` rule absent from Module Conventions, no rule for which file
-  names a package may add, and test files named by ticket number. A sixth pass (D33–D42) found
-  module settings merged last-writer-wins by module name, theme flags meaning "installed", three
-  throttle mechanisms, bare prefixes in shared namespaces, orgs naming feature modules by string,
-  three ways to resolve a secret, type-check strictness from none to twelve codes off, module
-  lists hand-kept outside the modules, READMEs missing options, and meaningless version floors.
-  The rules are recorded in
+  **Context:** the twelve modules grew one at a time and follow different conventions. The drift
+  items (D1–D42) are in
+  [module-conventions-inventory.md](../planning/module-conventions-inventory.md), the rules in
   [decisions.md § Module Conventions](decisions.md#module-conventions); SA217–SA227 are the code,
-  and this ticket closes them.
-
-  Other documents say "SA215 renames…" or "until SA215 lands" for work now split across
-  SA217–SA227; those notes stay true, because SA215 lands last and names the whole change.
+  and this ticket closes them. Where other documents say "SA215 renames…", they mean the whole
+  change, which SA215 lands last.
 
   **Scope:** the rule 40 conformance test, covering rules 1–39, with a control case per rule;
   the proof that a pre-SA215 project fails `apply` and startup naming each new name; the release
@@ -205,6 +167,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `schema.config_schema`, and the CLI's `module_config`, with the
     `contracts.imperative_inventory` that tracked them — and cross-option checks become the
     manifest's `required_when` / `any_of` keys, run by `plan`, `apply`, and the startup check.
+  - *Order.* The manifest half needs nothing from SA218; the startup check comes last, once
+    SA218's checks helper has merged.
 
   **Acceptance:** a setting of the wrong type or a violated `required_when` fails `plan`, `apply`,
   and startup with the setting's name; no module keeps its own settings reader or code default; no
@@ -224,7 +188,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   runs a module's `checks.py` from `ready()`, fails every process, and also registers the checks as
   system checks; the generic DRF exception handler emitting the one QuickScale error shape, with
   the generated `REST_FRAMEWORK` block that installs it.
-  `register_backup_persistence` stays as the listed core port.
+  `register_backup_persistence` stays as the listed core port. The checks helper merges first:
+  SA217 waits only on it.
 
   **Acceptance:** each helper has unit tests and a control proving failure is loud; a generated
   project installs the handler; no module adopts them yet beyond one pilot each.
@@ -257,11 +222,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)
   disabled, admin kept; `apply` refuses to switch off a module another installed module lists in
   `required_modules`. The generator renders the theme's seam producer (`index.html.j2`) from the
-  discovered module set, so every key the seam validator requires is present, and a flag is true
-  only when its module is installed and enabled, with paths from `{% url %}` (rule 31); today ten
-  flags mean "in `INSTALLED_APPS`", so a switched-off module would keep a navigation entry that
-  404s. The theme's TypeScript keeps naming its modules (frontend.md). The generated `templates/index.html` is user-owned (U3), so existing projects need the
-  release-note step.
+  discovered module set, and a flag is true only when its module is installed and enabled, with
+  paths from `{% url %}` (rule 31). The generated `templates/index.html` is user-owned (U3), so
+  existing projects need a release-note step.
 
   **Acceptance:** every row of the D1 table is applied; each module's `_ENABLED = False` has a test
   that its public surfaces answer as disabled; a `quickscale.yml` or environment with a
@@ -329,8 +292,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   check fails startup on a stray `TenantManager`; relations to other modules' models get
   `quickscale_<module>_<name>` `related_name`s (crm's two `created_by` fields have none; backups,
   billing, blog, crm, forms, and orgs rename the rest, with their callers); `FormFieldValue` gains an
-  ordering; the 15 literal tuple choice lists become `TextChoices`. User-FK `on_delete`
-  (rule 27) already conforms and SA35's gate enforces it; a new relation here follows it.
+  ordering; the 15 literal tuple choice lists become `TextChoices`.
 
   **Acceptance:** tenant classification and purge plans are unchanged for a fresh project; the
   stray-manager check has a control; `check_tenant_isolation` passes.
@@ -424,7 +386,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     report, and the unread `[tool.mypy]` blocks in blog, listings, and storage go (rule 36);
     `quickscale_modules/teams/` is deleted (README to
     `docs/planning/teams.md`) with core's placeholder handling; storage uses `timezone.now()`;
-    social's cache keys become `quickscale_social:*`. (`py.typed` already ships in every module.)
+    social's cache keys become `quickscale_social:*`.
   - *Files.* analytics, notifications, and storage gain `poetry.toml`; auth's `adapters.py` → `allauth_adapter.py`; orgs'
     `debug_helpers.py` → `_debug.py`; one-off files fold in.
   - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
@@ -451,13 +413,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Context:** under [decisions.md](decisions.md) § Clean-Break Migration History, each
   model-bearing module ships one `0001_initial` that is rewritten in place every release, and the
-  only supported upgrade is a fresh database. Since `bap-web` was generated on 2026-03-05, all ten
-  model-bearing modules' `0001_initial` were rewritten two to five times each. Every rewrite adds
-  to the hand-written transform each deployed project needs on its next upgrade, and after SA153
-  that transform must also assign `organization_id` under FORCE RLS. `bap-web`'s data is
-  reseeded, so the freeze is needed only at SA153's go-live, where the first non-reseedable tenant
-  data appears; it must land before any module schema change reaches that project. This is a one-way door: once a project applies a frozen `0001`, it can never be
-  re-squashed under it (arch audit `clean-break-schema-no-data-path`, option 1).
+  only supported upgrade is a fresh database. Every rewrite adds to the hand-written transform each
+  deployed project needs on its next upgrade. SA191 reseeds `bap-web`, so the freeze is needed at
+  SA153's go-live, where the first non-reseedable tenant data appears, and before any module schema
+  change reaches that project. It is a one-way door (arch audit
+  `clean-break-schema-no-data-path`, option 1).
 
   **Acceptance:** decisions record that rule 1 of the clean-break decision is lifted from 0.89.0
   onward, the release the freeze lands in. Upgrades from earlier vintages, including 0.88.0,
@@ -466,13 +426,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   when an existing migration file of a model-bearing module changes or disappears, with controls
   proving that it rejects an in-place `0001` edit and accepts a new `0002`.
 
-  The gate compares against a checked-in manifest of the frozen files' content hashes, not a git
-  ref: no 0.89.0 tag exists yet, and a manifest also works in shallow CI clones. The freeze takes
-  effect when SA204 merges, so any later `v89` change to a model-bearing module's models ships as
-  a `0002`; confirm before merging that no module schema change shipped between SA191's rebuild
-  and this freeze. The topology guard in `test_module_migration_topology.py` currently requires exactly one
-  `0001_initial` and has a canary that rejects any `0002`; it changes to require a `0001_initial`
-  followed by an ordered chain, and that canary is inverted.
+  The gate compares against a checked-in manifest of the frozen files' content hashes (it works in
+  shallow CI clones and needs no tag). Before merging, confirm no module schema change shipped
+  between SA191's rebuild and the freeze. `test_module_migration_topology.py` changes from exactly
+  one `0001_initial` to a `0001_initial` followed by an ordered chain, and its `0002` canary is
+  inverted.
 
   **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
   documentation, `quickscale_core/tests/test_module_migration_topology.py`, and the arch audit.
@@ -488,8 +446,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   v0.62.0 with the `showcase_react` theme and `auth`, `listings`, and `forms`. It carries a
   project-owned `properties` app (models on `AbstractListing`, a catalog seed command, a public
   `/api/properties/` endpoint), a heavily customized React design, and in-place edits under the
-  vendored `modules/forms`. It is 27 minor versions behind, and the tool's first iteration against
-  it blocked at preflight (ledger G-001), so a judgement-driven port is cheaper for this one site.
+  vendored `modules/forms`.
 
   **Recipient.** Built as the playbook's "Running a migration iteration" section describes: before
   the release, from the unreleased checkout with modules embedded by
@@ -565,14 +522,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   exchange-rate conversion, and Spanish launch coverage does not require translating every
   QuickScale interface.
 
-  Every new child table, including gallery images, must carry its own `organization_id` and RLS
-  policy under the child-table decision in [decisions.md](decisions.md). Match the existing
-  `test_rls_boundary.py` coverage pattern and verify tenant isolation across the API, the rendered
-  pages, and inquiry handling. These tables join the tenant universe through the marker-derived
-  classification of SA182, never through edits to the vendored `orgs` source.
-
-  This is the first real tenant data on a QuickScale site. From here on, module schema changes
-  reach it only as incremental migrations on SA204's frozen history.
+  New child tables, including gallery images, follow the child-table decision in
+  [decisions.md](decisions.md) and the `test_rls_boundary.py` coverage pattern.
 
   **Acceptance:** first record in decisions that React is the standard frontend for new application
   and public pages; `auth` and `billing` stay Django-rendered on the shared design (SA192); the
@@ -615,29 +566,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   release, so the next beta-site upgrade needs no one-off prompt. Donors: `bap-web` as it stood
   before SA191 (a pinned copy or commit, read-only) and fixture donors; not a live repository.
 
-  **Iterative loop.** Each iteration regenerates the recipient from scratch with `quickscale plan`
-  and `quickscale apply` (same slug, `showcase_react`, the donor's modules), runs
-  `make beta-migrate-fresh` with a read-only donor, verifies, and triages every gap into
-  a gap ledger (tool fix, playbook step, project decision, or upstream to a module). Fixes land in
-  QuickScale and the loop restarts. The recipient is never hand-edited before the final iteration.
-  The ledger is the acceptance evidence.
-
-  **Running an iteration.** The playbook's "Running a migration iteration" section is the
-  procedure. Before the release, the recipient is built from the unreleased checkout: `make install`,
-  an unpushed local annotated `0.89.0` tag on `HEAD` (the playbook gives the message format), a
-  clean tree, `make publish-modules`, then
-  `quickscale apply --split-refs-from-branches`; the tag is never pushed, because pushing it
-  starts PyPI publication. `apply` writes into `<cwd>/<slug>`, so the recipient is generated in a
-  staging directory and moved to the target path. A tool fix needs only `make install`; a module fix
-  also needs a commit, a re-pointed tag, and `make publish-modules`. An iteration's check is the run
-  report, the handoff prompt's remaining items, and the donor's pytest and Vitest suites in the
-  recipient; live-site Playwright and screenshot parity run in the final iteration only.
-
-  **Slice order.** Iteration zero comes first: one non-interactive `make beta-migrate-iterate`
-  target (reads slug, theme, and modules from the donor's `quickscale.yml`; stages, regenerates,
-  moves, migrates, and runs the iteration check) and its first run against a real donor, whose gaps
-  seed the ledger; the open G-001 entry comes from the first `bap-web` run.
-  Classification, functionality, and the design layer follow in ledger order.
+  **Iterative loop.** The playbook's "Running a migration iteration" section is the procedure:
+  each iteration regenerates the recipient, runs `make beta-migrate-fresh` with a read-only donor,
+  and triages every gap into the gap ledger (tool fix, playbook step, project decision, or upstream
+  to a module); fixes land in QuickScale and the loop restarts. The recipient is never hand-edited
+  before the final iteration. The first slice is one non-interactive `make beta-migrate-iterate`
+  target that reads slug, theme, and modules from the donor's `quickscale.yml` and runs one
+  iteration; the rest follows ledger order, starting with G-001.
 
   **Tool scope.** The tool migrates everything that can be done deterministically:
   - *Classification.* Every donor file lands in exactly one class — generated-untouched,
@@ -654,9 +589,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Handoff prompt.* The final phase writes `MIGRATION_PROMPT.md` into the recipient, generated
     from the report: what was migrated, the remaining manual actions with their paths and the
     applicable rule, the hard constraints, and the exact done criteria; a snapshot test pins the
-    rendered prompt. Each remaining file item will also carry its diff once classification lands. A
-    coding assistant completes the remainder from it. Work the assistant repeats every iteration is
-    a tool-fix candidate, so the prompt shrinks across iterations.
+    rendered prompt. A coding assistant completes the remainder from it.
 
   **Acceptance:**
   - A final iteration against the pinned `bap-web` donor runs clean: no unclassified files, every
@@ -747,8 +680,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   deletion); decisions.md and [organizations.md](organizations.md). These are Track 3 surfaces
   (`auth/views.py`, orgs' removal path) plus module code that SA215 also edits, hence the dependency;
   billing is a Track 2 surface, so SA216 lands through the serialized merge queue.
-
-- [x] **SA212 — Keep the CI supply-chain pins fresh and scan the generated container.**
 
 ## Deferred constraints and references
 
