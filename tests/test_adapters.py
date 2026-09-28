@@ -3,7 +3,7 @@
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory
-from quickscale_modules_auth.adapters import QuickscaleAccountAdapter
+from quickscale_modules_auth.allauth_adapter import QuickscaleAccountAdapter
 
 
 @pytest.mark.django_db
