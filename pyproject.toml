@@ -59,9 +59,6 @@ ignore_missing_imports = true
 module = "markdownx.*"
 ignore_missing_imports = true
 
-[tool.mypy]
-plugins = ["mypy_django_plugin.main"]
-
 [tool.django-stubs]
 django_settings_module = "tests.settings"
 
