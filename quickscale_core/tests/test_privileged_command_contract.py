@@ -60,8 +60,8 @@ def test_start_sh_names_exact_reduced_set() -> None:
     assert observed == EXPECTED_PRIVILEGED_COMMANDS
 
 
-def test_start_sh_rejects_retired_billing_backfill_argv(tmp_path: Path) -> None:
-    """The removed one-shot argv exits 2 before any privileged path can run."""
+def test_start_sh_rejects_supplied_argv(tmp_path: Path) -> None:
+    """A supplied argv exits 2 before any privileged path can run."""
     template = (
         ROOT / "quickscale_core/src/quickscale_core/generator/templates/start.sh.j2"
     ).read_text()
@@ -70,7 +70,7 @@ def test_start_sh_rejects_retired_billing_backfill_argv(tmp_path: Path) -> None:
     launcher.write_text(rendered)
 
     result = subprocess.run(
-        ["bash", str(launcher), "quickscale_orgs_migrate_billing_to_orgs"],
+        ["bash", str(launcher), "some_unsupported_command"],
         check=False,
         capture_output=True,
         text=True,
@@ -79,5 +79,5 @@ def test_start_sh_rejects_retired_billing_backfill_argv(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert result.stdout == ""
     assert result.stderr == (
-        "ERROR: unsupported start.sh command: quickscale_orgs_migrate_billing_to_orgs\n"
+        "ERROR: unsupported start.sh command: some_unsupported_command\n"
     )

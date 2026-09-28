@@ -965,12 +965,8 @@ step failing, check that ``DATABASE_URL`` is linked to the superuser PostgreSQL 
 exemptions:
 1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned DB command (``migrate``,
    ``createcachetable``) — used by ``start.sh`` for one-shot privileged operations.
-   ``migrate_billing_to_orgs`` is a retired recovery command and is not granted this exemption.
-2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` — non-serving escape hatch for development/test and the
-   explicitly acknowledged retired billing recovery invocation (deleted in SA215; afterwards the
-   escape hatch is for development/test only). It must never be set persistently
-   or used while serving production requests; see the exact one-shot form in
-   [Organizations — Migration Path from User-Scoped Billing](../technical/organizations.md#migration-path-from-user-scoped-billing).
+2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` — non-serving escape hatch for development/test only. It must
+   never be set persistently or used while serving production requests.
 
 **Other database issues**:
 - Verify `DATABASE_URL` environment variable is set (Railway auto-provides this when linked)

@@ -803,18 +803,6 @@
         "symbol": "get_client_ip",
         "type": "function"
       },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_migrate_billing_to_orgs.py::Command": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_migrate_billing_to_orgs.py",
-        "max_complexity": 28,
-        "symbol": "Command",
-        "type": "class"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_migrate_billing_to_orgs.py::Command.handle": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_migrate_billing_to_orgs.py",
-        "max_complexity": 27,
-        "symbol": "Command.handle",
-        "type": "method"
-      },
       "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py::Command": {
         "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py",
         "max_complexity": 11,

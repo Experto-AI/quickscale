@@ -303,7 +303,7 @@ def resolve_runtime_database_url(
         return runtime_database_url
 
     if runtime_database_url == "" and allow_bypass_rls:
-        # Explicit non-serving dev/test or retired-recovery opt-out: bridge to DATABASE_URL
+        # Explicit non-serving dev/test opt-out: bridge to DATABASE_URL
         if not database_url:
             raise ValueError(
                 "DATABASE_URL environment variable is not set or is empty. "
