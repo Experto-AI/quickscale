@@ -30,6 +30,8 @@ from collections.abc import Iterator
 from contextvars import ContextVar
 from typing import Any
 
+from quickscale_modules_orgs.exceptions import CurrentOrgError
+
 
 _SENTINEL = object()
 """Sentinel for detecting unset memo-atomic attribute."""
@@ -37,10 +39,6 @@ _SENTINEL = object()
 _current_org_id_var: ContextVar[uuid.UUID | None] = ContextVar(
     "_current_org_id", default=None
 )
-
-
-class CurrentOrgError(Exception):
-    """Raised when strict org access is required but no org context is set."""
 
 
 def set_current_org(request: Any, org: Any) -> None:
