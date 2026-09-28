@@ -15,6 +15,7 @@ config:
       default: true
       django_setting: ACCOUNT_ALLOW_REGISTRATION
       description: "Allow new user registration"
+      validation: {}
 
     email_verification:
       type: string
@@ -29,6 +30,8 @@ config:
       default: 1209600
       django_setting: SESSION_COOKIE_AGE
       description: "Session cookie lifetime in seconds (default: 2 weeks)"
+      validation:
+        min: 1
 
   # Immutable options - locked at embed time, require remove + re-embed to change
   immutable:
