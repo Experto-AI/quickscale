@@ -24,13 +24,6 @@
 # applied state, so a colliding id would make an adopted project pass a
 # different step.
 steps:
-  - id: sa221-identity-stem
-    minimum: "0.89.0"
-    title: "Adopt the quickscale_<module> identities in generated files"
-    adoption_steps:
-      - "Compare and manually adopt the current generated admin templates and React admin links so app admin URLs use the quickscale_<module> app labels (for example /admin/quickscale_backups/...), and rename the tenant-isolation invocation in the generated Makefile and CI workflow to `quickscale_orgs_check_tenant_isolation`."
-      - "Recreate the project database after adopting: module tables, content types, permissions, and AUTH_USER_MODEL moved to the quickscale_<module> stem, so a database created under the previous names cannot be carried over."
-
   - id: sa192-shared-design
     minimum: "0.89.0"
     title: "Adopt the shared design across generated templates"
@@ -72,3 +65,10 @@ steps:
     title: "Adopt the resilient frontend dependency install"
     adoption_steps:
       - "Compare and manually adopt the current docker-compose.yml frontend service command so the pnpm install passes --config.fetch-retries=5: a single stalled registry request would otherwise abort the whole install and leave `quickscale up` with a failed-to-start frontend on constrained links."
+
+  - id: sa221-identity-stem
+    minimum: "0.89.0"
+    title: "Adopt the quickscale_<module> identities in generated files"
+    adoption_steps:
+      - "Compare and manually adopt the current generated admin templates and React admin links so app admin URLs use the quickscale_<module> app labels (for example /admin/quickscale_backups/...), and rename the tenant-isolation invocation in the generated Makefile and CI workflow to `quickscale_orgs_check_tenant_isolation`."
+      - "Recreate the project database after adopting: module tables, content types, permissions, and AUTH_USER_MODEL moved to the quickscale_<module> stem, so a database created under the previous names cannot be carried over."
