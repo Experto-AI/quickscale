@@ -7,7 +7,8 @@
 
 The immediate goal is one convention across all modules (SA215): settings and identity names, how
 a module reads its configuration, and how modules depend on and use each other, as recorded in
-[decisions.md § Module Conventions](decisions.md#module-conventions). The migration and portal work (SA191, SA153, SA204, SA214) is
+[decisions.md § Module Conventions](decisions.md#module-conventions), delivered as SA217–SA227
+across all three tracks and closed by SA215's conformance test. The migration and portal work (SA191, SA153, SA204, SA214) is
 parked behind it, so `bap-web` is ported once, onto the standardized names. After that, the goal is
 the first useful property portal (SA153) in a project-owned extension, built on `bap-web` after a
 one-off port moves it onto current QuickScale (SA191). Capabilities are generalized only after that
@@ -33,7 +34,18 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA215 | Standardize conventions across modules | post-v88 | 1 | — | Deferred |
+| SA217 | Read the manifest option schema in core and check settings at startup | post-v88 | 2 | SA218 | Deferred |
+| SA218 | Add the shared runtime helpers modules build their conventions on | post-v88 | 3 | — | Deferred |
+| SA221 | Rename module identities to `quickscale_<module>` | post-v88 | 1 | — | Deferred |
+| SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
+| SA225 | Move startup checks and exceptions onto the shared helpers | post-v88 | 3 | SA218 | Deferred |
+| SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA218, SA219 | Deferred |
+| SA222 | Put every tenant model on `TenantModel` and align model basics | post-v88 | 1 | SA221 | Deferred |
+| SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 2 | SA218, SA221 | Deferred |
+| SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | SA221 | Deferred |
+| SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
+| SA227 | Standardize package files, commands, tooling, tests, and READMEs | post-v88 | 1 | SA221 | Deferred |
+| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA222, SA223, SA224, SA225, SA226, SA227 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -44,24 +56,32 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: idle
-Track 3: SA216 (after SA215)
-                         critical path: SA215 → SA191 → SA153
+Track 1: SA221 ──► SA222 ──► SA227 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 2: SA217 (after SA218) ──► SA219 ──► SA223 ──► SA224
+Track 3: SA218 ──► SA225 ──► SA220 ──► SA226 ──► SA216 (after SA215)
+     critical path: SA218 → SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
-**Critical path.** SA215 fixes one convention across modules first, while renames are still
+**Critical path.** The module conventions land first, while renames are still
 cheap: `bap-web` has not been ported onto the current names, and SA204 has not frozen the module
-migration history that the app-label rename rewrites.
-SA191 then migrates `bap-web` onto current QuickScale, rebuilds and reseeds its
+migration history that the app-label rename rewrites. SA215 names the whole change; SA217–SA227
+deliver it in slices and SA215 closes it with the conformance test. SA218 adds the runtime
+helpers every slice builds on and is small, so it goes first; SA221 renames identities in
+parallel. SA217's startup settings check runs through SA218's checks helper, SA219's renames and
+refusals run through SA217's check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's
+org-role authorization needs SA220's capabilities and SA223's DRF views. SA221 and SA222 both
+rewrite each module's `0001_initial`, so they share a track. SA191 then migrates `bap-web` onto current QuickScale, rebuilds and reseeds its
 database, and redeploys through `deploy railway`. SA153 builds the portal on it. SA204 freezes
 module migration history before any post-SA153 module schema change. SA214 hardens the migration
 tool off the critical path. SA154 is an inventory, not work.
 
-**Off the critical path.** Track 2 is idle. Track 3 holds SA216, which waits for SA215 because
-both change auth's views, orgs' removal path, and the user-referencing models.
+**Off the critical path.** Track 1's SA221, SA222, and SA227 have slack until SA215; SA223
+needs SA221 before Track 2 reaches it. Track 2's SA223 and SA224 follow its critical SA217 and
+SA219. Track 3's SA225 fills the wait for SA219 between SA218 and SA220. Track 3 ends with SA216,
+which waits for SA215 because both change auth's views, orgs' removal path, and the
+user-referencing models.
 
 ### Track states
 
@@ -69,9 +89,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA215 | yes | yes | yes | **yes** | **yes** |
-| 2 | — (idle) | — | — | — | **yes** | no |
-| 3 | SA216 | no (SA215) | — | — | **yes** | no |
+| 1 | SA221 | yes | yes | yes | **yes** | no |
+| 2 | SA217 | yes | no (SA218) | no (SA218) | no | **yes** |
+| 3 | SA218 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -79,24 +99,33 @@ A track is **truly green** only when all three states are yes.
   workflow triggers, the maintainer migration tools with their smoke gate and playbook, the
   migration-history freeze gate and `decisions.md` § Clean-Break Migration History, the `bap-web`
   migration and its reseed step, the property extension, public templates, and the portal's
-  extension documentation.
+  extension documentation, and, for the conventions, module identities, models and their
+  `0001_initial`, and module package files, commands, tests, and READMEs (SA221, SA222, SA227).
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
   every package, `ruff.toml`, the module page templates
   and test-settings stubs, the generated `base.html`, the CLI apply/deploy/update commands and
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
-  docs).
+  docs), and, for the conventions, the manifest option schema and the CLI's `module_config`,
+  module settings names, and module URLs, APIs, webhooks, templates, and static files, with the
+  theme's React API client (SA217, SA219, SA223, SA224).
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
-  blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block.
-- **Cross-track edits.** No queued ticket edits another track's surfaces; a ticket that does lands
-  through the serialized merge queue.
+  blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
+  conventions, the `quickscale_core.runtime` helpers, module `checks.py`, `exceptions.py`, and
+  `services.py`, and orgs' `permissions` (SA218, SA225, SA220, SA226).
+- **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
+  a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
+  SA217–SA227) touch every module and cross every track, so each lands in module-sized slices
+  through that queue, merging `v89` before each slice; a slice edits another convention ticket's
+  surface only where its own rule forces it (a rename's callers, for example).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
-  [decisions.md](decisions.md) (SA204, SA153). Each track resolves the shared set at its
+  [decisions.md](decisions.md) (SA204, SA153, and the convention tickets, which update the names it
+  quotes from the shipped state). Each track resolves the shared set at its
   own merge, after the previous merge lands, then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -110,7 +139,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA215 — Standardize conventions across modules.**
+- [ ] **SA215 — Enforce module conventions and close the inventory.**
 
   **Context:** the twelve modules grew one at a time and follow different conventions, and neither
   audit checks cross-module consistency. The evidence is
@@ -122,121 +151,265 @@ suite, and merge only the reviewed delivery through the serialized queue.
   follow one stem. A second pass found URL prefixes set in three places, two API frameworks and
   error shapes, templates breaking the recorded base-template rule, four startup-check styles, no
   fixed file set, uneven tenant-isolation tests, and twelve README outlines. A third pass found option
-checks in four places (including per-module validators in core and the CLI), three ways to build a
-tenant model, uneven reverse names on shared models, receivers in `signals.py`, destructive commands
-without `--dry-run`, and a placeholder module directory. A fourth pass (D22–D27) found tenant
-modules authorizing with the site-wide `is_staff` instead of org roles, a second email sender in
-forms, write side effects not tied to commit, feature events owned by analytics, and an
-undeclared `services.py` surface. A fifth pass (D28–D32) found five constraint-naming styles
-(two orgs names with no prefix at all), webhooks answering with hand-built `{"error": str(exc)}`
-bodies and `403`, the user-FK `on_delete` rule absent from Module Conventions, no rule for which file
-names a package may add, and test files named by ticket number. The rules are recorded in
-  [decisions.md § Module Conventions](decisions.md#module-conventions); this ticket is the code.
+  checks in four places (including per-module validators in core and the CLI), three ways to build a
+  tenant model, uneven reverse names on shared models, receivers in `signals.py`, destructive commands
+  without `--dry-run`, and a placeholder module directory. A fourth pass (D22–D27) found tenant
+  modules authorizing with the site-wide `is_staff` instead of org roles, a second email sender in
+  forms, write side effects not tied to commit, feature events owned by analytics, and an
+  undeclared `services.py` surface. A fifth pass (D28–D32) found five constraint-naming styles
+  (two orgs names with no prefix at all), webhooks answering with hand-built `{"error": str(exc)}`
+  bodies and `403`, the user-FK `on_delete` rule absent from Module Conventions, no rule for which file
+  names a package may add, and test files named by ticket number. The rules are recorded in
+  [decisions.md § Module Conventions](decisions.md#module-conventions); SA217–SA227 are the code,
+  and this ticket closes them.
 
-  **Scope,** in module-sized slices through the serialized merge queue:
-  - *Settings names.* Every first-party setting and option key follows rules 1 and 6 (the
-    inventory's D1 table, including `QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`); every module gains
-    `QUICKSCALE_<MODULE>_ENABLED`; undeclared settings are declared or removed.
-  - *Identity names.* App labels become `quickscale_<module>`, so tables, migrations, content types,
-    permissions, `AUTH_USER_MODEL`, and orgs' RLS table lists change; `db_table` overrides go; URL
-    namespaces, template folders, and management commands take the same stem.
-  - *Settings reading.* `apply` also writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
-    one generic startup check in `quickscale_core.runtime`, registered by each module, validates
-    every declared setting; per-module readers and code defaults are removed.
-  - *Dependencies.* `orgs` stops importing `auth` and `social`, `auth` stops importing `billing`,
-    `blog` stops reading storage's setting, and `dr_engine` stops reading backups' settings,
-    through `services.py` and `AppConfig` capabilities; `required_modules` covers every import.
-  - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
-    check refuses retired settings, each naming the replacement. Generated templates, docs, and
-    `.env.example` use only the new names.
-  - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
-    `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
-    route names become snake_case without the module name.
-  - *Templates and static.* One flat module base per module (orgs, analytics, forms gain one; orgs
-    stops emitting `<html>`); emails under `email/`; static under `static/quickscale_<module>/`;
-    template-tag libraries renamed `quickscale_<module>[_<purpose>]`.
-  - *APIs.* blog's and listings' function-view APIs become DRF views; `OrgApiBaseView` is rebased
-    on DRF's `APIView`; errors take the one QuickScale shape from a generic handler in `quickscale_core.runtime`
-    (generated `REST_FRAMEWORK` block, DRF dependency in every module with an API, the theme's `useApi.ts` and
-    orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception in the JSON API Endpoint
-    Base Contract, and its hand-written rate parser go. Signature-verified webhooks stay exempt.
-  - *Checks and errors.* Hand-written `ready()` checks move to `checks.py`, run from `ready()` by
-    one core helper that fails every process and also registers them as system checks, orgs' RLS
-    boot guard included; analytics
-    fails on invalid configuration and tolerates only an unreachable vendor; exceptions move to
-    `exceptions.py` under one base; `register_backup_persistence` stays as the listed core port.
-  - *Files, tests, docs.* Every module gains `services.py` with `is_enabled()` and `poetry.toml`;
-    auth's `adapters.py` → `allauth_adapter.py`; one-off files fold in; missing required tests
-    (`test_apps`, `test_services`, `test_migrations`, tenant isolation and RLS) are added;
-    READMEs follow the rule 11 headings; the 15 literal tuple choice lists become `TextChoices`.
-  - *Manifests and option checks (rule 12).* Every option gains `type`/`description`/`validation`
-    as required, in the per-option `validation` block, which core starts reading (today it is
-    parsed and ignored); listings' `derivation.validation_rules` moves there; the 25 one-to-one
-    `derived_settings` entries that repeat an option's `django_setting` (analytics, billing, blog,
-    crm, forms, listings), with their 10 repeated defaults, go; empty
-    `immutable`/`dependencies` blocks are written out. Core's and the CLI's per-module option code
-    goes — the `validate_/resolve_/normalize_/default_<module>_module_options` functions and
-    `DEFAULT_*` / `LEGACY_*` constants in `quickscale_core.contracts.resolvers`,
-    `contracts.module_options`, `schema.config_schema`, and the CLI's `module_config`, with the
-    `contracts.imperative_inventory` that tracked them — and cross-option checks become the
-    manifest's `required_when` / `any_of` keys, run by `plan`, `apply`, and the startup check.
-  - *Models (rules 13–14).* billing, forms, listings (`AbstractListing`), and social
-    (`BaseSocialItem`) models subclass `TenantModel` instead of `tenant_org_fk` plus hand-declared
-    managers, every tenant `Meta` inherits the base's, and `organization` keeps the base's reverse
-    name (`CreditBalance` alone overrides it, as a one-to-one); `is_tenant_model` recognizes
-    inheritance only and an orgs check fails startup on a stray `TenantManager`; relations to other modules' models get
-    `<module>_<name>` `related_name`s (crm's two `created_by` fields have none; backups, billing,
-    blog, crm, forms, and orgs rename the rest, with their callers); `FormFieldValue` gains an
-    ordering.
-  - *Package root, signals, commands, tooling (rules 15–18).* `default_app_config` and storage's
-    root re-export go; auth's and crm's `signals.py` become `receivers.py` and orgs' receivers move
-    there; `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas` gain `--dry-run`,
-    the retired `migrate_billing_to_orgs` is deleted with its recovery docs, and
-    `check_tenant_isolation` raises
-    `CommandError` instead of calling `sys.exit()`; orgs and social gain `[tool.mypy]` and
-    fix what it reports; `quickscale_modules/teams/` is deleted (README to
-    `docs/planning/teams.md`) with core's placeholder handling.
-  - *Authorization, email, effects, events, service surface* (rules 19–24). blog, listings, crm,
-    and forms authorize by org role through orgs' `permissions` (new DRF `HasOrgRole`); forms'
-    fallback email sender goes and forms and orgs require notifications; write effects (forms'
-    submission effects, orgs' invitation, crm's bootstrap receiver, social's cache purge) move to
-    `transaction.on_commit` with a rollback test each; analytics keeps only `capture_event`, forms
-    owns `forms_submitted` (release note: renames `form_submit`), and the unused
-    `capture_social_link_click` goes; every `services.py`
-    gains `__all__`, keyword-only signatures, and `<Module>Error` on failure; backups and blog gain
-    `py.typed`; storage uses `timezone.now()`; social's cache keys become `quickscale_social:*`.
-  - *Constraints, webhooks, deletion, file and test names* (rules 25–29). Every constraint and index
-    is named `quickscale_<module>_…` / `qs_<module>_…_idx` in each clean-break `0001_initial`, and
-    forms' and orgs' `unique_together` become `UniqueConstraint`s; billing's and notifications'
-    webhooks become DRF `APIView`s answering `200`/`400`/`404` in rule 9's shape, with the missing
-    secret moved to `checks.py`; orgs' `debug_helpers.py` becomes `_debug.py`; orgs' eight ticket-numbered test files
-    and two ticket-numbered test apps are renamed by subject, with the docs that cite them (decisions
-    rule 27 cites the SA35 gate's file); the 747 ticket mentions in the docstrings and comments of 103
-    module test files go, reworded to say what each test protects where the number was the only
-    explanation.
-  - *Enforcement.* The rule 30 conformance test, covering rules 1–29, with a control case per rule.
+  Other documents say "SA215 renames…" or "until SA215 lands" for work now split across
+  SA217–SA227; those notes stay true, because SA215 lands last and names the whole change.
+
+  **Scope:** the rule 30 conformance test, covering rules 1–29, with a control case per rule;
+  the proof that a pre-SA215 project fails `apply` and startup naming each new name; the release
+  notes; the inventory's closing pass. Code changes are in SA217–SA227; a drift item none of them
+  fixed is fixed here or recorded as an accepted exception.
 
   **Acceptance:** every inventory drift item (sections 1–31) is fixed or recorded as an accepted exception with
   its reason; the conformance test passes and rejects a violation of each rule; a project
   generated before SA215 fails `apply` and startup with messages naming each new name; a freshly
-  generated project with all twelve modules passes `make ci-e2e`; the `auth ↔ orgs` cycle is gone;
-  the release notes list every moved public URL with its operator step (Stripe and Resend webhook
-  endpoints);
-  decisions.md names quoted from the shipped state are updated; the inventory is marked resolved.
+  generated project with all twelve modules passes `make ci-e2e`; the release notes list every
+  moved public URL with its operator step (Stripe and Resend webhook endpoints); decisions.md
+  names quoted from the shipped state are updated; the inventory is marked resolved.
 
-  **Surfaces:** every module (manifests and core manifest copies, `adapter.py`, settings reads, `AppConfig`,
-  migrations, URLs, templates, static files, template tags, APIs, `checks.py`, `exceptions.py`,
-  tests, READMEs); orgs' tenant classification (`tenancy.is_tenant_model`, a new stray-`TenantManager` check);
-  `quickscale_core` (per-module option code in `contracts` and `schema` removed; placeholder
-  handling in module discovery and the catalog; the startup check, capability helper, and API exception handler in `runtime`, the
-  `dr_engine` backups call, generator settings including the `REST_FRAMEWORK` block, and theme
-  templates including the React API client; `scripts/check_csrf_exempt_gate.py`, which loses its two webhook helpers when the webhooks stop using `csrf_exempt`, the rule 30 test taking over);
-  `quickscale_cli` apply (schema writing, retired-key refusal) and `module_config` (per-module
-  option checks removed; prompts read the manifest); `.env.example`; decisions,
-  [module-extension.md](module-extension.md), [organizations.md](organizations.md) (tenant models,
-  billing recovery section), railway.md, and user docs. It touches Track 2 (CLI apply,
-  manifests' `contract_vintage` blocks, `.env.example`, `dr_engine`) and Track 3 (orgs, settings
-  templates, `auth/views.py`) surfaces.
+  **Surfaces:** the conformance test and its registry row; release notes; decisions; the inventory.
+
+- [ ] **SA217 — Read the manifest option schema in core and check settings at startup.**
+
+  **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. Option checks live in four places and the
+  manifests' per-option `validation` block is parsed and ignored.
+
+  **Scope:**
+  - *Settings reading.* `apply` also writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
+    one generic startup check in `quickscale_core.runtime`, run through SA218's checks helper and
+    registered by each module, validates
+    every declared setting; per-module readers and code defaults are removed.
+  - *Manifests and option checks.* Every option gains `type`/`description`/`validation`
+    as required, in the per-option `validation` block, which core starts reading; listings'
+    `derivation.validation_rules` moves there; the 25 one-to-one `derived_settings` entries that
+    repeat an option's `django_setting` (analytics, billing, blog, crm, forms, listings), with
+    their 10 repeated defaults, go; empty `immutable`/`dependencies` blocks are written out. Core's
+    and the CLI's per-module option code goes — the
+    `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
+    `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
+    `schema.config_schema`, and the CLI's `module_config`, with the
+    `contracts.imperative_inventory` that tracked them — and cross-option checks become the
+    manifest's `required_when` / `any_of` keys, run by `plan`, `apply`, and the startup check.
+
+  **Acceptance:** a setting of the wrong type or a violated `required_when` fails `plan`, `apply`,
+  and startup with the setting's name; no module keeps its own settings reader or code default; no
+  per-module option function remains in core or the CLI; CLI prompts read the manifest.
+
+  **Surfaces:** every manifest and core manifest copy; `quickscale_core` `contracts`, `schema`,
+  `runtime`; `quickscale_cli` apply and `module_config`; module settings reads. Track 2 surfaces
+  plus the `runtime` facade (Track 3), through the serialized queue.
+
+- [ ] **SA218 — Add the shared runtime helpers modules build their conventions on.**
+
+  **Context:** D5, D12, D13; Module Conventions rules 4, 9, and 10. Later tickets need one way to declare a capability, run checks, and
+  answer API errors; today each module hand-writes its own.
+
+  **Scope:** in `quickscale_core.runtime`: the `AppConfig` capability helper (a module declares
+  what it provides, a consumer asks core for every installed provider); the checks helper that
+  runs a module's `checks.py` from `ready()`, fails every process, and also registers the checks as
+  system checks; the generic DRF exception handler emitting the one QuickScale error shape, with
+  the generated `REST_FRAMEWORK` block that installs it.
+  `register_backup_persistence` stays as the listed core port.
+
+  **Acceptance:** each helper has unit tests and a control proving failure is loud; a generated
+  project installs the handler; no module adopts them yet beyond one pilot each.
+
+  **Surfaces:** `quickscale_core.runtime`, the generated settings templates, decisions' named
+  helpers.
+
+- [ ] **SA221 — Rename module identities to `quickscale_<module>`.**
+
+  **Context:** inventory §§ 6, 9, 10, 27; D7, D7b, D28; rules 2 and 25. Labels, tables, namespaces, folders,
+  commands, and constraints follow different stems.
+
+  **Scope:**
+  - *Identity names.* App labels become `quickscale_<module>`, so tables, migrations, content types,
+    permissions, `AUTH_USER_MODEL`, and orgs' RLS table lists change; `db_table` overrides go; URL
+    namespaces, template folders, and management commands take the same stem.
+  - *Constraints.* Every constraint and index is named `quickscale_<module>_…` /
+    `qs_<module>_…_idx` in each clean-break `0001_initial`, and forms' and orgs'
+    `unique_together` become `UniqueConstraint`s.
+
+  **Acceptance:** a fresh project with all twelve modules migrates and passes
+  `check_tenant_isolation` with the renamed tables; no `db_table` override or unprefixed
+  constraint remains; FORCE-RLS table and policy counts are unchanged.
+
+  **Surfaces:** every module's `AppConfig`, models, `0001_initial`, URL namespaces, template
+  folders, commands; orgs' RLS lists; generator settings (`AUTH_USER_MODEL`).
+
+- [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
+
+  **Context:** inventory §§ 1, 2, 4; D1–D3, D8; rules 1 and 6. Two settings families and three spellings of a
+  boolean flag.
+
+  **Scope:**
+  - *Settings names.* Every first-party setting and option key follows rules 1 and 6 (the
+    inventory's D1 table, including `QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`); every module gains
+    `QUICKSCALE_<MODULE>_ENABLED`; undeclared settings are declared or removed.
+  - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
+    check refuses retired settings, each naming the replacement. Generated templates, docs, and
+    `.env.example` use only the new names.
+
+  Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)
+  disabled, admin kept; `apply` refuses to switch off a module another installed module lists in
+  `required_modules`.
+
+  **Acceptance:** every row of the D1 table is applied; each module's `_ENABLED = False` has a test
+  that its public surfaces answer as disabled; a `quickscale.yml` or environment with a
+  retired name fails with the replacement named; no generated file or doc uses a retired name.
+
+  **Surfaces:** every manifest and module settings read; `quickscale_cli` apply; `.env.example`;
+  the generated settings templates (Track 3); railway.md and user docs.
+
+- [ ] **SA225 — Move startup checks and exceptions onto the shared helpers.**
+
+  **Context:** inventory § 12; D13; rule 10. Four startup-check styles.
+
+  **Scope:** hand-written `ready()` checks move to `checks.py`, run through SA218's helper, orgs'
+  RLS boot guard included; analytics fails on invalid configuration and tolerates only an
+  unreachable vendor; exceptions move to `exceptions.py` under one `<Module>Error` base, which
+  `services.py` re-exports.
+
+  **Acceptance:** no `ready()` holds a check body; each moved check fails `runserver`, `migrate`,
+  and `manage.py check` alike, with a test per module.
+
+  **Surfaces:** every module's `apps.py`, `checks.py`, `exceptions.py`; `orgs/apps.py`.
+
+- [ ] **SA220 — Untangle module dependencies behind `services.py` and capabilities.**
+
+  **Context:** inventory §§ 5, 25; D5, D6, D26; rules 4, 5, and 23. An `auth ↔ orgs` import cycle, modules reading
+  other modules' settings, and core reading `backups` settings.
+
+  **Scope:**
+  - *Dependencies.* `orgs` stops importing `auth` and `social`, `auth` stops importing `billing`,
+    `blog` stops reading storage's setting, and `dr_engine` stops reading backups' settings,
+    through `services.py` and SA218's `AppConfig` capabilities; `required_modules` covers every
+    import.
+  - *Service surface.* Every module gains `services.py` with `is_enabled()` (reading SA219's
+    `_ENABLED`); every `services.py` gains `__all__`, keyword-only signatures, and `<Module>Error`
+    on failure, with `test_services.py`.
+
+  **Acceptance:** the `auth ↔ orgs` cycle is gone; an import-graph test matches the D6 layers and
+  `required_modules`; no module reads another module's settings.
+
+  **Surfaces:** auth, orgs, billing, blog, storage, backups, every `services.py`;
+  `quickscale_core/dr_engine/` (Track 2); `auth/views.py`.
+
+- [ ] **SA222 — Put every tenant model on `TenantModel` and align model basics.**
+
+  **Context:** inventory §§ 15, 16; D16, D17; rules 13 and 14. Three ways to build a tenant model.
+
+  **Scope:** billing, forms, listings (`AbstractListing`), and social (`BaseSocialItem`) models
+  subclass `TenantModel` instead of `tenant_org_fk` plus hand-declared managers, every tenant
+  `Meta` inherits the base's, and `organization` keeps the base's reverse name (`CreditBalance`
+  alone overrides it, as a one-to-one); `is_tenant_model` recognizes inheritance only and an orgs
+  check fails startup on a stray `TenantManager`; relations to other modules' models get
+  `<module>_<name>` `related_name`s (crm's two `created_by` fields have none; backups, billing,
+  blog, crm, forms, and orgs rename the rest, with their callers); `FormFieldValue` gains an
+  ordering; the 15 literal tuple choice lists become `TextChoices`. User-FK `on_delete`
+  (rule 27) already conforms and SA35's gate enforces it; a new relation here follows it.
+
+  **Acceptance:** tenant classification and purge plans are unchanged for a fresh project; the
+  stray-manager check has a control; `check_tenant_isolation` passes.
+
+  **Surfaces:** model-bearing modules' models and `0001_initial`; `orgs` `tenancy`;
+  [organizations.md](organizations.md) (tenant models).
+
+- [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
+
+  **Context:** inventory §§ 9, 11, 28; D10, D12, D29; rules 7, 9, and 26. URL prefixes set in three places, two API
+  frameworks and error shapes, hand-built webhook error bodies.
+
+  **Scope:**
+  - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
+    `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
+    route names become snake_case without the module name.
+  - *APIs.* blog's and listings' function-view APIs become DRF views; `OrgApiBaseView` is rebased
+    on DRF's `APIView`; errors take SA218's shape (DRF dependency in every module with an API, the
+    theme's `useApi.ts` and orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception
+    in the JSON API Endpoint Base Contract, and its hand-written rate parser go.
+  - *Webhooks.* billing's and notifications' webhooks become DRF `APIView`s answering
+    `200`/`400`/`404` in rule 9's shape, with the missing secret moved to `checks.py`; they stay
+    signature-verified; `scripts/check_csrf_exempt_gate.py` loses its two webhook helpers.
+
+  **Acceptance:** every API and webhook error body matches the one shape; a list of every moved
+  public URL, with its operator step, is ready for SA215's release notes.
+
+  **Surfaces:** every module's `urls.py`, `adapter.py`, manifest; blog, listings, orgs, social
+  APIs; billing and notifications webhooks; the theme's React API client; the CSRF gate script.
+
+- [ ] **SA224 — Standardize module templates, static files, and template tags.**
+
+  **Context:** inventory § 10; D11; rule 8. Templates break the recorded base-template rule.
+
+  **Scope:** one flat module base per module (orgs, analytics, forms gain one; orgs stops emitting
+  `<html>`); emails under `email/`; static under `static/quickscale_<module>/`; template-tag
+  libraries renamed `quickscale_<module>[_<purpose>]`.
+
+  **Acceptance:** every module page extends its module base, which extends the project base; no
+  module template emits `<html>`; the generated project renders every module page.
+
+  **Surfaces:** every module's `templates/`, `static/`, `templatetags/`; the generated `base.html`.
+
+- [ ] **SA226 — Standardize authorization, email, write effects, and events.**
+
+  **Context:** inventory §§ 21–24; D22–D25; rules 19–22. Tenant modules authorize with site-wide `is_staff`, a
+  second email sender lives in forms, write effects are not tied to commit, analytics owns feature
+  events.
+
+  **Scope:** blog, listings, crm, and forms authorize by org role through orgs' `permissions` (new
+  DRF `HasOrgRole`); forms' fallback email sender goes and forms and orgs require notifications;
+  write effects (forms' submission effects, orgs' invitation, crm's bootstrap receiver, social's
+  cache purge) move to `transaction.on_commit` with a rollback test each; analytics keeps only
+  `capture_event`, forms owns `forms_submitted` (release note: renames `form_submit`), and the
+  unused `capture_social_link_click` goes.
+
+  **Acceptance:** an org member without the role is refused in each module's views and APIs; a
+  rolled-back write sends no email and fires no effect; only notifications sends email.
+
+  **Surfaces:** orgs `permissions`; blog, listings, crm, forms, orgs, social, analytics.
+
+- [ ] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
+
+  **Context:** inventory §§ 13, 17–20, 26, 30, 31; D14, D18–D21, D27, D31, D32; rules 11, 15–18,
+  24, 28, and 29.
+
+  **Scope:**
+  - *Package root, signals, commands, tooling.* `default_app_config` and storage's root re-export
+    go; auth's and crm's `signals.py` become `receivers.py` and orgs' receivers move there;
+    `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas` gain `--dry-run`, the
+    retired `migrate_billing_to_orgs` is deleted with its recovery docs, and
+    `check_tenant_isolation` raises `CommandError` instead of calling `sys.exit()`; orgs and social
+    gain `[tool.mypy]` and fix what it reports; `quickscale_modules/teams/` is deleted (README to
+    `docs/planning/teams.md`) with core's placeholder handling; backups and blog gain `py.typed`;
+    storage uses `timezone.now()`; social's cache keys become `quickscale_social:*`.
+  - *Files.* Every module gains `poetry.toml`; auth's `adapters.py` → `allauth_adapter.py`; orgs'
+    `debug_helpers.py` → `_debug.py`; one-off files fold in.
+  - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
+    isolation and RLS) are added; orgs' eight ticket-numbered test files and two ticket-numbered
+    test apps are renamed by subject, with the docs that cite them (decisions rule 27 cites the
+    SA35 gate's file); the 747 ticket mentions in the docstrings and comments of 103 module test
+    files go, reworded to say what each test protects where the number was the only explanation.
+  - *READMEs* follow the rule 11 headings.
+
+  **Acceptance:** every module package holds only rule 28's file names; no test file or test
+  docstring names a ticket; each destructive command's `--dry-run` has a test that nothing is
+  written.
+
+  **Surfaces:** every module's package root, commands, `pyproject.toml`, tests, README;
+  core's module discovery and catalog (placeholder handling); decisions; the billing recovery
+  section of organizations.md.
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
