@@ -67,8 +67,10 @@ def check_analytics_settings(
     host = snapshot.resolve_posthog_host()
     parsed_host = urlparse(host)
     try:
-        parsed_host.port
-        invalid_port = parsed_host.netloc.endswith(":")
+        parsed_port = parsed_host.port
+        invalid_port = parsed_host.netloc.endswith(":") or (
+            parsed_port is not None and not 1 <= parsed_port <= 65535
+        )
     except ValueError:
         invalid_port = True
     if (
