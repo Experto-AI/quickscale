@@ -24,13 +24,13 @@ from quickscale_modules_crm.models import Company, Contact, Tag
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
 _CRM_TABLES = (
-    "quickscale_modules_crm_tag",
-    "quickscale_modules_crm_company",
-    "quickscale_modules_crm_contact",
-    "quickscale_modules_crm_stage",
-    "quickscale_modules_crm_deal",
-    "quickscale_modules_crm_contactnote",
-    "quickscale_modules_crm_dealnote",
+    "quickscale_crm_tag",
+    "quickscale_crm_company",
+    "quickscale_crm_contact",
+    "quickscale_crm_stage",
+    "quickscale_crm_deal",
+    "quickscale_crm_contactnote",
+    "quickscale_crm_dealnote",
 )
 
 
@@ -167,7 +167,7 @@ class TestCrmRlsBoundaryRestrictedRole:
                 # Org A context
                 cursor.execute("SET app.current_org_id = %s", [str(org_a.id)])
                 cursor.execute(
-                    "SELECT first_name FROM quickscale_modules_crm_contact ORDER BY first_name"
+                    "SELECT first_name FROM quickscale_crm_contact ORDER BY first_name"
                 )
                 names = [r[0] for r in cursor.fetchall()]
                 assert names == ["Alice"], f"Expected only Alice, got {names}"
@@ -175,7 +175,7 @@ class TestCrmRlsBoundaryRestrictedRole:
                 # Switch to Org B context
                 cursor.execute("SET app.current_org_id = %s", [str(org_b.id)])
                 cursor.execute(
-                    "SELECT first_name FROM quickscale_modules_crm_contact ORDER BY first_name"
+                    "SELECT first_name FROM quickscale_crm_contact ORDER BY first_name"
                 )
                 names = [r[0] for r in cursor.fetchall()]
                 assert names == ["Bob"], f"Cross-org: expected only Bob, got {names}"
@@ -204,16 +204,12 @@ class TestCrmRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(org_a.id)])
-                cursor.execute(
-                    "SELECT name FROM quickscale_modules_crm_company ORDER BY name"
-                )
+                cursor.execute("SELECT name FROM quickscale_crm_company ORDER BY name")
                 names = [r[0] for r in cursor.fetchall()]
                 assert names == ["Acme Corp"], f"Expected only Acme Corp, got {names}"
 
                 cursor.execute("SET app.current_org_id = %s", [str(org_b.id)])
-                cursor.execute(
-                    "SELECT name FROM quickscale_modules_crm_company ORDER BY name"
-                )
+                cursor.execute("SELECT name FROM quickscale_crm_company ORDER BY name")
                 names = [r[0] for r in cursor.fetchall()]
                 assert names == ["Beta Ltd"], (
                     f"Cross-org: expected only Beta Ltd, got {names}"
@@ -267,9 +263,7 @@ class TestCrmRlsBoundaryRestrictedRole:
                     # SELECT triggers the AF9 execute wrapper, which
                     # issues SET LOCAL from the ContextVar before
                     # running the query — no manual SET required.
-                    cursor.execute(
-                        "SELECT name FROM quickscale_modules_crm_tag ORDER BY name"
-                    )
+                    cursor.execute("SELECT name FROM quickscale_crm_tag ORDER BY name")
                     names = [r[0] for r in cursor.fetchall()]
                     assert names == ["AF9 Tag"], (
                         f"Expected AF9 Tag, got {names}. "
@@ -306,7 +300,7 @@ class TestCrmRlsBoundaryRestrictedRole:
             try:
                 # Reset so current_setting returns NULL
                 cursor.execute("RESET app.current_org_id")
-                cursor.execute("SELECT COUNT(*) FROM quickscale_modules_crm_contact")
+                cursor.execute("SELECT COUNT(*) FROM quickscale_crm_contact")
                 (count,) = cursor.fetchone()
                 assert count == 0, (
                     "RLS should block all contacts when org context is unset (fail-closed)"
@@ -359,7 +353,7 @@ class TestAuthenticatedClientFailClosedRestoration:
             org_scope,
         )
 
-        _CRM_TAG_TABLE = "quickscale_modules_crm_tag"
+        _CRM_TAG_TABLE = "quickscale_crm_tag"
         _CRM_TAG_NAME = "VIP"
 
         # ------------------------------------------------------------------

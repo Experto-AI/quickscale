@@ -20,7 +20,7 @@ pytestmark = [
     pytest.mark.django_db(transaction=True),
 ]
 
-APP_LABEL = "quickscale_modules_crm"
+APP_LABEL = "quickscale_crm"
 MIG_0001 = "0001_initial"
 
 
@@ -38,7 +38,7 @@ def _current_role_bypasses_rls() -> bool:
 
 
 def test_contact_parent_unique_constraint_exists() -> None:
-    """The named ``crm_contact_id_org_unique`` constraint exists on
+    """The named ``quickscale_crm_contact_id_org_unique`` constraint exists on
     the contact table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -48,13 +48,13 @@ def test_contact_parent_unique_constraint_exists() -> None:
 
     constraints = Contact._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "crm_contact_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint crm_contact_id_org_unique on Contact"
+    assert "quickscale_crm_contact_id_org_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_crm_contact_id_org_unique on Contact"
     )
 
 
 def test_deal_parent_unique_constraint_exists() -> None:
-    """The named ``crm_deal_id_org_unique`` constraint exists on the
+    """The named ``quickscale_crm_deal_id_org_unique`` constraint exists on the
     deal table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -64,8 +64,8 @@ def test_deal_parent_unique_constraint_exists() -> None:
 
     constraints = Deal._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "crm_deal_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint crm_deal_id_org_unique on Deal"
+    assert "quickscale_crm_deal_id_org_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_crm_deal_id_org_unique on Deal"
     )
 
 
@@ -88,20 +88,20 @@ except Exception:
 class TestCrmCompositeFkCatalogProofs:
     """Prove composite child FKs exist with correct properties in pg_constraint."""
 
-    MIG_0001 = ("quickscale_modules_crm", "0001_initial")
+    MIG_0001 = ("quickscale_crm", "0001_initial")
 
     EXPECTED_FKS: list[dict[str, Any]] = [
         {
-            "constraint_name": "crm_contactnote_contact_org_fk",
-            "child_table": "quickscale_modules_crm_contactnote",
-            "parent_table": "quickscale_modules_crm_contact",
+            "constraint_name": "quickscale_crm_contactnote_contact_org_fk",
+            "child_table": "quickscale_crm_contactnote",
+            "parent_table": "quickscale_crm_contact",
             "child_fk_column": "contact_id",
             "on_delete": "c",
         },
         {
-            "constraint_name": "crm_dealnote_deal_org_fk",
-            "child_table": "quickscale_modules_crm_dealnote",
-            "parent_table": "quickscale_modules_crm_deal",
+            "constraint_name": "quickscale_crm_dealnote_deal_org_fk",
+            "child_table": "quickscale_crm_dealnote",
+            "parent_table": "quickscale_crm_deal",
             "child_fk_column": "deal_id",
             "on_delete": "c",
         },
@@ -358,13 +358,13 @@ def test_force_rls_installed_on_all_crm_tables() -> None:
     executor.migrate([(APP_LABEL, MIG_0001)])
 
     expected_policies = {
-        ("quickscale_modules_crm_tag", "crm_tag_org_isolation"),
-        ("quickscale_modules_crm_company", "crm_company_org_isolation"),
-        ("quickscale_modules_crm_contact", "crm_contact_org_isolation"),
-        ("quickscale_modules_crm_stage", "crm_stage_org_isolation"),
-        ("quickscale_modules_crm_deal", "crm_deal_org_isolation"),
-        ("quickscale_modules_crm_contactnote", "crm_contactnote_org_isolation"),
-        ("quickscale_modules_crm_dealnote", "crm_dealnote_org_isolation"),
+        ("quickscale_crm_tag", "crm_tag_org_isolation"),
+        ("quickscale_crm_company", "crm_company_org_isolation"),
+        ("quickscale_crm_contact", "crm_contact_org_isolation"),
+        ("quickscale_crm_stage", "crm_stage_org_isolation"),
+        ("quickscale_crm_deal", "crm_deal_org_isolation"),
+        ("quickscale_crm_contactnote", "crm_contactnote_org_isolation"),
+        ("quickscale_crm_dealnote", "crm_dealnote_org_isolation"),
     }
 
     with connection.cursor() as cursor:
@@ -373,7 +373,7 @@ def test_force_rls_installed_on_all_crm_tables() -> None:
             SELECT c.relname, pc.polname
             FROM pg_policy pc
             JOIN pg_class c ON c.oid = pc.polrelid
-            WHERE c.relname LIKE 'quickscale_modules_crm_%'
+            WHERE c.relname LIKE 'quickscale_crm_%'
             """,
         )
         found_policies = set(cursor.fetchall())
@@ -402,13 +402,13 @@ def test_crm_tables_have_force_rls_enabled() -> None:
     executor.migrate([(APP_LABEL, MIG_0001)])
 
     tenant_tables = [
-        "quickscale_modules_crm_tag",
-        "quickscale_modules_crm_company",
-        "quickscale_modules_crm_contact",
-        "quickscale_modules_crm_stage",
-        "quickscale_modules_crm_deal",
-        "quickscale_modules_crm_contactnote",
-        "quickscale_modules_crm_dealnote",
+        "quickscale_crm_tag",
+        "quickscale_crm_company",
+        "quickscale_crm_contact",
+        "quickscale_crm_stage",
+        "quickscale_crm_deal",
+        "quickscale_crm_contactnote",
+        "quickscale_crm_dealnote",
     ]
 
     with connection.cursor() as cursor:
@@ -554,13 +554,13 @@ def test_crm_rls_policy_has_org_predicate() -> None:
     executor.migrate([(APP_LABEL, MIG_0001)])
 
     tenant_tables = [
-        "quickscale_modules_crm_tag",
-        "quickscale_modules_crm_company",
-        "quickscale_modules_crm_contact",
-        "quickscale_modules_crm_stage",
-        "quickscale_modules_crm_deal",
-        "quickscale_modules_crm_contactnote",
-        "quickscale_modules_crm_dealnote",
+        "quickscale_crm_tag",
+        "quickscale_crm_company",
+        "quickscale_crm_contact",
+        "quickscale_crm_stage",
+        "quickscale_crm_deal",
+        "quickscale_crm_contactnote",
+        "quickscale_crm_dealnote",
     ]
 
     with connection.cursor() as cursor:

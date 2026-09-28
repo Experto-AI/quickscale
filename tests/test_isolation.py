@@ -39,13 +39,13 @@ from tests_shared.isolation import assert_org_scoped_response
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
 _CRM_TABLES = (
-    "quickscale_modules_crm_tag",
-    "quickscale_modules_crm_company",
-    "quickscale_modules_crm_contact",
-    "quickscale_modules_crm_stage",
-    "quickscale_modules_crm_deal",
-    "quickscale_modules_crm_contactnote",
-    "quickscale_modules_crm_dealnote",
+    "quickscale_crm_tag",
+    "quickscale_crm_company",
+    "quickscale_crm_contact",
+    "quickscale_crm_stage",
+    "quickscale_crm_deal",
+    "quickscale_crm_contactnote",
+    "quickscale_crm_dealnote",
 )
 _SYSTEM_TABLES = (
     "auth_user",
@@ -59,8 +59,8 @@ _SYSTEM_TABLES = (
     "django_migrations",
 )
 _ORGS_TABLES = (
-    "quickscale_modules_orgs_organization",
-    "quickscale_modules_orgs_organizationmembership",
+    "quickscale_orgs_organization",
+    "quickscale_orgs_organizationmembership",
 )
 
 

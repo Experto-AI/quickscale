@@ -287,27 +287,27 @@ class TestOperatorPathHTTPAccess:
 
     def test_superuser_can_access_tag_changelist(self, admin_client):
         """Platform operator (superuser) can access Tag changelist via /admin/."""
-        response = admin_client.get("/admin/quickscale_modules_crm/tag/")
+        response = admin_client.get("/admin/quickscale_crm/tag/")
         assert response.status_code == 200
 
     def test_superuser_can_access_company_changelist(self, admin_client):
         """Platform operator (superuser) can access Company changelist via /admin/."""
-        response = admin_client.get("/admin/quickscale_modules_crm/company/")
+        response = admin_client.get("/admin/quickscale_crm/company/")
         assert response.status_code == 200
 
     def test_superuser_can_access_contact_changelist(self, admin_client):
         """Platform operator (superuser) can access Contact changelist via /admin/."""
-        response = admin_client.get("/admin/quickscale_modules_crm/contact/")
+        response = admin_client.get("/admin/quickscale_crm/contact/")
         assert response.status_code == 200
 
     def test_superuser_can_access_stage_changelist(self, admin_client):
         """Platform operator (superuser) can access Stage changelist via /admin/."""
-        response = admin_client.get("/admin/quickscale_modules_crm/stage/")
+        response = admin_client.get("/admin/quickscale_crm/stage/")
         assert response.status_code == 200
 
     def test_superuser_can_access_deal_changelist(self, admin_client):
         """Platform operator (superuser) can access Deal changelist via /admin/."""
-        response = admin_client.get("/admin/quickscale_modules_crm/deal/")
+        response = admin_client.get("/admin/quickscale_crm/deal/")
         assert response.status_code == 200
 
     def test_superuser_can_filter_tag_by_organization(self, admin_client, org_a):
@@ -318,7 +318,7 @@ class TestOperatorPathHTTPAccess:
             tag = Tag.all_objects.create(name="Org-A Tag", organization=org_a)
         _set_active_org(admin_client, org_a.id)
         response = admin_client.get(
-            f"/admin/quickscale_modules_crm/tag/?organization={org_a.pk}"
+            f"/admin/quickscale_crm/tag/?organization={org_a.pk}"
         )
         assert response.status_code == 200
         assert tag.name in response.content.decode()
@@ -333,14 +333,14 @@ class TestOperatorPathHTTPAccess:
             )
         _set_active_org(admin_client, org_a.id)
         response = admin_client.get(
-            f"/admin/quickscale_modules_crm/company/?organization={org_a.pk}"
+            f"/admin/quickscale_crm/company/?organization={org_a.pk}"
         )
         assert response.status_code == 200
         assert company.name in response.content.decode()
 
     def test_superuser_add_form_includes_organization(self, admin_client):
         """Platform operator add forms must expose organization as a required field."""
-        response = admin_client.get("/admin/quickscale_modules_crm/tag/add/")
+        response = admin_client.get("/admin/quickscale_crm/tag/add/")
         assert response.status_code == 200
         # The rendered form should contain an organization field.
         content = response.content.decode()
@@ -355,9 +355,7 @@ class TestOperatorPathHTTPAccess:
         with org_scope(org_a):
             tag = Tag.all_objects.create(name="Readonly Tag", organization=org_a)
         _set_active_org(admin_client, org_a.id)
-        response = admin_client.get(
-            f"/admin/quickscale_modules_crm/tag/{tag.pk}/change/"
-        )
+        response = admin_client.get(f"/admin/quickscale_crm/tag/{tag.pk}/change/")
         assert response.status_code == 200
         # The rendered form should contain the organization value but not as an editable input.
         content = response.content.decode()
@@ -494,7 +492,7 @@ class TestF1110AdminTagFormLevelValidation:
         }
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/contact/add/",
+            "/admin/quickscale_crm/contact/add/",
             data={
                 "first_name": "Test",
                 "last_name": "User",
@@ -535,7 +533,7 @@ class TestF1110AdminTagFormLevelValidation:
         }
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/contact/add/",
+            "/admin/quickscale_crm/contact/add/",
             data={
                 "first_name": "Test",
                 "last_name": "User",
@@ -571,7 +569,7 @@ class TestF1110AdminTagFormLevelValidation:
         }
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/contact/add/",
+            "/admin/quickscale_crm/contact/add/",
             data={
                 "first_name": "Test",
                 "last_name": "User",
@@ -629,7 +627,7 @@ class TestF1110AdminTagFormLevelValidation:
         }
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/deal/add/",
+            "/admin/quickscale_crm/deal/add/",
             data={
                 "title": "Test Deal",
                 "contact": contact.id,
@@ -683,7 +681,7 @@ class TestF1110AdminTagFormLevelValidation:
         }
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/deal/add/",
+            "/admin/quickscale_crm/deal/add/",
             data={
                 "title": "Test Deal",
                 "contact": contact.id,
@@ -731,7 +729,7 @@ class TestF1110AdminTagFormLevelValidation:
         }
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/deal/add/",
+            "/admin/quickscale_crm/deal/add/",
             data={
                 "title": "Test Deal",
                 "contact": contact.id,
@@ -835,7 +833,7 @@ class TestContactNoteAdminSameOrgValidation:
             )
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/contactnote/add/",
+            "/admin/quickscale_crm/contactnote/add/",
             data={
                 "contact": contact_b.id,
                 "text": "Cross-org note",
@@ -866,7 +864,7 @@ class TestContactNoteAdminSameOrgValidation:
             )
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/contactnote/add/",
+            "/admin/quickscale_crm/contactnote/add/",
             data={
                 "contact": contact_a.id,
                 "text": "Same-org note",
@@ -893,7 +891,7 @@ class TestContactNoteAdminSameOrgValidation:
             )
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/contactnote/add/",
+            "/admin/quickscale_crm/contactnote/add/",
             data={
                 "contact": contact_a.id,
                 "text": "Missing org note",
@@ -944,7 +942,7 @@ class TestDealNoteAdminSameOrgValidation:
             )
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/dealnote/add/",
+            "/admin/quickscale_crm/dealnote/add/",
             data={
                 "deal": deal_b.id,
                 "text": "Cross-org deal note",
@@ -990,7 +988,7 @@ class TestDealNoteAdminSameOrgValidation:
             )
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/dealnote/add/",
+            "/admin/quickscale_crm/dealnote/add/",
             data={
                 "deal": deal_a.id,
                 "text": "Same-org deal note",
@@ -1031,7 +1029,7 @@ class TestDealNoteAdminSameOrgValidation:
             )
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/dealnote/add/",
+            "/admin/quickscale_crm/dealnote/add/",
             data={
                 "deal": deal_a.id,
                 "text": "Missing org deal note",
@@ -1061,7 +1059,7 @@ class TestContactAdminInlineNoteCreatedBy:
         _set_active_org(admin_client, org_a.id)
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/contact/add/",
+            "/admin/quickscale_crm/contact/add/",
             data={
                 "first_name": "Inline",
                 "last_name": "Test",
@@ -1115,7 +1113,7 @@ class TestContactAdminInlineNoteCreatedBy:
         _set_active_org(admin_client, org_a.id)
 
         response = admin_client.post(
-            f"/admin/quickscale_modules_crm/contact/{contact.pk}/change/",
+            f"/admin/quickscale_crm/contact/{contact.pk}/change/",
             data={
                 "first_name": "Existing",
                 "last_name": "Contact",
@@ -1178,7 +1176,7 @@ class TestDealAdminInlineNoteCreatedBy:
         _set_active_org(admin_client, org_a.id)
 
         response = admin_client.post(
-            "/admin/quickscale_modules_crm/deal/add/",
+            "/admin/quickscale_crm/deal/add/",
             data={
                 "title": "Test Deal with Note",
                 "contact": contact.id,

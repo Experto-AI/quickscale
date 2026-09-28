@@ -15,7 +15,7 @@ from quickscale_modules_crm.apps import QuickscaleCrmConfig
 def test_app_config_exposes_expected_metadata() -> None:
     """AppConfig should expose the expected CRM module metadata."""
     assert QuickscaleCrmConfig.name == "quickscale_modules_crm"
-    assert QuickscaleCrmConfig.label == "quickscale_modules_crm"
+    assert QuickscaleCrmConfig.label == "quickscale_crm"
     assert QuickscaleCrmConfig.verbose_name == "QuickScale CRM"
     assert QuickscaleCrmConfig.default_auto_field == "django.db.models.BigAutoField"
 

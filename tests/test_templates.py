@@ -10,10 +10,8 @@ from pathlib import Path
 import quickscale_modules_crm
 
 MODULE_PATH = Path(quickscale_modules_crm.__file__).parent
-BASE_TEMPLATE = (
-    MODULE_PATH / "templates" / "quickscale_modules_crm" / "crm" / "base.html"
-)
-CHILD_DIR = MODULE_PATH / "templates" / "quickscale_modules_crm" / "crm"
+BASE_TEMPLATE = MODULE_PATH / "templates" / "quickscale_crm" / "crm" / "base.html"
+CHILD_DIR = MODULE_PATH / "templates" / "quickscale_crm" / "crm"
 
 
 class TestBaseTemplateInheritance:
@@ -62,7 +60,7 @@ class TestBaseTemplateInheritance:
     def test_base_includes_orgs_debug_banner(self):
         """The VIEW-AS banner survives the move to the shared shell."""
         content = BASE_TEMPLATE.read_text()
-        assert "quickscale_modules_orgs/_debug_banner.html" in content
+        assert "quickscale_orgs/_debug_banner.html" in content
 
 
 class TestChildTemplates:
