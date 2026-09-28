@@ -21,8 +21,9 @@ class TenantTableStatus(Enum):
     these three states to describe tenant-table classification.
     """
 
-    #: Fully enrolled: has a direct ``organization_id`` column, a
-    #: ``TenantManager`` as ``objects``, and a live FORCE-RLS policy.
+    #: Fully enrolled: inherits ``TenantModel`` (and so carries a direct
+    #: ``organization_id`` column and a ``TenantManager`` as ``objects``),
+    #: with a live FORCE-RLS policy.
     ENROLLED = auto()
     #: Reviewed and intentionally excluded from the tenant isolation
     #: contract — e.g. control-plane models, abstract bases, or
@@ -130,8 +131,9 @@ class TenantTableEntry:
 
 TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
     # ====== ENROLLED =====================================================
-    # Tenant-owned models with direct ``organization_id`` column,
-    # ``TenantManager``, and a live FORCE-RLS policy.
+    # Tenant-owned ``TenantModel`` subclasses with a direct
+    # ``organization_id`` column, the inherited ``TenantManager`` pair,
+    # and a live FORCE-RLS policy.
     # ======================================================================
     # -- CRM --
     TenantTableEntry(
@@ -1472,8 +1474,8 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
     """Return concrete project models without a tenant classification marker.
 
     These are models from :func:`get_concrete_project_models` that are
-    neither tenant-scoped by ``TenantManager``/``TenantModel`` nor explicitly
-    excluded with ``tenant_excluded``.
+    neither ``TenantModel`` subclasses nor explicitly excluded with
+    ``tenant_excluded``.
 
     A model is unclassified when it has no marker-derived tenant contract
     (SA15.1). The shipped literal registry is deliberately not part of this

@@ -929,10 +929,9 @@ class TestFullE2EWorkflow:
         """A model with TenantManager but no TenantModel fails startup.
 
         Generates a project, embeds the orgs module, and adds the
-        manager-only model shape.  Django's system checks must refuse it
-        before migrations run, naming the model and the inheritance
-        contract, and the conformance command must still report it as an
-        unclassified project model.
+        manager-only model shape.  Django must refuse to start — both
+        ``manage.py check`` and ``manage.py migrate`` — naming the model and
+        the inheritance contract.
         """
         from quickscale_core.generator import ProjectGenerator
 
@@ -1115,18 +1114,9 @@ class TestFullE2EWorkflow:
             f"The stray-manager check should name its check id:\n{startup_output}"
         )
 
-        # ── Run check_tenant_isolation and assert failure ──────────────
-        check_result = subprocess.run(
-            [
-                "poetry",
-                "run",
-                "python",
-                "manage.py",
-                "quickscale_orgs_check_tenant_isolation",
-                "--postgres-only",
-                "--format",
-                "json",
-            ],
+        # ── Migrations must refuse to start under the same model ───────
+        migrate_result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -1137,40 +1127,15 @@ class TestFullE2EWorkflow:
                 }
             ),
         )
-
-        # Exit code 1 — isolation check failed
-        assert check_result.returncode != 0, (
-            f"quickscale_orgs_check_tenant_isolation should fail with unprotected model "
-            f"but exited 0:\nstdout: {check_result.stdout}\n"
-            f"stderr: {check_result.stderr}"
+        assert migrate_result.returncode != 0, (
+            "manage.py migrate should refuse to start while the stray "
+            "TenantManager model is installed but exited 0:\n"
+            f"stdout: {migrate_result.stdout}\n"
+            f"stderr: {migrate_result.stderr}"
         )
-
-        # JSON output should contain failure info
-        import json
-
-        try:
-            payload = json.loads(check_result.stdout)
-        except json.JSONDecodeError as exc:
-            raise AssertionError(
-                f"quickscale_orgs_check_tenant_isolation output should be valid JSON:\n"
-                f"{check_result.stdout}\n{check_result.stderr}"
-            ) from exc
-
-        assert payload.get("status") in ("fail",), (
-            f"Expected status 'fail', got {payload.get('status')!r}: "
-            f"{json.dumps(payload, indent=2)}"
-        )
-
-        # Either tenant_models has a failure or unclassified list is non-empty
-        tenant_models = payload.get("tenant_models", {})
-        unclassified = payload.get("unclassified", [])
-        has_tenant_failure = (
-            isinstance(tenant_models, dict) and tenant_models.get("failed", 0) > 0
-        )
-        has_unclassified = isinstance(unclassified, list) and len(unclassified) > 0
-        assert has_tenant_failure or has_unclassified, (
-            f"Expected tenant model failure or unclassified model, "
-            f"but found none:\n{json.dumps(payload, indent=2)}"
+        migrate_output = migrate_result.stdout + migrate_result.stderr
+        assert "UnprotectedModel" in migrate_output, (
+            f"The startup refusal should name the model:\n{migrate_output}"
         )
 
     def test_generated_project_python_ruff_check(self, tmp_path):

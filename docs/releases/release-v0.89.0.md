@@ -67,8 +67,11 @@ override left on the wrong block can parse without error and render no page cont
 ## Compatibility
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps
-existing organization ownership and FORCE RLS requirements in place without changing package APIs
-or upgrade requirements. Organization purge adds a fail-closed precondition but no new command-line
+existing organization ownership and FORCE RLS requirements in place, but this release does rename
+model-facing names: every organization-scoped model now inherits `TenantModel` (a `TenantManager` on
+a model that does not inherit it fails startup), cross-module reverse accessors take the
+`quickscale_<module>_<name>` form, and model choice constants become `TextChoices` members. A
+project that reads an old reverse accessor or choice constant updates to the new name. Organization purge adds a fail-closed precondition but no new command-line
 option; cancelled subscriptions remain purgeable, while any current row without a Stripe
 subscription ID blocks purge and dry run until reconciled. An incomplete subscription or one-time
 purchase Checkout reservation must reach provider-confirmed expiry first. Reconciliation runs
