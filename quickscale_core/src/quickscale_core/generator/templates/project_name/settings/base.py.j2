@@ -249,6 +249,15 @@ if globals().get("EMAIL_BACKEND") == "anymail.backends.resend.EmailBackend":
 # unset, so a project with no modules still fails closed.
 REST_FRAMEWORK = dict(globals().get("REST_FRAMEWORK", {}))
 
+# Every DRF-handled API error answers the one QuickScale shape —
+# ``{"error": {"code", "message", "fields"}}`` — produced by the shared
+# runtime handler.  ``setdefault`` lets a module-contributed handler from
+# MODULE_SETTINGS win on collision, like every other DRF key.
+REST_FRAMEWORK.setdefault(
+    "EXCEPTION_HANDLER",
+    "quickscale_core.runtime.conventions.exception_handler",
+)
+
 # Module APIs default to authenticated-only unless a view explicitly opts
 # into public access via ``permission_classes``.
 REST_FRAMEWORK.setdefault(

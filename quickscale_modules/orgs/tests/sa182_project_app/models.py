@@ -14,7 +14,7 @@ class ProjectListing(AbstractListing):
         settings.AUTH_USER_MODEL,
         blank=True,
         null=True,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="project_listings",
     )
 

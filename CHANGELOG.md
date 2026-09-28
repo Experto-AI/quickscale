@@ -120,6 +120,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     staying enabled as the between-release safety net. The workflow-security gate reads the pinned
     `zizmor` version from `pyproject.toml` instead of a hand copy, and the dependency gate renders a
     fresh project and fails on high-severity Trivy misconfiguration findings in its `Dockerfile`.
+  - **API errors answer one QuickScale shape.** Fresh generated settings install
+    `quickscale_core.runtime.conventions.exception_handler` as their DRF exception handler, so every
+    DRF-handled API error answers `{"error": {"code", "message", "fields"}}` with the HTTP status
+    carrying the error class; the same facade exports the shared `AppConfig` capability collector
+    and the startup-check runner that fails every process and registers a module's checks as system
+    checks, and existing projects adopt the handler through a declared contract step.
 
   - **Module identities use one `quickscale_<module>` stem.** App labels, database tables,
     migration references, content types, permissions, `AUTH_USER_MODEL`, template folders,

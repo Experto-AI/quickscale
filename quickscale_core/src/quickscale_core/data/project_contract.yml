@@ -66,6 +66,11 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current docker-compose.yml frontend service command so the pnpm install passes --config.fetch-retries=5: a single stalled registry request would otherwise abort the whole install and leave `quickscale up` with a failed-to-start frontend on constrained links."
 
+  - id: sa218-drf-error-shape
+    minimum: "0.89.0"
+    title: "Adopt the one QuickScale DRF error shape"
+    adoption_steps:
+      - "Compare and manually adopt the current settings/base.py REST_FRAMEWORK block: it installs quickscale_core.runtime.conventions.exception_handler as EXCEPTION_HANDLER unless a module already contributed one, so every DRF-handled API error answers {\"error\": {\"code\", \"message\", \"fields\"}} with the HTTP status carrying the error class."
   - id: sa221-identity-stem
     minimum: "0.89.0"
     title: "Adopt the quickscale_<module> identities in generated files"

@@ -331,7 +331,7 @@ class TestAccountDeleteViewSurvivorRegression:
             reset_current_org_id()
 
     def _create_project_listing(self, user: object, org: object) -> object:
-        """Create project-owned tenant content with protected user provenance."""
+        """Create project-owned tenant content with user provenance."""
         from tests.sa182_project_app.models import ProjectListing
 
         set_current_org_id(org.pk)
