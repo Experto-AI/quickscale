@@ -510,7 +510,7 @@ class StripePublishableKeyView(APIView):
 class BillingDashboardView(LoginRequiredMixin, TemplateView):
     """Module-owned billing dashboard mount page."""
 
-    template_name = "quickscale_modules_billing/dashboard.html"
+    template_name = "quickscale_billing/dashboard.html"
 
     def dispatch(
         self,
@@ -567,7 +567,7 @@ class BillingDashboardView(LoginRequiredMixin, TemplateView):
 class PricingPageView(TemplateView):
     """Public billing pricing mount page."""
 
-    template_name = "quickscale_modules_billing/pricing.html"
+    template_name = "quickscale_billing/pricing.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -603,7 +603,7 @@ class PricingPageView(TemplateView):
 class BillingPortalReturnView(TemplateView):
     """Public return page for hosted Stripe billing portal sessions."""
 
-    template_name = "quickscale_modules_billing/billing/portal_return.html"
+    template_name = "quickscale_billing/billing/portal_return.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -616,7 +616,7 @@ class BillingPortalReturnView(TemplateView):
 class PurchaseSuccessView(TemplateView):
     """Public success landing page for hosted checkout returns."""
 
-    template_name = "quickscale_modules_billing/purchase_success.html"
+    template_name = "quickscale_billing/purchase_success.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -629,7 +629,7 @@ class PurchaseSuccessView(TemplateView):
 class PurchaseCancelView(TemplateView):
     """Public cancel landing page for hosted checkout returns."""
 
-    template_name = "quickscale_modules_billing/purchase_cancel.html"
+    template_name = "quickscale_billing/purchase_cancel.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -642,7 +642,7 @@ class PurchaseCancelView(TemplateView):
 class SubscriptionSuccessView(TemplateView):
     """Public success landing page for recurring checkout returns."""
 
-    template_name = "quickscale_modules_billing/subscription_success.html"
+    template_name = "quickscale_billing/subscription_success.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -655,7 +655,7 @@ class SubscriptionSuccessView(TemplateView):
 class SubscriptionCancelView(TemplateView):
     """Public cancel landing page for recurring checkout returns."""
 
-    template_name = "quickscale_modules_billing/subscription_cancel.html"
+    template_name = "quickscale_billing/subscription_cancel.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)

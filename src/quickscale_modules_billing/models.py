@@ -77,7 +77,7 @@ class Plan(models.Model):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        app_label = "quickscale_modules_billing"
+        app_label = "quickscale_billing"
         ordering = ["name"]
 
     def __str__(self) -> str:
@@ -88,7 +88,7 @@ class CreditBalance(models.Model):
     """Current credit balance snapshot for a single organization."""
 
     organization = models.OneToOneField(
-        "quickscale_modules_orgs.Organization",
+        "quickscale_orgs.Organization",
         related_name="credit_balance",
         on_delete=models.PROTECT,
     )
@@ -106,13 +106,13 @@ class CreditBalance(models.Model):
     all_objects = TenantManager(super_scope=True)
 
     class Meta:
-        app_label = "quickscale_modules_billing"
+        app_label = "quickscale_billing"
         base_manager_name = "all_objects"
 
     @classmethod
     def get_or_create_for_org(cls, organization: Any) -> tuple["CreditBalance", bool]:
         organization_model = apps.get_model(
-            "quickscale_modules_orgs",
+            "quickscale_orgs",
             "Organization",
         )
         with transaction.atomic():
@@ -168,14 +168,14 @@ class CreditTransaction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "quickscale_modules_billing"
+        app_label = "quickscale_billing"
         base_manager_name = "all_objects"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["stripe_event_id", "transaction_type"],
                 condition=populated_value_q("stripe_event_id"),
-                name="quickscale_billing_unique_stripe_event_id_per_type",
+                name="quickscale_billing_credittransaction_stripe_event_id_unique",
             ),
         ]
 
@@ -226,7 +226,7 @@ class PurchaseCheckout(models.Model):
     all_objects = TenantManager(super_scope=True)
 
     class Meta:
-        app_label = "quickscale_modules_billing"
+        app_label = "quickscale_billing"
         base_manager_name = "all_objects"
         ordering = ["-id"]
 
@@ -299,24 +299,24 @@ class Subscription(models.Model):
     all_objects = TenantManager(super_scope=True)
 
     class Meta:
-        app_label = "quickscale_modules_billing"
+        app_label = "quickscale_billing"
         base_manager_name = "all_objects"
         ordering = ["-id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["stripe_subscription_id"],
                 condition=populated_value_q("stripe_subscription_id"),
-                name="quickscale_billing_unique_stripe_subscription_id_when_populated",
+                name="quickscale_billing_subscription_stripe_subscription_id_unique",
             ),
             models.UniqueConstraint(
                 fields=["stripe_checkout_session_id"],
                 condition=populated_value_q("stripe_checkout_session_id"),
-                name="quickscale_billing_unique_stripe_checkout_session_id_present",
+                name="quickscale_billing_subscription_stripe_checkout_unique",
             ),
             models.UniqueConstraint(
                 fields=["organization"],
                 condition=current_subscription_status_q(),
-                name="quickscale_billing_unique_current_subscription_per_organization",
+                name="quickscale_billing_subscription_current_per_organization_unique",
             ),
         ]
 
@@ -359,12 +359,12 @@ class WebhookEvent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "quickscale_modules_billing"
+        app_label = "quickscale_billing"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["stripe_event_id"],
-                name="quickscale_billing_unique_stripe_event_id",
+                name="quickscale_billing_webhookevent_stripe_event_id_unique",
             )
         ]
 

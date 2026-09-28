@@ -19,11 +19,11 @@ pytestmark = [
     pytest.mark.django_db(transaction=True),
 ]
 
-APP_LABEL = "quickscale_modules_billing"
+APP_LABEL = "quickscale_billing"
 MIG_LATEST = "0001_initial"
 
 # Dependencies for clean migration apply.
-ORGS_MIG_LATEST = ("quickscale_modules_orgs", "0001_initial")
+ORGS_MIG_LATEST = ("quickscale_orgs", "0001_initial")
 
 
 # ---------------------------------------------------------------------------
@@ -117,16 +117,16 @@ _EXPECTED_BILLING_SELECT_QUAL = _normalize_pg_expr(
 # Derived from the migration's UniqueConstraint conditions as rendered by
 # PostgreSQL 18, normalized for version-robust comparison.
 _EXPECTED_PARTIAL_PREDICATES: dict[str, str] = {
-    "quickscale_billing_unique_stripe_subscription_id_when_populated": _normalize_pg_expr(
+    "quickscale_billing_subscription_stripe_subscription_id_unique": _normalize_pg_expr(
         "(stripe_subscription_id IS NOT NULL) AND (NOT (((stripe_subscription_id)::text = ''::text) AND (stripe_subscription_id IS NOT NULL)))"
     ),
-    "quickscale_billing_unique_stripe_checkout_session_id_present": _normalize_pg_expr(
+    "quickscale_billing_subscription_stripe_checkout_unique": _normalize_pg_expr(
         "(stripe_checkout_session_id IS NOT NULL) AND (NOT (((stripe_checkout_session_id)::text = ''::text) AND (stripe_checkout_session_id IS NOT NULL)))"
     ),
-    "quickscale_billing_unique_current_subscription_per_organization": _normalize_pg_expr(
+    "quickscale_billing_subscription_current_per_organization_unique": _normalize_pg_expr(
         "((status)::text = ANY ((ARRAY['incomplete'::character varying, 'trialing'::character varying, 'active'::character varying, 'past_due'::character varying, 'unpaid'::character varying, 'paused'::character varying])::text[]))"
     ),
-    "quickscale_billing_unique_stripe_event_id_per_type": _normalize_pg_expr(
+    "quickscale_billing_credittransaction_stripe_event_id_unique": _normalize_pg_expr(
         "(stripe_event_id IS NOT NULL) AND (NOT ((stripe_event_id)::text = ''::text))"
     ),
 }
@@ -148,7 +148,7 @@ def test_initial_migration_applies_cleanly() -> None:
 
 
 def test_subscription_unique_stripe_subscription_id_constraint() -> None:
-    """The ``quickscale_billing_unique_stripe_subscription_id_when_populated``
+    """The ``quickscale_billing_subscription_stripe_subscription_id_unique``
     partial unique constraint exists on Subscription."""
     executor = MigrationExecutor(connection)
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
@@ -158,16 +158,16 @@ def test_subscription_unique_stripe_subscription_id_constraint() -> None:
     constraint_names = {c.name for c in Subscription._meta.constraints}
 
     assert (
-        "quickscale_billing_unique_stripe_subscription_id_when_populated"
+        "quickscale_billing_subscription_stripe_subscription_id_unique"
         in constraint_names
     ), (
         "Missing partial unique constraint "
-        "quickscale_billing_unique_stripe_subscription_id_when_populated on Subscription"
+        "quickscale_billing_subscription_stripe_subscription_id_unique on Subscription"
     )
 
 
 def test_subscription_unique_checkout_session_id_constraint() -> None:
-    """The ``quickscale_billing_unique_stripe_checkout_session_id_present``
+    """The ``quickscale_billing_subscription_stripe_checkout_unique``
     partial unique constraint exists on Subscription."""
     executor = MigrationExecutor(connection)
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
@@ -177,16 +177,15 @@ def test_subscription_unique_checkout_session_id_constraint() -> None:
     constraint_names = {c.name for c in Subscription._meta.constraints}
 
     assert (
-        "quickscale_billing_unique_stripe_checkout_session_id_present"
-        in constraint_names
+        "quickscale_billing_subscription_stripe_checkout_unique" in constraint_names
     ), (
         "Missing partial unique constraint "
-        "quickscale_billing_unique_stripe_checkout_session_id_present on Subscription"
+        "quickscale_billing_subscription_stripe_checkout_unique on Subscription"
     )
 
 
 def test_subscription_unique_current_per_org_constraint() -> None:
-    """The ``quickscale_billing_unique_current_subscription_per_organization``
+    """The ``quickscale_billing_subscription_current_per_organization_unique``
     partial unique constraint exists on Subscription."""
     executor = MigrationExecutor(connection)
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
@@ -196,16 +195,16 @@ def test_subscription_unique_current_per_org_constraint() -> None:
     constraint_names = {c.name for c in Subscription._meta.constraints}
 
     assert (
-        "quickscale_billing_unique_current_subscription_per_organization"
+        "quickscale_billing_subscription_current_per_organization_unique"
         in constraint_names
     ), (
         "Missing partial unique constraint "
-        "quickscale_billing_unique_current_subscription_per_organization on Subscription"
+        "quickscale_billing_subscription_current_per_organization_unique on Subscription"
     )
 
 
 def test_credittransaction_unique_stripe_event_per_type_constraint() -> None:
-    """The ``quickscale_billing_unique_stripe_event_id_per_type`` partial
+    """The ``quickscale_billing_credittransaction_stripe_event_id_unique`` partial
     unique constraint exists on CreditTransaction."""
     executor = MigrationExecutor(connection)
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
@@ -214,14 +213,17 @@ def test_credittransaction_unique_stripe_event_per_type_constraint() -> None:
     CreditTransaction = apps.get_model(APP_LABEL, "CreditTransaction")
     constraint_names = {c.name for c in CreditTransaction._meta.constraints}
 
-    assert "quickscale_billing_unique_stripe_event_id_per_type" in constraint_names, (
+    assert (
+        "quickscale_billing_credittransaction_stripe_event_id_unique"
+        in constraint_names
+    ), (
         "Missing partial unique constraint "
-        "quickscale_billing_unique_stripe_event_id_per_type on CreditTransaction"
+        "quickscale_billing_credittransaction_stripe_event_id_unique on CreditTransaction"
     )
 
 
 def test_webhookevent_unique_stripe_event_id_constraint() -> None:
-    """The ``quickscale_billing_unique_stripe_event_id`` unique constraint
+    """The ``quickscale_billing_webhookevent_stripe_event_id_unique`` unique constraint
     exists on WebhookEvent."""
     executor = MigrationExecutor(connection)
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
@@ -230,9 +232,11 @@ def test_webhookevent_unique_stripe_event_id_constraint() -> None:
     WebhookEvent = apps.get_model(APP_LABEL, "WebhookEvent")
     constraint_names = {c.name for c in WebhookEvent._meta.constraints}
 
-    assert "quickscale_billing_unique_stripe_event_id" in constraint_names, (
+    assert (
+        "quickscale_billing_webhookevent_stripe_event_id_unique" in constraint_names
+    ), (
         "Missing unique constraint "
-        "quickscale_billing_unique_stripe_event_id on WebhookEvent"
+        "quickscale_billing_webhookevent_stripe_event_id_unique on WebhookEvent"
     )
 
 
@@ -263,19 +267,19 @@ def test_force_rls_installed_on_tenant_scoped_billing_tables() -> None:
 
     expected_policies = {
         (
-            "quickscale_modules_billing_creditbalance",
+            "quickscale_billing_creditbalance",
             "billing_credit_balance_org_isolation",
         ),
         (
-            "quickscale_modules_billing_credittransaction",
+            "quickscale_billing_credittransaction",
             "billing_credit_transaction_org_isolation",
         ),
         (
-            "quickscale_modules_billing_purchasecheckout",
+            "quickscale_billing_purchasecheckout",
             "billing_purchase_checkout_org_isolation",
         ),
         (
-            "quickscale_modules_billing_subscription",
+            "quickscale_billing_subscription",
             "billing_subscription_org_isolation",
         ),
     }
@@ -286,7 +290,7 @@ def test_force_rls_installed_on_tenant_scoped_billing_tables() -> None:
             SELECT c.relname, pc.polname
             FROM pg_policy pc
             JOIN pg_class c ON c.oid = pc.polrelid
-            WHERE c.relname LIKE 'quickscale_modules_billing_%'
+            WHERE c.relname LIKE 'quickscale_billing_%'
             """,
         )
         found_policies = set(cursor.fetchall())
@@ -302,8 +306,8 @@ def test_force_rls_installed_on_tenant_scoped_billing_tables() -> None:
 
     # Verify Plan and WebhookEvent do NOT have RLS policies.
     tables_without_rls = (
-        "quickscale_modules_billing_plan",
-        "quickscale_modules_billing_webhookevent",
+        "quickscale_billing_plan",
+        "quickscale_billing_webhookevent",
     )
     for table in tables_without_rls:
         policies_on_table = {(t, p) for (t, p) in found_policies if t == table}
@@ -453,14 +457,14 @@ def test_billing_tenant_tables_have_force_rls_enabled() -> None:
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
     tenant_tables = [
-        "quickscale_modules_billing_creditbalance",
-        "quickscale_modules_billing_credittransaction",
-        "quickscale_modules_billing_purchasecheckout",
-        "quickscale_modules_billing_subscription",
+        "quickscale_billing_creditbalance",
+        "quickscale_billing_credittransaction",
+        "quickscale_billing_purchasecheckout",
+        "quickscale_billing_subscription",
     ]
     system_tables = [
-        "quickscale_modules_billing_plan",
-        "quickscale_modules_billing_webhookevent",
+        "quickscale_billing_plan",
+        "quickscale_billing_webhookevent",
     ]
 
     with connection.cursor() as cursor:
@@ -527,10 +531,10 @@ def test_billing_rls_policy_has_org_predicate() -> None:
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
 
     tables = [
-        "quickscale_modules_billing_creditbalance",
-        "quickscale_modules_billing_credittransaction",
-        "quickscale_modules_billing_purchasecheckout",
-        "quickscale_modules_billing_subscription",
+        "quickscale_billing_creditbalance",
+        "quickscale_billing_credittransaction",
+        "quickscale_billing_purchasecheckout",
+        "quickscale_billing_subscription",
     ]
 
     with connection.cursor() as cursor:
@@ -597,8 +601,8 @@ def test_billing_rls_policy_has_org_predicate() -> None:
 
         # System tables must have no policies at all
         for table in (
-            "quickscale_modules_billing_plan",
-            "quickscale_modules_billing_webhookevent",
+            "quickscale_billing_plan",
+            "quickscale_billing_webhookevent",
         ):
             cursor.execute(
                 "SELECT COUNT(*) FROM pg_policies WHERE tablename = %s",
@@ -684,7 +688,7 @@ def test_billing_partial_predicate_altered_status_set() -> None:
     predicate must NOT match the expected canonical form."""
     # Snapshot constraint name so we know which expected value to tamper.
     status_constraint = (
-        "quickscale_billing_unique_current_subscription_per_organization"
+        "quickscale_billing_subscription_current_per_organization_unique"
     )
     expected = _EXPECTED_PARTIAL_PREDICATES[status_constraint]
 
@@ -705,7 +709,7 @@ def test_billing_partial_predicate_altered_status_set() -> None:
 def test_billing_partial_predicate_extra_status() -> None:
     """Adding an extra status to the ARRAY must NOT match the canonical."""
     status_constraint = (
-        "quickscale_billing_unique_current_subscription_per_organization"
+        "quickscale_billing_subscription_current_per_organization_unique"
     )
     expected = _EXPECTED_PARTIAL_PREDICATES[status_constraint]
 

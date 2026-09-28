@@ -17,7 +17,7 @@ def test_app_config_exposes_expected_metadata() -> None:
     from quickscale_modules_billing.apps import QuickscaleBillingConfig
 
     assert QuickscaleBillingConfig.name == "quickscale_modules_billing"
-    assert QuickscaleBillingConfig.label == "quickscale_modules_billing"
+    assert QuickscaleBillingConfig.label == "quickscale_billing"
     assert QuickscaleBillingConfig.verbose_name == "QuickScale Billing"
     assert QuickscaleBillingConfig.default_auto_field == "django.db.models.BigAutoField"
 

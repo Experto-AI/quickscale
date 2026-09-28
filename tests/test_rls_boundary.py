@@ -52,19 +52,19 @@ from tests.stripe_payloads import checkout_session_event
 
 _BILLING_RLS_TARGETS = (
     (
-        "quickscale_modules_billing_creditbalance",
+        "quickscale_billing_creditbalance",
         "billing_credit_balance_org_isolation",
     ),
     (
-        "quickscale_modules_billing_credittransaction",
+        "quickscale_billing_credittransaction",
         "billing_credit_transaction_org_isolation",
     ),
     (
-        "quickscale_modules_billing_purchasecheckout",
+        "quickscale_billing_purchasecheckout",
         "billing_purchase_checkout_org_isolation",
     ),
     (
-        "quickscale_modules_billing_subscription",
+        "quickscale_billing_subscription",
         "billing_subscription_org_isolation",
     ),
 )
@@ -403,7 +403,7 @@ class TestBillingRlsBoundaryRestrictedRole:
             cursor.execute("RESET app.current_org_id")
             cursor.execute("SET SESSION app.current_org_id = %s", [str(org_a.pk)])
             cursor.execute(
-                "SELECT organization_id FROM quickscale_modules_billing_creditbalance"
+                "SELECT organization_id FROM quickscale_billing_creditbalance"
             )
             org_ids = [str(r[0]) for r in cursor.fetchall()]
             assert org_ids == [str(org_a.pk)], (
@@ -412,7 +412,7 @@ class TestBillingRlsBoundaryRestrictedRole:
 
             cursor.execute("SET SESSION app.current_org_id = %s", [str(org_b.pk)])
             cursor.execute(
-                "SELECT organization_id FROM quickscale_modules_billing_creditbalance"
+                "SELECT organization_id FROM quickscale_billing_creditbalance"
             )
             org_ids = [str(r[0]) for r in cursor.fetchall()]
             assert org_ids == [str(org_b.pk)], (
@@ -436,9 +436,7 @@ class TestBillingRlsBoundaryRestrictedRole:
         with connection.cursor() as cursor:
             cursor.execute("RESET app.current_org_id")
             cursor.execute("SET SESSION app.current_org_id = ''")
-            cursor.execute(
-                "SELECT COUNT(*) FROM quickscale_modules_billing_creditbalance"
-            )
+            cursor.execute("SELECT COUNT(*) FROM quickscale_billing_creditbalance")
             (count,) = cursor.fetchone()
             assert count == 0, (
                 "RLS should block all credit balances when org context is unset"
