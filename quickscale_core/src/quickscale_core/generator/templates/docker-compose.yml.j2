@@ -98,6 +98,10 @@ services:
       - PORT=${PORT:-8000}
       - QUICKSCALE_FRONTEND_HOST_PORT=${QUICKSCALE_FRONTEND_HOST_PORT:-5173}
       - QUICKSCALE_FRONTEND_ORIGIN=${QUICKSCALE_FRONTEND_ORIGIN:-}
+      # Clear the build-only check skip: environment entries take precedence
+      # over env_file, so a skip value left in .env can never reach a serving
+      # process.
+      - QUICKSCALE_SKIP_MODULE_CHECKS=
       - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - QUICKSCALE_BILLING_WEBHOOK_SECRET=${QUICKSCALE_BILLING_WEBHOOK_SECRET:-}

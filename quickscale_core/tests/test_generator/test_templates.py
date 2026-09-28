@@ -4031,6 +4031,10 @@ class TestDockerComposeContent:
 
         assert "env_file:" in output
         assert "- .env" in output
+        assert any(
+            line.strip() == "- QUICKSCALE_SKIP_MODULE_CHECKS="
+            for line in output.splitlines()
+        ), "Compose must clear the build-only check skip for serving processes"
         for variable in (
             "STRIPE_PUBLISHABLE_KEY",
             "STRIPE_SECRET_KEY",

@@ -86,10 +86,15 @@ steps:
     minimum: "0.89.0"
     title: "Adopt the Dockerfile build-time vendor placeholder credentials"
     adoption_steps:
-      - "Compare and manually adopt the current Dockerfile collectstatic step: alongside its one-shot SECRET_KEY and BYPASSRLS opt-out it now carries command-scoped placeholder credentials (STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY, QUICKSCALE_BILLING_WEBHOOK_SECRET, RESEND_API_KEY, QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET, POSTHOG_API_KEY) so an enabled module's empty-secret startup check passes at image build; the values never persist, and the runtime environment still needs the real secrets."
+      - "Superseded: this step's placeholder-credential Dockerfile contract was replaced before adoption by the one-shot QUICKSCALE_SKIP_MODULE_CHECKS=all declared in the sa225-vendor-secret-route-generic step. Adopt that final contract; do not add placeholder credentials to the Dockerfile."
   - id: sa225-vendor-secret-route-generic
     minimum: "0.89.0"
     title: "Adopt the generic vendor-credential route and the build-time check skip"
     adoption_steps:
       - "Compare and manually adopt the current docker-compose.yml backend service: an env_file entry loads the project's .env into the container so a credential under any configured *_env_var name reaches it, while the explicit environment entries keep the default names available from a shell export and take precedence over env_file."
       - "Compare and manually adopt the current Dockerfile collectstatic step: it passes the one-shot QUICKSCALE_SKIP_MODULE_CHECKS=all instead of placeholder credentials, because an image build carries no runtime credentials and a configured credential name cannot be known statically; registration and every serving process keep the checks, and the launcher never sets the skip."
+  - id: sa225-vendor-secret-skip-guard
+    minimum: "0.89.0"
+    title: "Adopt the container-side build-skip guard"
+    adoption_steps:
+      - "Compare and manually adopt the current docker-compose.yml backend environment: it clears QUICKSCALE_SKIP_MODULE_CHECKS explicitly so a build-skip value left in the project's .env (which env_file loads) can never reach a serving process, because environment entries take precedence over env_file."

@@ -48,7 +48,8 @@
       "sa221": "Regenerated 2026-09-28 — module identity rename (SA221): admin templates, React admin links, and generated Makefile/ci.yml now use the quickscale_<module> app labels.",
       "sa218": "Regenerated 2026-09-28 — generated settings install quickscale_core.runtime.conventions.exception_handler as REST_FRAMEWORK[EXCEPTION_HANDLER] (SA218). 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa225": "Regenerated 2026-09-28 — docker-compose.yml backend environment forwards the default vendor credential variables (Stripe, Resend, PostHog, AWS, backups remote) from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa225-build-placeholders": "Regenerated 2026-09-28 — the Dockerfile collectstatic step carries command-scoped placeholder credentials for the enabled modules' empty-secret startup checks, so an all-module image build succeeds while runtime still requires the real secrets. 1 fixture hash updated per variant: Dockerfile. All unrelated paths, hashes, and modes remain authoritative."
+      "sa225-build-placeholders": "Regenerated 2026-09-28 — the Dockerfile collectstatic step carries command-scoped placeholder credentials for the enabled modules' empty-secret startup checks, so an all-module image build succeeds while runtime still requires the real secrets. 1 fixture hash updated per variant: Dockerfile. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa225-skip-guard": "Regenerated 2026-09-28 — docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -110,7 +111,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "73c329212e4952ca04a870bb6568e9925ae903cc0c1151fa552ae8e1f9c8e998"
+      "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -580,7 +581,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "73c329212e4952ca04a870bb6568e9925ae903cc0c1151fa552ae8e1f9c8e998"
+      "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
     },
     "frontend/.prettierignore": {
       "mode": "664",
@@ -1050,7 +1051,7 @@
     },
     "docker-compose.yml": {
       "mode": "664",
-      "sha256": "73c329212e4952ca04a870bb6568e9925ae903cc0c1151fa552ae8e1f9c8e998"
+      "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
     },
     "frontend/.prettierignore": {
       "mode": "664",

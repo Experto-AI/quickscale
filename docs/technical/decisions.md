@@ -986,6 +986,9 @@ test checks both. Other files in `tests/` are `conftest.py`,
 - ✅ A module's `checks.py` (rule 10) fails startup when a secret its switched-on features need is
   empty; an unreachable vendor is still tolerated (rule 10). The webhook secret of rule 26 is one
   such check. backups' credentials reach the DR engine through the policy backups passes (rule 5).
+  Storage is the one carve-out: an `s3`/`r2` backend may take credentials from the environment's
+  default provider chain (instance role, shared config), which the storage helper already supports
+  by omitting empty static keys, so only a half-configured static pair fails startup.
 - ❌ `os.getenv` / `os.environ` in module code (listed exception: orgs' RLS boot guard reads core's
   runtime-role variables `QUICKSCALE_ALLOW_BYPASSRLS` and `QUICKSCALE_PRIVILEGED_COMMAND`, which
   start before settings load), or a default variable name written in code.
@@ -1580,7 +1583,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
 - **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
-  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `apps.py` module guard, the `quickscale_core.runtime.settings` facade, the CLI producer, and the generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
+  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `orgs` module guard (`_PRIVILEGED_COMMANDS` in `checks.py`), the `quickscale_core.runtime.settings` facade, the CLI producer, and the generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — non-serving environment-variable escape hatch for intentional single-tenant/development use or the explicitly acknowledged retired billing recovery invocation. It is never a production serving mode.
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; supplied argv, including the retired `migrate_billing_to_orgs` mode, exits 2 without a privileged path; `runserver`/`gunicorn` must still use the restricted runtime role
 - `quickscale manage` clears `RUNTIME_DATABASE_URL` only for those two sanctioned commands; every other management command (for example `createsuperuser` or `migrate_billing_to_orgs`) runs under the restricted runtime role, which the boot guard requires
