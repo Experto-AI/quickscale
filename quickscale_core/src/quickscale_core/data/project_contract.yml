@@ -98,3 +98,9 @@ steps:
     title: "Adopt the container-side build-skip guard"
     adoption_steps:
       - "Compare and manually adopt the current docker-compose.yml backend environment: it clears QUICKSCALE_SKIP_MODULE_CHECKS explicitly so a build-skip value left in the project's .env (which env_file loads) can never reach a serving process, because environment entries take precedence over env_file."
+  - id: sa225-generated-ci-test-credentials
+    minimum: "0.89.0"
+    title: "Adopt non-live vendor credentials in the generated CI workflow"
+    adoption_steps:
+      - "Compare and manually adopt the current .github/workflows/ci.yml job environment: when analytics, billing, or notifications is selected it defines non-live placeholder credentials (POSTHOG_API_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY, QUICKSCALE_BILLING_WEBHOOK_SECRET, RESEND_API_KEY, QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET) so an enabled module's startup check passes in CI, which never calls the live vendors."
+      - "A project that configured a custom *_env_var name adds that variable to the same job environment; the placeholders are test values only and do not belong in a serving environment."

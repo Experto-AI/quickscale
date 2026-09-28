@@ -27,6 +27,7 @@ call, so a project without a DRF-embedding module never imports
 from __future__ import annotations
 
 import os
+import sys
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
@@ -57,9 +58,13 @@ _RegisteredCheck = Callable[..., Sequence[CheckMessage]]
 #: One-shot escape hatch naming modules (comma-separated labels, or ``all``)
 #: whose eager startup run is skipped.  The generated image build sets it so
 #: ``collectstatic`` can run without runtime credentials; registration still
-#: happens, and every serving process still runs the checks.  The launcher
-#: never sets it.
+#: happens, and it is effective only in a ``collectstatic`` invocation, so a
+#: value left in a serving environment (a Compose ``.env``, a platform
+#: variable) never bypasses the checks.  The launcher never sets it.
 _SKIP_EAGER_CHECKS_ENV_VAR = "QUICKSCALE_SKIP_MODULE_CHECKS"
+
+#: The one Django command the skip is effective for.
+_SKIP_EAGER_CHECKS_COMMAND = "collectstatic"
 
 _VALIDATION_ERROR_CODE = "validation_error"
 _VALIDATION_ERROR_MESSAGE = "Invalid input."
@@ -155,7 +160,14 @@ def _declared_capabilities(
 
 
 def _eager_run_is_skipped(label: str) -> bool:
-    """Return whether the one-shot skip names *label* (or ``all``)."""
+    """Return whether the one-shot skip names *label* (or ``all``).
+
+    Effective only while the invoked Django command is ``collectstatic`` (the
+    generated image build's credential-free step), so a skip value that
+    survives into a serving process cannot disable the checks there.
+    """
+    if _SKIP_EAGER_CHECKS_COMMAND not in sys.argv:
+        return False
     declared = os.environ.get(_SKIP_EAGER_CHECKS_ENV_VAR, "").strip()
     if not declared:
         return False
@@ -183,10 +195,11 @@ def register_module_checks(
     them (including warning-level messages, which do not block startup).
 
     A one-shot ``QUICKSCALE_SKIP_MODULE_CHECKS`` naming this label (or
-    ``all``) skips the eager run and only registers the callables.  The
-    generated image build sets it for its credential-free ``collectstatic``
-    step; the launcher never sets it, so every serving process still runs and
-    enforces the checks.
+    ``all``) skips the eager run and only registers the callables, and only
+    while the invoked command is ``collectstatic``.  The generated image build
+    uses it for its credential-free ``collectstatic`` step; a skip value that
+    survives into a serving process (a platform variable, a loaded ``.env``)
+    therefore cannot disable the checks there.
 
     Args:
         app_config: The module's app config; its label is the system-check tag

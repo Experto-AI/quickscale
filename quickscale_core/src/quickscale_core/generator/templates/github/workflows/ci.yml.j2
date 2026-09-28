@@ -25,6 +25,18 @@ jobs:
       matrix:
         python-version: ["{{ python_version }}"]
         django-version: ["{{ django_ci_version }}"]
+{% if selected_modules is none or "analytics" in selected_modules or "billing" in selected_modules or "notifications" in selected_modules %}
+    # Non-live credential placeholders so an enabled module's startup check
+    # passes in CI, which never calls the live vendors. A project using a
+    # custom *_env_var name adds that name here too.
+    env:
+      POSTHOG_API_KEY: ph_test_ci
+      STRIPE_PUBLISHABLE_KEY: pk_test_ci
+      STRIPE_SECRET_KEY: sk_test_ci
+      QUICKSCALE_BILLING_WEBHOOK_SECRET: whsec_test_ci
+      RESEND_API_KEY: re_test_ci
+      QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET: whsec_test_ci
+{% endif %}
 
     steps:
     - uses: actions/checkout@v6

@@ -310,6 +310,9 @@ class TestRegisterModuleChecks:
             return [Error("boom", id="quickscale_test_module.E001")]
 
         monkeypatch.setenv("QUICKSCALE_SKIP_MODULE_CHECKS", "all")
+        monkeypatch.setattr(
+            conventions.sys, "argv", ["manage.py", "collectstatic", "--noinput"]
+        )
 
         conventions.register_module_checks(app_config, [failing_check])
 
@@ -330,6 +333,9 @@ class TestRegisterModuleChecks:
             "QUICKSCALE_SKIP_MODULE_CHECKS",
             "quickscale_other_module, quickscale_test_module",
         )
+        monkeypatch.setattr(
+            conventions.sys, "argv", ["manage.py", "collectstatic", "--noinput"]
+        )
 
         conventions.register_module_checks(app_config, [failing_check])
 
@@ -347,6 +353,28 @@ class TestRegisterModuleChecks:
             return [Error("boom", id="quickscale_test_module.E001")]
 
         monkeypatch.setenv("QUICKSCALE_SKIP_MODULE_CHECKS", "quickscale_other_module")
+        monkeypatch.setattr(
+            conventions.sys, "argv", ["manage.py", "collectstatic", "--noinput"]
+        )
+
+        with pytest.raises(ImproperlyConfigured):
+            conventions.register_module_checks(app_config, [failing_check])
+
+    def test_skip_env_var_is_ineffective_on_a_serving_path(
+        self, system_check_registry, monkeypatch
+    ) -> None:
+        """A skip value in a serving process never disables the eager checks."""
+        from django.core.checks import Error
+
+        app_config = _FakeAppConfig("quickscale_test_module")
+
+        def failing_check(app_configs: object = None, **kwargs: object) -> list:
+            return [Error("boom", id="quickscale_test_module.E001")]
+
+        monkeypatch.setenv("QUICKSCALE_SKIP_MODULE_CHECKS", "all")
+        monkeypatch.setattr(
+            conventions.sys, "argv", ["gunicorn", "myproject.wsgi:application"]
+        )
 
         with pytest.raises(ImproperlyConfigured):
             conventions.register_module_checks(app_config, [failing_check])

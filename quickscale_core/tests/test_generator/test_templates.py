@@ -3089,6 +3089,24 @@ class TestDevOpsTemplateLoading:
         template = jinja_env.get_template("github/workflows/ci.yml.j2")
         assert template is not None
 
+    def test_github_ci_workflow_supplies_non_live_credentials(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """CI carries non-live credentials for enabled credential modules."""
+        output = _render_template(jinja_env, "github/workflows/ci.yml.j2", test_context)
+
+        for variable in (
+            "POSTHOG_API_KEY",
+            "STRIPE_PUBLISHABLE_KEY",
+            "STRIPE_SECRET_KEY",
+            "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+            "RESEND_API_KEY",
+            "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+        ):
+            assert f"{variable}: " in output, (
+                f"generated CI must define the non-live {variable} placeholder"
+            )
+
     def test_dockerfile_loads(self, jinja_env: Environment) -> None:
         """Test Dockerfile template loads without errors."""
         template = jinja_env.get_template("Dockerfile.j2")
