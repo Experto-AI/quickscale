@@ -17,8 +17,7 @@ from quickscale_modules_social.contracts import (
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
     SOCIAL_EMBEDS_PATH,
-    SOCIAL_EMBED_RESOLUTION_ERROR,
-    SOCIAL_EMBED_RESOLUTION_RESOLVED,
+    SocialEmbedResolution,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINKS_CACHE_KEY,
@@ -245,12 +244,12 @@ def test_list_published_social_embeds_honors_runtime_toggle_and_filtering(
             "tiktok",
             "youtube",
         ]
-        assert initial_records[0].resolution_status == SOCIAL_EMBED_RESOLUTION_ERROR
+        assert initial_records[0].resolution_status == SocialEmbedResolution.ERROR
         assert initial_records[0].embed_url is None
         assert "canonical TikTok video URL" in (
             initial_records[0].resolution_error or ""
         )
-        assert initial_records[1].resolution_status == SOCIAL_EMBED_RESOLUTION_RESOLVED
+        assert initial_records[1].resolution_status == SocialEmbedResolution.RESOLVED
         assert (
             initial_records[1].embed_url
             == "https://www.youtube.com/embed/alpha123?rel=0"
@@ -662,7 +661,7 @@ def test_build_social_embeds_payload_freezes_enabled_disabled_and_error_semantic
                 "url": "https://www.youtube.com/shorts/alpha123",
                 "source_url": "https://www.youtube.com/shorts/alpha123",
                 "display_order": 20,
-                "resolution_status": SOCIAL_EMBED_RESOLUTION_RESOLVED,
+                "resolution_status": SocialEmbedResolution.RESOLVED,
                 "resolution_error": None,
                 "embed_url": "https://www.youtube.com/embed/alpha123?rel=0",
                 "thumbnail_url": "https://i.ytimg.com/vi/alpha123/hqdefault.jpg",

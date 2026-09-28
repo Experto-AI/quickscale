@@ -46,7 +46,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="%(class)s_listings",
+                        related_name="%(app_label)s_%(class)s_set",
                         to="quickscale_orgs.organization",
                     ),
                 ),

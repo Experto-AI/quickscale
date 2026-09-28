@@ -194,7 +194,7 @@ def form_field(db, form):
         return FormField.all_objects.create(
             form=form,
             organization=form.organization,
-            field_type=FormField.FIELD_TYPE_TEXT,
+            field_type=FormField.FieldType.TEXT,
             label="Name",
             name="full_name",
             required=True,
@@ -215,7 +215,7 @@ def email_field(db, form):
         return FormField.all_objects.create(
             form=form,
             organization=form.organization,
-            field_type=FormField.FIELD_TYPE_EMAIL,
+            field_type=FormField.FieldType.EMAIL,
             label="Email",
             name="email",
             required=True,
@@ -236,7 +236,7 @@ def optional_field(db, form):
         return FormField.all_objects.create(
             form=form,
             organization=form.organization,
-            field_type=FormField.FIELD_TYPE_TEXT,
+            field_type=FormField.FieldType.TEXT,
             label="Company",
             name="company",
             required=False,

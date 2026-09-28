@@ -952,7 +952,7 @@ class TestFormsCompositeFKMismatchBehavior:
             FormField.all_objects.create(
                 organization=org_a,
                 form=form,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Name",
                 name="name",
                 order=1,
@@ -963,7 +963,7 @@ class TestFormsCompositeFKMismatchBehavior:
                 FormField.all_objects.create(
                     organization=org_b,
                     form=form,
-                    field_type=FormField.FIELD_TYPE_TEXT,
+                    field_type=FormField.FieldType.TEXT,
                     label="Bad Org",
                     name="bad_org",
                     order=2,
@@ -1037,7 +1037,7 @@ class TestFormsCompositeFKMismatchBehavior:
             field = FormField.all_objects.create(
                 organization=org_a,
                 form=form,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Name",
                 name="name",
                 order=1,
@@ -1086,7 +1086,7 @@ class TestFormsCompositeFKMismatchBehavior:
             ff = FormField.all_objects.create(
                 organization=org_a,
                 form=form,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Positive Control",
                 name="positive_control",
                 order=1,
@@ -1164,7 +1164,7 @@ class TestCompositeFkFormFieldValueDeletePath:
             field = FormField.all_objects.create(
                 organization=org,
                 form=form,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Name",
                 name="name",
                 order=1,
@@ -1247,7 +1247,7 @@ class TestCompositeFkFormFieldValueDeletePath:
             field_a = FormField.all_objects.create(
                 organization=org,
                 form=form,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Name",
                 name="name",
                 order=1,
@@ -1255,7 +1255,7 @@ class TestCompositeFkFormFieldValueDeletePath:
             field_b = FormField.all_objects.create(
                 organization=org,
                 form=form,
-                field_type=FormField.FIELD_TYPE_EMAIL,
+                field_type=FormField.FieldType.EMAIL,
                 label="Email",
                 name="email",
                 order=2,

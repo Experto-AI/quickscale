@@ -150,12 +150,12 @@ class FormSubmissionAdmin(TenantModelAdmin):
 
     @admin.action(description="Mark selected submissions as read")
     def mark_as_read(self, request: HttpRequest, queryset: QuerySet) -> None:
-        queryset.update(status=FormSubmission.STATUS_READ)
+        queryset.update(status=FormSubmission.Status.READ)
 
     @admin.action(description="Mark selected submissions as replied")
     def mark_as_replied(self, request: HttpRequest, queryset: QuerySet) -> None:
-        queryset.update(status=FormSubmission.STATUS_REPLIED)
+        queryset.update(status=FormSubmission.Status.REPLIED)
 
     @admin.action(description="Mark selected submissions as archived")
     def mark_as_archived(self, request: HttpRequest, queryset: QuerySet) -> None:
-        queryset.update(status=FormSubmission.STATUS_ARCHIVED)
+        queryset.update(status=FormSubmission.Status.ARCHIVED)

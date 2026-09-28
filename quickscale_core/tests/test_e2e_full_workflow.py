@@ -925,14 +925,14 @@ class TestFullE2EWorkflow:
         # Generated project tests should pass
         assert result.returncode == 0, f"Generated tests failed: {result.stderr}"
 
-    def test_tenant_isolation_conformance_catches_unprotected_model(
-        self, tmp_path, e2e_postgres_url
-    ):
-        """SA1.5 conformance: a deliberately-unprotected model fails check_tenant_isolation.
+    def test_stray_tenant_manager_fails_startup(self, tmp_path, e2e_postgres_url):
+        """A model with TenantManager but no TenantModel fails startup.
 
-        Generates a project, embeds the orgs module, adds a model with
-        TenantManager but no organization_id, and proves the management
-        command exits 1 with JSON failure output.
+        Generates a project, embeds the orgs module, and adds the
+        manager-only model shape.  Django's system checks must refuse it
+        before migrations run, naming the model and the inheritance
+        contract, and the conformance command must still report it as an
+        unclassified project model.
         """
         from quickscale_core.generator import ProjectGenerator
 
@@ -998,19 +998,19 @@ class TestFullE2EWorkflow:
             f"poetry install failed after adding orgs dep: {install_result.stderr}"
         )
 
-        # ── Create an app with a deliberately-unprotected model ────────
+        # ── Create an app with the forbidden manager-only model ────────
         test_app_dir = project_path / project_name / "test_unprotected"
         test_app_dir.mkdir(exist_ok=True)
         (test_app_dir / "__init__.py").write_text("")
 
         (test_app_dir / "models.py").write_text(
-            '"""Deliberately-unprotected model — TenantManager but no organization_id."""\n'
+            '"""Manager-only model — TenantManager without TenantModel."""\n'
             "from django.db import models\n"
             "from quickscale_modules_orgs.models import TenantManager\n"
             "\n"
             "\n"
             "class UnprotectedModel(models.Model):\n"
-            '    """Model with TenantManager but MISSING organization_id — should fail isolation."""\n'
+            '    """Model with TenantManager but no TenantModel inheritance — should fail startup."""\n'
             "    name = models.CharField(max_length=100)\n"
             "    objects = TenantManager()\n"
             "\n"
@@ -1088,9 +1088,9 @@ class TestFullE2EWorkflow:
             f"}}\n"
         )
 
-        # Run migrations so the table exists
-        migrate_result = subprocess.run(
-            ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
+        # ── Django must refuse the manager-only model at startup ───────
+        startup_result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "check"],
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -1101,8 +1101,18 @@ class TestFullE2EWorkflow:
                 }
             ),
         )
-        assert migrate_result.returncode == 0, (
-            f"Migrations failed: {migrate_result.stderr}"
+        assert startup_result.returncode != 0, (
+            "manage.py check should refuse a TenantManager on a model that "
+            "does not inherit TenantModel but exited 0:\n"
+            f"stdout: {startup_result.stdout}\n"
+            f"stderr: {startup_result.stderr}"
+        )
+        startup_output = startup_result.stdout + startup_result.stderr
+        assert "UnprotectedModel" in startup_output, (
+            f"The stray-manager check should name the model:\n{startup_output}"
+        )
+        assert "quickscale_orgs.E003" in startup_output, (
+            f"The stray-manager check should name its check id:\n{startup_output}"
         )
 
         # ── Run check_tenant_isolation and assert failure ──────────────

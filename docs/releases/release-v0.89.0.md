@@ -40,10 +40,11 @@ pipeline, and the template-inheritance rule — is documented in `docs/technical
 
 ## Adoption
 
-A project-owned model declares the tenant-manager contract and calls `apply_force_rls()` from its
-initial migration to install the exact pair required by isolation checks: one tenant-only `FOR ALL`
-policy and its `<base>_select` operator-read `FOR SELECT` policy. A project-owned `AbstractListing`
-subclass declares both the tenant-scoped and super-scope managers before running those checks.
+A project-owned model inherits `TenantModel` (directly or through a module's abstract base) and
+calls `apply_force_rls()` from its initial migration to install the exact pair required by
+isolation checks: one tenant-only `FOR ALL` policy and its `<base>_select` operator-read
+`FOR SELECT` policy. A `TenantManager` on a model that does not inherit `TenantModel` fails
+startup.
 
 Existing projects must manually adopt the current generated `templates/base.html`,
 `templates/index.html`, generated

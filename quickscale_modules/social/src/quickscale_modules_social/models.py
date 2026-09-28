@@ -12,28 +12,21 @@ from django.utils import timezone
 
 from quickscale_modules_social.contracts import (
     SOCIAL_EMBEDS_CACHE_KEY,
-    SOCIAL_EMBED_RESOLUTION_CHOICES,
-    SOCIAL_EMBED_RESOLUTION_ERROR,
-    SOCIAL_EMBED_RESOLUTION_PENDING,
-    SOCIAL_EMBED_RESOLUTION_RESOLVED,
     SOCIAL_LINKS_CACHE_KEY,
     SOCIAL_PROVIDER_CHOICES,
     SocialConfigurationError,
+    SocialEmbedResolution,
     get_social_runtime_settings,
     resolve_social_embed_metadata,
     resolve_social_target,
     social_provider_supports_embeds,
 )
-from quickscale_modules_orgs.managers import TenantManager
-from quickscale_modules_orgs.tenancy import tenant_org_fk
+from quickscale_modules_orgs.models import TenantModel
 
 
-class BaseSocialItem(models.Model):
+class BaseSocialItem(TenantModel):
     """Shared curated social item fields and normalization behavior."""
 
-    organization = tenant_org_fk(
-        related_name="%(app_label)s_%(class)s_set",
-    )
     title = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     provider_name = models.CharField(
@@ -62,14 +55,9 @@ class BaseSocialItem(models.Model):
     cache_keys: ClassVar[tuple[str, ...]] = ()
     require_embed_support: ClassVar[bool] = False
 
-    # T1.9: TenantManager auto-scopes via contextvar; super_scope=True for operator bypass.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         abstract = True
         ordering = ["display_order", "title", "pk"]
-        base_manager_name = "all_objects"
 
     def __str__(self) -> str:
         return self.title
@@ -180,8 +168,8 @@ class SocialEmbed(BaseSocialItem):
     require_embed_support = True
     resolution_status = models.CharField(
         max_length=16,
-        choices=SOCIAL_EMBED_RESOLUTION_CHOICES,
-        default=SOCIAL_EMBED_RESOLUTION_PENDING,
+        choices=SocialEmbedResolution.choices,
+        default=SocialEmbedResolution.PENDING,
         editable=False,
         db_index=True,
     )
@@ -238,7 +226,7 @@ class SocialEmbed(BaseSocialItem):
         if self.last_resolution_attempt_at is None:
             return True
         return bool(
-            self.resolution_status != SOCIAL_EMBED_RESOLUTION_ERROR
+            self.resolution_status != SocialEmbedResolution.ERROR
             and not self.resolved_embed_url
         )
 
@@ -254,7 +242,7 @@ class SocialEmbed(BaseSocialItem):
                 provider=self.provider_name,
             )
         except ValueError as exc:
-            self.resolution_status = SOCIAL_EMBED_RESOLUTION_ERROR
+            self.resolution_status = SocialEmbedResolution.ERROR
             self.resolution_error = str(exc)
             self.last_resolved_at = None
             self.resolved_embed_url = ""
@@ -265,7 +253,7 @@ class SocialEmbed(BaseSocialItem):
             self.resolved_thumbnail_height = None
             return
 
-        self.resolution_status = SOCIAL_EMBED_RESOLUTION_RESOLVED
+        self.resolution_status = SocialEmbedResolution.RESOLVED
         self.resolution_error = ""
         self.last_resolved_at = attempted_at
         self.resolved_embed_url = metadata.embed_url

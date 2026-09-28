@@ -72,13 +72,13 @@ class FormSchemaSerializer(serializers.ModelSerializer):
             serialized_fields.append(
                 {
                     "name": HONEYPOT_FIELD_NAME,
-                    "field_type": FormField.FIELD_TYPE_HIDDEN,
+                    "field_type": FormField.FieldType.HIDDEN,
                     "label": "",
                     "required": False,
                     "order": max_existing_order + 1,
                     "placeholder": "",
                     "help_text": "",
-                    "layout_hint": FormField.LAYOUT_FULL,
+                    "layout_hint": FormField.LayoutHint.FULL,
                     "options": [],
                     "validation_rules": {},
                     "is_active": True,

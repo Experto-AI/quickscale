@@ -154,7 +154,7 @@ def test_webhook_view_accepts_valid_signed_event(
     assert response.json() == {
         "status": "accepted",
         "duplicate": False,
-        "delivery_status": NotificationDelivery.STATUS_DELIVERED,
+        "delivery_status": NotificationDelivery.Status.DELIVERED,
     }
     assert (
         NotificationDeliveryEvent.objects.filter(delivery=delivery_for_webhook).count()

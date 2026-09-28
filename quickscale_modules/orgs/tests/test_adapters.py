@@ -40,7 +40,9 @@ def test_solo_signup_redirect_creates_personal_org(settings) -> None:
 
     assert redirect_url == "/"
     assert (
-        Organization.objects.get(is_personal=True, memberships__user=user).slug
+        Organization.objects.get(
+            is_personal=True, quickscale_orgs_memberships__user=user
+        ).slug
         == "aliceorg"
     )
 
@@ -267,5 +269,5 @@ def test_solo_login_redirect_creates_personal_org_and_keeps_base_redirect(
 
     assert redirect_url == "/accounts/profile/"
     assert Organization.objects.filter(
-        is_personal=True, memberships__user=user
+        is_personal=True, quickscale_orgs_memberships__user=user
     ).exists()

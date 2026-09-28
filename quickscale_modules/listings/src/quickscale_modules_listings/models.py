@@ -5,23 +5,18 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
-from quickscale_modules_orgs.managers import TenantManager
-from quickscale_modules_orgs.tenancy import tenant_org_fk
+from quickscale_modules_orgs.models import TenantModel
 
 
-class AbstractListing(models.Model):
+class AbstractListing(TenantModel):
     """Abstract base model for marketplace listings"""
 
-    STATUS_CHOICES = [
-        ("draft", "Draft"),
-        ("published", "Published"),
-        ("sold", "Sold"),
-        ("archived", "Archived"),
-    ]
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PUBLISHED = "published", "Published"
+        SOLD = "sold", "Sold"
+        ARCHIVED = "archived", "Archived"
 
-    organization = tenant_org_fk(
-        related_name="%(class)s_listings",
-    )
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, blank=True)
     description = models.TextField(
@@ -42,8 +37,8 @@ class AbstractListing(models.Model):
     )
     status = models.CharField(
         max_length=10,
-        choices=STATUS_CHOICES,
-        default="draft",
+        choices=Status.choices,
+        default=Status.DRAFT,
     )
     featured_image = models.ImageField(
         upload_to="listings/images/",
@@ -64,7 +59,7 @@ class AbstractListing(models.Model):
         help_text="Date when listing was published",
     )
 
-    class Meta:
+    class Meta(TenantModel.Meta):
         abstract = True
         ordering = ["-published_date", "-created_at"]
         indexes = [
@@ -82,7 +77,7 @@ class AbstractListing(models.Model):
             self.slug = slugify(self.title)
 
         # Set published_date when status changes to published
-        if self.status == "published" and not self.published_date:
+        if self.status == self.Status.PUBLISHED and not self.published_date:
             self.published_date = timezone.now()
 
         super().save(*args, **kwargs)
@@ -97,12 +92,12 @@ class AbstractListing(models.Model):
     @property
     def is_published(self) -> bool:
         """Check if listing is published"""
-        return self.status == "published"
+        return self.status == self.Status.PUBLISHED
 
     @property
     def is_sold(self) -> bool:
         """Check if listing is sold"""
-        return self.status == "sold"
+        return self.status == self.Status.SOLD
 
     @property
     def has_price(self) -> bool:
@@ -116,19 +111,14 @@ class Listing(AbstractListing):
     This model can be used directly or extended for vertical-specific listings.
     For custom listings, extend AbstractListing instead.
 
-    Phase F11.12b: dual-manager contract.
-    - ``objects`` (TenantScopedManager): default manager.
-    - ``all_objects`` (OperatorManager): escape hatch for admin/operator paths.
+    The tenant contract (``organization`` plus the ``objects`` / ``all_objects``
+    manager pair) is inherited from ``AbstractListing``.
     """
-
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
 
     class Meta(AbstractListing.Meta):
         abstract = False
         verbose_name = "Listing"
         verbose_name_plural = "Listings"
-        base_manager_name = "all_objects"
         indexes = [
             models.Index(
                 fields=["-published_date"], name="qs_listings_listing_pub_idx"

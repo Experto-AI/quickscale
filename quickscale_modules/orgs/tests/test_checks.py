@@ -15,6 +15,11 @@ Covers every code path in ``check_model_classification()``:
 * W005 — unclassified concrete model found
 * Happy path — all models classified, no warnings
 
+Covers the ``check_tenant_manager_inheritance()`` paths:
+
+* E003 — a model carrying a ``TenantManager`` without ``TenantModel``
+* Happy path — an inheriting model and the installed walk pass
+
 Covers the SA208 ``check_provider_id_conformance()`` paths:
 
 * E001 — exception during tenant-model discovery
@@ -398,8 +403,8 @@ class TestW005HintIncludesRemediationGuidance:
         assert "not classified" in msg
         # Must reject literal-registry edits as the enrollment path.
         assert "TENANT_TABLE_REGISTRY" not in hint
-        # Must mention the dual tenant-manager contract and exclusion marker
-        assert "TenantManager" in hint
+        # Must name the inheritance contract and the exclusion marker
+        assert "TenantModel" in hint
         assert "tenant_excluded" in hint
 
     @patch("quickscale_modules_orgs.checks.get_unclassified_concrete_models")
@@ -516,6 +521,56 @@ def test_sa182_tenant_excluded_wins_over_tenant_manager(
     assert is_tenant_model(ProjectListing) is False
     assert is_classified_in_registry(ProjectListing) is True
     assert ProjectListing not in get_tenant_models()
+
+
+# ---------------------------------------------------------------------------
+# Stray tenant-manager check (E003)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckTenantManagerInheritance:
+    """A ``TenantManager`` without ``TenantModel`` fails startup."""
+
+    def test_stray_manager_is_reported(self) -> None:
+        """The manager-only form is reported as an error."""
+        from quickscale_modules_orgs.checks import check_tenant_manager_inheritance
+        from quickscale_modules_orgs.managers import TenantManager
+
+        class StrayControl:
+            _meta = SimpleNamespace(
+                abstract=False,
+                proxy=False,
+                app_label="stray_control",
+                managers=[TenantManager()],
+            )
+
+        with patch(
+            "quickscale_modules_orgs.checks.apps.get_models",
+            return_value=[StrayControl],
+        ):
+            messages = check_tenant_manager_inheritance(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_orgs.E003"
+        assert "StrayControl" in messages[0].msg
+        assert "does not inherit TenantModel" in messages[0].msg
+
+    def test_inheriting_model_is_not_reported(self) -> None:
+        """A real ``TenantModel`` subclass passes without a message."""
+        from quickscale_modules_crm.models import Tag
+        from quickscale_modules_orgs.checks import check_tenant_manager_inheritance
+
+        with patch(
+            "quickscale_modules_orgs.checks.apps.get_models",
+            return_value=[Tag],
+        ):
+            assert check_tenant_manager_inheritance(app_configs=None) == []
+
+    def test_installed_models_pass_the_real_walk(self) -> None:
+        """Every shipped tenant model inherits ``TenantModel``."""
+        from quickscale_modules_orgs.checks import check_tenant_manager_inheritance
+
+        assert check_tenant_manager_inheritance(app_configs=None) == []
 
 
 # ---------------------------------------------------------------------------

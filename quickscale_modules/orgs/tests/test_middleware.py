@@ -54,7 +54,7 @@ def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
     assert "Organization dashboard" in response.content.decode()
     assert "alice" in response.content.decode()
     assert Organization.objects.filter(
-        is_personal=True, memberships__user=user
+        is_personal=True, quickscale_orgs_memberships__user=user
     ).exists()
 
 
@@ -71,7 +71,9 @@ def test_solo_mode_sets_current_org_id_in_contextvar(settings) -> None:
     request.user = user
 
     response = TenantMiddleware(home_view)(request)
-    organization = Organization.objects.get(is_personal=True, memberships__user=user)
+    organization = Organization.objects.get(
+        is_personal=True, quickscale_orgs_memberships__user=user
+    )
 
     assert response.status_code == 200
     assert response.content.decode() == (f"{organization.slug}|{str(organization.id)}")
@@ -1120,7 +1122,7 @@ def test_middleware_sets_contextvar_in_solo_mode(settings) -> None:
 
     assert response.status_code == 200
     # Confirm the personal org was created.
-    Organization.objects.get(is_personal=True, memberships__user=user)
+    Organization.objects.get(is_personal=True, quickscale_orgs_memberships__user=user)
     # After the middleware + view chain, the contextvar must be cleaned up.
     assert get_current_org_id() is None
 

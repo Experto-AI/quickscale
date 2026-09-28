@@ -1,9 +1,8 @@
 """SA1.3 — Generic tenant-isolation conformance management command.
 
-Discovers tenant models by **marker** (default manager is ``TenantManager``
-**or** model is a ``TenantModel`` subclass) across **all** installed app
-labels — not just the ``quickscale_modules_*`` prefix — and reports whether
-each has:
+Discovers tenant models by marker (a ``TenantModel`` subclass, directly or
+through a module's abstract base) across **all** installed app labels — not
+just the ``quickscale_modules_*`` prefix — and reports whether each has:
 
 1. A direct ``organization_id`` column.
 2. On PostgreSQL, the exact tenant-write and operator-read FORCE-RLS policy
@@ -41,9 +40,9 @@ class Command(BaseCommand):
     """SA1.3 conformance command: discover tenant models and verify isolation."""
 
     help = (
-        "Discover tenant models by marker (TenantManager or TenantModel "
-        "subclass) across all installed apps and verify each has "
-        "organization_id + conformant FORCE RLS policies."
+        "Discover tenant models by TenantModel inheritance across all "
+        "installed apps and verify each has organization_id + conformant "
+        "FORCE RLS policies."
     )
 
     def add_arguments(self, parser: object) -> None:
@@ -72,9 +71,8 @@ class Command(BaseCommand):
             )
         else:
             self.stdout.write(
-                "         Hint: Declare objects = TenantManager() and "
-                "all_objects = TenantManager(super_scope=True), or inherit "
-                "TenantModel. Alternatively, add a reasoned "
+                "         Hint: Inherit TenantModel, directly or through a "
+                "module's abstract base. Alternatively, add a reasoned "
                 "'tenant_excluded' class attribute to the model.\n"
             )
 
@@ -145,8 +143,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.WARNING(
                         "No tenant models discovered by marker detection. "
-                        "Ensure at least one model uses TenantManager or "
-                        "inherits TenantModel."
+                        "Ensure at least one model inherits TenantModel."
                     )
                 )
                 if has_unclassified:

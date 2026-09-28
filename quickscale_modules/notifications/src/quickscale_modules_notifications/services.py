@@ -44,18 +44,18 @@ _ALLOWED_METADATA_KEYS = {"template", "project", "workflow"}
 _LIVE_RESEND_BACKEND = "anymail.backends.resend.EmailBackend"
 _PLACEHOLDER_SENDER_EMAIL = "noreply@example.com"
 _EVENT_STATUS_MAP = {
-    "sent": NotificationDelivery.STATUS_SENT,
-    "email.sent": NotificationDelivery.STATUS_SENT,
-    "delivered": NotificationDelivery.STATUS_DELIVERED,
-    "email.delivered": NotificationDelivery.STATUS_DELIVERED,
-    "delivery.delivered": NotificationDelivery.STATUS_DELIVERED,
-    "failed": NotificationDelivery.STATUS_FAILED,
-    "delivery.failed": NotificationDelivery.STATUS_FAILED,
-    "rejected": NotificationDelivery.STATUS_FAILED,
-    "bounced": NotificationDelivery.STATUS_BOUNCED,
-    "email.bounced": NotificationDelivery.STATUS_BOUNCED,
-    "complained": NotificationDelivery.STATUS_COMPLAINED,
-    "email.complained": NotificationDelivery.STATUS_COMPLAINED,
+    "sent": NotificationDelivery.Status.SENT,
+    "email.sent": NotificationDelivery.Status.SENT,
+    "delivered": NotificationDelivery.Status.DELIVERED,
+    "email.delivered": NotificationDelivery.Status.DELIVERED,
+    "delivery.delivered": NotificationDelivery.Status.DELIVERED,
+    "failed": NotificationDelivery.Status.FAILED,
+    "delivery.failed": NotificationDelivery.Status.FAILED,
+    "rejected": NotificationDelivery.Status.FAILED,
+    "bounced": NotificationDelivery.Status.BOUNCED,
+    "email.bounced": NotificationDelivery.Status.BOUNCED,
+    "complained": NotificationDelivery.Status.COMPLAINED,
+    "email.complained": NotificationDelivery.Status.COMPLAINED,
 }
 
 
@@ -512,7 +512,7 @@ def dispatch_notification_message(
         if configuration_issues:
             error_message = "; ".join(configuration_issues)
             for delivery in deliveries:
-                if delivery.status != NotificationDelivery.STATUS_QUEUED:
+                if delivery.status != NotificationDelivery.Status.QUEUED:
                     continue
                 _mark_delivery_failed(delivery, error_message)
             _refresh_message_status(message)
@@ -521,8 +521,8 @@ def dispatch_notification_message(
         resolved_mailer = mailer or _send_email_message
         for delivery in deliveries:
             if delivery.status not in {
-                NotificationDelivery.STATUS_QUEUED,
-                NotificationDelivery.STATUS_FAILED,
+                NotificationDelivery.Status.QUEUED,
+                NotificationDelivery.Status.FAILED,
             }:
                 continue
             try:
@@ -761,16 +761,16 @@ def _apply_delivery_event(
     delivery.last_event_type = event_type
     delivery.last_event_at = event_time
     if (
-        status == NotificationDelivery.STATUS_DELIVERED
+        status == NotificationDelivery.Status.DELIVERED
         and delivery.delivered_at is None
     ):
         delivery.delivered_at = event_time
     if (
         status
         in {
-            NotificationDelivery.STATUS_FAILED,
-            NotificationDelivery.STATUS_BOUNCED,
-            NotificationDelivery.STATUS_COMPLAINED,
+            NotificationDelivery.Status.FAILED,
+            NotificationDelivery.Status.BOUNCED,
+            NotificationDelivery.Status.COMPLAINED,
         }
         and delivery.failed_at is None
     ):
@@ -793,7 +793,7 @@ def _mark_delivery_sent(
     provider_message_id: str,
 ) -> None:
     now = timezone.now()
-    delivery.status = NotificationDelivery.STATUS_SENT
+    delivery.status = NotificationDelivery.Status.SENT
     if provider_message_id:
         delivery.provider_message_id = provider_message_id
     delivery.failure_reason = ""
@@ -815,7 +815,7 @@ def _mark_delivery_sent(
 
 def _mark_delivery_failed(delivery: NotificationDelivery, error_message: str) -> None:
     now = timezone.now()
-    delivery.status = NotificationDelivery.STATUS_FAILED
+    delivery.status = NotificationDelivery.Status.FAILED
     delivery.failure_reason = error_message
     delivery.retry_count += 1
     delivery.last_event_type = "failed"
@@ -857,23 +857,23 @@ def _refresh_message_status(message: NotificationMessage) -> None:
     ]
 
     success_statuses = {
-        NotificationDelivery.STATUS_SENT,
-        NotificationDelivery.STATUS_DELIVERED,
+        NotificationDelivery.Status.SENT,
+        NotificationDelivery.Status.DELIVERED,
     }
     failure_statuses = {
-        NotificationDelivery.STATUS_FAILED,
-        NotificationDelivery.STATUS_BOUNCED,
-        NotificationDelivery.STATUS_COMPLAINED,
+        NotificationDelivery.Status.FAILED,
+        NotificationDelivery.Status.BOUNCED,
+        NotificationDelivery.Status.COMPLAINED,
     }
 
     if statuses.issubset(success_statuses):
-        message.status = NotificationMessage.STATUS_SENT
+        message.status = NotificationMessage.Status.SENT
     elif statuses.issubset(failure_statuses):
-        message.status = NotificationMessage.STATUS_FAILED
-    elif statuses == {NotificationDelivery.STATUS_QUEUED}:
-        message.status = NotificationMessage.STATUS_QUEUED
+        message.status = NotificationMessage.Status.FAILED
+    elif statuses == {NotificationDelivery.Status.QUEUED}:
+        message.status = NotificationMessage.Status.QUEUED
     else:
-        message.status = NotificationMessage.STATUS_PARTIAL
+        message.status = NotificationMessage.Status.PARTIAL
 
     message.dispatched_at = min(dispatched_at_values) if dispatched_at_values else None
     message.last_event_at = max(last_event_at_values) if last_event_at_values else None

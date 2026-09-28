@@ -584,9 +584,9 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         artifact: BackupArtifact,
     ) -> str | None:
         """Return why an artifact cannot be restored from the admin surface."""
-        if artifact.status == BackupArtifact.STATUS_DELETED:
+        if artifact.status == BackupArtifact.Status.DELETED:
             return "Deleted backup artifacts cannot be restored from admin."
-        if artifact.status == BackupArtifact.STATUS_RESTORING:
+        if artifact.status == BackupArtifact.Status.RESTORING:
             if is_restore_stale(artifact):
                 return (
                     "This backup artifact's restore appears stale "
@@ -603,8 +603,8 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                 "Admin restore only supports PostgreSQL custom-format backup artifacts."
             )
         if artifact.effective_restore_scope() not in {
-            BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
-            BackupArtifact.RESTORE_SCOPE_PORTABLE,
+            BackupArtifact.RestoreScope.LOCAL_ONLY,
+            BackupArtifact.RestoreScope.PORTABLE,
         }:
             return "This backup artifact is not classified as an eligible restore candidate."
         if not artifact.local_path:
@@ -972,7 +972,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
 
     def _has_downloadable_local_file(self, obj: BackupArtifact) -> bool:
         """Return whether the admin can still offer a local download action."""
-        if obj.status == BackupArtifact.STATUS_DELETED:
+        if obj.status == BackupArtifact.Status.DELETED:
             return False
 
         try:
@@ -987,8 +987,8 @@ class BackupArtifactAdmin(admin.ModelAdmin):
 
     @admin.display(description="Stale restore")
     def stale_restore_warning(self, obj: BackupArtifact) -> str:
-        """Show a staleness warning when a STATUS_RESTORING artifact is stale."""
-        if obj.status != BackupArtifact.STATUS_RESTORING:
+        """Show a staleness warning when a Status.RESTORING artifact is stale."""
+        if obj.status != BackupArtifact.Status.RESTORING:
             return ""
         if not is_restore_stale(obj):
             return "In progress\u2026"
@@ -1003,7 +1003,9 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         if snapshot_status is None:
             return "Untracked"
 
-        return dict(BackupSnapshot.STATUS_CHOICES).get(snapshot_status, snapshot_status)
+        return str(
+            dict(BackupSnapshot.Status.choices).get(snapshot_status, snapshot_status)
+        )
 
     @admin.display(description="Provenance")
     def snapshot_provenance(self, obj: BackupArtifact) -> str:
@@ -1134,12 +1136,12 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         request: HttpRequest,
         queryset: Any,
     ) -> None:
-        """Reset stranded STATUS_RESTORING artifacts that exceed the stale threshold."""
+        """Reset stranded Status.RESTORING artifacts that exceed the stale threshold."""
         reset_count = 0
         skip_count = 0
         error_count = 0
         for artifact in queryset:
-            if artifact.status != BackupArtifact.STATUS_RESTORING:
+            if artifact.status != BackupArtifact.Status.RESTORING:
                 skip_count += 1
                 continue
             if not is_restore_stale(artifact):

@@ -138,7 +138,9 @@ def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> Non
         verbosity=0,
     )
 
-    organization = Organization.objects.get(is_personal=True, memberships__user=user)
+    organization = Organization.objects.get(
+        is_personal=True, quickscale_orgs_memberships__user=user
+    )
     subscription.refresh_from_db()
     balance.refresh_from_db()
     transaction_row.refresh_from_db()
@@ -163,7 +165,9 @@ def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> Non
     )
 
     assert (
-        Organization.objects.filter(is_personal=True, memberships__user=user).count()
+        Organization.objects.filter(
+            is_personal=True, quickscale_orgs_memberships__user=user
+        ).count()
         == 1
     )
     assert (
@@ -222,7 +226,9 @@ def test_migrate_billing_to_orgs_reuses_sole_existing_membership() -> None:
     assert balance.organization == organization
     assert organization.stripe_customer_id == "cus_member_bridge"
     assert (
-        Organization.objects.filter(is_personal=True, memberships__user=user).count()
+        Organization.objects.filter(
+            is_personal=True, quickscale_orgs_memberships__user=user
+        ).count()
         == 0
     )
     assert "created_personal_org=no" in stdout.getvalue()
@@ -477,7 +483,9 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
     subscription.refresh_from_db()
     assert subscription.organization_id is None
     assert (
-        Organization.objects.filter(is_personal=True, memberships__user=user).count()
+        Organization.objects.filter(
+            is_personal=True, quickscale_orgs_memberships__user=user
+        ).count()
         == 0
     )
 

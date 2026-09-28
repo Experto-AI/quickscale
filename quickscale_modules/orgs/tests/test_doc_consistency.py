@@ -144,7 +144,7 @@ def test_derived_registry_full_overview_matches_literal() -> None:
         f"The derived view must be purely marker-driven and agree with "
         f"the shipped literal registry for every installed model.  If you added "
         f"a model, ensure it carries the correct marker (tenant_excluded, "
-        f"TenantManager/TenantModel, or implicit M2M through detection)."
+        f"TenantModel inheritance, or implicit M2M through detection)."
     )
 
 
@@ -210,9 +210,8 @@ def test_derived_registry_works_without_registry_lookup() -> None:
     from the derived view.
 
     The derived view uses the new ``_is_classified_by_marker_only`` path
-    which checks ``tenant_excluded`` markers, ``TenantManager`` /
-    ``TenantModel`` detection, and marker-only M2M through inference —
-    never ``REGISTRY_LOOKUP``.
+    which checks ``tenant_excluded`` markers, ``TenantModel`` inheritance,
+    and marker-only M2M through inference — never ``REGISTRY_LOOKUP``.
     """
     # Use try/finally to restore REGISTRY_LOOKUP even on assertion failure.
     import quickscale_modules_orgs.tenancy as tenancy_mod
