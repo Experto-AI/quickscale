@@ -16,7 +16,7 @@ from django.utils.html import format_html
 
 from .constants import ACTIVE_ORG_SESSION_KEY
 from .current_org import org_scope, set_current_org_id
-from .debug_helpers import clear_debug_as_org, get_debug_as_org, set_debug_as_org
+from ._debug import clear_debug_as_org, get_debug_as_org, set_debug_as_org
 from .models import (
     OrgRole,
     Organization,
@@ -207,7 +207,7 @@ def _resolve_active_org_id(request: Any) -> uuid.UUID | None:
 
     Priority:
     1. **VIEW-AS debug session** — superuser override (resolved via
-       :func:`~.debug_helpers.get_debug_as_org`).
+       :func:`~._debug.get_debug_as_org`).
     2. **Explicit request selection** — GET filter or POST form field
        (see :func:`_explicit_org_from_request`).  When found, the
        selection is persisted to the session.
@@ -291,7 +291,7 @@ class TenantModelAdmin(admin.ModelAdmin):
     Organization resolution priority
     --------------------------------
     1. VIEW-AS debug session (superuser override — see
-       :func:`~.debug_helpers.get_debug_as_org`).
+       :func:`~._debug.get_debug_as_org`).
     2. Explicit request selection (POST form field ``organization`` or
        GET list filter ``organization__id__exact``).
     3. Session persistence (``ACTIVE_ORG_SESSION_KEY``).

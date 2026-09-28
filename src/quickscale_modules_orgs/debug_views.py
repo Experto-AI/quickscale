@@ -18,7 +18,7 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
-from .debug_helpers import clear_debug_as_org, set_debug_as_org
+from ._debug import clear_debug_as_org, set_debug_as_org
 from .models import Organization
 
 logger = logging.getLogger(__name__)

@@ -35,7 +35,9 @@ privileged command.
 
 from __future__ import annotations
 
+import importlib
 import os
+import sys
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -53,9 +55,6 @@ from quickscale_modules_orgs.apps import (
     _is_privileged_command,
 )
 from quickscale_modules_orgs.models import OrganizationMembership
-from quickscale_modules_orgs.signals import (
-    _protect_last_owner_on_membership_delete,
-)
 
 
 @pytest.fixture(autouse=True)
@@ -423,13 +422,17 @@ def test_ready_installs_backstops_under_privileged_command(settings: Any) -> Non
     ``test_models.test_historical_model_delete_of_last_owner_in_multi_member_org_is_refused``).
     Both receivers are disconnected first so the assertions observe this
     ``ready()`` call rather than Django's startup ``ready()``, then
-    reconnected so the rest of the suite sees the normal wiring.
+    reconnected so the rest of the suite sees the normal wiring.  The
+    receivers module is dropped from ``sys.modules`` first, because the
+    ``@receiver`` decorator runs on import and a cached import would not
+    reconnect the disconnected backstop.
     """
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
-    pre_delete.disconnect(_protect_last_owner_on_membership_delete)
+    receivers_module = importlib.import_module("quickscale_modules_orgs.receivers")
+    pre_delete.disconnect(receivers_module._protect_last_owner_on_membership_delete)
     connection_created.disconnect(_install_priming_on_connection)
     try:
         with patch("quickscale_modules_orgs.apps.connection", mock_conn):
@@ -438,6 +441,7 @@ def test_ready_installs_backstops_under_privileged_command(settings: Any) -> Non
                 {"QUICKSCALE_PRIVILEGED_COMMAND": "migrate"},
                 clear=True,
             ):
+                sys.modules.pop("quickscale_modules_orgs.receivers", None)
                 config = QuickscaleOrgsConfig(
                     "quickscale_modules_orgs", quickscale_modules_orgs
                 )
@@ -445,21 +449,29 @@ def test_ready_installs_backstops_under_privileged_command(settings: Any) -> Non
 
         # ``_live_receivers`` returns ``(sync_receivers, async_receivers)``;
         # both installs connect synchronous receivers.  A sender-free
-        # connection matches the live membership sender as well.
+        # connection matches the live membership sender as well.  The
+        # receiver is matched by name, not by the module attribute, so a
+        # test-side import is what must not be able to hide a missing
+        # ``ready()`` import: the assertion runs before any import here.
         membership_receivers, _membership_async = pre_delete._live_receivers(
             sender=OrganizationMembership
         )
         priming_receivers, _priming_async = connection_created._live_receivers(
             sender=None
         )
-        assert _protect_last_owner_on_membership_delete in membership_receivers, (
-            "privileged ready() skipped the SA70 last-owner pre_delete backstop"
-        )
+        assert any(
+            getattr(receiver, "__name__", "")
+            == "_protect_last_owner_on_membership_delete"
+            for receiver in membership_receivers
+        ), "privileged ready() skipped the SA70 last-owner pre_delete backstop"
         assert _install_priming_on_connection in priming_receivers, (
             "privileged ready() skipped the AF9 connection_created priming install"
         )
     finally:
-        pre_delete.connect(_protect_last_owner_on_membership_delete)
+        # Re-import in case an assertion fired before the fresh module was
+        # bound, then reconnect so the rest of the suite sees normal wiring.
+        receivers_module = importlib.import_module("quickscale_modules_orgs.receivers")
+        pre_delete.connect(receivers_module._protect_last_owner_on_membership_delete)
         connection_created.connect(_install_priming_on_connection)
 
 
