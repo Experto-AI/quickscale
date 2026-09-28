@@ -152,17 +152,17 @@ The list view supports query parameters:
 
 ### Template Customization
 
-All templates extend `quickscale_modules_listings/listings/base.html`. To customize:
+All templates extend `quickscale_listings/listings/base.html`. To customize:
 
 1. **Override the base template** in your project:
    ```
-   templates/quickscale_modules_listings/listings/base.html
+   templates/quickscale_listings/listings/base.html
    ```
 
 2. **Override individual templates**:
    ```
-   templates/quickscale_modules_listings/listings/listing_list.html
-   templates/quickscale_modules_listings/listings/listing_detail.html
+   templates/quickscale_listings/listings/listing_list.html
+   templates/quickscale_listings/listings/listing_detail.html
    ```
 
 3. **Example: Extending base template**:

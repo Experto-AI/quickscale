@@ -248,7 +248,7 @@ class ListingListView(ListingsPublicReadMixin, ListView):
     """Display paginated list of published listings with filtering"""
 
     model = Listing
-    template_name = "quickscale_modules_listings/listings/listing_list.html"
+    template_name = "quickscale_listings/listings/listing_list.html"
     context_object_name = "listings"
     paginate_by = DEFAULT_LISTINGS_PER_PAGE
     filterset_class: type[Any] | None = None
@@ -299,7 +299,7 @@ class ListingDetailView(ListingsPublicReadMixin, DetailView):
     """Display single listing detail"""
 
     model = Listing
-    template_name = "quickscale_modules_listings/listings/listing_detail.html"
+    template_name = "quickscale_listings/listings/listing_detail.html"
     context_object_name = "listing"
     slug_url_kwarg = "slug"
 

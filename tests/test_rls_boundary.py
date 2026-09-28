@@ -30,7 +30,7 @@ from quickscale_modules_orgs.models import Organization
 # ---------------------------------------------------------------------------
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
-_LISTINGS_TABLES = ("quickscale_modules_listings_listing",)
+_LISTINGS_TABLES = ("quickscale_listings_listing",)
 
 
 def _ensure_rls_test_role() -> None:
@@ -116,9 +116,7 @@ class TestListingsRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(bogus_org)])
-                cursor.execute(
-                    "SELECT COUNT(*) FROM quickscale_modules_listings_listing"
-                )
+                cursor.execute("SELECT COUNT(*) FROM quickscale_listings_listing")
                 (count,) = cursor.fetchone()
                 assert count == 0, (
                     "RLS should block all listings with a non-matching org context"
@@ -160,7 +158,7 @@ class TestListingsRlsBoundaryRestrictedRole:
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(org_a.id)])
                 cursor.execute(
-                    "SELECT title FROM quickscale_modules_listings_listing ORDER BY title"
+                    "SELECT title FROM quickscale_listings_listing ORDER BY title"
                 )
                 titles = [r[0] for r in cursor.fetchall()]
                 assert titles == ["Org A Listing"], (
@@ -169,7 +167,7 @@ class TestListingsRlsBoundaryRestrictedRole:
 
                 cursor.execute("SET app.current_org_id = %s", [str(org_b.id)])
                 cursor.execute(
-                    "SELECT title FROM quickscale_modules_listings_listing ORDER BY title"
+                    "SELECT title FROM quickscale_listings_listing ORDER BY title"
                 )
                 titles = [r[0] for r in cursor.fetchall()]
                 assert titles == ["Org B Listing"], (
@@ -199,9 +197,7 @@ class TestListingsRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("RESET app.current_org_id")
-                cursor.execute(
-                    "SELECT COUNT(*) FROM quickscale_modules_listings_listing"
-                )
+                cursor.execute("SELECT COUNT(*) FROM quickscale_listings_listing")
                 (count,) = cursor.fetchone()
                 assert count == 0, (
                     "RLS should block all listings when org context is unset (fail-closed)"
@@ -220,7 +216,7 @@ class TestListingsRlsBoundaryRestrictedRole:
 # is never primed and every RLS-gated query returns zero rows — turning
 # this test red.
 #
-# Pattern follows ``quickscale_modules_blog/tests/test_rls_boundary.py:324-379``:
+# Pattern follows ``quickscale_blog/tests/test_rls_boundary.py:324-379``:
 #   1. Create System-org listing data before SET ROLE (superuser connection).
 #   2. SET ROLE to the restricted runtime role.
 #   3. Make an anonymous request through the full Django stack.
@@ -229,12 +225,12 @@ class TestListingsRlsBoundaryRestrictedRole:
 # ---------------------------------------------------------------------------
 
 _RESTRICTED_ANON_ROLE = "quickscale_rls_test_role"
-_ANON_LISTINGS_TABLES = ("quickscale_modules_listings_listing",)
+_ANON_LISTINGS_TABLES = ("quickscale_listings_listing",)
 _SYSTEM_ANON_TABLES = (
     "auth_user",
     "django_session",
 )
-_ORGS_ANON_TABLES = ("quickscale_modules_orgs_organization",)
+_ORGS_ANON_TABLES = ("quickscale_orgs_organization",)
 
 
 def _ensure_anon_listings_rls_test_role() -> None:
@@ -288,7 +284,7 @@ class TestListingsRlsAnonymousReadUnderRestrictedRole:
     System-org listing content when running under a restricted PostgreSQL
     role that does not bypass RLS.
 
-    Exercises the shipped ``Listing`` table (``quickscale_modules_listings_listing``,
+    Exercises the shipped ``Listing`` table (``quickscale_listings_listing``,
     migration-backed with FORCE-RLS) via the production URL routing, making
     this a true regression proof for the shipped table that broke anonymous
     listing reads.
@@ -312,7 +308,7 @@ class TestListingsRlsAnonymousReadUnderRestrictedRole:
         the NOBYPASSRLS runtime role.
 
         Uses the shipped ``Listing`` model (migration-backed with FORCE-RLS
-        on ``quickscale_modules_listings_listing``) so the test proves
+        on ``quickscale_listings_listing``) so the test proves
         RLS behavior for the production table that broke anonymous reads.
         """
         _ensure_anon_listings_rls_test_role()
@@ -364,7 +360,7 @@ class TestListingsRlsAnonymousReadUnderRestrictedRole:
         under the NOBYPASSRLS runtime role.
 
         Uses the shipped ``Listing`` model (migration-backed with FORCE-RLS
-        on ``quickscale_modules_listings_listing``) so the test proves
+        on ``quickscale_listings_listing``) so the test proves
         RLS behavior for the production table that broke anonymous reads.
         """
         _ensure_anon_listings_rls_test_role()

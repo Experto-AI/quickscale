@@ -11,9 +11,9 @@ import quickscale_modules_listings
 
 MODULE_PATH = Path(quickscale_modules_listings.__file__).parent
 BASE_TEMPLATE = (
-    MODULE_PATH / "templates" / "quickscale_modules_listings" / "listings" / "base.html"
+    MODULE_PATH / "templates" / "quickscale_listings" / "listings" / "base.html"
 )
-CHILD_DIR = MODULE_PATH / "templates" / "quickscale_modules_listings" / "listings"
+CHILD_DIR = MODULE_PATH / "templates" / "quickscale_listings" / "listings"
 
 
 class TestBaseTemplateInheritance:
@@ -62,7 +62,7 @@ class TestBaseTemplateInheritance:
     def test_base_includes_orgs_debug_banner(self):
         """The VIEW-AS banner survives the move to the shared shell."""
         content = BASE_TEMPLATE.read_text()
-        assert "quickscale_modules_orgs/_debug_banner.html" in content
+        assert "quickscale_orgs/_debug_banner.html" in content
 
 
 class TestChildTemplates:

@@ -8,7 +8,7 @@ class QuickscaleListingsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_listings"
-    label = "quickscale_modules_listings"
+    label = "quickscale_listings"
     verbose_name = "QuickScale Listings"
 
     def ready(self) -> None:
