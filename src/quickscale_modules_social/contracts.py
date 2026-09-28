@@ -10,6 +10,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from django.conf import settings
 
+from quickscale_modules_social.exceptions import SocialConfigurationError
+
 SOCIAL_LINK_TREE_PATH = "/social"
 SOCIAL_EMBEDS_PATH = "/social/embeds"
 SOCIAL_INTEGRATION_BASE_PATH = "/_quickscale/social/"
@@ -66,10 +68,6 @@ _FALSE_VALUES = {"0", "false", "no", "off"}
 _YOUTUBE_EMBED_DIMENSIONS = (560, 315)
 _YOUTUBE_THUMBNAIL_DIMENSIONS = (480, 360)
 _TIKTOK_EMBED_DIMENSIONS = (325, 575)
-
-
-class SocialConfigurationError(Exception):
-    """Raised when the runtime social settings are invalid."""
 
 
 @dataclass(frozen=True)
