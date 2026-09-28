@@ -1,15 +1,15 @@
-"""Django app configuration for QuickScale auth module
+"""Django app configuration for QuickScale auth module.
 
-SA11.7 — fail-hard auth signup-open default: raises
-``ImproperlyConfigured`` at startup when ``ACCOUNT_ALLOW_REGISTRATION``
-is not set, instead of silently defaulting to open registration.
+Startup configuration is validated by
+:func:`quickscale_modules_auth.checks.check_required_settings`, run through
+``quickscale_core.runtime.register_module_checks`` from ``ready()``.
 """
 
 from importlib import import_module
 
 from django.apps import AppConfig
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
+
+from quickscale_core.runtime import register_module_checks
 
 
 class QuickscaleAuthConfig(AppConfig):
@@ -21,14 +21,11 @@ class QuickscaleAuthConfig(AppConfig):
     verbose_name = "QuickScale Authentication"
 
     def ready(self) -> None:
-        # ---- SA11.7 — fail-hard auth signup-open default -----------------
-        # Every generated project must explicitly set this; no silent
-        # fallback that enables open registration.
-        if not hasattr(settings, "ACCOUNT_ALLOW_REGISTRATION"):
-            raise ImproperlyConfigured(
-                "The ACCOUNT_ALLOW_REGISTRATION setting is required. "
-                "Set it to True or False in your Django settings."
-            )
+        # Late import: keep the app config importable while Django is still
+        # populating the app registry.
+        from quickscale_modules_auth.checks import check_required_settings
+
+        register_module_checks(self, [check_required_settings])
 
         # Import signal handlers when app is ready
         import_module("quickscale_modules_auth.signals")
