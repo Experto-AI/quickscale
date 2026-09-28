@@ -499,6 +499,27 @@ class TestPolicySnapshotOrchestration:
             assert orch._load_active_policy_snapshot() is settings_policy
         ensure.assert_called_once_with()
 
+    def test_load_active_policy_can_skip_default_reconciliation(self) -> None:
+        settings_policy = _policy(naming_prefix="settings")
+        with (
+            patch(
+                f"{_ORCH}._build_policy_snapshot_from_settings",
+                return_value=settings_policy,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.has_any_policy",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.ensure_default_policy"
+            ) as ensure,
+        ):
+            assert (
+                orch._load_active_policy_snapshot(ensure_default=False)
+                is settings_policy
+            )
+        ensure.assert_not_called()
+
     def test_load_active_policy_does_not_touch_provider_when_empty(self) -> None:
         settings_policy = _policy(naming_prefix="settings")
         with (

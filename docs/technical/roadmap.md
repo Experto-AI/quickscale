@@ -326,13 +326,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   rule 28.
 
   **Scope:**
-  - *Commands and tooling.* `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas`
-    gain `--dry-run`; the retired `migrate_billing_to_orgs` is deleted with its recovery docs;
-    `check_tenant_isolation` raises `CommandError` instead of calling `sys.exit()`; each module's
-    root `mypy.ini` section relaxes at most module-extension.md's standard override, so orgs (98
-    errors under it), billing (15), forms (9), notifications (7), and social fix what the tighter
-    sections report (rule 36); `quickscale_modules/teams/` is deleted (README to
-    `docs/planning/teams.md`) with core's placeholder handling.
+  - *Commands and tooling.* The retired `migrate_billing_to_orgs` is deleted with its recovery
+    docs; each module's root `mypy.ini` section relaxes at most module-extension.md's standard
+    override, so orgs (98 errors under it), billing (15), forms (9), notifications (7), and
+    social fix what the tighter sections report (rule 36); `quickscale_modules/teams/` is deleted
+    (README to `docs/planning/teams.md`) with core's placeholder handling.
   - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
     isolation and RLS) are added; orgs' eight ticket-numbered test files and two ticket-numbered
     test apps are renamed by subject, with the docs that cite them (decisions rule 27 cites the

@@ -147,6 +147,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     setting's name when a supplied value violates one. A mutable option's `django_setting` is its
     only one-to-one projection, so the duplicate `derived_settings` entries are gone and a
     transformed or computed setting carries no default.
+  - **Destructive module commands support `--dry-run`.** `quickscale_backups_prune`,
+    `quickscale_forms_anonymize_submissions`, and `quickscale_orgs_promote_to_saas` report what
+    they would change and write nothing, and `quickscale_orgs_check_tenant_isolation` reports
+    failures through `CommandError` instead of exiting directly.
 
   - **Blog and listings configuration is manifest-owned.** Their option defaults, CLI prompts, and
     validation come from `module.yml` through one manifest-driven configurator and the shared
