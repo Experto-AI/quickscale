@@ -667,7 +667,7 @@ class TestBackupPolicyAdmin:
         if artifact_kind == "remote_only":
             postgresql_backup_artifact.local_path = ""
             postgresql_backup_artifact.storage_target = (
-                BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+                BackupArtifact.StorageTarget.PRIVATE_REMOTE
             )
             postgresql_backup_artifact.remote_key = (
                 "private/backups/remote-artifact.dump"
@@ -707,7 +707,7 @@ class TestBackupPolicyAdmin:
     ) -> None:
         """SA20: Admin-triggered restore is dispatched async via subprocess.
 
-        The artifact should transition to STATUS_RESTORING immediately, and the
+        The artifact should transition to Status.RESTORING immediately, and the
         management command is invoked in the background. The admin returns to the
         changelist with an initiation message instead of blocking on the restore.
         """
@@ -729,7 +729,7 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORING
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.RESTORING
         assert postgresql_backup_artifact.restore_started_at is not None
         assert postgresql_backup_artifact.restore_error == ""
 
@@ -906,7 +906,7 @@ class TestBackupPolicyAdmin:
 
         The uploaded content goes through the shared staging + trusted resolver
         (not inline candidate selection).  The dispatch uses the artifact-id path
-        (not --file) and persists STATUS_RESTORING only after successful spawn.
+        (not --file) and persists Status.RESTORING only after successful spawn.
         """
         del backup_policy
         content = postgresql_artifact_file.read_bytes()
@@ -956,7 +956,7 @@ class TestBackupPolicyAdmin:
             size_bytes=postgresql_backup_artifact.size_bytes,
         )
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORING
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.RESTORING
         assert postgresql_backup_artifact.restore_started_at is not None
         assert postgresql_backup_artifact.restore_error == ""
 
@@ -1033,9 +1033,9 @@ class TestBackupPolicyAdmin:
             size_bytes=postgresql_backup_artifact.size_bytes,
         )
 
-        # Set the artifact to STATUS_RESTORING so the uploaded-file guard
+        # Set the artifact to Status.RESTORING so the uploaded-file guard
         # fires before copy or Popen.
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        postgresql_backup_artifact.status = BackupArtifact.Status.RESTORING
         postgresql_backup_artifact.save(update_fields=["status", "updated_at"])
 
         with (
@@ -1067,16 +1067,16 @@ class TestBackupPolicyAdmin:
         assert response.status_code == 200
         mocked_popen.assert_not_called()
         postgresql_backup_artifact.refresh_from_db()
-        # Status must still be STATUS_RESTORING — unchanged by the rejected
+        # Status must still be Status.RESTORING — unchanged by the rejected
         # attempt (the guard fires before the dispatch code transitions it).
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORING
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.RESTORING
         assert (
             "This backup artifact is currently being restored."
             in response.content.decode("utf-8")
         )
 
     # ------------------------------------------------------------------
-    # SA20 regression: spawn-failure rollback (no stranded STATUS_RESTORING)
+    # SA20 regression: spawn-failure rollback (no stranded Status.RESTORING)
     # ------------------------------------------------------------------
 
     def test_restore_page_does_not_strand_status_restoring_on_spawn_failure(
@@ -1085,7 +1085,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """SA20: When subprocess.Popen raises, STATUS_RESTORING is not persisted."""
+        """SA20: When subprocess.Popen raises, Status.RESTORING is not persisted."""
         del backup_policy
         original_status = postgresql_backup_artifact.status
 
@@ -1162,7 +1162,7 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        # Status must NOT have changed to STATUS_RESTORING
+        # Status must NOT have changed to Status.RESTORING
         assert postgresql_backup_artifact.status == original_status
         assert "Failed to initiate background restore" in response.content.decode(
             "utf-8"
@@ -1171,10 +1171,10 @@ class TestBackupPolicyAdmin:
 
     # ------------------------------------------------------------------
     # CR-SA20-007: regression — parent does not clobber fast child
-    # terminal status.  The new design persists STATUS_RESTORING before
+    # terminal status.  The new design persists Status.RESTORING before
     # Popen, so a child that completes during Popen (simulated here by
     # writing a terminal status inside the Popen mock) must not be
-    # overwritten back to STATUS_RESTORING by the parent return path.
+    # overwritten back to Status.RESTORING by the parent return path.
     # ------------------------------------------------------------------
 
     def test_restore_async_parent_does_not_clobber_fast_child_terminal_status(
@@ -1186,18 +1186,18 @@ class TestBackupPolicyAdmin:
         """CR-SA20-007: Recorded-artifact dispatch preserves fast child terminal status.
 
         The mock simulates a child that completes immediately inside the
-        Popen call, setting STATUS_FAILED before the parent return path
+        Popen call, setting Status.FAILED before the parent return path
         can run.  The parent must not overwrite this terminal state back
-        to STATUS_RESTORING.
+        to Status.RESTORING.
         """
         del backup_policy
 
         def _simulate_fast_child_first(*args: object, **kwargs: object) -> MagicMock:
             """Simulate a child that writes terminal status before parent returns."""
             postgresql_backup_artifact.refresh_from_db()
-            # Child sees STATUS_RESTORING (parent set it before Popen)
-            # and transitions to STATUS_FAILED.
-            postgresql_backup_artifact.status = BackupArtifact.STATUS_FAILED
+            # Child sees Status.RESTORING (parent set it before Popen)
+            # and transitions to Status.FAILED.
+            postgresql_backup_artifact.status = BackupArtifact.Status.FAILED
             postgresql_backup_artifact.restore_error = "simulated fast child failure"
             postgresql_backup_artifact.save(
                 update_fields=["status", "restore_error", "updated_at"]
@@ -1220,12 +1220,12 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        # The child's terminal STATUS_FAILED must be preserved.  In the
-        # old design (STATUS_RESTORING after Popen) the parent would
-        # overwrite this back to STATUS_RESTORING.  In the new design
-        # (STATUS_RESTORING before Popen) the parent never writes the
+        # The child's terminal Status.FAILED must be preserved.  In the
+        # old design (Status.RESTORING after Popen) the parent would
+        # overwrite this back to Status.RESTORING.  In the new design
+        # (Status.RESTORING before Popen) the parent never writes the
         # status again after Popen returns.
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.FAILED
         assert (
             "simulated fast child failure" in postgresql_backup_artifact.restore_error
         )
@@ -1254,7 +1254,7 @@ class TestBackupPolicyAdmin:
 
         def _simulate_fast_child_first(*args: object, **kwargs: object) -> MagicMock:
             postgresql_backup_artifact.refresh_from_db()
-            postgresql_backup_artifact.status = BackupArtifact.STATUS_FAILED
+            postgresql_backup_artifact.status = BackupArtifact.Status.FAILED
             postgresql_backup_artifact.restore_error = "simulated fast child failure"
             postgresql_backup_artifact.save(
                 update_fields=["status", "restore_error", "updated_at"]
@@ -1291,7 +1291,7 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.FAILED
         assert (
             "simulated fast child failure" in postgresql_backup_artifact.restore_error
         )
@@ -1314,7 +1314,7 @@ class TestBackupPolicyAdmin:
         del backup_policy
         prior_started_at = timezone.now() - timedelta(hours=1)
         prior_error = "Previous restore attempt failed."
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_FAILED
+        postgresql_backup_artifact.status = BackupArtifact.Status.FAILED
         postgresql_backup_artifact.restore_started_at = prior_started_at
         postgresql_backup_artifact.restore_error = prior_error
         postgresql_backup_artifact.save(
@@ -1342,7 +1342,7 @@ class TestBackupPolicyAdmin:
         assert response.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
         # Status must be restored to FAILED (pre-spawn)
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.FAILED
         # restore_started_at must be preserved from prior attempt
         assert postgresql_backup_artifact.restore_started_at == prior_started_at
         # restore_error must be preserved from prior attempt
@@ -1364,7 +1364,7 @@ class TestBackupPolicyAdmin:
         del backup_policy
         prior_started_at = timezone.now() - timedelta(hours=2)
         prior_error = "Prior uploaded restore attempt failed."
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_FAILED
+        postgresql_backup_artifact.status = BackupArtifact.Status.FAILED
         postgresql_backup_artifact.restore_started_at = prior_started_at
         postgresql_backup_artifact.restore_error = prior_error
         postgresql_backup_artifact.save(
@@ -1414,7 +1414,7 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.FAILED
         assert postgresql_backup_artifact.restore_started_at == prior_started_at
         assert postgresql_backup_artifact.restore_error == prior_error
         assert "Failed to initiate background restore" in response.content.decode(
@@ -1435,7 +1435,7 @@ class TestBackupPolicyAdmin:
         # RESTORED artifacts may have an empty restore_error and prior
         # restore_started_at still set.
         prior_error = ""
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORED
+        postgresql_backup_artifact.status = BackupArtifact.Status.RESTORED
         postgresql_backup_artifact.restore_started_at = prior_started_at
         postgresql_backup_artifact.restore_error = prior_error
         postgresql_backup_artifact.save(
@@ -1462,7 +1462,7 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.RESTORED
         assert postgresql_backup_artifact.restore_started_at == prior_started_at
         assert postgresql_backup_artifact.restore_error == prior_error
         assert "Failed to initiate background restore" in response.content.decode(
@@ -1482,7 +1482,7 @@ class TestBackupPolicyAdmin:
         del backup_policy
         prior_started_at = timezone.now() - timedelta(hours=4)
         prior_error = ""
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORED
+        postgresql_backup_artifact.status = BackupArtifact.Status.RESTORED
         postgresql_backup_artifact.restore_started_at = prior_started_at
         postgresql_backup_artifact.restore_error = prior_error
         postgresql_backup_artifact.save(
@@ -1532,7 +1532,7 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.RESTORED
         assert postgresql_backup_artifact.restore_started_at == prior_started_at
         assert postgresql_backup_artifact.restore_error == prior_error
         assert "Failed to initiate background restore" in response.content.decode(
@@ -1605,8 +1605,8 @@ class TestBackupPolicyAdmin:
             in response.content.decode("utf-8")
         )
         postgresql_backup_artifact.refresh_from_db()
-        # Status must NOT have changed to STATUS_RESTORING
-        assert postgresql_backup_artifact.status != BackupArtifact.STATUS_RESTORING
+        # Status must NOT have changed to Status.RESTORING
+        assert postgresql_backup_artifact.status != BackupArtifact.Status.RESTORING
 
     def test_restore_async_upload_rejects_incomplete_snapshot_contract(
         self,
@@ -1663,8 +1663,8 @@ class TestBackupPolicyAdmin:
             "utf-8"
         )
         postgresql_backup_artifact.refresh_from_db()
-        # Status must NOT have changed to STATUS_RESTORING
-        assert postgresql_backup_artifact.status != BackupArtifact.STATUS_RESTORING
+        # Status must NOT have changed to Status.RESTORING
+        assert postgresql_backup_artifact.status != BackupArtifact.Status.RESTORING
 
     # ------------------------------------------------------------------
     # CR-SA20-005: regression — async uploaded-file restore ignores
@@ -1858,7 +1858,7 @@ class TestBackupPolicyAdmin:
         Before the fix the second submission could also pass the TOCTOU
         eligibility check and dispatch a second Popen.  The atomic
         compare-and-swap ensures that only the first caller that wins the
-        race claims STATUS_RESTORING; the second caller's claim updates
+        race claims Status.RESTORING; the second caller's claim updates
         zero rows and the caller surfaces a blocked message.
         """
         del backup_policy
@@ -1880,7 +1880,7 @@ class TestBackupPolicyAdmin:
 
         assert response1.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORING
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.RESTORING
 
         # Second submission — must be blocked without reaching Popen
         with patch(
@@ -1915,7 +1915,7 @@ class TestBackupPolicyAdmin:
 
         Covers the uploaded-file branch with the same atomic claim
         gate used by the recorded-artifact branch.  The first
-        submission claims STATUS_RESTORING via compare-and-swap; the
+        submission claims Status.RESTORING via compare-and-swap; the
         second finds the artifact already claimed and returns a blocked
         message without a second Popen.
         """
@@ -1962,12 +1962,12 @@ class TestBackupPolicyAdmin:
 
         assert response1.status_code == 200
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORING
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.RESTORING
 
         # Second submission — blocked without reaching Popen.
         # Must include an uploaded file to pass form validation; the
         # staging/resolving patches will return the same artifact (now
-        # STATUS_RESTORING), and the atomic claim will fail.
+        # Status.RESTORING), and the atomic claim will fail.
         uploaded_file2 = SimpleUploadedFile(
             postgresql_backup_artifact.filename,
             content,
@@ -2024,7 +2024,7 @@ class TestBackupPolicyAdmin:
         ineligible_reason (lines 575-576).
 
         When _atomic_claim_restore fails and the artifact's post-claim
-        status maps to a known blocking reason (STATUS_RESTORING), the
+        status maps to a known blocking reason (Status.RESTORING), the
         code raises BackupRestoreBlocked with that reason rather than
         the generic fallback message.
         """
@@ -2033,7 +2033,7 @@ class TestBackupPolicyAdmin:
         def _fail_claim_set_restoring(
             artifact: BackupArtifact,
         ) -> bool:
-            artifact.status = BackupArtifact.STATUS_RESTORING
+            artifact.status = BackupArtifact.Status.RESTORING
             return False
 
         with (
@@ -2071,7 +2071,7 @@ class TestBackupPolicyAdmin:
         (lines 577-581).
 
         When _atomic_claim_restore fails and the artifact's post-claim
-        status does not map to a known blocking reason (STATUS_READY
+        status does not map to a known blocking reason (Status.READY
         passes all _get_admin_restore_ineligible_reason checks, returning
         None), the code falls back to a generic message.
         """
@@ -2080,7 +2080,7 @@ class TestBackupPolicyAdmin:
         def _fail_claim_set_ready(
             artifact: BackupArtifact,
         ) -> bool:
-            artifact.status = BackupArtifact.STATUS_READY
+            artifact.status = BackupArtifact.Status.READY
             return False
 
         with (
@@ -2116,10 +2116,10 @@ class TestBackupPolicyAdmin:
         postgresql_artifact_file: Path,
     ) -> None:
         """CR-SA20-REV-002: Uploaded-file atomic claim failure with
-        STATUS_DELETED (lines 743-749).
+        Status.DELETED (lines 743-749).
 
         When _atomic_claim_restore fails and the artifact's post-claim
-        status is STATUS_DELETED, the code surfaces the specific
+        status is Status.DELETED, the code surfaces the specific
         deleted-artifact message.
         """
         del backup_policy
@@ -2138,7 +2138,7 @@ class TestBackupPolicyAdmin:
         def _fail_claim_set_deleted(
             artifact: BackupArtifact,
         ) -> bool:
-            artifact.status = BackupArtifact.STATUS_DELETED
+            artifact.status = BackupArtifact.Status.DELETED
             return False
 
         with (
@@ -2189,7 +2189,7 @@ class TestBackupPolicyAdmin:
         (lines 751-755).
 
         When _atomic_claim_restore fails and the artifact's post-claim
-        status is not STATUS_DELETED, the code falls back to a generic
+        status is not Status.DELETED, the code falls back to a generic
         message.
         """
         del backup_policy
@@ -2208,7 +2208,7 @@ class TestBackupPolicyAdmin:
         def _fail_claim_set_failed(
             artifact: BackupArtifact,
         ) -> bool:
-            artifact.status = BackupArtifact.STATUS_FAILED
+            artifact.status = BackupArtifact.Status.FAILED
             return False
 
         with (
@@ -2301,7 +2301,7 @@ class TestBackupArtifactAdmin:
         BackupSnapshot.objects.create(
             snapshot_id="snap-artifact-admin",
             authoritative_dump=backup_artifact,
-            status=BackupSnapshot.STATUS_FAILED,
+            status=BackupSnapshot.Status.FAILED,
             source_environment="railway-prod",
             local_root_path=str(tmp_path / "snapshot-root"),
         )
@@ -2437,11 +2437,11 @@ class TestBackupArtifactAdmin:
         ("restore_scope", "expected_fragment"),
         [
             (
-                BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+                BackupArtifact.RestoreScope.LOCAL_ONLY,
                 "Classification: local_only.",
             ),
             (
-                BackupArtifact.RESTORE_SCOPE_PORTABLE,
+                BackupArtifact.RestoreScope.PORTABLE,
                 "Classification: portable.",
             ),
         ],
@@ -2479,13 +2479,13 @@ class TestBackupArtifactAdmin:
     def test_admin_availability_notice_explains_remote_only_artifacts(self) -> None:
         artifact = BackupArtifact.objects.create(
             filename="artifact-remote.dump",
-            storage_target=BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE,
+            storage_target=BackupArtifact.StorageTarget.PRIVATE_REMOTE,
             local_path="",
             remote_key="private/backups/artifact-remote.dump",
             checksum_sha256="abc123",
             size_bytes=100,
             backup_format="pg_dump_custom",
-            restore_scope=BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+            restore_scope=BackupArtifact.RestoreScope.LOCAL_ONLY,
             database_engine="django.db.backends.postgresql",
             database_name="quickscale_test",
         )
@@ -2535,7 +2535,7 @@ class TestBackupArtifactAdmin:
         )
 
         backup_artifact.refresh_from_db()
-        assert backup_artifact.status == BackupArtifact.STATUS_VALIDATED
+        assert backup_artifact.status == BackupArtifact.Status.VALIDATED
 
     def test_download_view_streams_local_file(
         self,
@@ -2645,7 +2645,7 @@ class TestBackupArtifactAdmin:
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        backup_artifact.status = BackupArtifact.STATUS_DELETED
+        backup_artifact.status = BackupArtifact.Status.DELETED
         backup_artifact.save(update_fields=["status", "updated_at"])
 
         artifact_admin = _artifact_admin()
@@ -2667,7 +2667,7 @@ class TestBackupArtifactAdmin:
         backup_artifact: BackupArtifact,
         superuser: AbstractBaseUser,
     ) -> None:
-        backup_artifact.status = BackupArtifact.STATUS_DELETED
+        backup_artifact.status = BackupArtifact.Status.DELETED
         backup_artifact.save(update_fields=["status", "updated_at"])
 
         artifact_admin = _artifact_admin()
@@ -2738,8 +2738,8 @@ class TestBackupArtifactAdminStaleRestore:
         *,
         stale: bool = True,
     ) -> BackupArtifact:
-        """Set artifact to STATUS_RESTORING with an appropriate restore_started_at."""
-        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        """Set artifact to Status.RESTORING with an appropriate restore_started_at."""
+        backup_artifact.status = BackupArtifact.Status.RESTORING
         minutes = -31 if stale else -5
         backup_artifact.restore_started_at = timezone.now() + timedelta(minutes=minutes)
         backup_artifact.restore_error = ""
@@ -2766,7 +2766,7 @@ class TestBackupArtifactAdminStaleRestore:
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """Recent STATUS_RESTORING shows 'In progress…'."""
+        """Recent Status.RESTORING shows 'In progress…'."""
         self._make_stale_artifact(backup_artifact, stale=False)
         artifact_admin = _artifact_admin()
         result = artifact_admin.stale_restore_warning(backup_artifact)
@@ -2776,7 +2776,7 @@ class TestBackupArtifactAdminStaleRestore:
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """Old STATUS_RESTORING shows a stale warning."""
+        """Old Status.RESTORING shows a stale warning."""
         self._make_stale_artifact(backup_artifact, stale=True)
         artifact_admin = _artifact_admin()
         result = artifact_admin.stale_restore_warning(backup_artifact)
@@ -2802,7 +2802,7 @@ class TestBackupArtifactAdminStaleRestore:
         admin_client: Client,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """The admin action resets a stale STATUS_RESTORING to FAILED."""
+        """The admin action resets a stale Status.RESTORING to FAILED."""
         self._make_stale_artifact(backup_artifact, stale=True)
 
         changelist_url = reverse("admin:quickscale_backups_backupartifact_changelist")
@@ -2818,7 +2818,7 @@ class TestBackupArtifactAdminStaleRestore:
 
         assert response.status_code == 200
         backup_artifact.refresh_from_db()
-        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert backup_artifact.status == BackupArtifact.Status.FAILED
         assert "Restore reset" in backup_artifact.restore_error
 
     def test_reset_stale_restore_action_skips_non_stale_artifact(
@@ -2826,7 +2826,7 @@ class TestBackupArtifactAdminStaleRestore:
         admin_client: Client,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """The admin action skips a recent STATUS_RESTORING artifact."""
+        """The admin action skips a recent Status.RESTORING artifact."""
         self._make_stale_artifact(backup_artifact, stale=False)
 
         changelist_url = reverse("admin:quickscale_backups_backupartifact_changelist")
@@ -2842,7 +2842,7 @@ class TestBackupArtifactAdminStaleRestore:
 
         assert response.status_code == 200
         backup_artifact.refresh_from_db()
-        assert backup_artifact.status == BackupArtifact.STATUS_RESTORING
+        assert backup_artifact.status == BackupArtifact.Status.RESTORING
 
 
 @pytest.mark.django_db
@@ -2855,9 +2855,9 @@ class TestBackupPolicyAdminStaleRestore:
         *,
         stale: bool = False,
     ) -> BackupArtifact:
-        """Set artifact to STATUS_RESTORING while keeping other eligibility."""
+        """Set artifact to Status.RESTORING while keeping other eligibility."""
         artifact = postgresql_backup_artifact
-        artifact.status = BackupArtifact.STATUS_RESTORING
+        artifact.status = BackupArtifact.Status.RESTORING
         minutes = -31 if stale else -5
         artifact.restore_started_at = timezone.now() + timedelta(minutes=minutes)
         artifact.save(update_fields=["status", "restore_started_at", "updated_at"])
@@ -2867,7 +2867,7 @@ class TestBackupPolicyAdminStaleRestore:
         self,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """A stale STATUS_RESTORING artifact shows the staleness message."""
+        """A stale Status.RESTORING artifact shows the staleness message."""
         self._make_eligible_artifact(postgresql_backup_artifact, stale=True)
         policy_admin = _policy_admin()
 
@@ -2882,7 +2882,7 @@ class TestBackupPolicyAdminStaleRestore:
         self,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """A recent STATUS_RESTORING artifact still shows the standard message."""
+        """A recent Status.RESTORING artifact still shows the standard message."""
         self._make_eligible_artifact(postgresql_backup_artifact, stale=False)
         policy_admin = _policy_admin()
 
@@ -2905,7 +2905,7 @@ class TestBackupPolicyAdminStaleRestore:
         postgresql_artifact_file: Path,
     ) -> None:
         """CR-SA38-001: Uploaded-file restore shows recovery guidance for
-        a stale STATUS_RESTORING artifact instead of a permanent block."""
+        a stale Status.RESTORING artifact instead of a permanent block."""
         del backup_policy
         content = postgresql_artifact_file.read_bytes()
         uploaded_file = SimpleUploadedFile(
@@ -2913,9 +2913,9 @@ class TestBackupPolicyAdminStaleRestore:
             content,
         )
 
-        # Set artifact to stale STATUS_RESTORING (>30 minutes ago).
+        # Set artifact to stale Status.RESTORING (>30 minutes ago).
         stale_started_at = timezone.now() - timedelta(minutes=45)
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        postgresql_backup_artifact.status = BackupArtifact.Status.RESTORING
         postgresql_backup_artifact.restore_started_at = stale_started_at
         postgresql_backup_artifact.save(
             update_fields=["status", "restore_started_at", "updated_at"]
@@ -2975,7 +2975,7 @@ class TestBackupPolicyAdminStaleRestore:
         postgresql_artifact_file: Path,
     ) -> None:
         """CR-SA38-001: Uploaded-file dry-run rejects a stale
-        STATUS_RESTORING artifact with recovery guidance (child process
+        Status.RESTORING artifact with recovery guidance (child process
         likely died), matching the recorded-artifact branch."""
         del backup_policy
         content = postgresql_artifact_file.read_bytes()
@@ -2984,9 +2984,9 @@ class TestBackupPolicyAdminStaleRestore:
             content,
         )
 
-        # Set artifact to stale STATUS_RESTORING (>30 minutes ago).
+        # Set artifact to stale Status.RESTORING (>30 minutes ago).
         stale_started_at = timezone.now() - timedelta(minutes=45)
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        postgresql_backup_artifact.status = BackupArtifact.Status.RESTORING
         postgresql_backup_artifact.restore_started_at = stale_started_at
         postgresql_backup_artifact.save(
             update_fields=["status", "restore_started_at", "updated_at"]
@@ -3037,7 +3037,7 @@ class TestBackupPolicyAdminStaleRestore:
         postgresql_artifact_file: Path,
     ) -> None:
         """CR-SA38-001: Uploaded-file dry-run rejects a recent
-        STATUS_RESTORING artifact with the standard wait message,
+        Status.RESTORING artifact with the standard wait message,
         matching the recorded-artifact branch."""
         del backup_policy
         content = postgresql_artifact_file.read_bytes()
@@ -3046,9 +3046,9 @@ class TestBackupPolicyAdminStaleRestore:
             content,
         )
 
-        # Set artifact to recent STATUS_RESTORING (within threshold).
+        # Set artifact to recent Status.RESTORING (within threshold).
         recent_started_at = timezone.now() - timedelta(minutes=5)
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        postgresql_backup_artifact.status = BackupArtifact.Status.RESTORING
         postgresql_backup_artifact.restore_started_at = recent_started_at
         postgresql_backup_artifact.save(
             update_fields=["status", "restore_started_at", "updated_at"]

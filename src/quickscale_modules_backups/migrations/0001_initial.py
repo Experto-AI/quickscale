@@ -167,7 +167,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="quickscale_backup_artifacts",
+                        related_name="quickscale_backups_artifacts",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),

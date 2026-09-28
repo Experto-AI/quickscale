@@ -214,16 +214,16 @@ def validate_policy_snapshot(policy: BackupPolicySnapshot) -> list[str]:
 
 _ARTIFACT_RESTORE_CLAIMABLE_STATUSES: frozenset[str] = frozenset(
     {
-        BackupArtifact.STATUS_READY,
-        BackupArtifact.STATUS_VALIDATED,
-        BackupArtifact.STATUS_FAILED,
-        BackupArtifact.STATUS_RESTORED,
+        BackupArtifact.Status.READY,
+        BackupArtifact.Status.VALIDATED,
+        BackupArtifact.Status.FAILED,
+        BackupArtifact.Status.RESTORED,
     }
 )
 """Pre-claim statuses eligible for an atomic restore claim.
 
-Excludes STATUS_DELETED (terminal — never restorable) and
-STATUS_RESTORING (already claimed by another request).
+Excludes Status.DELETED (terminal — never restorable) and
+Status.RESTORING (already claimed by another request).
 """
 
 
@@ -231,12 +231,12 @@ def _atomic_claim_restore(artifact: BackupArtifact) -> bool:
     """Atomically claim *artifact* for restore via DB compare-and-swap.
 
     Uses a single filtered ``update()`` to transition the artifact from an
-    eligible pre-claim status to ``STATUS_RESTORING``.  Only the caller that
+    eligible pre-claim status to ``Status.RESTORING``.  Only the caller that
     wins the race sees ``updated > 0``; losers re-read the artifact and
     return ``False``.
 
     After a successful claim the in-memory *artifact* is refreshed from the
-    database so its attributes reflect ``STATUS_RESTORING`` /
+    database so its attributes reflect ``Status.RESTORING`` /
     ``restore_started_at`` / ``restore_error``.  After a failed claim the
     in-memory *artifact* is also refreshed so the caller can inspect the
     current status to surface an appropriate reason.
@@ -250,7 +250,7 @@ def _atomic_claim_restore(artifact: BackupArtifact) -> bool:
         pk=artifact.pk,
         status__in=_ARTIFACT_RESTORE_CLAIMABLE_STATUSES,
     ).update(
-        status=BackupArtifact.STATUS_RESTORING,
+        status=BackupArtifact.Status.RESTORING,
         restore_started_at=now,
         restore_error="",
         updated_at=now,
@@ -310,7 +310,7 @@ def prepare_admin_uploaded_restore_artifact(
     Raises
     ------
     BackupRestoreBlocked
-        When the resolved artifact is already ``STATUS_RESTORING``, or
+        When the resolved artifact is already ``Status.RESTORING``, or
         the confirmation does not match the artifact filename.
     BackupError
         When the uploaded file does not resolve to a trusted artifact
@@ -333,9 +333,9 @@ def prepare_admin_uploaded_restore_artifact(
     try:
         # CR-SA20-REV-001: Reject already-restoring artifacts with parity to
         # the recorded-artifact branch.  CR-SA38-001: stale-aware — a stale
-        # STATUS_RESTORING artifact surfaces the same recovery guidance as
+        # Status.RESTORING artifact surfaces the same recovery guidance as
         # _get_admin_restore_ineligible_reason rather than a permanent block.
-        if trusted_artifact.status == BackupArtifact.STATUS_RESTORING:
+        if trusted_artifact.status == BackupArtifact.Status.RESTORING:
             if is_restore_stale(trusted_artifact):
                 raise BackupRestoreBlocked(
                     "This backup artifact's restore appears stale "
@@ -410,7 +410,7 @@ def dispatch_background_restore(
     *,
     confirmation: str,
 ) -> None:
-    """Persist STATUS_RESTORING, then dispatch ``quickscale_backups_restore`` via Popen.
+    """Persist Status.RESTORING, then dispatch ``quickscale_backups_restore`` via Popen.
 
     Parameters
     ----------
@@ -439,7 +439,7 @@ def dispatch_background_restore(
     # CR-SA20-REV-002: Atomic compare-and-swap — concurrent submissions
     # for the same artifact cannot both dispatch Popen.
     if not _atomic_claim_restore(artifact):
-        if artifact.status == BackupArtifact.STATUS_DELETED:
+        if artifact.status == BackupArtifact.Status.DELETED:
             raise BackupRestoreBlocked(
                 "Deleted backup artifacts cannot be restored from admin."
             )
@@ -464,7 +464,7 @@ def dispatch_background_restore(
         )
     except Exception:
         # Rollback: restore pre-spawn status/metadata so a spawn failure
-        # never strands the artifact in STATUS_RESTORING or loses prior
+        # never strands the artifact in Status.RESTORING or loses prior
         # failure metadata on retry.
         artifact.status = pre_spawn_status
         artifact.restore_started_at = pre_spawn_restore_started_at
@@ -552,10 +552,10 @@ def dispatch_background_prune() -> None:
 # ---------------------------------------------------------------------------
 
 STALE_RESTORE_THRESHOLD_MINUTES: int = 30
-"""Threshold beyond which a STATUS_RESTORING artifact is considered stale.
+"""Threshold beyond which a Status.RESTORING artifact is considered stale.
 
-A killed restore child (OOM, redeploy) can strand STATUS_RESTORING
-indefinitely because the child only sets STATUS_FAILED on Python
+A killed restore child (OOM, redeploy) can strand Status.RESTORING
+indefinitely because the child only sets Status.FAILED on Python
 exceptions, never on SIGKILL.  This constant defines the staleness
 boundary so operators can reset stranded artifacts without manual
 DB edits.
@@ -563,12 +563,12 @@ DB edits.
 
 
 def is_restore_stale(artifact: BackupArtifact) -> bool:
-    """Return whether a ``STATUS_RESTORING`` artifact exceeds the stale threshold.
+    """Return whether a ``Status.RESTORING`` artifact exceeds the stale threshold.
 
     Parameters
     ----------
     artifact :
-        The backup artifact to check.  Only ``STATUS_RESTORING`` artifacts
+        The backup artifact to check.  Only ``Status.RESTORING`` artifacts
         with a non-None ``restore_started_at`` older than 30 minutes are
         considered stale.
 
@@ -577,7 +577,7 @@ def is_restore_stale(artifact: BackupArtifact) -> bool:
     bool
         ``True`` when the artifact is stale and eligible for reset.
     """
-    if artifact.status != BackupArtifact.STATUS_RESTORING:
+    if artifact.status != BackupArtifact.Status.RESTORING:
         return False
     if artifact.restore_started_at is None:
         return False
@@ -588,13 +588,13 @@ def is_restore_stale(artifact: BackupArtifact) -> bool:
 
 
 def reset_stale_restore(artifact: BackupArtifact) -> None:
-    """Reset a stranded ``STATUS_RESTORING`` artifact to ``STATUS_FAILED``.
+    """Reset a stranded ``Status.RESTORING`` artifact to ``Status.FAILED``.
 
     Uses a database-level compare-and-swap (CAS) so a concurrently
     finishing child process never has its terminal status overwritten.
     Only resets artifacts whose ``restore_started_at`` exceeds the stale
-    threshold (30 minutes).  Non-stale ``STATUS_RESTORING`` artifacts and
-    artifacts not in ``STATUS_RESTORING`` are rejected with
+    threshold (30 minutes).  Non-stale ``Status.RESTORING`` artifacts and
+    artifacts not in ``Status.RESTORING`` are rejected with
     ``BackupRestoreBlocked``.
 
     After a successful reset the in-memory *artifact* is refreshed from
@@ -609,13 +609,13 @@ def reset_stale_restore(artifact: BackupArtifact) -> None:
     Raises
     ------
     BackupRestoreBlocked
-        When the artifact is not ``STATUS_RESTORING``, or when the restore
+        When the artifact is not ``Status.RESTORING``, or when the restore
         is still within the stale threshold.
     """
     # Early guard: reject non-RESTORING artifacts immediately so the
     # restore_error format string below never receives None
     # restore_started_at.
-    if artifact.status != BackupArtifact.STATUS_RESTORING:
+    if artifact.status != BackupArtifact.Status.RESTORING:
         artifact.refresh_from_db()
         raise BackupRestoreBlocked(
             "Only backup artifacts with status 'Restoring...' can be reset."
@@ -627,20 +627,20 @@ def reset_stale_restore(artifact: BackupArtifact) -> None:
     now = django_timezone.now()
     updated = BackupArtifact.objects.filter(
         pk=artifact.pk,
-        status=BackupArtifact.STATUS_RESTORING,
+        status=BackupArtifact.Status.RESTORING,
         restore_started_at__lt=threshold,
     ).update(
-        status=BackupArtifact.STATUS_FAILED,
+        status=BackupArtifact.Status.FAILED,
         restore_error=(
             "Restore reset: the child process likely died or was killed. "
-            f"Artifact was stranded in STATUS_RESTORING since "
+            f"Artifact was stranded in Status.RESTORING since "
             f"{artifact.restore_started_at:%Y-%m-%d %H:%M:%S} UTC."
         ),
         updated_at=now,
     )
     artifact.refresh_from_db()
     if updated == 0:
-        if artifact.status != BackupArtifact.STATUS_RESTORING:
+        if artifact.status != BackupArtifact.Status.RESTORING:
             raise BackupRestoreBlocked(
                 "Only backup artifacts with status 'Restoring...' can be reset."
             )
