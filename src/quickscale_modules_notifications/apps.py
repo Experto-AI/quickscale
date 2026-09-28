@@ -1,12 +1,8 @@
-"""Django app configuration for QuickScale notifications.
-
-SA17.6 — fail-hard notifications module settings: requires
-``QUICKSCALE_NOTIFICATIONS_ENABLED`` and
-``QUICKSCALE_NOTIFICATIONS_PROVIDER`` in Django settings at startup
-instead of silently defaulting them.
-"""
+"""Django app configuration for QuickScale notifications."""
 
 from django.apps import AppConfig
+
+from quickscale_core.runtime import register_module_checks
 
 
 class QuickscaleNotificationsConfig(AppConfig):
@@ -18,9 +14,11 @@ class QuickscaleNotificationsConfig(AppConfig):
     verbose_name = "QuickScale Notifications"
 
     def ready(self) -> None:
-        """Validate required notification runtime settings at startup."""
-        from quickscale_modules_notifications.services import (
-            validate_required_notification_settings,
+        # Late import: checks.py reads the notifications settings snapshot,
+        # which touches models, so it must load after the app registry is ready.
+        from quickscale_modules_notifications.checks import (
+            check_required_settings,
+            check_vendor_secrets,
         )
 
-        validate_required_notification_settings()
+        register_module_checks(self, [check_required_settings, check_vendor_secrets])
