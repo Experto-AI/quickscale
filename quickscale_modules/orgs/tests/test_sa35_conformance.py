@@ -13,7 +13,7 @@ import pytest
 from django.apps import apps
 from django.conf import settings
 from django.db import connection
-from django.db.models import CASCADE, PROTECT, SET_NULL
+from django.db.models import CASCADE, SET_NULL
 from django.test import Client
 from django.test.utils import CaptureQueriesContext
 
@@ -27,8 +27,9 @@ from quickscale_modules_orgs.tenancy import is_project_app
 
 @pytest.mark.django_db
 class TestUserFkDeleteRuleConformance:
-    """Verify every user-FK in project-owned apps is SET_NULL or
-    PROTECT, unless explicitly allowlisted.
+    """Verify every user-FK in project-owned apps is SET_NULL, unless
+    explicitly allowlisted as CASCADE. PROTECT is rejected: it would block
+    account deletion.
 
     This is a conformance / regression gate for SA35: FK referential
     actions bypass RLS, so a CASCADE user-FK in any tenant-scoped model
@@ -59,7 +60,7 @@ class TestUserFkDeleteRuleConformance:
     #   org may still have other members, and the user is gone.
     # OrganizationInvitation.invited_by:  a pending invite disappearing
     #   with its sender is acceptable — the invitation represents an
-    #   action by that specific user (documented in decisions.md §SA35).
+    #   action by that specific user (decisions.md § Multi-tenant SaaS Architecture).
     # AuthorProfile.user:  OneToOneField — the profile has no independent
     #   meaning without the user.  (Defined in blog, only checked when
     #   the blog module is installed.)
@@ -92,7 +93,7 @@ class TestUserFkDeleteRuleConformance:
 
     def test_all_user_fk_delete_rules_conform(self) -> None:
         """Assert every FK to AUTH_USER_MODEL in installed
-        quickscale_modules_* apps is SET_NULL or PROTECT, or is
+        quickscale_modules_* apps is SET_NULL, or is
         explicitly allowlisted."""
         User = apps.get_model(settings.AUTH_USER_MODEL)
         user_label = User._meta.label_lower
@@ -122,8 +123,8 @@ class TestUserFkDeleteRuleConformance:
 
                 key = (meta.model.__name__, field.name)
 
-                if field.remote_field.on_delete in (SET_NULL, PROTECT):
-                    continue  # Acceptable — no CASCADE risk.
+                if field.remote_field.on_delete is SET_NULL:
+                    continue  # Acceptable — keeps the row, drops the link.
                 if (
                     field.remote_field.on_delete is CASCADE
                     and key in self.ALLOWLISTED_CASCADE
@@ -133,7 +134,7 @@ class TestUserFkDeleteRuleConformance:
                 violations.append(
                     f"{app_label}.{meta.model.__name__}.{field.name}: "
                     f"on_delete={field.remote_field.on_delete!r} "
-                    f"(expected SET_NULL or PROTECT). "
+                    f"(expected SET_NULL). "
                     f"Add to ALLOWLISTED_CASCADE only after documenting "
                     f"the rationale in decisions.md."
                 )
@@ -147,7 +148,7 @@ class TestUserFkDeleteRuleConformance:
         """Regression: ORM-level user.delete() does not cascade-destroy
         cross-module content (blog Post).
 
-        All user-FKs in quickscale_modules_* are SET_NULL, PROTECT, or
+        All user-FKs in quickscale_modules_* are SET_NULL or
         explicitly allowlisted CASCADE, so deleting a user must not
         destroy content authored by that user.  This test exercises the
         ORM path directly (bypassing auth view-layer guards already

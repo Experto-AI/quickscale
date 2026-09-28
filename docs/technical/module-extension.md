@@ -517,12 +517,14 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] Tests use concrete models (not abstract stubs)
 - [ ] Required test files: `test_apps.py`, `test_services.py`, `test_migrations.py` (with models), and `test_isolation.py` plus `test_rls_boundary.py` (with tenant models)
 - [ ] Every `module.yml` option has `type`, `default`, `description`, `django_setting`, and its own `validation` block where invalid values exist; checks spanning options use only `required_when` / `any_of`; core and the CLI hold no code for the module's options (Module Conventions rule 12)
-- [ ] Tenant models subclass `TenantModel` (directly or through a module base) with a `Meta` that inherits the base's — the only tenant marker; relations to other modules' models use a `<name>_<plural|singular>` `related_name`; concrete models define `__str__` and `Meta.ordering` (rules 13–14)
+- [ ] Tenant models subclass `TenantModel` (directly or through a module base) with a `Meta` that inherits the base's — the only tenant marker; relations to other modules' models use a `<module>_<name>` `related_name` (plural, or singular for a one-to-one); concrete models define `__str__` and `Meta.ordering` (rules 13–14)
 - [ ] `__init__.py` holds only `__version__`; `signals.py` holds only sent signals and receivers live in `receivers.py` (rules 15–16)
 - [ ] Commands raise `CommandError` on expected failure (no `print()` or `sys.exit()`); data-destroying commands take `--dry-run` (rule 17)
 - [ ] Views managing tenant data check the org role through orgs' `permissions` (`require_org_role`, `OrgRoleMixin`, `HasOrgRole`), never `is_staff` / `is_superuser` / `IsAdminUser` (rule 19)
 - [ ] Email goes through notifications' `send_notification` with `notifications` in `required_modules` (rule 20); emails, analytics events, vendor calls, and cache purges caused by a write run in `transaction.on_commit`, with a test that rolls the write back and sees no effect (rule 21)
 - [ ] Analytics events are named `<module>_<event>` in the module's own `services.py` and sent with analytics' `capture_event` (rule 22); cache keys are `quickscale_<module>:<name>` and the current time is `timezone.now()` (rule 24)
+- [ ] Constraints and indexes are named `quickscale_<module>_…` / `qs_<module>_…_idx`, no `unique_together` (rule 25); a webhook is a DRF `APIView` without authentication, permission, or throttle classes that hands the body to `services.py`, answers `200`/`400`/`404`, and deduplicates provider events (rule 26)
+- [ ] `on_delete` on `User` is `SET_NULL` (never `PROTECT`), `CASCADE` only on the listed fields (rule 27; SA35 gate); package files use the allowed names or a private `_<name>.py` (rule 28); test files are `test_<subject>.py`, with no ticket number in the name, docstrings, or comments (rule 29)
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**

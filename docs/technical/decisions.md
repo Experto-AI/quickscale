@@ -478,7 +478,8 @@ Authoring mechanics:
 how it reads configuration, how it depends on and talks to other modules, how it exposes URLs,
 templates, APIs, checks, errors, files, tests, and docs, and how it declares options, tenant models,
 model basics, signals, and management commands, and how it authorizes, sends email, runs write
-effects, names analytics events, and declares its service surface. A conformance test
+effects, names analytics events, declares its service surface, names constraints, receives
+webhooks, deletes related rows, and names its files and tests. A conformance test
 enforces each rule. Evidence and the options weighed:
 [module-conventions-inventory.md](../planning/module-conventions-inventory.md).
 
@@ -528,6 +529,7 @@ settings read but never declared, and every default written twice. Renames are a
 | Template folder | `templates/quickscale_<module>/` |
 | Management command | `quickscale_<module>_<action>` |
 | Cache key | `quickscale_<module>:<name>` |
+| Constraint / index name | `quickscale_<module>_<model>_<purpose>` / `qs_<module>_<model>_<field>_idx` (rule 25) |
 
 - ✅ The Python package stays `quickscale_modules_<module>`; only developers see it.
 - ✅ Tables use the app-label default; no module sets `db_table`.
@@ -852,8 +854,53 @@ public surface is `services.py` (rule 4).
 - ✅ The current time is `django.utils.timezone.now()`.
 - ✅ Cache keys are `quickscale_<module>:<name>` (added to rule 2's identity table).
 
-**25. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–24: names, suffixes and types, `_ENABLED`
+**25. Constraint and index names.**
+- ✅ Every `UniqueConstraint`, `CheckConstraint`, and `Index` sets `name`. A constraint is
+  `quickscale_<module>_<model>_<purpose>` (at most 63 characters); an index is
+  `qs_<module>_<model>_<field>_idx`, abbreviated to fit Django's 30-character limit. PostgreSQL
+  index and unique-constraint names are one namespace per schema, shared with the project.
+- ❌ `unique_together`, `index_together`, an unnamed `Index`, or a name without the prefix.
+
+**26. Inbound webhooks.**
+- ✅ A webhook is a DRF `APIView` with empty `authentication_classes`, `permission_classes`, and
+  `throttle_classes` (the generated settings set default throttles; a provider's retry burst must
+  not be refused), mounted at `<mount>webhooks/<vendor>/` (rule 7), that passes `request.body` and the signature
+  headers to one `services.py` function. The signature is its authentication; this narrows the
+  §[JSON API Endpoint Base Contract](#json-api-endpoint-base-contract) exemption to that.
+- ✅ The service verifies the signature before parsing (the vendor SDK, else `hmac.compare_digest`
+  with a timestamp window) and records each provider event under a unique database key, so a
+  replay is a no-op.
+- ✅ Responses: `200` `{"status": "accepted", "duplicate": <bool>}`; `400` with rule 9's error shape
+  (`webhook_signature_invalid`, `webhook_payload_invalid`); `404` when the module is off (rule 1).
+  A missing webhook secret fails startup in `checks.py` (rule 10). Write effects follow rule 21.
+- ❌ Error bodies built from `str(exc)`, `403` for a bad signature, logic in the view.
+
+**27. `on_delete` on `User`.**
+- ✅ A relation to `User`, in a module or a project's own app (the gate checks both), is `SET_NULL`
+  (with `null=True`): the row stays with its organization and
+  loses only the link. `CASCADE` only on rows that mean nothing without that user:
+  `OrganizationMembership.user`, `OrganizationInvitation.invited_by` (reason in
+  § [Multi-tenant SaaS Architecture](#multitenant-saas-architecture)), and blog's `AuthorProfile.user`;
+  adding one is a decision edit and an edit of the gate's allowlist.
+- ❌ `PROTECT` on `User`: it makes account deletion fail because of one module. A module that must
+  keep a record past its user handles it in its SA213 removal obligation, visibly.
+- SA35's gate (`orgs/tests/test_sa35_conformance.py`) enforces this; rule 30 does not repeat it.
+
+**28. Module file names.** A package holds only: rule 11's files; `checks.py`, `exceptions.py`
+(rule 10); `signals.py`, `receivers.py` (rule 16); the Django and DRF names (`models`, `views`,
+`urls`, `admin`, `forms`, `serializers`, `managers`, `filters`, `feeds`, `middleware`, `validators`,
+`throttles`, `permissions`, `templatetags/`, `management/`, `migrations/`); `templates/` and
+`static/` (rule 8); rule 4's listed
+foundation surface files; the listed extras backups' `persistence.py` (rule 10's port) and orgs'
+`debug_views.py`; and private files named `_<name>.py`. Any other name needs a decision edit.
+
+**29. Test names.** Test files are `test_<subject>.py`, named for what they protect; neither the file
+name nor its docstrings and comments carry a ticket number (`SA<n>`, `AF<n>`, `CR-SA<n>-<n>`); the
+test checks both. Other files in `tests/` are `conftest.py`,
+`settings*.py`, `urls*.py`, private `_<name>.py` helpers, and test apps named `<purpose>_app/`.
+
+**30. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
+and the CLI's option handling fails on each of rules 1–29 (rule 27 through SA35's gate): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
@@ -865,7 +912,9 @@ tenant-model base,
 `--dry-run`, `pyproject.toml` sections, a module directory without `module.yml`, `is_staff` and
 hand-written login checks in views, email sent outside notifications, per-event analytics helpers and
 event names, `services.py` `__all__` and keyword-only signatures, `py.typed`, `datetime.now`, and
-cache-key prefixes — with a
+cache-key prefixes, constraint and index names and `unique_together`, webhook view bases, empty
+authentication and throttle classes, a signature-verifying service call in every such view (taking
+over from the CSRF pairing gate for webhooks), and response bodies, unlisted package file names, and ticket numbers in test file names, docstrings, and comments — with a
 control case proving each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
@@ -894,7 +943,8 @@ code before it works is not shippable.
 - ✅ Settings, identity names, module-to-module use, URLs, templates, APIs, checks, errors,
   package files, required tests, README outline, option schema, tenant models, model basics,
   package root, signals, management commands, package tooling, authorization, email, write effects,
-  analytics events, and the service surface follow §[Module Conventions](#module-conventions)
+  analytics events, the service surface, constraint names, webhooks, `on_delete`, file names,
+  and test names follow §[Module Conventions](#module-conventions)
 - ✅ A module's server-rendered templates **extend the project's `base.html`** and
   never emit their own `<html>` document. Child templates fill a module-named
   block (`<module>_content`); the module base owns `{% block content %}`. A module
@@ -1362,7 +1412,7 @@ alias.
 - ✅ **DRF baseline** (`rest_framework.views.APIView` with `SessionAuthentication` for automated CSRF enforcement; permission class per endpoint) — the default for any new JSON endpoint that does not need organization-role scoping. `AllowAny` is used when the view performs its own auth checks (the billing-module pattern); `IsAuthenticated` is the default for endpoints where all requests require an authenticated user. Used by billing, CRM, and forms.
 - ✅ **`OrgApiBaseView`** — for endpoints that need organization-role/membership scoping specifically. Chosen as a second sanctioned base rather than reimplementing org-role checks as a DRF permission class, because that logic is tenant-isolation-adjacent (see §multitenant-saas-architecture) and rewriting working, tested code for stylistic consistency alone carries regression risk for no user-visible benefit.
 - ❌ A plain-`View` + `@csrf_exempt` + manual `_enforce_csrf()` idiom is not a third sanctioned option and is not grandfathered as legacy — this project removes workarounds rather than permanently tolerating them alongside the sanctioned shape.
-- ❌ Signature-verified webhooks (Stripe, etc.) are a different trust class and are exempt from this rule — they use `csrf_exempt` because the calling party cannot present a CSRF token; verified instead by the pairing gate (`scripts/check_csrf_exempt_gate.py`).
+- ❌ Signature-verified webhooks (Stripe, etc.) are a different trust class and are exempt from this rule's authentication and CSRF requirements — the calling party cannot present a CSRF token. Today they are plain views with `csrf_exempt`, verified by the pairing gate (`scripts/check_csrf_exempt_gate.py`); SA215 makes them DRF `APIView`s without authentication, permission, or throttle classes (Module Conventions rule 26), which DRF does not CSRF-check, and the gate follows.
 
 **SA215 changes this section** (§[Module Conventions](#module-conventions) rule 9): `OrgApiBaseView`
 is rebased on DRF's `APIView`, so both bases are DRF views; the plain-`View` idiom is gone from
@@ -1427,7 +1477,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
 - **Composite-FK deferability policy:** every Option C composite FK (the child-table `organization_id` + local-key pair added by the `_ADD_COMPOSITE_FK_SQL` helper in `orgs/tenancy.py`) is `NOT DEFERRABLE`. On PostgreSQL 18, `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so the constraint is already effectively immediate — `NOT DEFERRABLE` is the fail-fast choice consistent with the [fail-hard principle](#fail-hard-principle) and requires no `SET CONSTRAINTS ALL DEFERRED` carve-out for fixture/loaddata restores. A conformance test validates that every Option C composite FK is `NOT DEFERRABLE`.
 - **`tenant_excluded` marker precedence:** in `is_tenant_model()` (`orgs/tenancy.py`), an explicit `tenant_excluded = "reason"` marker on a model takes precedence over manager/base-class detection (`TenantManager`/`TenantModel` inheritance) — a model marked excluded is never classified as tenant-scoped even if it also inherits tenant machinery.
-- **Intentional CASCADE exception:** `OrganizationInvitation.invited_by` remains `on_delete=CASCADE` because a pending invitation is an action attributed to its sender—if the sender's account is deleted, the invitation has no meaningful sender identity and dissolving it along with the sender is the correct behavior. This is a narrow, documented exception to the general SET_NULL/PROTECT rule for user-FKs in tenant-scoped models. Every other user-FK in `quickscale_modules_*` is SET_NULL or PROTECT (enforced by a conformance test in the orgs cross-module test harness).
+- **Intentional CASCADE exception:** `OrganizationInvitation.invited_by` remains `on_delete=CASCADE` because a pending invitation is an action attributed to its sender—if the sender's account is deleted, the invitation has no meaningful sender identity and dissolving it along with the sender is the correct behavior. This is a narrow, documented exception to the general SET_NULL rule for user-FKs in tenant-scoped models (`PROTECT` is not allowed; Module Conventions rule 27). The other two `CASCADE` user-FKs are `OrganizationMembership.user` and blog's `AuthorProfile.user` (rows that mean nothing without their user); every other user-FK in `quickscale_modules_*` is SET_NULL (enforced by a conformance test in the orgs cross-module test harness).
 - **Last-owner `pre_delete` backstop refusal mechanism:** the orgs `pre_delete` receiver on the `User` model raises (does not silently return/no-op) when the deletion would orphan a shared organization's last owner, matching the [fail-hard principle](#fail-hard-principle) — a caller (admin bulk-delete, management command, a future GDPR erasure path) must see a loud failure rather than believe a refused delete succeeded.
 ### Clean-Break Migration History {#migration-squash-decision}
 

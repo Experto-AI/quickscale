@@ -39,13 +39,14 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | SA215 | Deferred |
+| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | SA215 | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: idle
-Track 3: idle
+Track 3: SA216 (after SA215)
                          critical path: SA215 → SA191 → SA153
 ```
 
@@ -59,7 +60,8 @@ database, and redeploys through `deploy railway`. SA153 builds the portal on it.
 module migration history before any post-SA153 module schema change. SA214 hardens the migration
 tool off the critical path. SA154 is an inventory, not work.
 
-**Off the critical path.** Tracks 2 and 3 are idle.
+**Off the critical path.** Track 2 is idle. Track 3 holds SA216, which waits for SA215 because
+both change auth's views, orgs' removal path, and the user-referencing models.
 
 ### Track states
 
@@ -69,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA215 | yes | yes | yes | **yes** | **yes** |
 | 2 | — (idle) | — | — | — | **yes** | no |
-| 3 | — (idle) | — | — | — | **yes** | no |
+| 3 | SA216 | no (SA215) | — | — | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -125,7 +127,10 @@ tenant model, uneven reverse names on shared models, receivers in `signals.py`, 
 without `--dry-run`, and a placeholder module directory. A fourth pass (D22–D27) found tenant
 modules authorizing with the site-wide `is_staff` instead of org roles, a second email sender in
 forms, write side effects not tied to commit, feature events owned by analytics, and an
-undeclared `services.py` surface. The rules are recorded in
+undeclared `services.py` surface. A fifth pass (D28–D32) found five constraint-naming styles
+(two orgs names with no prefix at all), webhooks answering with hand-built `{"error": str(exc)}`
+bodies and `403`, the user-FK `on_delete` rule absent from Module Conventions, no rule for which file
+names a package may add, and test files named by ticket number. The rules are recorded in
   [decisions.md § Module Conventions](decisions.md#module-conventions); this ticket is the code.
 
   **Scope,** in module-sized slices through the serialized merge queue:
@@ -200,9 +205,18 @@ undeclared `services.py` surface. The rules are recorded in
     `capture_social_link_click` goes; every `services.py`
     gains `__all__`, keyword-only signatures, and `<Module>Error` on failure; backups and blog gain
     `py.typed`; storage uses `timezone.now()`; social's cache keys become `quickscale_social:*`.
-  - *Enforcement.* The rule 25 conformance test, covering rules 1–24, with a control case per rule.
+  - *Constraints, webhooks, deletion, file and test names* (rules 25–29). Every constraint and index
+    is named `quickscale_<module>_…` / `qs_<module>_…_idx` in each clean-break `0001_initial`, and
+    forms' and orgs' `unique_together` become `UniqueConstraint`s; billing's and notifications'
+    webhooks become DRF `APIView`s answering `200`/`400`/`404` in rule 9's shape, with the missing
+    secret moved to `checks.py`; orgs' `debug_helpers.py` becomes `_debug.py`; orgs' eight ticket-numbered test files
+    and two ticket-numbered test apps are renamed by subject, with the docs that cite them (decisions
+    rule 27 cites the SA35 gate's file); the 747 ticket mentions in the docstrings and comments of 103
+    module test files go, reworded to say what each test protects where the number was the only
+    explanation.
+  - *Enforcement.* The rule 30 conformance test, covering rules 1–29, with a control case per rule.
 
-  **Acceptance:** every inventory drift item (sections 1–26) is fixed or recorded as an accepted exception with
+  **Acceptance:** every inventory drift item (sections 1–31) is fixed or recorded as an accepted exception with
   its reason; the conformance test passes and rejects a violation of each rule; a project
   generated before SA215 fails `apply` and startup with messages naming each new name; a freshly
   generated project with all twelve modules passes `make ci-e2e`; the `auth ↔ orgs` cycle is gone;
@@ -216,7 +230,7 @@ undeclared `services.py` surface. The rules are recorded in
   `quickscale_core` (per-module option code in `contracts` and `schema` removed; placeholder
   handling in module discovery and the catalog; the startup check, capability helper, and API exception handler in `runtime`, the
   `dr_engine` backups call, generator settings including the `REST_FRAMEWORK` block, and theme
-  templates including the React API client);
+  templates including the React API client; `scripts/check_csrf_exempt_gate.py`, which loses its two webhook helpers when the webhooks stop using `csrf_exempt`, the rule 30 test taking over);
   `quickscale_cli` apply (schema writing, retired-key refusal) and `module_config` (per-module
   option checks removed; prompts read the manifest); `.env.example`; decisions,
   [module-extension.md](module-extension.md), [organizations.md](organizations.md) (tenant models,
@@ -448,6 +462,82 @@ undeclared `services.py` surface. The rules are recorded in
   **Surfaces:** `quickscale_devtools/.../beta_migration.py`, its tests and smoke gate; the migration
   playbook and gap ledger; the `showcase_react` theme, generator, and
   `generated_file_ownership.md` (design layer); decisions.
+
+- [ ] **SA216 — Disable and anonymize accounts instead of deleting the user row.**
+
+  **Context:** "Delete my account" (auth's `AccountDeleteView`) deletes the `User` row today. Every
+  record the person made for an organization loses its author ([Module Conventions](decisions.md#module-conventions) rule 27 makes
+  those links `SET_NULL`), and the deletion needs cross-organization machinery: orgs'
+  `account_deletion_user_reference_organization_ids()` lookup, the `RemovalCoordinator`'s
+  `ACCOUNT_DELETE` boundary, and billing reconciliation before the row can go. Deleting the row is
+  also what erasure requests are assumed to need. They need the personal data gone, not the row.
+  This ticket keeps the row, disables it, and scrubs the personal data, so records stay attributed
+  to "Deleted user" and the account can be restored during a grace period.
+
+  **Personal data about a user today** (from the models on `v89`; the first slice confirms it,
+  including third-party tables):
+
+  | Where | What | Proposed treatment |
+  |---|---|---|
+  | auth `User` | `username`, `email`, `first_name`, `last_name`, password, `last_login` | scrub: `deleted-<id>` / `deleted-<id>@invalid`, blank names, unusable password, `is_active = False` |
+  | django-allauth `EmailAddress` | the person's email addresses and their verified state | delete (rows exist only for login) |
+  | Django sessions | active logins | delete |
+  | blog `AuthorProfile` | `bio`, `avatar` file | blank the bio; delete the file through storage |
+  | orgs `OrganizationMembership` | membership, role | delete (the person leaves every organization; the last-owner guard still applies) |
+  | orgs `OrganizationInvitation` | invitations *sent* (`invited_by`); pending invitations *to* their `email` | withdraw both |
+  | notifications `NotificationMessage` / `NotificationDelivery` | `recipient_email`, rendered text and context sent to them (matched by address; there is no user link) | scrub the address and the rendered body; keep status for delivery statistics |
+  | billing `Subscription`, `CreditBalance`, `CreditTransaction`, `PurchaseCheckout` | the user as actor | keep the link (it now points at "Deleted user"); the organization's Stripe customer email belongs to the org owner and changes only with ownership |
+  | crm `ContactNote` / `DealNote`, `Deal.owner`, forms `Form.created_by`, blog `Post.author`, backups actor | the user as actor | keep the link; nothing to scrub on the row |
+  | analytics (PostHog) | events under the user's `distinct_id` | outside the database: request deletion through PostHog's API or document it as the operator's step |
+
+  Out of scope: data about people who are *not* users (crm `Contact`, forms submissions with their
+  IP and user agent). Those belong to the organization and keep their own retention settings.
+
+  **Scope:**
+  - *Inventory first.* The table above becomes a checked list, one entry per model field holding
+    personal data, including third-party apps. An unlisted field fails a test.
+  - *Anonymize capability.* Each module that holds personal data about a user declares an
+    anonymize handler on its `AppConfig` (Module Conventions rule 4's capability mechanism, extending
+    SA213's removal obligations in orgs' `removal.py` with an `ANONYMIZE` `RemovalAction`); auth collects and runs them in one transaction. Effects
+    outside the database (file deletion, the PostHog request) run on commit (Module Conventions rule 21).
+  - *auth.* `AccountDeleteView` disables and scrubs instead of calling `delete()`; the last-owner
+    guard and billing's checks before deletion stay. The person can sign up again with the same email.
+  - *Grace period (if chosen).* Step one only disables the login and marks the account pending; an
+    operator-run `quickscale_auth_anonymize_accounts` command (rule 17: `--dry-run`, listed under
+    Operations with a suggested interval) scrubs accounts past the period. Signing in during
+    the period restores the account.
+  - *Simplify.* The cross-organization null-out lookup
+    (`account_deletion_user_reference_organization_ids`, in orgs' `current_org` and billing) is
+    called only by auth's delete view; it goes if nothing else deletes users through self-service,
+    and the `ACCOUNT_DELETE` removal boundary becomes the anonymize boundary. Operator hard delete
+    (Django admin) keeps working under Module Conventions rule 27.
+  - *Docs.* decisions.md records the account-removal model; organizations.md's account deletion
+    section and auth's README change with it.
+
+  **Decisions to take before implementation:**
+  - Grace period or immediate anonymization, and how many days.
+  - Whether scrubbed accounts appear in Django admin, and how ("Deleted user #42").
+  - Whether a data export ("download my data") ships first; erasure and export usually go together.
+  - PostHog: delete through its API (a vendor call and a stored credential) or document it as an
+    operator step.
+
+  **Acceptance:**
+  - After account removal, no table (module or third-party) holds the person's email, name, or
+    free text written about them as a user, as a test that walks the inventory proves; files are gone
+    from storage.
+  - Their posts, deals, notes, and billing records remain, attributed to "Deleted user", and each
+    organization's data is otherwise untouched.
+  - The same email can register again; the old account cannot sign in.
+  - With a grace period: signing in inside it restores the account; the command scrubs after it and
+    `--dry-run` reports without writing.
+  - A rolled-back removal leaves no effect (Module Conventions rule 21); operator hard delete still passes SA35's gate.
+
+  **Surfaces:** auth (`views.py`, `AppConfig`, a new command, README); orgs (`removal.py`, the
+  account-deletion lookup, memberships, invitations); blog, notifications, billing, crm, forms,
+  backups (anonymize handlers where the inventory lists them); analytics (optional PostHog
+  deletion); decisions.md and [organizations.md](organizations.md). These are Track 3 surfaces
+  (`auth/views.py`, orgs' removal path) plus module code that SA215 also edits, hence the dependency;
+  billing is a Track 2 surface, so SA216 lands through the serialized merge queue.
 
 - [x] **SA212 — Keep the CI supply-chain pins fresh and scan the generated container.**
 

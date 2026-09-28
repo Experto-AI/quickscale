@@ -6,7 +6,10 @@
 > are decided, as decisions.md rules 12–18 (D15 → 12, D16 → 13, … D21 → 18; enforcement was rule 19, now 25).
 > D22–D27 (fourth pass: authorization, email, effects on commit, analytics events, service
 > surface, small leftovers; sections 21–26) are decided, as decisions.md rules 19–24 (D22 → 19, …
-> D27 → 24); enforcement moves to rule 25.
+> D27 → 24).
+> D28–D32 (fifth pass: constraint and index names, inbound webhooks, the SA35 user-FK rule, private file
+> names, test names; sections 27–31) map to decisions.md rules 25–29 (D28 → 25, … D32 → 29);
+> enforcement moves to rule 30. D28, D29, D31, and D32 are decided as option A, D30 as option B.
 > Two D15 details and one D20 item were settled during review (marked in place). Section 14 also covers core and CLI code, not only `quickscale_modules/`. All are recorded in
 > [decisions.md § Module Conventions](../technical/decisions.md#module-conventions), which wins on any
 > conflict with this file. Evidence for SA215, taken 2026-09-26 from `v89` (`quickscale_modules/*/module.yml`
@@ -522,6 +525,102 @@ paths, a project's own view).
 - backups' and blog's type hints are invisible to a project's mypy.
 - The cache key is a name a project and a shared Redis see, so it belongs in rule 2's identity table.
 
+## 27. Constraint and index names
+
+Fifth pass. The `name=` of every `UniqueConstraint`, `CheckConstraint`, and `Index`. In PostgreSQL a
+unique constraint or index name must be unique across the whole schema, so a name is a label every
+installed module and the project share, like a table name.
+
+| Style | Examples | Modules |
+|---|---|---|
+| `quickscale_<module>_…` (rule 2's stem) | `quickscale_billing_unique_stripe_event_id`, `quickscale_notifications_unique_message_recipient` | billing (5), notifications (1) |
+| `<module>_<model>_…` (no stem) | `blog_post_slug_organization_unique`, `crm_contact_id_org_unique`, `forms_form_id_org_unique` | blog (5), crm (6), forms (3), listings (1) |
+| old package stem | `quickscale_modules_forms_form_slug_organization_unique` | forms (1) |
+| no prefix at all | `unique_system_org`, `unique_nonempty_org_stripe_customer` | orgs (2) |
+| Django's generated index name (`quickscale__<field>_<hash>_idx`) | unnamed `Index(...)` in blog `Post` and listings' `AbstractListing`; listings' concrete `Listing` copies the generated names into its `Meta` | blog (3), listings (3) |
+| `unique_together` instead of a named constraint | `FormField` (`form`, `name`), `OrganizationMembership` (`user`, `organization`) | forms, orgs |
+
+**Drift**
+- Five naming styles and two unnamed forms. orgs' prefix-less names are the ones most likely to
+  collide with a project's own constraint. Generated index names depend on the app label, so
+  rule 2's rename changes them anyway, and a hashed, truncated name tells an operator reading a
+  migration or an error nothing.
+- `unique_together` is the form Django's docs say may be deprecated; the other 24 unique rules
+  are `UniqueConstraint`.
+
+## 28. Inbound webhooks
+
+| Aspect | billing (`StripeWebhookView`) | notifications (`NotificationWebhookView`) |
+|---|---|---|
+| View base | Django `View`, `csrf_exempt`, POST only | same |
+| Signature check | in `services.handle_stripe_event` (Stripe SDK) | in `services.ingest_webhook_event` (`hmac.compare_digest`, timestamped) |
+| Replay / duplicate handling | `WebhookEvent` unique on `stripe_event_id` | `NotificationDeliveryEvent.idempotency_key` unique |
+| Success body | `{"status": "accepted", "duplicate", "event_type", "processing_status"}` | `{"status": "accepted", "duplicate", "delivery_status"}` |
+| Error body | `{"error": "<str(exc)>"}` | `{"error": "<str(exc)>"}` |
+| Bad signature | 403 | 403 |
+| Module switched off | 403 | 403 |
+| Missing secret | 500 (`BillingConfigurationError`) | raised from `resolve_webhook_secret` at request time |
+
+Where it is already the same (keep): transport-only views, verification and deduplication in
+`services.py`, a unique database key per provider event, POST only.
+
+**Drift**
+- Both error bodies break rule 9's one shape, and `str(exc)` can put internal detail in a response
+  to an unauthenticated caller. The rule 9 exemption covers "signature-verified webhooks" as a
+  whole, so neither the shape nor the status codes are governed.
+- A switched-off module answers 403, but rule 1 says off disables its URLs (404). A missing secret
+  is found per request (500) instead of at startup (rules 3 and 10).
+- The success bodies differ, and a provider reads only the status.
+
+## 29. `on_delete` on relations to `User`
+
+| Behavior | Where |
+|---|---|
+| `SET_NULL` — a field recording who did something (author, creator, actor, owner) | backups, billing (4), blog (2), crm (3), forms, orgs `OrganizationMembership.invited_by` |
+| `CASCADE` — allowlisted | orgs `OrganizationMembership.user`, orgs `OrganizationInvitation.invited_by`, blog `AuthorProfile.user` |
+| `PROTECT` | none (allowed by the gate when taken; D30 forbids it) |
+
+All of it already conforms: SA35's gate (`orgs/tests/test_sa35_conformance.py`) allows `SET_NULL`
+or `PROTECT` and allowlists the three `CASCADE` fields, because referential actions bypass RLS.
+
+**Drift**
+- The rule is written, but only inside decisions.md § Multi-tenant SaaS Architecture (the
+  "Intentional CASCADE exception" bullet names "the general SET_NULL/PROTECT rule"), not in Module
+  Conventions or module-extension.md, where a module author looks. The gate's comment cites
+  "decisions.md §SA35", a heading that does not exist. (Correction: the first write-up of this
+  pass said the rule was written nowhere.)
+
+## 30. Module-private file names
+
+Files in a package that rule 11's required list, rule 4's public surface, and rule 10's
+`checks.py` / `exceptions.py` do not name:
+
+| File | Modules | What it is |
+|---|---|---|
+| `forms.py`, `serializers.py`, `managers.py`, `filters.py`, `feeds.py`, `middleware.py`, `validators.py`, `throttles.py`, `admin.py`, `models.py`, `views.py`, `urls.py` | many | Django / DRF names — every Django developer knows where to look |
+| `persistence.py` | backups | the core-port implementation (rule 10) |
+| `events.py` | analytics | event vocabulary; D25 removes the feature names |
+| `debug_views.py`, `debug_helpers.py` | orgs | DEBUG-only pages |
+| `contracts.py`, `helpers.py`, `constants.py` | social, storage, orgs | fold in (rule 11) |
+| `notifications.py` | forms | goes (D23) |
+
+**Drift**
+- Rule 11 names the files a module must have and three it must fold, but not what else a module
+  may add. Nothing stops the next `utils.py`, and nothing tells the conformance test whether an
+  unknown file is public.
+
+## 31. Test file names and helpers
+
+| Aspect | Observed |
+|---|---|
+| Ticket-numbered test files | orgs only: `test_sa35_conformance.py`, `test_sa41_statement_amplification.py`, `test_sa49_conformance.py`, `test_sa60_composite_fk_conformance.py`, `test_sa92_migration_squash_guardrail.py`, `test_sa213_removal_obligations.py`, `test_af9_autocommit_proof.py`, `test_af9_priming.py` |
+| Non-test files in `tests/` | `conftest.py`, `settings*.py`, `urls.py` everywhere; plus billing `stripe_payloads.py`, `diag_setlocal.py`; listings `models.py`, `views.py`; orgs `bypassed_boundary.py`, `urls_pre_home.py`, `sa182_project_app/`, `sa208_project_app/`; backups `wsgi.py` |
+| One-off import-cycle tests | `test_circular_import.py` in auth and billing |
+
+**Drift**
+- A ticket number says when a test was written, not what it protects; a reader of orgs' test
+  folder cannot find the RLS tests by name. Helper files and test apps are named three ways.
+
 ## What is already consistent (keep)
 
 - Package, `AppConfig`, and app-label naming.
@@ -535,6 +634,12 @@ paths, a project's own view).
   `@admin.register` (third pass; D17 and D16 now enforce them).
 - `logging.getLogger(__name__)` and no f-string log messages.
 - Build backend, pytest and coverage settings across `pyproject.toml` files.
+- Server-rendered pages are class-based views in every module; function views are only blog's and
+  listings' JSON APIs, which rule 9 already moves to DRF (fifth pass).
+- `on_delete` on `User` (section 29; SA35's gate) and webhook verification and deduplication in
+  `services.py` (section 28).
+- Every migration that references another module's model depends on that module's `0001_initial`,
+  and user references use `swappable_dependency` (fifth pass).
 
 ## Module independence: what is already decided
 
@@ -1364,3 +1469,74 @@ them yet (SA191 has not landed).
 - The current time is `django.utils.timezone.now()`; storage's `datetime.now(tz=...)` changes.
 - Cache keys are `quickscale_<module>:<name>` and join rule 2's identity table (social's
   `quickscale_modules_social:*` renames; the cache is disposable, so no migration step).
+
+### D28 — Constraint and index names carry the stem — decided (fifth pass)
+
+Every `UniqueConstraint`, `CheckConstraint`, and `Index` has an explicit `name`:
+`quickscale_<module>_<model>_<purpose>` for a constraint (`quickscale_blog_post_slug_org_unique`),
+at most 63 characters (PostgreSQL's limit). An `Index` name is limited to 30 characters by Django,
+too short for the stem, so an index is `qs_<module>_<model>_<field>_idx`, abbreviated to fit, and the
+test checks the `qs_<module>_` prefix only. `unique_together` becomes a `UniqueConstraint`.
+Rejected: keeping Django's generated names (they already change with rule 2's app label, and
+say nothing), and a `<module>_` prefix without the stem (it can collide with a project app of the
+same name, the reason rule 2 exists). Names are fixed in each module's clean-break `0001_initial`,
+so the rename costs no migration step before §Clean-Break Migration History freezes.
+
+### D29 — Inbound webhooks: one shape — decided (fifth pass)
+
+- A webhook is a DRF `APIView` with empty `authentication_classes`, `permission_classes`, and
+  `throttle_classes` (the generated settings set default throttles), mounted at `<mount>webhooks/<vendor>/` (rule 7). It reads `request.body` and passes it
+  with the signature headers to one `services.py` function; the view holds no logic. Being a DRF
+  view, its errors take rule 9's shape through the one handler, which replaces both `{"error": str}`
+  bodies. The JSON API Endpoint Base Contract's webhook exemption narrows to "no authentication
+  class": the signature is the authentication.
+- The service verifies the signature (the vendor's SDK, else `hmac.compare_digest` with a timestamp
+  window) before parsing, and records each provider event under a unique database key, so a
+  replayed event is a no-op answered `200`.
+- Status codes: `200` accepted or duplicate (body `{"status": "accepted", "duplicate": <bool>}`, no
+  more); `400` bad signature or malformed payload (`code` `webhook_signature_invalid` /
+  `webhook_payload_invalid`); the module off is `404`, because rule 1 disables its URLs. A missing
+  webhook secret fails startup through `checks.py` (rule 10) instead of a per-request `500`.
+- Effects of a webhook's writes follow rule 21 (on commit).
+
+Rejected: keeping plain Django views with a hand-written shape (a second error format, against
+rule 9), and 403 for a bad signature (a provider retries any non-2xx the same way, so 403 buys
+nothing, and a signature is a property of the request, not a permission).
+
+### D30 — `on_delete` on `User`: `SET_NULL`, no `PROTECT` — decided (fifth pass): option B
+
+Module Conventions rule 27: a relation to `User` is `SET_NULL`; `CASCADE` only on the listed rows
+(membership, invitation sender, author profile, as § Multi-tenant SaaS Architecture records);
+`PROTECT` is no longer allowed, because the first module to use it would make account deletion fail
+for every site that installs it. A record that must outlive its user is kept by the module's SA213
+removal obligation instead. No model uses `PROTECT` today, so the only change is the SA35 gate's
+allowed set. Rejected: A (keep `PROTECT` allowed) and C (no `CASCADE` allowlist, leaving empty
+memberships and profiles). Whether users are deleted at all or disabled and anonymized is a
+separate product question, not part of this decision.
+
+### D31 — Allowed file names in a module package — decided (fifth pass)
+
+A module package holds rule 11's required files, rule 10's `checks.py` / `exceptions.py`, rule 16's
+`signals.py` / `receivers.py`, the Django and DRF names (`models`, `views`, `urls`, `admin`, `forms`,
+`serializers`, `managers`, `filters`, `feeds`, `middleware`, `validators`, `throttles`,
+`permissions`, `templatetags/`, `management/`, `migrations/`), `templates/` and `static/` (rule 8),
+rule 4's listed foundation surface
+files, and private files named `_<name>.py`. The listed extras are backups' `persistence.py` (the
+core port) and orgs' `debug_views.py` (DEBUG-only; `debug_helpers.py` becomes `_debug.py`). The test
+rejects any other name, so a new public-looking file needs a decision edit. analytics' `events.py`
+goes with D25.
+
+### D32 — Tests are named by what they protect — decided (fifth pass)
+
+- A test file is `test_<subject>.py`, named for the behavior or unit it covers; the file name and
+  docstring describe what it protects and carry no ticket number; the history is in git. The
+  same holds for docstrings and comments, and the conformance test checks all three; SA215 sweeps the
+  747 existing mentions in 103 test files, rewording each to say what the test protects where the
+  ticket number was the only explanation (orgs' eight `test_sa*` / `test_af*` files are renamed, e.g.
+  `test_sa92_migration_squash_guardrail.py` → `test_migration_squash_guardrail.py`).
+- Non-test files in `tests/` are `conftest.py`, `settings*.py` (rule 18), `urls*.py`, and helpers
+  named `_<name>.py`; a test Django app is a package named `<purpose>_app/` (orgs'
+  `sa182_project_app` → `project_tenant_app` (project-owned tenant models for purge ordering) and
+  `sa208_project_app` → `provider_id_app` (provider-ID classification).
+- auth's and billing's `test_circular_import.py` stay: they guard import order against allauth and
+  Stripe, which rule 5's layer check between modules does not see.
