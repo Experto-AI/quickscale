@@ -17,60 +17,74 @@ config:
       default: "/media/"
       django_setting: MEDIA_URL
       description: "Base media URL for local/public delivery"
+      validation: {}
 
     public_base_url:
       type: string
       default: ""
       django_setting: QUICKSCALE_STORAGE_PUBLIC_BASE_URL
       description: "Optional absolute CDN/base URL used as the canonical source for helper-built public media URLs"
+      validation: {}
 
     bucket_name:
       type: string
       default: ""
       django_setting: AWS_STORAGE_BUCKET_NAME
       description: "S3-compatible bucket name when cloud storage is enabled"
+      validation: {}
 
     endpoint_url:
       type: string
       default: ""
       django_setting: AWS_S3_ENDPOINT_URL
       description: "Optional S3 endpoint URL (required for Cloudflare R2)"
+      validation: {}
 
     region_name:
       type: string
       default: ""
       django_setting: AWS_S3_REGION_NAME
       description: "Cloud provider region name (or auto for endpoint providers)"
+      validation: {}
 
     access_key_id_env_var:
       type: string
       default: "AWS_ACCESS_KEY_ID"
       django_setting: QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR
       description: "Environment variable name for the S3-compatible access key id"
+      validation:
+        required_when:
+          backend: ["s3", "r2"]
 
     secret_access_key_env_var:
       type: string
       default: "AWS_SECRET_ACCESS_KEY"
       django_setting: QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
       description: "Environment variable name for the S3-compatible secret access key"
+      validation:
+        required_when:
+          backend: ["s3", "r2"]
 
     default_acl:
       type: string
       default: ""
       django_setting: AWS_DEFAULT_ACL
       description: "Default ACL for uploaded objects (blank recommended for modern buckets)"
+      validation: {}
 
     querystring_auth:
       type: boolean
       default: false
       django_setting: AWS_QUERYSTRING_AUTH
       description: "When false, media URLs are public and cache-friendly"
+      validation: {}
 
   immutable:
     private_media_enabled:
       type: boolean
       default: false
       description: "Reserved extension point for future private media authorization flows"
+      validation: {}
 
 dependencies:
   - django-storages>=1.14.6

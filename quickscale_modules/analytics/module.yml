@@ -9,48 +9,59 @@ config:
       default: true
       django_setting: QUICKSCALE_ANALYTICS_ENABLED
       description: "Enable the analytics runtime. When disabled, QuickScale removes managed backend analytics wiring."
+      validation: {}
 
     provider:
       type: string
       default: "posthog"
       django_setting: QUICKSCALE_ANALYTICS_PROVIDER
       description: "Approved analytics provider for v0.80.0. PostHog is the only supported option."
+      validation:
+        choices: ["posthog"]
 
     posthog_api_key_env_var:
       type: string
       default: "POSTHOG_API_KEY"
       django_setting: QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
       description: "Environment-variable name containing the PostHog project API key."
+      validation: {}
 
     posthog_host_env_var:
       type: string
       default: "POSTHOG_HOST"
       django_setting: QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR
       description: "Optional environment-variable name containing the PostHog ingestion host override."
+      validation: {}
 
     posthog_host:
       type: string
       default: "https://us.i.posthog.com"
       django_setting: QUICKSCALE_ANALYTICS_POSTHOG_HOST
       description: "Fallback PostHog ingestion host used when the host env var is blank."
+      validation: {}
 
     exclude_debug:
       type: boolean
       default: true
       django_setting: QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG
       description: "Disable analytics automatically when Django DEBUG is true."
+      validation: {}
 
     exclude_staff:
       type: boolean
       default: false
       django_setting: QUICKSCALE_ANALYTICS_EXCLUDE_STAFF
       description: "Skip request-scoped analytics payloads for authenticated staff users."
+      validation: {}
 
     anonymous_by_default:
       type: boolean
       default: true
       django_setting: QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT
       description: "Use session-based anonymous distinct IDs unless operators explicitly opt into authenticated identity linkage."
+      validation: {}
+
+  immutable: {}
 
 dependencies:
   - posthog>=7.33.0,<8.0.0
@@ -74,77 +85,3 @@ derivation:
           - - analytics/
             - quickscale_modules_analytics.urls
       description: "Analytics URL include"
-
-  # Per-option derivation metadata.
-  option_derivations:
-    enabled:
-      derived_settings:
-        - setting_key: QUICKSCALE_ANALYTICS_ENABLED
-          source_options: [enabled]
-          derivation_type: direct
-          expression:
-            option: enabled
-          description: "Whether analytics is enabled"
-
-    provider:
-      derived_settings:
-        - setting_key: QUICKSCALE_ANALYTICS_PROVIDER
-          source_options: [provider]
-          derivation_type: direct
-          expression:
-            option: provider
-          description: "Analytics provider name"
-
-    posthog_api_key_env_var:
-      derived_settings:
-        - setting_key: QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
-          source_options: [posthog_api_key_env_var]
-          derivation_type: direct
-          expression:
-            option: posthog_api_key_env_var
-          description: "Env-var name for PostHog API key"
-
-    posthog_host_env_var:
-      derived_settings:
-        - setting_key: QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR
-          source_options: [posthog_host_env_var]
-          derivation_type: direct
-          expression:
-            option: posthog_host_env_var
-          description: "Env-var name for PostHog host"
-
-    posthog_host:
-      derived_settings:
-        - setting_key: QUICKSCALE_ANALYTICS_POSTHOG_HOST
-          source_options: [posthog_host]
-          derivation_type: direct
-          expression:
-            option: posthog_host
-          description: "PostHog ingestion host URL"
-
-    exclude_debug:
-      derived_settings:
-        - setting_key: QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG
-          source_options: [exclude_debug]
-          derivation_type: direct
-          expression:
-            option: exclude_debug
-          description: "Skip analytics when DEBUG is true"
-
-    exclude_staff:
-      derived_settings:
-        - setting_key: QUICKSCALE_ANALYTICS_EXCLUDE_STAFF
-          source_options: [exclude_staff]
-          derivation_type: direct
-          expression:
-            option: exclude_staff
-          description: "Skip analytics for staff users"
-
-    anonymous_by_default:
-      derived_settings:
-        - setting_key: QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT
-          source_options: [anonymous_by_default]
-          derivation_type: direct
-          expression:
-            option: anonymous_by_default
-          description: "Use anonymous distinct IDs by default"

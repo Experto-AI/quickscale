@@ -9,12 +9,15 @@ config:
       default: 14
       django_setting: QUICKSCALE_BACKUPS_RETENTION_DAYS
       description: "Number of days backup artifacts are retained before pruning."
+      validation:
+        min: 1
 
     naming_prefix:
       type: string
       default: "db"
       django_setting: QUICKSCALE_BACKUPS_NAMING_PREFIX
       description: "Prefix used when generating backup filenames."
+      validation: {}
 
     target_mode:
       type: string
@@ -29,54 +32,77 @@ config:
       default: ".quickscale/backups"
       django_setting: QUICKSCALE_BACKUPS_LOCAL_DIRECTORY
       description: "Private local directory used for stored backup artifacts."
+      validation: {}
 
     remote_bucket_name:
       type: string
       default: ""
       django_setting: QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME
       description: "Private S3-compatible bucket used when private_remote mode is enabled."
+      validation:
+        required_when:
+          target_mode: private_remote
 
     remote_prefix:
       type: string
       default: "backups/private"
       django_setting: QUICKSCALE_BACKUPS_REMOTE_PREFIX
       description: "Object-key prefix for private remote backup artifacts."
+      validation: {}
 
     remote_endpoint_url:
       type: string
       default: ""
       django_setting: QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL
       description: "Optional custom S3-compatible endpoint URL."
+      validation:
+        required_when:
+          target_mode: private_remote
+        any_of:
+          - remote_region_name
 
     remote_region_name:
       type: string
       default: ""
       django_setting: QUICKSCALE_BACKUPS_REMOTE_REGION_NAME
       description: "Cloud provider region (or auto for endpoint-driven providers)."
+      validation: {}
 
     remote_access_key_id_env_var:
       type: string
       default: ""
       django_setting: QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
       description: "Environment-variable name containing the private remote access key id."
+      validation:
+        required_when:
+          target_mode: private_remote
 
     remote_secret_access_key_env_var:
       type: string
       default: ""
       django_setting: QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
       description: "Environment-variable name containing the private remote secret access key."
+      validation:
+        required_when:
+          target_mode: private_remote
 
     automation_enabled:
       type: boolean
       default: false
       django_setting: QUICKSCALE_BACKUPS_AUTOMATION_ENABLED
       description: "Document whether cron or platform schedulers should invoke backup commands."
+      validation: {}
 
     schedule:
       type: string
       default: "0 2 * * *"
       django_setting: QUICKSCALE_BACKUPS_SCHEDULE
       description: "Cron-like schedule documentation for command-driven backup automation."
+      validation:
+        required_when:
+          automation_enabled: true
+
+  immutable: {}
 
 contract_vintage:
   minimum: "0.87.0"
@@ -96,3 +122,15 @@ derivation:
         value:
           - quickscale_modules_backups
       description: "Backups Django app label"
+
+  option_derivations:
+    target_mode:
+      normalization_rules:
+        - source_key: target_mode
+          target_key: target_mode
+          rule_type: strip
+          description: "Strip whitespace from target_mode"
+        - source_key: target_mode
+          target_key: target_mode
+          rule_type: lowercase
+          description: "Canonicalize target_mode to lowercase"
