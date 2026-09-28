@@ -54,7 +54,7 @@ def _create_contact_form(*, slug: str, notify_emails: str) -> Form:
     FormField.all_objects.create(
         form=form,
         organization=form.organization,
-        field_type=FormField.FIELD_TYPE_TEXT,
+        field_type=FormField.FieldType.TEXT,
         label="Name",
         name="full_name",
         required=True,
@@ -63,7 +63,7 @@ def _create_contact_form(*, slug: str, notify_emails: str) -> Form:
     FormField.all_objects.create(
         form=form,
         organization=form.organization,
-        field_type=FormField.FIELD_TYPE_EMAIL,
+        field_type=FormField.FieldType.EMAIL,
         label="Email",
         name="email",
         required=True,
@@ -200,7 +200,7 @@ def test_send_notification_tracks_each_recipient_and_sanitizes_provider_metadata
     deliveries = list(message.deliveries.order_by("recipient_email"))
 
     assert len(callbacks) == 1
-    assert message.status == NotificationMessage.STATUS_SENT
+    assert message.status == NotificationMessage.Status.SENT
     assert [delivery.recipient_email for delivery in deliveries] == [
         "alpha@example.com",
         "beta@example.com",
@@ -240,14 +240,14 @@ def test_send_notification_supports_org_invitation_template(
 
     assert len(callbacks) == 1
     assert message.subject == "You're invited to join Acme Labs"
-    assert message.status == NotificationMessage.STATUS_SENT
+    assert message.status == NotificationMessage.Status.SENT
     assert message.tags_json == ["quickscale", "transactional", "auth"]
     assert message.metadata_json == {
         "template": "notifications-org-invitation",
         "workflow": "org-invitation",
     }
     assert delivery.recipient_email == "invitee@example.com"
-    assert delivery.status == NotificationDelivery.STATUS_SENT
+    assert delivery.status == NotificationDelivery.Status.SENT
     assert delivery.provider_message_id == "provider::invitee@example.com"
     assert "Accept invitation" in message.rendered_html
 
@@ -277,12 +277,12 @@ def test_send_notification_persists_partial_failures_per_recipient(
     failed = message.deliveries.get(recipient_email="broken@example.com")
 
     assert len(callbacks) == 1
-    assert successful.status == NotificationDelivery.STATUS_SENT
+    assert successful.status == NotificationDelivery.Status.SENT
     assert successful.provider_message_id == "provider::ok@example.com"
-    assert failed.status == NotificationDelivery.STATUS_FAILED
+    assert failed.status == NotificationDelivery.Status.FAILED
     assert failed.retry_count == 1
     assert "provider exploded" in failed.failure_reason
-    assert message.status == NotificationMessage.STATUS_PARTIAL
+    assert message.status == NotificationMessage.Status.PARTIAL
     assert "provider exploded" in message.last_error
 
 
@@ -303,8 +303,8 @@ def test_send_notification_can_dispatch_inline_when_requested(
     message.refresh_from_db()
     delivery = message.deliveries.get()
 
-    assert message.status == NotificationMessage.STATUS_SENT
-    assert delivery.status == NotificationDelivery.STATUS_SENT
+    assert message.status == NotificationMessage.Status.SENT
+    assert delivery.status == NotificationDelivery.Status.SENT
     assert delivery.provider_message_id == "inline::inline@example.com"
 
 
@@ -361,7 +361,7 @@ def test_forms_notify_submission_tracks_each_recipient_through_notifications(
     assert len(callbacks) == 1
     assert dispatched_recipients == ["alpha@example.com", "beta@example.com"]
     assert message.subject == "[Tracked Contact] New submission from Alice"
-    assert message.status == NotificationMessage.STATUS_SENT
+    assert message.status == NotificationMessage.Status.SENT
     assert message.tags_json == ["quickscale", "transactional", "forms"]
     assert message.metadata_json == {
         "template": "notifications-forms-submission",
@@ -415,13 +415,13 @@ def test_forms_submit_keeps_saved_submission_when_tracked_delivery_fails(
     assert response.status_code == 201
     assert len(callbacks) == 1
     assert submission.values.filter(field_name="full_name", value="Alice").exists()
-    assert message.status == NotificationMessage.STATUS_FAILED
+    assert message.status == NotificationMessage.Status.FAILED
     assert [delivery.recipient_email for delivery in deliveries] == [
         "alpha@example.com",
         "broken@example.com",
     ]
     assert all(
-        delivery.status == NotificationDelivery.STATUS_FAILED for delivery in deliveries
+        delivery.status == NotificationDelivery.Status.FAILED for delivery in deliveries
     )
     assert all(
         "provider exploded" in delivery.failure_reason for delivery in deliveries
@@ -449,11 +449,11 @@ def test_dispatch_notification_message_fails_loudly_for_live_backend_without_api
         dispatch_notification_message(queued_message.pk)
 
     queued_message.refresh_from_db()
-    assert queued_message.status == NotificationMessage.STATUS_FAILED
+    assert queued_message.status == NotificationMessage.Status.FAILED
     assert "API key environment variable" in queued_message.last_error
     assert (
         queued_message.deliveries.filter(
-            status=NotificationDelivery.STATUS_FAILED
+            status=NotificationDelivery.Status.FAILED
         ).count()
         == 2
     )
@@ -470,11 +470,11 @@ def test_dispatch_notification_message_fails_loudly_for_live_backend_with_placeh
         dispatch_notification_message(queued_message.pk)
 
     queued_message.refresh_from_db()
-    assert queued_message.status == NotificationMessage.STATUS_FAILED
+    assert queued_message.status == NotificationMessage.Status.FAILED
     assert "placeholder sender email noreply@example.com" in queued_message.last_error
     assert (
         queued_message.deliveries.filter(
-            status=NotificationDelivery.STATUS_FAILED
+            status=NotificationDelivery.Status.FAILED
         ).count()
         == 2
     )
@@ -492,7 +492,7 @@ def test_dispatch_notification_message_allows_placeholder_sender_on_console_back
     queued_message.refresh_from_db()
     deliveries = list(queued_message.deliveries.order_by("recipient_email"))
 
-    assert queued_message.status == NotificationMessage.STATUS_SENT
+    assert queued_message.status == NotificationMessage.Status.SENT
     assert [delivery.provider_message_id for delivery in deliveries] == [
         "console::alpha@example.com",
         "console::beta@example.com",
@@ -509,10 +509,10 @@ def test_dispatch_notification_message_rejects_when_runtime_disabled(
 
     queued_message.refresh_from_db()
 
-    assert queued_message.status == NotificationMessage.STATUS_QUEUED
+    assert queued_message.status == NotificationMessage.Status.QUEUED
     assert (
         queued_message.deliveries.filter(
-            status=NotificationDelivery.STATUS_QUEUED
+            status=NotificationDelivery.Status.QUEUED
         ).count()
         == 2
     )
@@ -544,7 +544,7 @@ def test_webhook_ingestion_rejects_when_runtime_disabled(delivery_for_webhook) -
 
     delivery_for_webhook.refresh_from_db()
 
-    assert delivery_for_webhook.status == NotificationDelivery.STATUS_SENT
+    assert delivery_for_webhook.status == NotificationDelivery.Status.SENT
     assert (
         NotificationDeliveryEvent.objects.filter(delivery=delivery_for_webhook).count()
         == 0
@@ -652,8 +652,8 @@ def test_webhook_ingestion_is_replay_safe_and_updates_delivery_status(
 
     assert first_result.duplicate is False
     assert second_result.duplicate is True
-    assert delivery_for_webhook.status == NotificationDelivery.STATUS_DELIVERED
-    assert delivery_for_webhook.message.status == NotificationMessage.STATUS_SENT
+    assert delivery_for_webhook.status == NotificationDelivery.Status.DELIVERED
+    assert delivery_for_webhook.message.status == NotificationMessage.Status.SENT
     assert (
         NotificationDeliveryEvent.objects.filter(delivery=delivery_for_webhook).count()
         == 1

@@ -52,7 +52,7 @@ def backup_policy(db) -> "BackupPolicy":
     return BackupPolicy.objects.create(
         retention_days=14,
         naming_prefix="db",
-        target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+        target_mode=BackupPolicy.TargetMode.LOCAL,
         local_directory=".quickscale/backups",
         automation_enabled=False,
         schedule="0 2 * * *",
@@ -120,7 +120,7 @@ def postgresql_backup_artifact(
         ).hexdigest(),
         size_bytes=postgresql_artifact_file.stat().st_size,
         backup_format="pg_dump_custom",
-        restore_scope=BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+        restore_scope=BackupArtifact.RestoreScope.LOCAL_ONLY,
         database_engine="django.db.backends.postgresql",
         database_name="quickscale_test",
         database_server_major=18,

@@ -14,7 +14,7 @@ from quickscale_modules_social.contracts import (
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
     SOCIAL_EMBEDS_CACHE_KEY,
     SOCIAL_EMBEDS_PATH,
-    SOCIAL_EMBED_RESOLUTION_PENDING,
+    SocialEmbedResolution,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINKS_CACHE_KEY,
@@ -157,8 +157,7 @@ class SocialEmbedRecord:
             url=embed.normalized_url,
             source_url=embed.url,
             display_order=embed.display_order,
-            resolution_status=embed.resolution_status
-            or SOCIAL_EMBED_RESOLUTION_PENDING,
+            resolution_status=embed.resolution_status or SocialEmbedResolution.PENDING,
             resolution_error=embed.resolution_error or None,
             embed_url=embed.resolved_embed_url or None,
             thumbnail_url=embed.resolved_thumbnail_url or None,

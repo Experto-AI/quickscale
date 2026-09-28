@@ -131,7 +131,7 @@ class Migration(migrations.Migration):
                     "invited_by",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="sent_organization_invitations",
+                        related_name="quickscale_orgs_sent_organization_invitations",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),
@@ -139,7 +139,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="invitations",
+                        related_name="quickscale_orgs_invitations",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -180,7 +180,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="invited_organization_memberships",
+                        related_name="quickscale_orgs_invited_organization_memberships",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),
@@ -188,7 +188,7 @@ class Migration(migrations.Migration):
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="memberships",
+                        related_name="quickscale_orgs_memberships",
                         to="quickscale_orgs.organization",
                     ),
                 ),
@@ -196,7 +196,7 @@ class Migration(migrations.Migration):
                     "user",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="organization_memberships",
+                        related_name="quickscale_orgs_organization_memberships",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),

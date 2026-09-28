@@ -36,7 +36,7 @@ class TestTagSerializer:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         factory = APIRequestFactory()
         request = factory.post("/crm/api/tags/")
@@ -58,7 +58,7 @@ class TestTagSerializer:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         factory = APIRequestFactory()
         request = factory.post("/crm/api/tags/")
@@ -82,7 +82,7 @@ class TestTagSerializer:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         with org_scope(personal_org):
             Tag.objects.create(name="Hot Lead", organization=personal_org)
@@ -182,7 +182,7 @@ class TestStageSerializer:
             stage = Stage.objects.create(
                 name="Closed-Won",
                 order=3,
-                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                terminal_semantic=Stage.TerminalSemantic.WON,
                 organization=org_a,
             )
 
@@ -205,7 +205,7 @@ class TestStageSerializer:
             data={
                 "name": "Closed-Won",
                 "order": 3,
-                "terminal_semantic": Stage.TERMINAL_SEMANTIC_WON,
+                "terminal_semantic": Stage.TerminalSemantic.WON,
             },
             context={"request": request},
         )
@@ -227,14 +227,14 @@ class TestStageSerializer:
             stage_a = Stage.objects.create(
                 name="Closed-Won-A",
                 order=3,
-                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                terminal_semantic=Stage.TerminalSemantic.WON,
                 organization=org_a,
             )
         with org_scope(org_b):
             stage_b = Stage.objects.create(
                 name="Closed-Won-B",
                 order=3,
-                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                terminal_semantic=Stage.TerminalSemantic.WON,
                 organization=org_b,
             )
 
@@ -371,7 +371,7 @@ class TestOrganizationFieldNotExposedInSerializers:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         factory = APIRequestFactory()
         request = factory.post("/crm/api/tags/")
@@ -394,7 +394,7 @@ class TestOrganizationFieldNotExposedInSerializers:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         factory = APIRequestFactory()
         request = factory.post("/crm/api/companies/")
@@ -695,7 +695,7 @@ class TestF115Phase2SerializerHelperOrgScoping:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
 
         # Create personal-org data that SHOULD be visible.
@@ -1119,7 +1119,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         with org_scope(personal_org):
             same_org_company = Company.objects.create(
@@ -1164,7 +1164,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         with org_scope(personal_org):
             same_org_company = Company.objects.create(
@@ -1221,7 +1221,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         with org_scope(personal_org):
             same_org_company = Company.objects.create(
@@ -1471,7 +1471,7 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
 
         with org_scope(org_b):
@@ -1707,7 +1707,7 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         with org_scope(org_b):
             stage_b = Stage.objects.create(
@@ -1736,7 +1736,7 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         with org_scope(personal_org):
             stage = Stage.objects.create(

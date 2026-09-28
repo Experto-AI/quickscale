@@ -5,6 +5,8 @@ from typing import Any
 import django_filters
 from django.db import models
 
+from .models import AbstractListing
+
 
 class ListingFilter(django_filters.FilterSet):
     """Base filter for listing models"""
@@ -26,12 +28,7 @@ class ListingFilter(django_filters.FilterSet):
     )
     status = django_filters.ChoiceFilter(
         field_name="status",
-        choices=[
-            ("draft", "Draft"),
-            ("published", "Published"),
-            ("sold", "Sold"),
-            ("archived", "Archived"),
-        ],
+        choices=AbstractListing.Status.choices,
         label="Status",
     )
 

@@ -354,7 +354,9 @@ class OrgListView(SaasModeRequiredMixin, LoginRequiredMixin, ListView):
 
     def get_queryset(self) -> QuerySet[Organization]:
         return (
-            Organization.objects.filter(memberships__user=self.request.user)
+            Organization.objects.filter(
+                quickscale_orgs_memberships__user=self.request.user
+            )
             .distinct()
             .order_by("name")
         )

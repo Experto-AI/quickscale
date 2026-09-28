@@ -70,39 +70,23 @@ Every module does **not** need to implement every surface.
 A generated project may add tenant-scoped models in its own Django app without
 editing a vendored QuickScale module or adding an entry to
 `TENANT_TABLE_REGISTRY`. Runtime classification is marker-derived: a concrete
-model is enrolled when it inherits the tenant contract or declares the shared
-dual-manager contract, while an explicit reason string on `tenant_excluded`
-wins over any inherited or manager-based signal.
+model is enrolled when it inherits the tenant contract (`TenantModel` directly
+or through a module's abstract base), while an explicit reason string on
+`tenant_excluded` wins over any inherited signal. A `TenantManager` on a model
+that does not inherit `TenantModel` fails startup through orgs' system check
+([decisions.md § Module Conventions](decisions.md#module-conventions) rule 13).
 
-For example, a project-owned model extending the listings abstract base keeps
-both managers explicit:
+For example, a project-owned model extending the listings abstract base needs
+no manager declarations — the base owns the contract:
 
 ```python
 from quickscale_modules_listings.models import AbstractListing
-from quickscale_modules_orgs.managers import TenantManager
 
 
 class ProjectListing(AbstractListing):
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
     class Meta(AbstractListing.Meta):
         abstract = False
-        base_manager_name = "all_objects"
 ```
-
-> **After SA215** ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 13):
-> `AbstractListing` inherits `TenantModel`, inheritance is the only tenant marker, and a
-> `TenantManager` on a model that does not inherit `TenantModel` fails startup. The example
-> becomes:
->
-> ```python
-> class ProjectListing(AbstractListing):
->     class Meta(AbstractListing.Meta):
->         abstract = False
-> ```
->
-> The text above and below describes the shipped marker-or-manager contract until then.
 
 The project app must be installed and its initial migration must create the
 concrete table and call `apply_force_rls()` to install the exact two-policy
@@ -129,9 +113,6 @@ as provider-backed or not, from its own code:
 
 ```python
 class ProjectListing(AbstractListing):
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
     mls_id = models.CharField(max_length=64, blank=True, default="")
 
     provider_id_classification = {

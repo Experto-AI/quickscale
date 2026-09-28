@@ -141,7 +141,7 @@ class TestCRMDashboardView:
         user.save(update_fields=["is_staff"])
         client.force_login(user)
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=user
+            is_personal=True, quickscale_orgs_memberships__user=user
         )
         _activate_org_in_session(client, personal_org)
 
@@ -464,7 +464,7 @@ class TestCRMAPIPermissions:
         user.save(update_fields=["is_staff"])
         client.force_login(user)
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=user
+            is_personal=True, quickscale_orgs_memberships__user=user
         )
         _activate_org_in_session(client, personal_org)
 
@@ -778,7 +778,7 @@ class TestDealViewSet:
         semantic_stage = Stage.objects.create(
             name="Deal Signed",
             order=9,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            terminal_semantic=Stage.TerminalSemantic.WON,
             organization=staff_personal_org,
         )
         deal = Deal.objects.create(
@@ -815,7 +815,7 @@ class TestDealViewSet:
         semantic_stage = Stage.objects.create(
             name="No Decision",
             order=10,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST,
+            terminal_semantic=Stage.TerminalSemantic.LOST,
             organization=staff_personal_org,
         )
         open_stage = Stage.objects.create(
@@ -1106,7 +1106,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
 
         # Personal-org stage.
@@ -1160,7 +1160,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
 
         # A personal-org contact with personal-org company.
@@ -1220,14 +1220,14 @@ class TestF1110Phase1SoloRoutePersonalOrgTerminalStageResolution:
         # Use the personal org that the staff_user fixture already created
         # (the fixture calls create_personal_for, so there is exactly one).
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
 
         # Create a personal-org terminal won stage.
         personal_won_stage = Stage.objects.create(
             name="Personal Closed-Won",
             order=3,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            terminal_semantic=Stage.TerminalSemantic.WON,
             organization=personal_org,
         )
 
@@ -1294,7 +1294,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         from quickscale_modules_orgs.models import Organization
 
         personal_org_user = Organization.objects.get(
-            is_personal=True, memberships__user=user
+            is_personal=True, quickscale_orgs_memberships__user=user
         )
 
         # Create a contact in the user's personal org (foreign to staff_user).
@@ -1313,7 +1313,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         client.force_login(staff_user)
 
         staff_personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         _activate_org_in_session(client, staff_personal_org)
 
@@ -1346,7 +1346,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
 
         with org_scope(personal_org):
@@ -1395,7 +1395,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         from quickscale_modules_orgs.models import Organization
 
         personal_org_user = Organization.objects.get(
-            is_personal=True, memberships__user=user
+            is_personal=True, quickscale_orgs_memberships__user=user
         )
 
         # Create a deal in the user's personal org (foreign to staff_user).
@@ -1424,7 +1424,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         client.force_login(staff_user)
 
         staff_personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
         _activate_org_in_session(client, staff_personal_org)
 
@@ -1465,7 +1465,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
+            is_personal=True, quickscale_orgs_memberships__user=staff_user
         )
 
         with org_scope(personal_org):

@@ -19,7 +19,6 @@ from markdownx.models import MarkdownxField
 from PIL import Image
 
 from quickscale_modules_orgs.models import TenantModel
-from quickscale_modules_orgs.tenancy import tenant_org_fk
 
 storage_build_upload_path: Callable[..., str] | None = None
 storage_build_public_media_url: Callable[..., str] | None = None
@@ -116,15 +115,13 @@ def blog_media_upload_to(_: "BlogMediaAsset", filename: str) -> str:
 class Category(TenantModel):
     """Blog post category"""
 
-    organization = tenant_org_fk(related_name="blog_categories")
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, blank=True)
     description = models.TextField(blank=True)
 
-    class Meta:
+    class Meta(TenantModel.Meta):
         verbose_name_plural = "Categories"
         ordering = ["name"]
-        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "organization"],
@@ -153,13 +150,11 @@ class Category(TenantModel):
 class Tag(TenantModel):
     """Blog post tag"""
 
-    organization = tenant_org_fk(related_name="blog_tags")
     name = models.CharField(max_length=50)
     slug = models.SlugField(max_length=50, blank=True)
 
-    class Meta:
+    class Meta(TenantModel.Meta):
         ordering = ["name"]
-        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "organization"],
@@ -196,7 +191,7 @@ class AuthorProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="author_profile",
+        related_name="quickscale_blog_author_profile",
     )
     bio = models.TextField(blank=True, help_text="Author biography")
     avatar = models.ImageField(
@@ -221,8 +216,6 @@ class AuthorProfile(models.Model):
 
 class BlogMediaAsset(TenantModel):
     """Uploaded media asset that can be referenced by blog automation workflows."""
-
-    organization = tenant_org_fk(related_name="blog_media_assets")
 
     class Kind(models.TextChoices):
         INLINE = "inline", "Inline"
@@ -249,13 +242,12 @@ class BlogMediaAsset(TenantModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="uploaded_blog_media_assets",
+        related_name="quickscale_blog_media_assets",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
+    class Meta(TenantModel.Meta):
         ordering = ["-created_at"]
-        base_manager_name = "all_objects"
 
     def __str__(self) -> str:
         return self.original_filename
@@ -264,19 +256,16 @@ class BlogMediaAsset(TenantModel):
 class Post(TenantModel):
     """Blog post model with Markdown support"""
 
-    organization = tenant_org_fk(related_name="blog_posts")
-
-    STATUS_CHOICES = [
-        ("draft", "Draft"),
-        ("published", "Published"),
-    ]
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PUBLISHED = "published", "Published"
 
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, blank=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
-        related_name="blog_posts",
+        related_name="quickscale_blog_posts",
         null=True,
         blank=True,
     )
@@ -297,7 +286,9 @@ class Post(TenantModel):
         blank=True,
         help_text="Alt text for featured image (accessibility)",
     )
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.DRAFT
+    )
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
@@ -310,9 +301,8 @@ class Post(TenantModel):
     updated_at = models.DateTimeField(auto_now=True)
     published_date = models.DateTimeField(null=True, blank=True)
 
-    class Meta:
+    class Meta(TenantModel.Meta):
         ordering = ["-published_date", "-created_at"]
-        base_manager_name = "all_objects"
         indexes = [
             models.Index(fields=["-published_date"], name="qs_blog_post_publish_idx"),
             models.Index(fields=["status"], name="qs_blog_post_status_idx"),
@@ -334,7 +324,7 @@ class Post(TenantModel):
             self.slug = slugify(self.title)
 
         # Set published_date when status changes to published
-        if self.status == "published" and not self.published_date:
+        if self.status == self.Status.PUBLISHED and not self.published_date:
             self.published_date = timezone.now()
 
         # Auto-generate excerpt from content if not provided
