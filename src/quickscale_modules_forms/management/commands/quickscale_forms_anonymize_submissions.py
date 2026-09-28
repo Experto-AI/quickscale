@@ -16,11 +16,20 @@ class Command(BaseCommand):
         "Anonymize submission data older than each form's data_retention_days setting"
     )
 
+    def add_arguments(self, parser: Any) -> None:
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            default=False,
+            help="Report submissions that would be anonymized without changing them.",
+        )
+
     def handle(self, *args: Any, **options: Any) -> None:
         from django.db import transaction
 
         from quickscale_modules_orgs.current_org import operator_access, org_scope
 
+        dry_run = bool(options.get("dry_run", False))
         total_anonymized = 0
         now = timezone.now()
 
@@ -51,24 +60,41 @@ class Command(BaseCommand):
                         .values_list("pk", flat=True)
                     )
 
-                if old_pks:
-                    # Phase 3 — Update inside the form's owning org scope.
-                    # Every write uses the public ``objects`` manager under
-                    # ``org_scope`` so FORCE RLS sees the correct
-                    # ``app.current_org_id`` (write-path policy).
-                    with org_scope(form.organization):
-                        count = (
-                            FormSubmission.objects.filter(pk__in=old_pks)
-                            .exclude(ip_address=None)
-                            .update(ip_address=None, user_agent="")
-                        )
-                        total_anonymized += count
-                        self.stdout.write(
-                            f"  Anonymized {count} submissions for form: {form.slug}"
-                        )
+                if not old_pks:
+                    continue
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Done. Total submissions anonymized: {total_anonymized}"
+                if dry_run:
+                    total_anonymized += len(old_pks)
+                    self.stdout.write(
+                        f"  Would anonymize {len(old_pks)} submissions for form: "
+                        f"{form.slug}"
+                    )
+                    continue
+
+                # Phase 3 — Update inside the form's owning org scope.
+                # Every write uses the public ``objects`` manager under
+                # ``org_scope`` so FORCE RLS sees the correct
+                # ``app.current_org_id`` (write-path policy).
+                with org_scope(form.organization):
+                    count = (
+                        FormSubmission.objects.filter(pk__in=old_pks)
+                        .exclude(ip_address=None)
+                        .update(ip_address=None, user_agent="")
+                    )
+                    total_anonymized += count
+                    self.stdout.write(
+                        f"  Anonymized {count} submissions for form: {form.slug}"
+                    )
+
+        if dry_run:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Dry run. Submissions that would be anonymized: {total_anonymized}"
+                )
             )
-        )
+        else:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Done. Total submissions anonymized: {total_anonymized}"
+                )
+            )
