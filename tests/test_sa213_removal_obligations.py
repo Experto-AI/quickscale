@@ -50,7 +50,7 @@ DECLARED_ORGANIZATION_OBLIGATION = OrganizationRemovalObligation(
     account_delete_skip_reason="Account deletion retains the organization row.",
     external_provider_fields=(
         ExternalProviderField(
-            "quickscale_modules_orgs.organization",
+            "quickscale_orgs.organization",
             "stripe_customer_id",
         ),
     ),
@@ -129,7 +129,7 @@ def test_purge_refuses_a_populated_declared_provider_field(
     )
     with pytest.raises(CommandError, match=expected):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             dry_run=True,
             stdout=StringIO(),
@@ -139,7 +139,7 @@ def test_purge_refuses_a_populated_declared_provider_field(
 
     with pytest.raises(CommandError, match=expected):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
@@ -173,7 +173,7 @@ def test_purge_deletes_rows_with_an_empty_declared_provider_field(
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -224,11 +224,11 @@ def test_purge_refuses_a_populated_declared_organization_field(
 
     expected = (
         r"provider-backed values: "
-        r"quickscale_modules_orgs\.organization\.stripe_customer_id"
+        r"quickscale_orgs\.organization\.stripe_customer_id"
     )
     with pytest.raises(CommandError, match=expected):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             dry_run=True,
             stdout=StringIO(),
@@ -238,7 +238,7 @@ def test_purge_refuses_a_populated_declared_organization_field(
 
     with pytest.raises(CommandError, match=expected):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
@@ -262,7 +262,7 @@ def test_purge_deletes_with_an_empty_declared_organization_field(
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -279,7 +279,7 @@ UNSCOPED_DECLARATION = OrganizationRemovalObligation(
     account_delete_action=RemovalAction.SKIP,
     account_delete_skip_reason="Account deletion retains the rows.",
     external_provider_fields=(
-        ExternalProviderField("quickscale_modules_billing.plan", "stripe_price_id"),
+        ExternalProviderField("quickscale_billing.plan", "stripe_price_id"),
     ),
 )
 
@@ -309,7 +309,7 @@ def test_purge_fails_closed_on_an_uninspectable_declared_field(
 
     with pytest.raises(CommandError, match="is not organization-scoped"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
@@ -357,7 +357,7 @@ def test_purge_runs_a_declared_cache_hook(declared_cache_hook: list) -> None:
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -374,7 +374,7 @@ DECLARED_UNKNOWN_LABEL_OBLIGATION = OrganizationRemovalObligation(
     account_delete_skip_reason="Account deletion retains the organization's rows.",
     external_provider_fields=(
         ExternalProviderField(
-            "quickscale_modules_orgs.organizaton",
+            "quickscale_orgs.organizaton",
             "stripe_customer_id",
         ),
     ),
@@ -418,7 +418,7 @@ def test_purge_fails_closed_on_an_unknown_declared_label(
 
     with pytest.raises(CommandError, match="not an installed model"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
@@ -430,7 +430,7 @@ def test_purge_fails_closed_on_an_unknown_declared_label(
 
 def test_structured_values_that_are_not_mappings_fail_closed() -> None:
     """A declared structured field with a non-mapping value reads as carried."""
-    from quickscale_modules_orgs.management.commands.purge_organization import (
+    from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
         _mapping_carries_value,
     )
 
@@ -446,7 +446,7 @@ GUARDED_UNKNOWN_LABEL_DECLARATION = OrganizationRemovalObligation(
     account_delete_action=RemovalAction.RECONCILE,
     external_provider_fields=(
         ExternalProviderField(
-            "quickscale_modules_billing.misspeled",
+            "quickscale_billing.misspeled",
             "stripe_event_id",
             boundary_guarded=True,
         ),
@@ -457,7 +457,7 @@ GUARDED_UNKNOWN_LABEL_DECLARATION = OrganizationRemovalObligation(
 @pytest.fixture
 def declared_guarded_unknown_label(monkeypatch: pytest.MonkeyPatch) -> None:
     """Declare a boundary-guarded field on a misspelled model label."""
-    config = apps.get_app_config("quickscale_modules_billing")
+    config = apps.get_app_config("quickscale_billing")
     monkeypatch.setattr(
         config,
         "removal_obligations",
@@ -479,7 +479,7 @@ def test_purge_resolves_boundary_guarded_labels_too(
 
     with pytest.raises(CommandError, match="not an installed model"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
@@ -528,7 +528,7 @@ def test_purge_rejects_an_undischargeable_declaration_before_deleting(
 
     with pytest.raises(CommandError, match="no stage for"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),

@@ -37,7 +37,7 @@ from .permissions import OrgRoleMixin, user_has_org_role
 
 _UNSET = object()
 _ORG_INVITATION_TEMPLATE_KEY = "notifications.org_invitation"
-_MEMBERS_TEMPLATE_NAME = "quickscale_modules_orgs/members.html"
+_MEMBERS_TEMPLATE_NAME = "quickscale_orgs/members.html"
 _INVITATION_PAGE_COPY = {
     "accepted": {
         "title": "Invitation already used",
@@ -349,7 +349,7 @@ class OrgApiBaseView(OrganizationContextMixin, View):
 class OrgListView(SaasModeRequiredMixin, LoginRequiredMixin, ListView):
     """List the organizations the current user belongs to."""
 
-    template_name = "quickscale_modules_orgs/org_list.html"
+    template_name = "quickscale_orgs/org_list.html"
     context_object_name = "organizations"
 
     def get_queryset(self) -> QuerySet[Organization]:
@@ -364,7 +364,7 @@ class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
     """Create a new organization and hand off to the next onboarding step."""
 
     form_class = OrgCreateForm
-    template_name = "quickscale_modules_orgs/org_create.html"
+    template_name = "quickscale_orgs/org_create.html"
 
     def form_valid(self, form: OrgCreateForm) -> HttpResponse:
         organization = form.save(user=self.request.user)
@@ -374,7 +374,7 @@ class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
 class OrgInvitationAcceptView(SaasModeRequiredMixin, TemplateView):
     """Render the public org invitation accept page."""
 
-    template_name = "quickscale_modules_orgs/org_invitation_accept.html"
+    template_name = "quickscale_orgs/org_invitation_accept.html"
     request: HttpRequest
     kwargs: dict[str, Any]
     _invitation: OrganizationInvitation | None = None
@@ -536,7 +536,7 @@ class OrgDashboardView(
     """Render the active organization's dashboard."""
 
     min_org_role = OrgRole.VIEWER
-    template_name = "quickscale_modules_orgs/org_dashboard.html"
+    template_name = "quickscale_orgs/org_dashboard.html"
 
     def dispatch(
         self,
@@ -916,7 +916,7 @@ class OrgSettingsView(
 
     form_class = OrgSettingsForm
     min_org_role = OrgRole.ADMIN
-    template_name = "quickscale_modules_orgs/settings.html"
+    template_name = "quickscale_orgs/settings.html"
 
     def get_form_kwargs(self) -> dict[str, Any]:
         kwargs = super().get_form_kwargs()

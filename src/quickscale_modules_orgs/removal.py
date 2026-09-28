@@ -17,7 +17,7 @@ point, :class:`RemovalCoordinator`.  A boundary calls
 stage that realizes a declared action and :meth:`RemovalCoordinator.finish`
 once the removal is complete; ``finish`` fails closed when a declared
 obligation was never discharged.
-``check_removal_obligation_discharge`` (``quickscale_modules_orgs.E002``)
+``check_removal_obligation_discharge`` (``quickscale_orgs.E002``)
 fails when a declared obligation demands an action its boundary has no
 coordinator route for, because only a boundary that bypasses the coordinator
 could satisfy it.
@@ -106,7 +106,7 @@ REMOVAL_OBLIGATIONS_ATTRIBUTE: str = "removal_obligations"
 #: Label of the organization row itself.  It carries provider state but no
 #: ``organization_id``, so a declared refusal field on it is inspected on the
 #: organization row instead of through an organization filter.
-ORGANIZATION_MODEL_LABEL: str = "quickscale_modules_orgs.organization"
+ORGANIZATION_MODEL_LABEL: str = "quickscale_orgs.organization"
 
 #: The actions each removal boundary discharges through the shared coordinator.
 #: ``SKIP`` is deliberately absent: a skipped obligation is recorded, never
@@ -143,7 +143,7 @@ STAGE_EXECUTOR_HOOKS: dict[RemovalAction, str] = {
 #: these obligations and only for the listed declaring module; any other app
 #: would be claiming a boundary guard that does not exist.
 BOUNDARY_GUARDED_OBLIGATIONS: dict[str, str] = {
-    BILLING_PROVIDER_STATE: "quickscale_modules_billing",
+    BILLING_PROVIDER_STATE: "quickscale_billing",
 }
 
 

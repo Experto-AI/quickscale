@@ -812,15 +812,15 @@ class TestDebugBanner:
         # Navigate from this test file up to the workspace root.
         repo_root = Path(__file__).resolve().parent.parent.parent.parent
         template_paths = [
-            "quickscale_modules/crm/src/quickscale_modules_crm/templates/quickscale_modules_crm/crm/base.html",
-            "quickscale_modules/blog/src/quickscale_modules_blog/templates/quickscale_modules_blog/blog/base.html",
-            "quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_modules_listings/listings/base.html",
+            "quickscale_modules/crm/src/quickscale_modules_crm/templates/quickscale_crm/crm/base.html",
+            "quickscale_modules/blog/src/quickscale_modules_blog/templates/quickscale_blog/blog/base.html",
+            "quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_listings/listings/base.html",
         ]
         for rel_path in template_paths:
             tmpl_path = repo_root / rel_path
             assert tmpl_path.exists(), f"Downstream template not found: {tmpl_path}"
             content = tmpl_path.read_text()
-            assert "quickscale_modules_orgs/_debug_banner.html" in content, (
+            assert "quickscale_orgs/_debug_banner.html" in content, (
                 f"{tmpl_path} is missing the debug banner include"
             )
 
@@ -917,7 +917,7 @@ class TestAdminAffordances:
         )
 
         response = admin_client.post(
-            f"/admin/quickscale_modules_orgs/organization/{organization.slug}/debug/view-as/",
+            f"/admin/quickscale_orgs/organization/{organization.slug}/debug/view-as/",
         )
 
         # The admin view now sets the session directly and redirects to the org detail.
@@ -936,14 +936,10 @@ class TestAdminAffordances:
         session[DEBUG_AS_ORG_SESSION_KEY] = str(organization.pk)
         session.save()
 
-        response = admin_client.post(
-            "/admin/quickscale_modules_orgs/organization/debug/exit/"
-        )
+        response = admin_client.post("/admin/quickscale_orgs/organization/debug/exit/")
 
         assert response.status_code == 302
-        assert response.headers["Location"] == (
-            "/admin/quickscale_modules_orgs/organization/"
-        )
+        assert response.headers["Location"] == ("/admin/quickscale_orgs/organization/")
         assert DEBUG_AS_ORG_SESSION_KEY not in admin_client.session
 
     @pytest.mark.django_db
@@ -961,7 +957,7 @@ class TestAdminAffordances:
         client.force_login(user)
 
         response = client.post(
-            f"/admin/quickscale_modules_orgs/organization/{organization.slug}/debug/view-as/",
+            f"/admin/quickscale_orgs/organization/{organization.slug}/debug/view-as/",
         )
 
         assert response.status_code == 302
@@ -985,9 +981,7 @@ class TestAdminAffordances:
         session[DEBUG_AS_ORG_SESSION_KEY] = str(organization.pk)
         session.save()
 
-        response = client.post(
-            "/admin/quickscale_modules_orgs/organization/debug/exit/"
-        )
+        response = client.post("/admin/quickscale_orgs/organization/debug/exit/")
 
         assert response.status_code == 302
         # Session should still be set (exit is blocked for non-superuser)
@@ -1007,7 +1001,7 @@ class TestAdminAffordances:
 
         # Step 1: Activate VIEW-AS via admin (GET-based button link).
         response = client.get(
-            f"/admin/quickscale_modules_orgs/organization/{organization.slug}/debug/view-as/",
+            f"/admin/quickscale_orgs/organization/{organization.slug}/debug/view-as/",
         )
         assert response.status_code == 302
         assert response.headers["Location"] == f"/orgs/{organization.slug}/"

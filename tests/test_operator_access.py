@@ -859,7 +859,7 @@ def test_sa182_missing_force_rls_fails_command_and_restores_fixture() -> None:
         assert result["has_force_rls"] is False
 
         with pytest.raises(SystemExit) as exc_info:
-            call_command("check_tenant_isolation", verbosity=0)
+            call_command("quickscale_orgs_check_tenant_isolation", verbosity=0)
         assert exc_info.value.code == 1
     finally:
         with connection.schema_editor() as schema_editor:
@@ -972,9 +972,9 @@ class TestOperatorAccessCrossTenantReadOnly:
             except Exception:
                 pass
             for table in (
-                "quickscale_modules_forms_form",
-                "quickscale_modules_forms_formsubmission",
-                "quickscale_modules_orgs_organization",
+                "quickscale_forms_form",
+                "quickscale_forms_formsubmission",
+                "quickscale_orgs_organization",
             ):
                 try:
                     with transaction.atomic():
@@ -1029,8 +1029,7 @@ class TestOperatorAccessCrossTenantReadOnly:
 
                     # SELECT across all FormSubmission rows.
                     cursor.execute(
-                        "SELECT id FROM quickscale_modules_forms_formsubmission "
-                        "ORDER BY id"
+                        "SELECT id FROM quickscale_forms_formsubmission ORDER BY id"
                     )
                     row_ids = [r[0] for r in cursor.fetchall()]
                 finally:
@@ -1079,8 +1078,7 @@ class TestOperatorAccessCrossTenantReadOnly:
                     cursor.execute("SET LOCAL app.operator_access = 'on'")
 
                     cursor.execute(
-                        "DELETE FROM quickscale_modules_forms_formsubmission "
-                        "WHERE id = %s",
+                        "DELETE FROM quickscale_forms_formsubmission WHERE id = %s",
                         [sub_a.pk],
                     )
                     deleted_count = cursor.rowcount
@@ -1141,7 +1139,7 @@ class TestOperatorAccessCrossTenantReadOnly:
                     cursor.execute("SET LOCAL app.operator_access = 'on'")
 
                     cursor.execute(
-                        "UPDATE quickscale_modules_forms_formsubmission "
+                        "UPDATE quickscale_forms_formsubmission "
                         "SET form_id = %s WHERE id = %s",
                         [form_alt.pk, sub_a_pk],
                     )

@@ -48,18 +48,18 @@ class Organization(models.Model):
     objects = OrganizationManager()
 
     class Meta:
-        app_label = "quickscale_modules_orgs"
+        app_label = "quickscale_orgs"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
                 fields=["is_system"],
                 condition=models.Q(is_system=True),
-                name="unique_system_org",
+                name="quickscale_orgs_organization_unique_system_org",
             ),
             models.UniqueConstraint(
                 fields=["stripe_customer_id"],
                 condition=~models.Q(stripe_customer_id=""),
-                name="unique_nonempty_org_stripe_customer",
+                name="quickscale_orgs_organization_unique_nonempty_stripe_customer",
             ),
         ]
 
@@ -124,7 +124,7 @@ class OrganizationMembership(models.Model):
         related_name="organization_memberships",
     )
     organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
+        "quickscale_orgs.Organization",
         on_delete=models.CASCADE,
         related_name="memberships",
     )
@@ -143,9 +143,14 @@ class OrganizationMembership(models.Model):
     joined_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "quickscale_modules_orgs"
+        app_label = "quickscale_orgs"
         ordering = ["organization_id", "user_id"]
-        unique_together = [("user", "organization")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "organization"),
+                name="quickscale_orgs_organizationmembership_user_organization_unique",
+            ),
+        ]
 
     @classmethod
     def _has_other_owner(
@@ -363,7 +368,7 @@ class OrganizationInvitation(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
+        "quickscale_orgs.Organization",
         on_delete=models.CASCADE,
         related_name="invitations",
     )
@@ -383,7 +388,7 @@ class OrganizationInvitation(models.Model):
     accepted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        app_label = "quickscale_modules_orgs"
+        app_label = "quickscale_orgs"
         ordering = ["email"]
 
     @classmethod
@@ -497,7 +502,7 @@ class OrganizationTombstone(models.Model):
     )
 
     class Meta:
-        app_label = "quickscale_modules_orgs"
+        app_label = "quickscale_orgs"
         verbose_name = "organization tombstone"
         verbose_name_plural = "organization tombstones"
         ordering = ["-purged_at"]

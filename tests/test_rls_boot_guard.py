@@ -361,7 +361,7 @@ def test_is_privileged_command_false_for_retired_billing_backfill() -> None:
     """The retired billing backfill must not receive the privileged exemption."""
     with patch.dict(
         os.environ,
-        {"QUICKSCALE_PRIVILEGED_COMMAND": "migrate_billing_to_orgs"},
+        {"QUICKSCALE_PRIVILEGED_COMMAND": "quickscale_orgs_migrate_billing_to_orgs"},
         clear=True,
     ):
         assert _is_privileged_command() is False
@@ -472,7 +472,9 @@ def test_ready_rejects_retired_billing_backfill_under_bypassrls(settings: Any) -
     with patch("quickscale_modules_orgs.apps.connection", mock_conn):
         with patch.dict(
             os.environ,
-            {"QUICKSCALE_PRIVILEGED_COMMAND": "migrate_billing_to_orgs"},
+            {
+                "QUICKSCALE_PRIVILEGED_COMMAND": "quickscale_orgs_migrate_billing_to_orgs"
+            },
             clear=True,
         ):
             config = QuickscaleOrgsConfig(

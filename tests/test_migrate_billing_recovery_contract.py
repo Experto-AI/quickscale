@@ -18,7 +18,7 @@ from quickscale_modules_billing.models import (
 )
 from quickscale_modules_orgs.current_org import reset_current_org_id, set_current_org_id
 
-from quickscale_modules_orgs.management.commands.migrate_billing_to_orgs import (
+from quickscale_modules_orgs.management.commands.quickscale_orgs_migrate_billing_to_orgs import (
     _lock_planned_users,
     _lock_target_organizations,
     _require_explicit_recovery_connection,
@@ -41,7 +41,7 @@ def test_recovery_connection_requires_explicit_acknowledgement() -> None:
 
     with patch.dict(os.environ, {}, clear=True):
         with patch(
-            "quickscale_modules_orgs.management.commands.migrate_billing_to_orgs.connection",
+            "quickscale_modules_orgs.management.commands.quickscale_orgs_migrate_billing_to_orgs.connection",
             mock_connection,
         ):
             with pytest.raises(
@@ -58,7 +58,7 @@ def test_recovery_connection_rejects_restricted_runtime_role() -> None:
 
     with patch.dict(os.environ, {"QUICKSCALE_ALLOW_BYPASSRLS": "1"}, clear=True):
         with patch(
-            "quickscale_modules_orgs.management.commands.migrate_billing_to_orgs.connection",
+            "quickscale_modules_orgs.management.commands.quickscale_orgs_migrate_billing_to_orgs.connection",
             mock_connection,
         ):
             with pytest.raises(
@@ -76,7 +76,7 @@ def test_recovery_connection_accepts_explicit_bypassing_role(
 
     with patch.dict(os.environ, {"QUICKSCALE_ALLOW_BYPASSRLS": "1"}, clear=True):
         with patch(
-            "quickscale_modules_orgs.management.commands.migrate_billing_to_orgs.connection",
+            "quickscale_modules_orgs.management.commands.quickscale_orgs_migrate_billing_to_orgs.connection",
             mock_connection,
         ):
             _require_explicit_recovery_connection()
@@ -88,7 +88,7 @@ def test_recovery_connection_rejects_unknown_current_role() -> None:
 
     with patch.dict(os.environ, {"QUICKSCALE_ALLOW_BYPASSRLS": "1"}, clear=True):
         with patch(
-            "quickscale_modules_orgs.management.commands.migrate_billing_to_orgs.connection",
+            "quickscale_modules_orgs.management.commands.quickscale_orgs_migrate_billing_to_orgs.connection",
             mock_connection,
         ):
             with pytest.raises(
@@ -152,16 +152,16 @@ def test_recovery_command_executes_scoped_plan_after_connection_guard() -> None:
         with (
             patch(
                 "quickscale_modules_orgs.management.commands."
-                "migrate_billing_to_orgs._require_explicit_recovery_connection"
+                "quickscale_orgs_migrate_billing_to_orgs._require_explicit_recovery_connection"
             ),
             patch(
                 "quickscale_modules_orgs.management.commands."
-                "migrate_billing_to_orgs._lock_target_organizations",
+                "quickscale_orgs_migrate_billing_to_orgs._lock_target_organizations",
                 wraps=_lock_target_organizations,
             ) as lock_targets,
         ):
             call_command(
-                "migrate_billing_to_orgs",
+                "quickscale_orgs_migrate_billing_to_orgs",
                 stdout=stdout,
                 stderr=StringIO(),
                 verbosity=0,
@@ -225,12 +225,12 @@ def test_recovery_command_rejects_customer_owned_by_another_organization() -> No
     with (
         patch(
             "quickscale_modules_orgs.management.commands."
-            "migrate_billing_to_orgs._require_explicit_recovery_connection"
+            "quickscale_orgs_migrate_billing_to_orgs._require_explicit_recovery_connection"
         ),
         pytest.raises(CommandError, match="already owned by organization"),
     ):
         call_command(
-            "migrate_billing_to_orgs",
+            "quickscale_orgs_migrate_billing_to_orgs",
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -299,17 +299,17 @@ def test_recovery_command_revalidates_authoritative_org_after_lock() -> None:
     with (
         patch(
             "quickscale_modules_orgs.management.commands."
-            "migrate_billing_to_orgs._require_explicit_recovery_connection"
+            "quickscale_orgs_migrate_billing_to_orgs._require_explicit_recovery_connection"
         ),
         patch(
             "quickscale_modules_orgs.management.commands."
-            "migrate_billing_to_orgs._lock_target_organizations",
+            "quickscale_orgs_migrate_billing_to_orgs._lock_target_organizations",
             side_effect=add_competing_membership,
         ),
         pytest.raises(CommandError, match="ambiguous organization memberships"),
     ):
         call_command(
-            "migrate_billing_to_orgs",
+            "quickscale_orgs_migrate_billing_to_orgs",
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -388,7 +388,7 @@ def test_recovery_command_blocks_membership_insertion_while_users_are_locked() -
         stdout = StringIO()
         try:
             call_command(
-                "migrate_billing_to_orgs",
+                "quickscale_orgs_migrate_billing_to_orgs",
                 stdout=stdout,
                 stderr=StringIO(),
                 verbosity=0,
@@ -414,11 +414,11 @@ def test_recovery_command_blocks_membership_insertion_while_users_are_locked() -
     with (
         patch(
             "quickscale_modules_orgs.management.commands."
-            "migrate_billing_to_orgs._require_explicit_recovery_connection"
+            "quickscale_orgs_migrate_billing_to_orgs._require_explicit_recovery_connection"
         ),
         patch(
             "quickscale_modules_orgs.management.commands."
-            "migrate_billing_to_orgs._lock_planned_users",
+            "quickscale_orgs_migrate_billing_to_orgs._lock_planned_users",
             side_effect=lock_users_and_pause,
         ),
         concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor,
