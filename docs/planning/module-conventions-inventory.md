@@ -1,5 +1,138 @@
 # Module Conventions Inventory
 
+Audited: 58e73cc7 (v89) · 2026-09-28 · working tree clean · prompt: deep-coherence-audit v1 · passes: 6
+
+## Coherence audit re-run (2026-09-28)
+
+This file is the project's conventions inventory, so the coherence audit updates it in place instead
+of starting a rival file. The sixth pass re-checked the cells of sections 1–31 against the code
+(recounted by script wherever a count could be scripted; the cells only spot-checked are named in
+the [reconciliation log](#reconciliation-log)). It corrected eight cells in place (sections 5, 9,
+11 twice, 20, 25, 26, and the `db_table` row of *Module independence*), added one cell (section 3),
+and added sections 32–41 with decisions D33–D42 (proposed in this pass, decided the same day).
+The maintainer decided D33–D42 on 2026-09-28 (D36 as option B, the others as recommended); they
+are decisions.md rules 30–39, and enforcement moves to rule 40.
+Where a correction, a finding, or a decision changes the scope of a roadmap ticket (SA219–SA227),
+that ticket now says so.
+
+### Orientation
+
+- **Populations.** The 12 packaged modules (`teams` is a README-only placeholder, D21) and, inside
+  them: 12 manifests, 12 `adapter.py` wiring hooks writing one shared settings file, 12 READMEs, 12
+  test suites, 15 management commands (backups 9, orgs 4, forms 2), 3 modules with throttled
+  endpoints (billing, blog, forms), 5 modules resolving vendor secrets (analytics, backups, billing,
+  notifications, storage). The code *outside* the members that names them: core
+  (`contracts.module_catalog`, `module_wiring`, `contracts.resolvers`), the CLI (`module_config`), the
+  generator templates and React theme, `scripts/` gate lists, and orgs' `tenancy` registry.
+- **Shared namespaces.** Django settings keys (module-prefixed and third-party); environment
+  variables; app labels and tables; constraint and index names (one PostgreSQL schema); PostgreSQL
+  functions and triggers created by raw SQL (`qs_*`); advisory-lock keys; reverse accessors on
+  `User` and `Organization`; URL namespaces and mounts; template, static, and template-tag names;
+  cache keys; DRF throttle scopes and `DEFAULT_THROTTLE_RATES`; analytics event names; command names;
+  the theme's `window.__QUICKSCALE__.modules` flags.
+- **Declared conventions.** [decisions.md § Module Conventions](../technical/decisions.md#module-conventions)
+  rules 1–30 when audited (1–40 after D33–D42), linked from module-extension.md's authoring
+  checklist (where a module author looks).
+  Checks that exist today: the core ↔ module import linter, `.env.example` conformance, SA35's
+  `on_delete` gate (rule 27), the PostgreSQL isolation gate, core's page-style contract, and
+  `scripts/check_security_gates.py`. **The conformance test (rule 30, now rule 40) does not exist
+  yet**, so every rule except rule 27 is enforced by nothing (see [Enforcement gaps](#enforcement-gaps)).
+- **Reference members.** crm (on `TenantModel`, `services.py`, the most complete test set) and
+  notifications (`transaction.on_commit`, one error base, keyword-only services). Neither is complete:
+  crm has hand-written `is_staff` checks, and notifications' README documents none of its options.
+- **Activation.** `active: A–Q · inert: none`. I (outbound integrations) and K (observability)
+  showed no drift that passes the cost gate (see [Consistent by design](#consistent-by-design)).
+- **Scope.** `quickscale_modules/*` (12), plus core, CLI, generator templates, the `showcase_react`
+  theme, and `scripts/` where they name modules. Excluded: `quickscale_devtools` (not a member),
+  host projects such as `bap-web` (not in this repository).
+- **Delta since the first write-up** (`1dc8248b..58e73cc7`, 5 commits): `55d1a143`, `8a99bdd9`,
+  `60cc71c7`, `58e73cc7` are *unrelated* to member code (they record conventions in docs);
+  `fa0b882b` is *convention-applying* (SA35's gate stops accepting `PROTECT`, rule 27). No module
+  source changed, so every earlier cell was expected to hold. Eight did not: the first write-up had
+them wrong (corrections in place).
+- **Companion audits.** `tech-audit.md` (v5, `cdb6223f`) and `arch-audit.md` (v8, `cdb6223f`) have no
+  *Coherence hand-offs* section; a search for convention-shaped leads in both found none.
+- **Coverage.** Every member was read for every cell through scripted census (grep, manifest and
+  settings parsers, run with `poetry run python` from the repository root) with each hit opened at its
+  location. Not read: the theme's TypeScript beyond its page and component list; module tests beyond
+  file names, settings, and fakes.
+
+### Index
+
+```yaml
+schema: coherence-audit/v1
+audited: 58e73cc7
+items:
+  # sixth pass — new, ranked (see D33–D42)
+  - {id: shared-setting-writes, status: decided, rule: "rule 30 (D33)", aspect: A, cost: [collision, defect], members_diverging: [auth, orgs, blog, listings, billing], population: modules(12), check: apply-time, closed_world: true, handoff: [tech, arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: theme-module-presence, status: decided, rule: "rule 31 (D34)", aspect: P, cost: [ambiguity, defect], members_diverging: [auth, blog, listings, crm, forms, storage, backups, notifications, analytics, billing, social, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [tech], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: throttle-scopes-and-rates, status: decided, rule: "rule 32 (D35)", aspect: A, cost: [collision, tax], members_diverging: [billing, blog, forms], population: throttled-modules(3), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: namespace-prefix-principle, status: decided, rule: "rule 33 (D36)", aspect: A, cost: [ambiguity, collision], members_diverging: [backups, billing, blog, crm, forms, orgs], population: shared-namespaces(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: upward-name-references, status: decided, rule: "rule 34 (D37)", aspect: C, cost: [ambiguity, tax], members_diverging: [orgs, auth, blog], population: modules(12), check: conformance, closed_world: true, handoff: [arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: secret-resolution-path, status: decided, rule: "rule 35 (D38)", aspect: B, cost: [ambiguity, tax], members_diverging: [analytics, billing, notifications, storage, backups], population: secret-modules(5), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: type-check-config, status: decided, rule: "rule 36 (D39)", aspect: N, cost: [ambiguity], members_diverging: [orgs, social, forms, notifications, billing, blog, listings, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: module-lists-outside-members, status: decided, rule: "rule 37 (D40)", aspect: L, cost: [tax, ambiguity], members_diverging: [core, cli, scripts, theme, orgs], population: lists(10), check: conformance, closed_world: true, handoff: [arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: readme-content-accuracy, status: decided, rule: "rule 38 (D41)", aspect: O, cost: [tax], members_diverging: [notifications, billing, storage, backups, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: manifest-dependency-spec, status: decided, rule: "rule 39 (D42)", aspect: C, cost: [ambiguity, tax], members_diverging: [auth, billing, blog, crm, listings, social, orgs], population: manifests-with-deps(7), check: loader, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  # passes 1–5 — decided rules, members not yet changed
+  - {id: settings-names, status: decided, aspect: A, cost: [collision, tax], members_diverging: [billing, blog, crm, forms, listings, notifications, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 1 (D1, D2)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: module-enabled-switch, status: decided, aspect: B, cost: [ambiguity], members_diverging: [auth, backups, blog, crm, forms, listings, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 1 (D3)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: settings-readers-and-defaults, status: decided, aspect: B, cost: [tax, ambiguity], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: startup+conformance, closed_world: true, handoff: [], rule: "rule 3 (D4)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: cross-module-settings-reads, status: decided, aspect: C, cost: [ambiguity], members_diverging: [blog, forms, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rules 3–4 (D5)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: secret-env-var-names, status: decided, aspect: A, cost: [collision], members_diverging: [backups], population: secret-modules(5), check: conformance, closed_world: true, handoff: [], rule: "rule 1", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: module-dependency-direction, status: decided, aspect: C, cost: [ambiguity, tax], members_diverging: [auth, orgs, forms, blog], population: modules(12), check: conformance, closed_world: true, handoff: [arch], rule: "rules 4–5 (D5, D6)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: identity-stem, status: decided, aspect: A, cost: [collision, tax], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 2 (D7, D7b)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: url-mounts-and-names, status: decided, aspect: H, cost: [tax, ambiguity], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-urls(9), check: conformance, closed_world: true, handoff: [], rule: "rule 7 (D10)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: templates-static-tags, status: decided, aspect: A, cost: [collision, tax], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-templates(10), check: conformance, closed_world: true, handoff: [], rule: "rule 8 (D11)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: http-api-shape, status: decided, aspect: H, cost: [ambiguity], members_diverging: [billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-apis(7), check: conformance, closed_world: true, handoff: [], rule: "rule 9 (D12)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: startup-checks-and-errors, status: decided, aspect: D, cost: [ambiguity], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 10 (D13)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: package-files, status: decided, aspect: L, cost: [tax, ambiguity], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rules 11, 28 (D14, D31)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: required-tests, status: decided, aspect: M, cost: [tax], members_diverging: [auth, billing, blog, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: readme-outline, status: decided, aspect: O, cost: [tax], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: model-choices, status: decided, aspect: G, cost: [tax], members_diverging: [backups, blog, crm, forms, listings, notifications, social], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14, D17)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: option-schema-and-validation, status: decided, aspect: B, cost: [ambiguity, tax], members_diverging: [analytics, backups, billing, blog, crm, forms, listings, notifications, social, storage, core, cli], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 12 (D15)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: tenant-model-base, status: decided, aspect: G, cost: [tax], members_diverging: [billing, blog, forms, listings, social], population: tenant-modules(6), check: startup+conformance, closed_world: true, handoff: [], rule: "rule 13 (D16)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: model-basics, status: decided, aspect: G, cost: [collision, tax], members_diverging: [billing, blog, crm, forms, orgs], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 14 (D17)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: package-root-init, status: decided, aspect: D, cost: [tax], members_diverging: [auth, blog, crm, forms, listings, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 15 (D18)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: signals-vs-receivers, status: decided, aspect: L, cost: [ambiguity], members_diverging: [auth, crm, orgs], population: modules-with-signals(3), check: conformance, closed_world: true, handoff: [], rule: "rule 16 (D19)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: command-behavior, status: decided, aspect: J, cost: [tax], members_diverging: [backups, forms, orgs], population: commands(15), check: conformance, closed_world: true, handoff: [], rule: "rule 17 (D20)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: package-tooling, status: decided, aspect: N, cost: [tax], members_diverging: [analytics, notifications, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 18 (D21); mypy part superseded by type-check-config", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: tenant-authorization, status: decided, aspect: E, cost: [ambiguity], members_diverging: [blog, crm, forms, listings], population: tenant-modules(6), check: conformance, closed_world: false, handoff: [], rule: "rule 19 (D22)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: email-sender, status: decided, aspect: I, cost: [ambiguity], members_diverging: [forms], population: emailing-modules(4), check: conformance, closed_world: true, handoff: [], rule: "rule 20 (D23)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: write-effects-on-commit, status: decided, aspect: F, cost: [defect], members_diverging: [crm, forms, orgs, social], population: modules-with-effects(5), check: review+rollback-test, closed_world: false, handoff: [], rule: "rule 21 (D24)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: analytics-event-ownership, status: decided, aspect: C, cost: [tax], members_diverging: [analytics, forms, social], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 22 (D25)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: service-surface, status: decided, aspect: D, cost: [ambiguity], members_diverging: [analytics, backups, billing, crm, notifications], population: modules-with-services(6), check: conformance, closed_world: true, handoff: [], rule: "rule 23 (D26)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: current-time-call, status: decided, aspect: G, cost: [tax], members_diverging: [storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 24 (D27)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: cache-key-stem, status: decided, aspect: A, cost: [collision], members_diverging: [social], population: caching-modules(1), check: conformance, closed_world: true, handoff: [], rule: "rule 24 (D27)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: constraint-index-names, status: decided, aspect: A, cost: [collision], members_diverging: [blog, crm, forms, listings, orgs], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 25 (D28)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: inbound-webhooks, status: decided, aspect: H, cost: [ambiguity], members_diverging: [billing, notifications], population: webhook-modules(2), check: conformance, closed_world: true, handoff: [], rule: "rule 26 (D29)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: test-file-names, status: decided, aspect: M, cost: [tax], members_diverging: [auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 29 (D32)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  # log only
+  - {id: user-fk-on-delete, status: resolved, aspect: G, cost: [defect], members_diverging: [], population: modules-with-models(10), check: "SA35 gate", closed_world: true, handoff: [], rule: "rule 27 (D30)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: py-typed, status: resolved, aspect: D, cost: [], members_diverging: [], population: modules(12), check: none, closed_world: false, handoff: [], rule: "rule 24 (D27)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+```
+
+### Summary
+
+| ID | Aspect | Cost | Diverging / population | Status |
+|---|---|---|---|---|
+| `shared-setting-writes` | A | collision, defect (latent) | 5 / 12 | decided |
+| `theme-module-presence` | P | ambiguity, defect (latent) | 12 / 12 | decided |
+| `throttle-scopes-and-rates` | A | collision, tax | 3 / 3 | decided |
+| `namespace-prefix-principle` | A | ambiguity, collision | 2 rules / 12 namespaces | decided |
+| `upward-name-references` | C | ambiguity, tax | 3 / 12 | decided |
+| `secret-resolution-path` | B | ambiguity, tax | 5 / 5 | decided |
+| `type-check-config` | N | ambiguity | 8 / 12 | decided |
+| `module-lists-outside-members` | L | tax, ambiguity | 10 lists | decided |
+| `readme-content-accuracy` | O | tax | 5 / 12 | decided |
+| `manifest-dependency-spec` | C | ambiguity, tax | 7 / 7 | decided |
+| 34 items of passes 1–5 | A–O | see index | see index | decided (32), resolved (2) |
+
+All 42 decided items wait on one thing: SA217–SA227 landing the code changes and SA215 landing
+rule 40's test. None of them needs more analysis; delivery is what reduces them.
+
+---
+
 > **Status:** decisions D1–D9 (first pass) and D10–D14 (second pass: URLs, templates, APIs,
 > checks and errors, package files) are taken; D15–D21 (third pass: manifest option schema, tenant
 > models, model basics, `__init__.py`, signals, command behavior, package tooling; sections 14–20)
@@ -9,12 +142,16 @@
 > D27 → 24).
 > D28–D32 (fifth pass: constraint and index names, inbound webhooks, the SA35 user-FK rule, private file
 > names, test names; sections 27–31) map to decisions.md rules 25–29 (D28 → 25, … D32 → 29);
-> enforcement moves to rule 30. D28, D29, D31, and D32 are decided as option A, D30 as option B.
+> enforcement moves to rule 30 (now rule 40). D28, D29, D31, and D32 are decided as option A, D30 as option B.
 > Two D15 details and one D20 item were settled during review (marked in place). Section 14 also covers core and CLI code, not only `quickscale_modules/`. All are recorded in
 > [decisions.md § Module Conventions](../technical/decisions.md#module-conventions), which wins on any
 > conflict with this file. Evidence for SA215, taken 2026-09-26 from `v89` (`quickscale_modules/*/module.yml`
 > and module source under `src/quickscale_modules_<name>/`). It records what exists; the convention
 > itself is decided in SA215 and lands in [decisions.md](../technical/decisions.md).
+> D33–D42 (sixth pass, 2026-09-28: shared setting keys, the theme seam, throttles, namespace stems,
+> references by name, secrets, type checking, module lists, README content, manifest dependencies;
+> sections 32–41) are decided, as decisions.md rules 30–39 (D33 → 30, … D42 → 39; D36 as option B,
+> the others as recommended); enforcement moves to rule 40.
 
 Neither the [architecture audit](../others/arch-audit.md) (structural risk) nor the
 [technical audit](../others/tech-audit.md) (defect sweep) checks cross-module consistency, so this is
@@ -22,6 +159,8 @@ the first inventory of it. Each section ends with the **drift** it shows.
 
 Scope: the twelve packaged modules (`analytics`, `auth`, `backups`, `billing`, `blog`, `crm`,
 `forms`, `listings`, `notifications`, `orgs`, `social`, `storage`). `teams` is a README only.
+Sections 14 and 32–41 also cover the code outside the modules that names them (core, CLI, generator
+templates, the React theme, `scripts/`).
 
 ## 1. Settings: names
 
@@ -79,6 +218,7 @@ Settings a module's code reads (`settings.X` / `getattr(settings, "X")`) compare
 | Another module's setting read directly | forms reads `QUICKSCALE_ANALYTICS_ENABLED` and `QUICKSCALE_NOTIFICATIONS_ENABLED`; orgs reads `QUICKSCALE_NOTIFICATIONS_ENABLED`; blog reads `QUICKSCALE_STORAGE_PUBLIC_BASE_URL` |
 | Default duplicated in code | every `getattr(settings, "X", default)` repeats the manifest default (e.g. `DEFAULT_LISTINGS_PER_PAGE = 12`) |
 | Environment read directly | orgs: `QUICKSCALE_ALLOW_BYPASSRLS`, `QUICKSCALE_PRIVILEGED_COMMAND` (runtime-role contract) |
+| Declared but **absent from the module's test settings** (sixth pass) | 18 settings in 5 modules: storage 9 of 10, billing 4 of 5, blog 2 of 3 (`BLOG_POSTS_PER_PAGE`, `BLOG_API_RATE_LIMIT`), forms 2 of 5 (`FORMS_PER_PAGE`, `FORMS_DATA_RETENTION_DAYS`), auth 1 of 3 (`SESSION_COOKIE_AGE`). Those tests pass only because the code defaults exist, so removing the defaults (rule 3) breaks them until the stubs define every setting, as rule 3 already requires |
 
 Per-module settings readers, each written independently:
 
@@ -129,7 +269,12 @@ function). Manifest `required_modules`/`implies` are separate and not compared h
 | auth | **orgs** (`views.py`, top and lazy), **billing** (`views.py`, lazy) |
 | billing, blog, crm, listings, social | orgs (models, admin, migrations, services) |
 | forms | orgs (top and lazy), **analytics** (`views.py`, lazy) |
+| blog | orgs, and **storage** (`models.py`, `views.py`: `import_module("quickscale_modules_storage.helpers")`, undeclared in `required_modules`) |
+| orgs, by name without importing (sixth pass) | **billing** (`permissions.require_org_feature` loads `Subscription` and reads `plan.features`; `purge_organization` calls billing's `AppConfig` and model; `removal.BOUNDARY_GUARDED_OBLIGATIONS`), **blog**, **crm** (purge label prefixes), **auth** (`checks.py`), and nine modules' tables in `tenancy.TENANT_TABLE_REGISTRY` — see section 36 |
 | analytics, backups, notifications, storage | none |
+
+(Correction: the first write-up missed blog → storage, an `import_module` call that the import
+search did not match, and every reference orgs makes by app label rather than by import.)
 
 **Drift**
 - A cycle: `auth → orgs → auth`. `orgs` is the tenancy foundation most modules build on, yet it
@@ -191,7 +336,7 @@ Where each module's URL prefix is set, and how its routes are named.
 
 | Module | Prefix set in | Mounted at | API paths | Route-name style |
 |---|---|---|---|---|
-| analytics | manifest `url_includes` | `""` | — | kebab, module-prefixed (`analytics-dashboard`) |
+| analytics | manifest `url_includes` | `analytics/` (prefix in the manifest; `urls.py` has none) | — | kebab, module-prefixed (`analytics-dashboard`) |
 | auth | `adapter.py` | `accounts/` | — | kebab (`profile-edit`) |
 | billing | manifest | `""`, prefix inside `urls.py` | `api/billing/…`, webhook `billing/webhooks/stripe/` | kebab, some module-prefixed (`billing-dashboard`) |
 | blog | manifest | `""`, prefix inside `urls.py` | `blog/api/…` | snake (`post_list`, `api_publish_post`) |
@@ -238,9 +383,9 @@ share one global namespace across all installed apps.
 
 | Aspect | Observed |
 |---|---|
-| Framework | DRF in billing, crm, forms, orgs; plain `JsonResponse` in blog, listings, notifications, and parts of orgs |
+| Framework | DRF in billing, crm, forms; plain `JsonResponse` in blog, listings, notifications, and orgs (`OrgApiBaseView` subclasses Django's `View`), and in billing's webhook and JSON-parsing helper. (Correction, sixth pass: the first write-up counted orgs as DRF; decisions.md § JSON API Endpoint Base Contract lists DRF users as billing, CRM, and forms) |
 | Authentication | DRF `SessionAuthentication` (11 views); blog also accepts bearer tokens from undeclared `BLOG_API_TOKENS`; listings' publish API is session-only |
-| Error body | `{"error": …}` (84 sites) and `{"errors": …}` (28 sites) side by side; DRF's own errors use `{"detail": …}` |
+| Error body | `{"error": …}` (72 keys) and `{"errors": …}` (18 keys) side by side in module `src/`; DRF's own errors use `{"detail": …}`. (Correction, sixth pass: the first write-up gave 84 and 28 with no stated basis; with tests included the counts are 91 and 24) |
 | Pagination | DRF `PageNumberPagination` subclasses in billing and crm; hand-written slicing elsewhere |
 | Rate limiting | blog parses `"5/hour"` itself with a hard-coded fallback; forms uses a DRF throttle class |
 
@@ -415,12 +560,13 @@ non-zero.
 | Aspect | Observed |
 |---|---|
 | Build backend, pytest config, `--cov-fail-under=90`, ruff sections | same in all twelve — consistent |
-| `[tool.mypy]` | missing in orgs and social |
+| `[tool.mypy]` | present only in blog, listings, and storage, and read by nothing: `make typecheck` runs mypy from the repository root, which uses the root `mypy.ini`. Its per-module sections range from no relaxation (backups has none) to twelve disabled error codes (orgs); see section 38. (Correction: the first write-up said the section was missing only in orgs and social, and that those two were not type-checked. All twelve are type-checked through the root file, with very different strictness) |
 | Test settings | `tests/settings.py` in all; billing adds `settings_auth_parity.py` |
 | `teams/` | README-only placeholder in `quickscale_modules/`; nothing says a checker must skip it |
 
 **Drift**
-- orgs, the most security-sensitive module, and social are not type-checked with the others.
+- ~~orgs, the most security-sensitive module, and social are not type-checked with the others.~~
+  Superseded by section 38: orgs is type-checked, but with twelve error codes turned off.
 - Any whole-module check has to special-case `teams/` without a recorded reason.
 
 ## 21. Authorization: who may manage a module's data
@@ -503,26 +649,28 @@ paths, a project's own view).
 | Aspect | Observed |
 |---|---|
 | `__all__` in `services.py` | analytics, billing, social; not backups, crm, notifications |
-| Keyword-only parameters | 8 of 51 public service functions (backups 1, billing 2, notifications 3); the rest take positional arguments, including ones with several same-typed parameters (`capture_event(distinct_id, event, properties)`) |
+| Keyword-only parameters | 23 of 51 public service functions declare keyword-only parameters (billing 14, notifications 7, backups 2). Measured against rule 23 (at most one positional subject), 10 of 51 take two or more positional parameters: analytics 4 (`capture_event(distinct_id, event, properties)` among them), billing 5, backups 1. (Correction, sixth pass: the first write-up said 8 of 51 took keyword-only parameters and the rest were positional) |
 | Return and error shape | booleans, `None`, dicts, and model instances; failures are raised in billing and notifications and swallowed-and-logged in analytics |
 
 **Drift**
 - Rule 4 makes `services.py` the public surface but nothing lists what is in it, so the conformance
   test cannot tell a public function from a helper that happens to lack an underscore.
-- Positional calls across modules break silently when a parameter is added or reordered.
+- Positional calls across modules break silently when a parameter is added or reordered; ten
+  functions in three modules invite them.
 
 ## 26. Small leftovers
 
 | Aspect | Observed |
 |---|---|
-| `py.typed` | present in ten modules; missing in backups and blog |
+| `py.typed` | present and tracked in all twelve since `6ea37301` (2026-07-09). (Correction: the first write-up said backups and blog lack it; they do not) |
 | Current time | `django.utils.timezone.now()` in 16 files; storage's `helpers.py` uses `datetime.now(tz=timezone.utc)` |
 | Cache keys | only social caches, with keys `quickscale_modules_social:*` — the old package stem, not rule 2's `quickscale_social` |
 | Data migrations | every `RunPython` in `0001_initial` has a `reverse_code` (`noop`) — consistent |
 | Loggers | no log call formats an email address or username — consistent |
 
 **Drift**
-- backups' and blog's type hints are invisible to a project's mypy.
+- ~~backups' and blog's type hints are invisible to a project's mypy.~~ Not drift (see the
+  correction above).
 - The cache key is a name a project and a shared Redis see, so it belongs in rule 2's identity table.
 
 ## 27. Constraint and index names
@@ -621,6 +769,229 @@ Files in a package that rule 11's required list, rule 4's public surface, and ru
 - A ticket number says when a test was written, not what it protects; a reader of orgs' test
   folder cannot find the RLS tests by name. Helper files and test apps are named three ways.
 
+## 32. Settings written by module wiring
+
+Sixth pass. Besides option settings, each `adapter.py` (and orgs' `module.yml` `settings:` block)
+writes settings into the one generated `settings/modules.py`. Core merges them in
+`module_wiring.collect_wiring`: modules sorted by name, **last writer wins**, key by key, with no
+deep merge and no warning.
+
+| Written keys | Modules |
+|---|---|
+| only its own `QUICKSCALE_<MODULE>_*` / bare-family keys | analytics, backups, crm, forms, social |
+| Django or third-party keys that no other module writes | auth (`AUTH_USER_MODEL`, `AUTHENTICATION_BACKENDS`, `SITE_ID`, `LOGIN_REDIRECT_URL`, `ACCOUNT_*`), notifications (`EMAIL_BACKEND`, `DEFAULT_FROM_EMAIL`, `SERVER_EMAIL`), storage (`STORAGES`, `MEDIA_URL`, `AWS_*`), blog (`MARKDOWNX_MEDIA_PATH`) |
+| the same key as another module | `ACCOUNT_ADAPTER`: auth and orgs, and orgs wins only because `"orgs"` sorts after `"auth"`; `MARKDOWNX_MARKDOWN_EXTENSIONS`: blog and listings, equal values today, listings wins |
+| the same URL include as another module | `markdownx/` → `markdownx.urls`: blog and listings. URL includes are merged by `_merge_unique`, so identical pairs collapse; a different pair for the same prefix would mount twice |
+| a whole nested dict | `REST_FRAMEWORK`: billing (`DEFAULT_THROTTLE_RATES` for `billing_checkout`, `billing_portal`). The generated `base.py` merges its sub-keys with the template's defaults, and "module keys win on collision" |
+
+Already the same (keep): every module writes through `ModuleWiringSpec`; ordering is deterministic.
+
+**Drift**
+- Two keys already have two writers, and which one wins depends on alphabetical order. Nothing
+  says a module may not write a key another module writes.
+- Rule 9 has blog and forms feed DRF throttles from their `_RATE_LIMIT` settings. The natural way to
+  do that is to contribute `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]` as billing does. The first one
+  to do so replaces billing's whole dict ("forms" sorts after "billing"), and billing's checkout
+  and portal views then raise DRF's `ImproperlyConfigured` ("no default throttle rate set for
+  'billing_checkout' scope") on every request. The defect is latent today and becomes reachable
+  when rule 9 lands.
+
+## 33. The theme's view of modules
+
+The React theme learns which modules exist through `window.__QUICKSCALE__`
+(`themes/showcase_react/templates/index.html.j2`), per the recorded Frontend Theme Source
+De-Specialization seam.
+
+| `modules.<name>` is true when | Modules |
+|---|---|
+| `'quickscale_modules_<name>' in settings.INSTALLED_APPS` | auth, blog, listings, crm, forms, storage, backups, notifications, analytics, billing |
+| `QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or QUICKSCALE_SOCIAL_EMBEDS_ENABLED` (feature settings) | social |
+| no flag (mode read from `QUICKSCALE_MODE`) | orgs |
+
+`modulePaths` hard-codes `crm: "/crm/"` and `analytics: "/analytics/"`, computes social's, and has
+no entry for the others. The theme ships pages for blog, crm, forms, listings, social, and orgs.
+
+Already the same (keep): one seam, flags only, no per-project source (recorded decision).
+
+**Drift**
+- "true" means *installed* for ten modules and *enabled* for one. Rule 1 adds
+  `QUICKSCALE_<MODULE>_ENABLED`, and off means the URLs return 404. An installed but switched-off
+  module keeps its flag and its navigation, which then leads to a 404 (latent until rule 1 lands).
+- Mount paths are written a second time in the theme, although rule 7 makes the manifest's
+  `url_includes` the only mount; D10's moves (orgs under `orgs/`) must be mirrored by hand.
+- The template names ten module packages and reads social's settings: a list in core that a new
+  module must join (section 39).
+
+## 34. Throttle scopes and rates
+
+| Module | Mechanism | Scope name | Rate from |
+|---|---|---|---|
+| billing | DRF `ScopedRateThrottle` | `billing_checkout`, `billing_portal` | `"30/hour"` hard-coded in `adapter.py`, not an option |
+| forms | `ScopedRateThrottle` subclass (`throttles.py`) | `form_submit` | `getattr(settings, "FORMS_RATE_LIMIT", None)` |
+| blog | hand-written limiter in `views.py`, own `"5/hour"` parser | — | `BLOG_API_RATE_LIMIT`, counters in a raw-SQL table `quickscale_modules_blog_api_throttle_counter` created by `RunSQL` in `0001_initial` |
+
+The generated `base.py` defines `anon` and `user` rates and lets module rates win on a clash.
+
+**Drift**
+- Three mechanisms (section 11 already records two). Scope names are DRF cache-key and
+  `DEFAULT_THROTTLE_RATES` names shared with the project, and follow two shapes
+  (`billing_<action>`, `form_submit`); a module scope named like a project scope silently takes
+  its rate.
+- billing's rate is not configurable, against rule 9's "throttles fed by the module's
+  `_RATE_LIMIT`".
+- blog's counter table is named with the old stem outside the ORM, so rule 2's rename and rule 25's
+  name check cannot see it, and nothing in rule 9's decision says it goes.
+
+## 35. Which shared names carry the stem
+
+The rules already decided choose a prefix per namespace:
+
+| Namespace | Shared with | A clash is | Rule | Prefix |
+|---|---|---|---|---|
+| app label, URL namespace, template folder, command, cache key | project and modules | silent (shadowing, overwrite) or loud | 2, 24 | `quickscale_<module>` |
+| constraint and index names | the whole PostgreSQL schema | loud (migration error) | 25 | `quickscale_<module>_` / `qs_<module>_` |
+| reverse accessors on `User`, `Organization` | project and modules | loud (Django system check `fields.E304`) | 14 | `<module>_` |
+| analytics event names | the project's own PostHog events | silent (merged in dashboards) | 22 | `<module>_` |
+| DRF throttle scopes | project and generated defaults | silent (module wins) | none | two shapes (section 34) |
+| raw-SQL functions | the whole schema | loud | none | `qs_` without the module (orgs' `qs_child_parent_org_equality`; rule 33 now requires `quickscale_orgs_…`) |
+| raw-SQL triggers | one table | loud | none | `qs_` (orgs) |
+| advisory-lock keys | the whole database | hashed | none | `quickscale:billing-…` (billing; rule 33 now requires `quickscale_billing:…`) |
+| RLS policy names | one table | none | none (migration-owned) | `<module>_<model>_org_isolation` |
+
+**Drift**
+- Rule 25 rejects a bare `<module>_` prefix *because it can collide with a project app of the same
+  name*. Rules 14 and 22 choose exactly that prefix for two other shared namespaces, and the one
+  whose clash is silent (events) is the riskier. The next namespace (throttle scopes) has two
+  precedents to copy.
+
+## 36. References to other modules by name
+
+Rule 5's layer rule and its planned check are about **imports**. The census also finds references
+by app label, `apps.get_model`, `apps.is_installed`, and `import_module`:
+
+| From (layer) | To (layer) | Where | What |
+|---|---|---|---|
+| orgs (1) | billing (3) | `permissions.require_org_feature` | loads billing's `Subscription` and reads `plan.features` to answer 402 |
+| orgs (1) | billing (3) | `management/commands/purge_organization.py` | calls billing's `AppConfig` and model by label |
+| orgs (1) | billing (3) | `removal.BOUNDARY_GUARDED_OBLIGATIONS` | names the one module allowed to declare a guarded obligation |
+| orgs (1) | billing, blog, crm, forms, listings, social, backups, notifications, auth | `tenancy.TENANT_TABLE_REGISTRY` | 22 enrolled tables and their RLS policy names; § Multi-tenant SaaS Architecture records it as "only a shipped-module CI parity oracle", not read at runtime |
+| orgs (1) | blog, crm (3) | `purge_organization._LABEL_PREFIXES` | display labels |
+| orgs (1) | auth (1) | `checks.py` | names `quickscale_modules_auth.views` |
+| orgs (1) | social (3) | `apps.py` | cache clearing (D6 already fixes) |
+| auth (1) | billing (3) | `views.py` | account-deletion reconciliation (D6 already fixes) |
+| blog (3) | storage (1) | `models.py`, `views.py` | `import_module("quickscale_modules_storage.helpers")`, outside rule 4's surface and not in `required_modules` |
+
+**Drift**
+- orgs, the foundation every tenant module builds on, knows four layer-3 modules by name, in its
+  shipped source. Rule 5's fix list covers only the two import cases. A new tenant module must edit
+  orgs (the registry), and billing's plan vocabulary (`plan.features`) is owned by billing but
+  interpreted in orgs.
+- A check written for imports will pass all of the above.
+
+## 37. How a secret reaches module code
+
+The five modules with `_ENV_VAR` options (the option holds the *name* of an environment variable):
+
+| Mechanism | Modules | When a missing secret is found |
+|---|---|---|
+| `os.getenv(name, "")` in a settings snapshot at use, with the default variable name written again in code (`or "RESEND_API_KEY"`) | analytics, billing, notifications | at use: analytics disables itself (`"unconfigured"`), billing raises `BillingConfigurationError` (a 500), notifications at send or webhook time |
+| apply-time `__QS_ENV__:<NAME>` sentinel, which core's `module_wiring` renders as `os.environ.get(NAME, "")` in `settings/modules.py` | storage | never: the setting is `""`, and boto3 treats empty credentials as absent and falls back to its default chain (environment, profile files, instance role), so the site may run on other credentials or fail on first use |
+| read by core's `dr_engine` (with undeclared fallback names) | backups | at command time |
+
+**Drift**
+- One option suffix, three resolution paths. Rule 3 says values reach a running site only through
+  `apply`, which the storage path follows and the other three do not. Rule 26 settles when a missing
+  *webhook* secret is found (startup) but nothing settles it for an API key.
+
+## 38. Type-check configuration
+
+`make typecheck -- --modules` (CI) runs `mypy <module>/src` from the repository root, so the root
+`mypy.ini` applies, with one `[mypy-quickscale_modules_<name>.*]` section per module.
+
+| Root `mypy.ini` section for the module | Modules |
+|---|---|
+| none (full root strictness) | backups |
+| relaxes `disallow_untyped_defs`, `warn_return_any`, `warn_unused_ignores` only | analytics, auth, storage |
+| plus 1 disabled error code (`var-annotated`) | blog, crm, listings |
+| plus 2–3 disabled codes | billing 2, notifications 2, forms 3, social 2 (+ `ignore_missing_imports`) |
+| plus 12 disabled codes (`arg-type`, `assignment`, `union-attr`, `return-value`, `no-untyped-def`, `name-defined`, …) and `ignore_missing_imports` | orgs |
+
+blog, listings, and storage also have `[tool.mypy]` (with the django-stubs plugin) in their
+`pyproject.toml`, which this run does not read.
+
+**Drift**
+- Strictness runs from "none relaxed" to "twelve codes off", and the most relaxed module is orgs,
+  which holds RLS, tenancy, and authorization.
+- Rule 18 requires a `[tool.mypy]` section in every `pyproject.toml`, a section CI does not read.
+  Met as written, it would add unread configuration to nine more modules and leave the real
+  settings unchecked.
+- The two declared conventions disagree. [module-extension.md § Building a
+  Module](../technical/module-extension.md#building-a-module-authoring-checklist) step 1.3, where an
+  author looks, says to register the module in the root `mypy.ini` with one standard override
+  (`disallow_untyped_defs`, `warn_return_any`, `warn_unused_ignores` off; `var-annotated`
+  disabled), and its `pyproject.toml` template has no `[tool.mypy]`. Measured against that
+  override, blog, crm, and listings match it, and analytics, auth, backups, and storage are
+  stricter; orgs, social, forms, notifications, and billing relax more.
+- The same template carried `--cov-fail-under=70`, while rule 18 and all twelve modules use 90;
+  the template now says 90 (sixth pass; a documentation fix to match the decided rule).
+
+## 39. Module lists outside the modules
+
+Everywhere outside `quickscale_modules/` that enumerates modules by hand:
+
+| List | Names | Missing or different |
+|---|---|---|
+| core `contracts/module_catalog.py` (static catalog) | 13 (with `teams`) | its descriptions differ from `module.yml` (crm: "contacts, deals, pipeline" vs "contacts, companies, deals, and pipeline") |
+| `scripts/check_security_gates.py` source roots | 12 | — |
+| `scripts/render_j2_template.py` (theme lint context) | 11 | orgs |
+| theme `index.html.j2` flags | 11 | orgs (section 33) |
+| `scripts/lint_frontend.sh` `NO_SOCIAL_MODULES` | 10 | orgs, and social by design |
+| `scripts/provision_ci_postgres.sh` isolation `MAPPING_MODULES` | 6 | social, which has tenant models |
+| `scripts/test_isolation_conformance.sh` `RLS_MODULES` | 5 | social; and only crm's `test_isolation.py` runs in the PostgreSQL gate (blog, forms, listings, social have one) |
+| orgs `tenancy.TENANT_TABLE_REGISTRY` | 9 modules | section 36 |
+| core `tests/test_module_page_style_contract.py` `BASE_CONTRACTS` | per module | pins today's nested base paths and flat CSS, which rule 8 changes |
+| core `contracts.resolvers`, `contracts.module_options`, CLI `module_config` | 9, 5, 1 | section 14 (D15 removes them) |
+
+The recorded rule is the opposite: CLI discovery is derived from `quickscale_modules/*/module.yml`,
+§ Module Presence States makes discovery report what exists, and D21 calls a hand-maintained name
+list a smell.
+
+**Drift**
+- Adding a module means editing about nine files outside it, and forgetting one fails
+  nothing: the lists are open-world. Social's tenant tables are outside both isolation lists
+  today.
+
+## 40. README content
+
+| Aspect | Observed |
+|---|---|
+| Manifest options not named in the README (by option key or setting) | notifications 10 of 10, billing 2 of 5 (`enabled`, `billing_currency`), storage 1 of 11 (`private_media_enabled`); the other nine document every option |
+| Management commands not named in the README | backups 5 of 9 (`backups_pin`, `backups_record_verification`, `backups_report`, `backups_sync_media`, `dr_adapter_call`), orgs 3 of 4 (`check_tenant_isolation`, `migrate_billing_to_orgs`, `promote_to_saas`); forms 0 of 2 |
+| `##` headings | 0 (notifications) to 14 (auth) |
+
+**Drift**
+- Rule 11 says the Configuration heading lists every manifest option, but the planned test checks
+  headings only, so a README can pass with none of its options (notifications today).
+
+## 41. Manifest dependency declarations
+
+| Aspect | Modules |
+|---|---|
+| `required_modules` entry with a version floor, `orgs>=0.86.0` | auth, billing, blog, crm, listings, social |
+| bare name, `auth` | orgs |
+| required module also in `implies` | auth, billing, crm, listings, social |
+| required but not implied | blog (orgs), orgs (auth) |
+| implied but not required | orgs (notifications; rule 20 makes it required) |
+
+Core's `manifest.required_modules` parses and compares the floors at `apply`.
+
+**Drift**
+- Under lockstep every module is `0.89.0`, so a `>=0.86.0` floor is always met: it is validation
+  that cannot fail, and it reads as if versions could differ.
+- Five orgs dependants also imply it; blog does not, so selecting blog alone follows a different
+  path from its five peers. Once rule 20 lands, every `implies` entry repeats a `required_modules`
+  entry.
+
 ## What is already consistent (keep)
 
 - Package, `AppConfig`, and app-label naming.
@@ -640,6 +1011,9 @@ Files in a package that rule 11's required list, rule 4's public surface, and ru
   `services.py` (section 28).
 - Every migration that references another module's model depends on that module's `0001_initial`,
   and user references use `swappable_dependency` (fifth pass).
+- `py.typed` in all twelve packages; `[tool.pytest.ini_options]` and three `[tool.ruff*]` sections in
+  every `pyproject.toml`; the `qs_` prefix on orgs' per-table triggers; every wiring
+  setting goes through `ModuleWiringSpec` (sixth pass).
 
 ## Module independence: what is already decided
 
@@ -653,7 +1027,7 @@ The goal "each module is independent" is only partly written down today. What ex
 | **Mutable options are read from settings, never hard-coded.** | decisions § Module Manifest Architecture | Configuration flows `module.yml` → settings. | Says nothing about defaults also being written in code. |
 | **Fail-hard; no compat shims or silent degradation.** | decisions § Fail-Hard Principle; ❌ list | Supports D8 (no aliases). | Today's `getattr(settings, X, default)` calls are exactly such silent fallbacks. |
 | **No DI frameworks or service registries (direct imports in production).** | decisions "Architecture & Patterns" ❌ list | Keeps module code plain. | Conflicts with parts of D5 (see there). The SA213 removal obligations declared on `AppConfig` already act as a small registry. |
-| **No custom database table names; use the app-label default.** | decisions "Architecture & Patterns" ❌ list | Predictable table names. | **Violated today:** auth sets `db_table = "quickscale_auth_user"`, backups sets `quickscale_modules_backups_policy` / `_artifact`. |
+| **No custom database table names; use the app-label default.** | decisions "Architecture & Patterns" ❌ list | Predictable table names. | **Violated today:** auth sets `db_table = "quickscale_auth_user"`, backups sets `quickscale_modules_backups_policy` / `_artifact` / `_snapshot`, and forms sets it on all four models to the value the default already produces (`quickscale_modules_forms_form`, …), which would pin the old names when rule 2 changes the label. (Correction, sixth pass: the first write-up missed backups' third table and forms' four) |
 | **Lockstep versions.** Every module ships at the repository version; no independent module versions; "every change is a clean break". | decisions § Module Version Lockstep | Supports D8: no mixed-version compatibility to preserve. | — |
 | **Module dependencies declared in `module.yml`** (`required_modules`, `implies`). | manifests; apply resolves them | apply installs what a module needs. | Not checked against real imports (forms imports orgs but declares nothing). |
 
@@ -1126,7 +1500,7 @@ Since breaking changes are allowed, the app label can join the rename. What the 
 
 | Option | Label | Pros | Cons |
 |---|---|---|---|
-| **1. `quickscale_<module>` (recommended)** | `quickscale_blog` | One stem for URL, templates, commands, **and** tables — D7 becomes fully consistent. Also removes the recorded-rule violation: every `db_table` override is deleted. auth's `quickscale_auth_user` is exactly what the default produces; backups' tables change from `quickscale_modules_backups_policy`/`_artifact` to the defaults `quickscale_backups_backuppolicy`/`_backupartifact`. | Every table, migration dependency, content type, permission, `AUTH_USER_MODEL`, and RLS table list changes. Only safe before SA204 freezes migration history — after it, a rename needs a data migration forever. |
+| **1. `quickscale_<module>` (recommended)** | `quickscale_blog` | One stem for URL, templates, commands, **and** tables — D7 becomes fully consistent. Also removes the recorded-rule violation: every `db_table` override is deleted. auth's `quickscale_auth_user` is exactly what the default produces; backups' tables change from `quickscale_modules_backups_policy`/`_artifact` to the defaults `quickscale_backups_backuppolicy`/`_backupartifact`. (Sixth pass: backups also overrides `_snapshot`, and forms overrides all four of its tables; they go the same way.) | Every table, migration dependency, content type, permission, `AUTH_USER_MODEL`, and RLS table list changes. Only safe before SA204 freezes migration history — after it, a rename needs a data migration forever. |
 | 2. Keep `quickscale_modules_<module>` | unchanged | No database change. | Two stems stay (`quickscale_blog:` URLs vs `quickscale_modules_blog_` tables); the custom `db_table` exceptions stay or must be renamed anyway. |
 | 3. Also rename the Python package | `quickscale_blog` package and label | Everything identical, including imports. | Renames every import, split branch, wheel, `INSTALLED_APPS` entry, and the core ↔ module gate's patterns; large churn for little gain, since package names are seen only by developers. |
 
@@ -1392,6 +1766,9 @@ module's receivers as a side effect.
 - Every module's `pyproject.toml` has the same tool sections (`[tool.pytest.ini_options]` with
   `--cov-fail-under=90`, `[tool.mypy]`, `[tool.ruff]`); the test compares their keys, not values.
   orgs and social gain `[tool.mypy]` and fix what it reports.
+  (Correction, sixth pass: this bullet rests on section 20's wrong cell. CI type-checks every module
+  through the root `mypy.ini`, and a per-module `[tool.mypy]` is not read; D39 proposes the
+  replacement. The pytest and ruff parts stand.)
 - One `tests/settings.py` per module; extra settings files are named `tests/settings_<purpose>.py`.
 - `teams/` is deleted and its README moves to `docs/planning/teams.md`, with core's placeholder
   handling (catalog entry, discovery and constraint-validation skips). Every directory under
@@ -1465,7 +1842,8 @@ them yet (SA191 has not landed).
 
 ### D27 — Small leftovers — decided (fourth pass)
 
-- backups and blog gain `py.typed`; rule 11's file list adds it.
+- backups and blog gain `py.typed`; rule 11's file list adds it. (Correction, sixth pass: both
+  already ship it, so this is a no-op; keeping it in rule 11's list costs nothing.)
 - The current time is `django.utils.timezone.now()`; storage's `datetime.now(tz=...)` changes.
 - Cache keys are `quickscale_<module>:<name>` and join rule 2's identity table (social's
   `quickscale_modules_social:*` renames; the cache is disposable, so no migration step).
@@ -1540,3 +1918,551 @@ goes with D25.
   `sa208_project_app` → `provider_id_app` (provider-ID classification).
 - auth's and billing's `test_circular_import.py` stay: they guard import order against allauth and
   Stripe, which rule 5's layer check between modules does not see.
+
+### Sixth pass — decided (D33–D42)
+
+Status: **decided** 2026-09-28, as decisions.md rules 30–39 (D36 as option B, the others as the
+recommended option). Ranked by cost class (defect > collision > ambiguity > tax), then by how many
+modules diverge × their churn (commits in the last 12 months, merges and subtree splits excluded:
+orgs 118, crm 104, blog 101, forms 74, billing 73, backups 72, listings 70, auth 69, social 51,
+notifications 35, storage 32, analytics 27; bulk sweeps are included, so read these as relative
+figures). Every "Enforcement" line is a clause of the rule 40 test (rule 30 when these were
+written), or a check inside existing code, not a new gate. The roadmap folds the work into
+SA219–SA227.
+
+### D33 — One writer per shared setting key — decided
+
+- **ID:** `shared-setting-writes` · **Aspect / population:** A, settings written by module wiring;
+  12 modules (section 32).
+- **Drift:** two keys have two writers today, and the winner depends on alphabetical order. The
+  first second writer of `REST_FRAMEWORK` wipes billing's throttle rates.
+- **Cost class:** collision; latent defect (billing's throttled views raise `ImproperlyConfigured`
+  once another module contributes `REST_FRAMEWORK`, reachable when rule 9 lands).
+- **Declared rule:** none; rule 1's exception list covers option settings, not wiring settings.
+- **Options:**
+  - **A.** `collect_wiring` fails `apply` when two modules write one key with different values, and
+    deep-merges a listed set of dict settings (`REST_FRAMEWORK`), failing on a sub-key clash.
+    Small core change; D6 already removes orgs' `ACCOUNT_ADAPTER`.
+  - **B.** Modules may write only `QUICKSCALE_<MODULE>_*` keys, and the generator owns every Django or
+    third-party key. This puts per-module knowledge in core, against § Module Wiring Authority.
+  - **C.** Status quo plus a note. The latent defect stays.
+- **Decided rule (A, as recommended):**
+  - ✅ A module's wiring may write a key another module also writes only with an equal value. For
+    `REST_FRAMEWORK`, core merges the sub-dicts, and two modules may not set the same sub-key.
+  - ❌ Relying on module-name order to decide a setting's value.
+- **Enforcement:** in `collect_wiring` itself, closed-world (any conflicting second writer fails
+  `apply`, naming both modules and the key). Control case: two specs writing `ACCOUNT_ADAPTER`
+  differently.
+- **Migration:** core; orgs drops `ACCOUNT_ADAPTER` (D6); blog and listings keep equal markdownx
+  values or one owns them. No persisted names change.
+- **Confidence:** High for the merge semantics (read `collect_wiring` and base.py.j2). Medium for
+  the key list, which comes from grep; keys computed at runtime in an adapter were not traced.
+- **Hand-off:** tech (latent defect), arch (core's merge semantics are the boundary).
+
+### D34 — The theme's module flag means "enabled" — decided
+
+- **ID:** `theme-module-presence` · **Aspect / population:** P; 12 modules as the theme sees them
+  (section 33).
+- **Drift:** "true" means installed for 10, enabled for 1, absent for orgs; three mounts
+  hard-coded.
+- **Cost class:** ambiguity; latent defect (navigation to a 404 once rule 1's switch exists).
+- **Declared rule:** Frontend Theme Source De-Specialization (keep the seam), rules 1 and 7.
+- **Options:**
+  - **A.** The generator renders `index.html.j2`'s flags from the discovered module set: each
+    module's flag is `installed and QUICKSCALE_<MODULE>_ENABLED`, and each module's path comes from
+    reversing one of its URL names when it is installed. Nobody writes a per-module line.
+    (Correction at review: the first wording said "one loop over installed apps", but the seam
+    validator requires a key for every shipped module, present as `false` when absent, so the set
+    must be the discovered one, not the installed one.)
+  - **B.** Keep per-module lines and switch each to the `_ENABLED` setting. Still a list in core.
+  - **C.** Status quo.
+- **Decided rule (A, as recommended):**
+  - ✅ The seam reports, per shipped module, whether it is installed and enabled (rule 1) and where
+    it is mounted (rule 7), rendered from discovery. The theme's TypeScript (the `QuickScaleModules`
+    type, the seam validator, the SPA pages) keeps naming its modules, as frontend.md § Module
+    frontend surfaces records.
+  - ❌ Hand-written per-module lines or `INSTALLED_APPS` tests in `index.html.j2`; mount paths as
+    literals.
+- **Enforcement:** rule 40 clause, closed-world: the seam producer contains no hand-written
+  `quickscale_modules_<name>` test and no mount literal. Control case: re-add the `crm` line.
+- **Migration:** the theme's `index.html.j2`. The generated `templates/index.html` is user-owned
+  (category U3 in generated_file_ownership.md) and `quickscale update` never rewrites it, so only
+  new projects get the change. Existing projects need a release-note step, the same one rule 1's
+  switch needs. Theme types unchanged. Rides SA219.
+- **Confidence:** High (template read in full).
+- **Hand-off:** tech, when rule 1 lands.
+
+### D35 — Throttle scopes and rates — decided
+
+- **ID:** `throttle-scopes-and-rates` · **Aspect / population:** A and H; the 3 modules with
+  throttled endpoints (section 34).
+- **Drift:** three mechanisms, two scope shapes, one hard-coded rate, one raw-SQL table outside the
+  ORM.
+- **Cost class:** collision (scopes share DRF's rate table and cache keys with the project); tax.
+- **Declared rule:** rule 9 (DRF throttles fed by `_RATE_LIMIT`), rule 1 (`_RATE_LIMIT`); scope names
+  have no rule.
+- **Options:**
+  - **A.** Scope `quickscale_<module>_<purpose>`. Every rate comes from a `_RATE_LIMIT` option,
+    contributed as `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]` through D33's merge. blog's counter table
+    and `RunSQL` go with its hand-written limiter.
+  - **B.** Scope `<module>_<purpose>` (billing already conforms). Shorter, but it has rule 25's
+    collision reason against it.
+  - **C.** Leave scopes free; only fix billing's hard-coded rate.
+- **Decided rule (A, as recommended):**
+  - ✅ A DRF throttle scope is `quickscale_<module>_<purpose>`, its rate is the module's
+    `_RATE_LIMIT` option, and it joins rule 2's identity table.
+  - ❌ A rate written in code or `adapter.py`; a module table created by `RunSQL`.
+- **Enforcement:** rule 40 clause, closed-world: every `throttle_scope` / `scope` string has the
+  stem, and `DEFAULT_THROTTLE_RATES` values in an adapter come from a setting. A `RunSQL` that
+  creates a table fails outside a listed exception. Control case: `scope = "form_submit"`.
+- **Migration:** billing (new option `checkout_rate_limit` or one `api_rate_limit`), forms, blog.
+  The table drop rides blog's clean-break `0001_initial`. Throttle counters are disposable.
+- **Confidence:** High.
+- **Hand-off:** none.
+
+### D36 — The stem everywhere — decided: option B
+
+- **ID:** `namespace-prefix-principle` · **Aspect / population:** A; the shared namespaces of
+  section 35 (rules 2, 14, 22, 24, 25).
+- **Drift:** rule 25 rejects `<module>_` for collision; rules 14 and 22 adopt it.
+- **Cost class:** ambiguity (two precedents for the next namespace); collision for event names.
+- **Declared rule:** rules 2, 14, 22, 25. This is raised because the rules' own rationales
+  contradict each other, which § 0's "do not re-litigate" allows.
+- **Options:**
+  - **A.** A principle in rule 2: a name in a namespace the project shares uses the
+    `quickscale_<module>` stem when a clash would be **silent**. The shorter `<module>_` is allowed
+    where Django or PostgreSQL rejects a clash **loudly**. Reverse accessors keep `<module>_`
+    (Django's check fails at startup). Event names become `quickscale_<module>_<event>`.
+    Throttle scopes take the stem (D35).
+  - **B.** The stem everywhere, including reverse accessors (`user.quickscale_blog_posts`). Uniform,
+    verbose in every ORM query.
+  - **C.** Keep the rules as they are, and record why events differ.
+- **Recommended:** A. **Decided: B** (the maintainer chose one uniform rule over the shorter
+  accessors), recorded as rule 33:
+  - ✅ Every name a module places in a namespace shared with the project or other modules carries
+    `quickscale_<module>`, and rule 2's table lists the namespace: reverse accessors
+    (`quickscale_blog_posts`, rule 14), events (`quickscale_forms_submitted`, rule 22), throttle
+    scopes (rule 32). Exceptions: names another program fixes (`$pageview`, `account/`, `admin/`)
+    and index names, which Django caps at 30 characters (`qs_<module>_…`).
+  - ❌ A new shared namespace without an entry in rule 2's identity table.
+- **Enforcement:** rule 40's clauses per namespace (`related_name`, event names, throttle scopes);
+  a new namespace is a review rule (it needs a decision edit).
+- **Migration:** every `related_name` on a relation to another module's model (SA222; backups,
+  billing, blog, crm, forms, orgs, with their callers) and the one live event, whose D25 rename
+  now targets `quickscale_forms_submitted` (SA226). Applying the rule also renames orgs' one
+  schema-wide database function (`qs_child_parent_org_equality` →
+  `quickscale_orgs_child_parent_org_equality`, SA221's clean-break migrations) and billing's
+  advisory-lock key strings (SA223; transient). Tenant `organization` reverse names are stemmed by
+  construction once rule 2 renames the labels.
+- **Confidence:** High for the table.
+- **Hand-off:** none.
+
+### D37 — Layers cover references by name — decided
+
+- **ID:** `upward-name-references` · **Aspect / population:** C; 12 modules and rule 5's layer
+  table (section 36).
+- **Drift:** orgs (layer 1) names billing, blog, crm, and social in shipped source. blog reaches
+  storage outside its public surface. None of this is an import.
+- **Cost class:** ambiguity (billing's plan vocabulary is interpreted in orgs); tax (a new tenant
+  module edits orgs).
+- **Declared rule:** rule 5 (imports), rule 4 (public surface, capabilities for upward needs),
+  § Multi-tenant SaaS Architecture (the registry is a CI oracle only).
+- **Options:**
+  - **A.** Rule 5 covers every reference to another module (import, `import_module`, app label,
+    `apps.get_model`, `is_installed`). Then:
+    - `require_org_feature` moves to billing's surface (billing publishes the plan-feature gate);
+    - purge's billing branch and `BOUNDARY_GUARDED_OBLIGATIONS` become billing's removal
+      declarations (the SA213 pattern);
+    - `TENANT_TABLE_REGISTRY` moves into test code, or each module declares its tables on its
+      `AppConfig`;
+    - blog calls storage's `services.py` and lists storage in `required_modules`.
+  - **B.** Record orgs as the tenancy kernel that may name modules, with an allowlist. Cheap, but
+    it keeps the list in orgs.
+  - **C.** Move only the registry.
+- **Decided rule (A, as recommended):**
+  - ✅ A module refers to a higher-layer module only through a capability that the higher module
+    declares, whether by import or by name.
+  - ❌ App labels, model names, or package names of a higher-layer module in a module's source.
+- **Enforcement:** rule 40 clause, closed-world: a string search for every other module's package
+  and app label in each module's `src/`, allowed only for a lower layer or one way within a layer, with
+  migrations excepted. Control case: orgs' `require_org_feature` line.
+- **Migration:** orgs, billing, blog. `require_org_feature` is public, so the move is a
+  release-note item.
+- **Confidence:** High for the table (every reference opened). Medium that the registry can move
+  to tests, because its CI-oracle role was not traced into the gate that reads it.
+- **Hand-off:** arch.
+
+### D38 — Secrets reach code as settings — decided
+
+- **ID:** `secret-resolution-path` · **Aspect / population:** B and I; the 5 modules with
+  `_ENV_VAR` options (section 37).
+- **Drift:** three resolution paths for one suffix, and a missing API key is found at different
+  moments.
+- **Cost class:** ambiguity; tax.
+- **Declared rule:** rule 1 (`_ENV_VAR` holds a name), rule 3 (values only through `apply`, no code
+  defaults), rule 26 (webhook secret at startup).
+- **Options:**
+  - **A.** The storage path for all. `apply` renders each secret as an environment read in
+    `settings/modules.py` (core's existing `__QS_ENV__` mechanism), and module code reads the
+    setting. A `checks.py` check (rule 10: "what options cannot express") fails startup when a
+    secret the switched-on module needs is empty; the secret is not an option, so the option
+    schema's `required_when` cannot express it. This fits rule 3 as decided. Secret values then sit in
+    `django.conf.settings`, where Django's error reporter hides names containing `KEY`/`SECRET`/`TOKEN`;
+    name the settings to match.
+  - **B.** One core helper `runtime.read_secret(setting)` called at use. It is close to the "runtime
+    accessor" that rule 3 rejects.
+  - **C.** Leave resolution to each module, documented.
+- **Decided rule (A, as recommended):**
+  - ✅ A secret reaches module code as a setting that `apply` renders from the environment variable
+    its `_ENV_VAR` option names; a required secret that is empty fails startup.
+  - ❌ `os.getenv` / `os.environ` in module code (the listed exception: orgs' RLS boot guard reads
+    core's runtime-role variables, which exist before settings load), or a default variable name
+    written in code.
+- **Enforcement:** rule 40 clause, closed-world: no `os.getenv` / `os.environ` in `src/` outside the
+  listed orgs reads. Control case: analytics' `resolve_posthog_api_key`.
+- **Migration:** analytics, billing, notifications, backups (with D6's `dr_engine` fix); storage
+  already conforms.
+- **Confidence:** High (all five paths read).
+- **Hand-off:** none.
+
+### D39 — One type-check configuration — decided
+
+- **ID:** `type-check-config` · **Aspect / population:** N; 12 modules (section 38). This supersedes
+  D21's mypy bullet.
+- **Drift:** strictness runs from none relaxed to twelve codes off. The rule asks for a section that
+  CI does not read.
+- **Cost class:** ambiguity (rule 18 contradicts the authoring guide and cannot be enforced as
+  written); orgs is the least checked.
+- **Declared rule:** rule 18 (`[tool.mypy]` per module) against module-extension.md step 1.3 (a
+  section in the root `mypy.ini`). The two contradict each other, which is why this item is raised.
+- **Options:**
+  - **A.** The root `mypy.ini` is the only type-check configuration, as module-extension.md
+    already says. A module's section may relax only the guide's standard override, and the
+    per-module `[tool.mypy]` sections are deleted. orgs, social, forms, notifications, and billing
+    fix what the tightened sections report.
+  - **B.** Move to per-module `[tool.mypy]` and change `make typecheck` to run inside each module
+    directory. This is closer to D21 as written, but repeats the root options twelve times.
+  - **C.** Status quo, rule 18 amended to drop the mypy requirement.
+- **Decided rule (A, as recommended):**
+  - ✅ Every module has a section in the root `mypy.ini` that relaxes at most module-extension.md's
+    standard override (`disallow_untyped_defs`, `warn_return_any`, `warn_unused_ignores`,
+    `var-annotated`).
+  - ❌ A per-module `[tool.mypy]`, or a disabled error code outside the list.
+- **Enforcement:** rule 40 clause, closed-world: parse `mypy.ini`; each discovered module has a
+  section; disabled codes ⊆ the allowed set. Control case: orgs' current section.
+- **Migration:** orgs (twelve codes: real typing work), social, forms, notifications, billing;
+  delete the unread `[tool.mypy]` blocks in blog, listings, and storage; amend rule 18. No
+  persisted names.
+- **Confidence:** Medium. mypy's config lookup was read from the Makefile and mypy's documented
+  order (a `mypy.ini` in the working directory wins), not observed by running mypy.
+- **Hand-off:** none.
+
+### D40 — Module lists derive from discovery — decided
+
+- **ID:** `module-lists-outside-members` · **Aspect / population:** L and N; the ten lists of
+  section 39.
+- **Drift:** ten hand-kept lists of 5 to 13 names. None of them fails when a module is missing.
+- **Cost class:** tax (adding a module edits about nine files outside it); ambiguity (two
+  descriptions per module).
+- **Declared rule:** CLI discovery-derived modules; § Module Presence States; D21 ("a hand-maintained
+  name list … a smell").
+- **Options:**
+  - **A.** Each list is computed from discovery (`quickscale_modules/*/module.yml`) plus a fact the
+    module states about itself: tenant models from `TenantModel` subclasses; descriptions from
+    `module.yml`; theme flags per D34. Where a list must exclude a module, the exclusion sits next
+    to the derivation with its reason.
+  - **B.** Keep the lists and add one parity test that each equals discovery minus listed
+    exclusions.
+  - **C.** Status quo.
+- **Decided rule (A, as recommended):**
+  - ✅ Code outside `quickscale_modules/` that needs the set of modules computes it from discovery.
+  - ❌ A literal list of module names outside a module, except the theme's TypeScript module
+    surfaces (D34), rule 5's layer table, and rule 40's
+    test-owned mapping.
+- **Enforcement:** rule 40 clause, closed-world: a string search for three or more module names
+  in one literal, over core, CLI, scripts, and theme, with the two named exceptions. Control
+  case: `render_j2_template._all_modules`.
+- **Migration:** core catalog (descriptions from `module.yml`), five scripts, theme (D34),
+  orgs registry (D37), the page-style contract (with rule 8). Social joins the isolation gates.
+- **Confidence:** High for the table. Medium on completeness: lists were found by names appearing
+  together, so a list without `crm` in it could be missed.
+- **Hand-off:** arch (the population is declared in ten places).
+
+### D41 — README content, not only headings — decided
+
+- **ID:** `readme-content-accuracy` · **Aspect / population:** O; 12 READMEs (section 40).
+- **Drift:** 13 options and 8 commands appear in no README, and rule 11's check cannot see it.
+- **Cost class:** tax (operators read the manifest instead).
+- **Declared rule:** rule 11 ("Configuration (every manifest option)"; "the test checks the
+  headings only").
+- **Options:**
+  - **A.** The rule 11 clause also checks that each option key and each management command name
+    appears in the README. It is closed-world and cheap.
+  - **B.** Generate the Configuration and Management commands sections from the manifest and the
+    commands.
+  - **C.** Headings only, as decided.
+- **Decided rule (A, as recommended):**
+  - ✅ Every manifest option key appears under Configuration, and every management command under
+    Management commands.
+- **Enforcement:** rule 40 clause. Control case: notifications' README.
+- **Migration:** notifications, billing, storage, backups, orgs. Documentation only.
+- **Confidence:** High. The match is a substring anywhere in the README, so the count is a floor.
+- **Hand-off:** none.
+
+### D42 — `required_modules` is bare names and selects them — decided
+
+- **ID:** `manifest-dependency-spec` · **Aspect / population:** C; the 7 manifests with
+  dependencies (section 41).
+- **Drift:** version floors that lockstep makes meaningless; `implies` paired with
+  `required_modules` in five of six orgs dependants.
+- **Cost class:** ambiguity; tax.
+- **Declared rule:** § Module Version Lockstep ("no independent module versions"); rules 5 and 20
+  (what `required_modules` must list).
+- **Options:**
+  - **A.** `required_modules` lists bare names; `plan` and `apply` select required modules
+    automatically; `implies` is removed (after rule 20 its only non-duplicate use is gone), and the
+    floor parser goes.
+  - **B.** Keep both keys and require every required module to be implied.
+  - **C.** Status quo.
+- **Decided rule (A, as recommended):**
+  - ✅ `required_modules: [orgs]`; a required module is selected with its dependant.
+  - ❌ Version specifiers on first-party modules; `implies`.
+- **Enforcement:** the manifest loader rejects a specifier or an `implies` key, closed-world.
+  Control case: `orgs>=0.86.0`.
+- **Migration:** 7 manifests and their copies under `quickscale_core/data/manifests/`, core loader,
+  CLI plan and apply. Whether `quickscale.yml` or `.quickscale/state.yml` records implied modules
+  was not checked.
+- **Confidence:** Medium. `plan`'s behavior for blog without orgs was inferred from the
+  manifests, not run.
+- **Hand-off:** none.
+
+## Rules recorded (sixth pass)
+
+Recorded in [decisions.md § Module Conventions](../technical/decisions.md#module-conventions) as
+rules 30–39, before Enforcement (now rule 40), whose list gained a clause each; decisions.md wins on
+any difference from this summary. Rules 2, 9, 11, 13, 14, 18, 22, and 27 were amended to match.
+
+1. **Shared setting keys (D33).** ✅ A module's wiring may write a key another module writes only
+   with an equal value; `REST_FRAMEWORK` sub-dicts are merged by core, and two modules may not set
+   one sub-key. `apply` fails otherwise. ❌ Relying on module-name order for a setting's value.
+2. **Theme seam (D34).** ✅ The seam's per-module flag is "installed and `_ENABLED`" and its path
+   comes from the module's URL names, both rendered from the discovered module set; the theme's
+   TypeScript keeps naming its modules. ❌ Hand-written module lines in `index.html.j2`; literal
+   mount paths.
+3. **Throttles (D35).** ✅ Scope `quickscale_<module>_<purpose>`, rate from the module's
+   `_RATE_LIMIT` option. ❌ Rates in code or `adapter.py`; module tables created by `RunSQL`.
+4. **Namespace stems (D36, option B).** ✅ Every name in a namespace shared with the project or
+   other modules uses `quickscale_<module>`, reverse accessors, events, database functions, and
+   advisory-lock keys included; rule 2's identity table lists every such namespace and its form.
+5. **References by name (D37).** ✅ Rule 5's layer order applies to every reference to another
+   module (import, `import_module`, app label, `get_model`, `is_installed`). ❌ A higher-layer
+   module's name in a module's source, migrations excepted.
+6. **Secrets (D38).** ✅ A secret reaches module code as a setting that `apply` renders from its
+   `_ENV_VAR`; an empty required secret fails startup. ❌ `os.getenv` / `os.environ` in module code,
+   except orgs' boot guard reading core's runtime-role variables.
+7. **Type checking (D39).** ✅ One root `mypy.ini` section per module relaxing only the listed
+   options. ❌ Per-module `[tool.mypy]`; unlisted disabled codes. Replaces rule 18's `[tool.mypy]`
+   requirement.
+8. **Module lists (D40).** ✅ Code outside the modules computes the module set from discovery.
+   ❌ Literal lists of module names outside rule 5's table, rule 40's mapping, and the theme's
+   TypeScript module surfaces.
+9. **README content (D41).** ✅ Every option key and command name appears under its heading.
+10. **Dependencies (D42).** ✅ `required_modules` holds bare names and selects them. ❌ Version
+    specifiers on first-party modules; `implies`.
+
+## Enforcement gaps
+
+1. **The conformance test (rule 30 when audited, now rule 40) does not exist.** Every rule except
+   rule 27 has no check today; rule 27 is held by SA35's gate. The decisions are recorded, but nothing stops the next module from copying any
+   variant in sections 1–41.
+2. **An existing check pins the old convention.** Core's `test_module_page_style_contract.py`
+   hard-codes today's nested base paths (`quickscale_modules_blog/blog/base.html`) and flat CSS,
+   which rule 8 changes. It must change in the same commit as rule 8 (SA224 now carries it), and it lists modules by hand
+   (open-world).
+3. **A whole-population gate hosted in one module.** SA35's gate lives in orgs' tests and sees only
+   the apps orgs' test settings install: ten modules and two test apps. A new module that is not
+   added there is unchecked. Rule 27 says "in a module or a project's own app (the gate checks
+   both)", but the only project apps it sees are orgs' two test apps: no check runs in a generated
+   project. As a side effect, orgs (layer 1) installs every layer-3 module to test itself.
+4. **Isolation gates list modules by hand.** `RLS_MODULES` (5) and `MAPPING_MODULES` (6) leave out
+   social's tenant tables, and only crm's `test_isolation.py` runs on the PostgreSQL gate (D40).
+5. **Rule 11's README check is open-world.** It checks headings only (D41).
+6. **Rule 5's layer check is import-based.** References by name are invisible to it (D37).
+7. **Rule 18 is unenforceable as written.** It requires `[tool.mypy]` sections that CI does not
+   read, and contradicts module-extension.md step 1.3, which registers modules in the root
+   `mypy.ini` (D39).
+8. **Configuration read by nothing.** The `[tool.mypy]` blocks in blog, listings, and storage; the
+   per-option `validation:` blocks (section 14, D15 makes core read them).
+9. **Validation that cannot fail.** `required_modules` version floors under lockstep (D42);
+   listings' `^\d+$` accepts `0` (section 14).
+10. **Permissive allowed sets.** `collect_wiring` accepts any key from any module, last writer wins
+    (D33). The generated `base.py` lets a module rate override `anon`/`user`.
+11. **A reference that would dangle once rule 29 lands** — already covered: rules 27 and 30 cite
+    `orgs/tests/test_sa35_conformance.py` and "SA35's gate", which rule 29 renames, and SA227's scope
+    already renames "the docs that cite them (decisions rule 27 cites the SA35 gate's file)".
+12. **A shipped-source oracle.** `TENANT_TABLE_REGISTRY` is recorded as a CI parity oracle but lives
+    in orgs' `tenancy.py` (D37).
+
+## Consistent by design
+
+- **Outbound vendor clients follow their SDKs:** billing builds a `StripeClient` per call; analytics
+  keeps one PostHog client behind a lock (`sync_mode=False`); notifications uses Django's email
+  backend through anymail; storage uses django-storages; backups goes through the DR engine. None
+  sets an explicit timeout or retry, which is consistent across the population. Whether the SDK
+  defaults are acceptable is a technical question, not a convention.
+- **Vendor fakes in tests:** `mock.patch` plus small fake classes; notifications uses Django's
+  `locmem` backend. Each follows its vendor's shape.
+- **Log volume:** backups, crm, notifications, social, and storage log nothing. backups and
+  notifications record outcomes in models (`BackupArtifact`, `NotificationDelivery`). No cost to
+  name, so no item; every logger is `getLogger(__name__)`.
+- **RLS policy names** (`<module>_<model>_org_isolation`): per-table in PostgreSQL, so no clash;
+  migration-owned by decision.
+- **Soft delete** exists only in backups (retention state); with one member, there is nothing to
+  compare. (Advisory-lock keys, also billing-only, were listed here; rule 33 now covers them.)
+- **Module pages in the theme:** blog, crm, forms, listings, social, and orgs have React pages in
+  core's theme by the recorded De-Specialization decision; only the flags and paths drift (D34).
+- **URL converters:** slugs for public tenant routes, integers and UUIDs for internal ids, as rule
+  14 intends.
+- **Status codes** for "switched off": the 403/404 split is already decided (rules 1, 26).
+
+## Hand-offs
+
+**To the technical audit** (live defects): none live. Two become defects when decided rules land.
+Both are recorded here, and the technical audit should take them at that point:
+- `shared-setting-writes`: a second `REST_FRAMEWORK` writer removes billing's throttle rates (DRF
+  `ImproperlyConfigured` on checkout and portal).
+- `theme-module-presence`: switched-off modules keep navigation that 404s.
+
+**To the architectural audit** (structural roots):
+- `upward-name-references`: the tenancy foundation (orgs) owns vocabulary and table lists of layer-3
+  modules. The layer rule is import-shaped and does not reach them.
+- `module-lists-outside-members`: the module population is declared in about ten places outside
+  discovery.
+- `shared-setting-writes`: core's settings merge is last-writer-wins by module name; the wiring
+  boundary has no ownership model for shared keys.
+
+**Roadmap.** Where a finding follows from a rule already decided, the ticket carrying that rule now
+says so: SA219 (the theme's flags follow `_ENABLED`), SA220 (blog → `storage.helpers`), SA223 (blog's
+counter table, billing's hard-coded rates, and the `REST_FRAMEWORK` overwrite), SA227 (no `py.typed`
+work; `poetry.toml` in three modules, not all). The decided D33–D42 are folded into the existing
+tickets: D33 and D35 → SA223; D34, D38 (settings path), and D42 → SA219; D38's startup check →
+SA225; D36 → SA221 (identity table, orgs' database function), SA222 (`related_name`), SA223
+(billing's advisory-lock keys), SA226 (events); D37 → SA220; D39–D41 → SA227, except core's
+page-style contract, which SA224 changes together with the templates it pins; SA215 closes them
+with rule 40's test.
+
+## Aspect catalogue additions
+
+- **A:** settings keys written by module wiring, and the merge that combines them; DRF throttle
+  scopes; raw-SQL objects outside the ORM (tables, functions, triggers); advisory-lock keys.
+- **B:** when and where a secret named by an `_ENV_VAR` option is resolved.
+- **C:** references to another module by name (app label, `get_model`, `is_installed`,
+  `import_module`), not only imports.
+- **L/N:** hand-kept module lists outside the modules (core, CLI, scripts, theme).
+- **M/N:** which member's test suite hosts a whole-population gate, and which apps its settings
+  install.
+- **N:** where type-check strictness really lives, versus where the rule puts it.
+- **O:** README content against the manifest and the command list, not only its outline.
+- **P:** the theme seam's per-module flags and paths.
+
+## Questions that would change a rule
+
+Answered by the maintainer on 2026-09-28:
+
+1. orgs' `require_org_feature` moves to billing (D37 option A). → `upward-name-references`
+2. `TENANT_TABLE_REGISTRY` moves into test code (D37 option A). → `upward-name-references`,
+   `module-lists-outside-members`
+3. Event names take the stem, like every shared name (D36 option B): `quickscale_forms_submitted`.
+   → `namespace-prefix-principle`
+4. orgs' twelve disabled mypy codes are fixed in SA227 (D39 option A, no accepted debt). →
+   `type-check-config`
+
+Still to check while implementing: whether anything outside this repository (`bap-web`, a deployed
+`quickscale.yml` or `.quickscale/state.yml`) relies on `implies` or the `>=` floors that D42
+removes (SA219). → `manifest-dependency-spec`
+
+## Reconciliation log
+
+"Re-verified" means the cells were recounted by script or reopened at their locations on
+2026-09-28; "spot-checked" names what was not recounted. No module source changed between
+`1dc8248b` and `58e73cc7`, so every correction below is an error in the first write-up, not a change
+in the code.
+
+- 2026-09-28 — `settings-names`: decided (rule 1) — re-verified (every `django_setting` listed from
+  the manifests matches section 1).
+- 2026-09-28 — `module-enabled-switch`: decided (rule 1) — re-verified; still 3 of 12.
+- 2026-09-28 — `settings-readers-and-defaults`: decided (rule 3) — re-verified (`getattr(settings`
+  in 11 modules); adds 18 settings missing from five modules' test settings (section 3).
+- 2026-09-28 — `cross-module-settings-reads`: decided (rules 3–4) — re-verified (blog, forms, orgs).
+- 2026-09-28 — `secret-env-var-names`: decided (rule 1) — re-verified.
+- 2026-09-28 — `module-dependency-direction`: decided (rules 4–5) — re-verified; blog → storage
+  added (correction in section 5); references by name split out as `upward-name-references`.
+- 2026-09-28 — `identity-stem`: decided (rule 2) — re-verified (all 12 labels
+  `quickscale_modules_<name>`; orgs has no `app_name`); `db_table` row corrected (backups 3 tables,
+  forms 4).
+- 2026-09-28 — `url-mounts-and-names`: decided (rule 7) — re-verified; analytics' row corrected (it
+  already mounts at `analytics/` from its manifest).
+- 2026-09-28 — `templates-static-tags`: decided (rule 8) — re-verified (module base paths; orgs 6
+  of 8 templates emit `<html>`, the other two are a partial and an admin override); core's
+  page-style contract pins the old paths (Enforcement gaps 2).
+- 2026-09-28 — `http-api-shape`: decided (rule 9) — re-verified; framework row corrected (orgs is not
+  DRF) and error-body counts corrected (72 / 18 in `src/`).
+- 2026-09-28 — `startup-checks-and-errors`: decided (rule 10) — re-verified (`ImproperlyConfigured`
+  in seven `apps.py`, `checks.py` only in orgs; exception classes in billing and notifications
+  `services.py`, blog and listings `views.py`, social `contracts.py`, orgs `current_org.py`).
+- 2026-09-28 — `package-files`: decided (rules 11, 28) — re-verified (file listing of all 12
+  packages; no module defines `is_enabled()`).
+- 2026-09-28 — `required-tests`: decided (rule 11) — re-verified; the file matrix is unchanged.
+- 2026-09-28 — `readme-outline`: decided (rule 11) — re-verified; content gaps split out as
+  `readme-content-accuracy`.
+- 2026-09-28 — `model-choices`: decided (rules 11, 14) — re-verified (15 literal lists: backups 5,
+  forms 3, crm 2, notifications 2, blog 1, listings 1, social 1).
+- 2026-09-28 — `option-schema-and-validation`: decided (rule 12) — re-verified (5 `validation`
+  blocks in 4 modules; 25 duplicate `derived_settings`, 10 repeated defaults; listings' `^\d+$`).
+  Core's and the CLI's per-module option code was spot-checked by file, not recounted.
+- 2026-09-28 — `tenant-model-base`: decided (rule 13) — re-verified (blog and crm subclass
+  `TenantModel`; `tenant_org_fk` still in billing, blog, forms, listings, orgs, social).
+- 2026-09-28 — `model-basics`: decided (rule 14) — timestamps recounted (21 / 14); `related_name`,
+  `__str__`, and ordering spot-checked, not recounted.
+- 2026-09-28 — `package-root-init`: decided (rule 15) — re-verified (`default_app_config` in auth,
+  blog, crm, listings; forms has `__version__` only).
+- 2026-09-28 — `signals-vs-receivers`: decided (rule 16) — re-verified.
+- 2026-09-28 — `command-behavior`: decided (rule 17) — re-verified (`--dry-run` only in
+  `backups_sync_media`, `backups_restore`, `purge_organization`; `sys.exit` in
+  `check_tenant_isolation`).
+- 2026-09-28 — `package-tooling`: decided (rule 18) — corrected (section 20); the mypy part is
+  superseded by `type-check-config`. `poetry.toml` still missing in analytics, notifications,
+  storage.
+- 2026-09-28 — `tenant-authorization`: decided (rule 19) — re-verified (`is_staff` / `IsAdminUser`
+  in blog, crm, forms, listings views; orgs' four are `is_superuser` operator paths, as section 21 says).
+- 2026-09-28 — `email-sender`: decided (rule 20) — re-verified (forms' own path in
+  `notifications.py`).
+- 2026-09-28 — `write-effects-on-commit`: decided (rule 21) — re-verified (`on_commit` only in
+  notifications).
+- 2026-09-28 — `analytics-event-ownership`: decided (rule 22) — re-verified (`capture_form_submit`,
+  `capture_social_link_click` still in analytics); see `namespace-prefix-principle`.
+- 2026-09-28 — `service-surface`: decided (rule 23) — re-verified; keyword-only row corrected (10 of
+  51 violate rule 23, in analytics, billing, backups; social conforms).
+- 2026-09-28 — `current-time-call`: decided (rule 24) — re-verified (storage `helpers.py`).
+- 2026-09-28 — `cache-key-stem`: decided (rule 24) — re-verified (social only; orgs deletes social's
+  keys).
+- 2026-09-28 — `constraint-index-names`: decided (rule 25) — re-verified by style counts.
+- 2026-09-28 — `inbound-webhooks`: decided (rule 26) — re-verified (billing 403/403/500/400,
+  notifications 400/403/403/400).
+- 2026-09-28 — `user-fk-on-delete`: resolved (`fa0b882b` — verified: the SA35 gate accepts only
+  `SET_NULL` or an allowlisted `CASCADE`, no model uses `PROTECT`, and the rule is now Module
+  Conventions rule 27). The gate's reach is narrower than rule 27 states (Enforcement gaps 3).
+- 2026-09-28 — `test-file-names`: decided (rule 29) — re-verified (103 test files in 11 modules
+  mention a ticket; analytics has none).
+- 2026-09-28 — `py-typed`: resolved (`6ea37301` — verified; the first write-up's cell was wrong,
+  all twelve ship it).
+- 2026-09-28 — `shared-setting-writes`: decided (rule 30, D33) — maintainer decision; members not yet changed.
+- 2026-09-28 — `theme-module-presence`: decided (rule 31, D34) — maintainer decision; members not yet changed.
+- 2026-09-28 — `throttle-scopes-and-rates`: decided (rule 32, D35) — maintainer decision; members not yet changed.
+- 2026-09-28 — `namespace-prefix-principle`: decided (rule 33, D36, option B) — maintainer decision; members not yet changed.
+- 2026-09-28 — `upward-name-references`: decided (rule 34, D37) — maintainer decision; members not yet changed.
+- 2026-09-28 — `secret-resolution-path`: decided (rule 35, D38) — maintainer decision; members not yet changed.
+- 2026-09-28 — `type-check-config`: decided (rule 36, D39) — maintainer decision; members not yet changed.
+- 2026-09-28 — `module-lists-outside-members`: decided (rule 37, D40) — maintainer decision; members not yet changed.
+- 2026-09-28 — `readme-content-accuracy`: decided (rule 38, D41) — maintainer decision; members not yet changed.
+- 2026-09-28 — `manifest-dependency-spec`: decided (rule 39, D42) — maintainer decision; members not yet changed.

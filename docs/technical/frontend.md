@@ -70,6 +70,12 @@ It is written by `templates/index.html.j2` and carries:
 | `projectName` | Display name |
 | `modules` | Boolean flag per module, derived from `settings.INSTALLED_APPS` (and settings flags for `social`) |
 | `modulePaths` | Server-resolved base paths for `crm`, `social`, `analytics` |
+
+[decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) changes how
+the producer fills `modules` and `modulePaths`: the generator renders `index.html.j2` from the
+discovered module set, a flag is `true` only when the module is installed and its
+`QUICKSCALE_<MODULE>_ENABLED` is on, and paths come from `{% url %}`, not literals. The table above
+describes the shipped state until then; the three-place rule below is unchanged.
 | `owner.mode` | `"solo"` or `"saas"` — see [organizations.md](organizations.md) |
 | `owner.currentOrgSlug` | Current org slug, or `null` |
 | `publicPage` | Optional; present only on public non-SPA social surfaces |
@@ -267,7 +273,7 @@ Each module surface is in one of three states, and **this is the most important 
 Recorded so they are not rediscovered as surprises. None of these are settled decisions; they are the current state.
 
 - **Two presentations for one module.** `blog` and `listings` have both a React launcher page and a server-rendered UI, even though they now share design tokens.
-- **Module name list duplicated in three files** (`index.html.j2`, `useModules.ts`, `validateQuickScaleSeam.ts`), with no gate binding them together.
+- **Module name list duplicated in three files** (`index.html.j2`, `useModules.ts`, `validateQuickScaleSeam.ts`), with no gate binding them together. Module Conventions rules 31 and 37 remove the `index.html.j2` copy (it is rendered from discovery, SA219); the two TypeScript copies stay by design.
 - **Vite dev proxy duplicates the URL-ownership table** with no gate binding them together.
 - **`manifest: true` is emitted but unused**, leaving the unhashed-filename convention as the only thing keeping `{% static %}` references valid.
 - **Theme frontend internals are explicitly out of scope** for [arch-audit.md](../others/arch-audit.md), so none of the above appears in the structural findings.

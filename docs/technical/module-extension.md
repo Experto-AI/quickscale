@@ -397,7 +397,7 @@ DJANGO_SETTINGS_MODULE = "tests.settings"
 pythonpath = ["."]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
-addopts = "-v --cov=src/quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=70"
+addopts = "-v --cov=src/quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=90"
 ```
 
 **1.2. Register Module in Root pyproject.toml:**
@@ -408,7 +408,9 @@ quickscale-module-<name> = {path = "./quickscale_modules/<name>", develop = true
 ```
 
 **1.3. Register Module in Root mypy.ini:**
-Add mypy overrides for the module (Django models need relaxed type checking):
+Add mypy overrides for the module (Django models need relaxed type checking). This root section is
+the module's only type-check configuration; it may relax at most these options and no
+`[tool.mypy]` goes in the module's `pyproject.toml` (Module Conventions rule 36):
 ```ini
 [mypy-quickscale_modules_<name>.*]
 disallow_untyped_defs = False
@@ -509,7 +511,8 @@ SA170's final ordered serial and concurrent campaigns passed against retained pr
 closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **5. Template Integration (showcase_react theme):**
-- [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure
+- [ ] The seam's producer (`index.html.j2`) is rendered from the discovered module set, so the module's `window.__QUICKSCALE__` flag (installed and `QUICKSCALE_<MODULE>_ENABLED`) and its path (from its URL names) need no hand-written line there; nor does any list in core, the CLI, or `scripts/`, which derive the module set from discovery (Module Conventions rules 31 and 37)
+- [ ] A module with a React surface adds its page, its `QuickScaleModules` key, and its seam-validator key in the theme ([frontend.md § Module frontend surfaces](frontend.md#module-frontend-surfaces))
 
 **6. Testing:**
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
@@ -517,14 +520,17 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] Tests use concrete models (not abstract stubs)
 - [ ] Required test files: `test_apps.py`, `test_services.py`, `test_migrations.py` (with models), and `test_isolation.py` plus `test_rls_boundary.py` (with tenant models)
 - [ ] Every `module.yml` option has `type`, `default`, `description`, `django_setting`, and its own `validation` block where invalid values exist; checks spanning options use only `required_when` / `any_of`; core and the CLI hold no code for the module's options (Module Conventions rule 12)
-- [ ] Tenant models subclass `TenantModel` (directly or through a module base) with a `Meta` that inherits the base's — the only tenant marker; relations to other modules' models use a `<module>_<name>` `related_name` (plural, or singular for a one-to-one); concrete models define `__str__` and `Meta.ordering` (rules 13–14)
+- [ ] Tenant models subclass `TenantModel` (directly or through a module base) with a `Meta` that inherits the base's — the only tenant marker; relations to other modules' models use a `quickscale_<module>_<name>` `related_name` (plural, or singular for a one-to-one); concrete models define `__str__` and `Meta.ordering` (rules 13–14)
 - [ ] `__init__.py` holds only `__version__`; `signals.py` holds only sent signals and receivers live in `receivers.py` (rules 15–16)
 - [ ] Commands raise `CommandError` on expected failure (no `print()` or `sys.exit()`); data-destroying commands take `--dry-run` (rule 17)
 - [ ] Views managing tenant data check the org role through orgs' `permissions` (`require_org_role`, `OrgRoleMixin`, `HasOrgRole`), never `is_staff` / `is_superuser` / `IsAdminUser` (rule 19)
 - [ ] Email goes through notifications' `send_notification` with `notifications` in `required_modules` (rule 20); emails, analytics events, vendor calls, and cache purges caused by a write run in `transaction.on_commit`, with a test that rolls the write back and sees no effect (rule 21)
-- [ ] Analytics events are named `<module>_<event>` in the module's own `services.py` and sent with analytics' `capture_event` (rule 22); cache keys are `quickscale_<module>:<name>` and the current time is `timezone.now()` (rule 24)
+- [ ] Analytics events are named `quickscale_<module>_<event>` in the module's own `services.py` and sent with analytics' `capture_event` (rule 22); cache keys are `quickscale_<module>:<name>` and the current time is `timezone.now()` (rule 24)
 - [ ] Constraints and indexes are named `quickscale_<module>_…` / `qs_<module>_…_idx`, no `unique_together` (rule 25); a webhook is a DRF `APIView` without authentication, permission, or throttle classes that hands the body to `services.py`, answers `200`/`400`/`404`, and deduplicates provider events (rule 26)
 - [ ] `on_delete` on `User` is `SET_NULL` (never `PROTECT`), `CASCADE` only on the listed fields (rule 27; SA35 gate); package files use the allowed names or a private `_<name>.py` (rule 28); test files are `test_<subject>.py`, with no ticket number in the name, docstrings, or comments (rule 29)
+- [ ] Wiring writes a Django or third-party setting another module also writes only with the same value, or `apply` fails (rule 30); throttle scopes are `quickscale_<module>_<purpose>` with the rate from a `_RATE_LIMIT` option (rule 32); every name in a namespace shared with the project carries the `quickscale_<module>` stem (rule 33)
+- [ ] The module names no higher-layer module anywhere in its source — by import, app label, `get_model`, or `is_installed` (rule 34); secrets arrive as settings rendered by `apply` from the `_ENV_VAR` option, never through `os.getenv`, and `checks.py` fails startup when a needed secret is empty (rule 35)
+- [ ] The README names every option key under Configuration and every command under Management commands (rule 38); `required_modules` lists bare names, with no version floor and no `implies` (rule 39)
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**

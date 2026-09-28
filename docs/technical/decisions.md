@@ -479,8 +479,10 @@ how it reads configuration, how it depends on and talks to other modules, how it
 templates, APIs, checks, errors, files, tests, and docs, and how it declares options, tenant models,
 model basics, signals, and management commands, and how it authorizes, sends email, runs write
 effects, names analytics events, declares its service surface, names constraints, receives
-webhooks, deletes related rows, and names its files and tests. A conformance test
-enforces each rule. Evidence and the options weighed:
+webhooks, deletes related rows, and names its files and tests, and how its wiring shares settings,
+how the theme sees it, how it throttles, stems shared names, refers to other modules, receives
+secrets, is type-checked, is listed outside itself, documents its options, and declares its
+dependencies. A conformance test enforces each rule. Evidence and the options weighed:
 [module-conventions-inventory.md](../planning/module-conventions-inventory.md).
 
 **Why.** The modules grew one at a time and each invented its own naming, settings reader, and
@@ -509,7 +511,7 @@ settings read but never declared, and every default written twice. Renames are a
   | `_RATE_LIMIT` | throttle, `"<count>/<period>"`, parsed by DRF's throttle (rule 9) | string |
   | `_RETENTION_DAYS` | days before deletion or anonymization; `0` keeps forever | integer |
   | `_TTL_SECONDS` | lifetime of a cache entry or signed token | integer |
-  | `_ENV_VAR` | the *name* of an environment variable holding a secret, never the secret | string |
+  | `_ENV_VAR` | the *name* of an environment variable holding a secret, never the secret (rule 35) | string |
 
   Booleans that describe behavior rather than switch a feature keep a descriptive name
   (`QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG`).
@@ -530,7 +532,14 @@ settings read but never declared, and every default written twice. Renames are a
 | Management command | `quickscale_<module>_<action>` |
 | Cache key | `quickscale_<module>:<name>` |
 | Constraint / index name | `quickscale_<module>_<model>_<purpose>` / `qs_<module>_<model>_<field>_idx` (rule 25) |
+| Reverse accessor on another module's model | `quickscale_<module>_<name>` (rule 14) |
+| Analytics event | `quickscale_<module>_<event>` (rule 22) |
+| DRF throttle scope | `quickscale_<module>_<purpose>` (rule 32) |
+| PostgreSQL function created by a module's raw SQL | `quickscale_<module>_<name>` (orgs' `qs_child_parent_org_equality` → `quickscale_orgs_child_parent_org_equality`) |
+| Advisory-lock key (the string hashed into the lock id) | `quickscale_<module>:<purpose>:<id>` |
 
+- ✅ Every name a module places in a namespace shared with the project or other modules takes the
+  stem, and the namespace is listed in this table (rule 33).
 - ✅ The Python package stays `quickscale_modules_<module>`; only developers see it.
 - ✅ Tables use the app-label default; no module sets `db_table`.
 - ✅ Template folders required by other software stay as listed exceptions: `templates/account/`
@@ -603,6 +612,7 @@ unprojected manifest keys" prohibition. Moving a module between layers is a deci
   collects; social declares org-scoped cache keys that orgs' purge collects.
 - ✅ Core never names a module's settings: backups reads its own settings and passes a policy to
   the `dr_engine` call.
+- ✅ The layer order covers references by name as well as imports (rule 34).
 
 **6. No legacy names.** Renames land in one release, in modules, core, CLI, generator templates,
 tests, fixtures, and docs together — including names quoted elsewhere in this file, which describe
@@ -650,7 +660,7 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
   block. Module code raises DRF exceptions (or its `<Module>Error`, mapped by rule 10's
   `exceptions.py`) and builds no error body itself; the theme's API client parses the one shape.
 - ✅ Lists page with `PageNumberPagination` sized by the module's `<THING>_PER_PAGE`; throttles are
-  DRF throttles fed by the module's `_RATE_LIMIT` setting.
+  DRF throttles fed by the module's `_RATE_LIMIT` setting (rule 32).
 - ❌ `JsonResponse` APIs, error bodies built in module code, a third-party error-format library, hand-written rate
   parsers, per-module token schemes (blog's `BLOG_API_TOKENS` is removed; a shared token scheme is
   SA154 inventory).
@@ -688,7 +698,7 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
   ❌ `*_CHOICES` tuple lists written out as literals.
 - ✅ README headings, in order: Overview, Configuration (every manifest option), Public surface,
   URLs, Management commands, Operations, Extending. No versions in headings. The test checks the
-  headings only.
+  headings and, under rule 38, that every option key and command name appears.
 
 **12. Manifest option schema.**
 - ✅ Every option has `type`, `default`, and `description`. A mutable option has `django_setting`;
@@ -737,7 +747,8 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
   startup through orgs' `checks.py` (rule 10) instead of being left unenrolled. `tenant_excluded`
   keeps its meaning.
 - ✅ The `organization` field keeps the base's reverse name, `%(app_label)s_%(class)s_set`
-  (module-prefixed by construction; rule 14's `related_name` rule is met). The one allowed override
+  (stemmed by construction once rule 2's label is `quickscale_<module>`, e.g.
+  `quickscale_blog_post_set`; rule 14's `related_name` rule is met). The one allowed override
   is a one-per-organization model (billing's `CreditBalance`), which redeclares `organization` as a
   `PROTECT` `OneToOneField` and keeps everything else.
 - ✅ Tenant models are registered on `TenantModelAdmin`, other models on `admin.ModelAdmin`, both
@@ -752,8 +763,9 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
   token).
 - ✅ Users are referenced as `settings.AUTH_USER_MODEL`.
 - ✅ Every relation to another module's model (`User` and `Organization` included) sets
-  `related_name="<module>_<name>"` — plural for a foreign key or many-to-many, singular for a
-  one-to-one (`blog_posts`, `blog_author_profile`) — or `"+"` when no reverse access is wanted;
+  `related_name="quickscale_<module>_<name>"` — plural for a foreign key or many-to-many, singular
+  for a one-to-one (`quickscale_blog_posts`, `quickscale_blog_author_profile`) — or `"+"` when no
+  reverse access is wanted (rule 33);
   the tenant `organization` field is covered by rule 13. Reverse accessors on shared models are
   one namespace for every installed module.
 - ✅ Every concrete model defines `__str__` and `Meta.ordering`; a singleton or one-per-parent model
@@ -788,8 +800,9 @@ public surface is `services.py` (rule 4).
 - ❌ `print()`, `sys.exit()`, or returning normally after a failure.
 
 **18. Package tooling.**
-- ✅ Every module's `pyproject.toml` has `[tool.pytest.ini_options]` (with `--cov-fail-under=90`),
-  `[tool.mypy]`, and `[tool.ruff]`; the test compares section keys, not values.
+- ✅ Every module's `pyproject.toml` has `[tool.pytest.ini_options]` (with `--cov-fail-under=90`)
+  and `[tool.ruff]`; the test compares section keys, not values. Type checking is configured in the
+  root `mypy.ini` only (rule 36).
 - ✅ Test settings are `tests/settings.py`; an additional file is `tests/settings_<purpose>.py`.
 - ✅ Every directory under `quickscale_modules/` is a module with a `module.yml`; there are no
   placeholder directories. The `teams` placeholder is deleted, its README moves to
@@ -832,8 +845,9 @@ public surface is `services.py` (rule 4).
 
 **22. Analytics events.**
 - ✅ analytics publishes `capture_event(*, distinct_id, event, properties)` and no per-event helper.
-- ✅ The sending module names its events in its own `services.py` as `<module>_<event>` in
-  snake_case (`forms_submitted`), calls `capture_event` guarded as rule 4
+- ✅ The sending module names its events in its own `services.py` as
+  `quickscale_<module>_<event>` in snake_case (`quickscale_forms_submitted`, rule 33), calls
+  `capture_event` guarded as rule 4
   requires, and lists them in its README under Public surface. Listed exception: `$pageview`
   (PostHog's name).
 - ✅ Renaming an event is a breaking change recorded in the release notes, like a moved URL (rule 7).
@@ -876,7 +890,7 @@ public surface is `services.py` (rule 4).
 - ❌ Error bodies built from `str(exc)`, `403` for a bad signature, logic in the view.
 
 **27. `on_delete` on `User`.**
-- ✅ A relation to `User`, in a module or a project's own app (the gate checks both), is `SET_NULL`
+- ✅ A relation to `User`, in a module or a project's own app, is `SET_NULL`
   (with `null=True`): the row stays with its organization and
   loses only the link. `CASCADE` only on rows that mean nothing without that user:
   `OrganizationMembership.user`, `OrganizationInvitation.invited_by` (reason in
@@ -884,7 +898,9 @@ public surface is `services.py` (rule 4).
   adding one is a decision edit and an edit of the gate's allowlist.
 - ❌ `PROTECT` on `User`: it makes account deletion fail because of one module. A module that must
   keep a record past its user handles it in its SA213 removal obligation, visibly.
-- SA35's gate (`orgs/tests/test_sa35_conformance.py`) enforces this; rule 30 does not repeat it.
+- SA35's gate (`orgs/tests/test_sa35_conformance.py`) enforces this; rule 40 does not repeat it.
+  It runs in orgs' test suite, so it sees the modules installed there and orgs' project-style test
+  apps; nothing checks a generated project's own apps, where the rule is a review rule.
 
 **28. Module file names.** A package holds only: rule 11's files; `checks.py`, `exceptions.py`
 (rule 10); `signals.py`, `receivers.py` (rule 16); the Django and DRF names (`models`, `views`,
@@ -899,8 +915,108 @@ name nor its docstrings and comments carry a ticket number (`SA<n>`, `AF<n>`, `C
 test checks both. Other files in `tests/` are `conftest.py`,
 `settings*.py`, `urls*.py`, private `_<name>.py` helpers, and test apps named `<purpose>_app/`.
 
-**30. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–29 (rule 27 through SA35's gate): names, suffixes and types, `_ENABLED`
+**30. Settings written by module wiring.**
+- ✅ A module's wiring (`adapter.py`, `module.yml`) writes its own settings and the Django or
+  third-party settings it needs. Two modules may write the same key only with an equal value;
+  `apply` fails otherwise, naming both modules and the key. `REST_FRAMEWORK` is merged key by key
+  (its `DEFAULT_THROTTLE_RATES` too), and two modules setting one sub-key differently also fail.
+  Core's `collect_wiring` enforces this and names no module.
+- ❌ A setting whose value depends on the order of module names.
+
+**31. The theme seam.**
+- ✅ The seam's producer, the theme's `index.html.j2`, is rendered by the generator from the
+  discovered module set (rule 37), so `window.__QUICKSCALE__.modules` carries a key for every
+  shipped module, as the seam validator requires. A key is `true` only when the module is installed
+  and its `QUICKSCALE_<MODULE>_ENABLED` is on (rule 1). A `modulePaths` entry is resolved from the
+  module's URL names when it is installed (`{% url %}`), never written as a literal (rule 7). The
+  seam itself is unchanged
+  (§[Frontend Theme Source De-Specialization](#frontend-theme-despecialization-dormant-files)).
+- ✅ The theme's TypeScript (the `QuickScaleModules` type, the seam validator, the SPA pages) still
+  names the modules that have React surfaces, as [frontend.md](frontend.md) § Module frontend
+  surfaces records; a module with a React surface adds itself there.
+- ✅ The generated `templates/index.html` is user-owned (U3), so the change reaches new projects and
+  the release notes carry the step for existing ones.
+- ❌ Hand-written per-module lines or `INSTALLED_APPS` tests in `index.html.j2`, or mount paths
+  written as literals.
+
+**32. Throttles.**
+- ✅ A DRF throttle scope is `quickscale_<module>_<purpose>` (rule 2); its rate is the module's
+  `_RATE_LIMIT` option (rule 1), contributed to `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`
+  through rule 30's merge.
+- ❌ A rate written in code or `adapter.py`; a table created by `RunSQL` (blog's throttle-counter
+  table goes with its hand-written limiter, rule 9).
+
+**33. Shared-namespace stems.**
+- ✅ Every name a module places in a namespace shared with the project or other modules carries the
+  `quickscale_<module>` stem, and rule 2's table lists the namespace: labels, URL namespaces,
+  template folders, commands, cache keys, constraints, reverse accessors on another module's
+  models (rule 14), analytics events (rule 22), throttle scopes (rule 32), database functions, and
+  advisory-lock keys. Settings and QuickScale-defined environment variables take rule 1's
+  upper-case form, `QUICKSCALE_<MODULE>_`. Exceptions: names another program fixes (PostHog's
+  `$pageview`, the `account/` and `admin/` template folders), index names, which Django limits to
+  30 characters (`qs_<module>_…`, rule 25), and names core owns (its runtime-role variables
+  `QUICKSCALE_ALLOW_BYPASSRLS` and `QUICKSCALE_PRIVILEGED_COMMAND`).
+- ✅ A new shared namespace joins rule 2's table by a decision edit.
+
+**34. References by name.**
+- ✅ Rule 5's layer order and its one-way rule within a layer apply to every reference to another
+  module, not only imports: an app label, a package name given to `import_module`,
+  `apps.get_model`, `apps.is_installed`, or `apps.get_app_config`. An upward need uses a capability
+  (rule 4). Migrations referencing another module's models are excepted.
+- ✅ Applied: orgs' `require_org_feature` (it reads billing's plan features) moves to billing's
+  published surface; the purge command's billing steps and
+  `removal.BOUNDARY_GUARDED_OBLIGATIONS` become billing's removal declarations (the SA213
+  pattern), and its blog and crm label prefixes come from those modules' own declarations; orgs'
+  `checks.py` boundary table is declared by each boundary's owner (auth declares
+  account deletion); `TENANT_TABLE_REGISTRY`, a CI parity oracle only
+  (§[Multi-tenant SaaS Architecture](#multitenant-saas-architecture)), moves into test code; blog
+  reaches storage through its `services.py` and lists `storage` in `required_modules`.
+- ❌ A higher-layer module's app label, package name, or model name in a module's source.
+
+**35. Secrets.**
+- ✅ A secret reaches module code as a Django setting that `apply` renders in `settings/modules.py`
+  as a read of the environment variable its `_ENV_VAR` option names (core's generic `__QS_ENV__`
+  projection, as storage does today); module code reads the setting. The setting's name lets
+  Django's error reporter mask it (it contains `KEY`, `SECRET`, or `TOKEN`).
+- ✅ A module's `checks.py` (rule 10) fails startup when a secret its switched-on features need is
+  empty; an unreachable vendor is still tolerated (rule 10). The webhook secret of rule 26 is one
+  such check. backups' credentials reach the DR engine through the policy backups passes (rule 5).
+- ❌ `os.getenv` / `os.environ` in module code (listed exception: orgs' RLS boot guard reads core's
+  runtime-role variables `QUICKSCALE_ALLOW_BYPASSRLS` and `QUICKSCALE_PRIVILEGED_COMMAND`, which
+  start before settings load), or a default variable name written in code.
+
+**36. Type checking.**
+- ✅ Every module is type-checked through the root `mypy.ini`, where it has one
+  `[mypy-quickscale_modules_<module>.*]` section ([module-extension.md](module-extension.md) step
+  1.3). The section relaxes at most `disallow_untyped_defs`, `warn_return_any`,
+  `warn_unused_ignores`, and the `var-annotated` error code; stricter is allowed.
+- ❌ A per-module `[tool.mypy]` (CI runs mypy from the repository root and does not read it),
+  `ignore_missing_imports` in a module section, or another disabled error code.
+
+**37. Module lists.**
+- ✅ Code outside `quickscale_modules/` that needs the set of modules (core's catalog, the CLI,
+  scripts and CI gates, generator templates including the seam producer of rule 31) computes it
+  from discovery
+  (`quickscale_modules/*/module.yml`) plus what each module states about itself: a tenant model is
+  a `TenantModel` subclass (rule 13), a description is `module.yml`'s. A list that must exclude a
+  module states the exclusion and its reason beside the derivation.
+- ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
+  test-owned mapping, and the theme's TypeScript module surfaces (rule 31).
+
+**38. README content.** Rule 11's Configuration heading names every manifest option key, and its
+Management commands heading every command the module ships; the test checks both, besides the
+headings.
+
+**39. Module dependencies.**
+- ✅ `required_modules` lists bare module names (`[orgs]`); `plan` and `apply` select a required
+  module together with its dependant. Lockstep versions
+  (§[Module Version Lockstep](#module-version-lockstep)) make version floors meaningless.
+- ❌ A version specifier on a first-party module; the `implies` key (orgs' `implies: notifications`
+  is a requirement under rule 20).
+
+**40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
+and the CLI's option handling fails on each of rules 1–39 (rule 27 through SA35's gate; rule 30
+in `apply` itself): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
@@ -914,8 +1030,13 @@ hand-written login checks in views, email sent outside notifications, per-event 
 event names, `services.py` `__all__` and keyword-only signatures, `py.typed`, `datetime.now`, and
 cache-key prefixes, constraint and index names and `unique_together`, webhook view bases, empty
 authentication and throttle classes, a signature-verifying service call in every such view (taking
-over from the CSRF pairing gate for webhooks), and response bodies, unlisted package file names, and ticket numbers in test file names, docstrings, and comments — with a
-control case proving each rule rejects a violation. The layer table, each
+over from the CSRF pairing gate for webhooks), and response bodies, unlisted package file names, and ticket numbers in test file names, docstrings, and comments,
+hand-written module lines and literal mount paths in the seam producer, throttle scopes and rates
+and `RunSQL` tables, database function and advisory-lock names,
+stems in shared namespaces, references by name against the layers, `os.getenv` in module code, the
+root `mypy.ini` module sections and any per-module `[tool.mypy]`, literal module lists outside the
+modules, option keys and command names in READMEs, and `required_modules` specifiers and
+`implies` — with a control case proving each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
 
@@ -944,7 +1065,9 @@ code before it works is not shippable.
   package files, required tests, README outline, option schema, tenant models, model basics,
   package root, signals, management commands, package tooling, authorization, email, write effects,
   analytics events, the service surface, constraint names, webhooks, `on_delete`, file names,
-  and test names follow §[Module Conventions](#module-conventions)
+  test names, shared settings, the theme seam, throttles, shared-name stems, references by name,
+  secrets, type checking, module lists, README content, and dependencies follow
+  §[Module Conventions](#module-conventions)
 - ✅ A module's server-rendered templates **extend the project's `base.html`** and
   never emit their own `<html>` document. Child templates fill a module-named
   block (`<module>_content`); the module base owns `{% block content %}`. A module
@@ -1468,7 +1591,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 > does not inherit it fails startup. The "`TenantManager`/`TenantModel` detection" and
 > "marker/dual-manager contract" wording below describes the shipped state until SA215 lands.
 
-- Runtime tenant classification and membership: `is_classified_in_registry()` classifies installed concrete project models from explicit ``tenant_excluded`` markers, ``TenantManager``/``TenantModel`` detection, and implicit M2M-through inference. `is_tenant_model()` and `get_tenant_models()` derive only the positively enrolled tenant-model set from ``TenantManager``/``TenantModel`` detection; ``tenant_excluded`` wins over every enrollment signal. Classification and FORCE-RLS refresh must not fall back to or consult the literal ``TENANT_TABLE_REGISTRY``. The literal remains only a shipped-module CI parity oracle. Its 22 shipped ENROLLED models (CRM 7, Forms 4, Billing 4, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and the exact two-policy FORCE-RLS contract rendered by ``apply_force_rls``.
+- Runtime tenant classification and membership: `is_classified_in_registry()` classifies installed concrete project models from explicit ``tenant_excluded`` markers, ``TenantManager``/``TenantModel`` detection, and implicit M2M-through inference. `is_tenant_model()` and `get_tenant_models()` derive only the positively enrolled tenant-model set from ``TenantManager``/``TenantModel`` detection; ``tenant_excluded`` wins over every enrollment signal. Classification and FORCE-RLS refresh must not fall back to or consult the literal ``TENANT_TABLE_REGISTRY``. The literal remains only a shipped-module CI parity oracle (Module Conventions rule 34 moves it from orgs' `tenancy.py` into test code). Its 22 shipped ENROLLED models (CRM 7, Forms 4, Billing 4, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and the exact two-policy FORCE-RLS contract rendered by ``apply_force_rls``.
 - Project-owned tenant extensions: a concrete model in an installed project app may join the runtime tenant set through the same marker/dual-manager contract without a shipped-registry entry or vendored-module edit. Its initial migration owns the table and calls ``apply_force_rls`` to install exactly one tenant-only ``FOR ALL`` base policy plus its ``<base>_select`` operator-read ``FOR SELECT`` policy. Both policies are permissive and apply to ``PUBLIC``; the base policy has identical current-organization ``USING`` and ``WITH CHECK`` predicates, while the select policy has the rendered current-organization-or-operator ``USING`` predicate and no ``WITH CHECK``. Runtime refresh resolves each existing table's unique base policy from ``pg_policies`` before any DDL; missing or ambiguous policy metadata fails before mutation. The base name remains migration-owned rather than inferred from model metadata, but the companion must be named ``<base>_select``. The isolation checks reject a missing, extra, misnamed companion, restrictive, role-limited, or predicate-weakened policy.
 - Child tables: every tenant-owned child/detail table must denormalize `organization_id` directly onto the row and use a direct FORCE-RLS policy referencing that column; parent-join RLS policies are not used. This is the project default for all future tables.
 - Ambient scoping: request-scoped tenant reads flow through `request.org` → ContextVar (`app.current_org_id`) → `TenantManager`; the authoritative tenant-facing API is ambient manager scoping, not `.for_org(...)` query chaining.
@@ -1791,6 +1914,9 @@ specialization is confined to Django-side templates and at most `package.json`.
 
 Rejected: per-project source specialization plus an ownership-manifest overlay — it preserves
 the per-file migration merge and a second hand-synced list.
+
+Module Conventions rule 31 fixes what the seam's `modules` flags mean (installed and enabled) and
+has the generator render its producer from the discovered module set.
 
 ---
 

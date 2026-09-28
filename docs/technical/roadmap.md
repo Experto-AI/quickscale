@@ -159,19 +159,24 @@ suite, and merge only the reviewed delivery through the serialized queue.
   undeclared `services.py` surface. A fifth pass (D28–D32) found five constraint-naming styles
   (two orgs names with no prefix at all), webhooks answering with hand-built `{"error": str(exc)}`
   bodies and `403`, the user-FK `on_delete` rule absent from Module Conventions, no rule for which file
-  names a package may add, and test files named by ticket number. The rules are recorded in
+  names a package may add, and test files named by ticket number. A sixth pass (D33–D42) found
+  module settings merged last-writer-wins by module name, theme flags meaning "installed", three
+  throttle mechanisms, bare prefixes in shared namespaces, orgs naming feature modules by string,
+  three ways to resolve a secret, type-check strictness from none to twelve codes off, module
+  lists hand-kept outside the modules, READMEs missing options, and meaningless version floors.
+  The rules are recorded in
   [decisions.md § Module Conventions](decisions.md#module-conventions); SA217–SA227 are the code,
   and this ticket closes them.
 
   Other documents say "SA215 renames…" or "until SA215 lands" for work now split across
   SA217–SA227; those notes stay true, because SA215 lands last and names the whole change.
 
-  **Scope:** the rule 30 conformance test, covering rules 1–29, with a control case per rule;
+  **Scope:** the rule 40 conformance test, covering rules 1–39, with a control case per rule;
   the proof that a pre-SA215 project fails `apply` and startup naming each new name; the release
   notes; the inventory's closing pass. Code changes are in SA217–SA227; a drift item none of them
   fixed is fixed here or recorded as an accepted exception.
 
-  **Acceptance:** every inventory drift item (sections 1–31) is fixed or recorded as an accepted exception with
+  **Acceptance:** every inventory drift item (sections 1–41) is fixed or recorded as an accepted exception with
   its reason; the conformance test passes and rejects a violation of each rule; a project
   generated before SA215 fails `apply` and startup with messages naming each new name; a freshly
   generated project with all twelve modules passes `make ci-e2e`; the release notes list every
@@ -230,13 +235,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA221 — Rename module identities to `quickscale_<module>`.**
 
-  **Context:** inventory §§ 6, 9, 10, 27; D7, D7b, D28; rules 2 and 25. Labels, tables, namespaces, folders,
+  **Context:** inventory §§ 6, 9, 10, 27, 35; D7, D7b, D28, D36; rules 2, 25, and 33. Labels, tables, namespaces, folders,
   commands, and constraints follow different stems.
 
   **Scope:**
   - *Identity names.* App labels become `quickscale_<module>`, so tables, migrations, content types,
     permissions, `AUTH_USER_MODEL`, and orgs' RLS table lists change; `db_table` overrides go; URL
-    namespaces, template folders, and management commands take the same stem.
+    namespaces, template folders, and management commands take the same stem; rule 2's table lists
+    every shared namespace (rule 33), whose reverse accessors, events, and throttle scopes SA222,
+    SA226, and SA223 rename; orgs' database function `qs_child_parent_org_equality` becomes
+    `quickscale_orgs_child_parent_org_equality` in the clean-break migrations. backups' three and
+    forms' four `db_table` overrides go with auth's.
   - *Constraints.* Every constraint and index is named `quickscale_<module>_…` /
     `qs_<module>_…_idx` in each clean-break `0001_initial`, and forms' and orgs'
     `unique_together` become `UniqueConstraint`s.
@@ -250,8 +259,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
-  **Context:** inventory §§ 1, 2, 4; D1–D3, D8; rules 1 and 6. Two settings families and three spellings of a
-  boolean flag.
+  **Context:** inventory §§ 1, 2, 4, 33, 37, 41; D1–D3, D8, D34, D38, D42; rules 1, 6, 31, 35, and
+  39. Two settings families and three spellings of a boolean flag.
 
   **Scope:**
   - *Settings names.* Every first-party setting and option key follows rules 1 and 6 (the
@@ -260,26 +269,42 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
     check refuses retired settings, each naming the replacement. Generated templates, docs, and
     `.env.example` use only the new names.
+  - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
+    option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
+    notifications' `os.getenv` reads and in-code default variable names go (rule 35; SA225 adds the
+    empty-secret startup checks).
+  - *Dependencies.* `required_modules` holds bare names and `plan`/`apply` select them; version
+    floors, their parser, and `implies` go from the seven manifests, their core copies, and the
+    implication resolver (rule 39).
 
   Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)
   disabled, admin kept; `apply` refuses to switch off a module another installed module lists in
-  `required_modules`.
+  `required_modules`. The generator renders the theme's seam producer (`index.html.j2`) from the
+  discovered module set, so every key the seam validator requires is present, and a flag is true
+  only when its module is installed and enabled, with paths from `{% url %}` (rule 31); today ten
+  flags mean "in `INSTALLED_APPS`", so a switched-off module would keep a navigation entry that
+  404s. The theme's TypeScript keeps naming its modules (frontend.md). The generated `templates/index.html` is user-owned (U3), so existing projects need the
+  release-note step.
 
   **Acceptance:** every row of the D1 table is applied; each module's `_ENABLED = False` has a test
   that its public surfaces answer as disabled; a `quickscale.yml` or environment with a
-  retired name fails with the replacement named; no generated file or doc uses a retired name.
+  retired name fails with the replacement named; no generated file or doc uses a retired name; no
+  module calls `os.getenv`; a switched-off module's theme flag is false; no manifest has a version
+  floor or `implies`.
 
-  **Surfaces:** every manifest and module settings read; `quickscale_cli` apply; `.env.example`;
-  the generated settings templates (Track 3); railway.md and user docs.
+  **Surfaces:** every manifest and module settings read; `quickscale_cli` plan and apply;
+  `.env.example`; the generated settings templates (Track 3); the theme's `index.html.j2`;
+  core's manifest loader and implication resolver; railway.md and user docs.
 
 - [ ] **SA225 — Move startup checks and exceptions onto the shared helpers.**
 
-  **Context:** inventory § 12; D13; rule 10. Four startup-check styles.
+  **Context:** inventory §§ 12, 37; D13, D38; rules 10 and 35. Four startup-check styles.
 
   **Scope:** hand-written `ready()` checks move to `checks.py`, run through SA218's helper, orgs'
   RLS boot guard included; analytics fails on invalid configuration and tolerates only an
-  unreachable vendor; exceptions move to `exceptions.py` under one `<Module>Error` base, which
-  `services.py` re-exports.
+  unreachable vendor; each module with a vendor secret gains a check that fails startup when a
+  secret its switched-on features need is empty (rule 35); exceptions move to `exceptions.py` under
+  one `<Module>Error` base, which `services.py` re-exports.
 
   **Acceptance:** no `ready()` holds a check body; each moved check fails `runserver`, `migrate`,
   and `manage.py check` alike, with a test per module.
@@ -288,35 +313,45 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA220 — Untangle module dependencies behind `services.py` and capabilities.**
 
-  **Context:** inventory §§ 5, 25; D5, D6, D26; rules 4, 5, and 23. An `auth ↔ orgs` import cycle, modules reading
-  other modules' settings, and core reading `backups` settings.
+  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. An `auth ↔ orgs`
+  import cycle, modules reading other modules' settings, core reading `backups` settings, and orgs
+  naming feature modules by string.
 
   **Scope:**
   - *Dependencies.* `orgs` stops importing `auth` and `social`, `auth` stops importing `billing`,
-    `blog` stops reading storage's setting, and `dr_engine` stops reading backups' settings,
+    `blog` stops reading storage's setting and importing `storage.helpers` (and lists `storage` in
+    `required_modules`), and `dr_engine` stops reading backups' settings,
     through `services.py` and SA218's `AppConfig` capabilities; `required_modules` covers every
     import.
+  - *References by name* (rule 34). orgs' `require_org_feature` moves to billing's published
+    surface; the purge command's billing steps and `removal.BOUNDARY_GUARDED_OBLIGATIONS` become
+    billing's removal declarations, and its blog and crm label prefixes come from those modules'
+    declarations; orgs' `checks.py`
+    boundary table is declared by each boundary's owner (auth declares account deletion);
+    `TENANT_TABLE_REGISTRY` moves into test code. `require_org_feature` is public, so its move is a
+    release-note item.
   - *Service surface.* Every module gains `services.py` with `is_enabled()` (reading SA219's
     `_ENABLED`); every `services.py` gains `__all__`, keyword-only signatures, and `<Module>Error`
     on failure, with `test_services.py`.
 
   **Acceptance:** the `auth ↔ orgs` cycle is gone; an import-graph test matches the D6 layers and
-  `required_modules`; no module reads another module's settings.
+  `required_modules`, counting references by name as well as imports; no module reads another
+  module's settings; no module's source names a higher-layer module.
 
   **Surfaces:** auth, orgs, billing, blog, storage, backups, every `services.py`;
   `quickscale_core/dr_engine/` (Track 2); `auth/views.py`.
 
 - [ ] **SA222 — Put every tenant model on `TenantModel` and align model basics.**
 
-  **Context:** inventory §§ 15, 16; D16, D17; rules 13 and 14. Three ways to build a tenant model.
+  **Context:** inventory §§ 15, 16, 35; D16, D17, D36; rules 13, 14, and 33. Three ways to build a tenant model.
 
   **Scope:** billing, forms, listings (`AbstractListing`), and social (`BaseSocialItem`) models
   subclass `TenantModel` instead of `tenant_org_fk` plus hand-declared managers, every tenant
   `Meta` inherits the base's, and `organization` keeps the base's reverse name (`CreditBalance`
   alone overrides it, as a one-to-one); `is_tenant_model` recognizes inheritance only and an orgs
   check fails startup on a stray `TenantManager`; relations to other modules' models get
-  `<module>_<name>` `related_name`s (crm's two `created_by` fields have none; backups, billing,
-  blog, crm, forms, and orgs rename the rest, with their callers); `FormFieldValue` gains an
+  `quickscale_<module>_<name>` `related_name`s (crm's two `created_by` fields have none; backups,
+  billing, blog, crm, forms, and orgs rename the rest, with their callers); `FormFieldValue` gains an
   ordering; the 15 literal tuple choice lists become `TextChoices`. User-FK `on_delete`
   (rule 27) already conforms and SA35's gate enforces it; a new relation here follows it.
 
@@ -328,8 +363,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
-  **Context:** inventory §§ 9, 11, 28; D10, D12, D29; rules 7, 9, and 26. URL prefixes set in three places, two API
-  frameworks and error shapes, hand-built webhook error bodies.
+  **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
+  URL prefixes set in three places, two API frameworks and error shapes, hand-built webhook error
+  bodies, three throttle mechanisms, and module settings merged last-writer-wins.
 
   **Scope:**
   - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
@@ -338,33 +374,48 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *APIs.* blog's and listings' function-view APIs become DRF views; `OrgApiBaseView` is rebased
     on DRF's `APIView`; errors take SA218's shape (DRF dependency in every module with an API, the
     theme's `useApi.ts` and orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception
-    in the JSON API Endpoint Base Contract, and its hand-written rate parser go.
+    in the JSON API Endpoint Base Contract, and its hand-written rate parser go, with the raw-SQL
+    counter table `quickscale_modules_blog_api_throttle_counter` it writes.
+  - *Throttles and shared settings.* Throttle scopes become `quickscale_<module>_<purpose>`, each
+    rate a `_RATE_LIMIT` option (billing's hard-coded `"30/hour"` included; rule 32). Core's
+    `collect_wiring` fails `apply` when two modules write one key differently and merges
+    `REST_FRAMEWORK` key by key (rule 30) — this lands first: today a second module contributing
+    `REST_FRAMEWORK` would replace billing's rates, and its throttled views would raise
+    `ImproperlyConfigured`. billing's advisory-lock key strings become `quickscale_billing:…`
+    (rule 33; locks are transient, so nothing migrates).
   - *Webhooks.* billing's and notifications' webhooks become DRF `APIView`s answering
     `200`/`400`/`404` in rule 9's shape, with the missing secret moved to `checks.py`; they stay
     signature-verified; `scripts/check_csrf_exempt_gate.py` loses its two webhook helpers.
 
   **Acceptance:** every API and webhook error body matches the one shape; a list of every moved
-  public URL, with its operator step, is ready for SA215's release notes.
+  public URL, with its operator step, is ready for SA215's release notes; `apply` fails on two
+  modules writing one setting differently, with a control; every throttle scope has the stem and
+  its rate from a setting.
 
   **Surfaces:** every module's `urls.py`, `adapter.py`, manifest; blog, listings, orgs, social
-  APIs; billing and notifications webhooks; the theme's React API client; the CSRF gate script.
+  APIs; billing and notifications webhooks; the theme's React API client; the CSRF gate script;
+  `quickscale_core/module_wiring.py`.
 
 - [ ] **SA224 — Standardize module templates, static files, and template tags.**
 
-  **Context:** inventory § 10; D11; rule 8. Templates break the recorded base-template rule.
+  **Context:** inventory §§ 10, 39; D11, D40; rules 8 and 37. Templates break the recorded
+  base-template rule.
 
   **Scope:** one flat module base per module (orgs, analytics, forms gain one; orgs stops emitting
   `<html>`); emails under `email/`; static under `static/quickscale_<module>/`; template-tag
-  libraries renamed `quickscale_<module>[_<purpose>]`.
+  libraries renamed `quickscale_<module>[_<purpose>]`. Core's
+  `test_module_page_style_contract.py` pins today's nested base paths and flat CSS and lists modules
+  by hand; it changes in the same commit, deriving its module set from discovery (rule 37).
 
   **Acceptance:** every module page extends its module base, which extends the project base; no
   module template emits `<html>`; the generated project renders every module page.
 
-  **Surfaces:** every module's `templates/`, `static/`, `templatetags/`; the generated `base.html`.
+  **Surfaces:** every module's `templates/`, `static/`, `templatetags/`; the generated `base.html`;
+  core's page-style contract test.
 
 - [ ] **SA226 — Standardize authorization, email, write effects, and events.**
 
-  **Context:** inventory §§ 21–24; D22–D25; rules 19–22. Tenant modules authorize with site-wide `is_staff`, a
+  **Context:** inventory §§ 21–24, 35; D22–D25, D36; rules 19–22 and 33. Tenant modules authorize with site-wide `is_staff`, a
   second email sender lives in forms, write effects are not tied to commit, analytics owns feature
   events.
 
@@ -372,7 +423,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   DRF `HasOrgRole`); forms' fallback email sender goes and forms and orgs require notifications;
   write effects (forms' submission effects, orgs' invitation, crm's bootstrap receiver, social's
   cache purge) move to `transaction.on_commit` with a rollback test each; analytics keeps only
-  `capture_event`, forms owns `forms_submitted` (release note: renames `form_submit`), and the
+  `capture_event`, forms owns `quickscale_forms_submitted` (release note: renames `form_submit`), and the
   unused `capture_social_link_click` goes.
 
   **Acceptance:** an org member without the role is refused in each module's views and APIs; a
@@ -382,34 +433,42 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
 
-  **Context:** inventory §§ 13, 17–20, 26, 30, 31; D14, D18–D21, D27, D31, D32; rules 11, 15–18,
-  24, 28, and 29.
+  **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
+  rules 11, 15–18, 24, 28, 29, and 36–38.
 
   **Scope:**
   - *Package root, signals, commands, tooling.* `default_app_config` and storage's root re-export
     go; auth's and crm's `signals.py` become `receivers.py` and orgs' receivers move there;
     `backups_prune`, `forms_anonymize_submissions`, and `promote_to_saas` gain `--dry-run`, the
     retired `migrate_billing_to_orgs` is deleted with its recovery docs, and
-    `check_tenant_isolation` raises `CommandError` instead of calling `sys.exit()`; orgs and social
-    gain `[tool.mypy]` and fix what it reports; `quickscale_modules/teams/` is deleted (README to
-    `docs/planning/teams.md`) with core's placeholder handling; backups and blog gain `py.typed`;
-    storage uses `timezone.now()`; social's cache keys become `quickscale_social:*`.
-  - *Files.* Every module gains `poetry.toml`; auth's `adapters.py` → `allauth_adapter.py`; orgs'
+    `check_tenant_isolation` raises `CommandError` instead of calling `sys.exit()`; each module's
+    root `mypy.ini` section relaxes at most module-extension.md's standard override, so orgs
+    (twelve disabled codes), social, forms, notifications, and billing fix what the tighter sections
+    report, and the unread `[tool.mypy]` blocks in blog, listings, and storage go (rule 36);
+    `quickscale_modules/teams/` is deleted (README to
+    `docs/planning/teams.md`) with core's placeholder handling; storage uses `timezone.now()`;
+    social's cache keys become `quickscale_social:*`. (`py.typed` already ships in every module.)
+  - *Files.* analytics, notifications, and storage gain `poetry.toml`; auth's `adapters.py` → `allauth_adapter.py`; orgs'
     `debug_helpers.py` → `_debug.py`; one-off files fold in.
   - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
     isolation and RLS) are added; orgs' eight ticket-numbered test files and two ticket-numbered
     test apps are renamed by subject, with the docs that cite them (decisions rule 27 cites the
     SA35 gate's file); the 747 ticket mentions in the docstrings and comments of 103 module test
     files go, reworded to say what each test protects where the number was the only explanation.
-  - *READMEs* follow the rule 11 headings.
+  - *Module lists.* Core's catalog (descriptions from `module.yml`), `check_security_gates.py`,
+    `render_j2_template.py`, `lint_frontend.sh`, `provision_ci_postgres.sh`, and
+    `test_isolation_conformance.sh` compute the module set from discovery, so social's tenant tables
+    join the isolation gates (rule 37).
+  - *READMEs* follow the rule 11 headings and name every option key and command (rule 38).
 
   **Acceptance:** every module package holds only rule 28's file names; no test file or test
   docstring names a ticket; each destructive command's `--dry-run` has a test that nothing is
-  written.
+  written; `make typecheck` passes with the capped sections; no literal module list remains outside
+  the modules beyond rule 37's listed exceptions; every README names its options and commands.
 
   **Surfaces:** every module's package root, commands, `pyproject.toml`, tests, README;
-  core's module discovery and catalog (placeholder handling); decisions; the billing recovery
-  section of organizations.md.
+  core's module discovery and catalog (placeholder handling and descriptions); the root
+  `mypy.ini`; the listed `scripts/`; decisions; the billing recovery section of organizations.md.
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 

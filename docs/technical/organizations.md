@@ -408,7 +408,7 @@ Views check feature access via a decorator:
 def crm_index(request): ...
 ```
 
-This decorator resolves the current organization's active subscription through the billing ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent.
+This decorator resolves the current organization's active subscription through the billing ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent. It ships in orgs' `permissions` today; [decisions.md § Module Conventions](decisions.md#module-conventions) rule 34 moves it to billing's published surface (SA220), because orgs must not name billing, a higher-layer module.
 
 ### Migration Path from User-Scoped Billing
 
