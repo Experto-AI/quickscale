@@ -13,10 +13,10 @@ from django.core.checks import CheckMessage, Error
 #: The target mode whose backup operations upload through the remote provider.
 _REMOTE_TARGET_MODE = "private_remote"
 
-#: The environment-variable names the backup policy falls back to when its
-#: own ``_ENV_VAR`` settings are blank (the manifest's documented defaults).
-_DEFAULT_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
-_DEFAULT_SECRET_ACCESS_KEY_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"  # noqa: S105 - name constant, not a credential
+
+def _resolve_env_var_name(configured_name: str, manifest_default: str) -> str:
+    """Return the environment-variable name the credential resolves from."""
+    return configured_name.strip() or manifest_default
 
 
 def check_private_remote_credentials(
@@ -37,9 +37,9 @@ def check_private_remote_credentials(
 
     messages: list[CheckMessage] = []
     if not snapshot.resolve_remote_access_key_id():
-        env_var_name = (
-            snapshot.remote_access_key_id_env_var.strip()
-            or _DEFAULT_ACCESS_KEY_ID_ENV_VAR
+        env_var_name = _resolve_env_var_name(
+            snapshot.remote_access_key_id_env_var,
+            "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID",
         )
         messages.append(
             Error(
@@ -50,9 +50,9 @@ def check_private_remote_credentials(
             )
         )
     if not snapshot.resolve_remote_secret_access_key():
-        env_var_name = (
-            snapshot.remote_secret_access_key_env_var.strip()
-            or _DEFAULT_SECRET_ACCESS_KEY_ENV_VAR
+        env_var_name = _resolve_env_var_name(
+            snapshot.remote_secret_access_key_env_var,
+            "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY",
         )
         messages.append(
             Error(
