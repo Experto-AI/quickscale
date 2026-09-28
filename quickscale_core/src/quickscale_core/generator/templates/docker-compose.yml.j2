@@ -91,6 +91,20 @@ services:
       - PORT=${PORT:-8000}
       - QUICKSCALE_FRONTEND_HOST_PORT=${QUICKSCALE_FRONTEND_HOST_PORT:-5173}
       - QUICKSCALE_FRONTEND_ORIGIN=${QUICKSCALE_FRONTEND_ORIGIN:-}
+      # Vendor credentials reach an enabled module from the environment this
+      # Compose run sees (a shell export or the project .env it substitutes),
+      # so an operator has a route to the secret a module's startup check
+      # requires; blank keeps that check failing on purpose.
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - QUICKSCALE_BILLING_WEBHOOK_SECRET=${QUICKSCALE_BILLING_WEBHOOK_SECRET:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=${QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET:-}
+      - POSTHOG_API_KEY=${POSTHOG_API_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID=${QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID:-}
+      - QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY=${QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY:-}
     depends_on:
       db:
         condition: service_healthy

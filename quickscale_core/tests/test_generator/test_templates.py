@@ -4013,6 +4013,26 @@ class TestDockerComposeContent:
         )
         assert 'QUICKSCALE_IMAGE_CONTRACT: "sa142"' in output
 
+    def test_backend_forwards_vendor_credential_variables(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Compose forwards the default vendor credentials a module check needs."""
+        output = _render_template(jinja_env, "docker-compose.yml.j2", test_context)
+
+        for variable in (
+            "STRIPE_PUBLISHABLE_KEY",
+            "STRIPE_SECRET_KEY",
+            "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+            "RESEND_API_KEY",
+            "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+            "POSTHOG_API_KEY",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID",
+            "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY",
+        ):
+            assert f"- {variable}=${{{variable}:-}}" in output
+
     def test_removable_resources_have_owner_lifecycle_scope_labels(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:

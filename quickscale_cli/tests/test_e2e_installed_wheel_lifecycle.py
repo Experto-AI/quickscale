@@ -205,6 +205,17 @@ def _installed_environment(
     env["QUICKSCALE_RESOURCE_PREFIX"] = resource_prefix
     env["QS_E2E_PROJECT_SLUG"] = project_slug
     env["QS_E2E_NO_CLEANUP"] = os.environ.get("QS_E2E_NO_CLEANUP", "0")
+    # Test-only vendor credentials: the all-module lifecycle enables billing
+    # and notifications, whose startup checks refuse an empty secret, and
+    # Compose substitutes these into the backend container environment.
+    env["STRIPE_PUBLISHABLE_KEY"] = "pk_test_installed_wheel"
+    env["STRIPE_SECRET_KEY"] = "sk_test_installed_wheel"
+    env["QUICKSCALE_BILLING_WEBHOOK_SECRET"] = "whsec_test_installed_wheel"
+    env["RESEND_API_KEY"] = "re_test_installed_wheel"
+    env["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"] = (
+        "whsec_notifications_installed_wheel"
+    )
+    env["POSTHOG_API_KEY"] = "ph_test_installed_wheel"
     return env
 
 

@@ -77,3 +77,8 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current generated admin templates and React admin links so app admin URLs use the quickscale_<module> app labels (for example /admin/quickscale_backups/...), and rename the tenant-isolation invocation in the generated Makefile and CI workflow to `quickscale_orgs_check_tenant_isolation`."
       - "Recreate the project database after adopting: module tables, content types, permissions, and AUTH_USER_MODEL moved to the quickscale_<module> stem, so a database created under the previous names cannot be carried over."
+  - id: sa225-vendor-secret-compose-route
+    minimum: "0.89.0"
+    title: "Adopt the Compose backend vendor-credential route"
+    adoption_steps:
+      - "Compare and manually adopt the current docker-compose.yml backend environment list: it forwards STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY, QUICKSCALE_BILLING_WEBHOOK_SECRET, RESEND_API_KEY, QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET, POSTHOG_API_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID, and QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass."
