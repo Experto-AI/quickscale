@@ -38,14 +38,14 @@ class _AccountDeletionBillingBlocked(Exception):
 
 #: Apps whose account-deletion reconciliation is scoped by their own adapter
 #: rather than by the set of organizations the deletion touches.
-_SCOPED_RECONCILIATION_APPS = frozenset({"quickscale_modules_billing"})
+_SCOPED_RECONCILIATION_APPS = frozenset({"quickscale_billing"})
 
 
 class ProfileView(LoginRequiredMixin, DetailView):
     """Display user profile"""
 
     model = User
-    template_name = "quickscale_modules_auth/account/profile.html"
+    template_name = "quickscale_auth/account/profile.html"
     context_object_name = "profile_user"
 
     def get_object(self, queryset: Any = None) -> Any:
@@ -58,7 +58,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 
     model = User
     form_class = ProfileUpdateForm
-    template_name = "quickscale_modules_auth/account/profile_edit.html"
+    template_name = "quickscale_auth/account/profile_edit.html"
     success_url = reverse_lazy("quickscale_auth:profile")
 
     def get_object(self, queryset: Any = None) -> Any:
@@ -84,7 +84,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
     """
 
     model = User
-    template_name = "quickscale_modules_auth/account/account_delete.html"
+    template_name = "quickscale_auth/account/account_delete.html"
     success_url = reverse_lazy("home")  # Redirect to home after deletion
 
     def get_object(self, queryset: Any = None) -> Any:
@@ -499,7 +499,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         # Billing's checkout reconciliation stays scoped to the organizations
         # whose subscriptions this deletion cancels: a retained organization's
         # open checkout is not this user's to reconcile.
-        app_config = apps.get_app_config("quickscale_modules_billing")
+        app_config = apps.get_app_config("quickscale_billing")
         reconcile_checkout = getattr(
             app_config,
             "reconcile_account_deletion_provider_state",
@@ -533,7 +533,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         """Require every one-time Checkout tied to the account to be terminal."""
         if not organization_ids:
             return
-        billing_config = apps.get_app_config("quickscale_modules_billing")
+        billing_config = apps.get_app_config("quickscale_billing")
         reconcile = getattr(
             billing_config,
             "reconcile_account_deletion_purchase_provider_state",
@@ -595,7 +595,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
         if "quickscale_modules_billing" not in settings.INSTALLED_APPS:
             return
-        billing_config = apps.get_app_config("quickscale_modules_billing")
+        billing_config = apps.get_app_config("quickscale_billing")
         detach_user = getattr(
             billing_config,
             "detach_account_deletion_user_references",
@@ -618,7 +618,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
         if "quickscale_modules_billing" not in settings.INSTALLED_APPS:
             return set()
-        billing_config = apps.get_app_config("quickscale_modules_billing")
+        billing_config = apps.get_app_config("quickscale_billing")
         discover_organization_ids = getattr(
             billing_config,
             "account_deletion_user_reference_organization_ids",
@@ -641,7 +641,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
         specs: list[tuple[Any, tuple[str, ...]]] = []
         for model in get_tenant_models():
-            if model._meta.app_label == "quickscale_modules_billing":
+            if model._meta.app_label == "quickscale_billing":
                 continue
             field_attnames = tuple(
                 field.attname
@@ -660,7 +660,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
         return account_deletion_user_reference_organization_ids(
             user.pk,
-            excluded_app_labels=frozenset({"quickscale_modules_billing"}),
+            excluded_app_labels=frozenset({"quickscale_billing"}),
         )
 
     def _detach_tenant_user_references(
