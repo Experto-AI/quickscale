@@ -10,8 +10,7 @@ has two narrow exemptions:
    this env var alongside ``RUNTIME_DATABASE_URL=""`` so DDL runs under
    the superuser ``DATABASE_URL`` with BYPASSRLS.
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
-   intentional single-tenant/development use or the explicitly acknowledged
-   retired billing recovery command, never runtime serving.
+   intentional single-tenant/development use, never runtime serving.
 
 All other startup paths (including ``manage.py runserver``,
 gunicorn, and WSGI) remain fail-closed regardless of
