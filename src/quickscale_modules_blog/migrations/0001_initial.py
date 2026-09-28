@@ -17,10 +17,10 @@ BLOG_CATEGORY_RLS_POLICY = "blog_category_org_isolation"
 BLOG_TAG_RLS_POLICY = "blog_tag_org_isolation"
 BLOG_MEDIA_ASSET_RLS_POLICY = "blog_media_asset_org_isolation"
 BLOG_POST_RLS_POLICY = "blog_post_org_isolation"
-BLOG_CATEGORY_TABLE = "quickscale_modules_blog_category"
-BLOG_TAG_TABLE = "quickscale_modules_blog_tag"
-BLOG_MEDIA_ASSET_TABLE = "quickscale_modules_blog_blogmediaasset"
-BLOG_POST_TABLE = "quickscale_modules_blog_post"
+BLOG_CATEGORY_TABLE = "quickscale_blog_category"
+BLOG_TAG_TABLE = "quickscale_blog_tag"
+BLOG_MEDIA_ASSET_TABLE = "quickscale_blog_blogmediaasset"
+BLOG_POST_TABLE = "quickscale_blog_post"
 _BLOG_RLS_TARGETS = (
     (BLOG_CATEGORY_TABLE, BLOG_CATEGORY_RLS_POLICY),
     (BLOG_TAG_TABLE, BLOG_TAG_RLS_POLICY),
@@ -33,7 +33,7 @@ _BLOG_RLS_TARGETS = (
 # out of the model-based tenant classification and purge contract and is only
 # ever touched by the limiter's single atomic upsert.  The table name must
 # match ``BLOG_API_THROTTLE_COUNTER_TABLE`` in ``quickscale_modules_blog.views``.
-BLOG_API_THROTTLE_COUNTER_TABLE = "quickscale_modules_blog_api_throttle_counter"
+BLOG_API_THROTTLE_COUNTER_TABLE = "quickscale_blog_api_throttle_counter"
 _CREATE_BLOG_API_THROTTLE_COUNTER_SQL = f"""
 CREATE TABLE IF NOT EXISTS {BLOG_API_THROTTLE_COUNTER_TABLE} (
     counter_key varchar(96) NOT NULL PRIMARY KEY,
@@ -64,7 +64,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("quickscale_modules_orgs", "0001_initial"),
+        ("quickscale_orgs", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -160,7 +160,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="blog_media_assets",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -190,7 +190,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="blog_categories",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -223,7 +223,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="blog_tags",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -306,7 +306,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="posts",
-                        to="quickscale_modules_blog.category",
+                        to="quickscale_blog.category",
                     ),
                 ),
                 (
@@ -314,7 +314,7 @@ class Migration(migrations.Migration):
                     models.ManyToManyField(
                         blank=True,
                         related_name="posts",
-                        to="quickscale_modules_blog.tag",
+                        to="quickscale_blog.tag",
                     ),
                 ),
                 (
@@ -322,7 +322,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="blog_posts",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -339,49 +339,49 @@ class Migration(migrations.Migration):
             model_name="category",
             constraint=models.UniqueConstraint(
                 fields=("name", "organization"),
-                name="blog_category_name_organization_unique",
+                name="quickscale_blog_category_name_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="category",
             constraint=models.UniqueConstraint(
                 fields=("slug", "organization"),
-                name="blog_category_slug_organization_unique",
+                name="quickscale_blog_category_slug_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="tag",
             constraint=models.UniqueConstraint(
                 fields=("name", "organization"),
-                name="blog_tag_name_organization_unique",
+                name="quickscale_blog_tag_name_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="tag",
             constraint=models.UniqueConstraint(
                 fields=("slug", "organization"),
-                name="blog_tag_slug_organization_unique",
+                name="quickscale_blog_tag_slug_organization_unique",
             ),
         ),
         migrations.AddIndex(
             model_name="post",
             index=models.Index(
-                fields=["-published_date"], name="quickscale__publish_446271_idx"
+                fields=["-published_date"], name="qs_blog_post_publish_idx"
             ),
         ),
         migrations.AddIndex(
             model_name="post",
-            index=models.Index(fields=["status"], name="quickscale__status_e0e305_idx"),
+            index=models.Index(fields=["status"], name="qs_blog_post_status_idx"),
         ),
         migrations.AddIndex(
             model_name="post",
-            index=models.Index(fields=["slug"], name="quickscale__slug_9a53ab_idx"),
+            index=models.Index(fields=["slug"], name="qs_blog_post_slug_idx"),
         ),
         migrations.AddConstraint(
             model_name="post",
             constraint=models.UniqueConstraint(
                 fields=("slug", "organization"),
-                name="blog_post_slug_organization_unique",
+                name="quickscale_blog_post_slug_organization_unique",
             ),
         ),
         migrations.RunPython(

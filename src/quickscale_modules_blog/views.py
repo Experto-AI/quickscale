@@ -64,7 +64,7 @@ RATE_LIMIT_VALUE_PARSE_ERRORS = (TypeError, ValueError)
 # no tenant-owned data, so it stays out of the model-based tenant
 # classification and purge contract and is only ever touched by the limiter's
 # atomic upsert below.
-BLOG_API_THROTTLE_COUNTER_TABLE = "quickscale_modules_blog_api_throttle_counter"
+BLOG_API_THROTTLE_COUNTER_TABLE = "quickscale_blog_api_throttle_counter"
 
 # ---------------------------------------------------------------------------
 # Org-resolution helpers for the single-URL contract (T1.6)
@@ -857,7 +857,7 @@ class PostListView(BlogPublicReadMixin, ListView):
     """Display paginated list of published blog posts"""
 
     model = Post
-    template_name = "quickscale_modules_blog/blog/post_list.html"
+    template_name = "quickscale_blog/blog/post_list.html"
     context_object_name = "posts"
     paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
 
@@ -882,7 +882,7 @@ class PostDetailView(BlogPublicReadMixin, DetailView):
     """Display single blog post"""
 
     model = Post
-    template_name = "quickscale_modules_blog/blog/post_detail.html"
+    template_name = "quickscale_blog/blog/post_detail.html"
     context_object_name = "post"
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
@@ -905,7 +905,7 @@ class CategoryListView(BlogPublicReadMixin, ListView):
     """Display posts filtered by category"""
 
     model = Post
-    template_name = "quickscale_modules_blog/blog/category_list.html"
+    template_name = "quickscale_blog/blog/category_list.html"
     context_object_name = "posts"
     paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
 
@@ -940,7 +940,7 @@ class TagListView(BlogPublicReadMixin, ListView):
     """Display posts filtered by tag"""
 
     model = Post
-    template_name = "quickscale_modules_blog/blog/tag_list.html"
+    template_name = "quickscale_blog/blog/tag_list.html"
     context_object_name = "posts"
     paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
 

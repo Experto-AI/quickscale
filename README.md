@@ -46,7 +46,7 @@ The shipped `quickscale.yml` options for this module are:
 ### Manual Installation
 
 If embedding manually, install the orgs baseline first. The blog module depends
-on `quickscale-module-orgs` and relies on `quickscale_modules_orgs.Organization`
+on `quickscale-module-orgs` and relies on the `quickscale_orgs.Organization` model
 plus `request.org` tenant resolution from `TenantMiddleware`. In SaaS mode, keep
 the orgs active-org session flow in place so flat `/blog/...` requests resolve
 the current organization correctly.
@@ -102,7 +102,7 @@ the current organization correctly.
 
 5. Run migrations:
    ```bash
-   python manage.py migrate quickscale_modules_blog
+   python manage.py migrate quickscale_blog
    ```
 
 6. Collect static files:
@@ -274,19 +274,19 @@ post.tags.add(tag1, tag2)
 
 ### Template Customization
 
-All templates extend `quickscale_modules_blog/blog/base.html`. To customize:
+All templates extend `quickscale_blog/blog/base.html`. To customize:
 
 1. **Override the base template** in your project:
    ```
-   templates/quickscale_modules_blog/blog/base.html
+   templates/quickscale_blog/blog/base.html
    ```
 
 2. **Override individual templates**:
    ```
-   templates/quickscale_modules_blog/blog/post_list.html
-   templates/quickscale_modules_blog/blog/post_detail.html
-   templates/quickscale_modules_blog/blog/category_list.html
-   templates/quickscale_modules_blog/blog/tag_list.html
+   templates/quickscale_blog/blog/post_list.html
+   templates/quickscale_blog/blog/post_detail.html
+   templates/quickscale_blog/blog/category_list.html
+   templates/quickscale_blog/blog/tag_list.html
    ```
 
 3. **Example: Extending base template**:
@@ -450,7 +450,7 @@ poetry run pytest quickscale_modules/blog/tests/ --cov=quickscale_modules_blog -
 
 **Solution**: Run migrations:
 ```bash
-python manage.py migrate quickscale_modules_blog
+python manage.py migrate quickscale_blog
 ```
 
 ### Issue: Markdown not rendering

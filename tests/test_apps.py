@@ -18,7 +18,7 @@ from quickscale_modules_blog.apps import QuickscaleBlogConfig
 def test_app_config_exposes_expected_metadata() -> None:
     """AppConfig should expose the expected blog module metadata."""
     assert QuickscaleBlogConfig.name == "quickscale_modules_blog"
-    assert QuickscaleBlogConfig.label == "quickscale_modules_blog"
+    assert QuickscaleBlogConfig.label == "quickscale_blog"
     assert QuickscaleBlogConfig.verbose_name == "QuickScale Blog"
     assert QuickscaleBlogConfig.default_auto_field == "django.db.models.BigAutoField"
 

@@ -8,7 +8,7 @@ class QuickscaleBlogConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_blog"
-    label = "quickscale_modules_blog"
+    label = "quickscale_blog"
     verbose_name = "QuickScale Blog"
 
     def ready(self) -> None:

@@ -246,7 +246,7 @@ class TestPostAdmin:
         )
 
         client.force_login(admin_user)
-        response = client.get("/admin/quickscale_modules_blog/post/add/")
+        response = client.get("/admin/quickscale_blog/post/add/")
 
         assert response.status_code == 200
         assert '<select name="author"' in response.content.decode()
@@ -272,7 +272,7 @@ class TestPostAdmin:
 
         client.force_login(admin_user)
         response = client.post(
-            "/admin/quickscale_modules_blog/post/add/",
+            "/admin/quickscale_blog/post/add/",
             data={
                 "title": "Admin Selected Author Post",
                 "slug": "",
@@ -310,7 +310,7 @@ class TestPostAdmin:
         client.force_login(admin_user)
         with blog_org_scope(org):
             response = client.post(
-                "/admin/quickscale_modules_blog/post/add/",
+                "/admin/quickscale_blog/post/add/",
                 data={
                     "title": "Admin Blank Author Post",
                     "slug": "",
