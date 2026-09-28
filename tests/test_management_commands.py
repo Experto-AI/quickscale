@@ -1000,6 +1000,50 @@ def test_promote_to_saas_suffixes_collisions_and_is_idempotent() -> None:
     assert "updated 0 personal organizations" in second_stdout.getvalue().lower()
 
 
+@pytest.mark.django_db
+def test_promote_to_saas_dry_run_reports_without_saving() -> None:
+    """--dry-run reports the planned slug change and writes nothing."""
+    owner = get_user_model().objects.create_user(
+        username="dry-run-owner",
+        email="dry-run-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Dry Run Owner's Org",
+        slug="",
+        is_personal=True,
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    stdout = StringIO()
+    call_command(
+        "quickscale_orgs_promote_to_saas",
+        "--dry-run",
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+    organization.refresh_from_db()
+
+    assert organization.slug == ""
+    assert "personal_slug=<blank> -> dry-run-owner (dry run)" in stdout.getvalue()
+    assert "would update 1 personal organizations" in stdout.getvalue()
+
+    call_command(
+        "quickscale_orgs_promote_to_saas",
+        stdout=StringIO(),
+        stderr=StringIO(),
+        verbosity=0,
+    )
+    organization.refresh_from_db()
+
+    assert organization.slug == "dry-run-owner"
+
+
 # ---------------------------------------------------------------------------
 # T1.17 — quickscale_orgs_purge_organization contract tests
 # ---------------------------------------------------------------------------
@@ -3555,14 +3599,14 @@ def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
         # --- Human format ---
         stdout = StringIO()
         stderr = StringIO()
-        with pytest.raises(SystemExit) as excinfo:
+        with pytest.raises(CommandError) as excinfo:
             call_command(
                 "quickscale_orgs_check_tenant_isolation",
                 stdout=stdout,
                 stderr=stderr,
                 verbosity=0,
             )
-        assert excinfo.value.code == 1, (
+        assert excinfo.value.returncode == 1, (
             "Command should exit 1 when a model lacks org_id"
         )
 
@@ -3575,7 +3619,7 @@ def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
         # --- JSON format ---
         stdout = StringIO()
         stderr = StringIO()
-        with pytest.raises(SystemExit):
+        with pytest.raises(CommandError):
             call_command(
                 "quickscale_orgs_check_tenant_isolation",
                 format="json",
@@ -3844,7 +3888,7 @@ def test_classification_check_ok_when_all_models_classified() -> None:
         verbosity=0,
     )
     # On SQLite all models pass the isolation check (force_rls is None,
-    # only org_id is checked), so no SystemExit is raised.  The output
+    # only org_id is checked), so no CommandError is raised.  The output
     # must not contain any classification failure language.
     output = stdout.getvalue()
     assert "unclassified" not in output.lower()
@@ -3872,14 +3916,14 @@ def test_classification_check_fails_on_unclassified_model_human() -> None:
     ):
         stdout = StringIO()
         stderr = StringIO()
-        with pytest.raises(SystemExit) as excinfo:
+        with pytest.raises(CommandError) as excinfo:
             call_command(
                 "quickscale_orgs_check_tenant_isolation",
                 stdout=stdout,
                 stderr=stderr,
                 verbosity=0,
             )
-        assert excinfo.value.code == 1
+        assert excinfo.value.returncode == 1
         output = stdout.getvalue()
         assert "UNCLASSIFIED" in output
         assert "RogueModel" in output
@@ -3907,7 +3951,7 @@ def test_classification_check_fails_on_unclassified_model_json() -> None:
     ):
         stdout = StringIO()
         stderr = StringIO()
-        with pytest.raises(SystemExit) as excinfo:
+        with pytest.raises(CommandError) as excinfo:
             call_command(
                 "quickscale_orgs_check_tenant_isolation",
                 format="json",
@@ -3915,7 +3959,7 @@ def test_classification_check_fails_on_unclassified_model_json() -> None:
                 stderr=stderr,
                 verbosity=0,
             )
-        assert excinfo.value.code == 1
+        assert excinfo.value.returncode == 1
 
         import json as json_lib
 
@@ -4019,7 +4063,7 @@ def test_postgres_only_classification_still_runs_human() -> None:
         ):
             stdout = StringIO()
             stderr = StringIO()
-            with pytest.raises(SystemExit) as excinfo:
+            with pytest.raises(CommandError) as excinfo:
                 call_command(
                     "quickscale_orgs_check_tenant_isolation",
                     postgres_only=True,
@@ -4027,7 +4071,7 @@ def test_postgres_only_classification_still_runs_human() -> None:
                     stderr=stderr,
                     verbosity=0,
                 )
-            assert excinfo.value.code == 1
+            assert excinfo.value.returncode == 1
             output = stdout.getvalue()
             assert "UNCLASSIFIED" in output
             assert "RogueModel" in output
@@ -4060,7 +4104,7 @@ def test_postgres_only_classification_still_runs_json() -> None:
         ):
             stdout = StringIO()
             stderr = StringIO()
-            with pytest.raises(SystemExit) as excinfo:
+            with pytest.raises(CommandError) as excinfo:
                 call_command(
                     "quickscale_orgs_check_tenant_isolation",
                     postgres_only=True,
@@ -4069,7 +4113,7 @@ def test_postgres_only_classification_still_runs_json() -> None:
                     stderr=stderr,
                     verbosity=0,
                 )
-            assert excinfo.value.code == 1
+            assert excinfo.value.returncode == 1
 
             import json as json_lib
 
