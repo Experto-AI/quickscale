@@ -95,6 +95,19 @@ def test_check_reports_empty_api_key_for_live_analytics(settings, monkeypatch) -
     assert "POSTHOG_API_KEY" in messages[0].msg
 
 
+def test_check_reports_malformed_posthog_host(settings, monkeypatch) -> None:
+    """A host that is not an absolute http(s) URL is invalid configuration."""
+    settings.DEBUG = False
+    settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = False
+    settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST = "not-a-url"
+    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
+
+    messages = check_analytics_settings()
+
+    assert messages
+    assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST" in messages[0].msg
+
+
 def test_check_skips_empty_api_key_when_debug_excluded(settings, monkeypatch) -> None:
     """A DEBUG-excluded runtime never resolves the key, so it is not required."""
     settings.DEBUG = True

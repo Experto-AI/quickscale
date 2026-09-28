@@ -12,6 +12,8 @@ and tolerated.
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
@@ -61,6 +63,17 @@ def check_analytics_settings(
 
     if snapshot.exclude_debug and bool(getattr(settings, "DEBUG", False)):
         return messages
+
+    host = snapshot.resolve_posthog_host()
+    parsed_host = urlparse(host)
+    if parsed_host.scheme not in {"http", "https"} or not parsed_host.netloc:
+        messages.append(
+            Error(
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST must be an absolute http(s) "
+                f"URL, got {host!r}.",
+                id="quickscale_analytics.E004",
+            )
+        )
 
     if not snapshot.resolve_posthog_api_key():
         messages.append(

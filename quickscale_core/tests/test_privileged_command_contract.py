@@ -15,7 +15,7 @@ ROOT = Path(__file__).parents[2]
 EXPECTED_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})
 DECLARATION_STATIONS = (
     (
-        ROOT / "quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py",
+        ROOT / "quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py",
         "_PRIVILEGED_COMMANDS",
     ),
     (

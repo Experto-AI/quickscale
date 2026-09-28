@@ -29,6 +29,7 @@ from quickscale_modules_social.contracts import (
     get_social_runtime_settings,
     social_provider_supports_embeds,
 )
+from quickscale_modules_social.exceptions import SocialError
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
 _CACHE_MISS = object()
@@ -512,7 +513,9 @@ def build_social_embeds_payload() -> dict[str, object]:
 # clears bare keys and is unsafe to advertise as a tenant-aware bulk
 # invalidation API.
 __all__ = [
+    "SocialConfigurationError",
     "SocialEmbedRecord",
+    "SocialError",
     "SocialLinkRecord",
     "build_social_embeds_payload",
     "build_social_link_tree_payload",

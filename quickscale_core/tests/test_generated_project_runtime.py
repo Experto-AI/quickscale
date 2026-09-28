@@ -2631,12 +2631,24 @@ class TestGeneratedProjectRuntimeSmoke:
                 project_name,
                 database["url"],
             )
+            # Every authoritative module is enabled with its manifest defaults,
+            # so supply the vendor credentials their startup checks require; the
+            # proof under test is the migration, not the secret configuration.
+            vendor_secret_environment = {
+                "POSTHOG_API_KEY": "ph_test_all_modules",
+                "STRIPE_SECRET_KEY": "sk_test_all_modules",
+                "QUICKSCALE_BILLING_WEBHOOK_SECRET": "whsec_test_all_modules",
+                "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+                    "whsec_test_all_modules_notifications"
+                ),
+            }
             migrate_environment = _standalone_generated_env(
                 {
                     "DJANGO_SETTINGS_MODULE": (f"{project_name}.settings.test_smoke"),
                     "QUICKSCALE_PRIVILEGED_COMMAND": "migrate",
                     "DATABASE_URL": database["url"],
                     "RUNTIME_DATABASE_URL": database["url"],
+                    **vendor_secret_environment,
                 }
             )
             assert "QUICKSCALE_ALLOW_BYPASSRLS" not in migrate_environment
@@ -2655,6 +2667,7 @@ class TestGeneratedProjectRuntimeSmoke:
                     "DJANGO_SETTINGS_MODULE": (f"{project_name}.settings.test_smoke"),
                     "DATABASE_URL": database["url"],
                     "RUNTIME_DATABASE_URL": database["url"],
+                    **vendor_secret_environment,
                 }
             )
             assert "QUICKSCALE_PRIVILEGED_COMMAND" not in makemigrations_environment
