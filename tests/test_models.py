@@ -12,8 +12,7 @@ from django.test import override_settings
 
 from quickscale_modules_social.contracts import (
     ResolvedSocialEmbedMetadata,
-    SOCIAL_EMBED_RESOLUTION_ERROR,
-    SOCIAL_EMBED_RESOLUTION_RESOLVED,
+    SocialEmbedResolution,
 )
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
@@ -81,7 +80,7 @@ def test_social_embed_save_persists_backend_resolution_metadata(org_context) -> 
 
     assert embed.provider_name == "youtube"
     assert embed.normalized_url == "https://www.youtube.com/shorts/abc123"
-    assert embed.resolution_status == SOCIAL_EMBED_RESOLUTION_RESOLVED
+    assert embed.resolution_status == SocialEmbedResolution.RESOLVED
     assert embed.resolved_embed_url == "https://www.youtube.com/embed/abc123?rel=0"
     assert embed.resolved_thumbnail_url == "https://i.ytimg.com/vi/abc123/hqdefault.jpg"
     assert embed.resolved_width == 560
@@ -103,7 +102,7 @@ def test_social_embed_records_operator_visible_resolution_error(org_context) -> 
     )
 
     assert embed.provider_name == "tiktok"
-    assert embed.resolution_status == SOCIAL_EMBED_RESOLUTION_ERROR
+    assert embed.resolution_status == SocialEmbedResolution.ERROR
     assert "canonical TikTok video URL" in embed.resolution_error
     assert embed.resolved_embed_url == ""
     assert embed.last_resolution_attempt_at is not None
