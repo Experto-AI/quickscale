@@ -826,7 +826,7 @@ def test_sa182_refresh_skips_missing_project_table() -> None:
 @pytest.mark.django_db(transaction=True)
 def test_sa182_missing_force_rls_fails_command_and_restores_fixture() -> None:
     """W004 and command failure do not leave the fixture policy disabled."""
-    from django.core.management import call_command
+    from django.core.management import CommandError, call_command
     from django.db import connection
 
     from quickscale_modules_orgs.tenancy import check_tenant_model_isolation
@@ -858,9 +858,9 @@ def test_sa182_missing_force_rls_fails_command_and_restores_fixture() -> None:
         assert result["has_organization_id"] is True
         assert result["has_force_rls"] is False
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             call_command("quickscale_orgs_check_tenant_isolation", verbosity=0)
-        assert exc_info.value.code == 1
+        assert exc_info.value.returncode == 1
     finally:
         with connection.schema_editor() as schema_editor:
             apply_force_rls(schema_editor, targets)

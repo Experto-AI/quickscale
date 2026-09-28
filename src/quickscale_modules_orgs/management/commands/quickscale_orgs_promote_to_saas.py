@@ -62,8 +62,17 @@ class Command(BaseCommand):
         "required QUICKSCALE_MODE SaaS setting change."
     )
 
+    def add_arguments(self, parser: object) -> None:
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            default=False,
+            help="Report the slug changes without saving them.",
+        )
+
     def handle(self, *args: object, **options: object) -> None:
-        del args, options
+        del args
+        dry_run = bool(options.get("dry_run", False))
         used_slugs = {
             str(slug)
             for slug in Organization.objects.exclude(slug="").values_list(
@@ -89,17 +98,30 @@ class Command(BaseCommand):
                 used_slugs.add(current_slug)
                 continue
 
-            organization.slug = new_slug
-            organization.save(update_fields=["slug"])
+            if dry_run:
+                self.stdout.write(
+                    f"organization={organization.pk} personal_slug="
+                    f"{current_slug or '<blank>'} -> {new_slug} (dry run)"
+                )
+            else:
+                organization.slug = new_slug
+                organization.save(update_fields=["slug"])
+                self.stdout.write(
+                    f"organization={organization.pk} personal_slug="
+                    f"{current_slug or '<blank>'} -> {new_slug}"
+                )
             used_slugs.add(new_slug)
             updated_count += 1
-            self.stdout.write(
-                f"organization={organization.pk} personal_slug={current_slug or '<blank>'} -> {new_slug}"
-            )
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"quickscale_orgs_promote_to_saas updated {updated_count} personal organizations."
+        if dry_run:
+            summary = (
+                "quickscale_orgs_promote_to_saas would update "
+                f"{updated_count} personal organizations."
             )
-        )
+        else:
+            summary = (
+                "quickscale_orgs_promote_to_saas updated "
+                f"{updated_count} personal organizations."
+            )
+        self.stdout.write(self.style.SUCCESS(summary))
         self.stdout.write("Required settings change: QUICKSCALE_MODE = 'saas'")
