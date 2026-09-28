@@ -379,6 +379,27 @@ class TestRegisterModuleChecks:
         with pytest.raises(ImproperlyConfigured):
             conventions.register_module_checks(app_config, [failing_check])
 
+    def test_skip_env_var_is_ineffective_when_collectstatic_is_only_an_argument(
+        self, system_check_registry, monkeypatch
+    ) -> None:
+        """A serving argv carrying collectstatic as a value still runs checks."""
+        from django.core.checks import Error
+
+        app_config = _FakeAppConfig("quickscale_test_module")
+
+        def failing_check(app_configs: object = None, **kwargs: object) -> list:
+            return [Error("boom", id="quickscale_test_module.E001")]
+
+        monkeypatch.setenv("QUICKSCALE_SKIP_MODULE_CHECKS", "all")
+        monkeypatch.setattr(
+            conventions.sys,
+            "argv",
+            ["gunicorn", "--name", "collectstatic", "myproject.wsgi:application"],
+        )
+
+        with pytest.raises(ImproperlyConfigured):
+            conventions.register_module_checks(app_config, [failing_check])
+
 
 # ===================================================================
 # exception_handler — rule 9

@@ -162,11 +162,13 @@ def _declared_capabilities(
 def _eager_run_is_skipped(label: str) -> bool:
     """Return whether the one-shot skip names *label* (or ``all``).
 
-    Effective only while the invoked Django command is ``collectstatic`` (the
-    generated image build's credential-free step), so a skip value that
-    survives into a serving process cannot disable the checks there.
+    Effective only when the invoked management command is ``collectstatic``
+    (``sys.argv[1]`` after ``manage.py``/``django-admin``), the generated
+    image build's credential-free step, so a skip value that survives into a
+    serving process — or a serving argv that merely carries ``collectstatic``
+    as an option value — cannot disable the checks there.
     """
-    if _SKIP_EAGER_CHECKS_COMMAND not in sys.argv:
+    if len(sys.argv) < 2 or sys.argv[1] != _SKIP_EAGER_CHECKS_COMMAND:
         return False
     declared = os.environ.get(_SKIP_EAGER_CHECKS_ENV_VAR, "").strip()
     if not declared:
