@@ -39,9 +39,9 @@ def django_db_setup(django_db_blocker):
     created before the ``--run-syncdb`` step.  Without this
     ordering, ``--run-syncdb`` tries to create the ``tests``
     app's FK-dependent tables (e.g. ``tests_concretelisting``
-    referencing ``quickscale_modules_orgs_organization``) before
+    referencing ``quickscale_orgs_organization``) before
     the orgs migrations have run, causing:
-      ``ProgrammingError: relation "quickscale_modules_orgs_organization" does not exist``
+      ``ProgrammingError: relation "quickscale_orgs_organization" does not exist``
     """
     from django.core.management import call_command
 

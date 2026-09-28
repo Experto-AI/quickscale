@@ -1296,11 +1296,7 @@ class TestAccountDeleteView:
         with patch.object(
             settings,
             "INSTALLED_APPS",
-            [
-                app
-                for app in settings.INSTALLED_APPS
-                if app != "quickscale_modules_billing"
-            ],
+            [app for app in settings.INSTALLED_APPS if app != "quickscale_billing"],
         ):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account-delete")

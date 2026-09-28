@@ -8,5 +8,5 @@ class QuickscaleStorageConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_storage"
-    label = "quickscale_modules_storage"
+    label = "quickscale_storage"
     verbose_name = "QuickScale Storage"

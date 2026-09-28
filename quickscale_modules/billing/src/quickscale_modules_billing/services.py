@@ -963,7 +963,7 @@ def reconcile_purchase_checkouts_for_removal(
 ) -> tuple[str, ...]:
     """Require one-time Checkout sessions to be provider-terminal before removal."""
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     organization = organization_model._default_manager.filter(
@@ -1037,7 +1037,7 @@ def detach_account_deletion_user_references(
 ) -> int:
     """Null billing provenance under each organization's FORCE-RLS context."""
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     detached_count = 0
@@ -1080,7 +1080,7 @@ def account_deletion_user_reference_organization_ids(user_id: Any) -> list[Any]:
 
     organization_ids = discover_organization_ids(
         user_id,
-        included_app_labels=frozenset({"quickscale_modules_billing"}),
+        included_app_labels=frozenset({"quickscale_billing"}),
     )
     return sorted(organization_ids, key=str)
 
@@ -1095,7 +1095,7 @@ def _reconcile_subscription_checkout(
 ) -> SubscriptionCheckoutReconciliation:
     """Read one checkout from Stripe and persist it only when requested."""
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     organization = organization_model._default_manager.filter(
@@ -1370,11 +1370,11 @@ def _require_owner_provider_mutation_authorization(
 
     user_model = apps.get_model(settings.AUTH_USER_MODEL)
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     membership_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "OrganizationMembership",
     )
     current_user = user_model._default_manager.filter(pk=user_pk).first()
@@ -1477,7 +1477,7 @@ def _restore_subscription_cancellation_transition(
 ) -> Subscription:
     """Restore the exact subscription changed by a cancellation transition."""
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     organization = organization_model._default_manager.filter(
@@ -1592,7 +1592,7 @@ def _persist_subscription_provider_snapshot(
     )
 
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     organization = organization_model._default_manager.filter(
@@ -1955,7 +1955,7 @@ def _lock_organization_for_billing_mutation(organization: Any) -> Any:
             "Could not resolve an organization for the billing mutation."
         )
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     locked_organization = (
@@ -3477,7 +3477,7 @@ def _resolve_checkout_reservation_organization(
         return None
 
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     matches: list[Any] = []
@@ -4332,7 +4332,7 @@ def _resolve_organization_by_customer_id(customer_id: str) -> Any | None:
         return None
 
     organization_model = apps.get_model(
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     )
     matches = list(

@@ -303,8 +303,8 @@ class TestRunDockerExecCommand:
         with pytest.raises(ValueError):
             _run_docker_exec_command(
                 "container",
-                ["python", "manage.py", "migrate_billing_to_orgs"],
-                privileged_command="migrate_billing_to_orgs",
+                ["python", "manage.py", "quickscale_orgs_migrate_billing_to_orgs"],
+                privileged_command="quickscale_orgs_migrate_billing_to_orgs",
             )
 
 

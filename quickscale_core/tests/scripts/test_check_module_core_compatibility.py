@@ -119,7 +119,7 @@ def test_get_mgmt_cmds_finds_backups_commands() -> None:
     modules = compat._get_management_command_modules(package_name, src_dir)
     assert len(modules) >= 9
     assert all(m.startswith(f"{package_name}.management.commands.") for m in modules)
-    assert "backups_create" in modules[0]  # sorted alphabetically
+    assert "quickscale_backups_create" in modules[0]  # sorted alphabetically
     # Sanity: __init__.py is excluded
     init_path = f"{package_name}.management.commands.__init__"
     assert init_path not in modules
@@ -133,8 +133,8 @@ def test_get_mgmt_cmds_finds_forms_commands() -> None:
     package_name = "quickscale_modules_forms"
     modules = compat._get_management_command_modules(package_name, src_dir)
     assert len(modules) == 2
-    assert any("forms_anonymize_submissions" in m for m in modules)
-    assert any("forms_seed_presets" in m for m in modules)
+    assert any("quickscale_forms_anonymize_submissions" in m for m in modules)
+    assert any("quickscale_forms_seed_presets" in m for m in modules)
 
 
 def test_get_mgmt_cmds_returns_empty_when_absent() -> None:
@@ -163,11 +163,11 @@ def test_build_probe_script_includes_mgmt_cmd_phase() -> None:
         src_dir=Path("/fake/src"),
         has_django=True,
         management_commands=[
-            "quickscale_modules_backups.management.commands.backups_create",
+            "quickscale_modules_backups.management.commands.quickscale_backups_create",
         ],
     )
     assert "# Phase 3: probe management command modules" in script
-    assert "backups_create" in script
+    assert "quickscale_backups_create" in script
 
 
 def test_build_probe_script_omits_mgmt_cmd_phase() -> None:
@@ -197,7 +197,7 @@ def test_build_probe_script_uses_quickscale_core_failure_heuristic() -> None:
         src_dir=Path("/fake/src"),
         has_django=True,
         management_commands=[
-            "quickscale_modules_backups.management.commands.backups_create",
+            "quickscale_modules_backups.management.commands.quickscale_backups_create",
         ],
     )
     # Must detect quickscale_core import errors

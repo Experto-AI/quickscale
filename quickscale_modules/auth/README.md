@@ -133,7 +133,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Custom user model
-AUTH_USER_MODEL = "quickscale_modules_auth.User"
+AUTH_USER_MODEL = "quickscale_auth.User"
 
 # Site ID (required by django.contrib.sites)
 SITE_ID = 1
@@ -195,17 +195,17 @@ After embedding the module, these URLs are available:
 
 ### Template Customization
 
-All templates extend `quickscale_modules_auth/base.html`. To customize:
+All templates extend `quickscale_auth/base.html`. To customize:
 
 1. **Override the base template** in your project:
    ```
-   templates/quickscale_modules_auth/base.html
+   templates/quickscale_auth/base.html
    ```
 
 2. **Override individual templates**:
    ```
-   templates/quickscale_modules_auth/account/login.html
-   templates/quickscale_modules_auth/account/signup.html
+   templates/quickscale_auth/account/login.html
+   templates/quickscale_auth/account/signup.html
    ```
 
 3. **Add custom CSS/JS**:
@@ -228,7 +228,7 @@ To add custom fields to the User model:
 
 2. **Create migration**:
    ```bash
-   python manage.py makemigrations quickscale_modules_auth
+   python manage.py makemigrations quickscale_auth
    python manage.py migrate
    ```
 
@@ -304,7 +304,7 @@ pytest --cov=src/quickscale_modules_auth --cov-report=html
 
 **Solution**: Run migrations:
 ```bash
-python manage.py migrate quickscale_modules_auth
+python manage.py migrate quickscale_auth
 ```
 
 ### Issue: "AUTH_USER_MODEL refers to model that has not been installed"

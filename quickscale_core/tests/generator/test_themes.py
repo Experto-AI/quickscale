@@ -776,10 +776,9 @@ class TestSharedAdminTemplates:
 
         assert "Create backup now" not in admin_index
         assert "Open backup ops" in admin_index
-        assert 'app.app_label == "quickscale_modules_backups"' in admin_index
+        assert 'app.app_label == "quickscale_backups"' in admin_index
         assert (
-            'action="/admin/quickscale_modules_backups/backuppolicy/ops/create/"'
-            in app_index
+            'action="/admin/quickscale_backups/backuppolicy/ops/create/"' in app_index
         )
         assert "Open backup ops" in app_index
-        assert 'app_label == "quickscale_modules_backups"' in app_index
+        assert 'app_label == "quickscale_backups"' in app_index

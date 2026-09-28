@@ -293,7 +293,7 @@ def test_historical_model_delete_of_last_owner_in_multi_member_org_is_refused() 
     historical_membership = (
         MigrationLoader(None, ignore_no_migrations=True)
         .project_state()
-        .apps.get_model("quickscale_modules_orgs", "OrganizationMembership")
+        .apps.get_model("quickscale_orgs", "OrganizationMembership")
     )
     assert historical_membership is not OrganizationMembership
 
@@ -824,7 +824,7 @@ def test_tenant_org_fk_produces_protect_contract() -> None:
     assert fk.null is False
     # The FK is not yet contributed to a concrete model, so remote_field.model
     # is stored as the lazy string reference.
-    assert fk.remote_field.model == "quickscale_modules_orgs.Organization"  # type: ignore[comparison-overlap]
+    assert fk.remote_field.model == "quickscale_orgs.Organization"  # type: ignore[comparison-overlap]
 
 
 def test_tenant_org_fk_defaults_db_index_to_true() -> None:
@@ -856,7 +856,7 @@ def test_tenant_model_declares_org_foreign_key() -> None:
     # do not resolve it until a concrete subclass is prepared.
     assert organization_field.related_model in (
         Organization,
-        "quickscale_modules_orgs.Organization",
+        "quickscale_orgs.Organization",
     )
     assert organization_field.remote_field.on_delete == models.PROTECT  # type: ignore[union-attr]
 
@@ -880,7 +880,7 @@ class ConcreteTenantResource(TenantModel):
     name: models.CharField = models.CharField(max_length=100)
 
     class Meta:
-        app_label = "quickscale_modules_orgs"
+        app_label = "quickscale_orgs"
 
 
 class ForwardFKChild(models.Model):
@@ -896,7 +896,7 @@ class ForwardFKChild(models.Model):
     )
 
     organization: models.ForeignKey = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
+        "quickscale_orgs.Organization",
         on_delete=models.PROTECT,
     )
     parent: models.ForeignKey = models.ForeignKey(
@@ -910,7 +910,7 @@ class ForwardFKChild(models.Model):
     all_objects = TenantManager(super_scope=True)
 
     class Meta:
-        app_label = "quickscale_modules_orgs"
+        app_label = "quickscale_orgs"
         base_manager_name = "all_objects"
 
 

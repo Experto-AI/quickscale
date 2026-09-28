@@ -17,7 +17,7 @@ class QuickscaleAuthConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_auth"
-    label = "quickscale_modules_auth"
+    label = "quickscale_auth"
     verbose_name = "QuickScale Authentication"
 
     def ready(self) -> None:

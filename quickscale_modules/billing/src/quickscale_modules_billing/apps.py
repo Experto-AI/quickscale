@@ -23,7 +23,7 @@ class QuickscaleBillingConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_billing"
-    label = "quickscale_modules_billing"
+    label = "quickscale_billing"
     verbose_name = "QuickScale Billing"
 
     def removal_obligations(self) -> tuple[OrganizationRemovalObligation, ...]:
@@ -46,17 +46,17 @@ class QuickscaleBillingConfig(AppConfig):
                 # identifier must not block a purge.
                 external_provider_fields=(
                     ExternalProviderField(
-                        "quickscale_modules_billing.credittransaction",
+                        "quickscale_billing.credittransaction",
                         "stripe_event_id",
                         boundary_guarded=True,
                     ),
                     ExternalProviderField(
-                        "quickscale_modules_billing.credittransaction",
+                        "quickscale_billing.credittransaction",
                         "stripe_object_id",
                         boundary_guarded=True,
                     ),
                     ExternalProviderField(
-                        "quickscale_modules_billing.credittransaction",
+                        "quickscale_billing.credittransaction",
                         "stripe_reference_data",
                         structured_keys=(
                             "charge_id",
@@ -71,27 +71,27 @@ class QuickscaleBillingConfig(AppConfig):
                         boundary_guarded=True,
                     ),
                     ExternalProviderField(
-                        "quickscale_modules_billing.purchasecheckout",
+                        "quickscale_billing.purchasecheckout",
                         "stripe_checkout_session_id",
                         boundary_guarded=True,
                     ),
                     ExternalProviderField(
-                        "quickscale_modules_billing.subscription",
+                        "quickscale_billing.subscription",
                         "stripe_subscription_id",
                         boundary_guarded=True,
                     ),
                     ExternalProviderField(
-                        "quickscale_modules_billing.subscription",
+                        "quickscale_billing.subscription",
                         "stripe_customer_id",
                         boundary_guarded=True,
                     ),
                     ExternalProviderField(
-                        "quickscale_modules_billing.subscription",
+                        "quickscale_billing.subscription",
                         "stripe_checkout_session_id",
                         boundary_guarded=True,
                     ),
                     ExternalProviderField(
-                        "quickscale_modules_orgs.organization",
+                        "quickscale_orgs.organization",
                         "stripe_customer_id",
                         boundary_guarded=True,
                     ),

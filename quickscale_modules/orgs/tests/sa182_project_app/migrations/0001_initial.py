@@ -99,7 +99,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("quickscale_modules_orgs", "0001_initial"),
+        ("quickscale_orgs", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -131,7 +131,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(class)s_listings",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
                 ("title", models.CharField(max_length=200)),
@@ -258,7 +258,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="project_listing_images",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -290,7 +290,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="project_folders",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
                 (

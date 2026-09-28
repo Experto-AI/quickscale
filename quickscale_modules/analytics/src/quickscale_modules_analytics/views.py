@@ -15,7 +15,7 @@ from quickscale_modules_analytics.services import (
 class AnalyticsDashboardView(TemplateView):
     """Module-owned analytics overview page."""
 
-    template_name = "quickscale_modules_analytics/dashboard.html"
+    template_name = "quickscale_analytics/dashboard.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)

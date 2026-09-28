@@ -44,7 +44,8 @@
       "sa200": "Regenerated 2026-09-23 — generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py.",
       "sa206": "Regenerated 2026-09-23 — the generated settings import the executable runtime contracts (middleware, proxy-trust derivation, privileged-command/runtime-database selection, SECRET_KEY guard) from the versioned quickscale_core.runtime settings facade; pyproject.toml declares the bounded quickscale-core lockstep pin (SA206). Hashes updated per variant: pyproject.toml, testproject/settings/base.py, testproject/settings/production.py.",
       "sa210": "Regenerated 2026-09-24 — pyproject.toml.j2 emits a bounded poetry-core build requirement (poetry-core>=2.0,<3.0) into every generated project (SA210). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative.",
-      "compose-frontend-install-retries": "Regenerated 2026-09-25 — docker-compose.yml frontend startup raises pnpm's fetch retry budget (--config.fetch-retries=5) so a single stalled registry request does not abort the dev install and leave `quickscale up` with a failed-to-start frontend. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative."
+      "compose-frontend-install-retries": "Regenerated 2026-09-25 — docker-compose.yml frontend startup raises pnpm's fetch retry budget (--config.fetch-retries=5) so a single stalled registry request does not abort the dev install and leave `quickscale up` with a failed-to-start frontend. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa221": "Regenerated 2026-09-28 — module identity rename (SA221): admin templates, React admin links, and generated Makefile/ci.yml now use the quickscale_<module> app labels."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -74,7 +75,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
-      "sha256": "fde08a8100f17565a3c7befa73ec23f34857e2ce9f717e6319f13c30dde01236"
+      "sha256": "63e63f655133a3289a1be61a27cb0d84e9f717ee9af2417abe699ecd7fec77af"
     },
     ".gitignore": {
       "mode": "664",
@@ -90,7 +91,7 @@
     },
     "Makefile": {
       "mode": "664",
-      "sha256": "8a68f238d58d0e38f8bc7e2a2f4911c4a7206f15b90b814f1c9bb71e993b679d"
+      "sha256": "40ba0de63f9f0c52ceef81afe9dcabed481e8d3fe4a8ac721b8110a3456b4738"
     },
     "OPERATIONS.md": {
       "mode": "664",
@@ -290,15 +291,15 @@
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
-      "sha256": "db923e5a3c6aa05f2157986810ab49deed42f8fd52c4b9a744b9e2531711c88d"
+      "sha256": "86c71459a137a8b866880f5e26b121dd13a6ee4f80bc2d76d7ac6eab6d8403b3"
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "664",
-      "sha256": "3b090fe957f544409d687c6d772d3c898f6614372e1ee34f41ba97cd1f0d49f1"
+      "sha256": "701b8fa901f9395d542f8fd35b14bfea3354760206c5cdf0923f640495e7bc37"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "778495891fca2ee274d563042eb49ccda20d8b641fb49c7e69d88bab08becba2"
+      "sha256": "011f25936e936b3b4df7ca1299b2eab8a6262154f43611f409091481596093e3"
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
@@ -306,7 +307,7 @@
     },
     "frontend/src/pages/ListingsPage.tsx": {
       "mode": "664",
-      "sha256": "995cc65b6c9150f7c86aaab02740bac2790f7441940d550b0363bd7bebdaee07"
+      "sha256": "7dc3035b2af5c60b50c4db460b5d712e75b3d653275dca2d3f060c6dad243184"
     },
     "frontend/src/pages/NotFound.tsx": {
       "mode": "664",
@@ -442,11 +443,11 @@
     },
     "templates/admin/app_index.html": {
       "mode": "664",
-      "sha256": "7ebc7fec7377bc7c3c564e7841af734f24ed0410e79eed616f64a444c975e0a2"
+      "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
     },
     "templates/admin/index.html": {
       "mode": "664",
-      "sha256": "63cf742973016584a0bc1f3ca6eb6098f25939892a8045f30c9fc7a6b95baaa9"
+      "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
     },
     "templates/base.html": {
       "mode": "664",
@@ -760,15 +761,15 @@
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
-      "sha256": "db923e5a3c6aa05f2157986810ab49deed42f8fd52c4b9a744b9e2531711c88d"
+      "sha256": "86c71459a137a8b866880f5e26b121dd13a6ee4f80bc2d76d7ac6eab6d8403b3"
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "664",
-      "sha256": "3b090fe957f544409d687c6d772d3c898f6614372e1ee34f41ba97cd1f0d49f1"
+      "sha256": "701b8fa901f9395d542f8fd35b14bfea3354760206c5cdf0923f640495e7bc37"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "778495891fca2ee274d563042eb49ccda20d8b641fb49c7e69d88bab08becba2"
+      "sha256": "011f25936e936b3b4df7ca1299b2eab8a6262154f43611f409091481596093e3"
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
@@ -776,7 +777,7 @@
     },
     "frontend/src/pages/ListingsPage.tsx": {
       "mode": "664",
-      "sha256": "995cc65b6c9150f7c86aaab02740bac2790f7441940d550b0363bd7bebdaee07"
+      "sha256": "7dc3035b2af5c60b50c4db460b5d712e75b3d653275dca2d3f060c6dad243184"
     },
     "frontend/src/pages/NotFound.tsx": {
       "mode": "664",
@@ -912,11 +913,11 @@
     },
     "templates/admin/app_index.html": {
       "mode": "664",
-      "sha256": "7ebc7fec7377bc7c3c564e7841af734f24ed0410e79eed616f64a444c975e0a2"
+      "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
     },
     "templates/admin/index.html": {
       "mode": "664",
-      "sha256": "63cf742973016584a0bc1f3ca6eb6098f25939892a8045f30c9fc7a6b95baaa9"
+      "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
     },
     "templates/base.html": {
       "mode": "664",
@@ -1230,15 +1231,15 @@
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
-      "sha256": "db923e5a3c6aa05f2157986810ab49deed42f8fd52c4b9a744b9e2531711c88d"
+      "sha256": "86c71459a137a8b866880f5e26b121dd13a6ee4f80bc2d76d7ac6eab6d8403b3"
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "664",
-      "sha256": "3b090fe957f544409d687c6d772d3c898f6614372e1ee34f41ba97cd1f0d49f1"
+      "sha256": "701b8fa901f9395d542f8fd35b14bfea3354760206c5cdf0923f640495e7bc37"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "778495891fca2ee274d563042eb49ccda20d8b641fb49c7e69d88bab08becba2"
+      "sha256": "011f25936e936b3b4df7ca1299b2eab8a6262154f43611f409091481596093e3"
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
@@ -1246,7 +1247,7 @@
     },
     "frontend/src/pages/ListingsPage.tsx": {
       "mode": "664",
-      "sha256": "995cc65b6c9150f7c86aaab02740bac2790f7441940d550b0363bd7bebdaee07"
+      "sha256": "7dc3035b2af5c60b50c4db460b5d712e75b3d653275dca2d3f060c6dad243184"
     },
     "frontend/src/pages/NotFound.tsx": {
       "mode": "664",
@@ -1382,11 +1383,11 @@
     },
     "templates/admin/app_index.html": {
       "mode": "664",
-      "sha256": "7ebc7fec7377bc7c3c564e7841af734f24ed0410e79eed616f64a444c975e0a2"
+      "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
     },
     "templates/admin/index.html": {
       "mode": "664",
-      "sha256": "63cf742973016584a0bc1f3ca6eb6098f25939892a8045f30c9fc7a6b95baaa9"
+      "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
     },
     "templates/base.html": {
       "mode": "664",

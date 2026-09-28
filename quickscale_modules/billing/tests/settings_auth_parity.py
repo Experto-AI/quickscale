@@ -33,7 +33,7 @@ AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
-AUTH_USER_MODEL = "quickscale_modules_auth.User"
+AUTH_USER_MODEL = "quickscale_auth.User"
 SITE_ID = 1
 ACCOUNT_LOGIN_METHODS = {"email", "username"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]

@@ -34,7 +34,7 @@ def test_backups_create_command_reports_created_artifact() -> None:
         "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"capture_snapshot": mock_capture},
     ):
-        call_command("backups_create", stdout=stdout, stderr=StringIO())
+        call_command("quickscale_backups_create", stdout=stdout, stderr=StringIO())
 
     mock_capture.assert_called_once_with(trigger="manual")
     assert stdout.getvalue() == (
@@ -69,7 +69,7 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
         {"capture_snapshot": mock_capture},
     ):
         call_command(
-            "backups_create",
+            "quickscale_backups_create",
             "--scheduled",
             stdout=stdout,
             stderr=StringIO(),
@@ -93,10 +93,10 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
 
 
 def test_backups_create_command_routes_admin_trigger() -> None:
-    """``backups_create --trigger admin`` preserves admin provenance.
+    """``quickscale_backups_create --trigger admin`` preserves admin provenance.
 
     CR-SA37-001: ``dispatch_background_create(trigger="admin")`` spawns
-    ``backups_create --trigger admin``.  The management command must pass
+    ``quickscale_backups_create --trigger admin``.  The management command must pass
     ``trigger="admin"`` through to the adapter so the resulting artifact
     records admin provenance instead of silently falling back to
     ``"manual"``.
@@ -121,7 +121,7 @@ def test_backups_create_command_routes_admin_trigger() -> None:
         {"capture_snapshot": mock_capture},
     ):
         call_command(
-            "backups_create",
+            "quickscale_backups_create",
             "--trigger",
             "admin",
             stdout=stdout,
@@ -160,7 +160,7 @@ def test_backups_create_command_routes_resume_snapshot_id() -> None:
         {"capture_snapshot": mock_capture},
     ):
         call_command(
-            "backups_create",
+            "quickscale_backups_create",
             "--resume",
             "snap-resume",
             stdout=stdout,
@@ -196,7 +196,9 @@ def test_backups_create_command_outputs_json_report() -> None:
         "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"capture_snapshot": mock_capture},
     ):
-        call_command("backups_create", "--json", stdout=stdout, stderr=StringIO())
+        call_command(
+            "quickscale_backups_create", "--json", stdout=stdout, stderr=StringIO()
+        )
 
     assert json.loads(stdout.getvalue()) == report
 
@@ -209,7 +211,9 @@ def test_backups_create_command_wraps_backup_errors() -> None:
         {"capture_snapshot": mock_capture},
     ):
         with pytest.raises(CommandError, match="pg_dump exploded"):
-            call_command("backups_create", stdout=StringIO(), stderr=StringIO())
+            call_command(
+                "quickscale_backups_create", stdout=StringIO(), stderr=StringIO()
+            )
 
 
 def test_backups_prune_command_reports_deleted_count() -> None:
@@ -220,7 +224,7 @@ def test_backups_prune_command_reports_deleted_count() -> None:
         "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"prune_backups": mock_prune},
     ):
-        call_command("backups_prune", stdout=stdout, stderr=StringIO())
+        call_command("quickscale_backups_prune", stdout=stdout, stderr=StringIO())
 
     mock_prune.assert_called_once_with()
     assert stdout.getvalue() == "Pruned 3 expired backup artifact(s)\n"
@@ -234,7 +238,9 @@ def test_backups_prune_command_wraps_backup_errors() -> None:
         {"prune_backups": mock_prune},
     ):
         with pytest.raises(CommandError, match="prune backend unavailable"):
-            call_command("backups_prune", stdout=StringIO(), stderr=StringIO())
+            call_command(
+                "quickscale_backups_prune", stdout=StringIO(), stderr=StringIO()
+            )
 
 
 @pytest.mark.django_db
@@ -248,7 +254,10 @@ def test_backups_validate_command_requires_existing_artifact() -> None:
     ):
         with pytest.raises(CommandError, match="Backup artifact not found"):
             call_command(
-                "backups_validate", "999999", stdout=StringIO(), stderr=StringIO()
+                "quickscale_backups_validate",
+                "999999",
+                stdout=StringIO(),
+                stderr=StringIO(),
             )
 
 
@@ -272,7 +281,7 @@ def test_backups_validate_command_reports_validation_issues(
             match="checksum mismatch detected; size mismatch detected",
         ):
             call_command(
-                "backups_validate",
+                "quickscale_backups_validate",
                 str(backup_artifact.pk),
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -298,7 +307,7 @@ def test_backups_validate_command_reports_success(
         {"validate_artifact": mock_validate},
     ):
         call_command(
-            "backups_validate",
+            "quickscale_backups_validate",
             str(backup_artifact.pk),
             stdout=stdout,
             stderr=StringIO(),
@@ -342,7 +351,9 @@ def test_backups_report_command_renders_snapshot_summary() -> None:
         "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"fetch_snapshot_report": mock_report},
     ):
-        call_command("backups_report", "snap-report", stdout=stdout, stderr=StringIO())
+        call_command(
+            "quickscale_backups_report", "snap-report", stdout=stdout, stderr=StringIO()
+        )
 
     mock_report.assert_called_once_with("snap-report", sidecar_payloads=[])
     assert stdout.getvalue() == (
@@ -379,7 +390,7 @@ def test_backups_pin_command_sets_rollback_pin() -> None:
         {"set_rollback_pin": mock_pin},
     ):
         call_command(
-            "backups_pin",
+            "quickscale_backups_pin",
             "snap-pin",
             "--hours",
             "6",
@@ -420,7 +431,7 @@ def test_backups_pin_command_clears_rollback_pin() -> None:
         {"clear_rollback_pin": mock_clear},
     ):
         call_command(
-            "backups_pin",
+            "quickscale_backups_pin",
             "snap-pin",
             "--clear",
             stdout=stdout,

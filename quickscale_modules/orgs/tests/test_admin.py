@@ -606,7 +606,7 @@ class TestTenantModelAdminEndToEnd:
         from django.urls import reverse
 
         response = admin_client.get(
-            reverse("admin:quickscale_modules_social_sociallink_changelist")
+            reverse("admin:quickscale_social_sociallink_changelist")
         )
         content = response.content.decode("utf-8")
 
@@ -632,7 +632,7 @@ class TestTenantModelAdminEndToEnd:
         from django.urls import reverse
 
         response = admin_client.get(
-            reverse("admin:quickscale_modules_social_sociallink_changelist")
+            reverse("admin:quickscale_social_sociallink_changelist")
         )
         content = response.content.decode("utf-8")
         assert "Some Link" not in content
@@ -657,7 +657,7 @@ class TestTenantModelAdminEndToEnd:
 
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_social_sociallink_change",
+                "admin:quickscale_social_sociallink_change",
                 args=[link.pk],
             )
         )

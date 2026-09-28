@@ -116,7 +116,7 @@ def test_orgs_declares_the_provider_id_classification_step() -> None:
     assert "provider_id_classification" in steps
     assert "provider-backed" in steps
     assert "not-provider-backed" in steps
-    assert "quickscale_modules_orgs.E001" in steps
+    assert "quickscale_orgs.E001" in steps
 
 
 @pytest.mark.parametrize("module_name", ["auth", "billing", "blog", "listings", "crm"])

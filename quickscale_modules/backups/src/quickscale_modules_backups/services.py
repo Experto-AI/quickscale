@@ -410,7 +410,7 @@ def dispatch_background_restore(
     *,
     confirmation: str,
 ) -> None:
-    """Persist STATUS_RESTORING, then dispatch ``backups_restore`` via Popen.
+    """Persist STATUS_RESTORING, then dispatch ``quickscale_backups_restore`` via Popen.
 
     Parameters
     ----------
@@ -454,7 +454,7 @@ def dispatch_background_restore(
             [
                 sys.executable,
                 manage_py,
-                "backups_restore",
+                "quickscale_backups_restore",
                 str(artifact.pk),
                 "--confirm",
                 confirmation,
@@ -489,9 +489,9 @@ def dispatch_background_create(
     *,
     trigger: str = "admin",
 ) -> None:
-    """Dispatch ``backups_create`` via subprocess, returning immediately.
+    """Dispatch ``quickscale_backups_create`` via subprocess, returning immediately.
 
-    Spawns the ``backups_create`` management command in a background
+    Spawns the ``quickscale_backups_create`` management command in a background
     subprocess so the admin request returns without blocking on
     ``pg_dump`` or optional S3 upload.
 
@@ -507,7 +507,7 @@ def dispatch_background_create(
         When ``subprocess.Popen`` itself fails (not a command error).
     """
     manage_py = _get_manage_py()
-    argv = [sys.executable, manage_py, "backups_create"]
+    argv = [sys.executable, manage_py, "quickscale_backups_create"]
     if trigger == "scheduled":
         argv.append("--scheduled")
     elif trigger != "manual":
@@ -524,9 +524,9 @@ def dispatch_background_create(
 
 
 def dispatch_background_prune() -> None:
-    """Dispatch ``backups_prune`` via subprocess, returning immediately.
+    """Dispatch ``quickscale_backups_prune`` via subprocess, returning immediately.
 
-    Spawns the ``backups_prune`` management command in a background
+    Spawns the ``quickscale_backups_prune`` management command in a background
     subprocess so the admin request returns without blocking on
     file deletion or remote cleanup.
 
@@ -538,7 +538,7 @@ def dispatch_background_prune() -> None:
     manage_py = _get_manage_py()
     try:
         subprocess.Popen(  # noqa: S603 - fixed argv list, shell disabled
-            [sys.executable, manage_py, "backups_prune"],
+            [sys.executable, manage_py, "quickscale_backups_prune"],
             close_fds=True,
         )
     except Exception as exc:

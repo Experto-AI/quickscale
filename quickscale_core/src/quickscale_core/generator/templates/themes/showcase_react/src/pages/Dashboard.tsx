@@ -91,7 +91,7 @@ const buildModuleInfo = (
     name: 'Backups',
     icon: Archive,
     description: 'Operational backup snapshots with retention, validation, and artifact downloads.',
-    href: '/admin/quickscale_modules_backups/backuppolicy/',
+    href: '/admin/quickscale_backups/backuppolicy/',
     reloadDocument: true,
   },
   {
@@ -99,7 +99,7 @@ const buildModuleInfo = (
     name: 'Notifications',
     icon: Bell,
     description: 'Transactional email settings, message history, and delivery event visibility.',
-    href: '/admin/quickscale_modules_notifications/',
+    href: '/admin/quickscale_notifications/',
     reloadDocument: true,
   },
   {

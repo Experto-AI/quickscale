@@ -42,9 +42,7 @@ def _static_apps_projection(apps: list[Any] | None = None) -> dict[str, Any]:
     return {
         "wiring_field": "apps",
         "derivation_type": "static",
-        "expression": {
-            "value": ["quickscale_modules_social"] if apps is None else apps
-        },
+        "expression": {"value": ["quickscale_social"] if apps is None else apps},
     }
 
 

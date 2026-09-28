@@ -2174,7 +2174,7 @@ class TestBackupLifecycle:
             match="QUICKSCALE_BACKUPS_ALLOW_RESTORE=true",
         ):
             call_command(
-                "backups_restore",
+                "quickscale_backups_restore",
                 str(postgresql_backup_artifact.pk),
                 "--confirm",
                 postgresql_backup_artifact.filename,
@@ -2981,7 +2981,7 @@ class TestBackupServiceHelpers:
 
         def missing_module() -> object:
             raise ModuleNotFoundError(
-                "No module named 'quickscale_modules_storage'",
+                "No module named 'quickscale_storage'",
                 name="quickscale_modules_storage",
             )
 

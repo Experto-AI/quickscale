@@ -1,4 +1,4 @@
-"""Typed DR adapter entrypoints for the single supported CLI-to-Django path: the CLI calls a function from ``ADAPTER_FUNCTIONS``, the backups app's ``dr_adapter_call`` bridge dispatches it inside Django, and each adapter lazily imports the service implementation then returns a JSON-serializable ``dict[str, Any]`` response with no hidden env-var transport layer."""
+"""Typed DR adapter entrypoints for the single supported CLI-to-Django path: the CLI calls a function from ``ADAPTER_FUNCTIONS``, the backups app's ``quickscale_backups_dr_adapter_call`` bridge dispatches it inside Django, and each adapter lazily imports the service implementation then returns a JSON-serializable ``dict[str, Any]`` response with no hidden env-var transport layer."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def capture_snapshot(
 ) -> dict[str, Any]:
     """Capture a stored snapshot and return its structured report.
 
-    This is the adapter replacement for the ``backups_create`` management
+    This is the adapter replacement for the ``quickscale_backups_create`` management
     command.  Parameters are explicit (no env-var protocol).
     """
     from quickscale_core.dr_engine.orchestration import (
@@ -71,7 +71,7 @@ def fetch_snapshot_report(
 ) -> dict[str, Any]:
     """Fetch a structured snapshot report, optionally including sidecar payloads.
 
-    Adapter replacement for the ``backups_report`` management command.
+    Adapter replacement for the ``quickscale_backups_report`` management command.
     """
     from quickscale_core.dr_engine.orchestration import report_backup_snapshot
 
@@ -97,7 +97,7 @@ def record_verification(
 ) -> dict[str, Any]:
     """Record one route-specific plan or execute verification report.
 
-    Adapter replacement for the ``backups_record_verification`` management
+    Adapter replacement for the ``quickscale_backups_record_verification`` management
     command.
     """
     from quickscale_core.dr_engine.orchestration import (
@@ -127,7 +127,7 @@ def set_rollback_pin(
 ) -> dict[str, Any]:
     """Set a time-bounded rollback pin on one stored snapshot.
 
-    Adapter replacement for ``backups_pin`` (set path).
+    Adapter replacement for ``quickscale_backups_pin`` (set path).
     """
     from quickscale_core.dr_engine.orchestration import (
         set_backup_snapshot_rollback_pin,
@@ -299,7 +299,7 @@ def sync_media(
 def prune_backups() -> dict[str, Any]:
     """Prune expired backup artifacts per the active retention policy.
 
-    Adapter replacement for the ``backups_prune`` management command.
+    Adapter replacement for the ``quickscale_backups_prune`` management command.
     """
     from quickscale_core.dr_engine.orchestration import prune_expired_backups
 
@@ -318,7 +318,7 @@ def validate_artifact(
 ) -> dict[str, Any]:
     """Validate one backup artifact checksum and local availability.
 
-    Adapter replacement for the ``backups_validate`` management command.
+    Adapter replacement for the ``quickscale_backups_validate`` management command.
     """
     from quickscale_core.dr_engine.orchestration import validate_backup_artifact
     from quickscale_core.dr_engine.persistence import get_backup_artifact
@@ -345,7 +345,7 @@ def clear_rollback_pin(
 ) -> dict[str, Any]:
     """Clear any active rollback pin on one stored snapshot.
 
-    Adapter replacement for the ``backups_pin`` (clear path) management
+    Adapter replacement for the ``quickscale_backups_pin`` (clear path) management
     command.
     """
     from quickscale_core.dr_engine.orchestration import (
@@ -373,7 +373,7 @@ def restore_backup(
 ) -> dict[str, Any]:
     """Validate or execute a guarded restore from one of three source types.
 
-    Adapter replacement for the ``backups_restore`` management command.
+    Adapter replacement for the ``quickscale_backups_restore`` management command.
 
     When *resolution_mode* is ``None`` (the default), the underlying
     ``restore_backup_source`` uses its own default

@@ -15,7 +15,7 @@ class QuickscaleCrmConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_crm"
-    label = "quickscale_modules_crm"
+    label = "quickscale_crm"
     verbose_name = "QuickScale CRM"
 
     def ready(self) -> None:

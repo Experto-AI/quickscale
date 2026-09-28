@@ -44,7 +44,7 @@ def _reset_persistence_state() -> None:
     from django.apps import apps
 
     try:
-        config = apps.get_app_config("quickscale_modules_backups")
+        config = apps.get_app_config("quickscale_backups")
     except LookupError:
         pass
     else:
@@ -71,7 +71,7 @@ class TestAppConfigReady:
         """
         from django.apps import apps
 
-        config = apps.get_app_config("quickscale_modules_backups")
+        config = apps.get_app_config("quickscale_backups")
         config.ready()
 
         # After ready(), the persistence getters should not raise.
@@ -88,7 +88,7 @@ class TestAppConfigReady:
         """Calling ready() twice with the same config is a no-op."""
         from django.apps import apps
 
-        config = apps.get_app_config("quickscale_modules_backups")
+        config = apps.get_app_config("quickscale_backups")
         config.ready()
 
         # Second call should not raise.

@@ -52,7 +52,7 @@ def _show_removal_warning(module_name: str, keep_data: bool) -> None:
         click.echo(
             "   To fully remove module data, run reverse migrations BEFORE removing:"
         )
-        click.echo(f"   python manage.py migrate quickscale_modules_{module_name} zero")
+        click.echo(f"   python manage.py migrate quickscale_{module_name} zero")
 
     click.echo("\n💡 To change immutable options, re-embed after removal:")
     click.echo(f"   quickscale plan --add {module_name}")

@@ -16,10 +16,10 @@ from quickscale_modules_orgs.tenancy import (
     revert_force_rls,
 )
 
-FORMS_FORM_TABLE = "quickscale_modules_forms_form"
-FORMS_FORMFIELD_TABLE = "quickscale_modules_forms_formfield"
-FORMS_FORMSUBMISSION_TABLE = "quickscale_modules_forms_formsubmission"
-FORMS_FORMFIELDVALUE_TABLE = "quickscale_modules_forms_formfieldvalue"
+FORMS_FORM_TABLE = "quickscale_forms_form"
+FORMS_FORMFIELD_TABLE = "quickscale_forms_formfield"
+FORMS_FORMSUBMISSION_TABLE = "quickscale_forms_formsubmission"
+FORMS_FORMFIELDVALUE_TABLE = "quickscale_forms_formfieldvalue"
 FORMS_FORM_RLS_POLICY = "forms_form_org_isolation"
 FORMS_FORMFIELD_RLS_POLICY = "forms_formfield_org_isolation"
 FORMS_FORMSUBMISSION_RLS_POLICY = "forms_formsubmission_org_isolation"
@@ -30,13 +30,15 @@ _FORMS_ALL_RLS_TARGETS = (
     (FORMS_FORMSUBMISSION_TABLE, FORMS_FORMSUBMISSION_RLS_POLICY),
     (FORMS_FORMFIELDVALUE_TABLE, FORMS_FORMFIELDVALUE_RLS_POLICY),
 )
-FORMS_FORM_ID_ORG_UNIQUE = "forms_form_id_org_unique"
-FORMS_FORMFIELD_ID_ORG_UNIQUE = "forms_formfield_id_org_unique"
-FORMS_FORMSUBMISSION_ID_ORG_UNIQUE = "forms_formsubmission_id_org_unique"
-FORMS_FORMFIELD_FORM_ORG_FK = "forms_formfield_form_org_fk"
-FORMS_FORMSUBMISSION_FORM_ORG_FK = "forms_formsubmission_form_org_fk"
-FORMS_FORMFIELDVALUE_SUBMISSION_ORG_FK = "forms_formfieldvalue_submission_org_fk"
-FORMS_FORMFIELDVALUE_FIELD_ORG_FK = "forms_formfieldvalue_field_org_fk"
+FORMS_FORM_ID_ORG_UNIQUE = "quickscale_forms_form_id_org_unique"
+FORMS_FORMFIELD_ID_ORG_UNIQUE = "quickscale_forms_formfield_id_org_unique"
+FORMS_FORMSUBMISSION_ID_ORG_UNIQUE = "quickscale_forms_formsubmission_id_org_unique"
+FORMS_FORMFIELD_FORM_ORG_FK = "quickscale_forms_formfield_form_org_fk"
+FORMS_FORMSUBMISSION_FORM_ORG_FK = "quickscale_forms_formsubmission_form_org_fk"
+FORMS_FORMFIELDVALUE_SUBMISSION_ORG_FK = (
+    "quickscale_forms_formfieldvalue_submission_org_fk"
+)
+FORMS_FORMFIELDVALUE_FIELD_ORG_FK = "quickscale_forms_formfieldvalue_field_org_fk"
 
 _RATING_OPTIONS = [
     {"value": str(i), "label": label}
@@ -160,9 +162,9 @@ _PRESETS = [
 
 def seed_forms(apps: Any, schema_editor: Any) -> None:
     """Seed four preset forms with System-org ownership, idempotently."""
-    Organization = apps.get_model("quickscale_modules_orgs", "Organization")
-    Form = apps.get_model("quickscale_modules_forms", "Form")
-    FormField = apps.get_model("quickscale_modules_forms", "FormField")
+    Organization = apps.get_model("quickscale_orgs", "Organization")
+    Form = apps.get_model("quickscale_forms", "Form")
+    FormField = apps.get_model("quickscale_forms", "FormField")
     try:
         system_org = Organization.objects.get(is_system=True, slug="__system__")
     except Organization.DoesNotExist:
@@ -286,7 +288,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("quickscale_modules_orgs", "0001_initial"),
+        ("quickscale_orgs", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -344,12 +346,11 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="forms",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
             options={
-                "db_table": "quickscale_modules_forms_form",
                 "ordering": ["title"],
                 "base_manager_name": "all_objects",
             },
@@ -415,7 +416,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="fields",
-                        to="quickscale_modules_forms.form",
+                        to="quickscale_forms.form",
                     ),
                 ),
                 (
@@ -423,12 +424,11 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="form_fields",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
             options={
-                "db_table": "quickscale_modules_forms_formfield",
                 "ordering": ["order"],
                 "base_manager_name": "all_objects",
             },
@@ -471,7 +471,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="submissions",
-                        to="quickscale_modules_forms.form",
+                        to="quickscale_forms.form",
                     ),
                 ),
                 (
@@ -479,12 +479,11 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="form_submissions",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
             options={
-                "db_table": "quickscale_modules_forms_formsubmission",
                 "ordering": ["-submitted_at"],
                 "base_manager_name": "all_objects",
             },
@@ -515,7 +514,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="values",
-                        to="quickscale_modules_forms.formfield",
+                        to="quickscale_forms.formfield",
                     ),
                 ),
                 (
@@ -523,7 +522,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="values",
-                        to="quickscale_modules_forms.formsubmission",
+                        to="quickscale_forms.formsubmission",
                     ),
                 ),
                 (
@@ -531,12 +530,11 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="form_field_values",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
             options={
-                "db_table": "quickscale_modules_forms_formfieldvalue",
                 "base_manager_name": "all_objects",
             },
             managers=[
@@ -548,29 +546,35 @@ class Migration(migrations.Migration):
             model_name="form",
             constraint=models.UniqueConstraint(
                 fields=("slug", "organization"),
-                name="quickscale_modules_forms_form_slug_organization_unique",
+                name="quickscale_forms_form_slug_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="form",
             constraint=models.UniqueConstraint(
-                fields=("id", "organization"), name="forms_form_id_org_unique"
+                fields=("id", "organization"),
+                name="quickscale_forms_form_id_org_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="formfield",
             constraint=models.UniqueConstraint(
-                fields=("id", "organization"), name="forms_formfield_id_org_unique"
+                fields=("id", "organization"),
+                name="quickscale_forms_formfield_id_org_unique",
             ),
         ),
-        migrations.AlterUniqueTogether(
-            name="formfield",
-            unique_together={("form", "name")},
+        migrations.AddConstraint(
+            model_name="formfield",
+            constraint=models.UniqueConstraint(
+                fields=("form", "name"),
+                name="quickscale_forms_formfield_form_name_unique",
+            ),
         ),
         migrations.AddConstraint(
             model_name="formsubmission",
             constraint=models.UniqueConstraint(
-                fields=("id", "organization"), name="forms_formsubmission_id_org_unique"
+                fields=("id", "organization"),
+                name="quickscale_forms_formsubmission_id_org_unique",
             ),
         ),
         migrations.RunPython(

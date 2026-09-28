@@ -131,14 +131,14 @@ class Listing(AbstractListing):
         base_manager_name = "all_objects"
         indexes = [
             models.Index(
-                fields=["-published_date"], name="quickscale__publish_a4cb60_idx"
+                fields=["-published_date"], name="qs_listings_listing_pub_idx"
             ),
-            models.Index(fields=["status"], name="quickscale__status_e05f2c_idx"),
-            models.Index(fields=["slug"], name="quickscale__slug_e91f04_idx"),
+            models.Index(fields=["status"], name="qs_listings_listing_status_idx"),
+            models.Index(fields=["slug"], name="qs_listings_listing_slug_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],
-                name="listings_listing_slug_organization_unique",
+                name="quickscale_listings_listing_slug_organization_unique",
             ),
         ]

@@ -8,5 +8,5 @@ class QuickscaleSocialConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_social"
-    label = "quickscale_modules_social"
+    label = "quickscale_social"
     verbose_name = "QuickScale Social"

@@ -54,7 +54,10 @@ class TestNamingConstants:
     """Verify naming constants and metadata footprint values."""
 
     def test_equality_func_name(self) -> None:
-        assert CHILD_PARENT_EQUALITY_FUNC_NAME == "qs_child_parent_org_equality"
+        assert (
+            CHILD_PARENT_EQUALITY_FUNC_NAME
+            == "quickscale_orgs_child_parent_org_equality"
+        )
 
     def test_trigger_name_prefix(self) -> None:
         assert CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX == "qs_"
@@ -66,9 +69,9 @@ class TestNamingConstants:
         """The deterministic trigger name follows a stable convention
         that the conformance gate can search in pg_trigger."""
         name = _child_equality_trigger_name(
-            "quickscale_modules_crm_contactnote",
+            "quickscale_crm_contactnote",
         )
-        assert name == "qs_quickscale_modules_crm_contactnote_org_equality"
+        assert name == "qs_quickscale_crm_contactnote_org_equality"
         assert name.startswith(CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX)
         assert name.endswith("_org_equality")
 
@@ -299,15 +302,15 @@ class TestEqualityNaming:
 
     def test_trigger_name_for_contactnote(self) -> None:
         name = _child_equality_trigger_name(
-            "quickscale_modules_crm_contactnote",
+            "quickscale_crm_contactnote",
         )
-        assert name == "qs_quickscale_modules_crm_contactnote_org_equality"
+        assert name == "qs_quickscale_crm_contactnote_org_equality"
 
     def test_trigger_name_for_form_field(self) -> None:
         name = _child_equality_trigger_name(
-            "quickscale_modules_forms_formfield",
+            "quickscale_forms_formfield",
         )
-        assert name == "qs_quickscale_modules_forms_formfield_org_equality"
+        assert name == "qs_quickscale_forms_formfield_org_equality"
 
     def test_trigger_name_starts_with_prefix(self) -> None:
         name = _child_equality_trigger_name("any_table")
@@ -389,8 +392,8 @@ class TestInstallEqualityTriggerFunction:
 class TestEnableDisableChildParentEquality:
     """Tests for ``enable_child_parent_equality`` and its reverse."""
 
-    CHILD_TABLE = "quickscale_modules_crm_contactnote"
-    PARENT_TABLE = "quickscale_modules_crm_contact"
+    CHILD_TABLE = "quickscale_crm_contactnote"
+    PARENT_TABLE = "quickscale_crm_contact"
     FK_COLUMN = "contact_id"
 
     def test_enable_creates_trigger_on_postgres(self) -> None:
@@ -535,8 +538,8 @@ class TestCompositeFkSqlTemplates:
 class TestAddRemoveParentUniqueConstraint:
     """Tests for ``add_parent_unique_constraint`` and its reverse."""
 
-    TABLE = "quickscale_modules_crm_contact"
-    CONSTRAINT = "crm_contact_id_org_unique"
+    TABLE = "quickscale_crm_contact"
+    CONSTRAINT = "quickscale_crm_contact_id_org_unique"
 
     def test_add_creates_unique_on_postgres(self) -> None:
         schema_editor = MagicMock()
@@ -617,12 +620,12 @@ class TestAddRemoveParentUniqueConstraint:
 
         add_parent_unique_constraint(
             schema_editor,
-            table="quickscale_modules_crm_contact",
-            constraint_name="crm_contact_id_org_unique",
+            table="quickscale_crm_contact",
+            constraint_name="quickscale_crm_contact_id_org_unique",
         )
         sql = schema_editor.execute.call_args[0][0]
-        assert "crm_contact_id_org_unique" in sql
-        assert "quickscale_modules_crm_contact" in sql
+        assert "quickscale_crm_contact_id_org_unique" in sql
+        assert "quickscale_crm_contact" in sql
 
 
 # =========================================================================
@@ -633,10 +636,10 @@ class TestAddRemoveParentUniqueConstraint:
 class TestAddRemoveCompositeChildFk:
     """Tests for ``add_composite_child_fk`` and its reverse."""
 
-    CHILD_TABLE = "quickscale_modules_crm_contactnote"
-    PARENT_TABLE = "quickscale_modules_crm_contact"
+    CHILD_TABLE = "quickscale_crm_contactnote"
+    PARENT_TABLE = "quickscale_crm_contact"
     FK_COLUMN = "contact_id"
-    CONSTRAINT = "crm_contactnote_contact_org_fk"
+    CONSTRAINT = "quickscale_crm_contactnote_contact_org_fk"
 
     def test_add_creates_fk_on_postgres(self) -> None:
         schema_editor = MagicMock()
@@ -680,10 +683,10 @@ class TestAddRemoveCompositeChildFk:
         schema_editor.connection.vendor = "postgresql"
         add_composite_child_fk(
             schema_editor,
-            child_table="quickscale_modules_forms_formfieldvalue",
-            constraint_name="forms_formfieldvalue_field_org_fk",
+            child_table="quickscale_forms_formfieldvalue",
+            constraint_name="quickscale_forms_formfieldvalue_field_org_fk",
             child_fk_column="field_id",
-            parent_table="quickscale_modules_forms_formfield",
+            parent_table="quickscale_forms_formfield",
             on_delete="SET NULL (field_id)",
         )
         sql = schema_editor.execute.call_args[0][0]
@@ -747,7 +750,7 @@ def test_apply_force_rls_twice_preserves_policies_and_force_flag() -> None:
 
     assert connection.vendor == "postgresql"
 
-    table = "quickscale_modules_forms_form"
+    table = "quickscale_forms_form"
     policy_name = "forms_form_org_isolation"
     targets = ((table, policy_name),)
 
@@ -784,7 +787,7 @@ def test_apply_force_rls_twice_preserves_policies_and_force_flag() -> None:
 # ---------------------------------------------------------------------------
 # FormFieldValue.field delete-path proof (AF12 Phase 2)
 # ---------------------------------------------------------------------------
-# Proves that the DB-level composite FK ``forms_formfieldvalue_field_org_fk``
+# Proves that the DB-level composite FK ``quickscale_forms_formfieldvalue_field_org_fk``
 # with ``ON DELETE SET NULL (field_id)`` correctly sets only ``field_id``
 # to NULL when the parent ``FormField`` is deleted, while ``organization_id``
 # remains NOT NULL.
@@ -868,7 +871,7 @@ class TestCompositeFkFormFieldValueDeletePath:
         # handler) so the DB-level ON DELETE SET NULL fires.
         with connection.cursor() as cursor:
             cursor.execute(
-                "DELETE FROM quickscale_modules_forms_formfield WHERE id = %s",
+                "DELETE FROM quickscale_forms_formfield WHERE id = %s",
                 [field.pk],
             )
 
@@ -956,7 +959,7 @@ class TestCompositeFkFormFieldValueDeletePath:
         # Delete field_a (the "name" field) via raw SQL.
         with connection.cursor() as cursor:
             cursor.execute(
-                "DELETE FROM quickscale_modules_forms_formfield WHERE id = %s",
+                "DELETE FROM quickscale_forms_formfield WHERE id = %s",
                 [field_a.pk],
             )
 

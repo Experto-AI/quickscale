@@ -40,10 +40,10 @@ data migration — no separate seed step needed on first install.
 ### 4. Seed presets (idempotent recovery)
 
 ```bash
-python manage.py forms_seed_presets
+python manage.py quickscale_forms_seed_presets
 ```
 
-The `forms_seed_presets` management command remains available as a safe,
+The `quickscale_forms_seed_presets` management command remains available as a safe,
 idempotent recovery tool. Running it after a fresh migrate is harmless — it
 detects existing presets and skips duplicates. Use it to re-create any preset
 that was manually deleted or to recover presets in an older database that was
@@ -70,7 +70,7 @@ The following settings configure form behavior. `FORMS_SPAM_PROTECTION`, `FORMS_
 
 > **Note:** When using QuickScale project generation, these settings are wired automatically with explicit values in the generated project's settings.
 
-New `Form` rows created at runtime after migrations complete — including those from the `forms_seed_presets` management command when run manually — inherit `FORMS_DATA_RETENTION_DAYS` when `data_retention_days` is omitted. Fresh-install preset rows created by the initial seed migration are an exception: they hardcode the historical 365-day default and do not inherit the runtime setting. Existing forms always keep their stored per-row retention window regardless of how they were created.
+New `Form` rows created at runtime after migrations complete — including those from the `quickscale_forms_seed_presets` management command when run manually — inherit `FORMS_DATA_RETENTION_DAYS` when `data_retention_days` is omitted. Fresh-install preset rows created by the initial seed migration are an exception: they hardcode the historical 365-day default and do not inherit the runtime setting. Existing forms always keep their stored per-row retention window regardless of how they were created.
 
 ## REST API Endpoints
 
@@ -107,7 +107,7 @@ Superuser access is the only path that returns data across organizations, and it
 
 ## Built-in Form Presets
 
-Run `python manage.py forms_seed_presets` to create:
+Run `python manage.py quickscale_forms_seed_presets` to create:
 
 | Slug | Fields |
 |------|--------|
@@ -118,20 +118,20 @@ Run `python manage.py forms_seed_presets` to create:
 
 ## Management Commands
 
-### `forms_seed_presets`
+### `quickscale_forms_seed_presets`
 
 Creates all four built-in form presets. Idempotent — safe to run multiple times.
 
 ```bash
-python manage.py forms_seed_presets
+python manage.py quickscale_forms_seed_presets
 ```
 
-### `forms_anonymize_submissions`
+### `quickscale_forms_anonymize_submissions`
 
 Anonymizes (nulls `ip_address`, clears `user_agent`) for submissions older than each form's `data_retention_days`. GDPR compliance helper.
 
 ```bash
-python manage.py forms_anonymize_submissions
+python manage.py quickscale_forms_anonymize_submissions
 ```
 
 ## React Integration

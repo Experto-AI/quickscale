@@ -1,4 +1,4 @@
-"""Focused tests for the dr_adapter_call management command bridge.
+"""Focused tests for the quickscale_backups_dr_adapter_call management command bridge.
 
 SA31 stdin transport coverage is also provided by the standalone tests at
 ``quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py``.
@@ -18,7 +18,9 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from quickscale_modules_backups.management.commands.dr_adapter_call import Command
+from quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call import (
+    Command,
+)
 
 
 def test_dr_adapter_call_dispatches_registered_function_and_renders_json() -> None:
@@ -32,12 +34,12 @@ def test_dr_adapter_call_dispatches_registered_function_and_renders_json() -> No
     )
 
     with patch.dict(
-        "quickscale_modules_backups.management.commands.dr_adapter_call.ADAPTER_FUNCTIONS",
+        "quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call.ADAPTER_FUNCTIONS",
         {"capture_snapshot": mock_adapter},
         clear=True,
     ):
         call_command(
-            "dr_adapter_call",
+            "quickscale_backups_dr_adapter_call",
             "capture_snapshot",
             "--args-json",
             '{"snapshot_id": "snap-123", "dry_run": true}',
@@ -66,7 +68,7 @@ def test_dr_adapter_call_rejects_invalid_args_json(
 ) -> None:
     with pytest.raises(CommandError, match=message):
         call_command(
-            "dr_adapter_call",
+            "quickscale_backups_dr_adapter_call",
             "capture_snapshot",
             "--args-json",
             args_json,
@@ -77,7 +79,7 @@ def test_dr_adapter_call_rejects_invalid_args_json(
 
 def test_dr_adapter_call_rejects_unknown_function() -> None:
     with patch.dict(
-        "quickscale_modules_backups.management.commands.dr_adapter_call.ADAPTER_FUNCTIONS",
+        "quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call.ADAPTER_FUNCTIONS",
         {"capture_snapshot": MagicMock()},
         clear=True,
     ):
@@ -86,7 +88,7 @@ def test_dr_adapter_call_rejects_unknown_function() -> None:
             match="Unknown DR adapter function 'missing_function'. Available: capture_snapshot",
         ):
             call_command(
-                "dr_adapter_call",
+                "quickscale_backups_dr_adapter_call",
                 "missing_function",
                 "--args-json",
                 "{}",
@@ -99,7 +101,7 @@ def test_dr_adapter_call_returns_exit_code_one_for_adapter_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     with patch.dict(
-        "quickscale_modules_backups.management.commands.dr_adapter_call.ADAPTER_FUNCTIONS",
+        "quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call.ADAPTER_FUNCTIONS",
         {"capture_snapshot": MagicMock(side_effect=RuntimeError("adapter exploded"))},
         clear=True,
     ):
@@ -107,7 +109,7 @@ def test_dr_adapter_call_returns_exit_code_one_for_adapter_failure(
             Command().run_from_argv(
                 [
                     "manage.py",
-                    "dr_adapter_call",
+                    "quickscale_backups_dr_adapter_call",
                     "capture_snapshot",
                     "--args-json",
                     "{}",
@@ -136,7 +138,7 @@ def test_dr_adapter_call_reads_json_from_stdin() -> None:
 
     with (
         patch.dict(
-            "quickscale_modules_backups.management.commands.dr_adapter_call."
+            "quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call."
             "ADAPTER_FUNCTIONS",
             {"capture_snapshot": mock_adapter},
             clear=True,
@@ -144,7 +146,7 @@ def test_dr_adapter_call_reads_json_from_stdin() -> None:
         patch.object(sys, "stdin", StringIO(stdin_payload)),
     ):
         call_command(
-            "dr_adapter_call",
+            "quickscale_backups_dr_adapter_call",
             "capture_snapshot",
             stdout=stdout,
             stderr=StringIO(),
@@ -159,7 +161,7 @@ def test_dr_adapter_call_stdin_empty_raises_command_error() -> None:
     with patch.object(sys, "stdin", StringIO("")):
         with pytest.raises(CommandError, match="No JSON input provided"):
             call_command(
-                "dr_adapter_call",
+                "quickscale_backups_dr_adapter_call",
                 "capture_snapshot",
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -171,7 +173,7 @@ def test_dr_adapter_call_stdin_whitespace_only_raises_command_error() -> None:
     with patch.object(sys, "stdin", StringIO("   \n  \n  ")):
         with pytest.raises(CommandError, match="No JSON input provided"):
             call_command(
-                "dr_adapter_call",
+                "quickscale_backups_dr_adapter_call",
                 "capture_snapshot",
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -183,7 +185,7 @@ def test_dr_adapter_call_stdin_invalid_json_raises_command_error() -> None:
     with patch.object(sys, "stdin", StringIO("not-json")):
         with pytest.raises(CommandError, match="stdin input must be valid JSON"):
             call_command(
-                "dr_adapter_call",
+                "quickscale_backups_dr_adapter_call",
                 "capture_snapshot",
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -195,7 +197,7 @@ def test_dr_adapter_call_stdin_non_dict_raises_command_error() -> None:
     with patch.object(sys, "stdin", StringIO("[1, 2, 3]")):
         with pytest.raises(CommandError, match="stdin input must be a JSON object"):
             call_command(
-                "dr_adapter_call",
+                "quickscale_backups_dr_adapter_call",
                 "capture_snapshot",
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -205,7 +207,7 @@ def test_dr_adapter_call_stdin_non_dict_raises_command_error() -> None:
 def test_dr_adapter_call_stdin_with_unknown_function() -> None:
     """SA31: stdin transport with an unknown function name still errors."""
     with patch.dict(
-        "quickscale_modules_backups.management.commands.dr_adapter_call."
+        "quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call."
         "ADAPTER_FUNCTIONS",
         {"capture_snapshot": MagicMock()},
         clear=True,
@@ -216,7 +218,7 @@ def test_dr_adapter_call_stdin_with_unknown_function() -> None:
                 match="Unknown DR adapter function 'missing_function'",
             ):
                 call_command(
-                    "dr_adapter_call",
+                    "quickscale_backups_dr_adapter_call",
                     "missing_function",
                     stdout=StringIO(),
                     stderr=StringIO(),

@@ -30,10 +30,10 @@ from quickscale_modules_blog.models import Category, Post, Tag
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
 _BLOG_TABLES = (
-    "quickscale_modules_blog_category",
-    "quickscale_modules_blog_tag",
-    "quickscale_modules_blog_blogmediaasset",
-    "quickscale_modules_blog_post",
+    "quickscale_blog_category",
+    "quickscale_blog_tag",
+    "quickscale_blog_blogmediaasset",
+    "quickscale_blog_post",
 )
 
 
@@ -119,8 +119,8 @@ class TestBlogRlsBoundaryRestrictedRole:
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(bogus_org)])
                 for table in (
-                    "quickscale_modules_blog_category",
-                    "quickscale_modules_blog_tag",
+                    "quickscale_blog_category",
+                    "quickscale_blog_tag",
                 ):
                     cursor.execute(f"SELECT COUNT(*) FROM {table}")
                     (count,) = cursor.fetchone()
@@ -164,7 +164,7 @@ class TestBlogRlsBoundaryRestrictedRole:
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(org_a.id)])
                 cursor.execute(
-                    "SELECT name FROM quickscale_modules_blog_category ORDER BY name"
+                    "SELECT name FROM quickscale_blog_category ORDER BY name"
                 )
                 names = [r[0] for r in cursor.fetchall()]
                 assert names == ["Org A Category"], (
@@ -173,7 +173,7 @@ class TestBlogRlsBoundaryRestrictedRole:
 
                 cursor.execute("SET app.current_org_id = %s", [str(org_b.id)])
                 cursor.execute(
-                    "SELECT name FROM quickscale_modules_blog_category ORDER BY name"
+                    "SELECT name FROM quickscale_blog_category ORDER BY name"
                 )
                 names = [r[0] for r in cursor.fetchall()]
                 assert names == ["Org B Category"], (
@@ -206,16 +206,12 @@ class TestBlogRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(org_a.id)])
-                cursor.execute(
-                    "SELECT name FROM quickscale_modules_blog_tag ORDER BY name"
-                )
+                cursor.execute("SELECT name FROM quickscale_blog_tag ORDER BY name")
                 names = [r[0] for r in cursor.fetchall()]
                 assert names == ["Org A Tag"], f"Expected only Org A Tag, got {names}"
 
                 cursor.execute("SET app.current_org_id = %s", [str(org_b.id)])
-                cursor.execute(
-                    "SELECT name FROM quickscale_modules_blog_tag ORDER BY name"
-                )
+                cursor.execute("SELECT name FROM quickscale_blog_tag ORDER BY name")
                 names = [r[0] for r in cursor.fetchall()]
                 assert names == ["Org B Tag"], (
                     f"Cross-org: expected only Org B Tag, got {names}"
@@ -244,7 +240,7 @@ class TestBlogRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("RESET app.current_org_id")
-                cursor.execute("SELECT COUNT(*) FROM quickscale_modules_blog_category")
+                cursor.execute("SELECT COUNT(*) FROM quickscale_blog_category")
                 (count,) = cursor.fetchone()
                 assert count == 0, (
                     "RLS should block all categories when org context is unset (fail-closed)"
@@ -272,17 +268,17 @@ class TestBlogRlsBoundaryRestrictedRole:
 
 _RESTRICTED_ANON_ROLE = "quickscale_rls_test_role"
 _ANON_BLOG_TABLES = (
-    "quickscale_modules_blog_post",
-    "quickscale_modules_blog_category",
-    "quickscale_modules_blog_tag",
-    "quickscale_modules_blog_blogmediaasset",
-    "quickscale_modules_blog_post_tags",
+    "quickscale_blog_post",
+    "quickscale_blog_category",
+    "quickscale_blog_tag",
+    "quickscale_blog_blogmediaasset",
+    "quickscale_blog_post_tags",
 )
 _SYSTEM_ANON_TABLES = (
     "auth_user",
     "django_session",
 )
-_ORGS_ANON_TABLES = ("quickscale_modules_orgs_organization",)
+_ORGS_ANON_TABLES = ("quickscale_orgs_organization",)
 
 
 def _ensure_anon_blog_rls_test_role() -> None:

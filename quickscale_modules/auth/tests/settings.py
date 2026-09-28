@@ -38,7 +38,7 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
-AUTH_USER_MODEL = "quickscale_modules_auth.User"
+AUTH_USER_MODEL = "quickscale_auth.User"
 
 SITE_ID = 1
 

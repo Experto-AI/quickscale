@@ -122,7 +122,6 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "User",
                 "verbose_name_plural": "Users",
-                "db_table": "quickscale_auth_user",
                 "ordering": ["-date_joined"],
             },
             managers=[

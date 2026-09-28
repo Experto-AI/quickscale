@@ -13,8 +13,8 @@ from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
 
 SOCIAL_LINK_RLS_POLICY = "social_link_org_isolation"
 SOCIAL_EMBED_RLS_POLICY = "social_embed_org_isolation"
-SOCIAL_LINK_TABLE = "quickscale_modules_social_sociallink"
-SOCIAL_EMBED_TABLE = "quickscale_modules_social_socialembed"
+SOCIAL_LINK_TABLE = "quickscale_social_sociallink"
+SOCIAL_EMBED_TABLE = "quickscale_social_socialembed"
 _SOCIAL_RLS_TARGETS = (
     (SOCIAL_LINK_TABLE, SOCIAL_LINK_RLS_POLICY),
     (SOCIAL_EMBED_TABLE, SOCIAL_EMBED_RLS_POLICY),
@@ -32,7 +32,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("quickscale_modules_orgs", "0001_initial"),
+        ("quickscale_orgs", "0001_initial"),
     ]
 
     operations = [
@@ -88,7 +88,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
                 (
@@ -210,7 +210,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],

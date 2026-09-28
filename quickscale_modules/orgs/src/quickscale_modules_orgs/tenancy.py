@@ -39,7 +39,7 @@ class TenantTableEntry:
     """A single entry in the central tenant-table registry.
 
     Attributes:
-        app_label: Django app label (e.g. ``quickscale_modules_crm``).
+        app_label: Django app label (e.g. ``quickscale_crm``).
         model_name: Short model name (e.g. ``Contact``).
         status: Lifecycle status in the registry.
         reason: Human-readable justification for the status.
@@ -135,138 +135,138 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
     # ======================================================================
     # -- CRM --
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="Tag",
         status=TenantTableStatus.ENROLLED,
         policy_name="crm_tag_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="Company",
         status=TenantTableStatus.ENROLLED,
         policy_name="crm_company_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="Contact",
         status=TenantTableStatus.ENROLLED,
         policy_name="crm_contact_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="Stage",
         status=TenantTableStatus.ENROLLED,
         policy_name="crm_stage_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="Deal",
         status=TenantTableStatus.ENROLLED,
         policy_name="crm_deal_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="ContactNote",
         status=TenantTableStatus.ENROLLED,
         policy_name="crm_contactnote_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="DealNote",
         status=TenantTableStatus.ENROLLED,
         policy_name="crm_dealnote_org_isolation",
     ),
     # -- Forms --
     TenantTableEntry(
-        app_label="quickscale_modules_forms",
+        app_label="quickscale_forms",
         model_name="Form",
         status=TenantTableStatus.ENROLLED,
         policy_name="forms_form_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_forms",
+        app_label="quickscale_forms",
         model_name="FormField",
         status=TenantTableStatus.ENROLLED,
         policy_name="forms_formfield_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_forms",
+        app_label="quickscale_forms",
         model_name="FormSubmission",
         status=TenantTableStatus.ENROLLED,
         policy_name="forms_formsubmission_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_forms",
+        app_label="quickscale_forms",
         model_name="FormFieldValue",
         status=TenantTableStatus.ENROLLED,
         policy_name="forms_formfieldvalue_org_isolation",
     ),
     # -- Billing --
     TenantTableEntry(
-        app_label="quickscale_modules_billing",
+        app_label="quickscale_billing",
         model_name="CreditBalance",
         status=TenantTableStatus.ENROLLED,
         policy_name="billing_credit_balance_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_billing",
+        app_label="quickscale_billing",
         model_name="CreditTransaction",
         status=TenantTableStatus.ENROLLED,
         policy_name="billing_credit_transaction_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_billing",
+        app_label="quickscale_billing",
         model_name="PurchaseCheckout",
         status=TenantTableStatus.ENROLLED,
         policy_name="billing_purchase_checkout_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_billing",
+        app_label="quickscale_billing",
         model_name="Subscription",
         status=TenantTableStatus.ENROLLED,
         policy_name="billing_subscription_org_isolation",
     ),
     # -- Blog --
     TenantTableEntry(
-        app_label="quickscale_modules_blog",
+        app_label="quickscale_blog",
         model_name="Category",
         status=TenantTableStatus.ENROLLED,
         policy_name="blog_category_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_blog",
+        app_label="quickscale_blog",
         model_name="Tag",
         status=TenantTableStatus.ENROLLED,
         policy_name="blog_tag_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_blog",
+        app_label="quickscale_blog",
         model_name="BlogMediaAsset",
         status=TenantTableStatus.ENROLLED,
         policy_name="blog_media_asset_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_blog",
+        app_label="quickscale_blog",
         model_name="Post",
         status=TenantTableStatus.ENROLLED,
         policy_name="blog_post_org_isolation",
     ),
     # -- Listings --
     TenantTableEntry(
-        app_label="quickscale_modules_listings",
+        app_label="quickscale_listings",
         model_name="Listing",
         status=TenantTableStatus.ENROLLED,
         policy_name="listings_listing_org_isolation",
     ),
     # -- Social --
     TenantTableEntry(
-        app_label="quickscale_modules_social",
+        app_label="quickscale_social",
         model_name="SocialLink",
         status=TenantTableStatus.ENROLLED,
         policy_name="social_link_org_isolation",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_social",
+        app_label="quickscale_social",
         model_name="SocialEmbed",
         status=TenantTableStatus.ENROLLED,
         policy_name="social_embed_org_isolation",
@@ -276,93 +276,93 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
     # ======================================================================
     # -- Orgs (control-plane — the tenancy infrastructure itself) --
     TenantTableEntry(
-        app_label="quickscale_modules_orgs",
+        app_label="quickscale_orgs",
         model_name="Organization",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Control-plane model: tenant definition table, not tenant-scoped.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_orgs",
+        app_label="quickscale_orgs",
         model_name="OrganizationMembership",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Control-plane model: membership tracks the user-org "
         "relationship; it is not tenant-scoped data.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_orgs",
+        app_label="quickscale_orgs",
         model_name="OrganizationInvitation",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Control-plane model: pending invitations are "
         "tenancy-infrastructure records.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_orgs",
+        app_label="quickscale_orgs",
         model_name="OrganizationTombstone",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Control-plane model: purge-tracking records are "
         "tenancy-infrastructure, not tenant-owned data.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_orgs",
+        app_label="quickscale_orgs",
         model_name="TenantModel",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Abstract base model — not concrete.",
     ),
     # -- Billing (system-wide, not tenant-scoped) --
     TenantTableEntry(
-        app_label="quickscale_modules_billing",
+        app_label="quickscale_billing",
         model_name="Plan",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="System-wide plan definition, not tenant-owned.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_billing",
+        app_label="quickscale_billing",
         model_name="WebhookEvent",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="System-wide webhook idempotency record, not tenant-owned.",
     ),
     # -- Blog (user-profile, not tenant-scoped) --
     TenantTableEntry(
-        app_label="quickscale_modules_blog",
+        app_label="quickscale_blog",
         model_name="AuthorProfile",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="User-profile extension linked to auth.User, not tenant-scoped.",
     ),
     # -- Auto-created ManyToMany through tables --
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="Contact_tags",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Auto-created ManyToMany through table — no tenant-scoped data.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_crm",
+        app_label="quickscale_crm",
         model_name="Deal_tags",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Auto-created ManyToMany through table — no tenant-scoped data.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_blog",
+        app_label="quickscale_blog",
         model_name="Post_tags",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Auto-created ManyToMany through table — no tenant-scoped data.",
     ),
     # -- Auth (system-wide user model, not tenant-scoped) --
     TenantTableEntry(
-        app_label="quickscale_modules_auth",
+        app_label="quickscale_auth",
         model_name="User",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="System-wide user model: identities are cross-tenant, not tenant-scoped.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_auth",
+        app_label="quickscale_auth",
         model_name="User_groups",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Auto-created ManyToMany through table for auth.User.groups — "
         "no tenant-scoped data.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_auth",
+        app_label="quickscale_auth",
         model_name="User_user_permissions",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Auto-created ManyToMany through table for auth.User.user_permissions "
@@ -370,44 +370,44 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
     ),
     # -- Backups (operational/DR records, not tenant-scoped) --
     TenantTableEntry(
-        app_label="quickscale_modules_backups",
+        app_label="quickscale_backups",
         model_name="BackupPolicy",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Operational backup policy — singleton config, not tenant-scoped.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_backups",
+        app_label="quickscale_backups",
         model_name="BackupArtifact",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Operational backup artifact metadata — not tenant-scoped.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_backups",
+        app_label="quickscale_backups",
         model_name="BackupSnapshot",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Internal DR snapshot metadata — not tenant-scoped.",
     ),
     # -- Notifications (system-wide operational records, not tenant-scoped) --
     TenantTableEntry(
-        app_label="quickscale_modules_notifications",
+        app_label="quickscale_notifications",
         model_name="NotificationSettings",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Operational notification configuration — not tenant-scoped.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_notifications",
+        app_label="quickscale_notifications",
         model_name="NotificationMessage",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="System-wide notification send-request — not tenant-scoped.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_notifications",
+        app_label="quickscale_notifications",
         model_name="NotificationDelivery",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Recipient delivery tracking — not tenant-scoped.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_notifications",
+        app_label="quickscale_notifications",
         model_name="NotificationDeliveryEvent",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Provider delivery event history — not tenant-scoped.",
@@ -415,14 +415,14 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
     # -- Abstract base models --
     # -- Test-only models --
     TenantTableEntry(
-        app_label="quickscale_modules_orgs",
+        app_label="quickscale_orgs",
         model_name="ConcreteTenantResource",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Test-only model defined in test_models.py for "
         "TenantManager behaviour tests; not a real tenant table.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_orgs",
+        app_label="quickscale_orgs",
         model_name="ForwardFKChild",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Test-only model defined in test_models.py for "
@@ -430,7 +430,7 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
         "not a real tenant table.",
     ),
     TenantTableEntry(
-        app_label="quickscale_modules_orgs",
+        app_label="quickscale_orgs",
         model_name="TenantExcludedModel",
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Test-only model defined in test_management_commands.py for "
@@ -465,7 +465,7 @@ def tenant_org_fk(
     This is the canonical owned-model contract for all tenant-scoped models.
     Use this instead of a bare ForeignKey to Organization.  D3 enforces
     ``on_delete=PROTECT`` — accidental cascade is not possible; teardown is
-    always explicit via ``purge_organization`` (T1.17).
+    always explicit via ``quickscale_orgs_purge_organization`` (T1.17).
 
     Args:
         related_name: Standard Django related_name for the FK reverse
@@ -478,7 +478,7 @@ def tenant_org_fk(
         ``on_delete=PROTECT``, and the supplied ``related_name``.
     """
     return models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
+        "quickscale_orgs.Organization",
         on_delete=models.PROTECT,
         related_name=related_name,
         db_index=db_index,
@@ -499,7 +499,7 @@ def tenant_org_fk(
 #     from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
 #
 #     TARGETS = (
-#         ("quickscale_modules_billing_creditbalance",
+#         ("quickscale_billing_creditbalance",
 #          "billing_credit_balance_org_isolation"),
 #         ...
 #     )
@@ -826,7 +826,7 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
 #
 # The shared function accepts three trigger arguments:
 #
-#     0.  Parent table name (e.g. ``quickscale_modules_crm_contact``).
+#     0.  Parent table name (e.g. ``quickscale_crm_contact``).
 #     1.  FK column name on the child table pointing to the parent
 #         (e.g. ``contact_id``).
 #     2.  Organization ID column name (optional, defaults to
@@ -845,19 +845,19 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
 #         install_equality_trigger_function(schema_editor)
 #         enable_child_parent_equality(
 #             schema_editor,
-#             child_table="quickscale_modules_crm_contactnote",
-#             parent_table="quickscale_modules_crm_contact",
+#             child_table="quickscale_crm_contactnote",
+#             parent_table="quickscale_crm_contact",
 #             child_fk_column="contact_id",
 #         )
 #
 #     def reverse(apps, schema_editor):
 #         disable_child_parent_equality(
 #             schema_editor,
-#             child_table="quickscale_modules_crm_contactnote",
+#             child_table="quickscale_crm_contactnote",
 #         )
 # ---------------------------------------------------------------------------
 
-CHILD_PARENT_EQUALITY_FUNC_NAME: str = "qs_child_parent_org_equality"
+CHILD_PARENT_EQUALITY_FUNC_NAME: str = "quickscale_orgs_child_parent_org_equality"
 """Name of the shared PL/pgSQL trigger function installed in PostgreSQL."""
 
 CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX: str = "qs_"
@@ -966,8 +966,8 @@ def enable_child_parent_equality(
 
     Args:
         schema_editor: The Django schema editor from a migration.
-        child_table: The child table name (e.g. ``quickscale_modules_crm_contactnote``).
-        parent_table: The parent table name (e.g. ``quickscale_modules_crm_contact``).
+        child_table: The child table name (e.g. ``quickscale_crm_contactnote``).
+        parent_table: The parent table name (e.g. ``quickscale_crm_contact``).
         child_fk_column: The FK column on the child pointing to the parent
             (e.g. ``contact_id``).
         org_column: The organization ID column name (default ``organization_id``).
@@ -1034,10 +1034,10 @@ def disable_child_parent_equality(
 #         remove_composite_child_fk,
 #     )
 #
-#     PARENT_TABLE = "quickscale_modules_crm_contact"
-#     PARENT_UNIQUE = "crm_contact_id_org_unique"
-#     CHILD_TABLE = "quickscale_modules_crm_contactnote"
-#     CHILD_FK = "crm_contactnote_contact_org_fk"
+#     PARENT_TABLE = "quickscale_crm_contact"
+#     PARENT_UNIQUE = "quickscale_crm_contact_id_org_unique"
+#     CHILD_TABLE = "quickscale_crm_contactnote"
+#     CHILD_FK = "quickscale_crm_contactnote_contact_org_fk"
 #
 #     def forward(apps, schema_editor):
 #         add_parent_unique_constraint(
@@ -1222,7 +1222,7 @@ ORG_ID_COLUMN: str = "organization_id"
 # ---------------------------------------------------------------------------
 
 #: App-label prefix for QuickScale module apps.
-QS_APP_PREFIX: str = "quickscale_modules_"
+QS_APP_PREFIX: str = "quickscale_"
 
 #: Known third-party app-label prefixes excluded from project-app detection.
 #: Models from these apps are not expected to appear in
@@ -1337,7 +1337,7 @@ def is_project_app(app_label: str) -> bool:
     function to include their own custom app labels.
 
     Args:
-        app_label: Django app label (e.g. ``quickscale_modules_crm``).
+        app_label: Django app label (e.g. ``quickscale_crm``).
 
     Returns:
         ``True`` if the app is considered project-owned.
@@ -1526,7 +1526,7 @@ def _get_m2m_through_classification_marker_only(
     Non-project endpoints (Django contrib models, third-party packages)
     are treated as externally classified — they exist outside the
     tenant-registry contract and do not need markers.  This ensures
-    auto-created through tables like ``quickscale_modules_auth.User_groups``
+    auto-created through tables like ``quickscale_auth.User_groups``
     (project-owned ``User`` with ``tenant_excluded`` → contrib ``Group``)
     are classifiable by the marker-only path without ``REGISTRY_LOOKUP``.
 

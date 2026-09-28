@@ -1963,10 +1963,12 @@ class TestShellIntegration:
         assert data.get("schema_version") == 1
         assert "timestamp" in data
         assert "merge_base" in data
-        # With the current complete baseline and default merge-base, no violations exist
-        assert data.get("verdict") == "pass", (
-            "Expected verdict 'pass' with current baseline vs default ref, "
-            f"got {data.get('verdict')}"
+        # With the current complete baseline and default merge-base, no
+        # violations are unresolved; active waivers legitimately resolve rename
+        # increases, in which case the verdict is 'pass_waived'.
+        assert data.get("verdict") in {"pass", "pass_waived"}, (
+            "Expected verdict 'pass' or 'pass_waived' with current baseline vs "
+            f"default ref, got {data.get('verdict')}"
         )
         assert "summary" in data
         assert "violations" in data
@@ -2152,11 +2154,13 @@ class TestShellIntegration:
     def test_helper_exit_1_stale_base_waiver(self, tmp_path: Path) -> None:
         """A waiver whose ``base_ceiling`` does not match merge-base exits 1."""
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
-        current["complexity"]["allowed_functions"]["stale_base_test.py::func"] = {
-            "file": "stale_base_test.py",
-            "max_complexity": 10,
-            "symbol": "func",
-            "type": "function",
+        current["complexity"]["allowed_functions"] = {
+            "stale_base_test.py::func": {
+                "file": "stale_base_test.py",
+                "max_complexity": 10,
+                "symbol": "func",
+                "type": "function",
+            },
         }
         temp_baseline = tmp_path / "baseline_stale.json"
         temp_baseline.write_text(json.dumps(current), encoding="utf-8")
@@ -2220,11 +2224,13 @@ class TestShellIntegration:
     def test_helper_exit_1_over_ceiling_waiver(self, tmp_path: Path) -> None:
         """A waiver whose ``ceiling`` is below the observed value exits 1."""
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
-        current["complexity"]["allowed_functions"]["over_ceiling_test.py::func"] = {
-            "file": "over_ceiling_test.py",
-            "max_complexity": 20,
-            "symbol": "func",
-            "type": "function",
+        current["complexity"]["allowed_functions"] = {
+            "over_ceiling_test.py::func": {
+                "file": "over_ceiling_test.py",
+                "max_complexity": 20,
+                "symbol": "func",
+                "type": "function",
+            },
         }
         temp_baseline = tmp_path / "baseline_over.json"
         temp_baseline.write_text(json.dumps(current), encoding="utf-8")
@@ -2288,11 +2294,13 @@ class TestShellIntegration:
     def test_helper_exit_1_expired_waiver(self, tmp_path: Path) -> None:
         """An expired waiver does not resolve the violation — helper exits 1."""
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
-        current["complexity"]["allowed_functions"]["expired_test.py::func"] = {
-            "file": "expired_test.py",
-            "max_complexity": 10,
-            "symbol": "func",
-            "type": "function",
+        current["complexity"]["allowed_functions"] = {
+            "expired_test.py::func": {
+                "file": "expired_test.py",
+                "max_complexity": 10,
+                "symbol": "func",
+                "type": "function",
+            },
         }
         temp_baseline = tmp_path / "baseline_expired.json"
         temp_baseline.write_text(json.dumps(current), encoding="utf-8")
@@ -2360,11 +2368,13 @@ class TestShellIntegration:
     def test_helper_exit_1_duplicate_both_dimensions(self, tmp_path: Path) -> None:
         """Duplicate waiver_id AND entry_key simultaneously — violation unresolved, exit 1."""
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
-        current["complexity"]["allowed_functions"]["dup_both.py::func"] = {
-            "file": "dup_both.py",
-            "max_complexity": 10,
-            "symbol": "func",
-            "type": "function",
+        current["complexity"]["allowed_functions"] = {
+            "dup_both.py::func": {
+                "file": "dup_both.py",
+                "max_complexity": 10,
+                "symbol": "func",
+                "type": "function",
+            },
         }
         temp_baseline = tmp_path / "baseline_dup_both.json"
         temp_baseline.write_text(json.dumps(current), encoding="utf-8")
@@ -5433,19 +5443,24 @@ class TestShellSubprocess:
                 (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text()
             )
             higher_baseline = json.loads(json.dumps(real_baseline))
-            # Bump the three SA114 keys
-            higher_baseline["complexity"]["allowed_functions"][
+            # Bump the three SA114 keys and keep only them, so the fixture
+            # difference against the merge base is exactly these three
+            # increases, independent of any waivers the repository carries.
+            sa114_keys = (
                 "quickscale_core/src/quickscale_core/schema/config_schema.py"
-                "::_validate_modules_section"
-            ]["max_complexity"] = 13
-            higher_baseline["complexity"]["allowed_functions"][
+                "::_validate_modules_section",
                 "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                "::_perform_module_embed"
-            ]["max_complexity"] = 25
-            higher_baseline["complexity"]["allowed_functions"][
+                "::_perform_module_embed",
                 "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                "::_update_single_module"
-            ]["max_complexity"] = 20
+                "::_update_single_module",
+            )
+            bumped = dict(higher_baseline["complexity"]["allowed_functions"])
+            bumped[sa114_keys[0]] = dict(bumped[sa114_keys[0]], max_complexity=13)
+            bumped[sa114_keys[1]] = dict(bumped[sa114_keys[1]], max_complexity=25)
+            bumped[sa114_keys[2]] = dict(bumped[sa114_keys[2]], max_complexity=20)
+            higher_baseline["complexity"]["allowed_functions"] = {
+                key: bumped[key] for key in sa114_keys
+            }
             temp_baseline = tmp_path / "baseline_higher.json"
             temp_baseline.write_text(json.dumps(higher_baseline), encoding="utf-8")
 

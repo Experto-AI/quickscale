@@ -1194,10 +1194,10 @@ class TestReactThemeModuleActivationMatrix:
 
         assert "key: 'backups'" in dashboard
         assert "name: 'Backups'" in dashboard
-        assert "href: '/admin/quickscale_modules_backups/backuppolicy/'" in dashboard
+        assert "href: '/admin/quickscale_backups/backuppolicy/'" in dashboard
         assert "key: 'notifications'" in dashboard
         assert "name: 'Notifications'" in dashboard
-        assert "href: '/admin/quickscale_modules_notifications/'" in dashboard
+        assert "href: '/admin/quickscale_notifications/'" in dashboard
         assert "key: 'social'" in dashboard
         assert "name: 'Social'" in dashboard
         assert "_modulePaths.social" in dashboard
@@ -1258,12 +1258,12 @@ class TestReactThemeModuleActivationMatrix:
         ).read_text()
 
         assert (
-            'action="/admin/quickscale_modules_backups/backuppolicy/ops/create/"'
+            'action="/admin/quickscale_backups/backuppolicy/ops/create/"'
             in app_index_template
         )
         assert "Create backup now" in app_index_template
-        assert "/admin/quickscale_modules_backups/backuppolicy/" in app_index_template
-        assert 'app_label == "quickscale_modules_backups"' in app_index_template
+        assert "/admin/quickscale_backups/backuppolicy/" in app_index_template
+        assert 'app_label == "quickscale_backups"' in app_index_template
 
     def test_react_theme_generates_backups_admin_index_override(self, tmp_path):
         """Generated projects should expose backup actions on the admin root index."""
@@ -1277,7 +1277,7 @@ class TestReactThemeModuleActivationMatrix:
 
         assert "Create backup now" not in admin_index_template
         assert "Open backup ops" in admin_index_template
-        assert 'app.app_label == "quickscale_modules_backups"' in admin_index_template
+        assert 'app.app_label == "quickscale_backups"' in admin_index_template
 
     def test_react_theme_reserves_public_social_pages(self, tmp_path):
         """Generated React projects should reserve /social routes ahead of the SPA catch-all."""

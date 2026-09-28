@@ -11,7 +11,7 @@ from django.db import migrations, models
 from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
 
 LISTINGS_LISTING_RLS_POLICY = "listings_listing_org_isolation"
-LISTINGS_LISTING_TABLE = "quickscale_modules_listings_listing"
+LISTINGS_LISTING_TABLE = "quickscale_listings_listing"
 _LISTINGS_RLS_TARGETS = ((LISTINGS_LISTING_TABLE, LISTINGS_LISTING_RLS_POLICY),)
 
 
@@ -26,7 +26,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("quickscale_modules_orgs", "0001_initial"),
+        ("quickscale_orgs", "0001_initial"),
     ]
 
     operations = [
@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(class)s_listings",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
                 ("title", models.CharField(max_length=200)),
@@ -127,17 +127,17 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(
                         fields=["-published_date"],
-                        name="quickscale__publish_a4cb60_idx",
+                        name="qs_listings_listing_pub_idx",
                     ),
                     models.Index(
-                        fields=["status"], name="quickscale__status_e05f2c_idx"
+                        fields=["status"], name="qs_listings_listing_status_idx"
                     ),
-                    models.Index(fields=["slug"], name="quickscale__slug_e91f04_idx"),
+                    models.Index(fields=["slug"], name="qs_listings_listing_slug_idx"),
                 ],
                 "constraints": [
                     models.UniqueConstraint(
                         fields=("slug", "organization"),
-                        name="listings_listing_slug_organization_unique",
+                        name="quickscale_listings_listing_slug_organization_unique",
                     )
                 ],
             },

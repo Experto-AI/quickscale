@@ -41,7 +41,7 @@ def _auth_manifest_adapter(
                 "django.contrib.auth.backends.ModelBackend",
                 "allauth.account.auth_backends.AuthenticationBackend",
             ],
-            "AUTH_USER_MODEL": "quickscale_modules_auth.User",
+            "AUTH_USER_MODEL": "quickscale_auth.User",
             "SITE_ID": 1,
             "ACCOUNT_LOGIN_METHODS": login_methods,
             "ACCOUNT_SIGNUP_FIELDS": signup_fields,

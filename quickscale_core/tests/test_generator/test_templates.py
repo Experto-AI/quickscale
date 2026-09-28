@@ -3099,7 +3099,7 @@ class TestDevOpsTemplateRendering:
 
         # Default (selected_modules=None) — legacy behavior: render the step
         output = template.render(test_context)
-        assert "check_tenant_isolation" in output
+        assert "quickscale_orgs_check_tenant_isolation" in output
         assert "DATABASE_URL: postgres://postgres@localhost/postgres" in output
         assert "migrate" in output
         assert "QUICKSCALE_ALLOW_BYPASSRLS" in output
@@ -3108,7 +3108,7 @@ class TestDevOpsTemplateRendering:
         output_with_orgs = template.render(
             {**test_context, "selected_modules": ["orgs"]}
         )
-        assert "check_tenant_isolation" in output_with_orgs
+        assert "quickscale_orgs_check_tenant_isolation" in output_with_orgs
         assert "QUICKSCALE_ALLOW_BYPASSRLS" in output_with_orgs
         assert "migrate" in output_with_orgs
 
@@ -3116,11 +3116,11 @@ class TestDevOpsTemplateRendering:
         output_without_orgs = template.render(
             {**test_context, "selected_modules": ["auth"]}
         )
-        assert "check_tenant_isolation" not in output_without_orgs
+        assert "quickscale_orgs_check_tenant_isolation" not in output_without_orgs
 
         # Empty selected_modules — step absent (CR-SA15-002: [] must not render dead orgs-only entrypoints)
         output_empty = template.render({**test_context, "selected_modules": []})
-        assert "check_tenant_isolation" not in output_empty
+        assert "quickscale_orgs_check_tenant_isolation" not in output_empty
 
     def test_makefile_contains_check_tenant_isolation_target(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -3131,7 +3131,7 @@ class TestDevOpsTemplateRendering:
         # Default (selected_modules=None) — legacy behavior: render target
         output = template.render(test_context)
         assert "check-tenant-isolation:" in output
-        assert "check_tenant_isolation" in output
+        assert "quickscale_orgs_check_tenant_isolation" in output
         assert "--postgres-only" in output
         assert "--format json" in output
         assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in output
@@ -3176,7 +3176,7 @@ class TestDevOpsTemplateRendering:
 
         # Default (all modules) — step present with classification flags.
         output = template.render(test_context)
-        assert "check_tenant_isolation" in output, (
+        assert "quickscale_orgs_check_tenant_isolation" in output, (
             "CI must invoke check_tenant_isolation (SA1.5)"
         )
         assert "--postgres-only" in output, (
@@ -3195,7 +3195,7 @@ class TestDevOpsTemplateRendering:
         output_with_orgs = template.render(
             {**test_context, "selected_modules": ["orgs"]}
         )
-        assert "check_tenant_isolation" in output_with_orgs
+        assert "quickscale_orgs_check_tenant_isolation" in output_with_orgs
         assert "--postgres-only" in output_with_orgs
 
     def test_makefile_caller_parity_exercises_classification_contract(
@@ -3216,7 +3216,7 @@ class TestDevOpsTemplateRendering:
         assert "check-tenant-isolation:" in output, (
             "Makefile must have a check-tenant-isolation target (SA1.5)"
         )
-        assert "check_tenant_isolation" in output, (
+        assert "quickscale_orgs_check_tenant_isolation" in output, (
             "Makefile target must invoke check_tenant_isolation"
         )
         assert "--postgres-only" in output, "Makefile must pass --postgres-only"

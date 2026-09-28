@@ -932,7 +932,7 @@ def _build_probe_script(
     on failure.  Any other output is informational.
 
     *management_commands* is an optional list of dotted module paths for
-    management command modules (e.g. ``["backups.management.commands.backups_create"]``)
+    management command modules (e.g. ``["backups.management.commands.quickscale_backups_create"]``)
     that should be imported during the probe to verify they resolve.
     """
     lines: list[str] = [

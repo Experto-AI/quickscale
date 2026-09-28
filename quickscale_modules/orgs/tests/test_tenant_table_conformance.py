@@ -44,39 +44,39 @@ from quickscale_modules_orgs.tenancy import (
 # Which app labels fall under conformance-gate coverage?
 # ---------------------------------------------------------------------------
 
-QS_APP_PREFIX = "quickscale_modules_"
+QS_APP_PREFIX = "quickscale_"
 
 #: (child_table, constraint_name, parent_table) for every AF12 composite FK.
 _AF12_COMPOSITE_FK_PAIRS: tuple[tuple[str, str, str], ...] = (
     (
-        "quickscale_modules_crm_contactnote",
-        "crm_contactnote_contact_org_fk",
-        "quickscale_modules_crm_contact",
+        "quickscale_crm_contactnote",
+        "quickscale_crm_contactnote_contact_org_fk",
+        "quickscale_crm_contact",
     ),
     (
-        "quickscale_modules_crm_dealnote",
-        "crm_dealnote_deal_org_fk",
-        "quickscale_modules_crm_deal",
+        "quickscale_crm_dealnote",
+        "quickscale_crm_dealnote_deal_org_fk",
+        "quickscale_crm_deal",
     ),
     (
-        "quickscale_modules_forms_formfield",
-        "forms_formfield_form_org_fk",
-        "quickscale_modules_forms_form",
+        "quickscale_forms_formfield",
+        "quickscale_forms_formfield_form_org_fk",
+        "quickscale_forms_form",
     ),
     (
-        "quickscale_modules_forms_formsubmission",
-        "forms_formsubmission_form_org_fk",
-        "quickscale_modules_forms_form",
+        "quickscale_forms_formsubmission",
+        "quickscale_forms_formsubmission_form_org_fk",
+        "quickscale_forms_form",
     ),
     (
-        "quickscale_modules_forms_formfieldvalue",
-        "forms_formfieldvalue_submission_org_fk",
-        "quickscale_modules_forms_formsubmission",
+        "quickscale_forms_formfieldvalue",
+        "quickscale_forms_formfieldvalue_submission_org_fk",
+        "quickscale_forms_formsubmission",
     ),
     (
-        "quickscale_modules_forms_formfieldvalue",
-        "forms_formfieldvalue_field_org_fk",
-        "quickscale_modules_forms_formfield",
+        "quickscale_forms_formfieldvalue",
+        "quickscale_forms_formfieldvalue_field_org_fk",
+        "quickscale_forms_formfield",
     ),
 )
 
@@ -206,9 +206,9 @@ def test_concrete_qs_models_includes_auto_created_through() -> None:
 
     # The three known auto-created through models must be present.
     expected_through = {
-        ("quickscale_modules_crm", "Contact_tags"),
-        ("quickscale_modules_crm", "Deal_tags"),
-        ("quickscale_modules_blog", "Post_tags"),
+        ("quickscale_crm", "Contact_tags"),
+        ("quickscale_crm", "Deal_tags"),
+        ("quickscale_blog", "Post_tags"),
     }
     missing = expected_through - through_model_names
     assert not missing, (
@@ -503,7 +503,7 @@ def test_negative_missing_organization_id_detected() -> None:
     detection function should correctly report the missing column when
     it is checked as if it were ENROLLED.
     """
-    model = apps.get_model("quickscale_modules_billing", "Plan")
+    model = apps.get_model("quickscale_billing", "Plan")
     assert model is not None
 
     # Plan should NOT have organization_id (it is EXCLUDED_REVIEWED,
@@ -523,7 +523,7 @@ def test_negative_missing_scoped_manager_detected() -> None:
     control-plane), so checking it as if it were ENROLLED should fail
     our assertions.
     """
-    model = apps.get_model("quickscale_modules_orgs", "Organization")
+    model = apps.get_model("quickscale_orgs", "Organization")
     assert model is not None
 
     from quickscale_modules_orgs.managers import OrganizationManager
@@ -547,7 +547,7 @@ def test_negative_excluded_model_wrongly_has_organization_id() -> None:
     ``AuthorProfile`` should not be tenant-scoped. If it were to gain an
     organization_id field, the exclusion assertion should flag it.
     """
-    model = apps.get_model("quickscale_modules_blog", "AuthorProfile")
+    model = apps.get_model("quickscale_blog", "AuthorProfile")
     assert model is not None
 
     field = _get_field(model, "organization_id")
@@ -850,7 +850,7 @@ def test_enrolled_child_table_has_composite_fk(fk_pair: tuple[str, str, str]) ->
 # ---------------------------------------------------------------------------
 # Negative parent-organization mutation proof — PostgreSQL only (AF12 Phase 2)
 # ---------------------------------------------------------------------------
-# Proves that the composite FK ``crm_contactnote_contact_org_fk`` rejects
+# Proves that the composite FK ``quickscale_crm_contactnote_contact_org_fk`` rejects
 # assignments where ``ContactNote.organization_id`` does not match
 # ``Contact.organization_id``.  The composite FK enforces:
 #     (contactnote.contact_id, contactnote.organization_id) = (contact.id, contact.organization_id)
@@ -1526,9 +1526,7 @@ def test_af9_listings_restricted_role_cursor_proof() -> None:
                 # This is the FIRST statement in this restricted-role
                 # window that can establish the GUC.
                 cursor.execute(
-                    "SELECT title "
-                    "FROM quickscale_modules_listings_listing "
-                    "ORDER BY title"
+                    "SELECT title FROM quickscale_listings_listing ORDER BY title"
                 )
                 titles = [r[0] for r in cursor.fetchall()]
                 assert titles == ["AF9 Listings Proof"], (
