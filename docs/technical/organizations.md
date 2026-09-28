@@ -9,7 +9,7 @@ The organizations module enables a QuickScale-generated app to be sold as a SaaS
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes, migration/promote commands, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped module surface contains **22 ENROLLED models** across CRM (7), Forms (4), Billing (4), Blog (4), Listings (1), and Social (2); each inherits `TenantModel`, and so carries a direct `organization_id` plus the shared `TenantManager` / `TenantManager(super_scope=True)` pair, and ships with the exact two-policy FORCE-RLS pair rendered by `apply_force_rls()`. `TenantMiddleware` plus the execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract by design. Runtime tenant classification and FORCE-RLS refresh are marker-derived across installed concrete models; the shipped `TENANT_TABLE_REGISTRY` is retained only as a CI parity oracle for shipped modules. Project-owned tenant models join this runtime set by inheriting `TenantModel` (directly or through a module's abstract base) and install the same tenant-only `FOR ALL` plus operator-read `FOR SELECT` pair from their initial migration, without editing the shipped literal.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes, the `quickscale_orgs_promote_to_saas` command, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped module surface contains **22 ENROLLED models** across CRM (7), Forms (4), Billing (4), Blog (4), Listings (1), and Social (2); each inherits `TenantModel`, and so carries a direct `organization_id` plus the shared `TenantManager` / `TenantManager(super_scope=True)` pair, and ships with the exact two-policy FORCE-RLS pair rendered by `apply_force_rls()`. `TenantMiddleware` plus the execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract by design. Runtime tenant classification and FORCE-RLS refresh are marker-derived across installed concrete models; the shipped `TENANT_TABLE_REGISTRY` is retained only as a CI parity oracle for shipped modules. Project-owned tenant models join this runtime set by inheriting `TenantModel` (directly or through a module's abstract base) and install the same tenant-only `FOR ALL` plus operator-read `FOR SELECT` pair from their initial migration, without editing the shipped literal.
 
 ---
 
@@ -70,10 +70,10 @@ The same org views serve both modes. Org-management pages keep `org_slug` where 
 QUICKSCALE_MODE = 'saas'
 
 # 2. Run once after deploy
-python manage.py promote_to_saas
+python manage.py quickscale_orgs_promote_to_saas
 ```
 
-`promote_to_saas` ships as part of the org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_MODE = 'saas'` settings change instead of mutating settings files directly.
+`quickscale_orgs_promote_to_saas` ships as part of the org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_MODE = 'saas'` settings change instead of mutating settings files directly.
 
 ---
 
@@ -362,7 +362,7 @@ CreditTransaction.user     → nullable FK → User (acting org member provenanc
 Plan.features             → JSONField(default=list) (sole entitlement source)
 ```
 
-`Organization.stripe_customer_id` is the Stripe customer identifier. Every populated Stripe customer id is globally unique across organizations, with a database constraint as the final concurrency backstop; runtime and recovery writers reject cross-org reuse before assignment. The Org Owner's email is the Stripe billing email. When the Owner transfers ownership, the Stripe customer record stays with the organization (not the departing user).
+`Organization.stripe_customer_id` is the Stripe customer identifier. Every populated Stripe customer id is globally unique across organizations, with a database constraint as the final concurrency backstop; cross-org reuse is rejected before assignment. The Org Owner's email is the Stripe billing email. When the Owner transfers ownership, the Stripe customer record stays with the organization (not the departing user).
 
 Account deletion discovers nullable user-provenance rows through a narrow, read-only cross-tenant seam that returns only matching organization IDs. Discovery issues one indexed query per user-reference-bearing tenant model, so unrelated organizations do not increase request query count or provider-lock duration. The request then nulls those references under each matching organization's ordinary `org_scope`; cross-tenant write access is never elevated.
 
@@ -413,28 +413,13 @@ This decorator resolves the current organization's active subscription through t
 
 ### Migration Path from User-Scoped Billing
 
-> **SA215 deletes `migrate_billing_to_orgs`** ([decisions.md § Module Conventions](decisions.md#module-conventions)
-> rule 17). Current installs cannot contain user-scoped billing rows; this section describes the
-> shipped state until SA215 lands.
-
-For historical deployments that still contain user-scoped billing data, `migrate_billing_to_orgs` remains available as an idempotent recovery command. It reuses a sole existing organization when one is already resolvable for the billing user; otherwise it creates a personal org via the standard helper, migrates authoritative `Subscription`, `CreditBalance`, and `CreditTransaction` ownership to that organization, syncs a sole globally unowned Stripe customer id when safe, and aborts ambiguous or cross-org collision cases instead of guessing. Current installs already require organization ownership, so normal deployments do not run it. The launcher and CLI do not grant this retired command a privileged database connection automatically.
-
-The command fails before inspecting billing rows unless the operator explicitly acknowledges the
-break-glass path and selects the superuser URL. For local Docker, run the reviewed recovery form:
-
-```bash
-docker compose exec backend sh -c 'QUICKSCALE_ALLOW_BYPASSRLS=1 RUNTIME_DATABASE_URL="$DATABASE_URL" python manage.py migrate_billing_to_orgs'
-```
-
-For Railway, run the same in the deployed container rather than on the local machine:
-
-```bash
-railway ssh --service <app-service> /bin/bash -c 'QUICKSCALE_ALLOW_BYPASSRLS=1 RUNTIME_DATABASE_URL="$DATABASE_URL" python manage.py migrate_billing_to_orgs'
-```
-
-Use this only for a verified historical nullable-ownership schema. The command confirms that the
-connected PostgreSQL role actually has `BYPASSRLS` or `SUPERUSER`; the acknowledgement on a
-restricted runtime role fails loudly instead of reporting that no rows need migration.
+The retired recovery command `migrate_billing_to_orgs` is deleted with its recovery documentation
+and reviewed invocations ([decisions.md § Module Conventions](decisions.md#module-conventions)
+rule 17). Current installs cannot contain user-scoped billing rows: every supported install
+requires organization ownership, so no supported deployment needs the repair. A historical
+deployment that still holds nullable user-scoped billing rows has no recovery path on this
+release; the command's 2026-09-16 retirement note already stated that current installs cannot
+hold the shape it repaired.
 
 ---
 
@@ -673,7 +658,7 @@ All open questions from the original design were resolved before implementation 
 | Multi-org membership? | **No** — regular SaaS users belong to exactly one org | Eliminates the dual-source-of-truth problem (session is sole authority); removes need for explicit-org API contract. Multi-org membership at the DB level is not precluded but is not exposed in the UI. VIEW-AS handles operator debug needs. |
 | `Organization` model location? | **`quickscale_modules_orgs`** | Auth stays minimal and standalone; orgs depends on auth, not the reverse |
 | Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
-| Billing migration path? | **Current installs require organization ownership** | Retired recovery command `migrate_billing_to_orgs`; idempotent, explicit operator use, no automatic privileged connection |
+| Billing migration path? | **Current installs require organization ownership** | The retired recovery command `migrate_billing_to_orgs` is deleted; no supported install holds the nullable shape it repaired |
 | Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | The enrolled tenant-table surface now runs under the per-org runtime-role admin contract (explicit per-org selection → session → fail-closed); no operator bypass or `BYPASSRLS` deployed |
 | Active org routing? | **Session-based in SaaS; personal-org resolution in Solo** | Org-management pages stay under `/orgs/...`; shipped server content routes are flat for CRM, blog, forms, listings, and billing; fresh `showcase_react` SaaS pages keep org-slug blog/listings routes with flat redirect shims. Solo mode resolves the personal org transparently. |
 | Post-signup flow? | **SaaS: force `/orgs/new/`. Solo: auto-create personal org** | SaaS users must name their workspace; solo users should not see org concepts |
@@ -704,7 +689,7 @@ This section records the current repository slice, not the eventual end-state de
 | Server-rendered self-service org creation, dashboard, members, settings, and import-compatible org URL surfaces | ✅ implemented |
 | Server-rendered invitation flow: invite send/revoke on org admin surfaces, notifications registry-backed email, and slugless public accept continuation under `/orgs` | ✅ implemented |
 | Org-authoritative billing bridge (organization ownership fields, canonical org billing routes, flat compatibility shims, and ORM-backed feature gating) | ✅ implemented |
-| `migrate_billing_to_orgs` / `promote_to_saas` management commands | ✅ implemented |
+| `quickscale_orgs_promote_to_saas` management command | ✅ implemented |
 | Marker-derived organization purge and shared removal obligations | ✅ implemented — installed tenant models are FK-ordered child-before-parent; purge and account deletion discharge the removal obligations each app declares on its own `AppConfig` through one shared coordinator, and a provider-ID system check with per-model `provider_id_classification` refuses the purge while a provider-backed project value remains |
 | React org-management UI surfaces | ✅ implemented for fresh `showcase_react` generations (`OrgListPage`, `OrgCreatePage`, `OrgLayout`, `OrgDashboardPage`, `OrgMembersPage`, `OrgSettingsPage`) |
 | Subdomain routing | ❌ future-ready (middleware decoupled; DNS/NGINX config deferred) |

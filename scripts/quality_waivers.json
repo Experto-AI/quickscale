@@ -33,26 +33,6 @@
       "decision_ref": "module-conventions"
     },
     {
-      "waiver_id": "W004",
-      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_migrate_billing_to_orgs.py::Command",
-      "base_ceiling": 0,
-      "ceiling": 28,
-      "owner": "QuickScale maintainers",
-      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "module-conventions"
-    },
-    {
-      "waiver_id": "W005",
-      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_migrate_billing_to_orgs.py::Command.handle",
-      "base_ceiling": 0,
-      "ceiling": 27,
-      "owner": "QuickScale maintainers",
-      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "module-conventions"
-    },
-    {
       "waiver_id": "W006",
       "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py::Command",
       "base_ceiling": 0,

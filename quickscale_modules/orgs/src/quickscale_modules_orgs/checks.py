@@ -167,8 +167,7 @@ def check_rls_role(
        (``migrate`` or ``createcachetable``) — see
        :func:`_is_privileged_command`.
     2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
-       intentional single-tenant/development use or the explicitly acknowledged
-       retired billing recovery command, never runtime serving.
+       intentional single-tenant/development use, never runtime serving.
 
     This module guard declares its sanctioned command set in
     ``_PRIVILEGED_COMMANDS`` and checks it via ``_is_privileged_command()``;
@@ -178,8 +177,7 @@ def check_rls_role(
     No-op on SQLite (non-PostgreSQL).
     """
     # ---- Escape hatch --------------------------------------------------
-    # Explicit non-serving opt-in for single-tenant/development environments or
-    # the acknowledged retired billing recovery command.
+    # Explicit non-serving opt-in for single-tenant/development environments.
     if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
         return []
 

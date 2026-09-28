@@ -299,14 +299,6 @@ class TestRunDockerExecCommand:
                 privileged_command="shell",
             )
 
-    def test_retired_billing_backfill_is_rejected_as_privileged(self):
-        with pytest.raises(ValueError):
-            _run_docker_exec_command(
-                "container",
-                ["python", "manage.py", "quickscale_orgs_migrate_billing_to_orgs"],
-                privileged_command="quickscale_orgs_migrate_billing_to_orgs",
-            )
-
 
 # ============================================================================
 # _superuser_exists_in_backend
