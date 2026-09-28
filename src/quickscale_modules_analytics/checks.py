@@ -66,11 +66,15 @@ def check_analytics_settings(
 
     host = snapshot.resolve_posthog_host()
     parsed_host = urlparse(host)
-    if parsed_host.scheme not in {"http", "https"} or not parsed_host.netloc:
+    if (
+        parsed_host.scheme not in {"http", "https"}
+        or not parsed_host.netloc
+        or not parsed_host.hostname
+    ):
         messages.append(
             Error(
                 "QUICKSCALE_ANALYTICS_POSTHOG_HOST must be an absolute http(s) "
-                f"URL, got {host!r}.",
+                f"URL with a hostname, got {host!r}.",
                 id="quickscale_analytics.E004",
             )
         )

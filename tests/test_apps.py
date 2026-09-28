@@ -95,11 +95,17 @@ def test_check_reports_empty_api_key_for_live_analytics(settings, monkeypatch) -
     assert "POSTHOG_API_KEY" in messages[0].msg
 
 
-def test_check_reports_malformed_posthog_host(settings, monkeypatch) -> None:
-    """A host that is not an absolute http(s) URL is invalid configuration."""
+@pytest.mark.parametrize(
+    "malformed_host",
+    ["not-a-url", "https://:443", "ftp://example.com"],
+)
+def test_check_reports_malformed_posthog_host(
+    settings, monkeypatch, malformed_host
+) -> None:
+    """A host that is not an absolute http(s) URL with a hostname is invalid."""
     settings.DEBUG = False
     settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = False
-    settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST = "not-a-url"
+    settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST = malformed_host
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     messages = check_analytics_settings()
