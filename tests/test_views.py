@@ -1879,7 +1879,7 @@ class TestPostCommitTransactionBoundary:
             FormField.all_objects.create(
                 form=test_form,
                 organization=system_org,
-                field_type=FormField.FIELD_TYPE_TEXT,
+                field_type=FormField.FieldType.TEXT,
                 label="Full Name",
                 name="full_name",
                 required=True,
@@ -1888,7 +1888,7 @@ class TestPostCommitTransactionBoundary:
             FormField.all_objects.create(
                 form=test_form,
                 organization=system_org,
-                field_type=FormField.FIELD_TYPE_EMAIL,
+                field_type=FormField.FieldType.EMAIL,
                 label="Email",
                 name="email",
                 required=True,

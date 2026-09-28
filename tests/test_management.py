@@ -128,7 +128,7 @@ class TestFormsSeedPresets:
         # Enter org scope so that form.fields (via all_objects base
         # manager) sees the correct app.current_org_id GUC.
         with org_scope(form.organization):
-            assert form.fields.filter(field_type=FormField.FIELD_TYPE_SELECT).exists()
+            assert form.fields.filter(field_type=FormField.FieldType.SELECT).exists()
 
     def test_support_preset_has_priority_select(self):
         """Support preset has a priority select field with three options"""
@@ -139,7 +139,7 @@ class TestFormsSeedPresets:
             priority_field = FormField.all_objects.get(
                 form__slug="support", name="priority"
             )
-        assert priority_field.field_type == FormField.FIELD_TYPE_SELECT
+        assert priority_field.field_type == FormField.FieldType.SELECT
         assert len(priority_field.options) == 3
 
     def test_seed_scoped_to_system_org_under_per_org_slug_uniqueness(self):
