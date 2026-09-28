@@ -6,7 +6,7 @@ ContextVar and DB-level ``app.current_org_id`` propagation.
 
 Organization resolution follows a three-priority source order:
   1. **VIEW-AS debug session** — superuser override (resolved via
-     ``~.debug_helpers.get_debug_as_org``).
+     ``quickscale_modules_orgs._debug.get_debug_as_org``).
   2. **Explicit request selection** — the ``organization`` POST field
      (add/change form submission) or the ``organization__id__exact`` GET
      parameter (changelist list filter).  When found, it is persisted to
