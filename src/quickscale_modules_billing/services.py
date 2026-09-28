@@ -20,6 +20,16 @@ from django.db.models import F, Q
 from django.utils import timezone
 
 from quickscale_modules_orgs.current_org import org_scope
+from quickscale_modules_billing.exceptions import (
+    BillingConfigurationError,
+    BillingDisabledError,
+    BillingError,
+    BillingSubscriptionAnomalyError,
+    BillingValidationError,
+    BillingWebhookError,
+    BillingWebhookSignatureError,
+    InsufficientCreditsError,
+)
 from quickscale_modules_billing.models import (
     CREDIT_TRANSACTION_BUSINESS_REFERENCE_KEYS,
     CreditBalance,
@@ -84,44 +94,6 @@ _CUSTOMER_SEARCH_REFERENCE_UNSAFE_CHARACTERS: tuple[tuple[str, str], ...] = (
     ("\\", "backslash"),
     ("\n", "newline"),
 )
-
-
-class BillingError(Exception):
-    """Base error for billing runtime operations."""
-
-
-class InsufficientCreditsError(BillingError):
-    """Raised when a debit exceeds the available balance."""
-
-
-class BillingConfigurationError(BillingError):
-    """Raised when runtime billing configuration is invalid."""
-
-
-class BillingDisabledError(BillingError):
-    """Raised when the billing runtime is disabled."""
-
-
-class BillingValidationError(BillingError):
-    """Raised when a billing request is structurally invalid."""
-
-
-class BillingSubscriptionAnomalyError(BillingError):
-    """Raised when a local subscription row exists but is in an
-    anomalous state — e.g. missing its Stripe subscription id.
-
-    This is distinct from ``BillingValidationError`` so that callers
-    such as account-deletion can surface the anomaly (log it, flag it)
-    instead of silently treating it as "no subscription to cancel."
-    """
-
-
-class BillingWebhookError(BillingError):
-    """Raised when Stripe webhook handling fails."""
-
-
-class BillingWebhookSignatureError(BillingWebhookError):
-    """Raised when Stripe webhook signature validation fails."""
 
 
 @dataclass(frozen=True)

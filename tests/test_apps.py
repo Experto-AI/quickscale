@@ -54,6 +54,63 @@ def test_app_config_ready_raises_improperly_configured_when_enabled_setting_miss
         config.ready()
 
 
+def test_billing_settings_check_reports_missing_secret_key(
+    settings, monkeypatch
+) -> None:
+    """An enabled billing runtime needs its Stripe secret key."""
+    from quickscale_modules_billing.checks import check_billing_settings
+
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+
+    messages = check_billing_settings()
+
+    assert messages
+    assert "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR" in messages[0].msg
+
+
+def test_billing_settings_check_reports_missing_webhook_secret(
+    settings, monkeypatch
+) -> None:
+    """An enabled billing runtime needs its Stripe webhook signing secret."""
+    from quickscale_modules_billing.checks import check_billing_settings
+
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_dummy")
+    monkeypatch.delenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", raising=False)
+
+    messages = check_billing_settings()
+
+    assert messages
+    assert "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR" in messages[0].msg
+
+
+def test_billing_settings_check_passes_when_disabled(settings, monkeypatch) -> None:
+    """A disabled billing runtime needs no Stripe secrets."""
+    from quickscale_modules_billing.checks import check_billing_settings
+
+    settings.QUICKSCALE_BILLING_ENABLED = False
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", raising=False)
+
+    assert check_billing_settings() == []
+
+
+@pytest.mark.django_db
+def test_missing_setting_fails_check_migrate_and_runserver(settings) -> None:
+    """The registered check fails check, migrate, and runserver alike."""
+    from django.core.management import call_command
+    from django.core.management.base import SystemCheckError
+    from django.core.management.commands import migrate, runserver
+
+    del settings.QUICKSCALE_BILLING_ENABLED
+
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_BILLING_ENABLED"):
+        call_command("check")
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_BILLING_ENABLED"):
+        migrate.Command().check()
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_BILLING_ENABLED"):
+        runserver.Command().check()
+
+
 @pytest.mark.parametrize(
     ("provider_status", "expected_checkout_id"),
     [("expired", "cs_expired"), ("open", "")],
