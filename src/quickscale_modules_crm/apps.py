@@ -1,13 +1,13 @@
 """Django app configuration for QuickScale CRM module.
 
-SA17.3 — fail-hard CRM API-enable flag and page-size settings:
-requires ``CRM_ENABLE_API`` in Django settings at startup instead of
-silently defaulting to ``True``.
+Startup configuration is validated by
+:func:`quickscale_modules_crm.checks.check_required_settings`, run through
+``quickscale_core.runtime.register_module_checks`` from ``ready()``.
 """
 
 from django.apps import AppConfig
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
+
+from quickscale_core.runtime import register_module_checks
 
 
 class QuickscaleCrmConfig(AppConfig):
@@ -25,11 +25,8 @@ class QuickscaleCrmConfig(AppConfig):
         # the module is sufficient.
         import quickscale_modules_crm.signals  # noqa: F401
 
-        # ---- SA17.3 — fail-hard CRM API-enable setting --------------------
-        # Every generated project must explicitly set this; no silent
-        # fallback that enables the CRM API when the setting is absent.
-        if not hasattr(settings, "CRM_ENABLE_API"):
-            raise ImproperlyConfigured(
-                "The CRM_ENABLE_API setting is required. "
-                "Set it to True or False in your Django settings."
-            )
+        # Late import: keep the app config importable while Django is still
+        # populating the app registry.
+        from quickscale_modules_crm.checks import check_required_settings
+
+        register_module_checks(self, [check_required_settings])
