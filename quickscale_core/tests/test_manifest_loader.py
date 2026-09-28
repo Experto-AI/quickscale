@@ -1871,6 +1871,72 @@ contract_vintage:
         assert manifest.contract_vintage.minimum == "0"
 
 
+class TestLoadManifestRetiredOptions:
+    """Tests for the optional retired_options section in load_manifest (SA217)."""
+
+    def test_no_retired_options_section(self) -> None:
+        """Manifests without a retired_options section produce an empty mapping."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.retired_options == {}
+
+    def test_retired_options_are_parsed_with_their_messages(self) -> None:
+        """Each retired key maps to the removal message that must refuse it."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+retired_options:
+  default_pipeline_stages: >-
+    Legacy config key 'default_pipeline_stages' is no longer supported.
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.retired_options == {
+            "default_pipeline_stages": (
+                "Legacy config key 'default_pipeline_stages' is no longer supported."
+            )
+        }
+
+    def test_retired_options_must_be_a_mapping(self) -> None:
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+retired_options:
+  - default_pipeline_stages
+"""
+        with pytest.raises(ManifestError, match="must be a mapping"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_retired_option_message_must_be_non_empty(self) -> None:
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+retired_options:
+  default_pipeline_stages: ""
+"""
+        with pytest.raises(ManifestError, match="non-empty removal message"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_retired_option_cannot_also_be_declared(self) -> None:
+        """A key is either live or retired, never both."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    deals_per_page:
+      type: integer
+      default: 25
+      django_setting: DEALS_PER_PAGE
+      description: Deals per page
+      validation: {}
+  immutable: {}
+retired_options:
+  deals_per_page: Legacy key
+"""
+        with pytest.raises(ManifestError, match="also a declared option"):
+            load_manifest(yaml_content, "mymod")
+
+
 class TestLoadProjectContractVintage:
     """Tests for the packaged generated-project contract declaration (SA207)."""
 

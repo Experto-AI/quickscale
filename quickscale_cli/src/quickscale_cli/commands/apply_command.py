@@ -42,8 +42,6 @@ from quickscale_core.contracts.resolvers import (
     resolve_billing_module_options,
     validate_analytics_module_options,
     validate_billing_module_options,
-    validate_crm_module_options,
-    validate_forms_module_options,
     validate_orgs_module_options,
     validate_storage_module_options,
     notifications_live_delivery_configured,
@@ -1292,26 +1290,6 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
         list(qs_config.modules.keys()), source="quickscale.yml"
     )
 
-    forms_config = qs_config.modules.get("forms")
-    if forms_config is not None:
-        forms_issues = validate_forms_module_options(forms_config.options or {})
-        if forms_issues:
-            click.secho(
-                "\n❌ Forms module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in forms_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the forms option values. "
-                "Forms apply requires valid forms_per_page, rate_limit, "
-                "data_retention_days, and boolean flags.",
-                err=True,
-            )
-            raise click.Abort()
-
     storage_config = qs_config.modules.get("storage")
     if storage_config is not None:
         storage_issues = validate_storage_module_options(storage_config.options or {})
@@ -1387,24 +1365,6 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
                 "managed backend transport, and the canonical public paths remain "
                 f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH} for fresh "
                 "showcase_react generations or manual theme adoption.",
-                err=True,
-            )
-            raise click.Abort()
-
-    crm_config = qs_config.modules.get("crm")
-    if crm_config is not None:
-        crm_issues = validate_crm_module_options(crm_config.options or {})
-        if crm_issues:
-            click.secho(
-                "\n❌ CRM module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in crm_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the CRM option values.",
                 err=True,
             )
             raise click.Abort()

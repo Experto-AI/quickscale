@@ -302,32 +302,31 @@ modules:
         _validate_module_prerequisites(qs_config)
 
     @pytest.mark.parametrize(
-        ("options", "expected_marker"),
+        ("module_options_yaml", "expected_marker"),
         [
-            (
-                {"rate_limit": "10 per hour"},
-                "rate_limit must match format",
-            ),
-            (
-                {"forms_per_page": 0},
-                "forms_per_page must be at least 1",
-            ),
-            (
-                {"data_retention_days": -1},
-                "data_retention_days must be a non-negative integer",
-            ),
+            ("    rate_limit: 10 per hour", "must match pattern"),
+            ("    forms_per_page: 0", "must be >= 1"),
+            ("    data_retention_days: -1", "must be >= 0"),
         ],
     )
-    def test_apply_forms_prerequisites_fail(self, options, expected_marker, capsys):
-        """Forms apply preflight should report contract issues."""
-        qs_config = SimpleNamespace(modules={"forms": SimpleNamespace(options=options)})
+    def test_apply_forms_option_errors_fail_config_validation(
+        self, module_options_yaml, expected_marker
+    ):
+        """Forms option errors are refused when quickscale.yml is validated."""
+        yaml_content = (
+            'version: "1"\n'
+            "project:\n"
+            "  slug: demo\n"
+            "  package: demo\n"
+            "modules:\n"
+            "  forms:\n"
+            f"{module_options_yaml}\n"
+        )
 
-        with pytest.raises(click.Abort):
-            _validate_module_prerequisites(qs_config)
+        with pytest.raises(ConfigValidationError) as excinfo:
+            validate_config(yaml_content)
 
-        error_output = capsys.readouterr().err
-        assert "Forms module configuration is incomplete for apply" in error_output
-        assert expected_marker in error_output
+        assert expected_marker in str(excinfo.value)
 
     def test_apply_forms_valid_options_pass(self, capsys):
         """Forms with valid options must pass preflight."""
@@ -618,20 +617,22 @@ docker:
         )
 
     def test_apply_crm_rejects_non_bool_enable_api(self, capsys):
-        """CRM apply should reject non-boolean enable_api via the ingress validator."""
-        qs_config = SimpleNamespace(
-            modules={
-                "crm": SimpleNamespace(options={"enable_api": "yes"}),
-            }
+        """CRM option errors are refused when quickscale.yml is validated."""
+        yaml_content = (
+            'version: "1"\n'
+            "project:\n"
+            "  slug: demo\n"
+            "  package: demo\n"
+            "modules:\n"
+            "  crm:\n"
+            '    enable_api: "yes"\n'
         )
 
-        with pytest.raises(click.Abort):
-            _validate_module_prerequisites(qs_config)
+        with pytest.raises(ConfigValidationError) as excinfo:
+            validate_config(yaml_content)
 
-        error_output = capsys.readouterr().err
-        assert "CRM module configuration is incomplete for apply" in error_output
-        assert "modules.crm.enable_api must be boolean" in error_output
-        assert "correct the CRM option values" in error_output
+        assert "CRM_ENABLE_API" in str(excinfo.value)
+        assert "enable_api" in str(excinfo.value)
 
     def test_abort_for_not_ready_modules_reports_teams_reason(self, capsys):
         """Teams should remain blocked by the non-public-ready apply helper."""

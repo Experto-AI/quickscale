@@ -6,6 +6,7 @@ central module-options contract surface.
 
 from __future__ import annotations
 
+from unittest.mock import patch
 
 import pytest
 
@@ -28,7 +29,6 @@ from quickscale_core.contracts.module_options import (
     normalize_auth_module_options,
     normalize_backups_module_options,
     normalize_billing_module_options,
-    normalize_crm_module_options,
     normalize_notifications_module_options,
     normalize_social_module_options,
     sanitize_module_options,
@@ -44,6 +44,7 @@ from quickscale_core.contracts.module_options import (
     validate_social_module_options,
 )
 from quickscale_core.schema.config_schema import ConfigValidationError
+from quickscale_core.manifest.loader import ManifestError
 
 
 # ---------------------------------------------------------------------------
@@ -181,25 +182,6 @@ class TestNormalizeBilling:
     def test_billing_currency_lowered_and_stripped(self) -> None:
         result = normalize_billing_module_options({"billing_currency": "  USD "})
         assert result["billing_currency"] == "usd"
-
-
-# ---------------------------------------------------------------------------
-# normalize_crm_module_options
-# ---------------------------------------------------------------------------
-
-
-class TestNormalizeCrm:
-    def test_none_options_returns_empty(self) -> None:
-        assert normalize_crm_module_options(None) == {}
-
-    def test_legacy_pipeline_stages_raises(self) -> None:
-        """default_pipeline_stages raises ConfigValidationError instead of silent drop."""
-        with pytest.raises(ConfigValidationError, match="default_pipeline_stages"):
-            normalize_crm_module_options({"default_pipeline_stages": ["new", "won"]})
-
-    def test_other_keys_preserved(self) -> None:
-        result = normalize_crm_module_options({"deals_per_page": 50})
-        assert result["deals_per_page"] == 50
 
 
 # ---------------------------------------------------------------------------
@@ -518,8 +500,8 @@ class TestSanitizeDispatcher:
         result = sanitize_module_options("billing", {"billing_currency": " USD "})
         assert result["billing_currency"] == "usd"
 
-    def test_crm_dispatch_with_legacy_raises(self) -> None:
-        """Legacy CRM keys raise through sanitize dispatcher."""
+    def test_crm_dispatch_with_retired_raises(self) -> None:
+        """The manifest's retired_options declaration raises through sanitize."""
         with pytest.raises(ConfigValidationError, match="default_pipeline_stages"):
             sanitize_module_options("crm", {"default_pipeline_stages": ["a"]})
 
@@ -546,6 +528,29 @@ class TestSanitizeDispatcher:
 
     def test_unknown_module_passthrough(self) -> None:
         result = sanitize_module_options("unknown_module", {"key": "value"})
+        assert result == {"key": "value"}
+
+    def test_shipped_module_with_unreadable_manifest_fails_closed(self) -> None:
+        """A shipped module's retirement declaration must load or options fail."""
+        with patch(
+            "quickscale_core.contracts.resolvers.load_module_manifest_with_fallback",
+            side_effect=ManifestError("boom", "crm"),
+        ):
+            with pytest.raises(ManifestError):
+                sanitize_module_options("crm", {"deals_per_page": 50})
+
+    def test_unknown_module_with_unreadable_manifest_passes_through(self) -> None:
+        """An undeclared module has no retirement declaration to enforce."""
+        with patch(
+            "quickscale_core.contracts.resolvers.load_module_manifest_with_fallback",
+            side_effect=ManifestError("missing", "unknown_module"),
+        ):
+            result = sanitize_module_options("unknown_module", {"key": "value"})
+        assert result == {"key": "value"}
+
+    def test_placeholder_module_without_manifest_passes_through(self) -> None:
+        """A declared placeholder has no retirement declaration to enforce."""
+        result = sanitize_module_options("teams", {"key": "value"})
         assert result == {"key": "value"}
 
     def test_none_options_returns_empty(self) -> None:
