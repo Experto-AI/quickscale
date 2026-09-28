@@ -1,4 +1,4 @@
-"""Tests for the backups_restore management command."""
+"""Tests for the quickscale_backups_restore management command."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class TestBackupsRestoreCommand:
             match="Provide either an artifact_id, --snapshot-id, or --file PATH",
         ):
             call_command(
-                "backups_restore",
+                "quickscale_backups_restore",
                 "--confirm",
                 "sample-backup.dump",
                 stdout=StringIO(),
@@ -41,7 +41,7 @@ class TestBackupsRestoreCommand:
             match="Choose exactly one restore source",
         ):
             call_command(
-                "backups_restore",
+                "quickscale_backups_restore",
                 str(postgresql_backup_artifact.pk),
                 "--file",
                 str(postgresql_artifact_file),
@@ -68,7 +68,7 @@ class TestBackupsRestoreCommand:
             {"restore_backup": mock_restore},
         ):
             call_command(
-                "backups_restore",
+                "quickscale_backups_restore",
                 "--file",
                 str(postgresql_artifact_file),
                 "--confirm",
@@ -103,7 +103,7 @@ class TestBackupsRestoreCommand:
             {"restore_backup": mock_restore},
         ):
             call_command(
-                "backups_restore",
+                "quickscale_backups_restore",
                 "--snapshot-id",
                 "snap-restore-123",
                 "--confirm",
@@ -152,7 +152,7 @@ class TestBackupsRestoreCommand:
             {"restore_backup": mock_restore},
         ):
             call_command(
-                "backups_restore",
+                "quickscale_backups_restore",
                 str(postgresql_backup_artifact.pk),
                 "--confirm",
                 postgresql_backup_artifact.filename,
@@ -197,7 +197,7 @@ class TestBackupsRestoreCommand:
             {"restore_backup": mock_restore},
         ):
             call_command(
-                "backups_restore",
+                "quickscale_backups_restore",
                 str(postgresql_backup_artifact.pk),
                 "--confirm",
                 postgresql_backup_artifact.filename,
@@ -228,7 +228,7 @@ class TestBackupsRestoreCommand:
             {"restore_backup": mock_restore},
         ):
             call_command(
-                "backups_restore",
+                "quickscale_backups_restore",
                 str(postgresql_backup_artifact.pk),
                 "--confirm",
                 postgresql_backup_artifact.filename,
@@ -265,7 +265,7 @@ class TestBackupsRestoreCommand:
         ):
             with pytest.raises(CommandError, match="pg_restore crashed: disk full"):
                 call_command(
-                    "backups_restore",
+                    "quickscale_backups_restore",
                     str(postgresql_backup_artifact.pk),
                     "--confirm",
                     postgresql_backup_artifact.filename,
@@ -298,7 +298,7 @@ class TestBackupsRestoreCommand:
         ):
             with pytest.raises(CommandError, match="unexpected null"):
                 call_command(
-                    "backups_restore",
+                    "quickscale_backups_restore",
                     str(postgresql_backup_artifact.pk),
                     "--confirm",
                     postgresql_backup_artifact.filename,
@@ -331,7 +331,7 @@ class TestBackupsRestoreCommand:
         ):
             with pytest.raises(CommandError, match="pg_restore crashed: disk full"):
                 call_command(
-                    "backups_restore",
+                    "quickscale_backups_restore",
                     str(postgresql_backup_artifact.pk),
                     "--confirm",
                     postgresql_backup_artifact.filename,

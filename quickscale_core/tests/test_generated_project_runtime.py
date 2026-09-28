@@ -1319,7 +1319,7 @@ def _source_module_inventory(embedded_root: Path) -> dict[str, Any]:
     expected_app_config_identities = {
         name: {
             "name": f"quickscale_modules_{name}",
-            "label": f"quickscale_modules_{name}",
+            "label": f"quickscale_{name}",
         }
         for name in names
     }
@@ -2056,7 +2056,7 @@ _privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")
 _non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")
 
 _KNOWN_PRIVILEGED_COMMANDS = frozenset(
-    {"migrate", "createcachetable", "migrate_billing_to_orgs"}
+    {"migrate", "createcachetable", "quickscale_orgs_migrate_billing_to_orgs"}
 )
 _KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})
 
@@ -2128,7 +2128,7 @@ def _adopt_runtime_settings_facade(settings_text: str) -> str:
     )
     legacy_bridge = (
         "_KNOWN_PRIVILEGED_COMMANDS = frozenset(\n"
-        '    {"migrate", "createcachetable", "migrate_billing_to_orgs"}\n'
+        '    {"migrate", "createcachetable", "quickscale_orgs_migrate_billing_to_orgs"}\n'
         ")\n"
         '_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})\n'
         "\n"
@@ -2209,7 +2209,7 @@ def test_legacy_settings_updated_to_facade_boot(tmp_path: Path) -> None:
     assert "SECRET_KEY must be set" in refused.stderr + refused.stdout
 
     retired_command = _boot(
-        QUICKSCALE_PRIVILEGED_COMMAND="migrate_billing_to_orgs",
+        QUICKSCALE_PRIVILEGED_COMMAND="quickscale_orgs_migrate_billing_to_orgs",
         RUNTIME_DATABASE_URL="",
     )
     assert retired_command.returncode != 0

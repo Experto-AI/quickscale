@@ -35,7 +35,7 @@ class NotificationSettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_modules_notifications"
+        app_label = "quickscale_notifications"
         verbose_name = "Notification settings"
         verbose_name_plural = "Notification settings"
 
@@ -83,7 +83,7 @@ class NotificationMessage(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_modules_notifications"
+        app_label = "quickscale_notifications"
         ordering = ["-created_at"]
         verbose_name = "Notification message"
         verbose_name_plural = "Notification messages"
@@ -137,12 +137,12 @@ class NotificationDelivery(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_modules_notifications"
+        app_label = "quickscale_notifications"
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["message", "recipient_email"],
-                name="quickscale_notifications_unique_message_recipient",
+                name="quickscale_notifications_delivery_message_recipient_unique",
             )
         ]
         verbose_name = "Notification delivery"
@@ -174,7 +174,7 @@ class NotificationDeliveryEvent(models.Model):
     received_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "quickscale_modules_notifications"
+        app_label = "quickscale_notifications"
         ordering = ["received_at"]
         verbose_name = "Notification delivery event"
         verbose_name_plural = "Notification delivery events"

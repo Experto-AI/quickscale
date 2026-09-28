@@ -15,7 +15,7 @@ class QuickscaleFormsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_forms"
-    label = "quickscale_modules_forms"
+    label = "quickscale_forms"
     verbose_name = "QuickScale Forms"
 
     def ready(self) -> None:

@@ -131,7 +131,7 @@ class TestSocialAdminAddViews:
     ) -> None:
         """Admin link creation should normalize provider and URL values on save."""
         response = admin_client.post(
-            reverse("admin:quickscale_modules_social_sociallink_add"),
+            reverse("admin:quickscale_social_sociallink_add"),
             {
                 "title": "QuickScale on YouTube",
                 "description": "Launch clips and demos.",
@@ -168,7 +168,7 @@ class TestSocialAdminAddViews:
     ) -> None:
         """Admin embed creation should persist backend-owned resolution metadata."""
         response = admin_client.post(
-            reverse("admin:quickscale_modules_social_socialembed_add"),
+            reverse("admin:quickscale_social_socialembed_add"),
             {
                 "title": "QuickScale launch short",
                 "description": "Short-form launch clip.",
@@ -205,7 +205,7 @@ class TestSocialAdminAddViews:
     ) -> None:
         """Admin embed creation should reject providers without approved embed support."""
         response = admin_client.post(
-            reverse("admin:quickscale_modules_social_socialembed_add"),
+            reverse("admin:quickscale_social_socialembed_add"),
             {
                 "title": "QuickScale on Instagram",
                 "description": "Social photos.",
@@ -653,7 +653,7 @@ class TestSocialAdminEndToEnd:
             set_current_org_id(None)
         # No session org before the request.
         _clear_session_org(admin_client)
-        url = reverse("admin:quickscale_modules_social_sociallink_changelist")
+        url = reverse("admin:quickscale_social_sociallink_changelist")
         response = admin_client.get(url, {"organization__id__exact": str(org.pk)})
         content = response.content.decode("utf-8")
         assert "Test Link" in content
@@ -685,7 +685,7 @@ class TestSocialAdminEndToEnd:
         finally:
             set_current_org_id(None)
         _clear_session_org(admin_client)
-        url = reverse("admin:quickscale_modules_social_sociallink_changelist")
+        url = reverse("admin:quickscale_social_sociallink_changelist")
         response = admin_client.get(url, {"organization__id__exact": str(org_a.pk)})
         content = response.content.decode("utf-8")
         assert "Org A Link" in content
@@ -721,7 +721,7 @@ class TestSocialAdminEndToEnd:
 
         _set_session_org(admin_client, org_a.id)
         response = admin_client.get(
-            reverse("admin:quickscale_modules_social_sociallink_changelist")
+            reverse("admin:quickscale_social_sociallink_changelist")
         )
         content = response.content.decode("utf-8")
 
@@ -754,7 +754,7 @@ class TestSocialAdminEndToEnd:
 
         _set_session_org(admin_client, org_a.id)
         response = admin_client.get(
-            reverse("admin:quickscale_modules_social_socialembed_changelist")
+            reverse("admin:quickscale_social_socialembed_changelist")
         )
         content = response.content.decode("utf-8")
 
@@ -777,7 +777,7 @@ class TestSocialAdminEndToEnd:
             set_current_org_id(None)
         _clear_session_org(admin_client)
         response = admin_client.get(
-            reverse("admin:quickscale_modules_social_sociallink_changelist")
+            reverse("admin:quickscale_social_sociallink_changelist")
         )
         content = response.content.decode("utf-8")
         assert "Some Link" not in content
@@ -803,7 +803,7 @@ class TestSocialAdminEndToEnd:
         _set_session_org(admin_client, org.id)
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_social_sociallink_change",
+                "admin:quickscale_social_sociallink_change",
                 args=[link.pk],
             )
         )
@@ -827,7 +827,7 @@ class TestSocialAdminEndToEnd:
         _set_session_org(admin_client, org_b.id)
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_social_sociallink_change",
+                "admin:quickscale_social_sociallink_change",
                 args=[link.pk],
             )
         )
@@ -850,7 +850,7 @@ class TestSocialAdminEndToEnd:
         _set_session_org(admin_client, org_b.id)
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_social_sociallink_delete",
+                "admin:quickscale_social_sociallink_delete",
                 args=[link.pk],
             )
         )
@@ -873,7 +873,7 @@ class TestSocialAdminEndToEnd:
         _set_session_org(admin_client, org_b.id)
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_social_sociallink_history",
+                "admin:quickscale_social_sociallink_history",
                 args=[link.pk],
             )
         )
@@ -895,7 +895,7 @@ class TestSocialAdminEndToEnd:
         _set_session_org(admin_client, org.id)
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_social_socialembed_change",
+                "admin:quickscale_social_socialembed_change",
                 args=[embed.pk],
             )
         )
@@ -946,7 +946,7 @@ class TestSocialAdminNonexistentOrg:
         _set_session_org(admin_client, bogus)
 
         response = admin_client.get(
-            reverse("admin:quickscale_modules_social_sociallink_changelist")
+            reverse("admin:quickscale_social_sociallink_changelist")
         )
         content = response.content.decode("utf-8")
 
@@ -975,7 +975,7 @@ class TestSocialAdminNonexistentOrg:
         _set_session_org(admin_client, bogus)
 
         response = admin_client.get(
-            reverse("admin:quickscale_modules_social_socialembed_changelist")
+            reverse("admin:quickscale_social_socialembed_changelist")
         )
         content = response.content.decode("utf-8")
 
@@ -1005,9 +1005,7 @@ class TestSocialAdminNonexistentOrg:
         bogus = uuid.uuid4()
         _set_session_org(admin_client, bogus)
 
-        admin_client.get(
-            reverse("admin:quickscale_modules_social_sociallink_changelist")
-        )
+        admin_client.get(reverse("admin:quickscale_social_sociallink_changelist"))
 
         # The session should still contain the bogus UUID.
         session_after = admin_client.session.get(ACTIVE_ORG_SESSION_KEY)
@@ -1273,8 +1271,8 @@ class TestSocialAdminViewAsOrgLock:
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
 _SOCIAL_TABLES = (
-    "quickscale_modules_social_sociallink",
-    "quickscale_modules_social_socialembed",
+    "quickscale_social_sociallink",
+    "quickscale_social_socialembed",
 )
 
 
@@ -1367,13 +1365,11 @@ class TestSocialRlsBoundaryRestrictedRole:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(bogus_org)])
-                cursor.execute("SELECT title FROM quickscale_modules_social_sociallink")
+                cursor.execute("SELECT title FROM quickscale_social_sociallink")
                 assert cursor.fetchall() == [], (
                     "RLS should block all links with a non-matching org context"
                 )
-                cursor.execute(
-                    "SELECT title FROM quickscale_modules_social_socialembed"
-                )
+                cursor.execute("SELECT title FROM quickscale_social_socialembed")
                 assert cursor.fetchall() == [], (
                     "RLS should block all embeds with a non-matching org context"
                 )
@@ -1429,8 +1425,7 @@ class TestSocialRlsBoundaryRestrictedRole:
                 # ---- Org A context ----
                 cursor.execute("SET app.current_org_id = %s", [str(org_a.id)])
                 cursor.execute(
-                    "SELECT title FROM quickscale_modules_social_sociallink "
-                    "ORDER BY title"
+                    "SELECT title FROM quickscale_social_sociallink ORDER BY title"
                 )
                 link_titles = [r[0] for r in cursor.fetchall()]
                 assert link_titles == ["Org A Link"], (
@@ -1438,8 +1433,7 @@ class TestSocialRlsBoundaryRestrictedRole:
                 )
 
                 cursor.execute(
-                    "SELECT title FROM quickscale_modules_social_socialembed "
-                    "ORDER BY title"
+                    "SELECT title FROM quickscale_social_socialembed ORDER BY title"
                 )
                 embed_titles = [r[0] for r in cursor.fetchall()]
                 assert embed_titles == ["Org A Embed"], (
@@ -1449,8 +1443,7 @@ class TestSocialRlsBoundaryRestrictedRole:
                 # ---- Cross-org: switch to Org B context ----
                 cursor.execute("SET app.current_org_id = %s", [str(org_b.id)])
                 cursor.execute(
-                    "SELECT title FROM quickscale_modules_social_sociallink "
-                    "ORDER BY title"
+                    "SELECT title FROM quickscale_social_sociallink ORDER BY title"
                 )
                 link_titles = [r[0] for r in cursor.fetchall()]
                 assert link_titles == ["Org B Link"], (
@@ -1458,8 +1451,7 @@ class TestSocialRlsBoundaryRestrictedRole:
                 )
 
                 cursor.execute(
-                    "SELECT title FROM quickscale_modules_social_socialembed "
-                    "ORDER BY title"
+                    "SELECT title FROM quickscale_social_socialembed ORDER BY title"
                 )
                 embed_titles = [r[0] for r in cursor.fetchall()]
                 assert embed_titles == ["Org B Embed"], (

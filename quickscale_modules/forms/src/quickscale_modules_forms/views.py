@@ -596,7 +596,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
 class FormPageView(TemplateView):
     """Optional server-side entry point — renders a React mount point div"""
 
-    template_name = "quickscale_modules_forms/forms/form_page.html"
+    template_name = "quickscale_forms/forms/form_page.html"
 
     def get_context_data(self, **kwargs: Any) -> dict:
         context = super().get_context_data(**kwargs)

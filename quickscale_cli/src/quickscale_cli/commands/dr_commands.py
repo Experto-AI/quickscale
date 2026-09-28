@@ -2,7 +2,7 @@
 
 F5.3: All DR operations now call the explicit typed adapter
 (``quickscale_core.dr_engine.adapter``) through the thin
-``dr_adapter_call`` management command bridge, replacing the previous
+``quickscale_backups_dr_adapter_call`` management command bridge, replacing the previous
 docker-exec/management-command/env-var/stdout-JSON protocol.
 """
 
@@ -260,7 +260,7 @@ def _call_adapter(
         get_backend_container_name(),
         "python",
         "manage.py",
-        "dr_adapter_call",
+        "quickscale_backups_dr_adapter_call",
         function_name,
     ]
 

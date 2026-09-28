@@ -15,9 +15,7 @@ class TestTemplateCSSLoading:
         import quickscale_modules_auth
 
         module_path = Path(quickscale_modules_auth.__file__).parent
-        template_path = (
-            module_path / "templates" / "quickscale_modules_auth" / "base.html"
-        )
+        template_path = module_path / "templates" / "quickscale_auth" / "base.html"
 
         assert template_path.exists(), f"Template not found at {template_path}"
 

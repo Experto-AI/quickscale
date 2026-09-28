@@ -410,7 +410,7 @@ def test_no_stale_manager_names_in_organizations_doc() -> None:
 # ---------------------------------------------------------------------------
 # The marker-only M2M through classification must handle the case where
 # one endpoint is not a project-owned model.  For example,
-# ``quickscale_modules_auth.User`` (project-owned, marker-excluded) has
+# ``quickscale_auth.User`` (project-owned, marker-excluded) has
 # M2M fields through ``auth.Group`` / ``auth.Permission`` (Django contrib
 # — not project-owned).  The auto-created through tables ``User_groups``
 # and ``User_user_permissions`` must still be classifiable by the

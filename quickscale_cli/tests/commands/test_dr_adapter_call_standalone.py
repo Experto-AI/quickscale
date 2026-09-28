@@ -1,4 +1,4 @@
-"""Standalone direct-evidence tests for the dr_adapter_call bridge.
+"""Standalone direct-evidence tests for the quickscale_backups_dr_adapter_call bridge.
 
 Covers both the SA31 stdin transport and the legacy ``--args-json`` path.
 The existing Django-based test suite (``quickscale_modules/backups/tests/
@@ -32,7 +32,7 @@ import pytest
 # circular-import risk.
 # pylint: disable=wrong-import-position
 
-from quickscale_modules_backups.management.commands.dr_adapter_call import (  # noqa: E402
+from quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call import (  # noqa: E402
     Command,
 )
 from django.core.management.base import CommandError  # noqa: E402
@@ -170,7 +170,7 @@ class TestHandleDispatch:
         )
 
         with patch.dict(
-            "quickscale_modules_backups.management.commands.dr_adapter_call."
+            "quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call."
             "ADAPTER_FUNCTIONS",
             {"capture_snapshot": mock_adapter},
             clear=True,
@@ -198,7 +198,7 @@ class TestHandleDispatch:
         with (
             patch.dict(
                 "quickscale_modules_backups.management.commands."
-                "dr_adapter_call.ADAPTER_FUNCTIONS",
+                "quickscale_backups_dr_adapter_call.ADAPTER_FUNCTIONS",
                 {"capture_snapshot": mock_adapter},
                 clear=True,
             ),
@@ -220,7 +220,7 @@ class TestHandleDispatch:
         """Unknown function name raises CommandError listing available."""
         with patch.dict(
             "quickscale_modules_backups.management.commands."
-            "dr_adapter_call.ADAPTER_FUNCTIONS",
+            "quickscale_backups_dr_adapter_call.ADAPTER_FUNCTIONS",
             {"capture_snapshot": MagicMock()},
             clear=True,
         ):
@@ -239,7 +239,7 @@ class TestHandleDispatch:
         """Adapter raising an exception surfaces as CommandError."""
         with patch.dict(
             "quickscale_modules_backups.management.commands."
-            "dr_adapter_call.ADAPTER_FUNCTIONS",
+            "quickscale_backups_dr_adapter_call.ADAPTER_FUNCTIONS",
             {
                 "capture_snapshot": MagicMock(
                     side_effect=RuntimeError("adapter exploded")
@@ -266,7 +266,7 @@ class TestHandleDispatch:
 
         with patch.dict(
             "quickscale_modules_backups.management.commands."
-            "dr_adapter_call.ADAPTER_FUNCTIONS",
+            "quickscale_backups_dr_adapter_call.ADAPTER_FUNCTIONS",
             {"capture_snapshot": mock_adapter},
             clear=True,
         ):

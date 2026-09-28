@@ -27,15 +27,14 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
 | SA217 | Read the manifest option schema in core and check settings at startup | post-v88 | 2 | — | Deferred |
-| SA221 | Rename module identities to `quickscale_<module>` | post-v88 | 1 | — | Deferred |
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
 | SA225 | Move startup checks and exceptions onto the shared helpers | post-v88 | 3 | — | Deferred |
 | SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA219 | Deferred |
-| SA222 | Put every tenant model on `TenantModel` and align model basics | post-v88 | 1 | SA221 | Deferred |
-| SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 2 | SA221 | Deferred |
-| SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | SA221 | Deferred |
+| SA222 | Put every tenant model on `TenantModel` and align model basics | post-v88 | 1 | — | Deferred |
+| SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 2 | — | Deferred |
+| SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | — | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
-| SA227 | Standardize package files, commands, tooling, tests, and READMEs | post-v88 | 1 | SA221 | Deferred |
+| SA227 | Standardize package files, commands, tooling, tests, and READMEs | post-v88 | 1 | — | Deferred |
 | SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA222, SA223, SA224, SA225, SA226, SA227 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
@@ -73,7 +72,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA221 (in progress) | yes | yes | yes | **yes** | no |
+| 1 | SA222 | yes | yes | yes | **yes** | no |
 | 2 | SA217 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA225 | yes | yes | yes | **yes** | **yes** |
 
@@ -180,29 +179,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA218 — Add the shared runtime helpers modules build their conventions on.**
 
-- [ ] **SA221 — Rename module identities to `quickscale_<module>`.**
-
-  **Context:** inventory §§ 6, 9, 10, 27, 35; D7, D7b, D28, D36; rules 2, 25, and 33. Labels, tables, namespaces, folders,
-  commands, and constraints follow different stems.
-
-  **Scope:**
-  - *Identity names.* App labels become `quickscale_<module>`, so tables, migrations, content types,
-    permissions, `AUTH_USER_MODEL`, and orgs' RLS table lists change; `db_table` overrides go; URL
-    namespaces, template folders, and management commands take the same stem; rule 2's table lists
-    every shared namespace (rule 33), whose reverse accessors, events, and throttle scopes SA222,
-    SA226, and SA223 rename; orgs' database function `qs_child_parent_org_equality` becomes
-    `quickscale_orgs_child_parent_org_equality` in the clean-break migrations. backups' three and
-    forms' four `db_table` overrides go with auth's.
-  - *Constraints.* Every constraint and index is named `quickscale_<module>_…` /
-    `qs_<module>_…_idx` in each clean-break `0001_initial`, and forms' and orgs'
-    `unique_together` become `UniqueConstraint`s.
-
-  **Acceptance:** a fresh project with all twelve modules migrates and passes
-  `check_tenant_isolation` with the renamed tables; no `db_table` override or unprefixed
-  constraint remains; FORCE-RLS table and policy counts are unchanged.
-
-  **Surfaces:** every module's `AppConfig`, models, `0001_initial`, URL namespaces, template
-  folders, commands; orgs' RLS lists; generator settings (`AUTH_USER_MODEL`).
+- [x] **SA221 — Rename module identities to `quickscale_<module>`.**
 
 - [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
 

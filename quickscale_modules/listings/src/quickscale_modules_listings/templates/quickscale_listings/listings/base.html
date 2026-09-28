@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Listings{% endblock %}
+
+{% block extra_css %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'quickscale_modules_listings/listings.css' %}">
+{% endblock %}
+
+{% block content %}
+{% include "quickscale_orgs/_debug_banner.html" %}
+<nav class="listings-nav">
+    <a href="{% url 'quickscale_listings:listing_list' %}">Listings Home</a>
+</nav>
+
+<div class="listings-content">
+{% block listings_content %}{% endblock %}
+</div>
+{% endblock %}

@@ -188,9 +188,7 @@ def test_build_social_link_tree_payload_uses_empty_state_for_missing_table(
     """Missing link tables should degrade to the existing empty public payload."""
 
     def raise_missing_table(*args: object, **kwargs: object) -> object:
-        raise OperationalError(
-            'relation "quickscale_modules_social_sociallink" does not exist'
-        )
+        raise OperationalError('relation "quickscale_social_sociallink" does not exist')
 
     cache.delete(SOCIAL_LINKS_CACHE_KEY)
     monkeypatch.setattr(SocialLink.objects, "filter", raise_missing_table)
@@ -709,7 +707,7 @@ def test_build_social_embeds_payload_uses_empty_state_for_missing_table(
     """Missing embed tables should degrade to the existing empty public payload."""
 
     def raise_missing_table(*args: object, **kwargs: object) -> object:
-        raise ProgrammingError("no such table: quickscale_modules_social_socialembed")
+        raise ProgrammingError("no such table: quickscale_social_socialembed")
 
     cache.delete(SOCIAL_EMBEDS_CACHE_KEY)
     monkeypatch.setattr(SocialEmbed.objects, "filter", raise_missing_table)

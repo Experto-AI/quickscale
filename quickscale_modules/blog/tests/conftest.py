@@ -19,7 +19,7 @@ from django.contrib.auth import get_user_model
 # Configure Django before importing models
 if not settings.configured:
     settings_path = Path(__file__).with_name("settings.py")
-    settings_module_name = "quickscale_modules_blog_test_settings"
+    settings_module_name = "quickscale_blog_test_settings"
     settings_spec = spec_from_file_location(settings_module_name, settings_path)
     if settings_spec is None or settings_spec.loader is None:
         raise RuntimeError(f"Unable to load blog test settings from {settings_path}")

@@ -1,0 +1,17 @@
+{% extends "quickscale_billing/base.html" %}
+
+{% block title %}Back from billing portal{% endblock %}
+
+{% block billing_content %}
+<div class="status-page">
+    <div id="billing-portal-root" data-portal-status="return" class="status-card">
+        <div class="status-icon">-&gt;</div>
+        <h1>Back from billing portal</h1>
+        <p>You have returned from the Stripe billing portal. Recent plan or payment changes may take a moment to appear.</p>
+        <div class="actions">
+            <a class="button button-primary" href="{{ dashboard_url }}">Go to dashboard</a>
+            <a class="button button-secondary" href="/">Back to app</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

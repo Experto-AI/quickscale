@@ -845,9 +845,8 @@ def test_repository_module_migration_topology() -> None:
 
     assert len(inventory.app_configs) == len(inventory.names)
     for module_name, identity in inventory.app_configs.items():
-        expected_identity = f"quickscale_modules_{module_name}"
-        assert identity.name == expected_identity
-        assert identity.label == expected_identity
+        assert identity.name == f"quickscale_modules_{module_name}"
+        assert identity.label == f"quickscale_{module_name}"
 
 
 def test_missing_initial_migration_canary(tmp_path: Path) -> None:

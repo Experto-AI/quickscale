@@ -15,46 +15,44 @@ ROOT = Path(__file__).resolve().parents[2]
 BASE_CONTRACTS = {
     "auth": (
         "quickscale_modules/auth/src/quickscale_modules_auth/templates/"
-        "quickscale_modules_auth/base.html",
+        "quickscale_auth/base.html",
         "quickscale_modules_auth/css/auth.css",
     ),
     "billing": (
         "quickscale_modules/billing/src/quickscale_modules_billing/templates/"
-        "quickscale_modules_billing/base.html",
+        "quickscale_billing/base.html",
         "quickscale_modules_billing/css/billing.css",
     ),
     "blog": (
         "quickscale_modules/blog/src/quickscale_modules_blog/templates/"
-        "quickscale_modules_blog/blog/base.html",
+        "quickscale_blog/blog/base.html",
         "quickscale_modules_blog/blog.css",
     ),
     "listings": (
         "quickscale_modules/listings/src/quickscale_modules_listings/templates/"
-        "quickscale_modules_listings/listings/base.html",
+        "quickscale_listings/listings/base.html",
         "quickscale_modules_listings/listings.css",
     ),
     "crm": (
         "quickscale_modules/crm/src/quickscale_modules_crm/templates/"
-        "quickscale_modules_crm/crm/base.html",
+        "quickscale_crm/crm/base.html",
         "quickscale_modules_crm/crm.css",
     ),
 }
 
 CHILD_CONTRACTS = {
     "quickscale_modules/auth/src/quickscale_modules_auth/templates/"
-    "quickscale_modules_auth/account/*.html": "quickscale_modules_auth/base.html",
+    "quickscale_auth/account/*.html": "quickscale_auth/base.html",
     "quickscale_modules/billing/src/quickscale_modules_billing/templates/"
-    "quickscale_modules_billing/*.html": "quickscale_modules_billing/base.html",
+    "quickscale_billing/*.html": "quickscale_billing/base.html",
     "quickscale_modules/billing/src/quickscale_modules_billing/templates/"
-    "quickscale_modules_billing/billing/*.html": "quickscale_modules_billing/base.html",
+    "quickscale_billing/billing/*.html": "quickscale_billing/base.html",
     "quickscale_modules/blog/src/quickscale_modules_blog/templates/"
-    "quickscale_modules_blog/blog/*.html": "quickscale_modules_blog/blog/base.html",
+    "quickscale_blog/blog/*.html": "quickscale_blog/blog/base.html",
     "quickscale_modules/listings/src/quickscale_modules_listings/templates/"
-    "quickscale_modules_listings/listings/*.html": (
-        "quickscale_modules_listings/listings/base.html"
-    ),
+    "quickscale_listings/listings/*.html": ("quickscale_listings/listings/base.html"),
     "quickscale_modules/crm/src/quickscale_modules_crm/templates/"
-    "quickscale_modules_crm/crm/*.html": "quickscale_modules_crm/crm/base.html",
+    "quickscale_crm/crm/*.html": "quickscale_crm/crm/base.html",
 }
 
 MODULE_STYLESHEETS = [

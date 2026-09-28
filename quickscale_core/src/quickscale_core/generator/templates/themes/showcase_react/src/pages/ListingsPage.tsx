@@ -49,7 +49,7 @@ export function ListingsPage() {
           <CardContent>
             <Button variant="outline" size="sm" asChild>
               <a
-                href="/admin/quickscale_modules_listings/"
+                href="/admin/quickscale_listings/"
                 target="_blank"
                 rel="noopener noreferrer"
               >

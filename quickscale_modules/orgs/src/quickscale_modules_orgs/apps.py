@@ -99,7 +99,7 @@ def _check_quickscale_mode() -> None:
     if mode is None:
         raise ImproperlyConfigured(
             "QUICKSCALE_MODE setting is required when "
-            "quickscale_modules_orgs is installed. "
+            "quickscale_orgs is installed. "
             "Set it to 'solo' for single-tenant or 'saas' for "
             "multi-tenant mode."
         )
@@ -174,7 +174,7 @@ class QuickscaleOrgsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_orgs"
-    label = "quickscale_modules_orgs"
+    label = "quickscale_orgs"
     verbose_name = "QuickScale Organizations"
 
     def removal_obligations(self) -> tuple[OrganizationRemovalObligation, ...]:

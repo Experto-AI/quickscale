@@ -26,7 +26,7 @@ from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_id,
 )
-from quickscale_modules_orgs.management.commands.migrate_billing_to_orgs import (
+from quickscale_modules_orgs.management.commands.quickscale_orgs_migrate_billing_to_orgs import (
     _billing_user_ids,
     _candidate_customer_ids_for_user,
     _collect_unmigratable_row_messages,
@@ -34,7 +34,9 @@ from quickscale_modules_orgs.management.commands.migrate_billing_to_orgs import 
     _normalized_text,
     _resolve_authoritative_organization,
 )
-from quickscale_modules_orgs.management.commands.purge_organization import Command
+from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
+    Command,
+)
 from quickscale_modules_orgs.models import (
     OrgRole,
     Organization,
@@ -130,7 +132,7 @@ def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> Non
 
     first_stdout = StringIO()
     call_command(
-        "migrate_billing_to_orgs",
+        "quickscale_orgs_migrate_billing_to_orgs",
         stdout=first_stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -154,7 +156,7 @@ def test_migrate_billing_to_orgs_creates_personal_org_and_is_idempotent() -> Non
 
     second_stdout = StringIO()
     call_command(
-        "migrate_billing_to_orgs",
+        "quickscale_orgs_migrate_billing_to_orgs",
         stdout=second_stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -206,7 +208,7 @@ def test_migrate_billing_to_orgs_reuses_sole_existing_membership() -> None:
 
     stdout = StringIO()
     call_command(
-        "migrate_billing_to_orgs",
+        "quickscale_orgs_migrate_billing_to_orgs",
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -238,7 +240,7 @@ def test_migrate_billing_to_orgs_serializes_with_organization_purge(
     from django.db import close_old_connections
 
     from quickscale_modules_orgs.management.commands import (
-        migrate_billing_to_orgs as recovery_module,
+        quickscale_orgs_migrate_billing_to_orgs as recovery_module,
     )
 
     user = get_user_model().objects.create_user(
@@ -299,7 +301,7 @@ def test_migrate_billing_to_orgs_serializes_with_organization_purge(
         close_old_connections()
         try:
             call_command(
-                "migrate_billing_to_orgs",
+                "quickscale_orgs_migrate_billing_to_orgs",
                 stdout=StringIO(),
                 stderr=StringIO(),
                 verbosity=0,
@@ -312,7 +314,7 @@ def test_migrate_billing_to_orgs_serializes_with_organization_purge(
         try:
             with pytest.raises(CommandError) as exc_info:
                 call_command(
-                    "purge_organization",
+                    "quickscale_orgs_purge_organization",
                     organization_id=str(organization.pk),
                     stdout=StringIO(),
                     stderr=StringIO(),
@@ -404,7 +406,7 @@ def test_credit_mutation_serializes_with_organization_purge(
         close_old_connections()
         try:
             call_command(
-                "purge_organization",
+                "quickscale_orgs_purge_organization",
                 organization_id=str(organization.pk),
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -466,7 +468,7 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
 
     with pytest.raises(CommandError, match="ambiguous organization memberships"):
         call_command(
-            "migrate_billing_to_orgs",
+            "quickscale_orgs_migrate_billing_to_orgs",
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -481,7 +483,7 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
 
 
 # ---------------------------------------------------------------------------
-# Current-schema migrate_billing_to_orgs tests
+# Current-schema quickscale_orgs_migrate_billing_to_orgs tests
 #
 # The pre-migration tests above temporarily reproduce nullable ownership in the
 # explicitly authorized BYPASSRLS lane. Helper tests below use the restricted
@@ -739,7 +741,7 @@ def test_migrate_billing_no_users_early_return() -> None:
     """Command.handle() must exit early when no billing users exist."""
     stdout = StringIO()
     call_command(
-        "migrate_billing_to_orgs",
+        "quickscale_orgs_migrate_billing_to_orgs",
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -801,7 +803,7 @@ def test_migrate_billing_completes_with_preassigned_org() -> None:
     set_current_org_id(org.pk)
     stdout = StringIO()
     call_command(
-        "migrate_billing_to_orgs",
+        "quickscale_orgs_migrate_billing_to_orgs",
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -853,7 +855,7 @@ def test_migrate_billing_syncs_stripe_customer_id_when_org_has_none() -> None:
     set_current_org_id(org.pk)
     stdout = StringIO()
     call_command(
-        "migrate_billing_to_orgs",
+        "quickscale_orgs_migrate_billing_to_orgs",
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -905,7 +907,7 @@ def test_migrate_billing_fails_on_conflicting_stripe_customer_id() -> None:
     set_current_org_id(org.pk)
     with pytest.raises(CommandError, match="already has stripe_customer_id"):
         call_command(
-            "migrate_billing_to_orgs",
+            "quickscale_orgs_migrate_billing_to_orgs",
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -934,7 +936,7 @@ def test_promote_to_saas_fills_blank_personal_slug_from_owner_and_prints_setting
 
     stdout = StringIO()
     call_command(
-        "promote_to_saas",
+        "quickscale_orgs_promote_to_saas",
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -967,7 +969,7 @@ def test_promote_to_saas_suffixes_collisions_and_is_idempotent() -> None:
 
     first_stdout = StringIO()
     call_command(
-        "promote_to_saas",
+        "quickscale_orgs_promote_to_saas",
         stdout=first_stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -979,7 +981,7 @@ def test_promote_to_saas_suffixes_collisions_and_is_idempotent() -> None:
 
     second_stdout = StringIO()
     call_command(
-        "promote_to_saas",
+        "quickscale_orgs_promote_to_saas",
         stdout=second_stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -991,18 +993,18 @@ def test_promote_to_saas_suffixes_collisions_and_is_idempotent() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T1.17 — purge_organization contract tests
+# T1.17 — quickscale_orgs_purge_organization contract tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 def test_purge_organization_requires_uuid_or_slug() -> None:
-    """purge_organization must error when neither --organization-id nor --slug is provided."""
+    """quickscale_orgs_purge_organization must error when neither --organization-id nor --slug is provided."""
     stdout = StringIO()
     stderr = StringIO()
     with pytest.raises(CommandError, match="Specify --organization-id"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -1011,13 +1013,13 @@ def test_purge_organization_requires_uuid_or_slug() -> None:
 
 @pytest.mark.django_db
 def test_purge_organization_rejects_combined_targeting_flags() -> None:
-    """purge_organization must error when both --organization-id and --slug are given."""
+    """quickscale_orgs_purge_organization must error when both --organization-id and --slug are given."""
     organization = Organization.objects.create(name="Test", slug="test")
     stdout = StringIO()
     stderr = StringIO()
     with pytest.raises(CommandError, match="Cannot combine"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
             slug="test",
             stdout=stdout,
@@ -1052,7 +1054,7 @@ def test_purge_organization_slug_preflight_is_non_destructive() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         slug="preflight-test",
         stdout=stdout,
         stderr=StringIO(),
@@ -1076,7 +1078,7 @@ def test_purge_organization_slug_preflight_fails_on_missing_slug() -> None:
     stderr = StringIO()
     with pytest.raises(CommandError, match="No organization found with slug"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             slug="nonexistent-slug",
             stdout=stdout,
             stderr=stderr,
@@ -1092,7 +1094,7 @@ def test_purge_organization_missing_uuid_no_tombstone_errors() -> None:
     stderr = StringIO()
     with pytest.raises(CommandError, match="No organization found with UUID"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=missing_uuid,
             stdout=stdout,
             stderr=stderr,
@@ -1110,7 +1112,7 @@ def test_purge_organization_missing_uuid_with_tombstone_is_noop() -> None:
     stderr = StringIO()
     with pytest.raises(CommandError, match="No-op"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(purged_org_id),
             stdout=stdout,
             stderr=stderr,
@@ -1147,7 +1149,7 @@ def test_purge_organization_dry_run_is_noop() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(organization.pk),
         dry_run=True,
         stdout=stdout,
@@ -1167,14 +1169,14 @@ def test_purge_organization_dry_run_is_noop() -> None:
 
 @pytest.mark.django_db
 def test_purge_organization_reserved_org_refused() -> None:
-    """purge_organization must refuse to purge a reserved (System) organization."""
+    """quickscale_orgs_purge_organization must refuse to purge a reserved (System) organization."""
     system_org = Organization.objects.get_system_org()
 
     stdout = StringIO()
     stderr = StringIO()
     with pytest.raises(CommandError, match="Cannot purge the System organization"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(system_org.pk),
             stdout=stdout,
             stderr=stderr,
@@ -1210,7 +1212,7 @@ def test_purge_organization_invitations_appear_in_dry_run_counts() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(organization.pk),
         dry_run=True,
         stdout=stdout,
@@ -1243,7 +1245,7 @@ def test_purge_organization_creates_tombstone() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
@@ -1259,7 +1261,7 @@ def test_purge_organization_creates_tombstone() -> None:
 
 @pytest.mark.django_db
 def test_purge_organization_rerun_after_purge_is_noop() -> None:
-    """Rerunning purge_organization after a successful purge must return no-op."""
+    """Rerunning quickscale_orgs_purge_organization after a successful purge must return no-op."""
     owner = get_user_model().objects.create_user(
         username="rerun-owner",
         email="rerun-owner@example.com",
@@ -1276,7 +1278,7 @@ def test_purge_organization_rerun_after_purge_is_noop() -> None:
     # First run — purge.
     first_stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=first_stdout,
         stderr=StringIO(),
@@ -1290,7 +1292,7 @@ def test_purge_organization_rerun_after_purge_is_noop() -> None:
     second_stderr = StringIO()
     with pytest.raises(CommandError, match="No-op"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=second_stdout,
             stderr=second_stderr,
@@ -1310,7 +1312,7 @@ def test_purge_organization_rejects_invalid_uuid_format() -> None:
     stderr = StringIO()
     with pytest.raises(CommandError, match="valid UUID"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id="not-a-uuid",
             stdout=stdout,
             stderr=stderr,
@@ -1353,7 +1355,7 @@ def test_purge_organization_deletes_memberships_and_invitations() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
@@ -1372,7 +1374,7 @@ def test_purge_organization_deletes_memberships_and_invitations() -> None:
 
 @pytest.mark.django_db
 def test_purge_organization_one_owner_multi_member_succeeds() -> None:
-    """purge_organization must succeed for a one-owner/multi-member org.
+    """quickscale_orgs_purge_organization must succeed for a one-owner/multi-member org.
 
     Regression for CR-SA70-001: the SA70 pre_delete backstop on
     OrganizationMembership must not block org-wide purge when the owner
@@ -1416,7 +1418,7 @@ def test_purge_organization_one_owner_multi_member_succeeds() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
@@ -1492,7 +1494,7 @@ def test_purge_organization_refuses_live_stripe_subscription(
         pytest.raises(CommandError) as exc_info,
     ):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
@@ -1587,7 +1589,7 @@ def test_purge_organization_with_terminal_billing_rows() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
@@ -1644,7 +1646,7 @@ def test_purge_organization_refuses_current_subscription_without_provider_id(
 
     with pytest.raises(CommandError, match="no provider id"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
@@ -1701,7 +1703,7 @@ def test_purge_organization_refuses_pending_subscription_checkout(
 
     with pytest.raises(CommandError, match="checkout is pending"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
@@ -1762,7 +1764,7 @@ def test_purge_organization_refuses_open_purchase_checkout(dry_run: bool) -> Non
         pytest.raises(CommandError, match="purchase checkout session.*still open"),
     ):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
@@ -1824,7 +1826,7 @@ def test_purge_organization_allows_expired_subscription_checkout(
         return {"id": checkout_session_id, "status": "expired"}
 
     stripe_client.retrieve_checkout_session.side_effect = retrieve_checkout_session
-    billing_config = apps.get_app_config("quickscale_modules_billing")
+    billing_config = apps.get_app_config("quickscale_billing")
     monkeypatch.setattr(
         billing_config,
         "reconcile_organization_removal_provider_state",
@@ -1838,7 +1840,7 @@ def test_purge_organization_allows_expired_subscription_checkout(
     )
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         dry_run=dry_run,
         stdout=StringIO(),
@@ -1914,7 +1916,7 @@ def test_purge_organization_refuses_completed_checkout_past_local_expiry(
         }
 
     stripe_client.retrieve_checkout_session.side_effect = retrieve_checkout_session
-    billing_config = apps.get_app_config("quickscale_modules_billing")
+    billing_config = apps.get_app_config("quickscale_billing")
     monkeypatch.setattr(
         billing_config,
         "reconcile_organization_removal_provider_state",
@@ -1929,7 +1931,7 @@ def test_purge_organization_refuses_completed_checkout_past_local_expiry(
 
     with pytest.raises(CommandError, match="checkout completed"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
@@ -2020,7 +2022,7 @@ def test_purge_organization_rollback_on_error() -> None:
         patch.object(Command, "_delete_owned_rows", new=failing_delete),
     ):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=stdout,
             stderr=stderr,
@@ -2059,7 +2061,7 @@ def test_purge_organization_slug_reuse_safe() -> None:
 
     # Purge.
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -2158,7 +2160,7 @@ def test_purge_organization_sets_db_current_org_id_on_postgres() -> None:
     # Step 6: Full purge command also works on Postgres (smoke test).
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
@@ -2184,7 +2186,7 @@ def test_purge_organization_slug_preflight_refuses_system_org() -> None:
     stderr = StringIO()
     with pytest.raises(CommandError, match="Cannot purge the System organization"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             slug=system_org.slug,
             stdout=stdout,
             stderr=stderr,
@@ -2203,7 +2205,7 @@ def test_purge_organization_slug_preflight_refuses_system_org() -> None:
 def test_purge_organization_refuses_personal_org_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """purge_organization must refuse a personal org without --force."""
+    """quickscale_orgs_purge_organization must refuse a personal org without --force."""
     from django.apps import apps
 
     owner = get_user_model().objects.create_user(
@@ -2223,7 +2225,7 @@ def test_purge_organization_refuses_personal_org_by_default(
     )
     reconcile = MagicMock()
     monkeypatch.setattr(
-        apps.get_app_config("quickscale_modules_billing"),
+        apps.get_app_config("quickscale_billing"),
         "reconcile_organization_removal_provider_state",
         reconcile,
     )
@@ -2232,7 +2234,7 @@ def test_purge_organization_refuses_personal_org_by_default(
     stderr = StringIO()
     with pytest.raises(CommandError, match="Cannot purge the personal organization"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
             stdout=stdout,
             stderr=stderr,
@@ -2266,7 +2268,7 @@ def test_purge_organization_slug_preflight_refuses_personal_org() -> None:
     stderr = StringIO()
     with pytest.raises(CommandError, match="Cannot purge the personal organization"):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             slug=organization.slug,
             stdout=stdout,
             stderr=stderr,
@@ -2283,7 +2285,7 @@ def test_purge_organization_force_overrides_system_org_guard() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(system_org.pk),
         force=True,
         stdout=stdout,
@@ -2319,7 +2321,7 @@ def test_purge_organization_force_overrides_personal_org_guard() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         force=True,
         stdout=stdout,
@@ -2340,7 +2342,7 @@ def test_purge_organization_dry_run_with_force_bypasses_guard() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(system_org.pk),
         dry_run=True,
         force=True,
@@ -2493,7 +2495,7 @@ def test_purge_plan_is_marker_derived_and_fk_ordered() -> None:
     """The runtime purge plan covers every installed marker-enrolled model."""
     from django.db import models
 
-    from quickscale_modules_orgs.management.commands.purge_organization import (
+    from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
         _resolve_models,
     )
     from quickscale_modules_orgs.tenancy import (
@@ -2546,7 +2548,7 @@ def test_purge_plan_is_marker_derived_and_fk_ordered() -> None:
 
 def test_purge_plan_supports_explicit_order_overrides() -> None:
     """An explicit override orders models whose FK metadata is insufficient."""
-    from quickscale_modules_orgs.management.commands.purge_organization import (
+    from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
         _topologically_order_models,
     )
     from quickscale_modules_social.models import SocialLink
@@ -2561,7 +2563,7 @@ def test_purge_plan_supports_explicit_order_overrides() -> None:
 
 def test_purge_plan_rejects_unknown_order_override_models() -> None:
     """A misspelled override cannot silently leave the plan unordered."""
-    from quickscale_modules_orgs.management.commands.purge_organization import (
+    from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
         _topologically_order_models,
     )
     from quickscale_modules_social.models import SocialLink
@@ -2578,7 +2580,7 @@ def test_purge_plan_ignores_nonblocking_fk_cycle_edges() -> None:
     from django.db import models
     from django.test.utils import isolate_apps
 
-    from quickscale_modules_orgs.management.commands.purge_organization import (
+    from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
         _topologically_order_models,
     )
 
@@ -2609,7 +2611,7 @@ def test_purge_plan_propagates_protection_through_cascade_ancestors() -> None:
     from django.db import models
     from django.test.utils import isolate_apps
 
-    from quickscale_modules_orgs.management.commands.purge_organization import (
+    from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
         _topologically_order_models,
     )
 
@@ -2643,41 +2645,49 @@ def test_purge_plan_propagates_protection_through_cascade_ancestors() -> None:
 def test_purge_plan_disambiguates_duplicate_display_labels(monkeypatch) -> None:
     """Project models with the same plural keep distinct ownership-map keys."""
     from quickscale_modules_social.models import SocialEmbed, SocialLink
-    from quickscale_modules_orgs.management.commands import purge_organization
+    from quickscale_modules_orgs.management.commands import (
+        quickscale_orgs_purge_organization,
+    )
 
     monkeypatch.setattr(
-        purge_organization,
+        quickscale_orgs_purge_organization,
         "get_tenant_models",
         lambda: [SocialLink, SocialEmbed],
     )
     monkeypatch.setattr(
-        purge_organization,
+        quickscale_orgs_purge_organization,
         "_model_label",
         lambda _: "Rows",
     )
 
-    labels = [entry["label"] for entry in purge_organization._resolve_models()]
+    labels = [
+        entry["label"] for entry in quickscale_orgs_purge_organization._resolve_models()
+    ]
 
     assert labels == [
-        "Rows (quickscale_modules_social.socialembed)",
-        "Rows (quickscale_modules_social.sociallink)",
+        "Rows (quickscale_social.socialembed)",
+        "Rows (quickscale_social.sociallink)",
     ]
 
 
 def test_purge_plan_rejects_marker_model_without_organization_id(monkeypatch) -> None:
     """Marker discovery fails closed instead of silently dropping a model."""
     from quickscale_modules_billing.models import Plan
-    from quickscale_modules_orgs.management.commands import purge_organization
+    from quickscale_modules_orgs.management.commands import (
+        quickscale_orgs_purge_organization,
+    )
 
-    monkeypatch.setattr(purge_organization, "get_tenant_models", lambda: [Plan])
+    monkeypatch.setattr(
+        quickscale_orgs_purge_organization, "get_tenant_models", lambda: [Plan]
+    )
 
     with pytest.raises(CommandError, match="without an organization_id"):
-        purge_organization._resolve_models()
+        quickscale_orgs_purge_organization._resolve_models()
 
 
 def test_resolve_models_skips_uninstalled_apps() -> None:
     """_resolve_models() returns only installed marker-derived models."""
-    from quickscale_modules_orgs.management.commands.purge_organization import (
+    from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
         _resolve_models,
     )
 
@@ -2690,14 +2700,14 @@ def test_resolve_models_skips_uninstalled_apps() -> None:
 
 # ---------------------------------------------------------------------------
 # T1.17 — Real multi-module purge integration (CR-T117-REVIEW-001)
-# Tests create rows for each module and verify purge_organization actually
+# Tests create rows for each module and verify quickscale_orgs_purge_organization actually
 # deletes them.  All modules are installed in the orgs test environment.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 def test_purge_organization_deletes_social_rows() -> None:
-    """purge_organization must delete SocialLink rows."""
+    """quickscale_orgs_purge_organization must delete SocialLink rows."""
     from quickscale_modules_social.models import SocialLink
 
     org = Organization.objects.create(name="Social Purge", slug="social-purge")
@@ -2719,7 +2729,7 @@ def test_purge_organization_deletes_social_rows() -> None:
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -2732,7 +2742,7 @@ def test_purge_organization_deletes_social_rows() -> None:
 
 @pytest.mark.django_db
 def test_purge_organization_deletes_forms_rows() -> None:
-    """purge_organization must delete Form rows (with FormSubmission PROTECT)."""
+    """quickscale_orgs_purge_organization must delete Form rows (with FormSubmission PROTECT)."""
     from quickscale_modules_forms.models import Form, FormSubmission
 
     org = Organization.objects.create(name="Forms Purge", slug="forms-purge")
@@ -2750,7 +2760,7 @@ def test_purge_organization_deletes_forms_rows() -> None:
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -2764,7 +2774,7 @@ def test_purge_organization_deletes_forms_rows() -> None:
 
 @pytest.mark.django_db
 def test_purge_organization_deletes_listings_rows() -> None:
-    """purge_organization must delete Listing rows."""
+    """quickscale_orgs_purge_organization must delete Listing rows."""
     from quickscale_modules_listings.models import Listing
 
     org = Organization.objects.create(name="Listings Purge", slug="listings-purge")
@@ -2778,7 +2788,7 @@ def test_purge_organization_deletes_listings_rows() -> None:
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -2812,7 +2822,7 @@ def test_purge_organization_deletes_project_owned_child_rows() -> None:
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -2850,7 +2860,7 @@ def test_purge_organization_deletes_project_owned_self_protected_rows() -> None:
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -2895,7 +2905,7 @@ def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
     )
     with pytest.raises(CommandError, match=expected):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             dry_run=True,
             stdout=StringIO(),
@@ -2905,7 +2915,7 @@ def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
 
     with pytest.raises(CommandError, match=expected):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
@@ -2945,7 +2955,7 @@ def test_purge_deletes_rows_without_provider_backed_values() -> None:
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -3003,7 +3013,7 @@ def test_provider_backed_guard_serializes_concurrent_project_updates(
         close_old_connections()
         try:
             call_command(
-                "purge_organization",
+                "quickscale_orgs_purge_organization",
                 organization_id=str(org_id),
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -3053,7 +3063,7 @@ def test_provider_backed_guard_serializes_concurrent_project_updates(
 
 @pytest.mark.django_db
 def test_purge_organization_deletes_blog_rows() -> None:
-    """purge_organization must delete Post, Category, and Tag rows."""
+    """quickscale_orgs_purge_organization must delete Post, Category, and Tag rows."""
     from quickscale_modules_blog.models import Category, Post, Tag
 
     org = Organization.objects.create(name="Blog Purge", slug="blog-purge")
@@ -3075,7 +3085,7 @@ def test_purge_organization_deletes_blog_rows() -> None:
     org_id = org.pk
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -3090,7 +3100,7 @@ def test_purge_organization_deletes_blog_rows() -> None:
 
 @pytest.mark.django_db
 def test_purge_organization_deletes_crm_rows() -> None:
-    """purge_organization must delete Company rows (and protect-safe ordering)."""
+    """quickscale_orgs_purge_organization must delete Company rows (and protect-safe ordering)."""
     from quickscale_modules_crm.models import (
         Company,
         Contact,
@@ -3136,7 +3146,7 @@ def test_purge_organization_deletes_crm_rows() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
@@ -3189,7 +3199,7 @@ def test_purge_organization_dry_run_counts_all_modules() -> None:
 
     stdout = StringIO()
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         dry_run=True,
         stdout=stdout,
@@ -3209,7 +3219,7 @@ def test_purge_organization_dry_run_counts_all_modules() -> None:
 
 @pytest.mark.django_db
 def test_purge_organization_clears_social_cache() -> None:
-    """purge_organization must invalidate social cache keys (CR-T117-R2).
+    """quickscale_orgs_purge_organization must invalidate social cache keys (CR-T117-R2).
 
     SocialLink/SocialEmbed rows are deleted via QuerySet.delete() which
     bypasses BaseSocialItem.delete() cache invalidation.  The command
@@ -3252,7 +3262,7 @@ def test_purge_organization_clears_social_cache() -> None:
     assert cache.get(link_key) == "stale"
 
     call_command(
-        "purge_organization",
+        "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
@@ -3295,7 +3305,7 @@ def test_purge_cache_failure_happens_after_database_commit() -> None:
         pytest.raises(RuntimeError, match="cache unavailable"),
     ):
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
@@ -3331,7 +3341,7 @@ def test_purge_tombstone_retry_heals_social_cache() -> None:
 
     with pytest.raises(CommandError, match="No-op") as exc_info:
         call_command(
-            "purge_organization",
+            "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
@@ -3388,7 +3398,7 @@ def test_check_tenant_isolation_pass_on_current_models() -> None:
     stderr = StringIO()
 
     call_command(
-        "check_tenant_isolation",
+        "quickscale_orgs_check_tenant_isolation",
         stdout=stdout,
         stderr=stderr,
         verbosity=0,
@@ -3413,7 +3423,7 @@ def test_check_tenant_isolation_json_output() -> None:
     stderr = StringIO()
 
     call_command(
-        "check_tenant_isolation",
+        "quickscale_orgs_check_tenant_isolation",
         format="json",
         stdout=stdout,
         stderr=stderr,
@@ -3445,7 +3455,7 @@ def test_sa182_project_listing_appears_in_human_and_json_output() -> None:
     """The project-owned tenant model is reported by both output formats."""
     human_stdout = StringIO()
     call_command(
-        "check_tenant_isolation",
+        "quickscale_orgs_check_tenant_isolation",
         stdout=human_stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -3454,7 +3464,7 @@ def test_sa182_project_listing_appears_in_human_and_json_output() -> None:
 
     json_stdout = StringIO()
     call_command(
-        "check_tenant_isolation",
+        "quickscale_orgs_check_tenant_isolation",
         format="json",
         stdout=json_stdout,
         stderr=StringIO(),
@@ -3485,19 +3495,19 @@ def test_check_tenant_isolation_detects_missing_organization_id() -> None:
     )
 
     # Plan is a system-wide model — it should NOT be detected as tenant.
-    model = apps.get_model("quickscale_modules_billing", "Plan")
+    model = apps.get_model("quickscale_billing", "Plan")
     assert model is not None
     assert not is_tenant_model(model), "Plan should not be detected as a tenant model."
 
     # Organization (control-plane) should NOT be detected as tenant.
-    org_model = apps.get_model("quickscale_modules_orgs", "Organization")
+    org_model = apps.get_model("quickscale_orgs", "Organization")
     assert org_model is not None
     assert not is_tenant_model(org_model), (
         "Organization should not be detected as a tenant model."
     )
 
     # Tag (CRM) is a tenant model — must have organization_id.
-    tag_model = apps.get_model("quickscale_modules_crm", "Tag")
+    tag_model = apps.get_model("quickscale_crm", "Tag")
     assert tag_model is not None
     assert is_tenant_model(tag_model), "CRM Tag must be detected as tenant."
     assert has_organization_id_field(tag_model), "CRM Tag must have organization_id."
@@ -3530,7 +3540,7 @@ def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
     model._meta.get_field.side_effect = FieldDoesNotExist("organization_id")
 
     with patch(
-        "quickscale_modules_orgs.management.commands.check_tenant_isolation"
+        "quickscale_modules_orgs.management.commands.quickscale_orgs_check_tenant_isolation"
         ".get_tenant_models",
         return_value=[model],
     ):
@@ -3539,7 +3549,7 @@ def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
         stderr = StringIO()
         with pytest.raises(SystemExit) as excinfo:
             call_command(
-                "check_tenant_isolation",
+                "quickscale_orgs_check_tenant_isolation",
                 stdout=stdout,
                 stderr=stderr,
                 verbosity=0,
@@ -3559,7 +3569,7 @@ def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
         stderr = StringIO()
         with pytest.raises(SystemExit):
             call_command(
-                "check_tenant_isolation",
+                "quickscale_orgs_check_tenant_isolation",
                 format="json",
                 stdout=stdout,
                 stderr=stderr,
@@ -3597,13 +3607,13 @@ def test_check_tenant_isolation_detection_helpers() -> None:
 
     # CRM models should be detected as tenant models.
     assert (
-        "quickscale_modules_crm",
+        "quickscale_crm",
         "Tag",
     ) in tenant_names, "CRM Tag should be in tenant model list."
 
     # Organization (control-plane) should NOT be in the list.
     assert (
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "Organization",
     ) not in tenant_names, (
         "Organization (control-plane) must not be detected as tenant."
@@ -3611,7 +3621,7 @@ def test_check_tenant_isolation_detection_helpers() -> None:
 
     # OrganizationMembership should NOT be in the list.
     assert (
-        "quickscale_modules_orgs",
+        "quickscale_orgs",
         "OrganizationMembership",
     ) not in tenant_names, "OrganizationMembership must not be detected as tenant."
 
@@ -3677,11 +3687,11 @@ def test_check_tenant_isolation_json_postgres_only_skip() -> None:
 
     with patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.connection.vendor",
+        "quickscale_orgs_check_tenant_isolation.connection.vendor",
         "sqlite",
     ):
         call_command(
-            "check_tenant_isolation",
+            "quickscale_orgs_check_tenant_isolation",
             postgres_only=True,
             format="json",
             stdout=stdout,
@@ -3714,11 +3724,11 @@ def test_check_tenant_isolation_json_no_models() -> None:
 
     with patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_tenant_models",
+        "quickscale_orgs_check_tenant_isolation.get_tenant_models",
         return_value=[],
     ):
         call_command(
-            "check_tenant_isolation",
+            "quickscale_orgs_check_tenant_isolation",
             format="json",
             stdout=stdout,
             stderr=stderr,
@@ -3755,17 +3765,17 @@ def test_check_tenant_isolation_json_no_models_postgres_only_skip() -> None:
     with (
         patch(
             "quickscale_modules_orgs.management.commands."
-            "check_tenant_isolation.get_tenant_models",
+            "quickscale_orgs_check_tenant_isolation.get_tenant_models",
             return_value=[],
         ),
         patch(
             "quickscale_modules_orgs.management.commands."
-            "check_tenant_isolation.connection.vendor",
+            "quickscale_orgs_check_tenant_isolation.connection.vendor",
             "sqlite",
         ),
     ):
         call_command(
-            "check_tenant_isolation",
+            "quickscale_orgs_check_tenant_isolation",
             postgres_only=True,
             format="json",
             stdout=stdout,
@@ -3820,7 +3830,7 @@ def test_classification_check_ok_when_all_models_classified() -> None:
     stdout = StringIO()
     stderr = StringIO()
     call_command(
-        "check_tenant_isolation",
+        "quickscale_orgs_check_tenant_isolation",
         stdout=stdout,
         stderr=stderr,
         verbosity=0,
@@ -3849,14 +3859,14 @@ def test_classification_check_fails_on_unclassified_model_human() -> None:
 
     with patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_unclassified_concrete_models",
+        "quickscale_orgs_check_tenant_isolation.get_unclassified_concrete_models",
         return_value=[model],
     ):
         stdout = StringIO()
         stderr = StringIO()
         with pytest.raises(SystemExit) as excinfo:
             call_command(
-                "check_tenant_isolation",
+                "quickscale_orgs_check_tenant_isolation",
                 stdout=stdout,
                 stderr=stderr,
                 verbosity=0,
@@ -3884,14 +3894,14 @@ def test_classification_check_fails_on_unclassified_model_json() -> None:
 
     with patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_unclassified_concrete_models",
+        "quickscale_orgs_check_tenant_isolation.get_unclassified_concrete_models",
         return_value=[model],
     ):
         stdout = StringIO()
         stderr = StringIO()
         with pytest.raises(SystemExit) as excinfo:
             call_command(
-                "check_tenant_isolation",
+                "quickscale_orgs_check_tenant_isolation",
                 format="json",
                 stdout=stdout,
                 stderr=stderr,
@@ -3958,9 +3968,9 @@ def test_get_concrete_project_models_returns_expected_models() -> None:
         (m._meta.app_label, m.__name__) for m in project_models if m._meta.auto_created
     }
     expected_through = {
-        ("quickscale_modules_crm", "Contact_tags"),
-        ("quickscale_modules_crm", "Deal_tags"),
-        ("quickscale_modules_blog", "Post_tags"),
+        ("quickscale_crm", "Contact_tags"),
+        ("quickscale_crm", "Deal_tags"),
+        ("quickscale_blog", "Post_tags"),
     }
     missing = expected_through - through_model_names
     assert not missing, (
@@ -3991,19 +4001,19 @@ def test_postgres_only_classification_still_runs_human() -> None:
 
     with patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_unclassified_concrete_models",
+        "quickscale_orgs_check_tenant_isolation.get_unclassified_concrete_models",
         return_value=[model],
     ):
         with patch(
             "quickscale_modules_orgs.management.commands."
-            "check_tenant_isolation.connection.vendor",
+            "quickscale_orgs_check_tenant_isolation.connection.vendor",
             "sqlite",
         ):
             stdout = StringIO()
             stderr = StringIO()
             with pytest.raises(SystemExit) as excinfo:
                 call_command(
-                    "check_tenant_isolation",
+                    "quickscale_orgs_check_tenant_isolation",
                     postgres_only=True,
                     stdout=stdout,
                     stderr=stderr,
@@ -4032,19 +4042,19 @@ def test_postgres_only_classification_still_runs_json() -> None:
 
     with patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_unclassified_concrete_models",
+        "quickscale_orgs_check_tenant_isolation.get_unclassified_concrete_models",
         return_value=[model],
     ):
         with patch(
             "quickscale_modules_orgs.management.commands."
-            "check_tenant_isolation.connection.vendor",
+            "quickscale_orgs_check_tenant_isolation.connection.vendor",
             "sqlite",
         ):
             stdout = StringIO()
             stderr = StringIO()
             with pytest.raises(SystemExit) as excinfo:
                 call_command(
-                    "check_tenant_isolation",
+                    "quickscale_orgs_check_tenant_isolation",
                     postgres_only=True,
                     format="json",
                     stdout=stdout,
@@ -4072,11 +4082,11 @@ class TestImplicitM2MThroughClassification:
 
     @patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_tenant_models"
+        "quickscale_orgs_check_tenant_isolation.get_tenant_models"
     )
     @patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_unclassified_concrete_models"
+        "quickscale_orgs_check_tenant_isolation.get_unclassified_concrete_models"
     )
     def test_implicit_m2m_through_not_reported_when_classified(
         self, mock_get_unclassified: MagicMock, mock_tenant: MagicMock
@@ -4089,7 +4099,7 @@ class TestImplicitM2MThroughClassification:
         stdout = StringIO()
         stderr = StringIO()
         call_command(
-            "check_tenant_isolation",
+            "quickscale_orgs_check_tenant_isolation",
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -4100,11 +4110,11 @@ class TestImplicitM2MThroughClassification:
 
     @patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_tenant_models"
+        "quickscale_orgs_check_tenant_isolation.get_tenant_models"
     )
     @patch(
         "quickscale_modules_orgs.management.commands."
-        "check_tenant_isolation.get_unclassified_concrete_models"
+        "quickscale_orgs_check_tenant_isolation.get_unclassified_concrete_models"
     )
     def test_rationale_model_count_zero_when_all_classified(
         self, mock_get_unclassified: MagicMock, mock_tenant: MagicMock
@@ -4117,7 +4127,7 @@ class TestImplicitM2MThroughClassification:
         stdout = StringIO()
         stderr = StringIO()
         call_command(
-            "check_tenant_isolation",
+            "quickscale_orgs_check_tenant_isolation",
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -4154,7 +4164,7 @@ def test_tenant_excluded_marker_classifies_model() -> None:
         tenant_excluded = "Lookup table — not tenant-scoped."
 
         class Meta:
-            app_label = "quickscale_modules_orgs"
+            app_label = "quickscale_orgs"
 
     # Prove the marker is recognized at the function level.
     assert is_classified_in_registry(TenantExcludedModel), (
@@ -4181,7 +4191,7 @@ def test_tenant_excluded_marker_keeps_model_out_of_unclassified() -> None:
         tenant_excluded = "Lookup table — not tenant-scoped."
 
         class Meta:
-            app_label = "quickscale_modules_orgs"
+            app_label = "quickscale_orgs"
 
     # Verify the model is in the project models list.
     all_project_models = get_concrete_project_models()

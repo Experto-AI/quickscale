@@ -67,7 +67,7 @@ export function BlogPage() {
           </CardHeader>
           <CardContent>
             <Button variant="outline" size="sm" asChild>
-              <a href="/admin/quickscale_modules_blog/" target="_blank" rel="noopener noreferrer">
+              <a href="/admin/quickscale_blog/" target="_blank" rel="noopener noreferrer">
                 Open Admin <ExternalLink className="ml-1 h-3 w-3" />
               </a>
             </Button>

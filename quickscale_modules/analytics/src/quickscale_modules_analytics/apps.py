@@ -23,7 +23,7 @@ class QuickscaleAnalyticsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_analytics"
-    label = "quickscale_modules_analytics"
+    label = "quickscale_analytics"
     verbose_name = "QuickScale Analytics"
 
     def ready(self) -> None:

@@ -14,7 +14,7 @@ class QuickscaleNotificationsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "quickscale_modules_notifications"
-    label = "quickscale_modules_notifications"
+    label = "quickscale_notifications"
     verbose_name = "QuickScale Notifications"
 
     def ready(self) -> None:

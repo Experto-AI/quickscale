@@ -123,7 +123,7 @@ export function CrmPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <Button variant="outline" asChild>
-            <a href="/admin/quickscale_modules_crm/" target="_blank" rel="noopener noreferrer">
+            <a href="/admin/quickscale_crm/" target="_blank" rel="noopener noreferrer">
               Django Admin <ExternalLink className="ml-1 h-3 w-3" />
             </a>
           </Button>

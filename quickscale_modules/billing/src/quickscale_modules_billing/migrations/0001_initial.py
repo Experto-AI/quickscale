@@ -15,10 +15,10 @@ BILLING_CREDIT_BALANCE_RLS_POLICY = "billing_credit_balance_org_isolation"
 BILLING_CREDIT_TRANSACTION_RLS_POLICY = "billing_credit_transaction_org_isolation"
 BILLING_PURCHASE_CHECKOUT_RLS_POLICY = "billing_purchase_checkout_org_isolation"
 BILLING_SUBSCRIPTION_RLS_POLICY = "billing_subscription_org_isolation"
-BILLING_CREDIT_BALANCE_TABLE = "quickscale_modules_billing_creditbalance"
-BILLING_CREDIT_TRANSACTION_TABLE = "quickscale_modules_billing_credittransaction"
-BILLING_PURCHASE_CHECKOUT_TABLE = "quickscale_modules_billing_purchasecheckout"
-BILLING_SUBSCRIPTION_TABLE = "quickscale_modules_billing_subscription"
+BILLING_CREDIT_BALANCE_TABLE = "quickscale_billing_creditbalance"
+BILLING_CREDIT_TRANSACTION_TABLE = "quickscale_billing_credittransaction"
+BILLING_PURCHASE_CHECKOUT_TABLE = "quickscale_billing_purchasecheckout"
+BILLING_SUBSCRIPTION_TABLE = "quickscale_billing_subscription"
 _BILLING_RLS_TARGETS = (
     (BILLING_CREDIT_BALANCE_TABLE, BILLING_CREDIT_BALANCE_RLS_POLICY),
     (BILLING_CREDIT_TRANSACTION_TABLE, BILLING_CREDIT_TRANSACTION_RLS_POLICY),
@@ -38,7 +38,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("quickscale_modules_orgs", "0001_initial"),
+        ("quickscale_orgs", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -97,7 +97,7 @@ class Migration(migrations.Migration):
                     models.OneToOneField(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="credit_balance",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
                 (
@@ -141,7 +141,7 @@ class Migration(migrations.Migration):
                 "constraints": [
                     models.UniqueConstraint(
                         fields=("stripe_event_id",),
-                        name="quickscale_billing_unique_stripe_event_id",
+                        name="quickscale_billing_webhookevent_stripe_event_id_unique",
                     )
                 ],
             },
@@ -199,7 +199,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="credit_transactions",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -213,7 +213,7 @@ class Migration(migrations.Migration):
                             models.Q(("stripe_event_id", ""), _negated=True),
                         ),
                         fields=("stripe_event_id", "transaction_type"),
-                        name="quickscale_billing_unique_stripe_event_id_per_type",
+                        name="quickscale_billing_credittransaction_stripe_event_id_unique",
                     )
                 ],
             },
@@ -263,7 +263,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="purchase_checkouts",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
                 (
@@ -271,7 +271,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="purchase_checkouts",
-                        to="quickscale_modules_billing.plan",
+                        to="quickscale_billing.plan",
                     ),
                 ),
                 (
@@ -345,7 +345,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="subscriptions",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
                 (
@@ -363,7 +363,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="subscriptions",
-                        to="quickscale_modules_billing.plan",
+                        to="quickscale_billing.plan",
                     ),
                 ),
             ],
@@ -377,7 +377,7 @@ class Migration(migrations.Migration):
                             models.Q(("stripe_subscription_id", ""), _negated=True),
                         ),
                         fields=("stripe_subscription_id",),
-                        name="quickscale_billing_unique_stripe_subscription_id_when_populated",
+                        name="quickscale_billing_subscription_stripe_subscription_id_unique",
                     ),
                     models.UniqueConstraint(
                         condition=models.Q(
@@ -385,7 +385,7 @@ class Migration(migrations.Migration):
                             models.Q(("stripe_checkout_session_id", ""), _negated=True),
                         ),
                         fields=("stripe_checkout_session_id",),
-                        name="quickscale_billing_unique_stripe_checkout_session_id_present",
+                        name="quickscale_billing_subscription_stripe_checkout_unique",
                     ),
                     models.UniqueConstraint(
                         condition=models.Q(
@@ -402,7 +402,7 @@ class Migration(migrations.Migration):
                             )
                         ),
                         fields=("organization",),
-                        name="quickscale_billing_unique_current_subscription_per_organization",
+                        name="quickscale_billing_subscription_current_per_organization_unique",
                     ),
                 ],
             },

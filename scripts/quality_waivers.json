@@ -1,5 +1,106 @@
 {
   "schema_version": 1,
   "description": "Structured waiver ledger for quality baseline monotonicity violations. Each entry permits a specific ceiling increase above the merge-base baseline, with an owner, reason, expiry, and decision record anchor.",
-  "waivers": []
+  "waivers": [
+    {
+      "waiver_id": "W001",
+      "entry_key": "complexity:quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_create.py::Command.handle",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W002",
+      "entry_key": "complexity:quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_pin.py::Command.handle",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W003",
+      "entry_key": "complexity:quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_restore.py::Command.handle",
+      "base_ceiling": 0,
+      "ceiling": 14,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W004",
+      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_migrate_billing_to_orgs.py::Command",
+      "base_ceiling": 0,
+      "ceiling": 28,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W005",
+      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_migrate_billing_to_orgs.py::Command.handle",
+      "base_ceiling": 0,
+      "ceiling": 27,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W006",
+      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py::Command",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W007",
+      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py::_personal_slug_bases",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W008",
+      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_purge_organization.py::Command.handle",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W009",
+      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py::Command",
+      "base_ceiling": 0,
+      "ceiling": 16,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W010",
+      "entry_key": "complexity:quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py::Command.handle",
+      "base_ceiling": 0,
+      "ceiling": 42,
+      "owner": "QuickScale maintainers",
+      "reason": "SA221 renames the module management command to quickscale_<module>_<action>; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "module-conventions"
+    }
+  ]
 }

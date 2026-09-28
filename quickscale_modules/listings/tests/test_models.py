@@ -321,18 +321,18 @@ class TestListingModel:
         """CR-SA90-MSQ-001: Built-in Listing has exact baseline physical
         index names on the fresh PostgreSQL schema.
 
-        Verifies that ``quickscale__publish_a4cb60_idx``,
-        ``quickscale__status_e05f2c_idx``, and ``quickscale__slug_e91f04_idx``
-        exist on the ``quickscale_modules_listings_listing`` table so that
+        Verifies that ``qs_listings_listing_pub_idx``,
+        ``qs_listings_listing_status_idx``, and ``qs_listings_listing_slug_idx``
+        exist on the ``quickscale_listings_listing`` table so that
         ProjectState and the migration catalog remain unchanged.
         """
         from django.db import connection
 
-        table = "quickscale_modules_listings_listing"
+        table = "quickscale_listings_listing"
         expected = {
-            "quickscale__publish_a4cb60_idx",
-            "quickscale__status_e05f2c_idx",
-            "quickscale__slug_e91f04_idx",
+            "qs_listings_listing_pub_idx",
+            "qs_listings_listing_status_idx",
+            "qs_listings_listing_slug_idx",
         }
         with connection.cursor() as cursor:
             cursor.execute(

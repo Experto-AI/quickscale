@@ -1112,7 +1112,7 @@ class TestFullE2EWorkflow:
                 "run",
                 "python",
                 "manage.py",
-                "check_tenant_isolation",
+                "quickscale_orgs_check_tenant_isolation",
                 "--postgres-only",
                 "--format",
                 "json",
@@ -1130,7 +1130,7 @@ class TestFullE2EWorkflow:
 
         # Exit code 1 — isolation check failed
         assert check_result.returncode != 0, (
-            f"check_tenant_isolation should fail with unprotected model "
+            f"quickscale_orgs_check_tenant_isolation should fail with unprotected model "
             f"but exited 0:\nstdout: {check_result.stdout}\n"
             f"stderr: {check_result.stderr}"
         )
@@ -1142,7 +1142,7 @@ class TestFullE2EWorkflow:
             payload = json.loads(check_result.stdout)
         except json.JSONDecodeError as exc:
             raise AssertionError(
-                f"check_tenant_isolation output should be valid JSON:\n"
+                f"quickscale_orgs_check_tenant_isolation output should be valid JSON:\n"
                 f"{check_result.stdout}\n{check_result.stderr}"
             ) from exc
 

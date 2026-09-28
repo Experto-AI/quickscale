@@ -128,11 +128,11 @@ class Category(TenantModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "organization"],
-                name="blog_category_name_organization_unique",
+                name="quickscale_blog_category_name_organization_unique",
             ),
             models.UniqueConstraint(
                 fields=["slug", "organization"],
-                name="blog_category_slug_organization_unique",
+                name="quickscale_blog_category_slug_organization_unique",
             ),
         ]
 
@@ -163,11 +163,11 @@ class Tag(TenantModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "organization"],
-                name="blog_tag_name_organization_unique",
+                name="quickscale_blog_tag_name_organization_unique",
             ),
             models.UniqueConstraint(
                 fields=["slug", "organization"],
-                name="blog_tag_slug_organization_unique",
+                name="quickscale_blog_tag_slug_organization_unique",
             ),
         ]
 
@@ -314,14 +314,14 @@ class Post(TenantModel):
         ordering = ["-published_date", "-created_at"]
         base_manager_name = "all_objects"
         indexes = [
-            models.Index(fields=["-published_date"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["slug"]),
+            models.Index(fields=["-published_date"], name="qs_blog_post_publish_idx"),
+            models.Index(fields=["status"], name="qs_blog_post_status_idx"),
+            models.Index(fields=["slug"], name="qs_blog_post_slug_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],
-                name="blog_post_slug_organization_unique",
+                name="quickscale_blog_post_slug_organization_unique",
             ),
         ]
 

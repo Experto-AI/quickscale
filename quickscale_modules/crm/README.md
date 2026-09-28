@@ -36,7 +36,7 @@ INSTALLED_APPS = [
 Run migrations:
 
 ```bash
-python manage.py migrate quickscale_modules_crm
+python manage.py migrate quickscale_crm
 ```
 
 Add URL patterns:

@@ -3,7 +3,7 @@ SA1.4 — Default-deny classification system check.
 SA208 — Provider-ID removal-conformance system check.
 SA213 — Removal-obligation discharge system check.
 
-Registers four system checks with the ``quickscale_modules_orgs`` app:
+Registers four system checks with the ``quickscale_orgs`` app:
 
 1. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
    ``organization_id`` or the exact FORCE-RLS policy contract.
@@ -26,7 +26,7 @@ pass/fail exit code in CI.
 The provider-ID and discharge checks are ``ERROR`` messages: they read model
 and app declarations only, so they cannot depend on migration or database
 state, and the states they reject are exactly the ones that would let
-``purge_organization`` delete provider-backed rows without refusal or
+``quickscale_orgs_purge_organization`` delete provider-backed rows without refusal or
 reconciliation.  They fail ``manage.py check`` and ``migrate`` until the
 declaration is corrected.
 """
@@ -58,7 +58,7 @@ from quickscale_modules_orgs.tenancy import (
 )
 
 
-@register("quickscale_modules_orgs")
+@register("quickscale_orgs")
 def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
     """Discover tenant models and warn if any lack isolation.
 
@@ -78,7 +78,7 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
             Warning(
                 f"Failed to discover tenant models: {exc}",
                 hint="Ensure Django apps are fully loaded before this check runs.",
-                id="quickscale_modules_orgs.W001",
+                id="quickscale_orgs.W001",
             )
         )
         return messages
@@ -90,7 +90,7 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
                 "If tenant isolation is expected, ensure at least one "
                 "model uses TenantManager or inherits TenantModel.",
                 hint="See quickscale_modules_orgs.tenancy.get_tenant_models()",
-                id="quickscale_modules_orgs.W002",
+                id="quickscale_orgs.W002",
             )
         )
         return messages
@@ -106,7 +106,7 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
                         "Add organization = tenant_org_fk() or inherit "
                         "TenantModel to the model."
                     ),
-                    id="quickscale_modules_orgs.W003",
+                    id="quickscale_orgs.W003",
                 )
             )
         if result["has_force_rls"] is False:
@@ -121,7 +121,7 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
                         "pair with "
                         "quickscale_modules_orgs.tenancy.apply_force_rls()."
                     ),
-                    id="quickscale_modules_orgs.W004",
+                    id="quickscale_orgs.W004",
                 )
             )
 
@@ -133,14 +133,14 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
 # ---------------------------------------------------------------------------
 
 
-@register("quickscale_modules_orgs")
+@register("quickscale_orgs")
 def check_model_classification(app_configs: object, **kwargs: object) -> list:
     """Warn about concrete project models without tenant markers.
 
     Every concrete model from a project-owned app must either declare the
     tenant manager/base-model contract or provide a reasoned
     ``tenant_excluded`` marker. Unclassified models emit
-    ``quickscale_modules_orgs.W005``.
+    ``quickscale_orgs.W005``.
 
     Returns:
         A list of ``CheckMessage`` instances.
@@ -154,7 +154,7 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
             Warning(
                 f"Failed to discover concrete project models: {exc}",
                 hint="Ensure Django apps are fully loaded before this check runs.",
-                id="quickscale_modules_orgs.W005",
+                id="quickscale_orgs.W005",
             )
         )
         return messages
@@ -184,7 +184,7 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
                 f"Concrete project model {model._meta.app_label}.{model.__name__} "
                 "is not classified by tenant markers.",
                 hint=" ".join(hint_parts),
-                id="quickscale_modules_orgs.W005",
+                id="quickscale_orgs.W005",
             )
         )
 
@@ -196,7 +196,7 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
 # ---------------------------------------------------------------------------
 
 
-@register("quickscale_modules_orgs")
+@register("quickscale_orgs")
 def check_provider_id_conformance(app_configs: object, **kwargs: object) -> list:
     """Error on tenant-model provider-ID fields that nothing classifies.
 
@@ -217,7 +217,7 @@ def check_provider_id_conformance(app_configs: object, **kwargs: object) -> list
             Error(
                 f"Failed to discover tenant models for provider-ID conformance: {exc}",
                 hint="Ensure Django apps are fully loaded before this check runs.",
-                id="quickscale_modules_orgs.E001",
+                id="quickscale_orgs.E001",
             )
         ]
 
@@ -231,20 +231,19 @@ def check_provider_id_conformance(app_configs: object, **kwargs: object) -> list
                     "Declare each app's obligations as an AppConfig "
                     "'removal_obligations' tuple or method."
                 ),
-                id="quickscale_modules_orgs.E001",
+                id="quickscale_orgs.E001",
             )
         ]
 
     hint = (
         "Classify every non-relational *_id field on a tenant model in its "
         "provider_id_classification mapping: 'provider-backed' for an "
-        "identifier of provider-held state (purge_organization refuses while a "
+        "identifier of provider-held state (quickscale_orgs_purge_organization refuses while a "
         "row carries a value), or 'not-provider-backed' for a project-internal "
         "identifier the purge may delete with the row."
     )
     return [
-        Error(mismatch, hint=hint, id="quickscale_modules_orgs.E001")
-        for mismatch in mismatches
+        Error(mismatch, hint=hint, id="quickscale_orgs.E001") for mismatch in mismatches
     ]
 
 
@@ -254,13 +253,13 @@ def check_provider_id_conformance(app_configs: object, **kwargs: object) -> list
 
 
 #: Boundary implementations that must route their stages through the shared
-#: coordinator: ``boundary -> (shipping app label, implementation module, entry
+#: coordinator: ``boundary -> (shipping app name, implementation module, entry
 #: function every removal path reaches)``.  A boundary whose shipping app is
 #: not installed has no implementation here.
 _BOUNDARY_IMPLEMENTATIONS: dict[RemovalBoundary, tuple[str, str, str]] = {
     RemovalBoundary.PURGE: (
         "quickscale_modules_orgs",
-        "quickscale_modules_orgs.management.commands.purge_organization",
+        "quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization",
         "Command.handle",
     ),
     RemovalBoundary.ACCOUNT_DELETE: (
@@ -459,8 +458,8 @@ def _boundary_wiring_messages() -> list:
     """
     messages: list = []
     for boundary, implementation in _BOUNDARY_IMPLEMENTATIONS.items():
-        app_label, module_path, entry_name = implementation
-        if not apps.is_installed(app_label):
+        app_name, module_path, entry_name = implementation
+        if not apps.is_installed(app_name):
             continue
         module = importlib.import_module(module_path)
         try:
@@ -471,7 +470,7 @@ def _boundary_wiring_messages() -> list:
                     f"Could not read the {boundary.value!r} boundary "
                     f"implementation {module_path}: {exc}",
                     hint="Keep boundary implementations in readable source files.",
-                    id="quickscale_modules_orgs.E002",
+                    id="quickscale_orgs.E002",
                 )
             )
             continue
@@ -482,7 +481,7 @@ def _boundary_wiring_messages() -> list:
                     f"The {boundary.value!r} boundary implementation "
                     f"{module_path} has no {entry_name!r} entry point to check.",
                     hint="Name the removal entry point the check follows.",
-                    id="quickscale_modules_orgs.E002",
+                    id="quickscale_orgs.E002",
                 )
             )
             continue
@@ -501,7 +500,7 @@ def _boundary_wiring_messages() -> list:
                         "Discharge every declared stage with "
                         "RemovalCoordinator.discharge_stage on the entry path."
                     ),
-                    id="quickscale_modules_orgs.E002",
+                    id="quickscale_orgs.E002",
                 )
             )
         if not _calls_coordinator_finish(entry_source):
@@ -511,13 +510,13 @@ def _boundary_wiring_messages() -> list:
                     "never calls RemovalCoordinator.finish, so a stage it skips "
                     "would pass silently.",
                     hint="Call coordinator.finish() once the removal completes.",
-                    id="quickscale_modules_orgs.E002",
+                    id="quickscale_orgs.E002",
                 )
             )
     return messages
 
 
-@register("quickscale_modules_orgs")
+@register("quickscale_orgs")
 def check_removal_obligation_discharge(app_configs: object, **kwargs: object) -> list:
     """Error when the coordinator contract cannot discharge a declaration.
 
@@ -550,7 +549,7 @@ def check_removal_obligation_discharge(app_configs: object, **kwargs: object) ->
                     "Declare each app's obligations as an AppConfig "
                     "'removal_obligations' tuple or method."
                 ),
-                id="quickscale_modules_orgs.E002",
+                id="quickscale_orgs.E002",
             )
         ]
 
@@ -573,7 +572,7 @@ def check_removal_obligation_discharge(app_configs: object, **kwargs: object) ->
                         f"route for {action.value!r}, or declare SKIP with a "
                         "reason when the boundary must not perform it."
                     ),
-                    id="quickscale_modules_orgs.E002",
+                    id="quickscale_orgs.E002",
                 )
             )
         if obligation.account_delete_action is RemovalAction.RECONCILE and any(
@@ -590,7 +589,7 @@ def check_removal_obligation_discharge(app_configs: object, **kwargs: object) ->
                         "mark the fields boundary_guarded when a boundary guard "
                         "decides their liveness."
                     ),
-                    id="quickscale_modules_orgs.E002",
+                    id="quickscale_orgs.E002",
                 )
             )
         messages.extend(
@@ -629,6 +628,6 @@ def _uninspectable_refusal_field_messages(
                 "organization_id or on the organization row, or mark the field "
                 "boundary_guarded when a boundary guard decides its liveness."
             ),
-            id="quickscale_modules_orgs.E002",
+            id="quickscale_orgs.E002",
         )
     ]

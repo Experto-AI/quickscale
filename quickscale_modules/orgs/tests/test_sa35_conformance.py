@@ -2,7 +2,7 @@
 
 This test lives in the orgs test suite because ``orgs/tests/settings.py``
 is the smallest truthful cross-module harness: it includes blog, crm,
-billing, and all other ``quickscale_modules_*`` apps.  The previous
+billing, and all other ``quickscale_*`` apps.  The previous
 auth-side conformance gate could only inspect the subset installed in
 ``auth/tests/settings.py``, which excluded blog and crm modules.
 """
@@ -36,21 +36,21 @@ class TestUserFkDeleteRuleConformance:
     would destroy org content when a user's account is deleted.
     """
 
-    # ---- Required modules: all quickscale_modules_* apps with user-FKs ---
+    # ---- Required modules: all quickscale_* apps with user-FKs ---
     # CR-SA35-001: This set acts as a registration guard so that adding a
     # new user-FK-bearing module to INSTALLED_APPS requires an explicit
     # entry here (and removing one produces a clear test failure).
     REQUIRED_MODULES: frozenset[str] = frozenset(
         {
-            "quickscale_modules_auth",
-            "quickscale_modules_orgs",
-            "quickscale_modules_billing",
-            "quickscale_modules_social",
-            "quickscale_modules_forms",
-            "quickscale_modules_listings",
-            "quickscale_modules_blog",
-            "quickscale_modules_crm",
-            "quickscale_modules_backups",
+            "quickscale_auth",
+            "quickscale_orgs",
+            "quickscale_billing",
+            "quickscale_social",
+            "quickscale_forms",
+            "quickscale_listings",
+            "quickscale_blog",
+            "quickscale_crm",
+            "quickscale_backups",
         }
     )
 
@@ -83,7 +83,7 @@ class TestUserFkDeleteRuleConformance:
         installed_labels = frozenset(
             app.label
             for app in apps.get_app_configs()
-            if app.label.startswith("quickscale_modules_")
+            if app.label.startswith("quickscale_")
         )
         missing = self.REQUIRED_MODULES - installed_labels
         assert not missing, (
@@ -93,7 +93,7 @@ class TestUserFkDeleteRuleConformance:
 
     def test_all_user_fk_delete_rules_conform(self) -> None:
         """Assert every FK to AUTH_USER_MODEL in installed
-        quickscale_modules_* apps is SET_NULL, or is
+        quickscale_* apps is SET_NULL, or is
         explicitly allowlisted."""
         User = apps.get_model(settings.AUTH_USER_MODEL)
         user_label = User._meta.label_lower
@@ -148,7 +148,7 @@ class TestUserFkDeleteRuleConformance:
         """Regression: ORM-level user.delete() does not cascade-destroy
         cross-module content (blog Post).
 
-        All user-FKs in quickscale_modules_* are SET_NULL or
+        All user-FKs in quickscale_* are SET_NULL or
         explicitly allowlisted CASCADE, so deleting a user must not
         destroy content authored by that user.  This test exercises the
         ORM path directly (bypassing auth view-layer guards already

@@ -71,3 +71,9 @@ steps:
     title: "Adopt the one QuickScale DRF error shape"
     adoption_steps:
       - "Compare and manually adopt the current settings/base.py REST_FRAMEWORK block: it installs quickscale_core.runtime.conventions.exception_handler as EXCEPTION_HANDLER unless a module already contributed one, so every DRF-handled API error answers {\"error\": {\"code\", \"message\", \"fields\"}} with the HTTP status carrying the error class."
+  - id: sa221-identity-stem
+    minimum: "0.89.0"
+    title: "Adopt the quickscale_<module> identities in generated files"
+    adoption_steps:
+      - "Compare and manually adopt the current generated admin templates and React admin links so app admin URLs use the quickscale_<module> app labels (for example /admin/quickscale_backups/...), and rename the tenant-isolation invocation in the generated Makefile and CI workflow to `quickscale_orgs_check_tenant_isolation`."
+      - "Recreate the project database after adopting: module tables, content types, permissions, and AUTH_USER_MODEL moved to the quickscale_<module> stem, so a database created under the previous names cannot be carried over."

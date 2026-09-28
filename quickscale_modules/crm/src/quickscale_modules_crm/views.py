@@ -118,7 +118,7 @@ def _resolve_terminal_stage(
 class CRMDashboardView(TemplateView):
     """Dashboard view for CRM module showing summary statistics"""
 
-    template_name = "quickscale_modules_crm/crm/dashboard.html"
+    template_name = "quickscale_crm/crm/dashboard.html"
 
     def dispatch(
         self, request: HttpRequest, *args: Any, **kwargs: Any

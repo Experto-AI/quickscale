@@ -2527,12 +2527,12 @@ def _display_next_steps_impl(
             modules["backups"].options or {}
         )
         click.echo("\n  # Backups operations")
-        click.echo("  poetry run python manage.py backups_create")
+        click.echo("  poetry run python manage.py quickscale_backups_create")
         click.echo(
-            "  poetry run python manage.py backups_restore <id> --confirm BACKUP_FILENAME.dump --dry-run"
+            "  poetry run python manage.py quickscale_backups_restore <id> --confirm BACKUP_FILENAME.dump --dry-run"
         )
         click.echo(
-            "  poetry run python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run"
+            "  poetry run python manage.py quickscale_backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run"
         )
         click.echo(
             "  export QUICKSCALE_BACKUPS_ALLOW_RESTORE=true  # Required for destructive restores outside local DEBUG"

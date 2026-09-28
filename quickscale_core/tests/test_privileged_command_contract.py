@@ -70,7 +70,7 @@ def test_start_sh_rejects_retired_billing_backfill_argv(tmp_path: Path) -> None:
     launcher.write_text(rendered)
 
     result = subprocess.run(
-        ["bash", str(launcher), "migrate_billing_to_orgs"],
+        ["bash", str(launcher), "quickscale_orgs_migrate_billing_to_orgs"],
         check=False,
         capture_output=True,
         text=True,
@@ -79,5 +79,5 @@ def test_start_sh_rejects_retired_billing_backfill_argv(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert result.stdout == ""
     assert result.stderr == (
-        "ERROR: unsupported start.sh command: migrate_billing_to_orgs\n"
+        "ERROR: unsupported start.sh command: quickscale_orgs_migrate_billing_to_orgs\n"
     )

@@ -21,6 +21,6 @@ adapter
     Explicit typed boundary (F5.3) between CLI orchestration and the
     Django-backed DR services.  Replaces the hidden docker-exec /
     management-command / env-var / stdout-JSON protocol with a
-    registered-function API called through the ``dr_adapter_call``
+    registered-function API called through the ``quickscale_backups_dr_adapter_call``
     management command bridge.
 """

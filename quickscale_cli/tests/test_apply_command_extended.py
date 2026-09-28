@@ -3286,7 +3286,9 @@ class TestDisplayNextSteps:
         assert "OPS_BACKUPS_ACCESS_KEY_ID" in output
         assert "OPS_BACKUPS_SECRET_ACCESS_KEY" in output
         assert "Configure runtime credentials via env vars" in output
-        assert "backups_restore --file /path/to/BACKUP_FILENAME.dump" in output
+        assert (
+            "quickscale_backups_restore --file /path/to/BACKUP_FILENAME.dump" in output
+        )
         assert "JSON artifacts are export-only" in output
         assert "Admin download and validate stay local-file-only in v1." in output
         assert "Freshly generated Docker and GitHub CI files" in output

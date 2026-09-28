@@ -15,13 +15,13 @@ from quickscale_modules_orgs.tenancy import (
     revert_force_rls,
 )
 
-CRM_TAG_TABLE = "quickscale_modules_crm_tag"
-CRM_COMPANY_TABLE = "quickscale_modules_crm_company"
-CRM_CONTACT_TABLE = "quickscale_modules_crm_contact"
-CRM_STAGE_TABLE = "quickscale_modules_crm_stage"
-CRM_DEAL_TABLE = "quickscale_modules_crm_deal"
-CRM_CONTACTNOTE_TABLE = "quickscale_modules_crm_contactnote"
-CRM_DEALNOTE_TABLE = "quickscale_modules_crm_dealnote"
+CRM_TAG_TABLE = "quickscale_crm_tag"
+CRM_COMPANY_TABLE = "quickscale_crm_company"
+CRM_CONTACT_TABLE = "quickscale_crm_contact"
+CRM_STAGE_TABLE = "quickscale_crm_stage"
+CRM_DEAL_TABLE = "quickscale_crm_deal"
+CRM_CONTACTNOTE_TABLE = "quickscale_crm_contactnote"
+CRM_DEALNOTE_TABLE = "quickscale_crm_dealnote"
 
 CRM_TAG_RLS_POLICY = "crm_tag_org_isolation"
 CRM_COMPANY_RLS_POLICY = "crm_company_org_isolation"
@@ -43,10 +43,10 @@ _CRM_NOTE_RLS_TARGETS = (
     (CRM_DEALNOTE_TABLE, CRM_DEALNOTE_RLS_POLICY),
 )
 
-CRM_CONTACT_ID_ORG_UNIQUE = "crm_contact_id_org_unique"
-CRM_DEAL_ID_ORG_UNIQUE = "crm_deal_id_org_unique"
-CRM_CONTACTNOTE_CONTACT_ORG_FK = "crm_contactnote_contact_org_fk"
-CRM_DEALNOTE_DEAL_ORG_FK = "crm_dealnote_deal_org_fk"
+CRM_CONTACT_ID_ORG_UNIQUE = "quickscale_crm_contact_id_org_unique"
+CRM_DEAL_ID_ORG_UNIQUE = "quickscale_crm_deal_id_org_unique"
+CRM_CONTACTNOTE_CONTACT_ORG_FK = "quickscale_crm_contactnote_contact_org_fk"
+CRM_DEALNOTE_DEAL_ORG_FK = "quickscale_crm_dealnote_deal_org_fk"
 
 
 def _add_composite_fk(
@@ -114,7 +114,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("quickscale_modules_orgs", "0001_initial"),
+        ("quickscale_orgs", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -148,7 +148,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -184,7 +184,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -248,7 +248,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="contacts",
-                        to="quickscale_modules_crm.company",
+                        to="quickscale_crm.company",
                     ),
                 ),
                 (
@@ -256,7 +256,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -289,7 +289,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="notes",
-                        to="quickscale_modules_crm.contact",
+                        to="quickscale_crm.contact",
                     ),
                 ),
                 (
@@ -306,7 +306,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -357,7 +357,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="deals",
-                        to="quickscale_modules_crm.contact",
+                        to="quickscale_crm.contact",
                     ),
                 ),
                 (
@@ -375,7 +375,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="deals",
-                        to="quickscale_modules_crm.stage",
+                        to="quickscale_crm.stage",
                     ),
                 ),
                 (
@@ -383,7 +383,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -425,7 +425,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="notes",
-                        to="quickscale_modules_crm.deal",
+                        to="quickscale_crm.deal",
                     ),
                 ),
                 (
@@ -433,7 +433,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -466,7 +466,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="%(app_label)s_%(class)s_set",
-                        to="quickscale_modules_orgs.organization",
+                        to="quickscale_orgs.organization",
                     ),
                 ),
             ],
@@ -484,14 +484,14 @@ class Migration(migrations.Migration):
             model_name="deal",
             name="tags",
             field=models.ManyToManyField(
-                blank=True, related_name="deals", to="quickscale_modules_crm.tag"
+                blank=True, related_name="deals", to="quickscale_crm.tag"
             ),
         ),
         migrations.AddField(
             model_name="contact",
             name="tags",
             field=models.ManyToManyField(
-                blank=True, related_name="contacts", to="quickscale_modules_crm.tag"
+                blank=True, related_name="contacts", to="quickscale_crm.tag"
             ),
         ),
         migrations.AddConstraint(
@@ -499,7 +499,7 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 condition=models.Q(("organization__isnull", True)),
                 fields=("terminal_semantic",),
-                name="crm_stage_terminal_semantic_unique_null_org",
+                name="quickscale_crm_stage_terminal_semantic_unique_null_org",
             ),
         ),
         migrations.AddConstraint(
@@ -507,7 +507,7 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 condition=models.Q(("organization__isnull", False)),
                 fields=("terminal_semantic", "organization"),
-                name="crm_stage_terminal_semantic_organization_unique",
+                name="quickscale_crm_stage_terminal_semantic_organization_unique",
             ),
         ),
         migrations.AddConstraint(
@@ -515,7 +515,7 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 condition=models.Q(("organization__isnull", True)),
                 fields=("name",),
-                name="crm_tag_name_unique_null_org",
+                name="quickscale_crm_tag_name_unique_null_org",
             ),
         ),
         migrations.AddConstraint(
@@ -523,19 +523,20 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 condition=models.Q(("organization__isnull", False)),
                 fields=("name", "organization"),
-                name="crm_tag_name_organization_unique",
+                name="quickscale_crm_tag_name_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="deal",
             constraint=models.UniqueConstraint(
-                fields=("id", "organization"), name="crm_deal_id_org_unique"
+                fields=("id", "organization"), name="quickscale_crm_deal_id_org_unique"
             ),
         ),
         migrations.AddConstraint(
             model_name="contact",
             constraint=models.UniqueConstraint(
-                fields=("id", "organization"), name="crm_contact_id_org_unique"
+                fields=("id", "organization"),
+                name="quickscale_crm_contact_id_org_unique",
             ),
         ),
         migrations.RunPython(

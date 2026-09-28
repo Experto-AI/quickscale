@@ -23,7 +23,6 @@ class User(AbstractUser):
     # Users can add custom fields in their project if needed
 
     class Meta:
-        db_table = "quickscale_auth_user"
         verbose_name = "User"
         verbose_name_plural = "Users"
         ordering = ["-date_joined"]
