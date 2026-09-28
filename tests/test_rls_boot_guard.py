@@ -13,8 +13,7 @@ The guard is always active (regardless of ``QUICKSCALE_MODE`` or
    this env var alongside ``RUNTIME_DATABASE_URL=""`` so DDL/DML runs
    under the superuser ``DATABASE_URL``.
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` non-serving env-var escape hatch — for
-   intentional single-tenant/development use or acknowledged retired-command
-   recovery.
+   intentional single-tenant/development use.
 
 The module guard declares its sanctioned command set in
 ``_PRIVILEGED_COMMANDS`` and checks it via ``_is_privileged_command()``
@@ -356,16 +355,6 @@ def test_is_privileged_command_false_for_unrecognised_value() -> None:
         assert _is_privileged_command() is False
 
 
-def test_is_privileged_command_false_for_retired_billing_backfill() -> None:
-    """The retired billing backfill must not receive the privileged exemption."""
-    with patch.dict(
-        os.environ,
-        {"QUICKSCALE_PRIVILEGED_COMMAND": "quickscale_orgs_migrate_billing_to_orgs"},
-        clear=True,
-    ):
-        assert _is_privileged_command() is False
-
-
 # ---------------------------------------------------------------------------
 # ready() lifecycle seam: sanctioned QUICKSCALE_PRIVILEGED_COMMAND values
 # are exempt; all other commands fail-closed
@@ -475,8 +464,8 @@ def test_ready_installs_backstops_under_privileged_command(settings: Any) -> Non
         connection_created.connect(_install_priming_on_connection)
 
 
-def test_ready_rejects_retired_billing_backfill_under_bypassrls(settings: Any) -> None:
-    """The retired backfill cannot use a BYPASSRLS connection through ready()."""
+def test_ready_rejects_unrecognised_command_under_bypassrls(settings: Any) -> None:
+    """An unrecognised command cannot use a BYPASSRLS connection through ready()."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
@@ -484,9 +473,7 @@ def test_ready_rejects_retired_billing_backfill_under_bypassrls(settings: Any) -
     with patch("quickscale_modules_orgs.apps.connection", mock_conn):
         with patch.dict(
             os.environ,
-            {
-                "QUICKSCALE_PRIVILEGED_COMMAND": "quickscale_orgs_migrate_billing_to_orgs"
-            },
+            {"QUICKSCALE_PRIVILEGED_COMMAND": "not_a_sanctioned_command"},
             clear=True,
         ):
             config = QuickscaleOrgsConfig(
