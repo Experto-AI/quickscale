@@ -15,7 +15,7 @@ from .constants import (
 )
 from .models import Organization, OrganizationInvitation, OrganizationMembership
 
-from quickscale_modules_auth.adapters import (
+from quickscale_modules_auth.allauth_adapter import (
     QuickscaleAccountAdapter as _BaseAccountAdapter,
 )
 

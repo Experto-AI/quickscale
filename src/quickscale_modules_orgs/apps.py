@@ -183,7 +183,7 @@ class QuickscaleOrgsConfig(AppConfig):
         connection_created.connect(_install_priming_on_connection)
 
         # ---- SA70 — pre_delete receiver backstop for last-owner invariant -
-        # Connects the backstop receiver defined in signals.py so that
+        # Import receivers.py so its @receiver backstop connects, so that
         # cascade-driven membership deletions (e.g. user.delete()) also
         # enforce the last-owner invariant.
         #
@@ -196,10 +196,4 @@ class QuickscaleOrgsConfig(AppConfig):
         # path, and the cost is bounded to queryset deletes materialising
         # one model's rows at a time on operator paths (organization purge,
         # account deletion), which are not hot paths.
-        from django.db.models.signals import pre_delete
-
-        from quickscale_modules_orgs.signals import (
-            _protect_last_owner_on_membership_delete,
-        )
-
-        pre_delete.connect(_protect_last_owner_on_membership_delete)
+        import quickscale_modules_orgs.receivers  # noqa: F401

@@ -213,7 +213,7 @@ class TenantMiddleware:
         session = getattr(request, "session", None)
         if session is None:
             return None
-        from .debug_helpers import get_debug_as_org
+        from ._debug import get_debug_as_org
 
         return get_debug_as_org(request)
 
