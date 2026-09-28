@@ -28,8 +28,8 @@ deliberate and dense: a registered-gate universe, AST and conformance gates, and
 baselines. `decisions.md` § Clean-Break Migration History (`:986ff`) declares a
 **fresh-database-only** upgrade posture. Version `0.89.0` is not yet published.
 
-**Growth direction (planning surface, authoritative).** Track 1 is
-**SA191 → SA153 → SA204**:
+**Growth direction (planning surface, authoritative).** After the module conventions (SA215),
+Track 1 is **SA191 → SA153 → SA204**:
 1. SA191 rebuilds `bap-web` on current QuickScale and reseeds its data (maintainer decision,
    2026-09-23).
 2. SA153 builds the first property portal on it as a project-owned extension.
@@ -261,10 +261,10 @@ at the vintage SA191 lands `bap-web` on.
 
 ## Change-cost probe
 
-**Probe A: SA191, rebuild `bap-web`** (next on the critical path). Stations:
+**Probe A: SA191, rebuild `bap-web`** (on the critical path after SA215). Stations:
 1. Patch the donor `production.py` to call the `runtime.settings` facade (the validator refuses
    an inline copy).
-2. `make beta-migrate-fresh`.
+2. The one-off prompt-driven port onto a fresh recipient.
 3. Rewrite the project-owned `properties` migrations for the NOT NULL org foreign key and SA153's
    tenancy.
 4. Rebuild and reseed the database (project-owned work, no tool).
