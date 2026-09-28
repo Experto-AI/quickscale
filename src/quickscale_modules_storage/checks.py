@@ -23,7 +23,9 @@ def check_vendor_secrets(
 
     The selection is read with the module's own helper, so the check and the
     storage wiring agree on the backend and on the credential settings.
-    Local storage needs no credentials.
+    Local storage needs no credentials, and an s3-compatible backend with both
+    credentials empty may resolve them from boto3's default credential chain;
+    only a half-configured static pair is invalid.
     """
     try:
         selection = select_storage_backend(settings)
@@ -33,22 +35,30 @@ def check_vendor_secrets(
     if not selection.use_s3_compatible:
         return []
 
+    access_key_id = str(selection.options.get("access_key_id", "")).strip()
+    secret_access_key = str(selection.options.get("secret_access_key", "")).strip()
+    if not access_key_id and not secret_access_key:
+        # boto3's default credential chain (instance role, shared config) is
+        # the supported non-static path; the storage kwargs omit empty keys so
+        # the chain can supply them.  A half-configured pair is an error.
+        return []
+
     messages: list[CheckMessage] = []
-    if not str(selection.options.get("access_key_id", "")).strip():
+    if not access_key_id:
         messages.append(
             Error(
                 "QUICKSCALE_STORAGE_BACKEND is "
-                f"{selection.backend!r} but AWS_ACCESS_KEY_ID is empty. "
-                "Set the credential or switch the storage backend.",
+                f"{selection.backend!r} and AWS_SECRET_ACCESS_KEY is set, but "
+                "AWS_ACCESS_KEY_ID is empty. Set both credentials or neither.",
                 id="quickscale_storage.E002",
             )
         )
-    if not str(selection.options.get("secret_access_key", "")).strip():
+    if not secret_access_key:
         messages.append(
             Error(
                 "QUICKSCALE_STORAGE_BACKEND is "
-                f"{selection.backend!r} but AWS_SECRET_ACCESS_KEY is empty. "
-                "Set the credential or switch the storage backend.",
+                f"{selection.backend!r} and AWS_ACCESS_KEY_ID is set, but "
+                "AWS_SECRET_ACCESS_KEY is empty. Set both credentials or neither.",
                 id="quickscale_storage.E003",
             )
         )

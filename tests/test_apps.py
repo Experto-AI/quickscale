@@ -17,18 +17,25 @@ def test_local_backend_needs_no_credentials(settings) -> None:
     assert check_vendor_secrets() == []
 
 
-def test_s3_backend_reports_each_empty_credential(settings) -> None:
-    """An s3-compatible backend reports both empty credentials by name."""
+def test_s3_backend_reports_a_half_configured_pair(settings) -> None:
+    """An s3-compatible backend with only one credential set is invalid."""
     settings.QUICKSCALE_STORAGE_BACKEND = "s3"
-    settings.AWS_ACCESS_KEY_ID = ""
+    settings.AWS_ACCESS_KEY_ID = "key-id"
     settings.AWS_SECRET_ACCESS_KEY = ""
 
     messages = check_vendor_secrets()
 
-    assert len(messages) == 2
-    text = " ".join(message.msg for message in messages)
-    assert "AWS_ACCESS_KEY_ID" in text
-    assert "AWS_SECRET_ACCESS_KEY" in text
+    assert messages
+    assert "AWS_SECRET_ACCESS_KEY" in messages[0].msg
+
+
+def test_s3_backend_without_credentials_uses_the_default_chain(settings) -> None:
+    """Both credentials empty defer to boto3's default credential chain."""
+    settings.QUICKSCALE_STORAGE_BACKEND = "s3"
+    settings.AWS_ACCESS_KEY_ID = ""
+    settings.AWS_SECRET_ACCESS_KEY = ""
+
+    assert check_vendor_secrets() == []
 
 
 def test_s3_backend_passes_with_credentials(settings) -> None:
@@ -53,12 +60,12 @@ def test_missing_backend_setting_is_reported(settings) -> None:
 def test_missing_credentials_fail_check_migrate_and_runserver(settings) -> None:
     """The registered check fails check, migrate, and runserver alike."""
     settings.QUICKSCALE_STORAGE_BACKEND = "s3"
-    settings.AWS_ACCESS_KEY_ID = ""
+    settings.AWS_ACCESS_KEY_ID = "key-id"
     settings.AWS_SECRET_ACCESS_KEY = ""
 
-    with pytest.raises(SystemCheckError, match="AWS_ACCESS_KEY_ID"):
+    with pytest.raises(SystemCheckError, match="AWS_SECRET_ACCESS_KEY"):
         call_command("check")
-    with pytest.raises(SystemCheckError, match="AWS_ACCESS_KEY_ID"):
+    with pytest.raises(SystemCheckError, match="AWS_SECRET_ACCESS_KEY"):
         migrate.Command().check()
-    with pytest.raises(SystemCheckError, match="AWS_ACCESS_KEY_ID"):
+    with pytest.raises(SystemCheckError, match="AWS_SECRET_ACCESS_KEY"):
         runserver.Command().check()
