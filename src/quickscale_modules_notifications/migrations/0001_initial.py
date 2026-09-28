@@ -175,7 +175,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="events",
-                        to="quickscale_modules_notifications.notificationdelivery",
+                        to="quickscale_notifications.notificationdelivery",
                     ),
                 ),
             ],
@@ -191,14 +191,14 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="deliveries",
-                to="quickscale_modules_notifications.notificationmessage",
+                to="quickscale_notifications.notificationmessage",
             ),
         ),
         migrations.AddConstraint(
             model_name="notificationdelivery",
             constraint=models.UniqueConstraint(
                 fields=("message", "recipient_email"),
-                name="quickscale_notifications_unique_message_recipient",
+                name="quickscale_notifications_delivery_message_recipient_unique",
             ),
         ),
     ]

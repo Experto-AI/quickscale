@@ -76,7 +76,7 @@ class TestNotificationSettingsAdmin:
     ) -> None:
         response = admin_client.get(
             reverse(
-                "admin:quickscale_modules_notifications_notificationsettings_change",
+                "admin:quickscale_notifications_notificationsettings_change",
                 args=[notification_settings_row.pk],
             )
         )
