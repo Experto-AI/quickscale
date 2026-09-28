@@ -134,7 +134,7 @@ def _attach_complete_snapshot_contract(
         )
         sidecar_descriptors[filename] = {
             "kind": _kind,
-            "status": BackupSnapshot.STATUS_READY,
+            "status": BackupSnapshot.Status.READY,
             "relative_path": filename,
             "local_path": str(sidecar_path),
             "size_bytes": sidecar_path.stat().st_size,
@@ -145,14 +145,14 @@ def _attach_complete_snapshot_contract(
     return BackupSnapshot.objects.create(
         snapshot_id=snapshot_id,
         authoritative_dump=artifact,
-        status=BackupSnapshot.STATUS_READY,
+        status=BackupSnapshot.Status.READY,
         source_environment=source_environment,
         local_root_path=str(snapshot_root),
         remote_root_key="",
         child_descriptors_json={
             "database": {
                 "kind": "database_dump",
-                "status": BackupSnapshot.STATUS_READY,
+                "status": BackupSnapshot.Status.READY,
                 "relative_path": f"database/{artifact.filename}",
                 "local_path": artifact.local_path,
                 "size_bytes": artifact.size_bytes,
@@ -258,7 +258,7 @@ class TestArtifactProviderTrustResolution:
             tmp_path,
             snapshot_id="snap-deleted-artifact",
         )
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_DELETED
+        postgresql_backup_artifact.status = BackupArtifact.Status.DELETED
         postgresql_backup_artifact.save(update_fields=["status", "updated_at"])
 
         with pytest.raises(
@@ -308,7 +308,7 @@ class TestArtifactProviderTrustResolution:
             checksum_sha256=postgresql_backup_artifact.checksum_sha256,
             size_bytes=postgresql_backup_artifact.size_bytes,
             backup_format="pg_dump_custom",
-            restore_scope=BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+            restore_scope=BackupArtifact.RestoreScope.LOCAL_ONLY,
             database_engine=postgresql_backup_artifact.database_engine,
             database_name=postgresql_backup_artifact.database_name,
             database_server_major=postgresql_backup_artifact.database_server_major,
@@ -357,7 +357,7 @@ class TestArtifactProviderTrustResolution:
             tmp_path,
             snapshot_id="snap-deleted-linked",
         )
-        snapshot.status = BackupSnapshot.STATUS_DELETED
+        snapshot.status = BackupSnapshot.Status.DELETED
         snapshot.save(update_fields=["status", "updated_at"])
 
         with pytest.raises(

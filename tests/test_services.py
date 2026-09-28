@@ -107,7 +107,7 @@ def _private_remote_policy_snapshot(
     return BackupPolicySnapshot(
         retention_days=14,
         naming_prefix="db",
-        target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+        target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
         local_directory=local_directory,
         remote_bucket_name="private-backups",
         remote_prefix="ops/backups",
@@ -201,7 +201,7 @@ def _attach_complete_snapshot_contract(
         )
         sidecar_descriptors[filename] = {
             "kind": kind,
-            "status": BackupSnapshot.STATUS_READY,
+            "status": BackupSnapshot.Status.READY,
             "relative_path": filename,
             "local_path": str(sidecar_path),
             "size_bytes": sidecar_path.stat().st_size,
@@ -212,14 +212,14 @@ def _attach_complete_snapshot_contract(
     return BackupSnapshot.objects.create(
         snapshot_id=snapshot_id,
         authoritative_dump=artifact,
-        status=BackupSnapshot.STATUS_READY,
+        status=BackupSnapshot.Status.READY,
         source_environment=source_environment,
         local_root_path=str(snapshot_root),
         remote_root_key="",
         child_descriptors_json={
             "database": {
                 "kind": "database_dump",
-                "status": BackupSnapshot.STATUS_READY,
+                "status": BackupSnapshot.Status.READY,
                 "relative_path": f"database/{artifact.filename}",
                 "local_path": artifact.local_path,
                 "size_bytes": artifact.size_bytes,
@@ -239,7 +239,7 @@ class TestPolicyValidation:
         snapshot = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=".quickscale/backups",
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -270,7 +270,7 @@ class TestPolicyValidation:
         snapshot = BackupPolicySnapshot(
             retention_days=0,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=".quickscale/backups",
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -288,7 +288,7 @@ class TestPolicyValidation:
         snapshot = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="   ",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=".quickscale/backups",
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -324,7 +324,7 @@ class TestPolicyValidation:
         snapshot = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory="   ",
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -342,7 +342,7 @@ class TestPolicyValidation:
         snapshot = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=".quickscale/backups",
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -369,7 +369,7 @@ class TestPolicyValidation:
 
     @override_settings(
         QUICKSCALE_BACKUPS_RETENTION_DAYS=30,
-        QUICKSCALE_BACKUPS_TARGET_MODE=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+        QUICKSCALE_BACKUPS_TARGET_MODE=BackupPolicy.TargetMode.PRIVATE_REMOTE,
         QUICKSCALE_BACKUPS_LOCAL_DIRECTORY=".managed/backups",
         QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME="managed-bucket",
         QUICKSCALE_BACKUPS_REMOTE_REGION_NAME="us-east-1",
@@ -381,7 +381,7 @@ class TestPolicyValidation:
         backup_policy: BackupPolicy,
     ) -> None:
         backup_policy.retention_days = 7
-        backup_policy.target_mode = BackupPolicy.TARGET_MODE_LOCAL
+        backup_policy.target_mode = BackupPolicy.TargetMode.LOCAL
         backup_policy.local_directory = ".stale/backups"
         backup_policy.remote_bucket_name = "stale-bucket"
         backup_policy.remote_region_name = ""
@@ -392,7 +392,7 @@ class TestPolicyValidation:
         snapshot = load_policy_snapshot()
 
         assert snapshot.retention_days == 30
-        assert snapshot.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+        assert snapshot.target_mode == BackupPolicy.TargetMode.PRIVATE_REMOTE
         assert snapshot.local_directory == ".managed/backups"
         assert snapshot.remote_bucket_name == "managed-bucket"
         assert snapshot.remote_region_name == "us-east-1"
@@ -403,7 +403,7 @@ class TestPolicyValidation:
 
         backup_policy.refresh_from_db()
         assert backup_policy.retention_days == 30
-        assert backup_policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+        assert backup_policy.target_mode == BackupPolicy.TargetMode.PRIVATE_REMOTE
         assert backup_policy.local_directory == ".managed/backups"
         assert backup_policy.remote_bucket_name == "managed-bucket"
 
@@ -445,7 +445,7 @@ class TestBackupLifecycle:
         artifact = create_backup(initiated_by=superuser, trigger="manual")
 
         assert artifact.backup_format == "json"
-        assert artifact.storage_target == BackupArtifact.STORAGE_TARGET_LOCAL
+        assert artifact.storage_target == BackupArtifact.StorageTarget.LOCAL
         assert artifact.local_path.startswith(str(local_backup_settings))
         assert Path(artifact.local_path).exists()
         assert artifact.checksum_sha256
@@ -462,7 +462,7 @@ class TestBackupLifecycle:
         assert snapshot is not None
         assert len(snapshot.snapshot_id) == 32
         assert Path(snapshot.local_root_path) == snapshot_root
-        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.status == BackupSnapshot.Status.READY
         assert snapshot.source_environment == "local"
         assert (
             Path(artifact.local_path) == snapshot_root / "database" / artifact.filename
@@ -559,7 +559,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(local_backup_settings),
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -609,7 +609,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=str(local_backup_settings),
             remote_bucket_name="private-backups",
             remote_prefix="ops/backups",
@@ -647,7 +647,7 @@ class TestBackupLifecycle:
         assert snapshot is not None
         snapshot_prefix = f"ops/backups/snapshots/{snapshot.snapshot_id}"
 
-        assert artifact.storage_target == BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+        assert artifact.storage_target == BackupArtifact.StorageTarget.PRIVATE_REMOTE
         assert artifact.remote_key == f"{snapshot_prefix}/database/{artifact.filename}"
         assert uploaded == [
             (
@@ -690,7 +690,7 @@ class TestBackupLifecycle:
         assert artifact.remote_bucket_name == "private-backups"
         assert artifact.remote_endpoint_url == "https://example.invalid"
         assert artifact.remote_region_name == "auto"
-        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.status == BackupSnapshot.Status.READY
         assert snapshot.child_descriptors_json["database"]["remote_key"] == (
             artifact.remote_key
         )
@@ -710,7 +710,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=str(local_backup_settings),
             remote_bucket_name="private-backups",
             remote_prefix="ops/backups",
@@ -738,15 +738,15 @@ class TestBackupLifecycle:
 
         artifact = BackupArtifact.objects.get()
         snapshot = BackupSnapshot.objects.get()
-        assert artifact.status == BackupArtifact.STATUS_FAILED
+        assert artifact.status == BackupArtifact.Status.FAILED
         assert artifact.remote_key == ""
         assert artifact.local_path
         assert Path(artifact.local_path).exists()
         assert "remote upload failed" in artifact.validation_notes
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert "database dump remote upload failed" in snapshot.failure_note
         assert snapshot.child_descriptors_json["database"]["status"] == (
-            BackupSnapshot.STATUS_FAILED
+            BackupSnapshot.Status.FAILED
         )
         assert Path(snapshot.local_root_path).exists()
 
@@ -761,7 +761,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=str(local_backup_settings),
             remote_bucket_name="private-backups",
             remote_prefix="ops/backups",
@@ -812,10 +812,10 @@ class TestBackupLifecycle:
         snapshot_prefix = f"ops/backups/snapshots/{snapshot.snapshot_id}"
 
         assert artifact.pk == original_artifact_id
-        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.status == BackupSnapshot.Status.READY
         assert snapshot.failure_note == ""
         assert artifact.remote_key == f"{snapshot_prefix}/database/{artifact.filename}"
-        assert artifact.status == BackupArtifact.STATUS_READY
+        assert artifact.status == BackupArtifact.Status.READY
         assert BackupSnapshot.objects.count() == 1
         assert BackupArtifact.objects.count() == 1
         assert uploaded == [
@@ -835,7 +835,7 @@ class TestBackupLifecycle:
         monkeypatch.setenv("TEST_BACKUPS_ACCESS_KEY", "key-id")
         monkeypatch.setenv("TEST_BACKUPS_SECRET_KEY", "secret-key")
         base_remote_settings = {
-            "QUICKSCALE_BACKUPS_TARGET_MODE": BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            "QUICKSCALE_BACKUPS_TARGET_MODE": BackupPolicy.TargetMode.PRIVATE_REMOTE,
             "QUICKSCALE_BACKUPS_LOCAL_DIRECTORY": str(local_backup_settings),
             "QUICKSCALE_BACKUPS_REMOTE_PREFIX": "ops/backups",
             "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR": (
@@ -963,7 +963,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=str(local_backup_settings),
             remote_bucket_name="private-backups",
             remote_prefix="ops/backups",
@@ -1016,7 +1016,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=str(local_backup_settings),
             remote_bucket_name="private-backups",
             remote_prefix="ops/backups",
@@ -1071,7 +1071,7 @@ class TestBackupLifecycle:
         assert artifact.remote_key == ""
         assert artifact.local_path
         assert Path(artifact.local_path).exists()
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert f"'{artifact.filename}'" not in str(exc_info.value)
         assert expected_remote_key in str(exc_info.value)
 
@@ -1097,7 +1097,7 @@ class TestBackupLifecycle:
         artifact = create_backup(initiated_by=superuser, trigger="manual")
 
         artifact.refresh_from_db()
-        assert artifact.status == BackupArtifact.STATUS_READY
+        assert artifact.status == BackupArtifact.Status.READY
         assert Path(artifact.local_path).exists()
         assert "prune failed after backup creation" in artifact.validation_notes
         assert artifact.metadata_json["prune_error"] == "prune exploded"
@@ -1129,12 +1129,12 @@ class TestBackupLifecycle:
         snapshot.refresh_from_db()
 
         assert snapshot is not None
-        assert artifact.status == BackupArtifact.STATUS_READY
+        assert artifact.status == BackupArtifact.Status.READY
         assert Path(artifact.local_path).exists()
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert "release-metadata.json" in snapshot.failure_note
         assert "release metadata exploded" in snapshot.failure_note
-        assert artifact.metadata_json["snapshot_status"] == BackupSnapshot.STATUS_FAILED
+        assert artifact.metadata_json["snapshot_status"] == BackupSnapshot.Status.FAILED
         assert "snapshot sidecar capture failed" in artifact.validation_notes
         assert not (snapshot_root / "release-metadata.json").exists()
         assert (snapshot_root / "env-var-manifest.json").exists()
@@ -1168,7 +1168,7 @@ class TestBackupLifecycle:
         snapshot = _get_authoritative_snapshot(artifact)
         original_artifact_id = artifact.pk
         assert snapshot is not None
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
 
         resumed_artifact = create_backup(
             initiated_by=superuser,
@@ -1179,7 +1179,7 @@ class TestBackupLifecycle:
         snapshot.refresh_from_db()
         resumed_artifact.refresh_from_db()
         assert resumed_artifact.pk == original_artifact_id
-        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.status == BackupSnapshot.Status.READY
         assert snapshot.failure_note == ""
         assert not resumed_artifact.validation_notes
         assert (Path(snapshot.local_root_path) / "release-metadata.json").exists()
@@ -1193,7 +1193,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(local_backup_settings),
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -1225,7 +1225,7 @@ class TestBackupLifecycle:
 
         assert BackupArtifact.objects.count() == 0
         snapshot = BackupSnapshot.objects.get()
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=True)
@@ -1238,7 +1238,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(local_backup_settings),
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -1281,7 +1281,7 @@ class TestBackupLifecycle:
         assert "postgresql-client-18" in str(exc_info.value)
         assert BackupArtifact.objects.count() == 0
         snapshot = BackupSnapshot.objects.get()
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=True)
@@ -1294,7 +1294,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(local_backup_settings),
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -1323,7 +1323,7 @@ class TestBackupLifecycle:
 
         assert BackupArtifact.objects.count() == 0
         snapshot = BackupSnapshot.objects.get()
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=False)
@@ -1336,7 +1336,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(local_backup_settings),
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -1369,7 +1369,7 @@ class TestBackupLifecycle:
         )
         assert BackupArtifact.objects.count() == 0
         snapshot = BackupSnapshot.objects.get()
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=False)
@@ -1382,7 +1382,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(local_backup_settings),
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -1424,7 +1424,7 @@ class TestBackupLifecycle:
 
         assert BackupArtifact.objects.count() == 0
         snapshot = BackupSnapshot.objects.get()
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=False)
@@ -1437,7 +1437,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(local_backup_settings),
             remote_bucket_name="",
             remote_prefix="backups/private",
@@ -1478,7 +1478,7 @@ class TestBackupLifecycle:
 
         assert BackupArtifact.objects.count() == 0
         snapshot = BackupSnapshot.objects.get()
-        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert snapshot.status == BackupSnapshot.Status.FAILED
         assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     def test_create_backup_rejects_existing_filesystem_lock(
@@ -1505,7 +1505,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=".quickscale/backups",
             remote_bucket_name="",
             remote_prefix="ops/backups",
@@ -1531,7 +1531,7 @@ class TestBackupLifecycle:
 
         assert "checksum mismatch detected" in issues
         backup_artifact.refresh_from_db()
-        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert backup_artifact.status == BackupArtifact.Status.FAILED
 
     def test_validate_backup_artifact_detects_invalid_json_payload(
         self,
@@ -1551,7 +1551,7 @@ class TestBackupLifecycle:
 
         assert issues == ["json backup payload is not valid JSON"]
         backup_artifact.refresh_from_db()
-        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert backup_artifact.status == BackupArtifact.Status.FAILED
 
     def test_validate_backup_artifact_detects_corrupt_json_bytes(
         self,
@@ -1571,7 +1571,7 @@ class TestBackupLifecycle:
 
         assert issues == ["json backup payload is not valid JSON"]
         backup_artifact.refresh_from_db()
-        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert backup_artifact.status == BackupArtifact.Status.FAILED
 
     def test_prune_expired_backups_deletes_old_local_files(
         self,
@@ -1605,7 +1605,7 @@ class TestBackupLifecycle:
 
         assert deleted_count >= 1
         artifact.refresh_from_db()
-        assert artifact.status == BackupArtifact.STATUS_DELETED
+        assert artifact.status == BackupArtifact.Status.DELETED
         assert not local_path.exists()
 
     def test_prune_expired_backups_uses_artifact_location_and_current_credentials(
@@ -1619,7 +1619,7 @@ class TestBackupLifecycle:
         original_policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=str(local_backup_settings),
             remote_bucket_name="original-bucket",
             remote_prefix="ops/backups",
@@ -1658,7 +1658,7 @@ class TestBackupLifecycle:
         current_policy = BackupPolicySnapshot(
             retention_days=1,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=str(local_backup_settings),
             remote_bucket_name="current-bucket",
             remote_prefix="changed/prefix",
@@ -1757,7 +1757,7 @@ class TestBackupLifecycle:
         artifact.refresh_from_db()
         snapshot.refresh_from_db()
         assert deleted_count == 0
-        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.status == BackupSnapshot.Status.READY
         assert Path(artifact.local_path).exists()
 
         BackupSnapshot.objects.filter(pk=snapshot.pk).update(
@@ -1772,8 +1772,8 @@ class TestBackupLifecycle:
         artifact.refresh_from_db()
         snapshot.refresh_from_db()
         assert deleted_count == 1
-        assert snapshot.status == BackupSnapshot.STATUS_DELETED
-        assert artifact.status == BackupArtifact.STATUS_DELETED
+        assert snapshot.status == BackupSnapshot.Status.DELETED
+        assert artifact.status == BackupArtifact.Status.DELETED
         assert not Path(snapshot.local_root_path).exists()
 
     def test_report_backup_snapshot_returns_structured_snapshot_view(
@@ -1885,13 +1885,13 @@ class TestBackupLifecycle:
         snapshot = BackupSnapshot.objects.create(
             snapshot_id="snap-restore-123",
             authoritative_dump=postgresql_backup_artifact,
-            status=BackupSnapshot.STATUS_READY,
+            status=BackupSnapshot.Status.READY,
             source_environment="local",
             local_root_path=str(Path(postgresql_backup_artifact.local_path).parent),
             child_descriptors_json={
                 "database": {
                     "kind": "database_dump",
-                    "status": BackupSnapshot.STATUS_READY,
+                    "status": BackupSnapshot.Status.READY,
                     "relative_path": postgresql_backup_artifact.filename,
                 },
                 "sidecars": {},
@@ -1969,7 +1969,7 @@ class TestBackupLifecycle:
             checksum_sha256=hashlib.sha256(original_payload).hexdigest(),
             size_bytes=duplicate_path.stat().st_size,
             backup_format="pg_dump_custom",
-            restore_scope=BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+            restore_scope=BackupArtifact.RestoreScope.LOCAL_ONLY,
             database_engine=postgresql_backup_artifact.database_engine,
             database_name=postgresql_backup_artifact.database_name,
             database_server_major=postgresql_backup_artifact.database_server_major,
@@ -2386,7 +2386,7 @@ class TestBackupLifecycle:
         _mock_postgresql_18_contract(monkeypatch)
         Path(postgresql_backup_artifact.local_path).unlink()
         postgresql_backup_artifact.storage_target = (
-            BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+            BackupArtifact.StorageTarget.PRIVATE_REMOTE
         )
         postgresql_backup_artifact.remote_key = "private/backups/remote-artifact.dump"
         postgresql_backup_artifact.remote_bucket_name = "artifact-bucket"
@@ -2520,7 +2520,7 @@ class TestBackupLifecycle:
             "error_type": "DatabaseError",
             "filename": postgresql_backup_artifact.filename,
         }
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.READY
         assert postgresql_backup_artifact.restored_at is None
 
     def test_restore_execution_warns_when_artifact_row_is_missing_after_restore(
@@ -2577,7 +2577,7 @@ class TestBackupLifecycle:
             "artifact_id": str(artifact_id),
             "filename": postgresql_backup_artifact.filename,
         }
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.READY
         assert postgresql_backup_artifact.restored_at is None
 
     def test_restore_dry_run_materializes_private_remote_artifact_when_local_file_is_missing(
@@ -2591,7 +2591,7 @@ class TestBackupLifecycle:
         original_payload = original_local_path.read_bytes()
         original_local_path.unlink()
         postgresql_backup_artifact.storage_target = (
-            BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+            BackupArtifact.StorageTarget.PRIVATE_REMOTE
         )
         postgresql_backup_artifact.remote_key = "private/backups/remote-artifact.dump"
         postgresql_backup_artifact.remote_bucket_name = "artifact-bucket"
@@ -2615,7 +2615,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=".quickscale/backups",
             remote_bucket_name="ignored-policy-bucket",
             remote_prefix="ops/backups",
@@ -2669,7 +2669,7 @@ class TestBackupLifecycle:
             )
         ]
         assert postgresql_backup_artifact.local_path == str(original_local_path)
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.READY
         assert temp_paths and not temp_paths[0].exists()
 
     def test_restore_execute_materialized_private_remote_artifact_cleans_temp_file(
@@ -2683,7 +2683,7 @@ class TestBackupLifecycle:
         original_payload = original_local_path.read_bytes()
         original_local_path.unlink()
         postgresql_backup_artifact.storage_target = (
-            BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+            BackupArtifact.StorageTarget.PRIVATE_REMOTE
         )
         postgresql_backup_artifact.remote_key = "private/backups/remote-artifact.dump"
         postgresql_backup_artifact.remote_bucket_name = "artifact-bucket"
@@ -2708,7 +2708,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=".quickscale/backups",
             remote_bucket_name="ignored-policy-bucket",
             remote_prefix="ops/backups",
@@ -2756,7 +2756,7 @@ class TestBackupLifecycle:
         )
         assert runner_calls
         assert postgresql_backup_artifact.local_path == str(original_local_path)
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.RESTORED
         assert temp_paths and not temp_paths[0].exists()
 
     def test_restore_runner_failure_cleans_materialized_private_remote_file(
@@ -2770,7 +2770,7 @@ class TestBackupLifecycle:
         original_payload = original_local_path.read_bytes()
         original_local_path.unlink()
         postgresql_backup_artifact.storage_target = (
-            BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+            BackupArtifact.StorageTarget.PRIVATE_REMOTE
         )
         postgresql_backup_artifact.remote_key = "private/backups/remote-artifact.dump"
         postgresql_backup_artifact.remote_bucket_name = "artifact-bucket"
@@ -2795,7 +2795,7 @@ class TestBackupLifecycle:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=".quickscale/backups",
             remote_bucket_name="ignored-policy-bucket",
             remote_prefix="ops/backups",
@@ -2835,7 +2835,7 @@ class TestBackupLifecycle:
 
         postgresql_backup_artifact.refresh_from_db()
         assert postgresql_backup_artifact.local_path == str(original_local_path)
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.READY
         assert temp_paths and not temp_paths[0].exists()
 
     @pytest.mark.parametrize("dry_run", [True, False])
@@ -3754,7 +3754,7 @@ class TestBackupServiceUtilities:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            target_mode=BackupPolicy.TargetMode.PRIVATE_REMOTE,
             local_directory=".quickscale/backups",
             remote_bucket_name="bucket",
             remote_prefix="ops/backups",
@@ -3773,7 +3773,7 @@ class TestBackupServiceUtilities:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=".quickscale/backups",
             remote_bucket_name="",
             remote_prefix="",
@@ -3810,7 +3810,7 @@ class TestBackupServiceUtilities:
 
         snapshot = BackupSnapshot(
             local_root_path=str(tmp_path / "snapshot-root"),
-            status=BackupSnapshot.STATUS_READY,
+            status=BackupSnapshot.Status.READY,
         )
         result = backup_services._snapshot_sidecar_path(
             snapshot, "release-metadata.json"
@@ -3927,7 +3927,7 @@ class TestBackupServiceUtilities:
         from quickscale_modules_backups.models import BackupArtifact
 
         artifact = SimpleNamespace(
-            storage_target=BackupArtifact.STORAGE_TARGET_LOCAL,
+            storage_target=BackupArtifact.StorageTarget.LOCAL,
             remote_bucket_name="",
             remote_endpoint_url="",
             remote_region_name="",
@@ -3957,7 +3957,7 @@ class TestBackupServiceUtilities:
         from quickscale_modules_backups.models import BackupArtifact
 
         artifact = SimpleNamespace(
-            storage_target=BackupArtifact.STORAGE_TARGET_LOCAL,
+            storage_target=BackupArtifact.StorageTarget.LOCAL,
             remote_bucket_name="",
             remote_endpoint_url="",
             remote_region_name="",
@@ -4020,7 +4020,7 @@ class TestBackupServiceEdgeCases:
 
         snapshot = BackupSnapshot.objects.create(
             snapshot_id="test-sidecar-missing",
-            status=BackupSnapshot.STATUS_READY,
+            status=BackupSnapshot.Status.READY,
             source_environment="local",
             local_root_path=str(tmp_path),
             child_descriptors_json={},
@@ -4037,7 +4037,7 @@ class TestBackupServiceEdgeCases:
         sidecar.write_text("{invalid json", encoding="utf-8")
         snapshot = BackupSnapshot.objects.create(
             snapshot_id="test-json-error",
-            status=BackupSnapshot.STATUS_READY,
+            status=BackupSnapshot.Status.READY,
             source_environment="local",
             local_root_path=str(tmp_path),
             child_descriptors_json={},
@@ -4054,7 +4054,7 @@ class TestBackupServiceEdgeCases:
         sidecar.write_text('["list", "not", "dict"]', encoding="utf-8")
         snapshot = BackupSnapshot.objects.create(
             snapshot_id="test-not-dict",
-            status=BackupSnapshot.STATUS_READY,
+            status=BackupSnapshot.Status.READY,
             source_environment="local",
             local_root_path=str(tmp_path),
             child_descriptors_json={},
@@ -4076,7 +4076,7 @@ class TestBackupServiceEdgeCases:
         os.system(f"chmod 000 {sidecar}")  # Ensure file has no permissions
         snapshot = BackupSnapshot.objects.create(
             snapshot_id="test-os-error",
-            status=BackupSnapshot.STATUS_READY,
+            status=BackupSnapshot.Status.READY,
             source_environment="local",
             local_root_path=str(tmp_path),
             child_descriptors_json={},
@@ -4136,22 +4136,22 @@ class TestBackupServiceEdgeCases:
 
 @pytest.mark.django_db
 class TestStaleRestoreDetection:
-    """SA38: Stale STATUS_RESTORING detection and guarded reset."""
+    """SA38: Stale Status.RESTORING detection and guarded reset."""
 
     def test_is_restore_stale_returns_false_for_non_restoring_artifact(
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
         """Non-RESTORING artifacts are never stale."""
-        assert backup_artifact.status != BackupArtifact.STATUS_RESTORING
+        assert backup_artifact.status != BackupArtifact.Status.RESTORING
         assert backup_services.is_restore_stale(backup_artifact) is False
 
     def test_is_restore_stale_returns_false_when_started_at_is_none(
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """STATUS_RESTORING with no restore_started_at is not stale."""
-        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        """Status.RESTORING with no restore_started_at is not stale."""
+        backup_artifact.status = BackupArtifact.Status.RESTORING
         backup_artifact.restore_started_at = None
         backup_artifact.save(
             update_fields=["status", "restore_started_at", "updated_at"]
@@ -4162,8 +4162,8 @@ class TestStaleRestoreDetection:
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """A STATUS_RESTORING artifact started within the threshold is not stale."""
-        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        """A Status.RESTORING artifact started within the threshold is not stale."""
+        backup_artifact.status = BackupArtifact.Status.RESTORING
         backup_artifact.restore_started_at = django_timezone.now() - timedelta(
             minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES - 5
         )
@@ -4176,8 +4176,8 @@ class TestStaleRestoreDetection:
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """A STATUS_RESTORING artifact started past the threshold is stale."""
-        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        """A Status.RESTORING artifact started past the threshold is stale."""
+        backup_artifact.status = BackupArtifact.Status.RESTORING
         backup_artifact.restore_started_at = django_timezone.now() - timedelta(
             minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES + 1
         )
@@ -4190,11 +4190,11 @@ class TestStaleRestoreDetection:
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """A stale STATUS_RESTORING artifact is reset to STATUS_FAILED."""
+        """A stale Status.RESTORING artifact is reset to Status.FAILED."""
         started_at = django_timezone.now() - timedelta(
             minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES + 10
         )
-        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        backup_artifact.status = BackupArtifact.Status.RESTORING
         backup_artifact.restore_started_at = started_at
         backup_artifact.restore_error = ""
         backup_artifact.save(
@@ -4209,7 +4209,7 @@ class TestStaleRestoreDetection:
         backup_services.reset_stale_restore(backup_artifact)
 
         backup_artifact.refresh_from_db()
-        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert backup_artifact.status == BackupArtifact.Status.FAILED
         assert "Restore reset" in backup_artifact.restore_error
 
     def test_reset_stale_restore_rejects_non_restoring_artifact(
@@ -4217,7 +4217,7 @@ class TestStaleRestoreDetection:
         backup_artifact: BackupArtifact,
     ) -> None:
         """Non-RESTORING artifacts raise BackupRestoreBlocked."""
-        assert backup_artifact.status != BackupArtifact.STATUS_RESTORING
+        assert backup_artifact.status != BackupArtifact.Status.RESTORING
         with pytest.raises(
             BackupRestoreBlocked,
             match="Only backup artifacts with status 'Restoring",
@@ -4228,8 +4228,8 @@ class TestStaleRestoreDetection:
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        """A STATUS_RESTORING artifact within the threshold raises BackupRestoreBlocked."""
-        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        """A Status.RESTORING artifact within the threshold raises BackupRestoreBlocked."""
+        backup_artifact.status = BackupArtifact.Status.RESTORING
         backup_artifact.restore_started_at = django_timezone.now() - timedelta(
             minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES - 10
         )
@@ -4255,7 +4255,7 @@ class TestStaleRestoreDetection:
         started_at = django_timezone.now() - timedelta(
             minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES + 10
         )
-        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        backup_artifact.status = BackupArtifact.Status.RESTORING
         backup_artifact.restore_started_at = started_at
         backup_artifact.restore_error = ""
         backup_artifact.save(
@@ -4270,7 +4270,7 @@ class TestStaleRestoreDetection:
         # Simulate the child finishing: the DB row now has a terminal
         # status that the CAS must not overwrite.
         BackupArtifact.objects.filter(pk=backup_artifact.pk).update(
-            status=BackupArtifact.STATUS_FAILED,
+            status=BackupArtifact.Status.FAILED,
             restore_error="real child failure",
         )
 
@@ -4282,7 +4282,7 @@ class TestStaleRestoreDetection:
 
         backup_artifact.refresh_from_db()
         # The child's terminal status must be preserved.
-        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert backup_artifact.status == BackupArtifact.Status.FAILED
         assert backup_artifact.restore_error == "real child failure"
 
     # ------------------------------------------------------------------
@@ -4340,8 +4340,8 @@ class TestGetManagePySA52:
                 )
 
         postgresql_backup_artifact.refresh_from_db()
-        # Artifact must NOT be in STATUS_RESTORING — no claim was made.
-        assert postgresql_backup_artifact.status != BackupArtifact.STATUS_RESTORING
+        # Artifact must NOT be in Status.RESTORING — no claim was made.
+        assert postgresql_backup_artifact.status != BackupArtifact.Status.RESTORING
         assert postgresql_backup_artifact.restore_started_at is None
 
     def test_dispatch_background_create_fails_hard_when_unresolvable(
@@ -4407,9 +4407,9 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         existing_file.write_bytes(b"pre-existing backup content")
         original_content = existing_file.read_bytes()
 
-        # Artifact must be in a claimable status so the STATUS_RESTORING
+        # Artifact must be in a claimable status so the Status.RESTORING
         # guard passes.
-        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.status = BackupArtifact.Status.READY
         backup_artifact.save(update_fields=["status", "updated_at"])
 
         # Staged upload — a different file from the existing one
@@ -4425,7 +4425,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(tmp_path / "backups"),
             remote_bucket_name="",
             remote_prefix="",
@@ -4500,7 +4500,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         target_dir = tmp_path / "backups"
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.status = BackupArtifact.Status.READY
         backup_artifact.save(update_fields=["status", "updated_at"])
 
         staged_file = tmp_path / "staged" / "upload.dump"
@@ -4515,7 +4515,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(target_dir),
             remote_bucket_name="",
             remote_prefix="",
@@ -4601,7 +4601,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         symlink_path = target_dir / f"{artifact_filename}.tmp"
         symlink_path.symlink_to(escape_target)
 
-        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.status = BackupArtifact.Status.READY
         backup_artifact.save(update_fields=["status", "updated_at"])
 
         staged_file = tmp_path / "staged" / "upload.dump"
@@ -4616,7 +4616,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(target_dir),
             remote_bucket_name="",
             remote_prefix="",
@@ -4688,7 +4688,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         target_dir = tmp_path / "backups"
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.status = BackupArtifact.Status.READY
         backup_artifact.save(update_fields=["status", "updated_at"])
 
         staged_file = tmp_path / "staged" / "upload.dump"
@@ -4703,7 +4703,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(target_dir),
             remote_bucket_name="",
             remote_prefix="",
@@ -4768,7 +4768,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         target_dir = tmp_path / "backups"
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.status = BackupArtifact.Status.READY
         backup_artifact.save(update_fields=["status", "updated_at"])
 
         staged_file = tmp_path / "staged" / "upload.dump"
@@ -4783,7 +4783,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         policy = BackupPolicySnapshot(
             retention_days=14,
             naming_prefix="db",
-            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            target_mode=BackupPolicy.TargetMode.LOCAL,
             local_directory=str(target_dir),
             remote_bucket_name="",
             remote_prefix="",

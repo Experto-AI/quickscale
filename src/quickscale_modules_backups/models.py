@@ -25,12 +25,9 @@ class BackupPolicy(models.Model):
     #: singleton-config records, not tenant-scoped data.
     tenant_excluded = "Operational backup policy — singleton config, not tenant-scoped."
 
-    TARGET_MODE_LOCAL = "local"
-    TARGET_MODE_PRIVATE_REMOTE = "private_remote"
-    TARGET_MODE_CHOICES = [
-        (TARGET_MODE_LOCAL, "Local private storage"),
-        (TARGET_MODE_PRIVATE_REMOTE, "Private remote offload"),
-    ]
+    class TargetMode(models.TextChoices):
+        LOCAL = "local", "Local private storage"
+        PRIVATE_REMOTE = "private_remote", "Private remote offload"
 
     key = models.CharField(
         max_length=32, unique=True, default="default", editable=False
@@ -47,8 +44,8 @@ class BackupPolicy(models.Model):
     )
     target_mode = models.CharField(
         max_length=20,
-        choices=TARGET_MODE_CHOICES,
-        default=TARGET_MODE_LOCAL,
+        choices=TargetMode.choices,
+        default=TargetMode.LOCAL,
         help_text="Backups remain private regardless of target mode.",
     )
     local_directory = models.CharField(
@@ -93,42 +90,28 @@ class BackupArtifact(models.Model):
     #: are operational/audit data, not tenant-scoped application data.
     tenant_excluded = "Operational backup artifact metadata — not tenant-scoped."
 
-    STATUS_READY = "ready"
-    STATUS_VALIDATED = "validated"
-    STATUS_RESTORING = "restoring"
-    STATUS_FAILED = "failed"
-    STATUS_DELETED = "deleted"
-    STATUS_RESTORED = "restored"
-    STATUS_CHOICES = [
-        (STATUS_READY, "Ready"),
-        (STATUS_VALIDATED, "Validated"),
-        (STATUS_RESTORING, "Restoring..."),
-        (STATUS_FAILED, "Failed"),
-        (STATUS_DELETED, "Deleted"),
-        (STATUS_RESTORED, "Restored"),
-    ]
+    class Status(models.TextChoices):
+        READY = "ready", "Ready"
+        VALIDATED = "validated", "Validated"
+        RESTORING = "restoring", "Restoring..."
+        FAILED = "failed", "Failed"
+        DELETED = "deleted", "Deleted"
+        RESTORED = "restored", "Restored"
 
-    STORAGE_TARGET_LOCAL = "local"
-    STORAGE_TARGET_PRIVATE_REMOTE = "private_remote"
-    STORAGE_TARGET_CHOICES = [
-        (STORAGE_TARGET_LOCAL, "Local private storage"),
-        (STORAGE_TARGET_PRIVATE_REMOTE, "Private remote offload"),
-    ]
+    class StorageTarget(models.TextChoices):
+        LOCAL = "local", "Local private storage"
+        PRIVATE_REMOTE = "private_remote", "Private remote offload"
 
-    RESTORE_SCOPE_EXPORT_ONLY = "export_only"
-    RESTORE_SCOPE_LOCAL_ONLY = "local_only"
-    RESTORE_SCOPE_PORTABLE = "portable"
-    RESTORE_SCOPE_CHOICES = [
-        (RESTORE_SCOPE_EXPORT_ONLY, "Export only"),
-        (RESTORE_SCOPE_LOCAL_ONLY, "Local restore only"),
-        (RESTORE_SCOPE_PORTABLE, "Portable restore"),
-    ]
+    class RestoreScope(models.TextChoices):
+        EXPORT_ONLY = "export_only", "Export only"
+        LOCAL_ONLY = "local_only", "Local restore only"
+        PORTABLE = "portable", "Portable restore"
 
     filename = models.CharField(max_length=255, unique=True)
     storage_target = models.CharField(
         max_length=20,
-        choices=STORAGE_TARGET_CHOICES,
-        default=STORAGE_TARGET_LOCAL,
+        choices=StorageTarget.choices,
+        default=StorageTarget.LOCAL,
     )
     local_path = models.CharField(max_length=512, blank=True)
     remote_key = models.CharField(max_length=512, blank=True)
@@ -140,7 +123,7 @@ class BackupArtifact(models.Model):
     backup_format = models.CharField(max_length=32, default="json")
     restore_scope = models.CharField(
         max_length=20,
-        choices=RESTORE_SCOPE_CHOICES,
+        choices=RestoreScope.choices,
         null=True,
         blank=True,
         help_text=(
@@ -153,7 +136,7 @@ class BackupArtifact(models.Model):
     dump_client_major = models.PositiveIntegerField(null=True, blank=True)
     metadata_json = models.JSONField(default=dict, blank=True)
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default=STATUS_READY
+        max_length=20, choices=Status.choices, default=Status.READY
     )
     trigger = models.CharField(max_length=32, default="manual")
     initiated_by = models.ForeignKey(
@@ -161,7 +144,7 @@ class BackupArtifact(models.Model):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="quickscale_backup_artifacts",
+        related_name="quickscale_backups_artifacts",
     )
     validation_notes = models.TextField(blank=True)
     validated_at = models.DateTimeField(null=True, blank=True)
@@ -193,9 +176,9 @@ class BackupArtifact(models.Model):
         if self.restore_scope:
             return cast(str | None, self.restore_scope)
         if self.backup_format == "json":
-            return self.RESTORE_SCOPE_EXPORT_ONLY
+            return self.RestoreScope.EXPORT_ONLY
         if self.backup_format == "pg_dump_custom":
-            return self.RESTORE_SCOPE_LOCAL_ONLY
+            return self.RestoreScope.LOCAL_ONLY
         return None
 
     def restore_scope_label(self) -> str:
@@ -203,19 +186,19 @@ class BackupArtifact(models.Model):
         restore_scope = self.effective_restore_scope()
         if restore_scope is None:
             return "Unclassified"
-        return dict(self.RESTORE_SCOPE_CHOICES).get(restore_scope, "Unclassified")
+        return str(dict(self.RestoreScope.choices).get(restore_scope, "Unclassified"))
 
     def is_export_only(self) -> bool:
         """Return whether the artifact is classified as export-only."""
-        return self.effective_restore_scope() == self.RESTORE_SCOPE_EXPORT_ONLY
+        return self.effective_restore_scope() == self.RestoreScope.EXPORT_ONLY
 
     def is_local_only(self) -> bool:
         """Return whether the artifact is classified as local-only."""
-        return self.effective_restore_scope() == self.RESTORE_SCOPE_LOCAL_ONLY
+        return self.effective_restore_scope() == self.RestoreScope.LOCAL_ONLY
 
     def is_portable(self) -> bool:
         """Return whether the artifact is classified as portable."""
-        return self.effective_restore_scope() == self.RESTORE_SCOPE_PORTABLE
+        return self.effective_restore_scope() == self.RestoreScope.PORTABLE
 
     def download_path(self) -> str:
         """Return the best available operator-facing download path."""
@@ -235,16 +218,11 @@ class BackupSnapshot(models.Model):
     #: operations, not tenant-scoped application data.
     tenant_excluded = "Internal DR snapshot metadata — not tenant-scoped."
 
-    STATUS_PENDING = "pending"
-    STATUS_READY = "ready"
-    STATUS_FAILED = "failed"
-    STATUS_DELETED = "deleted"
-    STATUS_CHOICES = [
-        (STATUS_PENDING, "Pending"),
-        (STATUS_READY, "Ready"),
-        (STATUS_FAILED, "Failed"),
-        (STATUS_DELETED, "Deleted"),
-    ]
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        READY = "ready", "Ready"
+        FAILED = "failed", "Failed"
+        DELETED = "deleted", "Deleted"
 
     snapshot_id = models.CharField(max_length=64, unique=True, editable=False)
     authoritative_dump = models.OneToOneField(
@@ -256,8 +234,8 @@ class BackupSnapshot(models.Model):
     )
     status = models.CharField(
         max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_PENDING,
+        choices=Status.choices,
+        default=Status.PENDING,
     )
     source_environment = models.CharField(max_length=64, default="local")
     local_root_path = models.CharField(max_length=512)

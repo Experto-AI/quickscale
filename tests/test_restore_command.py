@@ -241,15 +241,15 @@ class TestBackupsRestoreCommand:
         assert _call_kwargs.get("resolution_mode") is None
 
     # ------------------------------------------------------------------
-    # CR-SA20-007: Failure recording for STATUS_RESTORING artifacts
+    # CR-SA20-007: Failure recording for Status.RESTORING artifacts
     # ------------------------------------------------------------------
 
     def test_command_records_failed_on_backup_error_for_restoring_artifact(
         self,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """BackupError on a STATUS_RESTORING artifact records STATUS_FAILED."""
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        """BackupError on a Status.RESTORING artifact records Status.FAILED."""
+        postgresql_backup_artifact.status = BackupArtifact.Status.RESTORING
         postgresql_backup_artifact.restore_error = ""
         postgresql_backup_artifact.save(
             update_fields=["status", "restore_error", "updated_at"]
@@ -274,15 +274,15 @@ class TestBackupsRestoreCommand:
                 )
 
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.FAILED
         assert "disk full" in postgresql_backup_artifact.restore_error
 
     def test_command_records_failed_on_generic_exception_for_restoring_artifact(
         self,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """Any Exception on a STATUS_RESTORING artifact records STATUS_FAILED."""
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        """Any Exception on a Status.RESTORING artifact records Status.FAILED."""
+        postgresql_backup_artifact.status = BackupArtifact.Status.RESTORING
         postgresql_backup_artifact.restore_error = ""
         postgresql_backup_artifact.save(
             update_fields=["status", "restore_error", "updated_at"]
@@ -307,15 +307,15 @@ class TestBackupsRestoreCommand:
                 )
 
         postgresql_backup_artifact.refresh_from_db()
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.FAILED
         assert "unexpected null" in postgresql_backup_artifact.restore_error
 
     def test_command_does_not_record_failed_for_non_restoring_artifact(
         self,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """Artifacts not in STATUS_RESTORING are left untouched on failure."""
-        postgresql_backup_artifact.status = BackupArtifact.STATUS_READY
+        """Artifacts not in Status.RESTORING are left untouched on failure."""
+        postgresql_backup_artifact.status = BackupArtifact.Status.READY
         postgresql_backup_artifact.restore_error = ""
         postgresql_backup_artifact.save(
             update_fields=["status", "restore_error", "updated_at"]
@@ -341,5 +341,5 @@ class TestBackupsRestoreCommand:
 
         postgresql_backup_artifact.refresh_from_db()
         # Status must NOT have changed from READY to FAILED
-        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.READY
         assert postgresql_backup_artifact.restore_error == ""

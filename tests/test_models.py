@@ -23,7 +23,7 @@ class TestBackupPolicyModel:
         policy = BackupPolicy.objects.create()
         assert policy.retention_days == 14
         assert policy.naming_prefix == "db"
-        assert policy.target_mode == BackupPolicy.TARGET_MODE_LOCAL
+        assert policy.target_mode == BackupPolicy.TargetMode.LOCAL
 
 
 @pytest.mark.django_db
@@ -43,7 +43,7 @@ class TestBackupArtifactModel:
     def test_download_path_uses_remote_key_when_local_missing(self) -> None:
         artifact = BackupArtifact.objects.create(
             filename="backup.dump",
-            storage_target=BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE,
+            storage_target=BackupArtifact.StorageTarget.PRIVATE_REMOTE,
             local_path="",
             remote_key="private/backups/backup.dump",
             checksum_sha256="abc123",
@@ -67,7 +67,7 @@ class TestBackupArtifactModel:
         assert artifact.restore_scope is None
         assert (
             artifact.effective_restore_scope()
-            == BackupArtifact.RESTORE_SCOPE_EXPORT_ONLY
+            == BackupArtifact.RestoreScope.EXPORT_ONLY
         )
         assert artifact.restore_scope_label() == "Export only"
         assert artifact.is_export_only() is True
@@ -84,8 +84,7 @@ class TestBackupArtifactModel:
 
         assert artifact.restore_scope is None
         assert (
-            artifact.effective_restore_scope()
-            == BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY
+            artifact.effective_restore_scope() == BackupArtifact.RestoreScope.LOCAL_ONLY
         )
         assert artifact.restore_scope_label() == "Local restore only"
         assert artifact.is_local_only() is True
@@ -96,13 +95,13 @@ class TestBackupArtifactModel:
             checksum_sha256="abc123",
             size_bytes=100,
             backup_format="pg_dump_custom",
-            restore_scope=BackupArtifact.RESTORE_SCOPE_PORTABLE,
+            restore_scope=BackupArtifact.RestoreScope.PORTABLE,
             database_engine="django.db.backends.postgresql",
             database_name="app",
         )
 
         assert (
-            artifact.effective_restore_scope() == BackupArtifact.RESTORE_SCOPE_PORTABLE
+            artifact.effective_restore_scope() == BackupArtifact.RestoreScope.PORTABLE
         )
         assert artifact.restore_scope_label() == "Portable restore"
         assert artifact.is_portable() is True
