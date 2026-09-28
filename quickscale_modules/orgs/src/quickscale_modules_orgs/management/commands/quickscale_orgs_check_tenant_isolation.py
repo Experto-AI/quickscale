@@ -14,18 +14,15 @@ Usage::
     python manage.py quickscale_orgs_check_tenant_isolation --postgres-only
     python manage.py quickscale_orgs_check_tenant_isolation --format json
 
-Exit codes:
-
-* ``0`` — all tenant models pass isolation checks.
-* ``1`` — one or more tenant models fail isolation checks.
+Failures raise ``CommandError`` so the management runner reports the failure
+and exits non-zero.
 """
 
 from __future__ import annotations
 
 import json
-import sys
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, models
 
 from quickscale_modules_orgs.tenancy import (
@@ -33,6 +30,10 @@ from quickscale_modules_orgs.tenancy import (
     check_tenant_model_isolation,
     get_tenant_models,
     get_unclassified_concrete_models,
+)
+
+_UNCLASSIFIED_FAILURE = (
+    "Unclassified model(s) found — not in the marker-derived tenant contract."
 )
 
 
@@ -167,11 +168,11 @@ class Command(BaseCommand):
 
             if is_pg_skip:
                 if has_unclassified:
-                    sys.exit(1)
+                    raise CommandError(_UNCLASSIFIED_FAILURE)
                 return None
 
             if has_unclassified:
-                sys.exit(1)
+                raise CommandError(_UNCLASSIFIED_FAILURE)
             return None
 
         # ---- SA1.3 — Tenant model isolation check -------------------------
@@ -219,7 +220,7 @@ class Command(BaseCommand):
                             f"{m._meta.app_label}.{m.__name__}\n"
                         )
                         self._write_classification_hint(m)
-                sys.exit(1)
+                raise CommandError(_UNCLASSIFIED_FAILURE)
             else:
                 if fmt == "json":
                     self.stdout.write(
@@ -329,8 +330,11 @@ class Command(BaseCommand):
             )
 
         if has_unclassified:
-            sys.exit(1)
+            raise CommandError(_UNCLASSIFIED_FAILURE)
         if failed_count > 0:
-            sys.exit(1)
+            raise CommandError(
+                f"Tenant isolation check failed: {failed_count} model(s) "
+                "do not satisfy the isolation contract."
+            )
 
         return None

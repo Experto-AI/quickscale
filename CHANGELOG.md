@@ -147,6 +147,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     setting's name when a supplied value violates one. A mutable option's `django_setting` is its
     only one-to-one projection, so the duplicate `derived_settings` entries are gone and a
     transformed or computed setting carries no default.
+  - **Destructive module commands support `--dry-run`.** `quickscale_backups_prune`,
+    `quickscale_forms_anonymize_submissions`, and `quickscale_orgs_promote_to_saas` report what
+    they would change and write nothing, and `quickscale_orgs_check_tenant_isolation` reports
+    failures through `CommandError` instead of exiting directly.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
