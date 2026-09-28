@@ -214,6 +214,15 @@ class ModuleManifest:
     sub-lists.  Populated from the ``derivation.option_derivations`` section
     in the manifest YAML."""
 
+    retired_options: dict[str, str] = field(default_factory=dict)
+    """Retired option keys mapped to the message naming their removal.
+
+    Populated when the loader encounters a top-level ``retired_options``
+    section.  The option-validation engine reports every supplied retired
+    key with its declared message, and ``sanitize_module_options`` refuses
+    them on the config and state paths, so ``module.yml`` is the single home
+    of a retired key's refusal."""
+
     # ------------------------------------------------------------------ #
     # Contract-vintage metadata (SA10.2)
     #

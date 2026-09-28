@@ -506,27 +506,6 @@ def normalize_billing_module_options(
     return normalized
 
 
-def normalize_crm_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Return CRM options with retired legacy keys raising instead of silent drop.
-
-    Raises:
-        ConfigValidationError: if a legacy key is present, naming the dead key.
-    """
-    from quickscale_core.schema.config_schema import ConfigValidationError
-
-    normalized = dict(options or {})
-
-    if "default_pipeline_stages" in normalized:
-        raise ConfigValidationError(
-            "Legacy config key 'default_pipeline_stages' is no longer supported. "
-            "Remove it from the CRM module options."
-        )
-
-    return normalized
-
-
 def normalize_notifications_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
@@ -1031,8 +1010,11 @@ def sanitize_module_options(
 
     This is the canonical module-name dispatcher previously located in
     ``quickscale_cli.backups_contract``. It routes to the per-module
-    ``normalize_*_module_options`` helper above.
+    ``normalize_*_module_options`` helper above, and first refuses any key the
+    module's manifest declares retired.
     """
+    _raise_for_retired_module_options(module_name, options)
+
     if module_name == "analytics":
         return normalize_analytics_module_options(options)
     if module_name == "auth":
@@ -1041,8 +1023,6 @@ def sanitize_module_options(
         return normalize_backups_module_options(options)
     if module_name == "billing":
         return normalize_billing_module_options(options)
-    if module_name == "crm":
-        return normalize_crm_module_options(options)
     if module_name == "notifications":
         return normalize_notifications_module_options(options)
     if module_name == "social":
@@ -1050,6 +1030,52 @@ def sanitize_module_options(
     if module_name == "storage":
         return normalize_storage_module_options(options)
     return dict(options or {})
+
+
+def _raise_for_retired_module_options(
+    module_name: str,
+    options: Mapping[str, Any] | None,
+) -> None:
+    """Refuse every retired option key the module's manifest declares.
+
+    The message is authored once in the module's ``module.yml``
+    (``retired_options``); this dispatcher applies it wherever options are
+    canonicalized for config or state persistence.  An undeclared module has
+    no retirement declaration and passes through, keeping the layers that own
+    unknown modules in charge; a shipped module whose manifest cannot be read
+    fails closed rather than silently skipping its declaration.
+
+    Raises:
+        ConfigValidationError: naming the retired key and its removal.
+        ManifestError: when a shipped module's manifest cannot be read.
+    """
+    if not options:
+        return
+
+    from quickscale_core.contracts.module_catalog import MODULE_CATALOG
+    from quickscale_core.contracts.module_discovery import ImproperlyConfigured
+    from quickscale_core.contracts.resolvers import (
+        load_module_manifest_with_fallback,
+    )
+    from quickscale_core.manifest.loader import ManifestError
+    from quickscale_core.schema.config_schema import ConfigValidationError
+
+    try:
+        manifest = load_module_manifest_with_fallback(module_name)
+    except ManifestError, ImproperlyConfigured, OSError:
+        # The static catalog names the shipped release inventory without
+        # touching the filesystem, so this decision holds when a module's
+        # directory or manifest is missing and in bundled-only installs.
+        shipped_names = {
+            entry.name for entry in MODULE_CATALOG if not entry.placeholder
+        }
+        if module_name not in shipped_names:
+            return
+        raise
+
+    for retired_name, message in sorted(manifest.retired_options.items()):
+        if retired_name in options:
+            raise ConfigValidationError(message)
 
 
 __all__ = [
@@ -1113,7 +1139,6 @@ __all__ = [
     "normalize_auth_module_options",
     "normalize_backups_module_options",
     "normalize_billing_module_options",
-    "normalize_crm_module_options",
     "normalize_notifications_module_options",
     "normalize_social_module_options",
     # Validate functions

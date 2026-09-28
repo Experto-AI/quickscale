@@ -40,16 +40,11 @@ from quickscale_core.contracts.resolvers import (
     default_analytics_module_options,
     resolve_analytics_module_options,
     validate_analytics_module_options,
-    default_forms_module_options,
-    resolve_forms_module_options,
-    validate_forms_module_options,
     default_billing_module_options,
     resolve_billing_module_options,
     validate_billing_module_options,
     default_auth_module_options,
     resolve_auth_module_options,
-    default_crm_module_options,
-    resolve_crm_module_options,
     default_notifications_module_options,
     resolve_notifications_module_options,
     validate_notifications_module_options,
@@ -149,133 +144,6 @@ def _normalize_auth_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized.setdefault("social_providers", [])
     normalized.setdefault("session_cookie_age", 1209600)
     return normalized
-
-
-# ============================================================================
-# CRM MODULE CONFIGURATION
-# ============================================================================
-
-
-def get_default_crm_config() -> dict[str, Any]:
-    """Get default configuration for CRM module (non-interactive mode)"""
-    return default_crm_module_options()
-
-
-def configure_crm_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Interactive configuration for CRM module"""
-    defaults = resolve_crm_module_options(existing_config)
-
-    if non_interactive:
-        click.echo("\n⚙️  Using default CRM module configuration...")
-        config = defaults
-        click.echo("  • API: Enabled")
-        click.echo(f"  • Deals per page: {config['deals_per_page']}")
-        click.echo(f"  • Contacts per page: {config['contacts_per_page']}")
-        return config
-
-    click.echo("\n⚙️  Configuring CRM module...")
-    click.echo(
-        "The CRM module provides contact management, companies, and deal pipeline.\n"
-    )
-
-    config = resolve_crm_module_options(
-        {
-            "enable_api": click.confirm(
-                "Enable REST API endpoints?",
-                default=bool(defaults["enable_api"]),
-            ),
-            "deals_per_page": click.prompt(
-                "Deals per page",
-                type=int,
-                default=int(defaults["deals_per_page"]),
-            ),
-            "contacts_per_page": click.prompt(
-                "Contacts per page",
-                type=int,
-                default=int(defaults["contacts_per_page"]),
-            ),
-        }
-    )
-
-    return config
-
-
-# ============================================================================
-# FORMS MODULE CONFIGURATION
-# ============================================================================
-
-
-def get_default_forms_config() -> dict[str, Any]:
-    """Return default configuration for the forms module."""
-    return default_forms_module_options()
-
-
-def _raise_for_invalid_forms_config(config: Mapping[str, Any]) -> None:
-    """Abort with actionable messaging when forms config is invalid."""
-    issues = validate_forms_module_options(config)
-    if not issues:
-        return
-
-    click.secho("\n❌ Invalid forms module configuration:", fg="red", err=True)
-    for issue in issues:
-        click.echo(f"  • {issue}", err=True)
-    raise click.Abort()
-
-
-def configure_forms_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Configure the forms module interactively or using defaults."""
-    defaults = resolve_forms_module_options(existing_config)
-
-    if non_interactive:
-        click.echo("\n⚙️  Using default forms module configuration...")
-        config = defaults
-        click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
-        click.echo(
-            f"  \u2022 Spam protection: "
-            f"{'Enabled' if config['spam_protection_enabled'] else 'Disabled'}"
-        )
-        click.echo(f"  \u2022 Rate limit: {config['rate_limit']}")
-        click.echo(f"  \u2022 Data retention: {config['data_retention_days']} days")
-        click.echo(
-            f"  \u2022 Submissions API: "
-            f"{'Enabled' if config['submissions_api_enabled'] else 'Disabled'}"
-        )
-        _raise_for_invalid_forms_config(config)
-        return config
-
-    click.echo("\n⚙️  Configuring forms module...")
-    config = {
-        "forms_per_page": click.prompt(
-            "Submissions per page (admin)",
-            type=int,
-            default=int(defaults["forms_per_page"]),
-        ),
-        "spam_protection_enabled": click.confirm(
-            "Enable honeypot spam protection?",
-            default=bool(defaults["spam_protection_enabled"]),
-        ),
-        "rate_limit": click.prompt(
-            "Rate limit for submissions (e.g. 5/hour, 10/minute)",
-            default=str(defaults["rate_limit"]),
-        ),
-        "data_retention_days": click.prompt(
-            "Data retention days (0 = keep forever)",
-            type=int,
-            default=int(defaults["data_retention_days"]),
-        ),
-        "submissions_api_enabled": click.confirm(
-            "Enable REST API for admin submissions?",
-            default=bool(defaults["submissions_api_enabled"]),
-        ),
-    }
-    _raise_for_invalid_forms_config(config)
-    return config
 
 
 # ============================================================================
@@ -1184,6 +1052,29 @@ def _raise_for_invalid_manifest_config(
     raise click.Abort()
 
 
+def _raise_for_retired_existing_config(
+    module_name: str,
+    manifest: Any,
+    existing_config: Mapping[str, Any] | None,
+) -> None:
+    """Abort when *existing_config* still carries a retired option key.
+
+    ``_declared_config`` drops undeclared names so a newer manifest can shed
+    options; a key the manifest *declares retired* is refused here instead, so
+    reconfiguring a project never silently discards it.
+    """
+    retired_supplied = sorted(
+        key for key in dict(existing_config or {}) if key in manifest.retired_options
+    )
+    if not retired_supplied:
+        return
+
+    click.secho(f"\n❌ Invalid {module_name} module configuration:", fg="red", err=True)
+    for key in retired_supplied:
+        click.echo(f"  • {manifest.retired_options[key]}", err=True)
+    raise click.Abort()
+
+
 def configure_module_from_manifest(
     module_name: str,
     non_interactive: bool = False,
@@ -1200,6 +1091,7 @@ def configure_module_from_manifest(
     writes to ``quickscale.yml`` is what the engine and the wiring see.
     """
     manifest = load_module_manifest_with_fallback(module_name)
+    _raise_for_retired_existing_config(module_name, manifest, existing_config)
     defaults = _declared_config(manifest, existing_config)
 
     if non_interactive:
@@ -1265,13 +1157,13 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
         ),
         ModuleConfigurator(
             name="crm",
-            configure=configure_crm_module,
-            get_defaults=get_default_crm_config,
+            configure=partial(configure_module_from_manifest, "crm"),
+            get_defaults=partial(default_module_config_from_manifest, "crm"),
         ),
         ModuleConfigurator(
             name="forms",
-            configure=configure_forms_module,
-            get_defaults=get_default_forms_config,
+            configure=partial(configure_module_from_manifest, "forms"),
+            get_defaults=partial(default_module_config_from_manifest, "forms"),
         ),
         ModuleConfigurator(
             name="listings",

@@ -20,17 +20,13 @@ from quickscale_cli.commands.module_config import (
     configure_auth_module,
     configure_backups_module,
     configure_billing_module,
-    configure_forms_module,
     configure_storage_module,
-    configure_crm_module,
     configure_notifications_module,
     configure_social_module,
     get_default_analytics_config,
     get_default_auth_config,
     get_default_backups_config,
     get_default_billing_config,
-    get_default_crm_config,
-    get_default_forms_config,
     get_default_notifications_config,
     get_default_social_config,
     get_default_storage_config,
@@ -1193,16 +1189,17 @@ class TestModuleWiringSpecs:
 
 
 class TestFormsModuleConfig:
-    """Tests for the forms module configurator."""
+    """Tests for the forms module configurator (manifest-driven)."""
 
     def test_configure_forms_non_interactive_uses_defaults(self, capsys):
-        config = configure_forms_module(non_interactive=True)
+        entry = MODULE_CONFIGURATOR_REGISTRY["forms"]
+        config = entry.configure(non_interactive=True)
 
         output = capsys.readouterr().out
 
-        assert config == get_default_forms_config()
+        assert config == entry.get_defaults()
         assert "Using default forms module configuration" in output
-        assert "Forms per page: 25" in output
+        assert "Number of submissions shown per page in admin.: 25" in output
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
@@ -1210,7 +1207,7 @@ class TestFormsModuleConfig:
         mock_confirm.side_effect = [False, False]
         mock_prompt.side_effect = [40, "10/minute", 30]
 
-        config = configure_forms_module(non_interactive=False)
+        config = MODULE_CONFIGURATOR_REGISTRY["forms"].configure(non_interactive=False)
 
         assert config == {
             "forms_per_page": 40,
@@ -1824,11 +1821,11 @@ class TestSocialModuleConfig:
 
 
 class TestCRMModuleConfig:
-    """Tests for CRM module configuration functions"""
+    """Tests for CRM module configuration functions (manifest-driven)"""
 
     def test_get_default_crm_config(self):
         """Test default CRM configuration"""
-        config = get_default_crm_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["crm"].get_defaults()
         assert config["enable_api"] is True
         assert config["deals_per_page"] == 25
         assert config["contacts_per_page"] == 50
@@ -1836,14 +1833,14 @@ class TestCRMModuleConfig:
 
     def test_configure_crm_non_interactive(self):
         """Test non-interactive CRM configuration"""
-        config = configure_crm_module(non_interactive=True)
+        config = MODULE_CONFIGURATOR_REGISTRY["crm"].configure(non_interactive=True)
         assert config["enable_api"] is True
         assert config["deals_per_page"] == 25
         assert config["contacts_per_page"] == 50
 
     def test_configure_crm_non_interactive_with_canonical_keys(self):
         """Canonical CRM keys pass through non-interactive config."""
-        config = configure_crm_module(
+        config = MODULE_CONFIGURATOR_REGISTRY["crm"].configure(
             non_interactive=True,
             existing_config={
                 "deals_per_page": 30,
@@ -1861,7 +1858,7 @@ class TestCRMModuleConfig:
         mock_confirm.return_value = False
         mock_prompt.side_effect = [30, 100]
 
-        config = configure_crm_module(non_interactive=False)
+        config = MODULE_CONFIGURATOR_REGISTRY["crm"].configure(non_interactive=False)
         assert config["enable_api"] is False
         assert config["deals_per_page"] == 30
         assert config["contacts_per_page"] == 100

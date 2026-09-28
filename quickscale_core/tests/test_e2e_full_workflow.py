@@ -158,14 +158,19 @@ def _default_smoke_config(module_name: str) -> dict[str, object]:
     """Return a non-interactive module config suitable for dependency smoke tests."""
     from quickscale_cli.commands import module_config as module_config_commands
 
-    config_factory = getattr(
-        module_config_commands,
-        f"get_default_{module_name}_config",
-        None,
-    )
-    assert callable(config_factory), f"Missing default config factory for {module_name}"
-
-    config = dict(config_factory())
+    entry = module_config_commands.MODULE_CONFIGURATOR_REGISTRY.get(module_name)
+    if entry is not None and entry.get_defaults is not None:
+        config = dict(entry.get_defaults())
+    else:
+        config_factory = getattr(
+            module_config_commands,
+            f"get_default_{module_name}_config",
+            None,
+        )
+        assert callable(config_factory), (
+            f"Missing default config factory for {module_name}"
+        )
+        config = dict(config_factory())
     if module_name == "storage":
         config["backend"] = "s3"
     return config
@@ -302,7 +307,9 @@ class TestGeneratedProjectDependencyInstallSmoke:
     ):
         """A generated project should install synced forms dependencies through the CLI path."""
         from quickscale_cli.commands.module_commands import _install_module_dependencies
-        from quickscale_cli.commands.module_config import get_default_forms_config
+        from quickscale_cli.commands.module_config import (
+            MODULE_CONFIGURATOR_REGISTRY,
+        )
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
         )
@@ -339,7 +346,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
 
         sync_result = sync_project_module_dependencies(
             project_path,
-            {"forms": get_default_forms_config()},
+            {"forms": MODULE_CONFIGURATOR_REGISTRY["forms"].get_defaults()},
         )
 
         assert sync_result.added_path_dependencies == ["quickscale-module-forms"]
