@@ -20,10 +20,10 @@ class QuickscaleCrmConfig(AppConfig):
 
     def ready(self) -> None:
         # ---- SA7.1 — organization_created signal receiver -----------------
-        # Import signals to connect the seed_crm_default_stages_on_org_created
+        # Import receivers to connect the seed_crm_default_stages_on_org_created
         # receiver.  The @receiver decorator runs at import time, so importing
         # the module is sufficient.
-        import quickscale_modules_crm.signals  # noqa: F401
+        import quickscale_modules_crm.receivers  # noqa: F401
 
         # ---- SA17.3 — fail-hard CRM API-enable setting --------------------
         # Every generated project must explicitly set this; no silent

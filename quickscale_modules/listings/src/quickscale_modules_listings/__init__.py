@@ -2,4 +2,4 @@
 
 __version__ = "0.89.0"
 
-default_app_config = "quickscale_modules_listings.apps.QuickscaleListingsConfig"
+__all__ = ["__version__"]

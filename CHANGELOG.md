@@ -132,6 +132,14 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     constraint and index names, and management commands such as
     `quickscale_orgs_check_tenant_isolation` all carry the stem; a database created from an
     earlier release keeps the old table and permission names, so recreate it on upgrade.
+  - **Module packages follow one file layout.** Package roots export only their version,
+    signal receivers live in `receivers.py` while `signals.py` holds the signals a module sends,
+    every module ships `poetry.toml`, and auth's allauth adapter (`allauth_adapter.py`), orgs'
+    debug helpers (`_debug.py`), social's cache keys (`quickscale_social:*`), and storage's
+    timestamps and root exports take their standard names and homes. An import of
+    `quickscale_modules_storage.<helper>` moves to `quickscale_modules_storage.helpers` or the
+    module's `services.py`, and the retired `default_app_config` declarations and unread
+    per-module `[tool.mypy]` blocks are gone.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -30,5 +30,5 @@ class QuickscaleAuthConfig(AppConfig):
                 "Set it to True or False in your Django settings."
             )
 
-        # Import signal handlers when app is ready
-        import_module("quickscale_modules_auth.signals")
+        # Import signal receivers when app is ready
+        import_module("quickscale_modules_auth.receivers")

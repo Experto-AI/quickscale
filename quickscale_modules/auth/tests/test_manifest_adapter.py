@@ -72,7 +72,7 @@ class TestAuthManifestAdapter:
         )
         assert spec.pre_home_url_includes == ()
         assert spec.settings["ACCOUNT_ADAPTER"] == (
-            "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"
+            "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
         )
         assert spec.settings["ACCOUNT_SIGNUP_FORM_CLASS"] == (
             "quickscale_modules_auth.forms.SignupForm"

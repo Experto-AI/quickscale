@@ -336,6 +336,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
 
+  **Landed:** the package-shape slice — `__init__.py` reduced to `__version__`/`__all__` (auth,
+  blog, crm, listings, forms; storage's root re-export removed), `receivers.py` split from
+  `signals.py` (auth, crm; orgs' `pre_delete` backstop moved, `connection_created` stays in
+  `apps.py`), `poetry.toml` (analytics, notifications, storage), `allauth_adapter.py` (auth) and
+  `_debug.py` (orgs), storage's `timezone.now()`, `quickscale_social:*` cache keys, the dead
+  `[tool.mypy]` blocks gone, and crm's empty command package and listings' no-op `ready()` deleted.
+  **Remaining:** command behavior (`--dry-run` ×3, `CommandError`, `migrate_billing_to_orgs` with
+  its recovery docs), the mypy caps and the module-local mypy overrides (orgs measures 98 errors
+  under the standard override; billing 15, forms 9, notifications 7, social 0), teams with core's
+  placeholder handling, the test renames/ticket-mention sweep/missing tests, discovery-derived
+  module lists, and the READMEs.
+
   **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
   rules 11, 15–18, 24, 28, 29, and 36–38.
 

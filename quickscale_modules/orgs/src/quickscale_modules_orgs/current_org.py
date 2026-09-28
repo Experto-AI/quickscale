@@ -807,7 +807,7 @@ def operator_access(*, reason: str) -> Iterator[None]:
     **Superuser-gated:** callers must verify ``user.is_superuser``
     before entering this context manager.  Views and management commands
     are responsible for this check (see the existing pattern in
-    :func:`debug_helpers.set_debug_as_org`).
+    :func:`_debug.set_debug_as_org`).
 
     **Audit-logged:** every activation is recorded at ``INFO`` level
     via stdlib logging with a structured ``extra`` dict containing the

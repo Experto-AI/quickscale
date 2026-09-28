@@ -47,7 +47,7 @@ def _auth_manifest_adapter(
             "ACCOUNT_SIGNUP_FIELDS": signup_fields,
             "ACCOUNT_EMAIL_VERIFICATION": resolved["email_verification"],
             "ACCOUNT_ALLOW_REGISTRATION": bool(resolved["registration_enabled"]),
-            "ACCOUNT_ADAPTER": "quickscale_modules_auth.adapters.QuickscaleAccountAdapter",
+            "ACCOUNT_ADAPTER": "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter",
             "ACCOUNT_SIGNUP_FORM_CLASS": "quickscale_modules_auth.forms.SignupForm",
             "LOGIN_REDIRECT_URL": "/accounts/profile/",
             "LOGOUT_REDIRECT_URL": "/",
