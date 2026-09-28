@@ -132,6 +132,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     constraint and index names, and management commands such as
     `quickscale_orgs_check_tenant_isolation` all carry the stem; a database created from an
     earlier release keeps the old table and permission names, so recreate it on upgrade.
+  - **Module startup checks run through one helper, and module exceptions share one base.**
+    Invalid configuration and an empty vendor secret in an enabled module now refuse `runserver`,
+    `migrate`, and `manage.py check` alike. Each module's own errors derive from one
+    `<Module>Error` base in its `exceptions.py`, while `services.py` keeps re-exporting them.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

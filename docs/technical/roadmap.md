@@ -28,13 +28,12 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|---|
 | SA217 | Read the manifest option schema in core and check settings at startup | post-v88 | 2 | — | Deferred |
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
-| SA225 | Move startup checks and exceptions onto the shared helpers | post-v88 | 3 | — | Deferred |
 | SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA219 | Deferred |
 | SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 2 | — | Deferred |
 | SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | — | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
 | SA227 | Standardize package files, commands, tooling, tests, and READMEs | post-v88 | 1 | — | Deferred |
-| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA224, SA225, SA226, SA227 | Deferred |
+| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA224, SA226, SA227 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -73,7 +72,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA227 | yes | yes | yes | **yes** | no |
 | 2 | SA217 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA225 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA220 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -217,20 +216,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `.env.example`; the generated settings templates (Track 3); the theme's `index.html.j2`;
   core's manifest loader and implication resolver; railway.md and user docs.
 
-- [ ] **SA225 — Move startup checks and exceptions onto the shared helpers.**
-
-  **Context:** inventory §§ 12, 37; D13, D38; rules 10 and 35. Four startup-check styles.
-
-  **Scope:** hand-written `ready()` checks move to `checks.py`, run through SA218's helper, orgs'
-  RLS boot guard included; analytics fails on invalid configuration and tolerates only an
-  unreachable vendor; each module with a vendor secret gains a check that fails startup when a
-  secret its switched-on features need is empty (rule 35); exceptions move to `exceptions.py` under
-  one `<Module>Error` base, which `services.py` re-exports.
-
-  **Acceptance:** no `ready()` holds a check body; each moved check fails `runserver`, `migrate`,
-  and `manage.py check` alike, with a test per module.
-
-  **Surfaces:** every module's `apps.py`, `checks.py`, `exceptions.py`; `orgs/apps.py`.
+- [x] **SA225 — Move startup checks and exceptions onto the shared helpers.**
 
 - [ ] **SA220 — Untangle module dependencies behind `services.py` and capabilities.**
 
