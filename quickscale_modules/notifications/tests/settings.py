@@ -9,6 +9,11 @@ import os
 # Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include bypass_rls tests.
 
 SECRET_KEY = "test-secret-key-for-notifications-module"
+
+# The rule 35 startup checks run while Django populates the app registry,
+# before the test conftest loads, so the env-var names must be populated here.
+os.environ.setdefault("RESEND_API_KEY", "test-resend-api-key")
+os.environ.setdefault("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET", "test-webhook-secret")
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 

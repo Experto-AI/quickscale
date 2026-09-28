@@ -84,3 +84,20 @@ def test_ready_raises_improperly_configured_when_spam_protection_missing(
         match="FORMS_SPAM_PROTECTION",
     ):
         config.ready()
+
+
+@pytest.mark.django_db
+def test_missing_setting_fails_check_migrate_and_runserver(settings) -> None:
+    """The registered forms check fails check, migrate, and runserver alike."""
+    from django.core.management import call_command
+    from django.core.management.base import SystemCheckError
+    from django.core.management.commands import migrate, runserver
+
+    del settings.FORMS_RATE_LIMIT
+
+    with pytest.raises(SystemCheckError, match="FORMS_RATE_LIMIT"):
+        call_command("check")
+    with pytest.raises(SystemCheckError, match="FORMS_RATE_LIMIT"):
+        migrate.Command().check()
+    with pytest.raises(SystemCheckError, match="FORMS_RATE_LIMIT"):
+        runserver.Command().check()

@@ -23,6 +23,15 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.text import slugify
 
+from quickscale_modules_notifications.exceptions import (
+    NotificationConfigurationError,  # noqa: F401 - re-exported for service callers
+    NotificationDisabledError,
+    NotificationError,  # noqa: F401 - re-exported for service callers
+    NotificationTemplateError,
+    NotificationValidationError,
+    NotificationWebhookError,
+    NotificationWebhookSignatureError,
+)
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
     NotificationDeliveryEvent,
@@ -80,34 +89,6 @@ def validate_required_notification_settings() -> None:
         "QUICKSCALE_NOTIFICATIONS_PROVIDER",
         "Set it to the configured provider name in your Django settings.",
     )
-
-
-class NotificationError(Exception):
-    """Base error for notification operations."""
-
-
-class NotificationConfigurationError(NotificationError):
-    """Raised when runtime notification configuration is invalid."""
-
-
-class NotificationDisabledError(NotificationError):
-    """Raised when the notifications runtime is disabled."""
-
-
-class NotificationValidationError(NotificationError):
-    """Raised when the requested notification payload is invalid."""
-
-
-class NotificationTemplateError(NotificationValidationError):
-    """Raised when a notification template cannot be rendered safely."""
-
-
-class NotificationWebhookError(NotificationError):
-    """Raised when webhook payload ingestion fails."""
-
-
-class NotificationWebhookSignatureError(NotificationWebhookError):
-    """Raised when webhook signature validation fails."""
 
 
 class DeliveryMailer(Protocol):

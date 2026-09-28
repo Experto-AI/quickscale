@@ -4,6 +4,11 @@ import os
 
 SECRET_KEY = "test-secret-key-for-auth-module"
 
+# This suite installs billing enabled; billing's rule 35 startup check needs
+# the Stripe secret key and webhook secret to resolve.
+os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_auth_suite")
+os.environ.setdefault("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_auth_suite")
+
 QUICKSCALE_MODE = "solo"
 
 INSTALLED_APPS = [

@@ -2223,7 +2223,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
 
         self._configure_test_database(project_path, project_name, postgres_url)
         # The generated-project test PostgreSQL role is a bootstrap superuser
-        # with BYPASSRLS, so ``quickscale_modules_orgs.apps._check_rls_role()``
+        # with BYPASSRLS, so ``quickscale_modules_orgs.checks.check_rls_role()``
         # aborts unless QUICKSCALE_ALLOW_BYPASSRLS is set. Pass the escape-hatch
         # env var to both the migration and dev-server subprocesses, scoped
         # per-call so no ambient env leakage occurs.

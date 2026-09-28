@@ -181,3 +181,72 @@ class TestRegistrationIdentity:
         )
         save_default_policy(policy)
         # No exception means success.
+
+
+# ===================================================================
+# Startup checks — private_remote credentials (rule 35)
+# ===================================================================
+
+
+class TestPrivateRemoteCredentialCheck:
+    """The private_remote target mode requires non-empty remote credentials."""
+
+    def test_check_passes_for_local_target(self) -> None:
+        """The local target mode needs no remote credentials."""
+        from quickscale_modules_backups.checks import check_private_remote_credentials
+
+        assert check_private_remote_credentials() == []
+
+    def test_check_reports_both_empty_credentials(self, settings) -> None:
+        """Each empty remote credential is reported by its variable name."""
+        import os
+        from unittest.mock import patch
+
+        from quickscale_modules_backups.checks import check_private_remote_credentials
+
+        settings.QUICKSCALE_BACKUPS_TARGET_MODE = "private_remote"
+        with patch.dict(os.environ, {}, clear=True):
+            messages = check_private_remote_credentials()
+
+        assert len(messages) == 2
+        text = " ".join(message.msg for message in messages)
+        assert "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID" in text
+        assert "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY" in text
+
+    def test_check_passes_with_configured_credentials(self, settings) -> None:
+        """Configured credentials satisfy the check in private_remote mode."""
+        import os
+        from unittest.mock import patch
+
+        from quickscale_modules_backups.checks import check_private_remote_credentials
+
+        settings.QUICKSCALE_BACKUPS_TARGET_MODE = "private_remote"
+        with patch.dict(
+            os.environ,
+            {
+                "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID": "key-id",
+                "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY": "secret-key",
+            },
+            clear=True,
+        ):
+            assert check_private_remote_credentials() == []
+
+    def test_missing_credentials_fail_check_migrate_and_runserver(
+        self, settings
+    ) -> None:
+        """The registered check fails check, migrate, and runserver alike."""
+        import os
+        from unittest.mock import patch
+
+        from django.core.management import call_command
+        from django.core.management.base import SystemCheckError
+        from django.core.management.commands import migrate, runserver
+
+        settings.QUICKSCALE_BACKUPS_TARGET_MODE = "private_remote"
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(SystemCheckError, match="private_remote"):
+                call_command("check")
+            with pytest.raises(SystemCheckError, match="private_remote"):
+                migrate.Command().check()
+            with pytest.raises(SystemCheckError, match="private_remote"):
+                runserver.Command().check()

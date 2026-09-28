@@ -202,3 +202,20 @@ class TestBlogApiTokensValidation:
 
         # ready() returns None implicitly; calling it without raising is the check.
         config.ready()
+
+
+@pytest.mark.django_db
+def test_missing_rss_setting_fails_check_migrate_and_runserver(settings: Any) -> None:
+    """The registered blog check fails check, migrate, and runserver alike."""
+    from django.core.management import call_command
+    from django.core.management.base import SystemCheckError
+    from django.core.management.commands import migrate, runserver
+
+    del settings.BLOG_ENABLE_RSS
+
+    with pytest.raises(SystemCheckError, match="BLOG_ENABLE_RSS"):
+        call_command("check")
+    with pytest.raises(SystemCheckError, match="BLOG_ENABLE_RSS"):
+        migrate.Command().check()
+    with pytest.raises(SystemCheckError, match="BLOG_ENABLE_RSS"):
+        runserver.Command().check()

@@ -25,15 +25,12 @@ from quickscale_modules_orgs.removal import (
     RemovalCoordinator,
 )
 
+from quickscale_modules_auth.exceptions import _AccountDeletionBillingBlocked
 from quickscale_modules_auth.forms import ProfileUpdateForm
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
-
-
-class _AccountDeletionBillingBlocked(Exception):
-    """Raised when provider state is not safe for account deletion."""
 
 
 #: Apps whose account-deletion reconciliation is scoped by their own adapter

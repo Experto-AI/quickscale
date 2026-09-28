@@ -1,8 +1,8 @@
 """Django app configuration for QuickScale backups module."""
 
-from __future__ import annotations
-
 from django.apps import AppConfig
+
+from quickscale_core.runtime import register_module_checks
 
 
 class QuickscaleBackupsConfig(AppConfig):
@@ -14,7 +14,7 @@ class QuickscaleBackupsConfig(AppConfig):
     verbose_name = "QuickScale Backups"
 
     def ready(self) -> None:
-        """Register persistence providers at Django startup.
+        """Register persistence providers and run startup checks.
 
         Registers module-level singleton persistence provider instances with
         the core DR persistence seam.  Registration is identity-idempotent
@@ -30,3 +30,9 @@ class QuickscaleBackupsConfig(AppConfig):
         )
 
         register_backup_persistence(artifact_persistence, policy_persistence)
+
+        # Late import: keep the app config importable while Django is still
+        # populating the app registry.
+        from quickscale_modules_backups.checks import check_private_remote_credentials
+
+        register_module_checks(self, [check_private_remote_credentials])

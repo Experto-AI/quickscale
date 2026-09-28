@@ -8,8 +8,8 @@ instead of silently defaulting to ``True``.
 from typing import Any
 
 from django.apps import AppConfig
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
+
+from quickscale_core.runtime import register_module_checks
 from quickscale_modules_orgs.removal import (
     BILLING_PROVIDER_STATE,
     ExternalProviderField,
@@ -182,11 +182,8 @@ class QuickscaleBillingConfig(AppConfig):
         return account_deletion_user_reference_organization_ids(user_id)
 
     def ready(self) -> None:
-        # ---- SA17.2 — fail-hard billing enabled-flag setting -------------
-        # Every generated project must explicitly set this; no silent
-        # fallback that enables billing when the setting is absent.
-        if not hasattr(settings, "QUICKSCALE_BILLING_ENABLED"):
-            raise ImproperlyConfigured(
-                "The QUICKSCALE_BILLING_ENABLED setting is required. "
-                "Set it to True or False in your Django settings."
-            )
+        # Late import: checks.py reads the billing settings snapshot, which
+        # touches models, so it must load after the app registry is ready.
+        from quickscale_modules_billing.checks import check_billing_settings
+
+        register_module_checks(self, [check_billing_settings])

@@ -21,19 +21,15 @@ AF9 Phase 1 — installs the connection-layer GUC priming execute wrapper
 on every Django ``DatabaseWrapper`` so that ``SET LOCAL app.current_org_id``
 is derived from the ContextVar in the same transaction as tenant SQL.
 
-SA203 — the privileged-command exemption narrows to ``_check_rls_role()``
+SA203 — the privileged-command exemption narrows to ``check_rls_role()``
 alone; the priming install, the SA70 last-owner ``pre_delete`` backstop,
-and the SA1.3 system check registration run on every startup path.
+and the check registration run on every startup path.
 """
 
-import os
-
 from django.apps import AppConfig
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
-from django.db import connection
 from django.db.backends.signals import connection_created
 
+from quickscale_core.runtime import register_module_checks
 from quickscale_modules_orgs.removal import (
     OWNED_TENANT_ROWS,
     PURGE_TOMBSTONE,
@@ -41,116 +37,6 @@ from quickscale_modules_orgs.removal import (
     OrganizationRemovalObligation,
     RemovalAction,
 )
-
-
-# Module-guard declaration of the sanctioned privileged DB commands.
-# Keep it aligned with the independent fail-closed declarations in the production
-# settings validator, CLI producer, and generated start.sh launcher; none is a SSOT.
-_PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})
-
-
-def _is_privileged_command() -> bool:
-    """Return ``True`` when ``QUICKSCALE_PRIVILEGED_COMMAND`` is set to a
-    sanctioned privileged DB command.
-
-    Sanctioned values (``migrate`` and ``createcachetable``) are exempt from
-    the BYPASSRLS/SUPERUSER boot guard because the generated ``start.sh``
-    sets this env var alongside ``RUNTIME_DATABASE_URL=""`` so that
-    database DDL/DML runs under the superuser ``DATABASE_URL`` with
-    ``BYPASSRLS`` (and thus also ``SUPERUSER``).  All other management
-    commands and non-manage.py startup (gunicorn, WSGI) must still fail
-    closed — running with BYPASSRLS or SUPERUSER on a runtime server is
-    catastrophic for RLS enforcement.
-
-    ``_PRIVILEGED_COMMANDS`` is the module guard's declaration, one of four
-    independent fail-closed declarations in this contract.  The other three
-    are the generated production-settings validator, the CLI producer, and
-    the generated ``start.sh`` launcher.  If the env var is set to an
-    unrecognised value the guard still fails closed (return ``False``) — it
-    is not a catch-all escape hatch.
-
-    SA68 Phase 1 replaces the old ``sys.argv`` inspection with the
-    explicit env-var contract set by the generated ``start.sh`` and
-    ``Dockerfile`` launchers.
-
-    SA68 CR-SA68-001: widened from a ``== "migrate"`` check to a
-    membership test against ``_PRIVILEGED_COMMANDS`` so that
-    ``createcachetable`` (and future sanctioned values) also skip the
-    boot guard without requiring the ``QUICKSCALE_ALLOW_BYPASSRLS=1``
-    escape hatch.
-
-    SA2.1: For the separate ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape
-    hatch see ``_check_rls_role``.
-    """
-    return os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND") in _PRIVILEGED_COMMANDS
-
-
-def _check_quickscale_mode() -> None:
-    """SA14.6 — Require ``QUICKSCALE_MODE`` setting when orgs is installed.
-
-    Raises ``ImproperlyConfigured`` at startup when ``QUICKSCALE_MODE``
-    is unset, preventing a saas-mode generated project from silently
-    defaulting to solo-mode tenancy.
-
-    Also rejects values other than ``"solo"`` or ``"saas"`` so that
-    an invalid ``QUICKSCALE_MODE`` does not silently behave as solo.
-    """
-    mode = getattr(settings, "QUICKSCALE_MODE", None)
-    if mode is None:
-        raise ImproperlyConfigured(
-            "QUICKSCALE_MODE setting is required when "
-            "quickscale_orgs is installed. "
-            "Set it to 'solo' for single-tenant or 'saas' for "
-            "multi-tenant mode."
-        )
-    if mode not in ("solo", "saas"):
-        raise ImproperlyConfigured(
-            f"QUICKSCALE_MODE must be 'solo' or 'saas', got {mode!r}."
-        )
-
-
-def _check_rls_role() -> None:
-    """Verify the connected PostgreSQL role does not have BYPASSRLS or SUPERUSER.
-
-    SA2.1: The guard is always active (regardless of ``QUICKSCALE_MODE``
-    or ``DEBUG``) with two narrow exemptions:
-
-    1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned value
-       (``migrate`` or ``createcachetable``) — handled in ``ready()``
-       before this is called.
-    2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
-       intentional single-tenant/development use or the explicitly acknowledged
-       retired billing recovery command, never runtime serving.
-
-    This module guard declares its sanctioned command set in
-    ``_PRIVILEGED_COMMANDS`` and checks it via ``_is_privileged_command()``;
-    the production-settings validator, CLI producer, and generated launcher
-    carry independent fail-closed declarations of the same contract.
-
-    No-op on SQLite (non-PostgreSQL).
-    """
-    # ---- Escape hatch --------------------------------------------------
-    # Explicit non-serving opt-in for single-tenant/development environments or
-    # the acknowledged retired billing recovery command.
-    if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
-        return
-
-    if connection.vendor != "postgresql":
-        return
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT rolbypassrls, rolsuper FROM pg_roles WHERE rolname = current_user"
-        )
-        row = cursor.fetchone()
-        if row is not None and (row[0] or row[1]):
-            raise ImproperlyConfigured(
-                "The connected PostgreSQL role has BYPASSRLS and/or SUPERUSER privilege. "
-                "PostgreSQL Row-Level Security policies are silently "
-                "disabled for roles with BYPASSRLS or SUPERUSER. "
-                "Use a restricted role created with NOSUPERUSER and NOBYPASSRLS "
-                "as documented in the operations guide."
-            )
 
 
 def _install_priming_on_connection(
@@ -247,32 +133,41 @@ class QuickscaleOrgsConfig(AppConfig):
         )
 
     def ready(self) -> None:
-        # ---- SA14.6 — QUICKSCALE_MODE boot guard -----------------------
-        # Runs before the migrate exemption and the BYPASSRLS guard so
-        # that every startup path (including migrate) enforces the
-        # required setting.  A saas-mode generated project cannot silently
-        # default to solo-mode tenancy when QUICKSCALE_MODE is omitted.
-        _check_quickscale_mode()
-
-        # ---- SA68 Phase 1 — BYPASSRLS/SUPERUSER boot guard -------------
-        # Two narrow exemptions:
-        #   1. QUICKSCALE_PRIVILEGED_COMMAND set to a sanctioned value
-        #      (migrate or createcachetable) — launchers set this env var
-        #      alongside RUNTIME_DATABASE_URL="" so DDL/DML runs under
-        #      the superuser DATABASE_URL with BYPASSRLS.
-        #   2. QUICKSCALE_ALLOW_BYPASSRLS=1 env-var escape hatch
-        #      (checked inside _check_rls_role).
-        # All other startup (runserver, gunicorn, WSGI) must still
-        # fail closed — regardless of QUICKSCALE_MODE or DEBUG.
+        # ---- Rule 10 — startup checks through the shared helper --------
+        # The helper runs every check eagerly, so runserver, migrate, and a
+        # WSGI server all refuse to start on an error-level failure, and it
+        # registers the same callables as ``quickscale_orgs`` system checks
+        # for ``manage.py check``.  Order matters: QUICKSCALE_MODE is
+        # validated before the BYPASSRLS/SUPERUSER role guard.
         #
-        # SA203: a privileged command exempts *only* the role check.  The
-        # installations below stay unconditional, so a privileged
-        # ``migrate`` still gets the GUC priming wrapper, the last-owner
-        # ``pre_delete`` backstop, and the tenant-isolation system check —
-        # the backstop is what fails a data migration that would delete an
-        # organization's last owner.
-        if not _is_privileged_command():
-            _check_rls_role()
+        # SA203: a privileged command exempts *only* the role check, inside
+        # check_rls_role.  The installations below stay unconditional, so a
+        # privileged ``migrate`` still gets the GUC priming wrapper and the
+        # last-owner ``pre_delete`` backstop — the backstop is what fails a
+        # data migration that would delete an organization's last owner.
+        #
+        # Late import: checks.py reads models through tenancy, so it must load
+        # after the app registry is ready.  Importing the module also
+        # registers the two warning-only catalog checks (tenant isolation and
+        # model classification) as ``quickscale_orgs`` system checks; they are
+        # not passed to the eager runner because one of them reads live
+        # database catalog state and neither may block startup.
+        from quickscale_modules_orgs.checks import (
+            check_provider_id_conformance,
+            check_quickscale_mode,
+            check_removal_obligation_discharge,
+            check_rls_role,
+        )
+
+        register_module_checks(
+            self,
+            [
+                check_quickscale_mode,
+                check_rls_role,
+                check_provider_id_conformance,
+                check_removal_obligation_discharge,
+            ],
+        )
 
         # ---- AF9 Phase 1 — GUC priming execute wrapper ------------------
         # Install on any connections already created (defensive — at
@@ -306,10 +201,3 @@ class QuickscaleOrgsConfig(AppConfig):
         )
 
         pre_delete.connect(_protect_last_owner_on_membership_delete)
-
-        # ---- SA1.3 / SA1.4 / SA208 — registered system checks ------------
-        # Import checks.py to register the check_tenant_isolation (SA1.3),
-        # check_model_classification (SA1.4), and check_provider_id_conformance
-        # (SA208) system checks.  The @register decorator runs at import time,
-        # so importing the module is sufficient to register them.
-        import quickscale_modules_orgs.checks  # noqa: F401

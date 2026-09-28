@@ -30,6 +30,11 @@ from quickscale_modules_orgs.current_org import get_client_ip
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 from quickscale_modules_orgs.sanitization import sanitize_rendered_html
 
+from .exceptions import (
+    BlogMediaUploadValidationError,
+    BlogPublishConflictError,
+    BlogPublishValidationError,
+)
 from .models import BlogMediaAsset, Category, Post, Tag
 
 storage_build_public_media_url: Callable[..., str] | None = None
@@ -177,26 +182,6 @@ def _build_media_response_url(request: HttpRequest, stored_reference: str) -> st
         normalized_media_url += "/"
 
     return request.build_absolute_uri(f"{normalized_media_url}{reference.lstrip('/')}")
-
-
-class BlogPublishValidationError(Exception):
-    """Validation error for blog publish API payload"""
-
-    def __init__(self, errors: dict[str, str]) -> None:
-        super().__init__("Invalid payload")
-        self.errors = errors
-
-
-class BlogPublishConflictError(Exception):
-    """Conflict error for blog publish API payload"""
-
-
-class BlogMediaUploadValidationError(Exception):
-    """Validation error for blog media upload payload."""
-
-    def __init__(self, errors: dict[str, str]) -> None:
-        super().__init__("Invalid media upload payload")
-        self.errors = errors
 
 
 def _get_blog_api_tokens() -> list[tuple[str, str]]:

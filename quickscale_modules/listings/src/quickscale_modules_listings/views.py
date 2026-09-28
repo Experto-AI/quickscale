@@ -25,6 +25,10 @@ from quickscale_modules_orgs.models import Organization
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 from quickscale_modules_orgs.sanitization import sanitize_rendered_html
 
+from .exceptions import (
+    ListingPublishConflictError,
+    ListingPublishValidationError,
+)
 from .filters import get_listing_filter
 from .models import Listing
 
@@ -61,18 +65,6 @@ def _get_positive_int_setting(setting_name: str) -> int:
             f"{setting_name} must be a positive integer, got {parsed_value}"
         )
     return parsed_value
-
-
-class ListingPublishValidationError(Exception):
-    """Validation error for listing publish API payload"""
-
-    def __init__(self, errors: dict[str, str]) -> None:
-        super().__init__("Invalid payload")
-        self.errors = errors
-
-
-class ListingPublishConflictError(Exception):
-    """Conflict error for listing publish API payload"""
 
 
 def create_published_listing_from_payload(
