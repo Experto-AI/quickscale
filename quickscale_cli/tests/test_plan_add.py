@@ -7,7 +7,10 @@ from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
 from quickscale_core.contracts.resolvers import default_notifications_module_options
-from quickscale_core.contracts.module_catalog import get_discovered_module_names
+from quickscale_core.contracts.module_catalog import (
+    get_discovered_module_entries,
+    get_discovered_module_names,
+)
 
 
 class TestPlanAddBasic:
@@ -314,7 +317,12 @@ docker:
             )
 
             assert result.exit_code == 0
-            assert "billing - Stripe integration" in result.output
+            billing_description = next(
+                entry.description
+                for entry in get_discovered_module_entries()
+                if entry.name == "billing"
+            )
+            assert f"billing - {billing_description}" in result.output
             # teams is not in the discovered catalog; the error loop re-prompts.
             assert "Unknown or already installed module" in result.output
 

@@ -28,6 +28,20 @@ class TestGetModuleEntry:
         """Unknown module name should return None."""
         assert get_module_entry("nonexistent_module") is None
 
+    def test_returns_manifest_description_for_declared_module(self) -> None:
+        """A declared module's description comes from its module.yml (rule 37)."""
+        from quickscale_core.contracts.module_discovery import (
+            discover_shipped_module_paths,
+        )
+        from quickscale_core.manifest.loader import load_manifest_from_path
+
+        entry = get_module_entry("orgs")
+        assert entry is not None
+        manifest = load_manifest_from_path(
+            discover_shipped_module_paths()["orgs"] / "module.yml"
+        )
+        assert entry.description == manifest.description
+
 
 class TestFindNotReadyModules:
     def test_returns_sorted_not_ready(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -147,12 +161,18 @@ class TestDiscoverShippedModuleNames:
         assert names == sorted(names)
 
     def test_discovery_entries_have_descriptions(self) -> None:
-        """Discovered entries should carry descriptions from the static catalog."""
+        """Discovered entries carry the module.yml description of each module."""
+        from quickscale_core.contracts.module_discovery import (
+            discover_shipped_module_paths,
+        )
+        from quickscale_core.manifest.loader import load_manifest_from_path
+
         entries = get_discovered_module_entries()
         entry_map = {e.name: e for e in entries}
-        auth_entry = entry_map.get("auth")
-        assert auth_entry is not None
-        assert auth_entry.description  # non-empty
+        assert entry_map["auth"].description  # non-empty
+        for name, module_path in discover_shipped_module_paths().items():
+            manifest = load_manifest_from_path(module_path / "module.yml")
+            assert entry_map[name].description == manifest.description
 
 
 # ---------------------------------------------------------------------------
@@ -163,8 +183,9 @@ class TestDiscoverShippedModuleNames:
 class TestDiscoveredCatalogIsCanonicalInventory:
     """Guard that ``get_discovered_module_entries`` is the sole inventory path.
 
-    ``MODULE_CATALOG`` is frozen to description-only metadata after D2.
-    Any caller that needs the list of shipped modules must use
+    ``MODULE_CATALOG`` declares the shipped-contract inventory and readiness
+    only; a module's description lives in its ``module.yml``.  Any caller that
+    needs the list of shipped modules must use
     :func:`get_discovered_module_entries` or
     :func:`get_discovered_module_names` instead of iterating the static
     ``MODULE_CATALOG`` tuple.
@@ -174,8 +195,8 @@ class TestDiscoveredCatalogIsCanonicalInventory:
         """Every ready module in the static catalog must appear in discovered entries.
 
         This prevents divergence: if you add a ``module.yml`` for a new module,
-        it must also appear in the static catalog's ready set (for description
-        metadata), and vice versa.
+        it must also appear in the static catalog's ready set (the shipped
+        contract), and vice versa.
         """
         discovered = {e.name for e in get_discovered_module_entries()}
         static_ready = {e.name for e in MODULE_CATALOG if e.ready}
@@ -186,6 +207,12 @@ class TestDiscoveredCatalogIsCanonicalInventory:
             "Either the module.yml is missing or the static catalog entry "
             "is stale."
         )
+
+    def test_declared_inventory_matches_discovery(self) -> None:
+        """The declared release inventory equals the discovered shipped set."""
+        declared = {entry.name for entry in MODULE_CATALOG}
+        discovered = set(get_discovered_module_names())
+        assert declared == discovered
 
     def test_discovered_names_are_sorted(self) -> None:
         """get_discovered_module_names must return sorted names."""

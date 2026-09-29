@@ -85,6 +85,31 @@ def test_lock_inventory_uses_dev_only_sentinel() -> None:
     assert (sentinel, expects_dev) == ("ast-serialize", True)
 
 
+def test_source_roots_discover_every_shipped_module() -> None:
+    """Bandit scan roots derive from the module workspace manifests (rule 37)."""
+    roots = gates._source_roots()
+    for package in ("quickscale", "quickscale_cli", "quickscale_core", "quickscale_devtools"):
+        assert ROOT / package / "src" in roots
+    discovered = {
+        entry
+        for entry in gates.MODULES_ROOT.iterdir()
+        if entry.is_dir() and (entry / "module.yml").is_file()
+    }
+    module_roots = {path.parent for path in roots if path.parent.parent == gates.MODULES_ROOT}
+    assert module_roots == discovered
+    assert module_roots, "no module source roots were discovered"
+
+
+def test_source_roots_reject_incomplete_module_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A module directory without module.yml fails closed instead of being skipped."""
+    (tmp_path / "broken").mkdir()
+    monkeypatch.setattr(gates, "MODULES_ROOT", tmp_path)
+    with pytest.raises(GateError, match="without module.yml"):
+        gates._discover_module_source_roots()
+
+
 def test_adjudication_ignores_unrelated_scanner_entries() -> None:
     """A static run must not fail because dependency suppressions are unused."""
     findings = [
