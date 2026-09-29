@@ -1,60 +1,30 @@
-"""Parity/regression tests for the manifest-driven billing path.
+"""Contract tests for the billing module's manifest-owned configuration.
 
-These tests encode the *legacy* ``billing_contract.py`` behaviour as gold
-expectations and verify that the manifest-driven replacement
-(``billing_manifest.py``) produces identical results for every public
-entry point.
-
-The legacy contract file was deleted when the billing module was migrated
-to the manifest-driven path (Phase 4, billing migration).  The gold values
-below were recovered from the last committed version of ``billing_contract.py``
-and from the billing ``module.yml`` manifest that now owns the defaults.
-
-Scope
------
-* Default option values
-* Env-var reference normalisation (strip)
-* Currency normalisation (strip + lowercase)
-* Resolution (defaults + normalised overrides, idempotency)
-* Env-var validation messages (pattern check)
-* Currency validation messages (unsupported code, blank)
-* Full module options validation
-* Production-targeting predicate truth table
-* BILLING_SUPPORTED_CURRENCIES set completeness
+The billing option defaults, normalization, and validation are declared in
+``quickscale_modules/billing/module.yml`` and enforced through the shared
+manifest engine; its CLI configurator is the one generic manifest-driven
+configurator.  These tests pin that contract and the operator-facing
+behaviour it produces.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from unittest.mock import patch
 
 import pytest
 
-from quickscale_core.contracts.module_options import (
-    BILLING_ENV_VAR_OPTION_NAMES,
-    BILLING_MODULE_OPTION_KEYS,
-    BILLING_SUPPORTED_CURRENCIES,
-    DEFAULT_BILLING_CURRENCY,
-    DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-    DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-    normalize_billing_module_options,
-    validate_billing_currency,
-    validate_billing_env_var_reference,
-)
+from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
+from quickscale_core.contracts.module_options import BILLING_ENV_VAR_OPTION_NAMES
 from quickscale_core.contracts.resolvers import (
-    billing_production_targeted,
-    default_billing_module_options,
-    resolve_billing_module_options,
-    validate_billing_module_options,
+    load_module_manifest_with_fallback,
+    resolve_manifest_module_options,
+)
+from quickscale_core.manifest.option_validation import (
+    collect_option_validation_issues,
+    validate_module_options,
 )
 
-# ---------------------------------------------------------------------------
-# Gold expectations recovered from the legacy billing_contract.py
-# billing has NO immutable options, so default_billing_module_options()
-# == get_defaults() == {k: opt.default for all mutable options}.
-# ---------------------------------------------------------------------------
-
-_LEGACY_DEFAULTS: dict[str, Any] = {
+_EXPECTED_DEFAULTS: dict[str, object] = {
     "enabled": True,
     "publishable_key_env_var": "STRIPE_PUBLISHABLE_KEY",
     "secret_key_env_var": "STRIPE_SECRET_KEY",
@@ -62,7 +32,7 @@ _LEGACY_DEFAULTS: dict[str, Any] = {
     "billing_currency": "usd",
 }
 
-_LEGACY_SUPPORTED_CURRENCIES = (
+_SUPPORTED_CURRENCIES = (
     "aud",
     "brl",
     "cad",
@@ -91,197 +61,137 @@ _LEGACY_SUPPORTED_CURRENCIES = (
 )
 
 
-# ===========================================================================
-# 1. Default values parity
-# ===========================================================================
-
-
-class TestDefaultsParity:
-    """The manifest-driven defaults must match the legacy hardcoded dict."""
-
-    def test_default_options_match_legacy_contract(self) -> None:
-        """Every default must equal the value the old contract file returned."""
-        defaults = default_billing_module_options()
-        assert defaults == _LEGACY_DEFAULTS
-
-    def test_default_options_keys_are_stable(self) -> None:
-        """The key set must not drift from the legacy contract."""
-        defaults = default_billing_module_options()
-        assert set(defaults.keys()) == set(_LEGACY_DEFAULTS.keys())
-
-    def test_default_enabled_is_true(self) -> None:
-        defaults = default_billing_module_options()
-        assert defaults["enabled"] is True
-
-    def test_default_currency_is_usd(self) -> None:
-        defaults = default_billing_module_options()
-        assert defaults["billing_currency"] == DEFAULT_BILLING_CURRENCY
-        assert defaults["billing_currency"] == "usd"
-
-    def test_default_publishable_key_env_var(self) -> None:
-        defaults = default_billing_module_options()
-        assert (
-            defaults["publishable_key_env_var"]
-            == DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR
-        )
-        assert defaults["publishable_key_env_var"] == "STRIPE_PUBLISHABLE_KEY"
-
-    def test_default_secret_key_env_var(self) -> None:
-        defaults = default_billing_module_options()
-        assert defaults["secret_key_env_var"] == DEFAULT_BILLING_SECRET_KEY_ENV_VAR
-        assert defaults["secret_key_env_var"] == "STRIPE_SECRET_KEY"
-
-    def test_default_webhook_secret_env_var(self) -> None:
-        defaults = default_billing_module_options()
-        assert (
-            defaults["webhook_secret_env_var"] == DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR
-        )
-        assert defaults["webhook_secret_env_var"] == "QUICKSCALE_BILLING_WEBHOOK_SECRET"
+def _manifest():
+    return load_module_manifest_with_fallback("billing")
 
 
 # ===========================================================================
-# 2. Constants parity
+# 1. Supported currencies live in the manifest
 # ===========================================================================
 
 
-class TestConstantsParity:
-    """Public constants must remain identical to the legacy contract values."""
+class TestSupportedCurrenciesDeclaration:
+    """The manifest's currency choices are the module's supported set."""
 
-    def test_default_publishable_key_constant(self) -> None:
-        assert DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR == "STRIPE_PUBLISHABLE_KEY"
+    def test_manifest_choices_match_the_supported_set(self) -> None:
+        option = _manifest().get_option("billing_currency")
+        assert option is not None
+        assert option.validation.get("choices") == list(_SUPPORTED_CURRENCIES)
 
-    def test_default_secret_key_constant(self) -> None:
-        assert DEFAULT_BILLING_SECRET_KEY_ENV_VAR == "STRIPE_SECRET_KEY"
-
-    def test_default_webhook_secret_constant(self) -> None:
-        assert (
-            DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR
-            == "QUICKSCALE_BILLING_WEBHOOK_SECRET"
-        )
-
-    def test_default_currency_constant(self) -> None:
-        assert DEFAULT_BILLING_CURRENCY == "usd"
-
-    def test_env_var_option_names_tuple(self) -> None:
-        assert BILLING_ENV_VAR_OPTION_NAMES == (
-            "publishable_key_env_var",
-            "secret_key_env_var",
-            "webhook_secret_env_var",
-        )
-
-    def test_module_option_keys_frozenset(self) -> None:
-        assert BILLING_MODULE_OPTION_KEYS == frozenset(
-            {
-                "enabled",
-                "publishable_key_env_var",
-                "secret_key_env_var",
-                "webhook_secret_env_var",
-                "billing_currency",
-            }
-        )
-
-
-# ===========================================================================
-# 3. BILLING_SUPPORTED_CURRENCIES parity
-# ===========================================================================
-
-
-class TestSupportedCurrenciesParity:
-    """BILLING_SUPPORTED_CURRENCIES must be byte-identical to the legacy tuple."""
-
-    def test_supported_currencies_match_legacy(self) -> None:
-        assert BILLING_SUPPORTED_CURRENCIES == _LEGACY_SUPPORTED_CURRENCIES
-
-    def test_supported_currencies_count(self) -> None:
-        assert len(BILLING_SUPPORTED_CURRENCIES) == 25
-
-    def test_usd_in_supported_currencies(self) -> None:
-        assert "usd" in BILLING_SUPPORTED_CURRENCIES
-
-    def test_eur_in_supported_currencies(self) -> None:
-        assert "eur" in BILLING_SUPPORTED_CURRENCIES
-
-    def test_gbp_in_supported_currencies(self) -> None:
-        assert "gbp" in BILLING_SUPPORTED_CURRENCIES
-
-    def test_no_uppercase_currencies(self) -> None:
-        """All currency codes should be lowercase."""
-        for code in BILLING_SUPPORTED_CURRENCIES:
+    def test_supported_set_has_25_lowercase_codes(self) -> None:
+        option = _manifest().get_option("billing_currency")
+        assert option is not None
+        choices = option.validation.get("choices") or []
+        assert len(choices) == 25
+        for code in choices:
             assert code == code.lower(), f"Expected lowercase: {code!r}"
+        assert "usd" in choices
+        assert "eur" in choices
+        assert "gbp" in choices
 
 
 # ===========================================================================
-# 4. Normalisation parity
+# 2. Validation engine behaviour
 # ===========================================================================
 
 
-class TestNormalizationParity:
-    """Normalisation must behave identically to the legacy contract."""
+class TestBillingValidation:
+    """The shared engine enforces the manifest's declared constraints."""
 
-    def test_env_var_strip(self) -> None:
-        normalized = normalize_billing_module_options(
-            {
-                "publishable_key_env_var": "  OPS_STRIPE_PUBLISHABLE_KEY  ",
-                "secret_key_env_var": " OPS_STRIPE_SECRET_KEY ",
-                "webhook_secret_env_var": "  OPS_BILLING_WEBHOOK_SECRET ",
-            }
+    def test_defaults_pass_validation(self) -> None:
+        assert validate_module_options(_manifest(), None) == []
+
+    def test_valid_overrides_pass_validation(self) -> None:
+        assert (
+            validate_module_options(
+                _manifest(),
+                {
+                    "enabled": True,
+                    "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
+                    "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
+                    "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
+                    "billing_currency": "eur",
+                },
+            )
+            == []
         )
-        assert normalized["publishable_key_env_var"] == "OPS_STRIPE_PUBLISHABLE_KEY"
-        assert normalized["secret_key_env_var"] == "OPS_STRIPE_SECRET_KEY"
-        assert normalized["webhook_secret_env_var"] == "OPS_BILLING_WEBHOOK_SECRET"
 
-    def test_currency_strip_and_lowercase(self) -> None:
-        normalized = normalize_billing_module_options({"billing_currency": " EUR "})
-        assert normalized["billing_currency"] == "eur"
+    @pytest.mark.parametrize("bad_value", ["stripe-publishable-key", "1INVALID"])
+    def test_invalid_env_var_names_are_refused(self, bad_value: str) -> None:
+        for option_name in BILLING_ENV_VAR_OPTION_NAMES:
+            issues = collect_option_validation_issues(
+                _manifest(), {option_name: bad_value}
+            )
+            assert any(
+                issue.option_name == option_name
+                and "must match pattern" in issue.message
+                for issue in issues
+            )
 
-    def test_currency_already_lower(self) -> None:
-        normalized = normalize_billing_module_options({"billing_currency": "usd"})
-        assert normalized["billing_currency"] == "usd"
+    def test_blank_env_var_names_are_accepted(self) -> None:
+        for option_name in BILLING_ENV_VAR_OPTION_NAMES:
+            assert validate_module_options(_manifest(), {option_name: ""}) == []
 
-    def test_none_options_returns_empty_dict(self) -> None:
-        normalized = normalize_billing_module_options(None)
-        assert normalized == {}
+    def test_uppercase_currency_is_canonicalized_before_the_check(self) -> None:
+        assert validate_module_options(_manifest(), {"billing_currency": "USD"}) == []
 
-    def test_empty_options_returns_empty_dict(self) -> None:
-        normalized = normalize_billing_module_options({})
-        assert normalized == {}
+    @pytest.mark.parametrize("bad_value", ["credits", "", "   "])
+    def test_unsupported_or_blank_currency_is_refused(self, bad_value: str) -> None:
+        issues = collect_option_validation_issues(
+            _manifest(), {"billing_currency": bad_value}
+        )
+        assert any(
+            issue.option_name == "billing_currency"
+            and "must be one of" in issue.message
+            for issue in issues
+        )
 
-    def test_untouched_keys_pass_through(self) -> None:
-        normalized = normalize_billing_module_options({"enabled": False})
-        assert normalized["enabled"] is False
-        assert "billing_currency" not in normalized
+    def test_non_boolean_enabled_is_refused(self) -> None:
+        issues = collect_option_validation_issues(
+            _manifest(), {"enabled": "yes"}, supplied={"enabled": "yes"}
+        )
+        assert any(
+            issue.option_name == "enabled" and "boolean" in issue.message
+            for issue in issues
+        )
+
+    def test_multiple_issues_are_collected(self) -> None:
+        issues = collect_option_validation_issues(
+            _manifest(),
+            {
+                "publishable_key_env_var": "stripe-publishable-key",
+                "billing_currency": "credits",
+            },
+        )
+        assert len(issues) >= 2
 
 
 # ===========================================================================
-# 5. Resolution parity (defaults + normalised overrides)
+# 3. Generic resolver behaviour
 # ===========================================================================
 
 
-class TestResolutionParity:
-    """resolve_billing_module_options must merge defaults + overrides."""
+class TestBillingResolution:
+    """The generic manifest resolver returns the manifest's canonical values."""
 
-    def test_no_overrides_returns_defaults(self) -> None:
-        resolved = resolve_billing_module_options(None)
-        assert resolved == _LEGACY_DEFAULTS
-
-    def test_empty_overrides_returns_defaults(self) -> None:
-        resolved = resolve_billing_module_options({})
-        assert resolved == _LEGACY_DEFAULTS
+    def test_defaults_match_the_manifest(self) -> None:
+        assert resolve_manifest_module_options("billing") == _EXPECTED_DEFAULTS
 
     def test_partial_override_preserves_other_defaults(self) -> None:
-        resolved = resolve_billing_module_options({"enabled": False})
-        expected = dict(_LEGACY_DEFAULTS)
+        resolved = resolve_manifest_module_options("billing", {"enabled": False})
+        expected = dict(_EXPECTED_DEFAULTS)
         expected["enabled"] = False
         assert resolved == expected
 
-    def test_env_var_overrides_are_stripped(self) -> None:
-        resolved = resolve_billing_module_options(
+    def test_env_var_overrides_are_stripped_and_currency_lowercased(self) -> None:
+        resolved = resolve_manifest_module_options(
+            "billing",
             {
                 "publishable_key_env_var": "  OPS_STRIPE_PUBLISHABLE_KEY  ",
                 "secret_key_env_var": " OPS_STRIPE_SECRET_KEY ",
                 "webhook_secret_env_var": "  OPS_BILLING_WEBHOOK_SECRET ",
                 "billing_currency": " EUR ",
-            }
+            },
         )
         assert resolved == {
             "enabled": True,
@@ -292,235 +202,76 @@ class TestResolutionParity:
         }
 
     def test_resolution_is_idempotent(self) -> None:
-        """Resolved options are stable when resolved again."""
-        resolved = resolve_billing_module_options(
+        resolved = resolve_manifest_module_options(
+            "billing",
             {
                 "publishable_key_env_var": "  OPS_STRIPE_PUBLISHABLE_KEY  ",
                 "billing_currency": " EUR ",
-            }
+            },
         )
-        assert resolve_billing_module_options(resolved) == resolved
-
-    def test_resolved_keys_match_legacy(self) -> None:
-        """The resolved dict must contain exactly the same keys as legacy."""
-        resolved = resolve_billing_module_options({"enabled": False})
-        assert set(resolved.keys()) == set(_LEGACY_DEFAULTS.keys())
+        assert resolve_manifest_module_options("billing", resolved) == resolved
 
 
 # ===========================================================================
-# 6. Env-var validation parity
+# 4. CLI configurator behaviour
 # ===========================================================================
 
 
-class TestEnvVarValidationParity:
-    """Env-var reference validation must match legacy pattern checks."""
+class TestBillingConfigurator:
+    """The CLI configurator's prompts and defaults come from the manifest."""
 
-    def test_valid_env_var_returns_none(self) -> None:
-        assert (
-            validate_billing_env_var_reference(
-                "publishable_key_env_var", "STRIPE_PUBLISHABLE_KEY"
-            )
-            is None
+    def test_defaults_factory_reads_the_manifest(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
+        assert entry.get_defaults() == _EXPECTED_DEFAULTS
+
+    def test_non_interactive_configuration_uses_manifest_defaults(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
+        assert entry.configure(non_interactive=True) == _EXPECTED_DEFAULTS
+
+    def test_existing_declared_values_are_kept(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
+        config = entry.configure(
+            non_interactive=True,
+            existing_config={"enabled": False, "billing_currency": "eur"},
         )
+        assert config["enabled"] is False
+        assert config["billing_currency"] == "eur"
+        assert config["secret_key_env_var"] == "STRIPE_SECRET_KEY"
 
-    def test_valid_env_var_with_underscores(self) -> None:
-        assert (
-            validate_billing_env_var_reference(
-                "secret_key_env_var", "MY_CUSTOM_SECRET_KEY"
-            )
-            is None
+    def test_undeclared_existing_keys_are_dropped(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
+        config = entry.configure(
+            non_interactive=True,
+            existing_config={"stripe_secret_key": "sk_live_value"},
         )
+        assert "stripe_secret_key" not in config
+        assert config == _EXPECTED_DEFAULTS
 
-    def test_lowercase_rejected(self) -> None:
-        result = validate_billing_env_var_reference(
-            "publishable_key_env_var", "stripe_publishable_key"
+    def test_existing_values_are_returned_in_canonical_form(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
+        config = entry.configure(
+            non_interactive=True,
+            existing_config={
+                "publishable_key_env_var": "  OPS_STRIPE_PUBLISHABLE_KEY  ",
+                "billing_currency": " GBP ",
+            },
         )
-        assert result is not None
-        assert "modules.billing.publishable_key_env_var" in result
-        assert "^[A-Z][A-Z0-9_]*$" in result
+        assert config["publishable_key_env_var"] == "OPS_STRIPE_PUBLISHABLE_KEY"
+        assert config["billing_currency"] == "gbp"
 
-    def test_hyphen_rejected(self) -> None:
-        result = validate_billing_env_var_reference(
-            "publishable_key_env_var", "stripe-publishable-key"
-        )
-        assert result is not None
-        assert "modules.billing.publishable_key_env_var" in result
-
-    def test_leading_digit_rejected(self) -> None:
-        result = validate_billing_env_var_reference(
-            "publishable_key_env_var", "1INVALID"
-        )
-        assert result is not None
-
-    def test_empty_string_returns_none(self) -> None:
-        """Empty env-var references are treated as absent (no error)."""
-        assert validate_billing_env_var_reference("publishable_key_env_var", "") is None
-
-    def test_whitespace_only_returns_none(self) -> None:
-        assert (
-            validate_billing_env_var_reference("publishable_key_env_var", "   ") is None
-        )
-
-    def test_error_message_contains_qualified_option_name(self) -> None:
-        result = validate_billing_env_var_reference(
-            "webhook_secret_env_var", "bad-name"
-        )
-        assert result is not None
-        assert "modules.billing.webhook_secret_env_var" in result
-
-
-# ===========================================================================
-# 7. Currency validation parity
-# ===========================================================================
-
-
-class TestCurrencyValidationParity:
-    """validate_billing_currency must match legacy validation exactly."""
-
-    def test_valid_usd_returns_none(self) -> None:
-        assert validate_billing_currency("usd") is None
-
-    def test_valid_eur_returns_none(self) -> None:
-        assert validate_billing_currency("eur") is None
-
-    def test_valid_gbp_returns_none(self) -> None:
-        assert validate_billing_currency("gbp") is None
-
-    def test_uppercase_usd_returns_none(self) -> None:
-        """Legacy contract strips and lowercases before checking."""
-        assert validate_billing_currency("USD") is None
-
-    def test_whitespace_usd_returns_none(self) -> None:
-        assert validate_billing_currency("  usd  ") is None
-
-    def test_unsupported_code_returns_error(self) -> None:
-        result = validate_billing_currency("credits")
-        assert result is not None
-        assert "modules.billing.billing_currency" in result
-        assert "supported QuickScale billing currency codes" in result
-
-    def test_blank_returns_error(self) -> None:
-        result = validate_billing_currency("")
-        assert result is not None
-        assert "modules.billing.billing_currency" in result
-        assert "cannot be blank" in result
-
-    def test_whitespace_only_returns_blank_error(self) -> None:
-        result = validate_billing_currency("   ")
-        assert result is not None
-        assert "cannot be blank" in result
-
-    def test_error_message_lists_currencies(self) -> None:
-        result = validate_billing_currency("credits")
-        assert result is not None
-        assert "usd" in result
-        assert "eur" in result
-
-
-# ===========================================================================
-# 8. Full module options validation parity
-# ===========================================================================
-
-
-class TestFullValidationParity:
-    """validate_billing_module_options must produce legacy-compatible issues."""
-
-    def test_defaults_pass_validation(self) -> None:
-        issues = validate_billing_module_options(None)
-        assert issues == []
-
-    def test_valid_overrides_pass_validation(self) -> None:
-        issues = validate_billing_module_options(
-            {
-                "enabled": True,
-                "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
-                "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
-                "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
-                "billing_currency": "eur",
-            }
-        )
-        assert issues == []
-
-    def test_invalid_env_var_name(self) -> None:
-        issues = validate_billing_module_options(
-            {"publishable_key_env_var": "stripe-publishable-key"}
-        )
-        expected = (
-            "modules.billing.publishable_key_env_var must be an environment variable "
-            "name matching ^[A-Z][A-Z0-9_]*$"
-        )
-        assert expected in issues
-
-    def test_invalid_currency(self) -> None:
-        issues = validate_billing_module_options({"billing_currency": "credits"})
-        assert len(issues) == 1
-        assert "modules.billing.billing_currency" in issues[0]
-        assert "supported QuickScale billing currency codes" in issues[0]
-
-    def test_multiple_issues_collected(self) -> None:
-        """Multiple invalid options should produce multiple issues."""
-        issues = validate_billing_module_options(
-            {
-                "publishable_key_env_var": "stripe-publishable-key",
-                "billing_currency": "credits",
-            }
-        )
-        assert len(issues) >= 2
-
-
-# ===========================================================================
-# 9. Production-targeting parity (truth table)
-# ===========================================================================
-
-
-class TestProductionTargetedParity:
-    """billing_production_targeted must match legacy predicate behaviour."""
-
-    def test_defaults_are_production_targeted(self) -> None:
-        """Default config has enabled=True and valid env-var references."""
-        assert billing_production_targeted(None) is True
-
-    def test_empty_overrides_are_production_targeted(self) -> None:
-        assert billing_production_targeted({}) is True
-
-    def test_defaults_dict_is_production_targeted(self) -> None:
-        assert billing_production_targeted(default_billing_module_options()) is True
-
-    def test_disabled_is_not_production_targeted(self) -> None:
-        assert billing_production_targeted({"enabled": False}) is False
-
-    def test_invalid_env_var_is_not_production_targeted(self) -> None:
-        assert (
-            billing_production_targeted(
-                {"publishable_key_env_var": "stripe-publishable-key"}
-            )
-            is False
-        )
-
-    def test_invalid_currency_is_not_production_targeted(self) -> None:
-        assert billing_production_targeted({"billing_currency": "credits"}) is False
-
-    def test_blank_currency_is_not_production_targeted(self) -> None:
-        assert billing_production_targeted({"billing_currency": ""}) is False
-
-    def test_valid_custom_env_vars_are_production_targeted(self) -> None:
-        assert (
-            billing_production_targeted(
-                {
-                    "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
-                    "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
-                    "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
-                }
-            )
-            is True
-        )
-
-    def test_valid_eur_currency_is_production_targeted(self) -> None:
-        assert billing_production_targeted({"billing_currency": "eur"}) is True
-
-    @pytest.mark.parametrize("currency", list(_LEGACY_SUPPORTED_CURRENCIES))
-    def test_every_supported_currency_is_production_targeted(
-        self, currency: str
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_interactive_values_are_returned_in_canonical_form(
+        self, mock_confirm, mock_prompt
     ) -> None:
-        """Every supported currency must allow production targeting."""
-        assert billing_production_targeted({"billing_currency": currency}) is True
+        """Padded interactive answers are stored in their canonical forms."""
+        mock_confirm.side_effect = [True]
+        mock_prompt.side_effect = ["  OPS_KEY  ", "OPS_SECRET", "OPS_HOOK", " EUR "]
+
+        entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
+        config = entry.configure(non_interactive=False)
+
+        assert config["publishable_key_env_var"] == "OPS_KEY"
+        assert config["secret_key_env_var"] == "OPS_SECRET"
+        assert config["webhook_secret_env_var"] == "OPS_HOOK"
+        assert config["billing_currency"] == "eur"

@@ -29,7 +29,8 @@ because they are recovery sentinels recorded in the apply recovery ledger.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -39,14 +40,8 @@ from quickscale_core.contracts.module_options import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     BILLING_ENV_VAR_OPTION_NAMES,
-    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-    DEFAULT_BILLING_CURRENCY,
-    DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-    DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
     DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
@@ -57,9 +52,9 @@ from quickscale_core.contracts.module_options import (
     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
 )
 from quickscale_core.contracts.resolvers import (
-    resolve_analytics_module_options,
+    load_module_manifest_with_fallback,
     resolve_backups_module_options,
-    resolve_billing_module_options,
+    resolve_manifest_module_options,
     resolve_notifications_module_options,
     resolve_storage_module_options,
 )
@@ -84,7 +79,8 @@ class EnvExampleModuleSpec:
             variables; each renders as a ``NAME=`` placeholder using the
             resolved option value.
         env_var_defaults: Conventional environment-variable name used when a
-            resolved option value is blank.
+            resolved option value is blank; a module whose manifest declares
+            the option omits this and falls back to the manifest default.
         resolve_options: Resolver that merges the declared manifest defaults
             with the configured option overrides.
         prose: Hook returning the module-specific guidance lines that precede
@@ -100,9 +96,9 @@ class EnvExampleModuleSpec:
     module: str
     title: str
     env_var_options: tuple[str, ...]
-    env_var_defaults: Mapping[str, str]
     resolve_options: Callable[[Mapping[str, Any] | None], Mapping[str, Any]]
     prose: Callable[[Mapping[str, Any]], list[str]]
+    env_var_defaults: Mapping[str, str] = field(default_factory=dict)
     tail_lines: tuple[str, ...] = ()
     remove_when_absent: bool = False
     respects_enabled_flag: bool = False
@@ -117,14 +113,25 @@ class EnvExampleSyncResult:
     detail: str | None = None
 
 
+def _declared_option_default(module_name: str, option_name: str) -> str:
+    """Return a module manifest's declared default for one option."""
+    defaults = load_module_manifest_with_fallback(module_name).get_defaults()
+    return str(defaults.get(option_name, "") or "").strip()
+
+
 def _placeholder_name(
     spec: EnvExampleModuleSpec,
     resolved: Mapping[str, Any],
     option_name: str,
 ) -> str:
     """Return the environment-variable name a declared option resolves to."""
-    fallback = spec.env_var_defaults[option_name]
-    return str(resolved.get(option_name, fallback) or fallback).strip()
+    value = str(resolved.get(option_name) or "").strip()
+    if value:
+        return value
+    fallback = spec.env_var_defaults.get(option_name)
+    if fallback is None:
+        fallback = _declared_option_default(spec.module, option_name)
+    return fallback
 
 
 def _notifications_prose(resolved: Mapping[str, Any]) -> list[str]:
@@ -140,14 +147,10 @@ def _notifications_prose(resolved: Mapping[str, Any]) -> list[str]:
 
 
 def _analytics_prose(resolved: Mapping[str, Any]) -> list[str]:
-    host = str(
-        resolved.get("posthog_host", ANALYTICS_POSTHOG_DEFAULT_HOST)
-        or ANALYTICS_POSTHOG_DEFAULT_HOST
-    ).strip()
-    host_env_var = str(
-        resolved.get("posthog_host_env_var", DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR)
-        or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR
-    ).strip()
+    host = str(resolved.get("posthog_host") or ANALYTICS_POSTHOG_DEFAULT_HOST).strip()
+    host_env_var = str(resolved.get("posthog_host_env_var") or "").strip()
+    if not host_env_var:
+        host_env_var = _declared_option_default("analytics", "posthog_host_env_var")
     return [
         "# Runtime PostHog variables for the backend analytics module.",
         "# VITE_* variables are for fresh showcase_react generations or manual frontend adoption.",
@@ -156,10 +159,9 @@ def _analytics_prose(resolved: Mapping[str, Any]) -> list[str]:
 
 
 def _billing_prose(resolved: Mapping[str, Any]) -> list[str]:
-    billing_currency = str(
-        resolved.get("billing_currency", DEFAULT_BILLING_CURRENCY)
-        or DEFAULT_BILLING_CURRENCY
-    ).strip()
+    billing_currency = str(resolved.get("billing_currency") or "").strip()
+    if not billing_currency:
+        billing_currency = _declared_option_default("billing", "billing_currency")
     return [
         "# Runtime Stripe variables for the backend billing module.",
         f"# Billing currency from quickscale.yml: {billing_currency}",
@@ -208,11 +210,7 @@ ENV_EXAMPLE_MODULE_SPECS: tuple[EnvExampleModuleSpec, ...] = (
             "posthog_api_key_env_var",
             "posthog_host_env_var",
         ),
-        env_var_defaults={
-            "posthog_api_key_env_var": DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-            "posthog_host_env_var": DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
-        },
-        resolve_options=resolve_analytics_module_options,
+        resolve_options=partial(resolve_manifest_module_options, "analytics"),
         prose=_analytics_prose,
         tail_lines=("VITE_POSTHOG_KEY=", "VITE_POSTHOG_HOST="),
         remove_when_absent=True,
@@ -222,12 +220,7 @@ ENV_EXAMPLE_MODULE_SPECS: tuple[EnvExampleModuleSpec, ...] = (
         module="billing",
         title="Billing",
         env_var_options=BILLING_ENV_VAR_OPTION_NAMES,
-        env_var_defaults={
-            "publishable_key_env_var": DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-            "secret_key_env_var": DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-            "webhook_secret_env_var": DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-        },
-        resolve_options=resolve_billing_module_options,
+        resolve_options=partial(resolve_manifest_module_options, "billing"),
         prose=_billing_prose,
     ),
     EnvExampleModuleSpec(

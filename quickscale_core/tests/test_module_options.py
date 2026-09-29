@@ -11,11 +11,9 @@ from unittest.mock import patch
 import pytest
 
 from quickscale_core.contracts.module_options import (
-    ANALYTICS_PROVIDERS,
     AUTH_REGISTRATION_ENABLED_OPTION,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-    BILLING_SUPPORTED_CURRENCIES,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     ENV_VAR_PORTABILITY_IGNORED,
@@ -25,69 +23,19 @@ from quickscale_core.contracts.module_options import (
     format_auth_desired_config_contract,
     get_env_var_portability,
     has_legacy_backups_secret_values,
-    normalize_analytics_module_options,
     normalize_auth_module_options,
     normalize_backups_module_options,
-    normalize_billing_module_options,
     normalize_notifications_module_options,
     normalize_social_module_options,
     sanitize_module_options,
-    validate_analytics_env_var_reference,
-    validate_analytics_module_options,
     validate_auth_module_options,
     validate_backups_env_var_reference,
-    validate_billing_currency,
-    validate_billing_env_var_reference,
-    validate_billing_module_options,
     validate_notifications_env_var_reference,
     validate_notifications_module_options,
     validate_social_module_options,
 )
 from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_core.manifest.loader import ManifestError
-
-
-# ---------------------------------------------------------------------------
-# normalize_analytics_module_options
-# ---------------------------------------------------------------------------
-
-
-class TestNormalizeAnalytics:
-    def test_none_options_returns_empty(self) -> None:
-        assert normalize_analytics_module_options(None) == {}
-
-    def test_provider_lowered_and_stripped(self) -> None:
-        result = normalize_analytics_module_options({"provider": "  PostHog "})
-        assert result["provider"] == "posthog"
-
-    def test_env_var_options_stripped(self) -> None:
-        result = normalize_analytics_module_options(
-            {"posthog_api_key_env_var": "  MY_KEY  ", "posthog_host_env_var": "  H "}
-        )
-        assert result["posthog_api_key_env_var"] == "MY_KEY"
-        assert result["posthog_host_env_var"] == "H"
-
-    def test_posthog_host_gets_https_prefix(self) -> None:
-        result = normalize_analytics_module_options(
-            {"posthog_host": "  us.i.posthog.com/  "}
-        )
-        assert result["posthog_host"] == "https://us.i.posthog.com"
-
-    def test_posthog_host_preserves_existing_scheme(self) -> None:
-        result = normalize_analytics_module_options(
-            {"posthog_host": "https://eu.i.posthog.com"}
-        )
-        assert result["posthog_host"] == "https://eu.i.posthog.com"
-
-    def test_posthog_host_http_preserved(self) -> None:
-        result = normalize_analytics_module_options(
-            {"posthog_host": "http://localhost:8080"}
-        )
-        assert result["posthog_host"] == "http://localhost:8080"
-
-    def test_empty_posthog_host_stays_empty(self) -> None:
-        result = normalize_analytics_module_options({"posthog_host": "  "})
-        assert result["posthog_host"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -165,26 +113,6 @@ class TestNormalizeBackups:
 
 
 # ---------------------------------------------------------------------------
-# normalize_billing_module_options
-# ---------------------------------------------------------------------------
-
-
-class TestNormalizeBilling:
-    def test_none_options_returns_empty(self) -> None:
-        assert normalize_billing_module_options(None) == {}
-
-    def test_env_var_options_stripped(self) -> None:
-        result = normalize_billing_module_options(
-            {"publishable_key_env_var": "  MY_KEY  "}
-        )
-        assert result["publishable_key_env_var"] == "MY_KEY"
-
-    def test_billing_currency_lowered_and_stripped(self) -> None:
-        result = normalize_billing_module_options({"billing_currency": "  USD "})
-        assert result["billing_currency"] == "usd"
-
-
-# ---------------------------------------------------------------------------
 # normalize_notifications_module_options
 # ---------------------------------------------------------------------------
 
@@ -251,51 +179,6 @@ class TestNormalizeSocial:
 
 
 # ---------------------------------------------------------------------------
-# validate_analytics_env_var_reference
-# ---------------------------------------------------------------------------
-
-
-class TestValidateAnalyticsEnvVar:
-    def test_empty_returns_none(self) -> None:
-        assert validate_analytics_env_var_reference("key", "") is None
-
-    def test_valid_name_returns_none(self) -> None:
-        assert validate_analytics_env_var_reference("key", "MY_VAR") is None
-
-    def test_invalid_name_returns_issue(self) -> None:
-        result = validate_analytics_env_var_reference("key", "bad-name")
-        assert result is not None
-        assert "modules.analytics.key" in result
-
-
-# ---------------------------------------------------------------------------
-# validate_analytics_module_options
-# ---------------------------------------------------------------------------
-
-
-class TestValidateAnalyticsOptions:
-    def test_none_returns_no_issues(self) -> None:
-        assert validate_analytics_module_options(None) == []
-
-    def test_valid_provider_no_issues(self) -> None:
-        issues = validate_analytics_module_options(
-            {"provider": list(ANALYTICS_PROVIDERS)[0]}
-        )
-        assert issues == []
-
-    def test_invalid_provider_reported(self) -> None:
-        issues = validate_analytics_module_options({"provider": "invalid_provider"})
-        assert len(issues) == 1
-        assert "provider" in issues[0]
-
-    def test_invalid_env_var_reported(self) -> None:
-        issues = validate_analytics_module_options(
-            {"posthog_api_key_env_var": "bad-name"}
-        )
-        assert len(issues) == 1
-
-
-# ---------------------------------------------------------------------------
 # validate_auth_module_options (stub)
 # ---------------------------------------------------------------------------
 
@@ -328,53 +211,6 @@ class TestValidateBackupsEnvVar:
         )
         assert result is not None
         assert "literal AWS" in result
-
-
-# ---------------------------------------------------------------------------
-# validate_billing_currency
-# ---------------------------------------------------------------------------
-
-
-class TestValidateBillingCurrency:
-    def test_valid_currency(self) -> None:
-        assert validate_billing_currency(list(BILLING_SUPPORTED_CURRENCIES)[0]) is None
-
-    def test_blank_currency_rejected(self) -> None:
-        result = validate_billing_currency("")
-        assert result is not None
-        assert "blank" in result
-
-    def test_unsupported_currency_rejected(self) -> None:
-        result = validate_billing_currency("XYZ")
-        assert result is not None
-        assert "supported" in result
-
-
-# ---------------------------------------------------------------------------
-# validate_billing_env_var_reference
-# ---------------------------------------------------------------------------
-
-
-class TestValidateBillingEnvVar:
-    def test_empty_returns_none(self) -> None:
-        assert validate_billing_env_var_reference("key", "") is None
-
-    def test_valid_name_returns_none(self) -> None:
-        assert validate_billing_env_var_reference("key", "MY_VAR") is None
-
-    def test_invalid_name_returns_issue(self) -> None:
-        result = validate_billing_env_var_reference("key", "123bad")
-        assert result is not None
-
-
-# ---------------------------------------------------------------------------
-# validate_billing_module_options (stub)
-# ---------------------------------------------------------------------------
-
-
-class TestValidateBillingStub:
-    def test_returns_empty(self) -> None:
-        assert validate_billing_module_options(None) == []
 
 
 # ---------------------------------------------------------------------------
@@ -478,8 +314,8 @@ class TestGetEnvVarPortability:
 
 
 class TestSanitizeDispatcher:
-    def test_analytics_dispatch(self) -> None:
-        result = sanitize_module_options("analytics", {"provider": "  PostHog "})
+    def test_analytics_dispatch_passes_declared_keys_through(self) -> None:
+        result = sanitize_module_options("analytics", {"provider": "posthog"})
         assert result["provider"] == "posthog"
 
     def test_auth_dispatch_with_legacy_raises(self) -> None:
@@ -496,8 +332,8 @@ class TestSanitizeDispatcher:
         result = sanitize_module_options("backups", {"remote_access_key_id": "key123"})
         assert BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION in result
 
-    def test_billing_dispatch(self) -> None:
-        result = sanitize_module_options("billing", {"billing_currency": " USD "})
+    def test_billing_dispatch_passes_declared_keys_through(self) -> None:
+        result = sanitize_module_options("billing", {"billing_currency": "usd"})
         assert result["billing_currency"] == "usd"
 
     def test_crm_dispatch_with_retired_raises(self) -> None:

@@ -175,38 +175,41 @@ modules:
             assert "Configuration error" in result.output
 
     @pytest.mark.parametrize(
-        ("options", "expected_marker"),
+        ("option_line", "expected_marker"),
         [
             (
-                {"publishable_key_env_var": "stripe-publishable-key"},
-                "publishable_key_env_var must be an environment variable name",
+                "publishable_key_env_var: stripe-publishable-key",
+                "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
             ),
             (
-                {"billing_currency": "credits"},
-                "billing_currency must be one of the supported QuickScale billing currency codes",
+                "billing_currency: credits",
+                "QUICKSCALE_BILLING_CURRENCY",
             ),
         ],
     )
-    def test_apply_billing_prerequisites_fail_before_readiness_gate(
+    def test_billing_invalid_options_fail_at_config_load(
         self,
-        options,
+        option_line,
         expected_marker,
+        tmp_path,
         capsys,
     ):
-        """Billing apply preflight should report contract issues before readiness."""
-        qs_config = SimpleNamespace(
-            modules={"billing": SimpleNamespace(options=options)}
+        """A malformed billing value is refused at config load, naming the setting."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "modules:\n"
+            "  billing:\n"
+            f"    {option_line}\n"
         )
 
         with pytest.raises(click.Abort):
-            _validate_module_prerequisites(qs_config)
+            _load_and_validate_config(config)
 
-        error_output = capsys.readouterr().err
-        assert "Billing module configuration is incomplete for apply" in error_output
-        assert expected_marker in error_output
-        assert "correct the billing option values" in error_output
-        assert "non-public-ready" not in error_output
-        assert "references modules that are not public-ready" not in error_output
+        assert expected_marker in capsys.readouterr().err
 
     def test_apply_billing_requires_auth_module(self, capsys):
         """Billing apply should fail early when auth is not selected."""

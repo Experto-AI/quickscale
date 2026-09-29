@@ -74,8 +74,6 @@ def _copy_module_options(
 ) -> dict[str, Any]:
     """Return a shallow copy of module options after pruning legacy keys."""
     copied = dict(options or {})
-    if module_name == "storage":
-        copied.pop("custom_domain", None)
     if module_name is not None:
         copied = sanitize_module_options(module_name, copied)
     return copied

@@ -102,26 +102,11 @@ BACKUPS_MANIFEST: Final[list[tuple[str, str, str]]] = [
     ("default_backups_module_options", ADAPTER_ONLY, "T2.5"),
 ]
 
-BILLING_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Shared helpers — relocated to quickscale_core.contracts.module_options
-    ("DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR", SHARED_HELPER, "T2.3"),
-    ("DEFAULT_BILLING_SECRET_KEY_ENV_VAR", SHARED_HELPER, "T2.3"),
-    ("DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR", SHARED_HELPER, "T2.3"),
-    ("DEFAULT_BILLING_CURRENCY", SHARED_HELPER, "T2.3"),
-    ("BILLING_ENV_VAR_OPTION_NAMES", SHARED_HELPER, "T2.3"),
-    ("BILLING_MODULE_OPTION_KEYS", SHARED_HELPER, "T2.3"),
-    ("BILLING_SUPPORTED_CURRENCIES", SHARED_HELPER, "T2.3"),
-    ("normalize_billing_module_options", SHARED_HELPER, "T2.3"),
-    ("validate_billing_env_var_reference", SHARED_HELPER, "T2.3"),
-    ("validate_billing_currency", SHARED_HELPER, "T2.3"),
-    ("validate_billing_module_options", SHARED_HELPER, "T2.3"),
-    # Manifest resolver
-    ("_build_billing_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_billing_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_billing_module_options", ADAPTER_ONLY, "T2.5"),
-    ("billing_production_targeted", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: Billing imperative inventory cleared — the manifest owns its option
+# defaults, normalization, and validation, and its CLI configurator reads the
+# manifest.  The billing key remains in MANIFEST_INVENTORY with an empty list
+# so that callers of get_manifest_inventory("billing") continue to succeed.
+BILLING_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 # SA217: Blog imperative inventory cleared — the manifest owns its option
 # defaults, normalization, and validation, its adapter runs through the

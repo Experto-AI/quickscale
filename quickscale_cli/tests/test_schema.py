@@ -456,12 +456,12 @@ modules:
             (
                 "publishable_key_env_var",
                 '"stripe-publishable-key"',
-                "publishable_key_env_var must be an environment variable name",
+                "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
             ),
             (
                 "billing_currency",
                 '"credits"',
-                "billing_currency must be one of the supported QuickScale billing currency codes",
+                "QUICKSCALE_BILLING_CURRENCY",
             ),
         ],
     )
@@ -471,7 +471,7 @@ modules:
         option_value,
         expected_marker,
     ):
-        """Billing value validation should remain actionable."""
+        """A malformed billing value is refused with its setting named."""
         yaml_content = f"""
 version: "1"
 project:

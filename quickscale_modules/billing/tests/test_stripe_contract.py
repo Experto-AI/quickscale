@@ -329,12 +329,6 @@ def test_operator_guidance_states_the_pinned_stripe_api_version() -> None:
         / "quickscale_cli"
         / "commands"
         / "apply_command.py",
-        REPO_ROOT
-        / "quickscale_cli"
-        / "src"
-        / "quickscale_cli"
-        / "commands"
-        / "module_config.py",
     )
 
     for path in guidance_paths:

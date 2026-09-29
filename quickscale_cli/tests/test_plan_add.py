@@ -448,8 +448,8 @@ docker:
             assert "orgs" in modules
             assert modules["notifications"] == default_notifications_module_options()
 
-    def test_plan_add_prunes_legacy_storage_custom_domain(self) -> None:
-        """Adding modules should drop legacy storage-only custom_domain keys."""
+    def test_plan_add_refuses_legacy_storage_custom_domain(self) -> None:
+        """A retired storage key is refused by name instead of silently dropped."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             with open("quickscale.yml", "w") as f:
@@ -472,12 +472,9 @@ docker:
 
             result = runner.invoke(plan, ["--add"], input="1\ny\n")
 
-            assert result.exit_code == 0
-            with open("quickscale.yml") as f:
-                content = f.read()
-            assert "custom_domain" not in content
-            assert "public_base_url: https://cdn.example.com/media" in content
-            assert "analytics:" in content
+            assert result.exit_code != 0
+            assert "custom_domain" in result.output
+            assert "public_base_url" in result.output
 
     def test_plan_add_configure_modules_collects_storage_options(self) -> None:
         """Planner should collect storage options interactively when requested."""

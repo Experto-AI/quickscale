@@ -1,17 +1,15 @@
-"""Tests for the manifest-driven analytics module adapter.
+"""Manifest-declaration tests for the analytics module's option contract.
 
-Verifies that the analytics configuration path routes through the
-manifest-driven resolver (``quickscale_core.manifest.resolver``) and
-that defaults, normalization, validation, and production-targeting
-helpers produce the same results as the legacy contract file.
+The analytics ``module.yml`` is the single source of the module's option
+defaults, Django-setting projections, normalization rules, and validation.
+The module-root manifest is loaded directly so the declaration is tested
+where module authors write it.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-
-import pytest
 
 from quickscale_core.contracts.module_options import (
     ANALYTICS_EVENT_FORM_SUBMIT,
@@ -21,159 +19,125 @@ from quickscale_core.contracts.module_options import (
     ANALYTICS_POSTHOG_EU_HOST,
     ANALYTICS_PROVIDER_POSTHOG,
     ANALYTICS_PROVIDERS,
-    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
-)
-from quickscale_core.contracts.resolvers import (
-    analytics_production_targeted,
-    default_analytics_module_options,
-    normalize_analytics_module_options,
-    resolve_analytics_module_options,
-    validate_analytics_env_var_reference,
-    validate_analytics_module_options,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ANALYTICS_MANIFEST_PATH = REPO_ROOT / "quickscale_modules" / "analytics" / "module.yml"
 
+_EXPECTED_DEFAULTS: dict[str, object] = {
+    "enabled": True,
+    "provider": "posthog",
+    "posthog_api_key_env_var": "POSTHOG_API_KEY",
+    "posthog_host_env_var": "POSTHOG_HOST",
+    "posthog_host": "https://us.i.posthog.com",
+    "exclude_debug": True,
+    "exclude_staff": False,
+    "anonymous_by_default": True,
+}
+
+_EXPECTED_SETTINGS: dict[str, str] = {
+    "enabled": "QUICKSCALE_ANALYTICS_ENABLED",
+    "provider": "QUICKSCALE_ANALYTICS_PROVIDER",
+    "posthog_api_key_env_var": "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
+    "posthog_host_env_var": "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
+    "posthog_host": "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
+    "exclude_debug": "QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG",
+    "exclude_staff": "QUICKSCALE_ANALYTICS_EXCLUDE_STAFF",
+    "anonymous_by_default": "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
+}
+
 
 def _load_analytics_manifest() -> Any:
     return load_manifest_from_path(ANALYTICS_MANIFEST_PATH)
 
 
-def test_analytics_manifest_constants_are_stable() -> None:
-    """The analytics adapter should stay explicitly PostHog-only."""
-    assert ANALYTICS_PROVIDER_POSTHOG == "posthog"
-    assert ANALYTICS_PROVIDERS == ("posthog",)
-    assert DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR == "POSTHOG_API_KEY"
-    assert DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR == "POSTHOG_HOST"
-    assert ANALYTICS_POSTHOG_DEFAULT_HOST == "https://us.i.posthog.com"
-    assert ANALYTICS_POSTHOG_EU_HOST == "https://eu.i.posthog.com"
+# ===========================================================================
+# 1. Manifest declaration
+# ===========================================================================
 
 
-def test_analytics_event_constants_are_stable() -> None:
-    """First-party analytics event names should remain fixed."""
-    assert ANALYTICS_EVENT_PAGEVIEW == "$pageview"
-    assert ANALYTICS_EVENT_FORM_SUBMIT == "form_submit"
-    assert ANALYTICS_EVENT_SOCIAL_LINK_CLICK == "social_link_click"
+class TestAnalyticsManifestDeclaration:
+    """The manifest declares the defaults, settings, and checks."""
 
+    def test_manifest_declares_exactly_the_contract_options(self) -> None:
+        manifest = _load_analytics_manifest()
+        assert set(manifest.get_defaults()) == set(_EXPECTED_DEFAULTS)
 
-def test_default_analytics_module_options_match_manifest() -> None:
-    """Default planner/apply config should align with the analytics manifest."""
-    manifest = _load_analytics_manifest()
-    defaults = default_analytics_module_options()
+    def test_manifest_defaults_match_contract(self) -> None:
+        assert _load_analytics_manifest().get_defaults() == _EXPECTED_DEFAULTS
 
-    assert set(defaults.keys()) == set(manifest.get_all_options().keys())
-    assert defaults["enabled"] is True
-    assert defaults["provider"] == ANALYTICS_PROVIDER_POSTHOG
-    assert defaults["posthog_host"] == ANALYTICS_POSTHOG_DEFAULT_HOST
-    assert defaults["exclude_debug"] is True
-    assert defaults["exclude_staff"] is False
-    assert defaults["anonymous_by_default"] is True
+    def test_manifest_declares_every_django_setting(self) -> None:
+        manifest = _load_analytics_manifest()
+        for option_name, setting_name in _EXPECTED_SETTINGS.items():
+            option = manifest.get_option(option_name)
+            assert option is not None
+            assert option.django_setting == setting_name
 
-
-def test_normalize_analytics_module_options_canonicalizes_provider_and_host() -> None:
-    """Normalization should collapse provider casing and canonicalize the host URL."""
-    normalized = normalize_analytics_module_options(
-        {
-            "provider": " PostHog ",
-            "posthog_api_key_env_var": " OPS_POSTHOG_API_KEY ",
-            "posthog_host_env_var": " OPS_POSTHOG_HOST ",
-            "posthog_host": "eu.i.posthog.com/",
-        }
-    )
-
-    assert normalized == {
-        "provider": "posthog",
-        "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
-        "posthog_host_env_var": "OPS_POSTHOG_HOST",
-        "posthog_host": "https://eu.i.posthog.com",
-    }
-
-
-def test_resolve_analytics_module_options_merges_defaults() -> None:
-    """Resolved analytics config should merge defaults with normalized overrides."""
-    resolved = resolve_analytics_module_options(
-        {
-            "posthog_host": "eu.i.posthog.com",
-            "exclude_staff": True,
-        }
-    )
-
-    assert resolved == {
-        "enabled": True,
-        "provider": "posthog",
-        "posthog_api_key_env_var": "POSTHOG_API_KEY",
-        "posthog_host_env_var": "POSTHOG_HOST",
-        "posthog_host": "https://eu.i.posthog.com",
-        "exclude_debug": True,
-        "exclude_staff": True,
-        "anonymous_by_default": True,
-    }
-
-
-def test_validate_analytics_env_var_reference_rejects_invalid_names() -> None:
-    """Analytics env-var references must remain env-var names, not literal secrets."""
-    assert (
-        validate_analytics_env_var_reference(
+    def test_manifest_declares_the_option_types(self) -> None:
+        manifest = _load_analytics_manifest()
+        assert manifest.get_option("enabled").option_type == "boolean"
+        assert manifest.get_option("provider").option_type == "string"
+        for option_name in (
             "posthog_api_key_env_var",
-            "OPS_POSTHOG_API_KEY",
+            "posthog_host_env_var",
+            "posthog_host",
+            "exclude_debug",
+            "exclude_staff",
+            "anonymous_by_default",
+        ):
+            option = manifest.get_option(option_name)
+            assert option is not None
+        assert manifest.get_option("exclude_debug").option_type == "boolean"
+
+    def test_manifest_declares_provider_choices(self) -> None:
+        option = _load_analytics_manifest().get_option("provider")
+        assert option is not None
+        assert option.validation.get("choices") == ["posthog"]
+
+    def test_manifest_declares_env_var_name_patterns(self) -> None:
+        manifest = _load_analytics_manifest()
+        for option_name in ("posthog_api_key_env_var", "posthog_host_env_var"):
+            option = manifest.get_option(option_name)
+            assert option is not None
+            assert option.validation.get("pattern") == "^(?:[A-Z][A-Z0-9_]*)?$"
+
+    def test_manifest_declares_the_host_pattern(self) -> None:
+        option = _load_analytics_manifest().get_option("posthog_host")
+        assert option is not None
+        assert option.validation.get("pattern") == (
+            "^(?:https?://[^\\s/?#][^\\s]*|"
+            "(?![A-Za-z][A-Za-z0-9+.-]*://)[^\\s/?#][^\\s]*)$"
         )
-        is None
-    )
-    assert (
-        validate_analytics_env_var_reference(
-            "posthog_api_key_env_var",
-            "ops-posthog-api-key",
-        )
-        == "modules.analytics.posthog_api_key_env_var must be an environment "
-        "variable name matching ^[A-Z][A-Z0-9_]*$"
-    )
+
+    def test_manifest_declares_normalization_rules(self) -> None:
+        manifest = _load_analytics_manifest()
+        provider_rules = manifest.option_derivations["provider"]["normalization_rules"]
+        assert [rule["rule_type"] for rule in provider_rules] == ["strip", "lowercase"]
+        for option_name in ("posthog_api_key_env_var", "posthog_host_env_var"):
+            rules = manifest.option_derivations[option_name]["normalization_rules"]
+            assert [rule["rule_type"] for rule in rules] == ["strip"]
+        host_rules = manifest.option_derivations["posthog_host"]["normalization_rules"]
+        assert [rule["rule_type"] for rule in host_rules] == ["url"]
 
 
-@pytest.mark.parametrize(
-    ("options", "expected_issue"),
-    [
-        (
-            {"provider": "segment"},
-            "modules.analytics.provider must be one of: posthog",
-        ),
-        (
-            {"posthog_api_key_env_var": "ops-posthog-api-key"},
-            "modules.analytics.posthog_api_key_env_var must be an environment "
-            "variable name matching ^[A-Z][A-Z0-9_]*$",
-        ),
-        (
-            {"posthog_host": "https:///missing-host"},
-            "modules.analytics.posthog_host must be an absolute http(s) URL",
-        ),
-        (
-            {"enabled": "yes"},
-            "modules.analytics.enabled must be a boolean",
-        ),
-    ],
-)
-def test_validate_analytics_module_options_reports_issues(
-    options: dict[str, object],
-    expected_issue: str,
-) -> None:
-    """Validation should surface actionable errors for invalid analytics config."""
-    assert expected_issue in validate_analytics_module_options(options)
+# ===========================================================================
+# 2. Public constants
+# ===========================================================================
 
 
-def test_analytics_production_targeted_requires_enabled_valid_env_reference() -> None:
-    """Production-targeted analytics should require an enabled valid env-var ref."""
-    assert analytics_production_targeted({"enabled": False}) is False
-    assert (
-        analytics_production_targeted(
-            {"posthog_api_key_env_var": "ops-posthog-api-key"}
-        )
-        is False
-    )
-    assert (
-        analytics_production_targeted(
-            {"posthog_api_key_env_var": "OPS_POSTHOG_API_KEY"}
-        )
-        is True
-    )
+class TestAnalyticsPublicConstants:
+    """Non-option provider metadata stays stable for docs and adapters."""
+
+    def test_provider_constants_are_stable(self) -> None:
+        assert ANALYTICS_PROVIDER_POSTHOG == "posthog"
+        assert ANALYTICS_PROVIDERS == ("posthog",)
+
+    def test_host_constants_are_stable(self) -> None:
+        assert ANALYTICS_POSTHOG_DEFAULT_HOST == "https://us.i.posthog.com"
+        assert ANALYTICS_POSTHOG_EU_HOST == "https://eu.i.posthog.com"
+
+    def test_event_name_constants_are_stable(self) -> None:
+        assert ANALYTICS_EVENT_PAGEVIEW == "$pageview"
+        assert ANALYTICS_EVENT_FORM_SUBMIT == "form_submit"
+        assert ANALYTICS_EVENT_SOCIAL_LINK_CLICK == "social_link_click"

@@ -1,16 +1,13 @@
-"""Module options resolution functions.
+"""Shared manifest resolution surface for QuickScale module options.
 
-Provides ``resolve_*_module_options``, ``default_*_module_options``, and
-``validate_*_module_options`` for every QuickScale module.  Relocated from
-the ``quickscale_cli.*_manifest`` adapter files during T2.3 Phase 4.
-
-Each function follows the same pattern: load the module's ``module.yml``
-manifest, build a derivation schema, resolve user overrides against defaults,
-and apply module-specific post-resolution coercions.
-
-Constants and low-level ``normalize_*``/``validate_*`` helpers live in
-:mod:`quickscale_core.contracts.module_options` alongside the derivation-level
-``DerivedSetting``/``WiringProjection`` types.
+Owns the manifest loader every option consumer shares
+(``load_module_manifest_with_fallback``) and the one generic resolver
+non-adapter callers use (``resolve_manifest_module_options``).  A module's
+option defaults, normalization, and validation live in its ``module.yml``;
+the remaining ``default_*``/``normalize_*``/``validate_*`` functions are the
+per-module code that SA217 is removing module by module.  Adapters resolve
+through the manifest engine via
+``quickscale_core.runtime.build_generic_manifest_spec``.
 """
 
 from __future__ import annotations
@@ -26,8 +23,6 @@ from quickscale_core.contracts.module_options import (
     LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION,
     # Backups
     normalize_backups_module_options,
-    # Billing
-    BILLING_ENV_VAR_OPTION_NAMES,
     # Notifications
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
@@ -84,124 +79,28 @@ def load_module_manifest_with_fallback(module_name: str) -> Any:
     )
 
 
-# ---------------------------------------------------------------------------
-# Analytics
-# ---------------------------------------------------------------------------
-
-_ANALYTICS_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
-
-
-def _normalize_posthog_host(value: Any) -> str:
-    """Canonicalize a PostHog host URL (preserved for backward compat)."""
-    candidate = str(value).strip()
-    if not candidate:
-        return ""
-    if not candidate.startswith(("http://", "https://")):
-        candidate = "https://" + candidate.lstrip("/")
-    return candidate.rstrip("/")
-
-
-def default_analytics_module_options() -> dict[str, Any]:
-    """Return defaults declared in analytics ``module.yml``."""
-    manifest = load_module_manifest_with_fallback("analytics")
-    return dict(manifest.get_defaults())
-
-
-def normalize_analytics_module_options(
-    options: Mapping[str, Any] | None,
+def resolve_manifest_module_options(
+    module_name: str,
+    options: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Normalize analytics options (strip, lowercase provider)."""
-    normalized = dict(options or {})
-    if "provider" in normalized:
-        normalized["provider"] = str(normalized["provider"]).strip().lower()
-    for option_name in ("posthog_api_key_env_var", "posthog_host_env_var"):
-        if option_name in normalized:
-            normalized[option_name] = str(normalized[option_name]).strip()
-    if "posthog_host" in normalized:
-        normalized["posthog_host"] = _normalize_posthog_host(normalized["posthog_host"])
-    return normalized
+    """Resolve one module's declared option values through the manifest engine.
 
-
-def resolve_analytics_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Resolve analytics module options via the manifest runtime path."""
-    manifest = load_module_manifest_with_fallback("analytics")
+    The manifest owns the defaults, normalization rules, and validation; this
+    is the one path non-adapter callers use to read resolved values (module
+    adapters use ``quickscale_core.runtime.build_generic_manifest_spec``).
+    Declared normalization rules are applied, so the returned mapping carries
+    the manifest's canonical forms.
+    """
+    manifest = load_module_manifest_with_fallback(module_name)
     schema = build_schema_from_manifest(
-        manifest_name="analytics",
+        manifest_name=module_name,
         wiring_projections=manifest.wiring_projections,
         derived_settings=manifest.derived_settings,
         option_derivations=manifest.option_derivations,
         version="1",
     )
     result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
-    resolved = dict(result.resolved)
-    if "posthog_host" in resolved:
-        resolved["posthog_host"] = _normalize_posthog_host(resolved["posthog_host"])
-    resolved["provider"] = str(resolved.get("provider", "")).strip().lower()
-    resolved["posthog_api_key_env_var"] = str(
-        resolved.get("posthog_api_key_env_var", "")
-    ).strip()
-    resolved["posthog_host_env_var"] = str(
-        resolved.get("posthog_host_env_var", "")
-    ).strip()
-    resolved["posthog_host"] = _normalize_posthog_host(resolved.get("posthog_host", ""))
-    return resolved
-
-
-def validate_analytics_env_var_reference(option_name: str, value: Any) -> str | None:
-    candidate = str(value).strip()
-    if not candidate:
-        return None
-    qualified_option = f"modules.analytics.{option_name}"
-    if not _ANALYTICS_ENV_VAR_NAME_PATTERN.fullmatch(candidate):
-        return f"{qualified_option} must be an environment variable name matching ^[A-Z][A-Z0-9_]*$"
-    return None
-
-
-def validate_analytics_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    from urllib.parse import urlsplit  # noqa: PLC0415
-
-    resolved = resolve_analytics_module_options(options)
-    issues: list[str] = []
-    provider = str(resolved.get("provider", "")).strip().lower()
-    if provider not in ("posthog",):
-        issues.append("modules.analytics.provider must be one of: posthog")
-    for option_name in ("posthog_api_key_env_var", "posthog_host_env_var"):
-        issue = validate_analytics_env_var_reference(
-            option_name, resolved.get(option_name, "")
-        )
-        if issue:
-            issues.append(issue)
-    # Inline PostHog host URL validation (was _is_valid_posthog_host).
-    _ph_host = str(resolved.get("posthog_host", "")).strip()
-    if _ph_host:
-        _parsed = urlsplit(_ph_host)
-        if not (_parsed.scheme in {"http", "https"} and bool(_parsed.netloc)):
-            issues.append(
-                "modules.analytics.posthog_host must be an absolute http(s) URL"
-            )
-    else:
-        issues.append("modules.analytics.posthog_host must be an absolute http(s) URL")
-    for option_name in (
-        "enabled",
-        "exclude_debug",
-        "exclude_staff",
-        "anonymous_by_default",
-    ):
-        if not isinstance(resolved.get(option_name), bool):
-            issues.append(f"modules.analytics.{option_name} must be a boolean")
-    return issues
-
-
-def analytics_production_targeted(options: Mapping[str, Any] | None) -> bool:
-    resolved = resolve_analytics_module_options(options)
-    if not bool(resolved.get("enabled", True)):
-        return False
-    api_key_env_var = str(resolved.get("posthog_api_key_env_var", "")).strip()
-    return not bool(
-        validate_analytics_env_var_reference("posthog_api_key_env_var", api_key_env_var)
-    )
+    return dict(result.resolved)
 
 
 # ---------------------------------------------------------------------------
@@ -282,107 +181,6 @@ def resolve_backups_module_options(options: Mapping[str, Any] | None) -> dict[st
     merged = dict(defaults)
     merged.update(normalized)
     return merged
-
-
-# ---------------------------------------------------------------------------
-# Billing
-# ---------------------------------------------------------------------------
-
-_BILLING_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
-
-
-def _load_billing_manifest() -> Any:
-    return load_module_manifest_with_fallback("billing")
-
-
-def _build_billing_derivation_schema() -> ModuleDerivationSchema:
-    return ModuleDerivationSchema(
-        module_name="billing", version="1", option_derivations={}
-    )
-
-
-def default_billing_module_options() -> dict[str, Any]:
-    manifest = _load_billing_manifest()
-    return dict(manifest.get_defaults())
-
-
-def normalize_billing_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    normalized = dict(options or {})
-    for option_name in BILLING_ENV_VAR_OPTION_NAMES:
-        if option_name in normalized:
-            normalized[option_name] = str(normalized[option_name]).strip()
-    if "billing_currency" in normalized:
-        normalized["billing_currency"] = (
-            str(normalized["billing_currency"]).strip().lower()
-        )
-    return normalized
-
-
-def resolve_billing_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    manifest = _load_billing_manifest()
-    schema = _build_billing_derivation_schema()
-    result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
-    resolved = dict(result.resolved)
-    for option_name in BILLING_ENV_VAR_OPTION_NAMES:
-        resolved[option_name] = str(resolved[option_name]).strip()
-    resolved["billing_currency"] = str(resolved["billing_currency"]).strip().lower()
-    return resolved
-
-
-def validate_billing_env_var_reference(option_name: str, value: Any) -> str | None:
-    candidate = str(value).strip()
-    if not candidate:
-        return None
-    qualified_option = f"modules.billing.{option_name}"
-    if not _BILLING_ENV_VAR_NAME_PATTERN.fullmatch(candidate):
-        return f"{qualified_option} must be an environment variable name matching ^[A-Z][A-Z0-9_]*$"
-    return None
-
-
-def validate_billing_currency(value: Any) -> str | None:
-    from quickscale_core.contracts.module_options import BILLING_SUPPORTED_CURRENCIES
-
-    candidate = str(value).strip().lower()
-    if not candidate:
-        return "modules.billing.billing_currency cannot be blank"
-    if candidate not in BILLING_SUPPORTED_CURRENCIES:
-        return (
-            "modules.billing.billing_currency must be one of the supported QuickScale billing currency codes: "
-            + ", ".join(BILLING_SUPPORTED_CURRENCIES)
-        )
-    return None
-
-
-def validate_billing_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    resolved = resolve_billing_module_options(options)
-    issues: list[str] = []
-    if not isinstance(resolved.get("enabled", True), bool):
-        issues.append("modules.billing.enabled must be a boolean")
-    for option_name in BILLING_ENV_VAR_OPTION_NAMES:
-        issue = validate_billing_env_var_reference(
-            option_name, resolved.get(option_name, "")
-        )
-        if issue:
-            issues.append(issue)
-    currency_issue = validate_billing_currency(resolved.get("billing_currency", ""))
-    if currency_issue:
-        issues.append(currency_issue)
-    return issues
-
-
-def billing_production_targeted(options: Mapping[str, Any] | None) -> bool:
-    resolved = resolve_billing_module_options(options)
-    if not bool(resolved.get("enabled", True)):
-        return False
-    if validate_billing_currency(resolved.get("billing_currency", "")):
-        return False
-    for option_name in BILLING_ENV_VAR_OPTION_NAMES:
-        candidate = str(resolved.get(option_name, "")).strip()
-        if not candidate or validate_billing_env_var_reference(option_name, candidate):
-            return False
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1281,13 +1079,9 @@ def validate_storage_module_options(options: Mapping[str, Any] | None) -> list[s
 
 
 __all__ = [
-    # Analytics
-    "analytics_production_targeted",
-    "default_analytics_module_options",
-    "normalize_analytics_module_options",
-    "resolve_analytics_module_options",
-    "validate_analytics_env_var_reference",
-    "validate_analytics_module_options",
+    # Shared manifest resolution
+    "load_module_manifest_with_fallback",
+    "resolve_manifest_module_options",
     # Auth
     "default_auth_module_options",
     "format_auth_desired_config_contract",
@@ -1296,14 +1090,6 @@ __all__ = [
     # Backups
     "default_backups_module_options",
     "resolve_backups_module_options",
-    # Billing
-    "billing_production_targeted",
-    "default_billing_module_options",
-    "normalize_billing_module_options",
-    "resolve_billing_module_options",
-    "validate_billing_currency",
-    "validate_billing_env_var_reference",
-    "validate_billing_module_options",
     # Notifications
     "default_notifications_module_options",
     "notifications_live_delivery_configured",

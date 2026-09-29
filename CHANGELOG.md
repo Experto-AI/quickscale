@@ -165,6 +165,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     validation come from `module.yml` through the same manifest-driven configurator and shared
     engine, and a manifest's `retired_options` block refuses a retired key such as CRM's
     `default_pipeline_stages` in `quickscale.yml` and state with its removal message.
+  - **Analytics and billing configuration is manifest-owned.** Their option defaults, CLI prompts,
+    env-var-name patterns, and billing's currency choices come from `module.yml` through the same
+    manifest-driven configurator and shared engine, and `quickscale.yml` refuses any key no module
+    manifest declares.
   - **The `teams` placeholder is removed.** `quickscale_modules/teams/` no longer exists,
     `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`, and the
     planning note lives at `docs/planning/teams.md`.
