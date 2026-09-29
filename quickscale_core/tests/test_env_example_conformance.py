@@ -33,10 +33,6 @@ from quickscale_core.apply.steps.env_sync import (
     render_env_example_block,
     sync_env_example_blocks,
 )
-from quickscale_core.contracts.module_options import (
-    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-)
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.schema.config_schema import (
@@ -60,17 +56,6 @@ _DECLARING_MODULES: tuple[str, ...] = (
     "backups",
 )
 
-#: Conventional names a module falls back to when its declared default is
-#: blank.  The runtime uses the same names (``dr_engine`` builds its policy
-#: snapshot with these fallbacks), so a blank declaration still has to show up
-#: as a placeholder under one of them.
-_BLANK_DEFAULT_NAMES: dict[tuple[str, str], str] = {
-    ("storage", "access_key_id_env_var"): DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-    ("storage", "secret_access_key_env_var"): (
-        DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
-    ),
-}
-
 
 def _manifest_paths(root: Path) -> list[Path]:
     if not root.is_dir():
@@ -92,15 +77,17 @@ def _declared_env_var_options(manifest_path: Path) -> list[tuple[str, object]]:
 
 
 def _expected_placeholder_name(module: str, option_name: str, default: object) -> str:
+    """Return the placeholder name a declared option must render as.
+
+    Every shipped ``*_env_var`` option declares a non-blank conventional
+    variable name as its manifest default, so the default is the placeholder.
+    """
     candidate = str(default or "").strip()
-    if candidate:
-        return candidate
-    fallback = _BLANK_DEFAULT_NAMES.get((module, option_name))
-    assert fallback is not None, (
-        f"{module}.{option_name} declares a blank default and has no "
-        "conventional fallback name recorded in this check"
+    assert candidate, (
+        f"{module}.{option_name} declares a blank default; the placeholder "
+        "check needs a conventional fallback name recorded for it"
     )
-    return fallback
+    return candidate
 
 
 def _declaration_cases() -> Iterator[tuple[str, str, Path]]:

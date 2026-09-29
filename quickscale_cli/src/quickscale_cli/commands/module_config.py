@@ -21,12 +21,6 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_LAYOUT_VARIANTS,
     SOCIAL_LINK_TREE_PATH,
 )
-from quickscale_core.contracts.module_options import (
-    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-)
 from quickscale_core.contracts.resolvers import (
     default_notifications_module_options,
     resolve_notifications_module_options,
@@ -40,17 +34,6 @@ from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.manifest.resolver import normalize_module_option_values
 
 
-def _merge_existing_config(
-    defaults: dict[str, Any],
-    existing_config: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Merge module defaults with any existing configured values."""
-    merged = dict(defaults)
-    if existing_config:
-        merged.update(dict(existing_config))
-    return merged
-
-
 def _format_tag_list(tags: list[str] | tuple[str, ...]) -> str:
     """Return a comma-separated prompt string for provider-visible tags."""
     return ", ".join(tags)
@@ -60,149 +43,6 @@ def _parse_notification_tag_input(raw_value: str, field_name: str) -> list[str]:
     """Normalize comma-separated notification tags using the shared contract."""
     normalized = resolve_notifications_module_options({field_name: raw_value})
     return list(normalized[field_name])
-
-
-# ============================================================================
-# STORAGE MODULE CONFIGURATION
-# ============================================================================
-
-
-def get_default_storage_config() -> dict[str, Any]:
-    """Return default configuration for the storage module."""
-    return {
-        "backend": "local",
-        "media_url": "/media/",
-        "public_base_url": "",
-        "bucket_name": "",
-        "endpoint_url": "",
-        "region_name": "",
-        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-        "default_acl": "",
-        "querystring_auth": False,
-        "private_media_enabled": False,
-    }
-
-
-def configure_storage_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Configure storage module settings interactively or with defaults."""
-    defaults = _merge_existing_config(get_default_storage_config(), existing_config)
-
-    if non_interactive:
-        click.echo("\n⚙️  Using default storage module configuration...")
-        config = defaults
-        click.echo(f"  • Backend: {config['backend']}")
-        click.echo(f"  • Media URL: {config['media_url']}")
-        click.echo("  • Public base URL: not configured")
-        return config
-
-    click.echo("\n⚙️  Configuring storage module...")
-    click.echo("Configure media storage backend for local or cloud delivery.\n")
-
-    backend = click.prompt(
-        "Storage backend",
-        type=click.Choice(["local", "s3", "r2"], case_sensitive=False),
-        default=str(defaults["backend"]),
-        show_choices=True,
-    ).lower()
-
-    config = {
-        "backend": backend,
-        "media_url": click.prompt(
-            "Media URL prefix",
-            default=str(defaults["media_url"]),
-        ).strip()
-        or "/media/",
-        "public_base_url": click.prompt(
-            "Optional public base URL (CDN/domain)",
-            default=str(defaults["public_base_url"]),
-            show_default=False,
-        ).strip(),
-        "bucket_name": str(defaults["bucket_name"]),
-        "endpoint_url": str(defaults["endpoint_url"]),
-        "region_name": str(defaults["region_name"]),
-        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: str(
-            defaults.get(
-                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-                DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-            )
-        ),
-        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: str(
-            defaults.get(
-                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-                DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-            )
-        ),
-        "default_acl": str(defaults["default_acl"]),
-        "querystring_auth": bool(defaults["querystring_auth"]),
-        "private_media_enabled": bool(defaults["private_media_enabled"]),
-    }
-
-    if backend in {"s3", "r2"}:
-        click.echo("\nCloud backend selected. Provide bucket/provider settings.")
-        config["bucket_name"] = click.prompt(
-            "Bucket name",
-            default=str(defaults["bucket_name"]),
-        ).strip()
-        config["endpoint_url"] = click.prompt(
-            "Endpoint URL (required for R2)",
-            default=str(defaults["endpoint_url"]),
-        ).strip()
-        config["region_name"] = click.prompt(
-            "Region name",
-            default=str(defaults["region_name"]),
-        ).strip()
-        config[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] = (
-            click.prompt(
-                "Access key ID environment variable name",
-                default=str(
-                    defaults.get(
-                        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-                        DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-                    )
-                    or DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-                ),
-            ).strip()
-            or DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR
-        )
-        config[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = (
-            click.prompt(
-                "Secret access key environment variable name",
-                default=str(
-                    defaults.get(
-                        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-                        DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-                    )
-                    or DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-                ),
-            ).strip()
-            or DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
-        )
-        config["default_acl"] = click.prompt(
-            "Default ACL (blank recommended)",
-            default=str(defaults["default_acl"]),
-        ).strip()
-        config["querystring_auth"] = click.confirm(
-            "Enable querystring auth (signed URLs)?",
-            default=bool(defaults["querystring_auth"]),
-        )
-    else:
-        config.update(
-            {
-                "bucket_name": "",
-                "endpoint_url": "",
-                "region_name": "",
-                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "",
-                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "",
-                "default_acl": "",
-                "querystring_auth": False,
-            }
-        )
-
-    return config
 
 
 # ============================================================================
@@ -473,16 +313,34 @@ def default_module_config_from_manifest(module_name: str) -> dict[str, Any]:
     return dict(load_module_manifest_with_fallback(module_name).get_defaults())
 
 
+def _is_blank_stored_value(value: Any) -> bool:
+    """Return whether a stored option value counts as unset for prompting."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, tuple, dict, set)):
+        return not value
+    return False
+
+
 def _prompt_for_manifest_option(option: Any, current: Any) -> Any:
-    """Prompt once for one manifest-declared option, by its declared shape."""
+    """Prompt once for one manifest-declared option, by its declared shape.
+
+    The prompt's default is the stored value when it carries one, else the
+    option's declared default, so a blank stored value never hides the
+    conventional value the manifest declares (storage's credential-variable
+    names on a local-to-cloud reconfiguration, for example).
+    """
     description = option.description or option.name
     validation = option.validation or {}
+    fallback = option.default if _is_blank_stored_value(current) else current
 
     if option.option_type == "boolean":
-        return click.confirm(description, default=bool(current))
+        return click.confirm(description, default=bool(fallback))
 
     if option.option_type == "integer":
-        return click.prompt(description, type=int, default=int(current))
+        return click.prompt(description, type=int, default=int(fallback))
 
     choices = validation.get("choices")
     if option.option_type == "string" and isinstance(choices, list) and choices:
@@ -491,19 +349,19 @@ def _prompt_for_manifest_option(option: Any, current: Any) -> Any:
             type=click.Choice(
                 [str(choice) for choice in choices], case_sensitive=False
             ),
-            default=str(current),
+            default=str(fallback),
             show_choices=True,
         )
 
     if option.option_type == "list":
         rendered = click.prompt(
             description,
-            default=", ".join(str(value) for value in current or []),
-            show_default=bool(current),
+            default=", ".join(str(value) for value in fallback or []),
+            show_default=bool(fallback),
         )
         return [part.strip() for part in rendered.split(",") if part.strip()]
 
-    return click.prompt(description, default=str(current), show_default=bool(current))
+    return click.prompt(description, default=str(fallback), show_default=bool(fallback))
 
 
 def _raise_for_invalid_manifest_config(
@@ -642,8 +500,8 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
         ),
         ModuleConfigurator(
             name="storage",
-            configure=configure_storage_module,
-            get_defaults=get_default_storage_config,
+            configure=partial(configure_module_from_manifest, "storage"),
+            get_defaults=partial(default_module_config_from_manifest, "storage"),
         ),
         ModuleConfigurator(
             name="backups",

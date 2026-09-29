@@ -495,7 +495,21 @@ docker:
             result = runner.invoke(
                 plan,
                 ["--add", "--configure-modules"],
-                input="storage\nlocal\n/media/\nhttps://cdn.example.com/media\ny\n",
+                input=(
+                    "storage\n"
+                    "local\n"
+                    "/media/\n"
+                    "https://cdn.example.com/media\n"
+                    "\n"
+                    "\n"
+                    "\n"
+                    "AWS_ACCESS_KEY_ID\n"
+                    "AWS_SECRET_ACCESS_KEY\n"
+                    "\n"
+                    "n\n"
+                    "n\n"
+                    "y\n"
+                ),
             )
 
             assert result.exit_code == 0
@@ -516,7 +530,21 @@ class TestPlanNewProjectConfigureModules:
                 plan,
                 ["myapp", "--configure-modules"],
                 input=(
-                    "\n\nstorage\nn\nlocal\n/media/\nhttps://cdn.example.com/media\ny\n"
+                    "\n\n"
+                    "storage\n"
+                    "n\n"
+                    "local\n"
+                    "/media/\n"
+                    "https://cdn.example.com/media\n"
+                    "\n"
+                    "\n"
+                    "\n"
+                    "AWS_ACCESS_KEY_ID\n"
+                    "AWS_SECRET_ACCESS_KEY\n"
+                    "\n"
+                    "n\n"
+                    "n\n"
+                    "y\n"
                 ),
             )
 

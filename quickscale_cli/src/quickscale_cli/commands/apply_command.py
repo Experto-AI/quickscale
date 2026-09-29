@@ -34,7 +34,6 @@ from quickscale_core.contracts.module_options import (
 from quickscale_core.contracts.resolvers import (
     load_module_manifest_with_fallback,
     resolve_manifest_module_options,
-    validate_storage_module_options,
     notifications_live_delivery_configured,
     notifications_production_targeted,
     resolve_notifications_module_options,
@@ -1263,7 +1262,10 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
 
     storage_config = qs_config.modules.get("storage")
     if storage_config is not None:
-        storage_issues = validate_storage_module_options(storage_config.options or {})
+        storage_issues = validate_module_options(
+            load_module_manifest_with_fallback("storage"),
+            storage_config.options or {},
+        )
         if storage_issues:
             click.secho(
                 "\n❌ Storage module configuration is incomplete for apply:",

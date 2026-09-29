@@ -38,18 +38,14 @@ from quickscale_core.contracts.module_catalog import (
 from quickscale_core.contracts.resolvers import (  # noqa: F401
     default_notifications_module_options,
     default_social_module_options,
-    default_storage_module_options,
     normalize_social_module_options,
-    normalize_storage_module_options,
     notifications_live_delivery_configured,
     notifications_production_targeted,
     notifications_runtime_email_backend,
     resolve_notifications_module_options,
     resolve_social_module_options,
-    resolve_storage_module_options,
     validate_notifications_module_options,
     validate_social_module_options,
-    validate_storage_module_options,
 )
 from quickscale_core.contracts.module_discovery import (
     AUTHORITATIVE_MODULE_COUNT,
@@ -67,8 +63,6 @@ from quickscale_core.contracts.module_options import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     BILLING_ENV_VAR_OPTION_NAMES,
-    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
     ENV_VAR_PORTABILITY_IGNORED,
@@ -89,7 +83,6 @@ from quickscale_core.contracts.module_options import (
     normalize_notifications_module_options,
     sanitize_module_options,
     validate_notifications_env_var_reference,
-    validate_storage_env_var_reference,
 )
 
 __all__ = [
@@ -104,18 +97,14 @@ __all__ = [
     # Resolver functions
     "default_notifications_module_options",
     "default_social_module_options",
-    "default_storage_module_options",
     "normalize_social_module_options",
-    "normalize_storage_module_options",
     "notifications_live_delivery_configured",
     "notifications_production_targeted",
     "notifications_runtime_email_backend",
     "resolve_notifications_module_options",
     "resolve_social_module_options",
-    "resolve_storage_module_options",
     "validate_notifications_module_options",
     "validate_social_module_options",
-    "validate_storage_module_options",
     # Module discovery
     "AUTHORITATIVE_MODULE_COUNT",
     "ModulePresenceRecord",
@@ -164,20 +153,16 @@ __all__ = [
     "DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
     "NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION",
     "NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION",
-    # Storage constants
-    "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
-    "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
+    # Storage option-name constants
     "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
     # Normalize functions
     "normalize_notifications_module_options",
     "normalize_social_module_options",
-    "normalize_storage_module_options",
     # Validate functions
     "validate_notifications_env_var_reference",
     "validate_notifications_module_options",
     "validate_social_module_options",
-    "validate_storage_env_var_reference",
     # Sanitize dispatcher
     "sanitize_module_options",
 ]

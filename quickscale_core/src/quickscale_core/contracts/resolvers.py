@@ -25,14 +25,6 @@ from quickscale_core.contracts.module_options import (
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
     NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
     normalize_notifications_module_options,
-    # Storage
-    STORAGE_BACKENDS,
-    DEFAULT_STORAGE_MEDIA_URL,
-    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-    validate_storage_env_var_reference,
     # Social
     SOCIAL_LAYOUT_VARIANTS,
     # Common
@@ -756,167 +748,14 @@ def validate_social_module_options(options: dict[str, Any] | None) -> list[str]:
 # ---------------------------------------------------------------------------
 # Storage
 # ---------------------------------------------------------------------------
-
-
-def _load_storage_manifest() -> Any:
-    return load_module_manifest_with_fallback("storage")
-
-
-def _normalize_media_url(media_url: str) -> str:
-    normalized = (media_url or "/media/").strip()
-    if not normalized.startswith("/") and not normalized.startswith("http"):
-        normalized = "/" + normalized
-    if not normalized.endswith("/"):
-        normalized += "/"
-    return normalized
-
-
-def _build_storage_derivation_schema() -> ModuleDerivationSchema:
-    _strip_keys = (
-        "public_base_url",
-        "bucket_name",
-        "endpoint_url",
-        "region_name",
-        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-        "default_acl",
-    )
-    strip_derivations = {
-        key: OptionDerivation(
-            option_key=key,
-            normalization_rules=[
-                NormalizationRule(source_key=key, target_key=key, rule_type="strip")
-            ],
-        )
-        for key in _strip_keys
-    }
-    return ModuleDerivationSchema(
-        module_name="storage",
-        version="1",
-        option_derivations={
-            "backend": OptionDerivation(
-                option_key="backend",
-                normalization_rules=[
-                    NormalizationRule(
-                        source_key="backend",
-                        target_key="backend",
-                        rule_type="lowercase",
-                    )
-                ],
-                validation_rules=[
-                    ValidationRule(
-                        option_key="backend",
-                        rule_type="choices",
-                        allowed_values=list(STORAGE_BACKENDS),
-                        description="modules.storage.backend must be one of: "
-                        + ", ".join(STORAGE_BACKENDS),
-                    )
-                ],
-            ),
-            **strip_derivations,
-        },
-    )
-
-
-def default_storage_module_options() -> dict[str, Any]:
-    manifest = _load_storage_manifest()
-    return dict(manifest.get_defaults())
-
-
-def normalize_storage_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    normalized = dict(options or {})
-    if "backend" in normalized:
-        normalized["backend"] = str(normalized["backend"]).lower()
-    if "media_url" in normalized:
-        normalized["media_url"] = _normalize_media_url(str(normalized["media_url"]))
-    if "public_base_url" in normalized:
-        normalized["public_base_url"] = str(normalized["public_base_url"]).strip()
-
-    # Convert legacy literal credential options to env-var references.
-    legacy_access_key_id = str(normalized.pop("access_key_id", "")).strip()
-    legacy_secret_access_key = str(normalized.pop("secret_access_key", "")).strip()
-    access_key_env_var = str(
-        normalized.get(STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION, "")
-    ).strip()
-    secret_access_key_env_var = str(
-        normalized.get(STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION, "")
-    ).strip()
-    if legacy_access_key_id and not access_key_env_var:
-        normalized[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] = (
-            DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR
-        )
-    if legacy_secret_access_key and not secret_access_key_env_var:
-        normalized[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = (
-            DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
-        )
-
-    for key in (
-        "bucket_name",
-        "endpoint_url",
-        "region_name",
-        "default_acl",
-        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-    ):
-        if key in normalized:
-            normalized[key] = str(normalized[key]).strip()
-    return normalized
-
-
-def resolve_storage_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    manifest = _load_storage_manifest()
-    schema = _build_storage_derivation_schema()
-    normalized = normalize_storage_module_options(options)
-    result = resolve_module_config(manifest, schema, overrides=normalized)
-    resolved = dict(result.resolved)
-    backend = str(resolved.get("backend", "")).lower()
-    resolved["backend"] = backend
-    resolved["media_url"] = _normalize_media_url(
-        str(resolved.get("media_url", DEFAULT_STORAGE_MEDIA_URL))
-    )
-    resolved["public_base_url"] = str(resolved.get("public_base_url", "")).strip()
-    resolved["private_media_enabled"] = bool(
-        resolved.get("private_media_enabled", False)
-    )
-    resolved["querystring_auth"] = bool(resolved.get("querystring_auth", False))
-    for key in (
-        "bucket_name",
-        "endpoint_url",
-        "region_name",
-        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-        "default_acl",
-    ):
-        resolved[key] = str(resolved.get(key, "")).strip()
-    return resolved
-
-
-def validate_storage_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    raw_normalized = normalize_storage_module_options(options)
-    defaults = default_storage_module_options()
-    merged: dict[str, Any] = {**defaults, **raw_normalized}
-    issues: list[str] = []
-    backend = str(merged.get("backend", "")).lower()
-    if backend not in STORAGE_BACKENDS:
-        issues.append(
-            "modules.storage.backend must be one of: " + ", ".join(STORAGE_BACKENDS)
-        )
-    if not isinstance(merged.get("private_media_enabled"), bool):
-        issues.append("modules.storage.private_media_enabled must be a boolean")
-    # Validate env-var references when a cloud backend is configured.
-    if backend in {"s3", "r2"}:
-        for option_name in (
-            STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-            STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-        ):
-            issue = validate_storage_env_var_reference(
-                option_name, merged.get(option_name, "")
-            )
-            if issue:
-                issues.append(issue)
-    return issues
+#
+# SA217: storage's option code is gone.  Its defaults, normalization rules
+# (strip / lowercase), validation blocks (backend choices, credential
+# env-var patterns, cloud-backend requiredness), and retired raw-credential
+# keys are declared in ``quickscale_modules/storage/module.yml`` and enforced
+# through the generic manifest engine (``resolve_manifest_module_options``
+# and ``quickscale_core.manifest.option_validation``); its adapter projects
+# the resolved options through ``build_generic_manifest_spec``.
 
 
 __all__ = [
@@ -937,10 +776,4 @@ __all__ = [
     "normalize_social_provider_allowlist",
     "resolve_social_module_options",
     "validate_social_module_options",
-    # Storage
-    "default_storage_module_options",
-    "normalize_storage_module_options",
-    "resolve_storage_module_options",
-    "validate_storage_env_var_reference",
-    "validate_storage_module_options",
 ]

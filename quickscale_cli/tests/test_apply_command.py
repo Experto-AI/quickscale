@@ -346,7 +346,15 @@ modules:
         [
             (
                 {"backend": "invalid"},
-                "modules.storage.backend must be one of",
+                "QUICKSCALE_STORAGE_BACKEND (modules.storage.backend) must be one of",
+            ),
+            (
+                {"backend": "s3", "access_key_id_env_var": ""},
+                "QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+            ),
+            (
+                {"access_key_id": "raw-secret"},
+                "'access_key_id' is no longer supported",
             ),
         ],
     )

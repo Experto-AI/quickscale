@@ -251,12 +251,6 @@
         "symbol": "sanitize_module_options",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/contracts/resolvers.py::normalize_storage_module_options": {
-        "file": "quickscale_core/src/quickscale_core/contracts/resolvers.py",
-        "max_complexity": 11,
-        "symbol": "normalize_storage_module_options",
-        "type": "function"
-      },
       "quickscale_core/src/quickscale_core/contracts/resolvers.py::validate_notifications_module_options": {
         "file": "quickscale_core/src/quickscale_core/contracts/resolvers.py",
         "max_complexity": 20,
