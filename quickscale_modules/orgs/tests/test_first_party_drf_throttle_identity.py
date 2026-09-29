@@ -333,6 +333,8 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
     relative_forms_views = (
         "quickscale_modules/forms/src/quickscale_modules_forms/views.py"
     )
+    # Rule 26 webhooks register no throttle classes; the closed-world list
+    # still records each empty registration.
     assert [
         (
             str(record.path.relative_to(REPO_ROOT)),
@@ -340,7 +342,19 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
             record.names,
         )
         for record in registrations
-    ] == [(relative_forms_views, "FormSubmitAPIView", ("FormSubmitThrottle",))]
+    ] == [
+        (
+            "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
+            "StripeWebhookView",
+            (),
+        ),
+        (relative_forms_views, "FormSubmitAPIView", ("FormSubmitThrottle",)),
+        (
+            "quickscale_modules/notifications/src/quickscale_modules_notifications/views.py",
+            "NotificationWebhookView",
+            (),
+        ),
+    ]
 
     assert aliases == [], f"Unexpected first-party throttle aliases: {aliases!r}"
 
