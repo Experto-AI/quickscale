@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 import hashlib
 import hmac
 import json
@@ -972,10 +972,10 @@ def _parse_event_datetime(value: Any) -> datetime | None:
     if value in (None, ""):
         return None
     if isinstance(value, (int, float)):
-        return timezone.datetime.fromtimestamp(value, tz=timezone.UTC)
+        return datetime.fromtimestamp(value, tz=UTC)
     parsed_value = parse_datetime(str(value))
     if parsed_value is None:
         return None
     if timezone.is_naive(parsed_value):
-        return timezone.make_aware(parsed_value, timezone.UTC)
+        return timezone.make_aware(parsed_value, UTC)
     return parsed_value
