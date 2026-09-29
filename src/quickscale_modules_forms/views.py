@@ -259,7 +259,7 @@ class FormSubmitAPIView(CreateAPIView):
     authentication_classes = []
     permission_classes = [AllowAny]
     throttle_classes = [FormSubmitThrottle]
-    throttle_scope = "form_submit"
+    throttle_scope = "quickscale_forms_submit"
 
     def get_serializer(
         self, *args: Any, **kwargs: Any

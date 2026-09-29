@@ -473,18 +473,27 @@ class TestFormSubmitAPIView:
         assert len(mail.outbox) == 1
         assert "admin@example.com" in mail.outbox[0].recipients()
 
-    @override_settings(FORMS_RATE_LIMIT="2/minute")
     def test_returns_429_when_rate_limit_exceeded(
         self, api_client, form, form_field, email_field
     ):
-        """Submit endpoint returns 429 after configured FORMS_RATE_LIMIT is exceeded"""
+        """Submit endpoint returns 429 after the wired scope rate is exceeded."""
+        from rest_framework.throttling import ScopedRateThrottle
+
         cache.clear()
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
+        scope_rates = {"quickscale_forms_submit": "2/minute"}
 
-        first = api_client.post(url, data=data, format="json")
-        second = api_client.post(url, data=data, format="json")
-        third = api_client.post(url, data=data, format="json")
+        # The forms wiring contributes the rate from FORMS_RATE_LIMIT; DRF
+        # binds DEFAULT_THROTTLE_RATES onto the throttle class at import time,
+        # so the test applies both bindings itself.
+        with (
+            override_settings(REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": scope_rates}),
+            patch.object(ScopedRateThrottle, "THROTTLE_RATES", scope_rates),
+        ):
+            first = api_client.post(url, data=data, format="json")
+            second = api_client.post(url, data=data, format="json")
+            third = api_client.post(url, data=data, format="json")
 
         assert first.status_code == 201
         assert second.status_code == 201

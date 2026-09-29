@@ -43,6 +43,9 @@ def test_post_hook_coerces_all_settings() -> None:
         "FORMS_RATE_LIMIT": "5",
         "FORMS_DATA_RETENTION_DAYS": 365,
         "FORMS_SUBMISSIONS_API": False,
+        "REST_FRAMEWORK": {
+            "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "5"},
+        },
     }
 
 

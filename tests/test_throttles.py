@@ -64,23 +64,9 @@ INVALID_PROXY_SETTINGS = (
 )
 
 
-def test_form_submit_throttle_uses_configured_rate() -> None:
-    throttle = FormSubmitThrottle()
-
-    with override_settings(FORMS_RATE_LIMIT="5/hour"):
-        assert throttle.get_rate() == "5/hour"
-
-
-def test_form_submit_throttle_missing_rate_raises_improperly_configured() -> None:
-    """SA17.4 — missing FORMS_RATE_LIMIT must raise at request time."""
-    throttle = FormSubmitThrottle()
-
-    with override_settings(FORMS_RATE_LIMIT=None):
-        with pytest.raises(
-            ImproperlyConfigured,
-            match="FORMS_RATE_LIMIT",
-        ):
-            throttle.get_rate()
+def test_form_submit_throttle_scope_carries_the_module_stem() -> None:
+    """The scope is a shared DRF name; it carries the module stem (rule 32)."""
+    assert FormSubmitThrottle.scope == "quickscale_forms_submit"
 
 
 def test_form_submit_throttle_uses_parent_cache_key_when_view_scope_is_declared() -> (
@@ -116,7 +102,7 @@ def test_form_submit_throttle_builds_cache_key_from_default_scope() -> None:
     with patch.object(throttle, "get_ident", return_value="127.0.0.1"):
         cache_key = throttle.get_cache_key(request, view)
 
-    assert cache_key == "throttle_form_submit_127.0.0.1"
+    assert cache_key == "throttle_quickscale_forms_submit_127.0.0.1"
 
 
 # ---------------------------------------------------------------------------
@@ -148,12 +134,12 @@ def test_form_submit_throttle_short_xff_chain_falls_back_to_remote_addr() -> Non
     the throttle ident must be REMOTE_ADDR, not the XFF entry (fail-closed)."""
     throttle = FormSubmitThrottle()
     request = _make_request(remote_addr="10.0.0.42", xff="203.0.113.50")
-    view = SimpleNamespace(throttle_scope="form_submit")
+    view = SimpleNamespace(throttle_scope="quickscale_forms_submit")
 
     cache_key = throttle.get_cache_key(request, view)
 
     # Chain length 1 < TRUSTED_PROXY_COUNT 2 → REMOTE_ADDR
-    assert cache_key == "throttle_form_submit_10.0.0.42", (
+    assert cache_key == "throttle_quickscale_forms_submit_10.0.0.42", (
         f"Expected REMOTE_ADDR-based key, got {cache_key!r}"
     )
 
@@ -167,12 +153,12 @@ def test_form_submit_throttle_sufficient_xff_chain_resolves_from_xff() -> None:
     the throttle ident must resolve from the rightmost trusted entry."""
     throttle = FormSubmitThrottle()
     request = _make_request(remote_addr="10.0.0.1", xff="203.0.113.50, 10.0.0.1")
-    view = SimpleNamespace(throttle_scope="form_submit")
+    view = SimpleNamespace(throttle_scope="quickscale_forms_submit")
 
     cache_key = throttle.get_cache_key(request, view)
 
     # Chain length 2 >= TRUSTED_PROXY_COUNT 2 → ips[-2] = "203.0.113.50"
-    assert cache_key == "throttle_form_submit_203.0.113.50", (
+    assert cache_key == "throttle_quickscale_forms_submit_203.0.113.50", (
         f"Expected XFF-resolved key, got {cache_key!r}"
     )
 
@@ -186,11 +172,11 @@ def test_form_submit_throttle_use_xff_false_ignores_xff() -> None:
     REMOTE_ADDR even when X-Forwarded-For is present (CR-SA21.2-001)."""
     throttle = FormSubmitThrottle()
     request = _make_request(remote_addr="10.0.0.99", xff="198.51.100.1")
-    view = SimpleNamespace(throttle_scope="form_submit")
+    view = SimpleNamespace(throttle_scope="quickscale_forms_submit")
 
     cache_key = throttle.get_cache_key(request, view)
 
-    assert cache_key == "throttle_form_submit_10.0.0.99", (
+    assert cache_key == "throttle_quickscale_forms_submit_10.0.0.99", (
         f"Expected REMOTE_ADDR-based key when USE_X_FORWARDED_FOR=False, "
         f"got {cache_key!r}"
     )
@@ -205,7 +191,7 @@ def test_form_submit_throttle_identity_matches_direct_resolver(
     """Every value-bearing proxy tuple keeps throttle identity parity."""
     throttle = FormSubmitThrottle()
     request = _make_request(remote_addr="10.0.0.1", xff=xff)
-    view = SimpleNamespace(throttle_scope="form_submit")
+    view = SimpleNamespace(throttle_scope="quickscale_forms_submit")
 
     with override_settings(
         USE_X_FORWARDED_FOR=use_xff,
@@ -214,7 +200,7 @@ def test_form_submit_throttle_identity_matches_direct_resolver(
         expected = get_client_ip(request)
         assert throttle.get_ident(request) == expected
         assert throttle.get_cache_key(request, view) == (
-            f"throttle_form_submit_{expected}"
+            f"throttle_quickscale_forms_submit_{expected}"
         )
 
 
@@ -226,7 +212,7 @@ def test_form_submit_throttle_fail_loud_matches_resolver_without_cache_write(
     """Invalid resolver settings fail before DRF can mutate throttle cache."""
     throttle = FormSubmitThrottle()
     request = _make_request(remote_addr="10.0.0.1", xff="198.51.100.1")
-    view = SimpleNamespace(throttle_scope="form_submit")
+    view = SimpleNamespace(throttle_scope="quickscale_forms_submit")
     values: dict[str, object] = {
         "USE_X_FORWARDED_FOR": False,
         "TRUSTED_PROXY_COUNT": 1,

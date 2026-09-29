@@ -59,7 +59,7 @@ REST_FRAMEWORK = {
         "django_filters.rest_framework.DjangoFilterBackend",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "form_submit": "5/hour",
+        "quickscale_forms_submit": "5/hour",
     },
 }
 
