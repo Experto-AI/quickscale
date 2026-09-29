@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -24,7 +25,7 @@ class OrgRole(models.TextChoices):
 
 
 INVITABLE_ORG_ROLE_CHOICES = tuple(
-    (role.value, role.label) for role in OrgRole if role != OrgRole.OWNER
+    (role.value, str(role.label)) for role in OrgRole if role != OrgRole.OWNER
 )
 
 
@@ -95,7 +96,7 @@ class Organization(models.Model):
         if errors:
             raise ValidationError(errors)
 
-    def save(self, *args: object, **kwargs: object) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         self.clean()
         super().save(*args, **kwargs)
 
@@ -141,6 +142,13 @@ class OrganizationMembership(models.Model):
         related_name="quickscale_orgs_invited_organization_memberships",
     )
     joined_at = models.DateTimeField(auto_now_add=True)
+
+    if TYPE_CHECKING:
+        # FK attname; unset until the organization is assigned.
+        organization_id: uuid.UUID | None
+
+        # Django's choices accessor for ``role``.
+        def get_role_display(self) -> str: ...
 
     class Meta:
         app_label = "quickscale_orgs"
@@ -264,7 +272,7 @@ class OrganizationMembership(models.Model):
         ):
             raise ValidationError({"role": self.LAST_OWNER_DEMOTION_MESSAGE})
 
-    def save(self, *args: object, **kwargs: object) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         with transaction.atomic():
             # 1. Lock org rows FIRST (normalized lock order — prevents
             #    deadlock with AccountDeleteView which locks org rows
@@ -305,7 +313,7 @@ class OrganizationMembership(models.Model):
             )
             super().save(*args, **kwargs)
 
-    def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
+    def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
         with transaction.atomic():
             # 1. Lock org rows FIRST (normalized lock order — prevents
             #    deadlock with AccountDeleteView which locks org rows
@@ -387,6 +395,10 @@ class OrganizationInvitation(models.Model):
     expires_at = models.DateTimeField()
     accepted_at = models.DateTimeField(null=True, blank=True)
 
+    if TYPE_CHECKING:
+        # FK attname; unset until the organization is assigned.
+        organization_id: uuid.UUID | None
+
     class Meta:
         app_label = "quickscale_orgs"
         ordering = ["email"]
@@ -411,7 +423,7 @@ class OrganizationInvitation(models.Model):
 
         return str(value).strip().lower()
 
-    def _has_active_duplicate(self, *, now: timezone.datetime) -> bool:
+    def _has_active_duplicate(self, *, now: datetime) -> bool:
         if (
             self.organization_id is None
             or not self.email
@@ -447,7 +459,7 @@ class OrganizationInvitation(models.Model):
         if errors:
             raise ValidationError(errors)
 
-    def save(self, *args: object, **kwargs: object) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.email:
             self.email = self.normalize_email(self.email)
         with transaction.atomic():

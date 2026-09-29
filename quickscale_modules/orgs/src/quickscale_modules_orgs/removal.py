@@ -478,6 +478,11 @@ def _provider_id_classification(
     return declaration
 
 
+#: The ``models`` module name is shadowed by the ``declared_provider_backed_fields``
+#: parameter, so that function's local annotation resolves through this alias.
+_ModelClass = type[models.Model]
+
+
 def declared_provider_backed_fields(
     models: Iterable[type[models.Model]],
 ) -> list[tuple[type[models.Model], str]]:
@@ -490,7 +495,7 @@ def declared_provider_backed_fields(
             rather than treating an unreadable declaration as "no provider
             state".
     """
-    declared: list[tuple[type[models.Model], str]] = []
+    declared: list[tuple[_ModelClass, str]] = []
     for model in models:
         declaration = _provider_id_classification(model)
         if declaration is None:

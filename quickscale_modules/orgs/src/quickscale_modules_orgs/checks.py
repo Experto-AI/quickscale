@@ -65,6 +65,8 @@ from django.db import connection
 
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL,
+    ExternalProviderField,
+    OrganizationRemovalObligation,
     RemovalAction,
     RemovalBoundary,
     coordinator_discharge_actions,
@@ -801,9 +803,9 @@ def check_removal_obligation_discharge(app_configs: object, **kwargs: object) ->
 
 
 def _uninspectable_refusal_field_messages(
-    obligation: object,
-    provider_field: object,
-) -> list:
+    obligation: OrganizationRemovalObligation,
+    provider_field: ExternalProviderField,
+) -> list[Error]:
     """Report a declared provider field no boundary can inspect per organization."""
     try:
         model = apps.get_model(provider_field.model_label)

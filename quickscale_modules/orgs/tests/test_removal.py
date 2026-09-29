@@ -195,6 +195,13 @@ def test_declared_provider_backed_fields_lists_only_provider_backed() -> None:
     assert declared_provider_backed_fields([model]) == [(model, "mls_id")]
 
 
+def test_declared_provider_backed_fields_keeps_its_keyword_interface() -> None:
+    """Callers keep passing the model set by the published `models` keyword."""
+    model = _classified_model({"mls_id": PROVIDER_BACKED})
+
+    assert declared_provider_backed_fields(models=[model]) == [(model, "mls_id")]
+
+
 def test_declared_provider_backed_fields_rejects_malformed_declaration() -> None:
     """A malformed declaration cannot be read as "no provider state"."""
     model = _classified_model("provider-backed")
