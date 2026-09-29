@@ -46,6 +46,15 @@ config:
 dependencies:
   - django-allauth>=65.18.0,<66.0.0
 
+# Retired option keys are refused by name with the message declared here.
+retired_options:
+  allow_registration: >-
+    Legacy config key 'allow_registration' is no longer supported. Use
+    'registration_enabled' instead.
+  social_providers: >-
+    Legacy config key 'social_providers' is no longer supported. Remove it
+    from the auth module options.
+
 # Required first-party modules with minimum versions
 required_modules:
   - orgs>=0.86.0
