@@ -74,7 +74,7 @@ class TestAccountDeleteView:
         assert not user_model.objects.filter(id=user_id).exists()
 
     # ------------------------------------------------------------------
-    # SA28 — last-owner guard
+    # last-owner guard
     # ------------------------------------------------------------------
 
     def test_account_delete_blocked_when_sole_owner_of_shared_org_with_members(
@@ -219,7 +219,7 @@ class TestAccountDeleteView:
         self, authenticated_client, user, user_data
     ):
         """Deletion is blocked when the user is the sole owner of a
-        personal org that has other members — CR-SA28-001 last-owner
+        personal org that has other members — last-owner
         protection applies to memberful personal orgs too."""
         from django.contrib.auth import get_user_model
 
@@ -267,7 +267,7 @@ class TestAccountDeleteView:
         self, authenticated_client, user
     ):
         """A member on someone else's personal org must NOT trigger
-        subscription cancellation for that org — CR-SA28-001 non-owner
+        subscription cancellation for that org — non-owner
         personal-org guard."""
         from unittest.mock import patch
 
@@ -315,7 +315,7 @@ class TestAccountDeleteView:
         mock_cancel.assert_not_called()
 
     # ------------------------------------------------------------------
-    # SA28 — personal-org subscription cancellation
+    # personal-org subscription cancellation
     # ------------------------------------------------------------------
 
     def test_account_delete_cancels_personal_org_subscription(
@@ -1309,7 +1309,7 @@ class TestAccountDeleteView:
     ):
         """When the user is an owner of one personal org and a mere
         member of another, only the owned personal org's subscription
-        is cancelled — CR-SA28-001 multi-personal-org guard."""
+        is cancelled — multi-personal-org guard."""
         from unittest.mock import ANY, patch
 
         from quickscale_modules_orgs.models import (
@@ -1372,14 +1372,14 @@ class TestAccountDeleteView:
         )
 
     # ------------------------------------------------------------------
-    # SA28 — multi-eligible-org cancellation (CR-SA28-001)
+    # multi-eligible-org cancellation
     # ------------------------------------------------------------------
 
     def test_account_delete_cancels_two_sole_member_personal_orgs(
         self, authenticated_client, user
     ):
         """When the user is the sole member of two personal orgs, both
-        subscriptions are cancelled — CR-SA28-001 multi-org fix."""
+        subscriptions are cancelled — multi-org fix."""
         from unittest.mock import patch
 
         from quickscale_modules_orgs.models import (
@@ -1435,7 +1435,7 @@ class TestAccountDeleteView:
         that will survive (has other members and another owner) — only
         the sole-member org's subscription is cancelled.
 
-        CR-SA28-001 surviving-org exclusion fix.
+        Surviving-org exclusion fix.
         """
         from unittest.mock import ANY, patch
 
@@ -1511,7 +1511,7 @@ class TestAccountDeleteView:
         )
 
     # ------------------------------------------------------------------
-    # SA41 — missing-Stripe-id anomaly blocks destructive account deletion
+    # missing-Stripe-id anomaly blocks destructive account deletion
     # ------------------------------------------------------------------
 
     def test_account_delete_blocks_missing_stripe_id_anomaly(
@@ -1798,7 +1798,7 @@ class TestAccountDeleteView:
         )
 
     # ------------------------------------------------------------------
-    # SA28 — success-message fix
+    # success-message fix
     # ------------------------------------------------------------------
 
     def test_account_delete_success_message(self, authenticated_client, user):
@@ -1823,7 +1823,7 @@ class TestAccountDeleteView:
 
 
 # ------------------------------------------------------------------
-# SA35 — account-deletion must not CASCADE-destroy org content
+# account-deletion must not CASCADE-destroy org content
 #
 # The cross-module user-FK conformance gate now lives in
 # ``orgs/tests/test_user_fk_conformance.py``, where the test harness
@@ -1833,7 +1833,7 @@ class TestAccountDeleteView:
 
 @pytest.mark.django_db
 class TestAccountDeleteViewSA35:
-    """SA35 regression: account deletion preserves content authored by
+    """Regression: account deletion preserves content authored by
     the deleted user in org records that are reachable from the auth
     test suite (orgs module installed).
 
@@ -1846,7 +1846,7 @@ class TestAccountDeleteViewSA35:
         self, authenticated_client, user
     ):
         """Account deletion succeeds when the user has a personal org
-        membership (CASCADE-on-membership is intentional — SA35).  This
+        membership (CASCADE-on-membership is intentional). This
         is the simplest case: a personal org where the user is the sole
         member; no other members or shared-org protection applies."""
         from django.contrib.auth import get_user_model
