@@ -1,5 +1,7 @@
 """Data models for the QuickScale notifications module."""
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 
 
@@ -76,6 +78,10 @@ class NotificationMessage(models.Model):
     last_event_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    if TYPE_CHECKING:
+        # Reverse FK accessor from NotificationDelivery.message.
+        deliveries: models.Manager["NotificationDelivery"]
 
     class Meta:
         app_label = "quickscale_notifications"

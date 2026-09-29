@@ -27,7 +27,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA217 | Read the manifest option schema in core and check settings at startup | post-v88 | 2 | — | Deferred |
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
 | SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA219 | Deferred |
-| SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 2 | — | Deferred |
+| SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 3 | — | Deferred |
 | SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | — | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
 | SA227 | Standardize package files, commands, tooling, tests, and READMEs | post-v88 | 1 | — | Deferred |
@@ -43,8 +43,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA227 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA217 ──► SA219 ──► SA223 ──► SA224
-Track 3: SA225 ──► SA220 ──► SA226 ──► SA216 (after SA215)
+Track 2: SA217 ──► SA219 ──► SA224
+Track 3: SA225 ──► SA223 ──► SA220 ──► SA226 ──► SA216 (after SA215)
      critical path: SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
@@ -56,7 +56,7 @@ SA217's startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA22
 authorization needs SA220's capabilities and SA223's DRF views. SA204 freezes migration history
 before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** Track 1's SA227 has slack until SA215. Track 3's SA225 fills the wait
+**Off the critical path.** Track 1's SA227 has slack until SA215. Track 3's SA223 fills the wait
 for SA219; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
 user-referencing models.
 
@@ -68,7 +68,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA227 | yes | yes | yes | **yes** | no |
 | 2 | SA217 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA220 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA223 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -85,15 +85,15 @@ A track is **truly green** only when all three states are yes.
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
   docs), and, for the conventions, the manifest option schema and the CLI's `module_config`,
-  module settings names, and module URLs, APIs, webhooks, templates, and static files, with the
-  theme's React API client (SA217, SA219, SA223, SA224).
+  module settings names, and module templates and static files (SA217, SA219, SA224).
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py`, `exceptions.py`, and
-  `services.py`, and orgs' `permissions` (SA225, SA220, SA226).
+  `services.py`, orgs' `permissions`, and module URLs, APIs, and webhooks, with the theme's React
+  API client (SA225, SA223, SA220, SA226).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
   SA217, SA219, SA220, SA223–SA227) touch every module and cross every track, so each lands in
@@ -317,10 +317,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Scope:**
   - *Commands and tooling.* Each module's root `mypy.ini` section relaxes at most
-    module-extension.md's standard override, so orgs (98 errors under it), billing (15), forms (9),
-    notifications (7), and social fix what the tighter sections report (rule 36).
-  - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
-    isolation and RLS) are added; orgs' two ticket-numbered test apps (`sa182_project_app`,
+    module-extension.md's standard override. Forms, notifications, and social are capped and clean;
+    billing (15 errors under the cap) and orgs (86) fix what their tighter sections report (rule 36).
+  - *Tests.* orgs' two ticket-numbered test apps (`sa182_project_app`,
     `sa208_project_app`) are renamed by subject (D32); the remaining ticket mentions in the
     docstrings and comments of module test files go, reworded to say what each test protects where
     the number was the only explanation.
