@@ -302,7 +302,7 @@ class TestFormSubmitAPIView:
         short-circuits via the apps.is_installed guard; no analytics
         symbols are imported or resolved.
 
-        CR-SA17.7-002 (resolved): Replaces the analytics services
+        Replaces the analytics services
         submodule in sys.modules with an import-seam sentinel.  If the
         guard were bypassed or broken, the lazy import
         ``from quickscale_modules_analytics.services import ...``
@@ -505,7 +505,7 @@ class TestFormSubmitAPIView:
 class TestAdminFormListAPIView:
     """Tests for the staff GET /api/admin/forms/ endpoint
 
-    SA85 Phase 4 retained-role contract:
+    Retained-role contract:
     * Superuser: cross-tenant read via ``operator_access``.
     * Regular staff with active org: scoped to that org via RLS.
     * Regular staff without org: fail-closed — view-unit tests assert
@@ -513,7 +513,7 @@ class TestAdminFormListAPIView:
       redirect to /orgs/ before view executes.
     * Anonymous: denied (403).
 
-    CR-SA85-REV-001: /api/admin/forms/ is NON-EXEMPT from
+    /api/admin/forms/ is NON-EXEMPT from
     TenantMiddleware (does not match any EXEMPT_PATH_PREFIX).
     """
 
@@ -538,7 +538,7 @@ class TestAdminFormListAPIView:
         This test uses ``force_authenticate`` (DRF-only, no session
         middleware).  The session-parity proof for real middleware-pipeline
         coverage is ``test_staff_session_active_org_sees_own_org_forms``
-        and ``test_staff_session_cross_org_excluded`` (CR-SA85-REV-001).
+        and ``test_staff_session_cross_org_excluded``.
         """
         url = reverse("quickscale_forms:admin-form-list")
         response = staff_client.get(url)
@@ -550,7 +550,7 @@ class TestAdminFormListAPIView:
     def test_superuser_sees_org_scoped_form(self, superuser_client, org, org_form):
         """Superuser sees forms from a scoped org via cross-tenant read.
 
-        SA85 Phase 4: The org_form fixture creates a form under *org*.
+        The org_form fixture creates a form under *org*.
         The superuser operator path (all_objects) returns it regardless
         of org context.
         """
@@ -565,7 +565,7 @@ class TestAdminFormListAPIView:
     def test_staff_with_org_uses_scoped_queryset_not_none(self, db, org):
         """Staff with active org context gets a scoped queryset (not .none()).
 
-        SA85 Phase 4: verifies the _get_org_bound_queryset contract
+        Verifies the _get_org_bound_queryset contract
         by checking the queryset class type rather than executing a
         database query (which requires PG RLS GUC setup).  The actual
         end-to-end behavior is covered by the superuser test above and
@@ -621,7 +621,7 @@ class TestAdminFormListAPIView:
         assert get_current_org_id() is None, "ContextVar must be None after cleanup"
 
     # ------------------------------------------------------------------
-    # CR-SA85-REV-001: session-auth pipeline proofs
+    # session-auth pipeline proofs
     # ------------------------------------------------------------------
     # These tests use force_login + ACTIVE_ORG_SESSION_KEY to exercise
     # the full session authentication pipeline (SessionMiddleware +
@@ -651,7 +651,7 @@ class TestAdminFormListAPIView:
         """Regular staff with force_login + ACTIVE_ORG_SESSION_KEY sees
         only forms belonging to their active org.
 
-        CR-SA85-REV-001: real session-auth pipeline proof.
+        Real session-auth pipeline proof.
         /api/admin/forms/ is non-exempt, so TenantMiddleware runs and
         populates the ContextVar from the session.  Staff see their own
         org's form and do NOT see forms from other orgs.
@@ -709,7 +709,7 @@ class TestAdminFormListAPIView:
         """Regular staff with force_login + ACTIVE_ORG_SESSION_KEY set
         to one org does not see forms belonging to a different org.
 
-        CR-SA85-REV-001: proves cross-tenant isolation through the
+        Proves cross-tenant isolation through the
         full middleware + RLS pipeline on the non-exempt admin path.
         """
         from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
@@ -767,7 +767,7 @@ class TestAdminFormListAPIView:
         """Superuser with ACTIVE_ORG_SESSION_KEY set to a specific org
         can still see forms across all tenants via operator_access.
 
-        CR-SA85-REV-001: proves superuser cross-tenant bypass on the
+        Proves superuser cross-tenant bypass on the
         non-exempt admin path.  TenantMiddleware runs and populates the
         ContextVar, but _get_org_bound_queryset returns all_objects.all()
         for superusers regardless of ContextVar state.
@@ -831,7 +831,7 @@ class TestAdminFormListAPIView:
         )
 
     # ------------------------------------------------------------------
-    # CR-SA85-REV-001: no-active-org redirect proofs
+    # no-active-org redirect proofs
     # ------------------------------------------------------------------
     # These tests hit /api/admin/forms/ which is NON-EXEMPT from
     # TenantMiddleware.  Without ACTIVE_ORG_SESSION_KEY, the middleware
@@ -842,7 +842,7 @@ class TestAdminFormListAPIView:
         """Regular staff without ACTIVE_ORG_SESSION_KEY gets 302
         redirect to /orgs/ on the admin-form-list path.
 
-        CR-SA85-REV-001: proves TenantMiddleware redirects to /orgs/
+        Proves TenantMiddleware redirects to /orgs/
         when an authenticated user has no active org selected on the
         non-exempt admin API route.
         """
@@ -864,7 +864,7 @@ class TestAdminFormListAPIView:
         """Superuser without ACTIVE_ORG_SESSION_KEY also gets 302
         redirect to /orgs/ on the admin-form-list path.
 
-        CR-SA85-REV-001: proves TenantMiddleware applies the same
+        Proves TenantMiddleware applies the same
         no-active-org redirect to superusers before the view executes
         on the non-exempt admin API route.
         """
@@ -894,7 +894,7 @@ class TestAdminFormListAPIView:
 class TestAdminSubmissionListAPIView:
     """Tests for the staff GET /api/admin/forms/{id}/submissions/ endpoint
 
-    SA85 Phase 4 retained-role:
+    Retained-role:
     * Superuser: cross-tenant read via ``operator_access``.
     * Regular staff without org: fail-closed (empty list).
     """
@@ -912,7 +912,7 @@ class TestAdminSubmissionListAPIView:
 
         Session-parity proof for the real middleware pipeline is
         ``test_staff_session_active_org_sees_own_org_forms`` and
-        ``test_staff_session_cross_org_excluded`` (CR-SA85-REV-001).
+        ``test_staff_session_cross_org_excluded``.
         """
         url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
         response = staff_client.get(url)
@@ -950,7 +950,7 @@ class TestAdminSubmissionListAPIView:
 class TestAdminSubmissionDetailAPIView:
     """Tests for the staff GET/PATCH /api/admin/forms/{id}/submissions/{sub_id}/ endpoint
 
-    SA85 Phase 4 retained-role:
+    Retained-role:
     * Superuser: cross-tenant read via ``operator_access`` (GET).
     * PATCH target identified through allowed read elevation; save occurs
       inside ``org_scope(submission.organization)``.
@@ -987,7 +987,7 @@ class TestAdminSubmissionDetailAPIView:
     ):
         """Superuser PATCH succeeds with a mismatched active org context.
 
-        CR-SA85-REV-002: A superuser whose session active org differs from the
+        A superuser whose session active org differs from the
         target submission's owning org must still be able to PATCH and have
         the response materialized correctly (serializer.data evaluated inside
         org_scope).  Also proves the persisted value survives a DB refresh.
@@ -1050,7 +1050,7 @@ class TestAdminSubmissionDetailAPIView:
 class TestAdminSubmissionExportView:
     """Tests for the staff CSV export view
 
-    SA85 Phase 4 retained-role:
+    Retained-role:
     * Superuser: cross-tenant read via ``operator_access`` (audited).
     * Regular staff without org: fail-closed (404).
     """
@@ -1127,7 +1127,7 @@ class TestAdminSubmissionExportView:
 class TestAdminSubmissionListFilters:
     """Tests for query parameter filters on AdminSubmissionListAPIView
 
-    SA85 Phase 4: filters are role-agnostic — they apply to whatever
+    Filters are role-agnostic — they apply to whatever
     queryset the role produces.  Use superuser for cross-tenant filter
     coverage.
     """
@@ -1172,13 +1172,13 @@ class TestAdminSubmissionDetailNotFound:
 
 
 # ---------------------------------------------------------------------------
-# AF1-CR-001: DB-side org scope for public forms routes
+# DB-side org scope for public forms routes
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestFormSubmissionCanonicalIp:
-    """SA21.2 — verify that FormSubmission.ip_address uses the canonical
+    """Verify that FormSubmission.ip_address uses the canonical
     client IP (via the shared get_client_ip helper) instead of raw REMOTE_ADDR."""
 
     def test_ip_address_uses_xff_when_configured(
@@ -1441,7 +1441,7 @@ class TestFormSubmissionClientIpParity:
 
 @pytest.mark.django_db
 class TestPublicViewsDbOrgScope:
-    """AF1-CR-001: Verify FormSchemaAPIView and FormSubmitAPIView establish
+    """Verify FormSchemaAPIView and FormSubmitAPIView establish
     DB-side app.current_org_id via tenant_context(), not just ContextVar state."""
 
     def test_form_schema_view_sets_db_current_org_id(
@@ -1635,7 +1635,7 @@ class TestFormCallerParity:
         """Authenticated requests get forms scoped to their session org.
 
         Creates the test form under the target org from the start instead
-        of reassigning the fixture form's org (which AF12 composite FKs
+        of reassigning the fixture form's org (which composite FKs
         prevent when child FormField rows already reference the old org).
         """
         from quickscale_modules_forms.models import Form, FormField
@@ -1824,14 +1824,14 @@ class TestNotificationContentAfterPostCommit:
 
 
 # ---------------------------------------------------------------------------
-# SA85 Phase 3 — CR-P3-006 regression: side-effect callbacks run after
+# CR-P3-006 regression: side-effect callbacks run after
 # commit with in_atomic_block = False and can observe committed rows
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
 class TestPostCommitTransactionBoundary:
-    """CR-P3-006/SA85 Phase 3: notification and analytics callbacks run
+    """CR-P3-006: notification and analytics callbacks run
     after the view's outer ``org_scope`` + ``transaction.atomic()`` commits,
     with ``connection.in_atomic_block == False``, can observe committed rows
     via fresh ``org_scope``, and leave no context leak.

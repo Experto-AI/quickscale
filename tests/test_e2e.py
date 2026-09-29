@@ -80,7 +80,7 @@ def staff_client(db):
 def superuser_client(db):
     """DRF API client authenticated as a superuser.
 
-    SA85 Phase 4: only superusers may perform cross-tenant SELECT via
+    Only superusers may perform cross-tenant SELECT via
     ``operator_access``.
     """
     from django.contrib.auth import get_user_model
