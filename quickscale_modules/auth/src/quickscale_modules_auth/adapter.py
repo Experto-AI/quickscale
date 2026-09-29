@@ -5,23 +5,33 @@ from __future__ import annotations
 from typing import Any
 
 from quickscale_core.runtime.manifest import (
+    ManifestError,
     ModuleWiringSpec,
-    ResolverResult,
-    assemble_wiring_spec,
     build_generic_manifest_spec,
-    resolve_auth_module_options,
+    load_module_manifest,
+    validate_module_options,
 )
 
 
-def _auth_manifest_adapter(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
+def _auth_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Build the auth module's manifest-driven wiring specification."""
-    del project_package
+    """Project auth's login/signup settings from the resolved options.
 
-    resolved = resolve_auth_module_options(options)
+    The manifest declares the option-to-setting mapping; the login-method and
+    signup-field projections are computed from ``authentication_method`` here
+    because the declarative resolver cannot branch a set and an ordered list
+    from one option.  Every option is validated against the manifest's own
+    declared rules, so a retired legacy key or an unknown value fails before a
+    spec is assembled.
+    """
+    issues = validate_module_options(load_module_manifest("auth"), resolved)
+    if issues:
+        raise ManifestError(
+            "Module 'auth' has validation issues that must be resolved before "
+            "assembly:\n" + "\n".join(f"  • {issue}" for issue in issues)
+        )
+
     authentication_method = resolved["authentication_method"]
     if authentication_method == "username":
         login_methods: set[str] = {"username"}
@@ -33,8 +43,7 @@ def _auth_manifest_adapter(
         login_methods = {"email"}
         signup_fields = ["email*", "password1*", "password2*"]
 
-    manifest_spec = build_generic_manifest_spec("auth", options)
-    settings = dict(manifest_spec.settings)
+    settings = dict(spec.settings)
     settings.update(
         {
             "AUTHENTICATION_BACKENDS": [
@@ -55,19 +64,27 @@ def _auth_manifest_adapter(
         }
     )
 
-    result = ResolverResult(
-        module_name="auth",
-        defaults={},
-        resolved=resolved,
-        derived_settings=settings,
-        apps=manifest_spec.apps,
+    return ModuleWiringSpec(
+        apps=spec.apps,
         middleware=("allauth.account.middleware.AccountMiddleware",),
+        settings=settings,
+        pre_home_url_includes=(),
         url_includes=(
             ("accounts/", "allauth.urls"),
             ("accounts/", "quickscale_modules_auth.urls"),
         ),
+        managed_files=spec.managed_files,
     )
-    return assemble_wiring_spec(result)
+
+
+def _auth_manifest_adapter(
+    options: dict[str, Any],
+    *,
+    project_package: str | None = None,
+) -> ModuleWiringSpec:
+    """Build the auth module's manifest-driven wiring specification."""
+    del project_package
+    return build_generic_manifest_spec("auth", options, post_hook=_auth_post_hook)
 
 
 def get_manifest_adapter() -> Any:

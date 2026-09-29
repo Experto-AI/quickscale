@@ -1,250 +1,155 @@
-"""Parity/regression tests for the manifest-driven orgs option-resolution path.
+"""Contract tests for the orgs module's manifest-owned configuration.
 
-These tests encode the *legacy* ``_orgs_wiring`` option-resolution behaviour
-as gold expectations and verify that the manifest-driven replacement
-(``orgs_manifest.py``) produces identical results for every public entry point.
-
-This file is ADDITIVE to ``test_orgs_contract.py``.  It focuses solely on
-option-resolution parity (defaults, normalisation, resolution, validation) and
-does NOT test wiring integration — that is covered by the existing contract
-tests.
-
-The gold values below were recovered from the orgs ``module.yml`` manifest
-and the ``orgs_manifest.py`` adapter.
-
-Scope
------
-* Default option values
-* mode normalisation (strip + lowercase)
-* mode fallback (invalid value → "solo")
-* Resolution (defaults + normalised overrides, idempotency)
-* Validation messages (choices enforcement)
+The orgs option defaults, normalization, and validation are declared in
+``quickscale_modules/orgs/module.yml`` and enforced through the shared manifest
+engine; its CLI configurator is the one generic manifest-driven configurator.
+These tests pin that contract and the operator-facing behaviour it produces.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from unittest.mock import patch
 
 import pytest
 
-from quickscale_core.contracts.module_options import (
-    DEFAULT_ORGS_MODE,
-    ORGS_MODE_SAAS,
-    ORGS_MODE_SOLO,
-    ORGS_MODES,
-    ORGS_MODULE_OPTION_KEYS,
-)
+from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
 from quickscale_core.contracts.resolvers import (
-    default_orgs_module_options,
-    normalize_orgs_module_options,
-    resolve_orgs_module_options,
-    validate_orgs_module_options,
+    load_module_manifest_with_fallback,
+    resolve_manifest_module_options,
 )
+from quickscale_core.manifest.option_validation import validate_module_options
 
-# ---------------------------------------------------------------------------
-# Gold expectations recovered from the legacy _orgs_wiring + module.yml
-# ---------------------------------------------------------------------------
-
-_LEGACY_DEFAULTS: dict[str, Any] = {
-    "mode": "solo",
-}
+_EXPECTED_DEFAULTS: dict[str, object] = {"mode": "solo"}
+_MODES = ["solo", "saas"]
 
 
-# ===========================================================================
-# 1. Default values parity
-# ===========================================================================
-
-
-class TestDefaultsParity:
-    """The manifest-driven defaults must match the legacy hardcoded dict."""
-
-    def test_default_options_match_legacy(self) -> None:
-        defaults = default_orgs_module_options()
-        assert defaults == _LEGACY_DEFAULTS
-
-    def test_default_options_keys_are_stable(self) -> None:
-        defaults = default_orgs_module_options()
-        assert set(defaults.keys()) == set(_LEGACY_DEFAULTS.keys())
-
-    def test_default_mode_is_solo(self) -> None:
-        defaults = default_orgs_module_options()
-        assert defaults["mode"] == DEFAULT_ORGS_MODE
-        assert defaults["mode"] == "solo"
+def _manifest():
+    return load_module_manifest_with_fallback("orgs")
 
 
 # ===========================================================================
-# 2. Constants parity
+# 1. Manifest declarations
 # ===========================================================================
 
 
-class TestConstantsParity:
-    """Public constants must match the legacy values."""
+class TestManifestDeclaration:
+    """The manifest owns the option set, choices, and normalization rules."""
 
-    def test_default_mode_constant(self) -> None:
-        assert DEFAULT_ORGS_MODE == "solo"
+    def test_defaults_match_the_manifest(self) -> None:
+        assert resolve_manifest_module_options("orgs") == _EXPECTED_DEFAULTS
 
-    def test_mode_constants(self) -> None:
-        assert ORGS_MODE_SOLO == "solo"
-        assert ORGS_MODE_SAAS == "saas"
+    def test_mode_choices_are_declared(self) -> None:
+        option = _manifest().get_option("mode")
+        assert option is not None
+        assert option.validation.get("choices") == _MODES
 
-    def test_modes_tuple(self) -> None:
-        assert set(ORGS_MODES) == {"solo", "saas"}
-        assert "solo" in ORGS_MODES
-        assert "saas" in ORGS_MODES
-
-    def test_module_option_keys_frozenset(self) -> None:
-        assert ORGS_MODULE_OPTION_KEYS == frozenset({"mode"})
+    def test_mode_normalization_rules_are_declared(self) -> None:
+        derivation = _manifest().option_derivations["mode"]
+        rule_types = [rule["rule_type"] for rule in derivation["normalization_rules"]]
+        assert rule_types == ["strip", "lowercase"]
 
 
 # ===========================================================================
-# 3. Normalisation parity (mirrors _orgs_wiring coercion)
+# 2. Resolution through the generic resolver
 # ===========================================================================
 
 
-class TestNormalizationParity:
-    """Normalisation must behave identically to the legacy contract."""
-
-    def test_mode_strip(self) -> None:
-        """Whitespace is stripped from mode (mirrors str(...).strip())."""
-        normalized = normalize_orgs_module_options({"mode": "  solo  "})
-        assert normalized["mode"] == "solo"
-
-    def test_mode_lowercase(self) -> None:
-        """Mode is lowercased (mirrors .lower())."""
-        normalized = normalize_orgs_module_options({"mode": "SOLO"})
-        assert normalized["mode"] == "solo"
-
-    def test_mode_saas_strip_and_lower(self) -> None:
-        normalized = normalize_orgs_module_options({"mode": "  SaaS  "})
-        assert normalized["mode"] == "saas"
-
-    def test_none_options_returns_empty_dict(self) -> None:
-        normalized = normalize_orgs_module_options(None)
-        assert normalized == {}
-
-    def test_empty_options_returns_empty_dict(self) -> None:
-        normalized = normalize_orgs_module_options({})
-        assert normalized == {}
-
-    def test_already_normalized_mode_passes_through(self) -> None:
-        normalized = normalize_orgs_module_options({"mode": "saas"})
-        assert normalized["mode"] == "saas"
-
-
-# ===========================================================================
-# 4. Resolution parity (defaults + normalised overrides + fallback)
-# ===========================================================================
-
-
-class TestResolutionParity:
-    """resolve_orgs_module_options must merge defaults + overrides."""
+class TestOrgResolution:
+    """The generic resolver merges defaults with canonicalized overrides."""
 
     def test_no_overrides_returns_defaults(self) -> None:
-        resolved = resolve_orgs_module_options(None)
-        assert resolved == _LEGACY_DEFAULTS
-
-    def test_empty_overrides_returns_defaults(self) -> None:
-        resolved = resolve_orgs_module_options({})
-        assert resolved == _LEGACY_DEFAULTS
-
-    def test_solo_mode_override(self) -> None:
-        resolved = resolve_orgs_module_options({"mode": "solo"})
-        assert resolved["mode"] == "solo"
+        assert resolve_manifest_module_options("orgs") == _EXPECTED_DEFAULTS
 
     def test_saas_mode_override(self) -> None:
-        resolved = resolve_orgs_module_options({"mode": "saas"})
-        assert resolved["mode"] == "saas"
+        assert resolve_manifest_module_options("orgs", {"mode": "saas"}) == {
+            "mode": "saas"
+        }
 
-    def test_mode_is_strip_and_lowercased_in_resolve(self) -> None:
-        resolved = resolve_orgs_module_options({"mode": "  SaaS  "})
-        assert resolved["mode"] == "saas"
+    def test_mode_is_stripped_and_lowercased(self) -> None:
+        assert resolve_manifest_module_options("orgs", {"mode": "  SaaS  "}) == {
+            "mode": "saas"
+        }
 
-    def test_invalid_mode_passes_through(self) -> None:
-        """SA27: invalid mode passes through instead of coercing to 'solo'."""
-        resolved = resolve_orgs_module_options({"mode": "team"})
-        assert resolved["mode"] == "team"
+    def test_invalid_mode_passes_through_resolution(self) -> None:
+        """SA27: resolution does not coerce an invalid mode; validation refuses."""
+        assert resolve_manifest_module_options("orgs", {"mode": "team"}) == {
+            "mode": "team"
+        }
 
-    def test_empty_mode_passes_through(self) -> None:
-        """SA27: empty mode passes through instead of coercing to 'solo'."""
-        resolved = resolve_orgs_module_options({"mode": ""})
-        assert resolved["mode"] == ""
-
-    def test_blank_mode_passes_through(self) -> None:
-        """SA27: blank mode passes through instead of coercing to 'solo'."""
-        resolved = resolve_orgs_module_options({"mode": "   "})
-        assert resolved["mode"] == ""
+    def test_blank_mode_resolves_to_empty(self) -> None:
+        assert resolve_manifest_module_options("orgs", {"mode": "   "}) == {"mode": ""}
 
     def test_resolution_is_idempotent(self) -> None:
-        resolved = resolve_orgs_module_options({"mode": "saas"})
-        assert resolve_orgs_module_options(resolved) == resolved
+        resolved = resolve_manifest_module_options("orgs", {"mode": " SaaS "})
+        assert resolve_manifest_module_options("orgs", resolved) == resolved
 
-    def test_resolved_keys_match_legacy(self) -> None:
-        resolved = resolve_orgs_module_options({"mode": "saas"})
-        assert set(resolved.keys()) == set(_LEGACY_DEFAULTS.keys())
+    def test_resolved_keys_match_the_manifest(self) -> None:
+        resolved = resolve_manifest_module_options("orgs", {"mode": "saas"})
+        assert set(resolved.keys()) == set(_EXPECTED_DEFAULTS.keys())
 
 
 # ===========================================================================
-# 5. Validation parity
+# 3. Validation through the shared engine
 # ===========================================================================
 
 
-class TestValidationParity:
-    """validate_orgs_module_options must produce legacy-compatible issues."""
+class TestOrgValidation:
+    """The engine refuses a mode outside the manifest's declared choices."""
 
     def test_defaults_pass_validation(self) -> None:
-        issues = validate_orgs_module_options(None)
-        assert issues == []
+        assert validate_module_options(_manifest(), _EXPECTED_DEFAULTS) == []
 
-    def test_solo_mode_passes_validation(self) -> None:
-        issues = validate_orgs_module_options({"mode": "solo"})
-        assert issues == []
+    @pytest.mark.parametrize("mode", _MODES)
+    def test_valid_modes_pass_validation(self, mode: str) -> None:
+        assert validate_module_options(_manifest(), {"mode": mode}) == []
 
-    def test_saas_mode_passes_validation(self) -> None:
-        issues = validate_orgs_module_options({"mode": "saas"})
-        assert issues == []
+    def test_mixed_case_modes_are_canonicalized_before_the_check(self) -> None:
+        assert validate_module_options(_manifest(), {"mode": "Solo"}) == []
+        assert validate_module_options(_manifest(), {"mode": "SAAS"}) == []
 
     @pytest.mark.parametrize("invalid_mode", ["team", "enterprise", "INVALID", "0"])
     def test_invalid_mode_fails_validation(self, invalid_mode: str) -> None:
-        issues = validate_orgs_module_options({"mode": invalid_mode})
+        issues = validate_module_options(_manifest(), {"mode": invalid_mode})
         assert len(issues) >= 1
-        assert any("mode" in i for i in issues)
-        assert any("solo" in i and "saas" in i for i in issues)
+        assert any("modules.orgs.mode" in issue for issue in issues)
+        assert any("solo" in issue and "saas" in issue for issue in issues)
 
-    def test_valid_modes_parametrized(self) -> None:
-        for valid_mode in ("solo", "saas"):
-            issues = validate_orgs_module_options({"mode": valid_mode})
-            assert issues == [], f"Expected no issues for mode={valid_mode!r}"
-
-    def test_case_insensitive_mode_passes_validation(self) -> None:
-        """Mixed-case valid modes are normalized before validation."""
-        assert validate_orgs_module_options({"mode": "Solo"}) == []
-        assert validate_orgs_module_options({"mode": "SAAS"}) == []
+    def test_blank_mode_fails_validation(self) -> None:
+        issues = validate_module_options(_manifest(), {"mode": ""})
+        assert any("modules.orgs.mode" in issue for issue in issues)
 
 
 # ===========================================================================
-# 6. Wiring-field values parity
+# 4. CLI configurator behaviour
 # ===========================================================================
 
 
-class TestWiringFieldsParity:
-    """Resolved options must project to the exact wiring field values
-    that ``_orgs_wiring`` would have computed from the same input."""
+class TestOrgConfigurator:
+    """The CLI configurator's prompts and defaults come from the manifest."""
 
-    def test_default_wiring_mode_is_solo(self) -> None:
-        resolved = resolve_orgs_module_options(None)
-        # Mirrors: mode = str(options.get("mode", "solo")).strip().lower() or "solo"
-        assert resolved["mode"] == "solo"
+    def test_defaults_factory_reads_the_manifest(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["orgs"]
+        assert entry.get_defaults() == _EXPECTED_DEFAULTS
 
-    def test_saas_wiring_mode(self) -> None:
-        resolved = resolve_orgs_module_options({"mode": "saas"})
-        assert resolved["mode"] == "saas"
+    def test_non_interactive_configuration_uses_manifest_defaults(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["orgs"]
+        assert entry.configure(non_interactive=True) == _EXPECTED_DEFAULTS
 
-    def test_invalid_mode_passes_through_in_wiring(self) -> None:
-        """SA27: invalid mode passes through instead of coercing to 'solo'."""
-        resolved = resolve_orgs_module_options({"mode": "enterprise"})
-        assert resolved["mode"] == "enterprise"
+    def test_existing_declared_values_are_canonicalized(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["orgs"]
+        config = entry.configure(
+            non_interactive=True, existing_config={"mode": "  SaaS  "}
+        )
+        assert config == {"mode": "saas"}
 
-    def test_resolved_contains_all_wiring_keys(self) -> None:
-        resolved = resolve_orgs_module_options(None)
-        wiring_keys = {"mode"}
-        assert wiring_keys.issubset(set(resolved.keys()))
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    def test_interactive_prompt_reads_the_manifest(self, mock_prompt) -> None:
+        mock_prompt.return_value = "saas"
+
+        entry = MODULE_CONFIGURATOR_REGISTRY["orgs"]
+        config = entry.configure(non_interactive=False)
+
+        assert config == {"mode": "saas"}
+        _, kwargs = mock_prompt.call_args
+        choice = kwargs["type"]
+        assert list(choice.choices) == _MODES

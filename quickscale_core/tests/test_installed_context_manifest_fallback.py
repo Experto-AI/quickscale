@@ -28,8 +28,8 @@ from quickscale_core.contracts.module_discovery import (
 )
 from quickscale_core.contracts.resolvers import (
     load_module_manifest_with_fallback,
-    validate_orgs_module_options,
 )
+from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.manifest.social_manifest import load_social_manifest
 
 # Every module with a bundled manifest snapshot shipped in the wheel.
@@ -80,10 +80,13 @@ class TestInstalledContextManifestFallback:
     ) -> None:
         """The exact frame that aborted installed ``apply``.
 
-        ``_validate_module_prerequisites`` → ``validate_orgs_module_options``
-        → ``default_orgs_module_options`` → ``_load_orgs_manifest``.
+        ``_validate_module_prerequisites`` → ``validate_module_options``
+        → ``load_module_manifest_with_fallback``.
         """
-        assert validate_orgs_module_options({}) == []
+        assert (
+            validate_module_options(load_module_manifest_with_fallback("orgs"), {})
+            == []
+        )
 
     def test_source_tree_is_preferred_when_available(self) -> None:
         """Without the patch, resolution still prefers the source workspace."""

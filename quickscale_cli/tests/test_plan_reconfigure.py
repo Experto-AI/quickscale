@@ -73,8 +73,7 @@ docker:
             assert result.exit_code != 0
             assert "quickscale.yml is invalid" in result.output
             assert "social_providers" in result.output
-            assert "registration_enabled" in result.output
-            assert "email_verification" in result.output
+            assert "no longer supported" in result.output
 
 
 class TestPlanReconfigureWithState:

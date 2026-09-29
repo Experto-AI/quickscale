@@ -3,19 +3,17 @@
 from unittest.mock import patch
 
 from quickscale_cli.commands.module_config import (
-    configure_auth_module,
-    get_default_auth_config,
     MODULE_CONFIGURATOR_REGISTRY,
     ModuleConfigurator,
 )
 
 
 class TestAuthModuleConfig:
-    """Tests for auth module configuration functions."""
+    """Auth configuration is read from the module manifest."""
 
     def test_get_default_auth_config(self):
         """Test default auth configuration."""
-        config = get_default_auth_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["auth"].get_defaults()
 
         assert config["registration_enabled"] is True
         assert config["email_verification"] == "none"
@@ -24,7 +22,7 @@ class TestAuthModuleConfig:
 
     def test_configure_auth_module_non_interactive(self):
         """Test non-interactive auth configuration."""
-        config = configure_auth_module(non_interactive=True)
+        config = MODULE_CONFIGURATOR_REGISTRY["auth"].configure(non_interactive=True)
 
         assert config["registration_enabled"] is True
         assert config["email_verification"] == "none"
@@ -33,14 +31,15 @@ class TestAuthModuleConfig:
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
     def test_configure_auth_module_interactive(self, mock_confirm, mock_prompt):
-        """Test interactive auth configuration."""
+        """Test interactive auth configuration, one prompt per manifest option."""
         mock_confirm.return_value = False
-        mock_prompt.side_effect = ["mandatory", "username"]
+        mock_prompt.side_effect = ["mandatory", 3600, "username"]
 
-        config = configure_auth_module(non_interactive=False)
+        config = MODULE_CONFIGURATOR_REGISTRY["auth"].configure(non_interactive=False)
 
         assert config["registration_enabled"] is False
         assert config["email_verification"] == "mandatory"
+        assert config["session_cookie_age"] == 3600
         assert config["authentication_method"] == "username"
 
 

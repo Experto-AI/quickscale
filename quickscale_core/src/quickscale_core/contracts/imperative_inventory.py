@@ -63,26 +63,12 @@ ADAPTER_ONLY: Final[str] = "adapter_only"
 # callers of get_manifest_inventory("analytics") continue to succeed.
 ANALYTICS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
-AUTH_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Shared helpers — relocated to quickscale_core.contracts.module_options
-    ("AUTH_REGISTRATION_ENABLED_OPTION", SHARED_HELPER, "T2.3"),
-    ("AUTH_EMAIL_VERIFICATION_OPTION", SHARED_HELPER, "T2.3"),
-    ("AUTH_AUTHENTICATION_METHOD_OPTION", SHARED_HELPER, "T2.3"),
-    ("AUTH_SESSION_COOKIE_AGE_OPTION", SHARED_HELPER, "T2.3"),
-    ("AUTH_EMAIL_VERIFICATION_VALUES", SHARED_HELPER, "T2.3"),
-    ("AUTH_AUTHENTICATION_METHOD_VALUES", SHARED_HELPER, "T2.3"),
-    ("CANONICAL_AUTH_MODULE_OPTION_KEYS", SHARED_HELPER, "T2.3"),
-    ("LEGACY_AUTH_ALLOW_REGISTRATION_OPTION", SHARED_HELPER, "T2.3"),
-    ("LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION", SHARED_HELPER, "T2.3"),
-    ("normalize_auth_module_options", SHARED_HELPER, "T2.3"),
-    ("validate_auth_module_options", SHARED_HELPER, "T2.3"),
-    ("format_auth_desired_config_contract", SHARED_HELPER, "T2.3"),
-    # Declarative targets
-    ("DEFAULT_AUTH_SESSION_COOKIE_AGE", DECLARATIVE_TARGET, "T2.4"),
-    # Adapter-only
-    ("default_auth_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_auth_module_options", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: Auth imperative inventory cleared — the manifest owns its option
+# defaults, normalization, validation, and its retired-key refusals
+# (`retired_options`), and its CLI configurator reads the manifest.  The auth
+# key remains in MANIFEST_INVENTORY with an empty list so that callers of
+# get_manifest_inventory("auth") continue to succeed.
+AUTH_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 BACKUPS_MANIFEST: Final[list[tuple[str, str, str]]] = [
     # Shared helpers — relocated to quickscale_core.contracts.module_options
@@ -152,17 +138,11 @@ NOTIFICATIONS_MANIFEST: Final[list[tuple[str, str, str]]] = [
     ("notifications_production_targeted", ADAPTER_ONLY, "T2.5"),
 ]
 
-ORGS_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Declarative targets
-    ("DEFAULT_ORGS_MODE", DECLARATIVE_TARGET, "T2.4"),
-    ("ORGS_MODULE_OPTION_KEYS", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_orgs_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_orgs_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_orgs_module_options", ADAPTER_ONLY, "T2.5"),
-    ("validate_orgs_module_options", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: Orgs imperative inventory cleared — the manifest owns its option
+# defaults, normalization, and validation, and its CLI configurator reads the
+# manifest.  The orgs key remains in MANIFEST_INVENTORY with an empty list so
+# that callers of get_manifest_inventory("orgs") continue to succeed.
+ORGS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 SOCIAL_MANIFEST: Final[list[tuple[str, str, str]]] = [
     # Declarative targets
