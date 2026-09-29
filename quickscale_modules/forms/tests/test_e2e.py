@@ -271,11 +271,14 @@ class TestContactFormE2EWorkflow:
     # 5. Rate limiting
     # ------------------------------------------------------------------
 
-    @override_settings(FORMS_RATE_LIMIT="2/minute")
     def test_rate_limit_returns_429_after_threshold(
         self, api_client, seeded_contact_form
     ):
-        """Submitting more times than the rate limit returns 429."""
+        """Submitting more times than the wired scope rate returns 429."""
+        from unittest.mock import patch
+
+        from rest_framework.throttling import ScopedRateThrottle
+
         cache.clear()
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
         payload = {
@@ -284,10 +287,18 @@ class TestContactFormE2EWorkflow:
             "subject": "Rate test",
             "project_context": "Testing rate limiting.",
         }
+        scope_rates = {"quickscale_forms_submit": "2/minute"}
 
-        first = api_client.post(url, data=payload, format="json")
-        second = api_client.post(url, data=payload, format="json")
-        third = api_client.post(url, data=payload, format="json")
+        # The forms wiring contributes the rate from FORMS_RATE_LIMIT; DRF
+        # binds DEFAULT_THROTTLE_RATES onto the throttle class at import time,
+        # so the test applies both bindings itself.
+        with (
+            override_settings(REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": scope_rates}),
+            patch.object(ScopedRateThrottle, "THROTTLE_RATES", scope_rates),
+        ):
+            first = api_client.post(url, data=payload, format="json")
+            second = api_client.post(url, data=payload, format="json")
+            third = api_client.post(url, data=payload, format="json")
 
         assert first.status_code == 201
         assert second.status_code == 201

@@ -10,13 +10,20 @@ from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spe
 def _forms_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Apply forms-specific int/bool/str coercions."""
+    """Apply forms-specific int/bool/str coercions and DRF throttle scope."""
     settings = dict(spec.settings)
     settings["FORMS_PER_PAGE"] = int(settings["FORMS_PER_PAGE"])
     settings["FORMS_SPAM_PROTECTION"] = bool(settings["FORMS_SPAM_PROTECTION"])
     settings["FORMS_RATE_LIMIT"] = str(settings["FORMS_RATE_LIMIT"])
     settings["FORMS_DATA_RETENTION_DAYS"] = int(settings["FORMS_DATA_RETENTION_DAYS"])
     settings["FORMS_SUBMISSIONS_API"] = bool(settings["FORMS_SUBMISSIONS_API"])
+    # Rule 32 — the form submission scope carries the module stem and its rate
+    # is the rate_limit option, contributed here for rule 30's merge.
+    settings["REST_FRAMEWORK"] = {
+        "DEFAULT_THROTTLE_RATES": {
+            "quickscale_forms_submit": settings["FORMS_RATE_LIMIT"],
+        },
+    }
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,

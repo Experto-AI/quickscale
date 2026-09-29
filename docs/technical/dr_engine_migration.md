@@ -125,7 +125,7 @@ preserved invariants are in
 
 The DR engine split is a maintainer-side code reorganization. The `backups` module now imports from `quickscale-core` at runtime.
 
-> **Important:** `quickscale update` updates module subtree code only and does not add root dependency constraints. Current fresh generated projects already declare the bounded `quickscale-core` lockstep pin in `pyproject.toml`, so nothing needs to be added for them. Older projects generated before the pin was emitted do not carry `quickscale-core`; for those, `quickscale apply` adds the bounded version spec from the embedded module manifest (`quickscale-core = ">=X.Y.0,<X.(Y+1).0"`) to the root `pyproject.toml`. That spec must resolve from a package index, or from the local wheelhouse a locally installed CLI stages, before `poetry install` succeeds — a project pinned to a core version the index does not carry must be given a resolvable source first. The developer-only path dependency in the module's own `pyproject.toml` is rewritten to the same bounded spec when the path does not exist inside the generated project.
+> **Important:** `quickscale update` updates module subtree code and regenerates the managed wiring, but it does not add root dependency constraints. Current fresh generated projects already declare the bounded `quickscale-core` lockstep pin in `pyproject.toml`, so nothing needs to be added for them. Older projects generated before the pin was emitted do not carry `quickscale-core`; for those, `quickscale apply` adds the bounded version spec from the embedded module manifest (`quickscale-core = ">=X.Y.0,<X.(Y+1).0"`) to the root `pyproject.toml`. That spec must resolve from a package index, or from the local wheelhouse a locally installed CLI stages, before `poetry install` succeeds — a project pinned to a core version the index does not carry must be given a resolvable source first. The developer-only path dependency in the module's own `pyproject.toml` is rewritten to the same bounded spec when the path does not exist inside the generated project.
 
 ### Steps
 
@@ -178,7 +178,7 @@ Fresh generated projects that include the `backups` module will receive the upda
 | Management commands (backups_create, etc.) | **Preserved** — thin wrappers with backward-compatible env-var fallback |
 | `BackupArtifact` / `BackupPolicy` models | **Unchanged** — same ORM contract, same migrations |
 | Admin UI (guarded restore surface) | **Unchanged** — same interface |
-| `quickscale update` workflow | **Unchanged** — embeds updated module code |
+| `quickscale update` workflow | **Extended** — embeds updated module code and regenerates the managed wiring |
 | PostgreSQL 18 custom-dump contract | **Unchanged** — same restore path, same guardrails |
 | JSON artifact export (non-PostgreSQL dev/test) | **Unchanged** — export-only, not a restore surface |
 

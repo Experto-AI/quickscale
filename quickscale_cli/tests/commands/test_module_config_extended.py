@@ -1035,8 +1035,8 @@ class TestModuleWiringSpecs:
             "password2*",
         ]
 
-    def test_forms_wiring_without_submissions_api_omits_rest_framework(self):
-        """Forms wiring should avoid REST_FRAMEWORK when submissions API is disabled."""
+    def test_forms_wiring_keeps_the_submit_throttle_rate_without_submissions_api(self):
+        """The public submit throttle keeps its rate when the admin API is off."""
         specs = _build_specs(
             {
                 "forms": {
@@ -1056,7 +1056,9 @@ class TestModuleWiringSpecs:
         assert settings["FORMS_RATE_LIMIT"] == "10/minute"
         assert settings["FORMS_DATA_RETENTION_DAYS"] == 14
         assert settings["FORMS_SUBMISSIONS_API"] is False
-        assert "REST_FRAMEWORK" not in settings
+        assert settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
+        }
 
     def test_crm_and_forms_wiring_do_not_collide_on_rest_framework(self):
         """CRM and forms wiring should keep distinct module-owned settings."""
@@ -1086,7 +1088,9 @@ class TestModuleWiringSpecs:
         assert settings["CRM_CONTACTS_PER_PAGE"] == 20
         assert settings["FORMS_PER_PAGE"] == 15
         assert settings["FORMS_SUBMISSIONS_API"] is True
-        assert "REST_FRAMEWORK" not in settings
+        assert settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
+        }
         assert ("", "quickscale_modules_crm.urls") in urls
         assert ("", "quickscale_modules_forms.urls") in urls
 
@@ -1350,6 +1354,7 @@ class TestBillingModuleConfig:
         assert config["secret_key_env_var"] == "STRIPE_SECRET_KEY"
         assert config["webhook_secret_env_var"] == "QUICKSCALE_BILLING_WEBHOOK_SECRET"
         assert config["billing_currency"] == "usd"
+        assert config["api_rate_limit"] == "30/hour"
 
     def test_billing_in_module_configurators(self):
         assert "billing" in MODULE_CONFIGURATOR_REGISTRY
@@ -1372,6 +1377,7 @@ class TestBillingModuleConfig:
             " OPS_STRIPE_SECRET_KEY ",
             "  OPS_BILLING_WEBHOOK_SECRET ",
             " EUR ",
+            " 10/hour ",
         ]
 
         config = MODULE_CONFIGURATOR_REGISTRY["billing"].configure(
@@ -1384,6 +1390,7 @@ class TestBillingModuleConfig:
             "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
             "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
             "billing_currency": "eur",
+            "api_rate_limit": "10/hour",
         }
 
 

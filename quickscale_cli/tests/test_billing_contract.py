@@ -40,6 +40,7 @@ def test_resolved_billing_config_normalizes_and_is_stable() -> None:
         "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
         "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
         "billing_currency": "eur",
+        "api_rate_limit": "30/hour",
     }
     assert resolve_manifest_module_options("billing", resolved) == resolved
 

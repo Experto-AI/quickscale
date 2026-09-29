@@ -1301,7 +1301,7 @@ def resume_current_subscription(
 def _subscription_provider_mutation_lock_key(organization: Any) -> int:
     organization_pk = getattr(organization, "pk", organization)
     digest = hashlib.sha256(
-        f"quickscale:billing-subscription:{organization_pk}".encode()
+        f"quickscale_billing:subscription:{organization_pk}".encode()
     ).digest()
     return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
@@ -1887,7 +1887,7 @@ def _process_verified_stripe_event(
 
 def _webhook_event_processing_lock_key(event_id: str) -> int:
     digest = hashlib.sha256(
-        f"quickscale:billing-webhook-event:{event_id}".encode()
+        f"quickscale_billing:webhook-event:{event_id}".encode()
     ).digest()
     return int.from_bytes(digest[:8], byteorder="big", signed=True)
 

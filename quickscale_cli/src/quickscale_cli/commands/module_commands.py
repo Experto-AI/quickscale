@@ -16,7 +16,11 @@ from quickscale_core.contracts.module_catalog import (
     get_module_readiness_reason,
 )
 from quickscale_core.schema.config_schema import validate_config
-from quickscale_core.schema.state_schema import StateError, StateManager
+from quickscale_core.schema.state_schema import (
+    ManagedFileRecord,
+    StateError,
+    StateManager,
+)
 from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError,
     resolve_embedded_module_install_path as _resolve_install_path_from_dependency_sync,
@@ -41,8 +45,10 @@ from quickscale_core.advisory_lock import (
     AdvisoryLockContentionError,
 )
 from quickscale_core.project_state import (
+    DEFAULT_MANAGED_WIRING_PATHS,
     ProjectStateManager,
     check_version_drift,
+    compute_file_hashes,
 )
 from quickscale_core.manifest.loader import (
     ManifestError,
@@ -1413,6 +1419,239 @@ def _commit_contract_adoption() -> None:
         raise GitError(f"Failed to commit the recorded contract adoption: {e.stderr}")
 
 
+def _regenerate_and_record_managed_wiring(
+    project_path: Path,
+    project_package: str,
+) -> tuple[bool, str]:
+    """Regenerate the managed wiring after every module pull and hash it.
+
+    Runs once per update, after all module pulls succeeded: regeneration
+    validates every embedded manifest against the running core version, so a
+    half-updated mixed-version set would fail mid-update.  The pre-update
+    wiring is restored when regeneration fails — including a failure while
+    persisting the refreshed hash records — so an aborted update never leaves
+    a half-written settings file or a wiring/state mismatch.  The managed-file
+    hash records are refreshed so ``quickscale status`` does not report
+    QuickScale's own regeneration as drift.
+    """
+    package_root = project_path / project_package
+    wiring_paths = (
+        package_root / "settings" / "modules.py",
+        package_root / "urls_modules.py",
+        package_root / "quickscale_managed",
+    )
+    with TemporaryDirectory(prefix="quickscale-update-wiring-") as backup_dir:
+        snapshots = [
+            _snapshot_update_path(path, Path(backup_dir), f"managed-{index}")
+            for index, path in enumerate(wiring_paths)
+        ]
+        try:
+            success, message = regenerate_managed_wiring(
+                project_path,
+                project_package=project_package,
+            )
+            if not success:
+                _restore_update_snapshots(snapshots)
+                return False, message
+            _record_managed_wiring_hashes(project_path, project_package)
+        except Exception as error:  # noqa: BLE001 - restore before surfacing
+            _restore_update_snapshots(snapshots)
+            return False, str(error)
+    return True, message
+
+
+def _record_managed_wiring_hashes(
+    project_path: Path,
+    project_package: str,
+) -> None:
+    """Record the regenerated wiring's hashes in the authoritative state."""
+    state_manager = StateManager(project_path)
+    state = state_manager.load()
+    if state is None:
+        return
+
+    managed_paths = [
+        f"{project_package}/{relative}" for relative in DEFAULT_MANAGED_WIRING_PATHS
+    ]
+    for path_str, digest in compute_file_hashes(project_path, managed_paths).items():
+        state.managed_files[path_str] = ManagedFileRecord(
+            path=path_str,
+            hash=digest,
+        )
+    state_manager.save(state)
+
+
+def _git_tracks_path(path: Path) -> bool:
+    """Return whether git tracks any file under *path*."""
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+        ["git", "ls-files", "--", str(path)],  # noqa: S607 - PATH-resolved executable by design
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return bool(result.stdout.strip())
+
+
+def _path_in_commit(project_path: Path, commit: str, path: str) -> bool:
+    """Return whether *commit* holds any file under *path*."""
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+        ["git", "ls-tree", "--name-only", commit, "--", path],  # noqa: S607 - PATH-resolved executable by design
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return bool(result.stdout.strip())
+
+
+def _commit_regenerated_managed_wiring(project_package: str) -> None:
+    """Commit regenerated managed wiring and its refreshed hash records."""
+    tracked_paths: list[str] = []
+    package_root = Path(project_package)
+    for wiring_path in (
+        package_root / "settings" / "modules.py",
+        package_root / "urls_modules.py",
+        package_root / "quickscale_managed",
+    ):
+        # A path that no longer exists but is tracked must be staged so a
+        # regeneration that removes a managed file commits its deletion.
+        if wiring_path.exists() or _git_tracks_path(wiring_path):
+            tracked_paths.append(str(wiring_path))
+    state_path = Path(".quickscale") / "state.yml"
+    if state_path.exists():
+        tracked_paths.append(str(state_path))
+    if not tracked_paths:
+        return
+
+    try:
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "add", "-A", "--", *tracked_paths],  # noqa: S607 - PATH-resolved executable by design
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to stage regenerated managed wiring: {e.stderr}")
+
+    cached_diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],  # noqa: S607 - PATH-resolved executable by design
+        capture_output=True,
+        text=True,
+    )
+    if cached_diff.returncode == 0:
+        return
+    if cached_diff.returncode != 1:
+        raise GitError("Failed to inspect staged changes before the wiring commit")
+
+    try:
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "commit", "-m", "chore: regenerate managed module wiring"],  # noqa: S607 - PATH-resolved executable by design
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to commit regenerated managed wiring: {e.stderr}")
+
+
+def _roll_back_partial_module_update(
+    project_path: Path,
+    pre_update_head: str,
+    updated_modules: list[str],
+    project_package: str | None = None,
+) -> None:
+    """Restore already-committed pulls and wiring after a post-pull failure.
+
+    ``update`` commits each successful module pull before continuing, so a
+    later failure would otherwise leave the earlier modules' new code paired
+    with the pre-update managed wiring.  Restoring the updated module trees,
+    the managed wiring, and the tracking files the update touched from the
+    commit that preceded the update keeps the project coherent; the
+    restoration is committed so the tree stays clean for the operator's next
+    command.
+    """
+    if not updated_modules or not pre_update_head:
+        return
+
+    restore_paths = [f"modules/{name}" for name in updated_modules]
+    if project_package:
+        restore_paths.extend(
+            [
+                f"{project_package}/settings/modules.py",
+                f"{project_package}/urls_modules.py",
+                f"{project_package}/quickscale_managed",
+            ]
+        )
+    restore_paths.extend(
+        [
+            ".quickscale/state.yml",
+            ".quickscale/config.yml",
+            "pyproject.toml",
+        ]
+    )
+
+    try:
+        # Remove every path a successful pull or a failed wiring commit may
+        # have added or staged, then restore the pre-update content: a plain
+        # checkout keeps files that exist only in the newer commit, and a
+        # staged-but-uncommitted wiring change would otherwise ride into the
+        # rollback commit.
+        for path in restore_paths:
+            subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+                [  # noqa: S607 - PATH-resolved executable by design
+                    "git",
+                    "rm",
+                    "-r",
+                    "-f",
+                    "-q",
+                    "--ignore-unmatch",
+                    "--",
+                    path,
+                ],
+                cwd=project_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        restore_from_head = [
+            path
+            for path in restore_paths
+            if _path_in_commit(project_path, pre_update_head, path)
+        ]
+        if restore_from_head:
+            subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+                ["git", "checkout", pre_update_head, "--", *restore_from_head],  # noqa: S607 - PATH-resolved executable by design
+                cwd=project_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        cached_diff = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],  # noqa: S607 - PATH-resolved executable by design
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+        )
+        if cached_diff.returncode != 1:
+            return
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "commit", "-m", "chore: roll back partial module update"],  # noqa: S607 - PATH-resolved executable by design
+            cwd=project_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as error:
+        click.secho(
+            "⚠️  Failed to roll back the modules updated before the failure; "
+            "reconcile with 'quickscale apply' before serving.",
+            fg="yellow",
+            err=True,
+        )
+        if error.stderr:
+            click.echo(error.stderr.strip(), err=True)
+
+
 def _commit_module_update(module_name: str, module_prefix: str) -> None:
     """Create a commit for a successfully updated module."""
     tracked_paths = [module_prefix]
@@ -1570,6 +1809,21 @@ def update(
             raise click.Abort() from error
 
         failed_modules: list[str] = []
+        updated_modules: list[str] = []
+        wiring_failed = False
+        try:
+            pre_update_head = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+                ["git", "rev-parse", "HEAD"],  # noqa: S607 - PATH-resolved executable by design
+                cwd=project_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        except subprocess.CalledProcessError:
+            # ``_validate_update_environment`` already required a git
+            # repository; without a resolvable HEAD there is no committed
+            # state to roll back to, so partial-failure rollback is skipped.
+            pre_update_head = ""
 
         try:
             # Update each module
@@ -1582,16 +1836,68 @@ def update(
                 ):
                     failed_modules.append(name)
                     break
+                updated_modules.append(name)
+
+            # Regenerate the managed wiring once every module pull succeeded.
+            # Regeneration validates every embedded manifest against the
+            # running core version, so it cannot run between the pulls of a
+            # mixed-version set.  A failed regeneration restores the
+            # pre-update wiring and its hash records, then aborts the command.
+            if not failed_modules:
+                # Any failure in this post-pull phase — loading state,
+                # regenerating, recording hashes, or committing the wiring —
+                # must be treated as a failed update so the modules committed
+                # by the pulls above are rolled back with it.
+                try:
+                    refreshed_state = ProjectStateManager(project_path).load_state()
+                    if refreshed_state is None:
+                        raise StateError(
+                            "authoritative project state could not be loaded"
+                        )
+                    wiring_success, wiring_message = (
+                        _regenerate_and_record_managed_wiring(
+                            project_path,
+                            refreshed_state.project.package,
+                        )
+                    )
+                    if not wiring_success:
+                        raise RuntimeError(wiring_message)
+                    _commit_regenerated_managed_wiring(refreshed_state.project.package)
+                    click.echo("  ✅ Regenerated managed module wiring")
+                except Exception as error:  # noqa: BLE001 - rollback below
+                    wiring_failed = True
+                    click.secho(
+                        f"❌ Failed to regenerate managed module wiring: {error}",
+                        fg="red",
+                        err=True,
+                    )
+                    click.echo(
+                        "💡 Fix the module manifests, then run "
+                        "'quickscale apply' to regenerate the managed wiring.",
+                        err=True,
+                    )
 
             # Record the confirmed adoption only after every module mutation
             # (the subtree pulls need a clean tree) and while the advisory lock
             # is still held, then commit it so the next command's clean-tree
             # check still passes (SA207).
-            if confirm_contract_adoption and not failed_modules:
+            if confirm_contract_adoption and not failed_modules and not wiring_failed:
                 refreshed_state = ProjectStateManager(project_path).load_state()
                 if refreshed_state is not None:
                     record_contract_adoption(refreshed_state, project_path)
                     _commit_contract_adoption()
+
+            if failed_modules or wiring_failed:
+                # A post-pull failure must not leave the modules committed
+                # before it paired with the pre-update managed wiring.  The
+                # rollback runs under the same advisory lock that protects the
+                # update, so a concurrent update cannot interleave with it.
+                _roll_back_partial_module_update(
+                    project_path,
+                    pre_update_head,
+                    updated_modules,
+                    state.project.package,
+                )
         finally:
             lock.release()
 
@@ -1606,6 +1912,27 @@ def update(
                 f"Failed module(s): {', '.join(failed_modules)}",
                 err=True,
             )
+            if updated_modules:
+                click.echo(
+                    "The modules updated before the failure were rolled back; "
+                    "fix the failure and re-run 'quickscale update'.",
+                    err=True,
+                )
+            raise click.Abort()
+
+        if wiring_failed:
+            click.secho(
+                "\n❌ Module update finished without regenerated managed wiring",
+                fg="red",
+                bold=True,
+                err=True,
+            )
+            if updated_modules:
+                click.echo(
+                    "The modules updated before the failure were rolled back; "
+                    "fix the failure and re-run 'quickscale update'.",
+                    err=True,
+                )
             raise click.Abort()
 
         click.secho("\n🎉 Module update complete!", fg="green", bold=True)

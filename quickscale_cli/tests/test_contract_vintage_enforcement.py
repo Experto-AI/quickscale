@@ -175,7 +175,7 @@ def test_project_declaration_declares_each_template_contract_step() -> None:
 
     sa201 = " ".join(steps["sa201-throttling"].manual_adoption_steps)
     assert "ScopedRateThrottle" in sa201
-    assert "billing_checkout" in sa201
+    assert "quickscale_billing_checkout" in sa201
     assert "REST_FRAMEWORK" in sa201
 
     sa206 = " ".join(steps["sa206-runtime-settings-facade"].manual_adoption_steps)
@@ -347,6 +347,16 @@ def test_update_records_adoption_after_module_mutations(
         module_commands, "_validate_module_readiness", Mock(return_value=True)
     )
     monkeypatch.setattr(module_commands, "_update_single_module", _update)
+    monkeypatch.setattr(
+        module_commands,
+        "_regenerate_and_record_managed_wiring",
+        lambda *args, **kwargs: (True, "regenerated"),
+    )
+    monkeypatch.setattr(
+        module_commands,
+        "_commit_regenerated_managed_wiring",
+        lambda *args, **kwargs: None,
+    )
     monkeypatch.setattr(module_commands, "AdvisoryLock", Mock(return_value=Mock()))
     monkeypatch.setattr(module_commands.click, "confirm", Mock(return_value=True))
 
@@ -427,6 +437,16 @@ def test_update_confirm_contract_adoption_records_and_proceeds(
         module_commands, "_validate_module_readiness", Mock(return_value=True)
     )
     monkeypatch.setattr(module_commands, "_update_single_module", update_module)
+    monkeypatch.setattr(
+        module_commands,
+        "_regenerate_and_record_managed_wiring",
+        lambda *args, **kwargs: (True, "regenerated"),
+    )
+    monkeypatch.setattr(
+        module_commands,
+        "_commit_regenerated_managed_wiring",
+        lambda *args, **kwargs: None,
+    )
     monkeypatch.setattr(module_commands, "AdvisoryLock", Mock(return_value=lock))
     monkeypatch.setattr(module_commands, "_commit_contract_adoption", Mock())
     monkeypatch.setattr(module_commands.click, "confirm", Mock(return_value=True))
@@ -858,6 +878,16 @@ def test_update_enforces_vintage_before_module_mutation(
         ),
     )
     monkeypatch.setattr(module_commands, "_update_single_module", update_module)
+    monkeypatch.setattr(
+        module_commands,
+        "_regenerate_and_record_managed_wiring",
+        lambda *args, **kwargs: (True, "regenerated"),
+    )
+    monkeypatch.setattr(
+        module_commands,
+        "_commit_regenerated_managed_wiring",
+        lambda *args, **kwargs: None,
+    )
     monkeypatch.setattr(module_commands, "AdvisoryLock", Mock(return_value=lock))
     monkeypatch.setattr(module_commands.click, "confirm", Mock(return_value=True))
 

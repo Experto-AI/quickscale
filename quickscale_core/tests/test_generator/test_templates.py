@@ -1577,7 +1577,9 @@ class TestDrfPermissionBaseline:
             config_values={},
             module_settings={
                 "REST_FRAMEWORK": {
-                    "DEFAULT_THROTTLE_RATES": {"billing_checkout": "30/hour"},
+                    "DEFAULT_THROTTLE_RATES": {
+                        "quickscale_billing_checkout": "30/hour"
+                    },
                 },
             },
         )
@@ -1585,7 +1587,7 @@ class TestDrfPermissionBaseline:
         rest_framework = namespace["REST_FRAMEWORK"]
         assert isinstance(rest_framework, dict)
         rates = rest_framework["DEFAULT_THROTTLE_RATES"]
-        assert rates["billing_checkout"] == "30/hour"
+        assert rates["quickscale_billing_checkout"] == "30/hour"
         assert rates["user"] == "3000/hour"
         assert rates["anon"] == "1200/hour"
         assert rest_framework["DEFAULT_PERMISSION_CLASSES"] == [
