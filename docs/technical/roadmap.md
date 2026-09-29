@@ -44,7 +44,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA227 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA217 ──► SA219 ──► SA224
-Track 3: SA225 ──► SA223 ──► SA220 ──► SA226 ──► SA216 (after SA215)
+Track 3: SA223 ──► SA220 ──► SA226 ──► SA216 (after SA215)
      critical path: SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
@@ -93,7 +93,7 @@ A track is **truly green** only when all three states are yes.
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py`, `exceptions.py`, and
   `services.py`, orgs' `permissions`, and module URLs, APIs, and webhooks, with the theme's React
-  API client (SA225, SA223, SA220, SA226).
+  API client (SA223, SA220, SA226).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
   SA217, SA219, SA220, SA223–SA227) touch every module and cross every track, so each lands in
@@ -153,9 +153,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
     `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
     `schema.config_schema`, and the CLI's `module_config`, with `contracts.imperative_inventory`.
-    One generic manifest-driven CLI configurator now reads the manifest (blog, listings, CRM,
-    forms, analytics, billing, auth, orgs, and backups use it); the other modules convert to it,
-    and the adapter path still needs notifications, social, and storage.
+    Notifications, social, and storage convert to the generic manifest-driven CLI configurator.
   - *Settings reading (last).* `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
     one generic startup check in `quickscale_core.runtime`, run through the shared checks helper
     and registered by each module, validates every declared setting; per-module readers and code
@@ -183,8 +181,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `.env.example` use only the new names.
   - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
     option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
-    notifications' `os.getenv` reads and in-code default variable names go (rule 35; SA225 adds the
-    empty-secret startup checks).
+    notifications' `os.getenv` reads and in-code default variable names go (rule 35).
   - *Dependencies.* `required_modules` holds bare names and `plan`/`apply` select them; version
     floors, their parser, and `implies` go from the seven manifests, their core copies, and the
     implication resolver (rule 39).
@@ -205,8 +202,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** every manifest and module settings read; `quickscale_cli` plan and apply;
   `.env.example`; the generated settings templates (Track 3); the theme's `index.html.j2`;
   core's manifest loader and implication resolver; railway.md and user docs.
-
-- [x] **SA225 — Move startup checks and exceptions onto the shared helpers.**
 
 - [ ] **SA220 — Untangle module dependencies behind `services.py` and capabilities.**
 
@@ -256,21 +251,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Throttles and shared settings.* Throttle scopes become `quickscale_<module>_<purpose>`, each
     rate a `_RATE_LIMIT` option (billing's hard-coded `"30/hour"` included; rule 32), and
     billing's advisory-lock key strings become `quickscale_billing:…` (rule 33; locks are
-    transient, so nothing migrates). Core's `collect_wiring` now fails `apply` when two modules
-    write one key differently and merges `REST_FRAMEWORK` key by key (rule 30, landed); auth
-    stopped writing `ACCOUNT_ADAPTER`, so orgs is its only writer until D6 inverts ownership.
+    transient, so nothing migrates).
   - *Webhooks.* billing's and notifications' webhooks become DRF `APIView`s answering
     `200`/`400`/`404` in rule 9's shape, with the missing secret moved to `checks.py`; they stay
     signature-verified; `scripts/check_csrf_exempt_gate.py` loses its two webhook helpers.
 
   **Acceptance:** every API and webhook error body matches the one shape; a list of every moved
-  public URL, with its operator step, is ready for SA215's release notes; `apply` fails on two
-  modules writing one setting differently, with a control; every throttle scope has the stem and
+  public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and
   its rate from a setting.
 
   **Surfaces:** every module's `urls.py`, `adapter.py`, manifest; blog, listings, orgs, social
-  APIs; billing and notifications webhooks; the theme's React API client; the CSRF gate script;
-  `quickscale_core/module_wiring.py`.
+  APIs; billing and notifications webhooks; the theme's React API client; the CSRF gate script.
 
 - [ ] **SA224 — Standardize module templates, static files, and template tags.**
 
