@@ -22,7 +22,7 @@ from quickscale_modules_billing.apps import QuickscaleBillingConfig
 
 assert quickscale_modules_billing.__version__
 
-# SA225: ready() now runs the module's checks through the shared helper, and
+# ready() now runs the module's checks through the shared helper, and
 # a check reads the module's settings snapshot; that is only importable once
 # Django has populated the app registry, so set Django up before calling it.
 import django

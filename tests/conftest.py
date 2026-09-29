@@ -8,7 +8,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client
 
-# SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
 # The collection hook below deselects bypass_rls-marked tests unless the env var
 # is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
@@ -84,7 +84,7 @@ def admin_client(superuser) -> Client:
 
 
 # ---------------------------------------------------------------------------
-# SA14.4 — bypass_rls marker registration and collection-time opt-in
+# bypass_rls marker registration and collection-time opt-in
 # ---------------------------------------------------------------------------
 
 
