@@ -1,6 +1,6 @@
-"""Focused seam tests for SA7.1 organization_created signal dispatch in orgs.
+"""Focused seam tests for organization_created signal dispatch in orgs.
 
-After SA7.1 the ``crm_bootstrap.maybe_seed_crm_default_stages`` reverse-import
+After the ``crm_bootstrap.maybe_seed_crm_default_stages`` reverse-import
 is replaced by an ``organization_created`` signal fired from
 ``OrgCreateForm.save()``.  These tests verify the orgs-side dispatch
 behavior; CRM-side receiver tests live in the CRM module.
@@ -43,7 +43,7 @@ def test_org_create_form_dispatches_organization_created_signal() -> None:
 def test_create_personal_for_dispatches_organization_created_signal() -> None:
     """Personal-org creation dispatches the organization_created signal.
 
-    SA11.6: ``create_personal_for`` now fires ``organization_created`` so
+    ``create_personal_for`` now fires ``organization_created`` so
     that CRM default pipeline stages (and any future signal receivers) are
     seeded at personal-org creation time — matching the behavior of
     ``OrgCreateForm.save()``.

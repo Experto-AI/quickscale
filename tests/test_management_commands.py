@@ -646,7 +646,7 @@ def test_purge_organization_deletes_memberships_and_invitations() -> None:
 def test_purge_organization_one_owner_multi_member_succeeds() -> None:
     """quickscale_orgs_purge_organization must succeed for a one-owner/multi-member org.
 
-    Regression for CR-SA70-001: the SA70 pre_delete backstop on
+    Regression: the pre_delete backstop on
     OrganizationMembership must not block org-wide purge when the owner
     is the sole owner but other members exist.
     """
@@ -1417,7 +1417,7 @@ def test_purge_organization_sets_db_current_org_id_on_postgres() -> None:
 
     # Step 5: After the atomic block, the local setting is gone (SET LOCAL
     # only persists for the current transaction).  Reset the ContextVar
-    # first so the AF9 priming wrapper does not re-issue SET LOCAL on
+    # first so the priming wrapper does not re-issue SET LOCAL on
     # the probe query — without this the wrapper sees the stale ContextVar
     # and primes the GUC inside its short atomic, masking the proof.
     reset_current_org_id()
@@ -1800,7 +1800,7 @@ def test_purge_plan_is_marker_derived_and_fk_ordered() -> None:
                     f"{parent_model._meta.label} in the purge plan"
                 )
 
-    from tests.sa182_project_app.models import ProjectListing, ProjectListingImage
+    from tests.project_tenant_app.models import ProjectListing, ProjectListingImage
 
     assert order[ProjectListingImage] < order[ProjectListing]
 
@@ -1822,7 +1822,7 @@ def test_purge_plan_supports_explicit_order_overrides() -> None:
         _topologically_order_models,
     )
     from quickscale_modules_social.models import SocialLink
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
 
     ordered = _topologically_order_models(
         [SocialLink, ProjectListing],
@@ -2072,7 +2072,7 @@ def test_purge_organization_deletes_listings_rows() -> None:
 @pytest.mark.django_db
 def test_purge_organization_deletes_project_owned_child_rows() -> None:
     """A project-owned protected child purges without a command registry edit."""
-    from tests.sa182_project_app.models import ProjectListing, ProjectListingImage
+    from tests.project_tenant_app.models import ProjectListing, ProjectListingImage
 
     org = Organization.objects.create(name="Project Purge", slug="project-purge")
     set_current_org_id(org.pk)
@@ -2108,7 +2108,7 @@ def test_purge_organization_deletes_project_owned_child_rows() -> None:
 @pytest.mark.django_db
 def test_purge_organization_deletes_project_owned_self_protected_rows() -> None:
     """A project-owned self-PROTECT tree purges in one organization-wide delete."""
-    from tests.sa182_project_app.models import ProjectFolder
+    from tests.project_tenant_app.models import ProjectFolder
 
     org = Organization.objects.create(
         name="Project Folder Purge",
@@ -2143,7 +2143,7 @@ def test_purge_organization_deletes_project_owned_self_protected_rows() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA208 — Provider-backed project fields refuse the purge
+# Provider-backed project fields refuse the purge
 # ---------------------------------------------------------------------------
 
 
@@ -2152,7 +2152,7 @@ def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
     """A declared provider-backed project value refuses dry-run and purge."""
     from django.core.management.base import CommandError
 
-    from tests.sa208_project_app.models import ProjectProviderRecord
+    from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
         name="SA208 Provider Refusal",
@@ -2171,7 +2171,7 @@ def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
 
     expected = (
         r"provider-backed values: "
-        r"sa208_project_app\.projectproviderrecord\.mls_id"
+        r"provider_id_app\.projectproviderrecord\.mls_id"
     )
     with pytest.raises(CommandError, match=expected):
         call_command(
@@ -2207,7 +2207,7 @@ def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
 @pytest.mark.django_db
 def test_purge_deletes_rows_without_provider_backed_values() -> None:
     """An empty provider-backed field and a non-provider field do not refuse."""
-    from tests.sa208_project_app.models import ProjectProviderRecord
+    from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
         name="SA208 Local Only",
@@ -2245,7 +2245,7 @@ def test_provider_backed_guard_serializes_concurrent_project_updates(
     from django.db import close_old_connections, connection
     from django.db.utils import OperationalError
 
-    from tests.sa208_project_app.models import ProjectProviderRecord
+    from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
         name="SA208 Provider Race",
@@ -2626,7 +2626,7 @@ def test_purge_tombstone_retry_heals_social_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA1.3 — check_tenant_isolation command tests
+# check_tenant_isolation command tests
 # ---------------------------------------------------------------------------
 
 
@@ -2641,7 +2641,7 @@ def _expected_tenant_model_keys() -> set[tuple[str, str]]:
 
     project_models = {
         (model._meta.app_label, model.__name__)
-        for app_label in ("sa182_project_app", "sa208_project_app")
+        for app_label in ("project_tenant_app", "provider_id_app")
         for model in apps.get_app_config(app_label).get_models()
     }
     shipped_keys = {
@@ -2721,7 +2721,7 @@ def test_check_tenant_isolation_json_output() -> None:
 
 
 @pytest.mark.django_db
-def test_sa182_project_listing_appears_in_human_and_json_output() -> None:
+def test_project_tenant_listing_appears_in_human_and_json_output() -> None:
     """The project-owned tenant model is reported by both output formats."""
     human_stdout = StringIO()
     call_command(
@@ -2730,7 +2730,7 @@ def test_sa182_project_listing_appears_in_human_and_json_output() -> None:
         stderr=StringIO(),
         verbosity=0,
     )
-    assert "sa182_project_app.ProjectListing" in human_stdout.getvalue()
+    assert "project_tenant_app.ProjectListing" in human_stdout.getvalue()
 
     json_stdout = StringIO()
     call_command(
@@ -2745,7 +2745,7 @@ def test_sa182_project_listing_appears_in_human_and_json_output() -> None:
         (result["app_label"], result["model_name"])
         for result in data["tenant_models"]["results"]
     }
-    assert ("sa182_project_app", "ProjectListing") in result_keys
+    assert ("project_tenant_app", "ProjectListing") in result_keys
 
 
 @pytest.mark.django_db
@@ -2861,7 +2861,7 @@ def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
 
 @pytest.mark.django_db
 def test_check_tenant_isolation_detection_helpers() -> None:
-    """Unit-test the SA1.3 detection helpers directly.
+    """Unit-test the detection helpers directly.
 
     * TenantModel subclasses (like ConcreteTenantResource in test_models.py)
       must be detected as tenant models.
@@ -2945,7 +2945,7 @@ def test_check_tenant_isolation_detects_all_enrolled_models() -> None:
 def test_check_tenant_isolation_json_postgres_only_skip() -> None:
     """--postgres-only --format json on non-PostgreSQL must emit clean JSON.
 
-    Regression for CR-SA13-001: the --postgres-only skip branch must emit
+    Regression: the --postgres-only skip branch must emit
     JSON-only output with status ``skip`` when ``--format json`` is
     specified and the database is not PostgreSQL.
     """
@@ -2982,7 +2982,7 @@ def test_check_tenant_isolation_json_postgres_only_skip() -> None:
 def test_check_tenant_isolation_json_no_models() -> None:
     """get_tenant_models()==[] with --format json must emit clean JSON.
 
-    Regression for CR-SA13-001: the no-models warning branch must emit
+    Regression: the no-models warning branch must emit
     JSON-only output with status ``warning`` when ``--format json`` is
     specified and no tenant models are discovered.
     """
@@ -3021,7 +3021,7 @@ def test_check_tenant_isolation_json_no_models() -> None:
 @pytest.mark.django_db
 def test_check_tenant_isolation_json_no_models_postgres_only_skip() -> None:
     """get_tenant_models()==[] with --postgres-only --format json on
-    non-PostgreSQL must emit a single valid JSON document (CR-SA14-003).
+    non-PostgreSQL must emit a single valid JSON document.
 
     Regression: the no-models payload and the --postgres-only skip must
     be combined into one JSON document, not written as two separate docs.
@@ -3073,7 +3073,7 @@ def test_check_tenant_isolation_json_no_models_postgres_only_skip() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA1.4 — Default-deny classification check tests
+# Default-deny classification check tests
 # ---------------------------------------------------------------------------
 
 
@@ -3206,9 +3206,9 @@ def test_get_unclassified_concrete_models_acceptance() -> None:
 
 def test_get_concrete_project_models_returns_expected_models() -> None:
     """Prove that get_concrete_project_models() returns all concrete
-    models from project-owned apps under the SA15.1 widened scope:
+    models from project-owned apps under the widened scope:
     all installed non-contrib, non-third-party apps.  The set must be
-    non-empty and must include auto-created through models (CR-SA14-001).
+    non-empty and must include auto-created through models.
     """
     from quickscale_modules_orgs.tenancy import get_concrete_project_models
 
@@ -3233,7 +3233,7 @@ def test_get_concrete_project_models_returns_expected_models() -> None:
             f"{type(m).__module__})."
         )
 
-    # CR-SA14-001: Verify auto-created ManyToMany through models are included.
+    # Verify auto-created ManyToMany through models are included.
     through_model_names = {
         (m._meta.app_label, m.__name__) for m in project_models if m._meta.auto_created
     }
@@ -3250,14 +3250,14 @@ def test_get_concrete_project_models_returns_expected_models() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA14-002 — --postgres-only must not bypass classification check
+# --postgres-only must not bypass classification check
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 def test_postgres_only_classification_still_runs_human() -> None:
     """--postgres-only on non-PostgreSQL must still report unclassified
-    models in human-readable output (CR-SA14-002).
+    models in human-readable output.
     """
     from unittest.mock import MagicMock, patch
 
@@ -3298,7 +3298,7 @@ def test_postgres_only_classification_still_runs_human() -> None:
 @pytest.mark.django_db
 def test_postgres_only_classification_still_runs_json() -> None:
     """--postgres-only on non-PostgreSQL must still report unclassified
-    models in JSON output (CR-SA14-002).
+    models in JSON output.
     """
     from unittest.mock import MagicMock, patch
 
@@ -3342,7 +3342,7 @@ def test_postgres_only_classification_still_runs_json() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA15.1 — Implicit M2M through models are auto-classified (CR-SA15.1-001)
+# Implicit M2M through models are auto-classified
 # ---------------------------------------------------------------------------
 
 
@@ -3409,7 +3409,7 @@ class TestImplicitM2MThroughClassification:
 
 
 # ---------------------------------------------------------------------------
-# SA15.1 — tenant_excluded marker classification path (CR-SA15.1-003)
+# tenant_excluded marker classification path
 # ---------------------------------------------------------------------------
 
 

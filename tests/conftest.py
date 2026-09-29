@@ -20,7 +20,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client
 
-# SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
 # The collection hook below deselects bypass_rls-marked tests unless the env var
 # is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
@@ -30,7 +30,7 @@ from django.test import Client
 # ran during setup — use a restricted (NOBYPASSRLS) DB role for testing.
 
 
-# SA97: shared per-test state reset fixture replaces the private
+# shared per-test state reset fixture replaces the private
 # ``_reset_test_state`` copy.  See ``tests_shared/reset_state.py``.
 from tests_shared.reset_state import reset_test_state  # noqa: F401
 
@@ -39,8 +39,8 @@ from tests_shared.reset_state import reset_test_state  # noqa: F401
 def mock_org_created_signal() -> Iterator[None]:
     """Opt-in fixture: prevent CRM receiver from firing during org creation.
 
-    SA74 fixed the CRM receiver (``seed_crm_default_stages_on_org_created``)
-    to use ``org_scope`` internally, so the receiver no longer needs a
+    The CRM receiver (``seed_crm_default_stages_on_org_created``) uses
+    ``org_scope`` internally, so it no longer needs a
     pre-primed ``app.current_org_id`` to write safely under FORCE RLS.
     The old autouse ``_mock_org_created_signal`` fixture has been removed.
 
@@ -57,7 +57,7 @@ def mock_org_created_signal() -> Iterator[None]:
 
 
 # ---------------------------------------------------------------------------
-# SA59.1 — restricted-role context helpers
+# restricted-role context helpers
 # ---------------------------------------------------------------------------
 
 
@@ -65,7 +65,7 @@ def mock_org_created_signal() -> Iterator[None]:
 def org_write_context(organization: Any) -> Iterator[None]:
     """Context manager that establishes org context for tenant-scoped writes.
 
-    Under SA59.1 restricted-role testing, FORCE-RLS policies require
+    Under restricted-role testing, FORCE-RLS policies require
     ``app.current_org_id`` to be set before any INSERT/UPDATE/DELETE on
     tenant-scoped tables, even when using ``all_objects`` (which bypasses
     Django-level scoping but not PostgreSQL RLS).
@@ -143,7 +143,7 @@ def org_b(db: None) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# SA14.4 — bypass_rls marker registration and collection-time opt-in
+# bypass_rls marker registration and collection-time opt-in
 # ---------------------------------------------------------------------------
 
 

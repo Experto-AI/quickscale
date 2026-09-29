@@ -11,7 +11,7 @@ Phase 1 scope
   when the wrapper itself issues ``SET LOCAL``).
 * Correct GUC derivation from the ``ContextVar`` in both explicit-transaction
   and autocommit modes.
-* No regressions for the AF4 no-request-long-transaction contract.
+* No regressions for the no-request-long-transaction contract.
 
 Phase 2+ is out of scope for this file (backend contingency, restricted-role
 proofs, middleware/view/module redesign, schema/migration work).
@@ -23,7 +23,7 @@ registered in the session the first time they are referenced via ``SET`` or
 ``SET LOCAL``.  Once registered, ``current_setting('app.current_org_id', true)``
 returns ``''`` (the compiled-in default) instead of ``NULL``.
 
-The shared test connection is therefore "tainted" after any AF9 priming call:
+The shared test connection is therefore "tainted" after any priming call:
 the GUC changes from ``NULL`` to ``''`` for the session lifetime.  This would
 break the existing ``test_postgres_content_route_does_not_set_db_current_org_id``
 in ``test_middleware.py`` which asserts ``current_setting`` returns ``None``
@@ -57,7 +57,7 @@ from quickscale_modules_orgs.current_org import (
 # Resets the PostgreSQL session between tests so that the
 # ``app.current_org_id`` custom GUC returns to the ``NULL`` state.
 # Without this, the existing middleware isolation test would fail when run
-# after any AF9 test that issues ``SET LOCAL``.
+# after any test that issues ``SET LOCAL``.
 
 
 @pytest.fixture(autouse=True)
@@ -111,7 +111,7 @@ def test_signal_handler_installs_wrapper() -> None:
     wrappers and no installation marker — it is a clean seam for
     verifying per-connection install behaviour.
 
-    Test isolation (CR-AF9-002): the fresh ``DatabaseWrapper`` is
+    Test isolation: the fresh ``DatabaseWrapper`` is
     created and discarded within this test; the shared default
     connection is never touched.
     """
@@ -148,7 +148,7 @@ def test_signal_handler_installs_wrapper() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Non-PostgreSQL backend — vendor guard (CR-AF9-003)
+# Non-PostgreSQL backend — vendor guard
 # ---------------------------------------------------------------------------
 
 
@@ -156,7 +156,7 @@ def test_signal_handler_installs_wrapper() -> None:
 def test_priming_wrapper_noop_on_non_postgresql() -> None:
     """The priming execute wrapper is a no-op on non-PostgreSQL backends.
 
-    Regression for CR-AF9-003: set the ContextVar to a non-None value and
+    Regression: set the ContextVar to a non-None value and
     mock ``connection.vendor`` to ``"sqlite"``.  A subsequent
     ``cursor.execute()`` must complete normally without issuing
     ``SET LOCAL`` — the GUC must remain at the session default.
@@ -325,7 +325,7 @@ def test_priming_guc_differs_per_org_in_explicit_txn() -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_priming_same_org_consecutive_explicit_txns() -> None:
-    """CR-SA42-001 regression: back-to-back same-org explicit transactions
+    """Regression: back-to-back same-org explicit transactions
     must each issue SET LOCAL on their first statement.
 
     The per-transaction memo carries the atomic block identity.  When a
@@ -443,7 +443,7 @@ def test_priming_no_guc_when_contextvar_none() -> None:
 
 
 # ---------------------------------------------------------------------------
-# No-request-long-transaction regression guard (AF4)
+# No-request-long-transaction regression guard
 # ---------------------------------------------------------------------------
 # The existing ``test_postgres_content_route_does_not_set_db_current_org_id``
 # in ``test_middleware.py`` remains the authoritative regression test.
@@ -457,7 +457,7 @@ def test_short_atomic_does_not_leak_across_calls() -> None:
 
     Each ``cursor.execute()`` is genuinely autocommitted.  After one
     call's short atomic exits, the next call must not see stale GUC
-    state (AF4 no-request-long-transaction behavior).
+    state (no-request-long-transaction behavior).
 
     Uses ``transaction=True`` so the test runs outside Django's test
     transaction.
@@ -495,7 +495,7 @@ def test_short_atomic_does_not_leak_across_calls() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA83 — Canonical GUC mutator memo-clearing lifecycle
+# Canonical GUC mutator memo-clearing lifecycle
 # ---------------------------------------------------------------------------
 # Each direct GUC mutator (_set_db_current_org_id, reset_db_current_org_id,
 # _restore_current_org_id) must clear the per-transaction priming memo so

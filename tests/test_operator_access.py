@@ -1,11 +1,11 @@
-"""SA14.5 — operator_access context manager and RLS template refresh tests.
+"""Operator_access context manager and RLS template refresh tests.
 
 Tests for:
     * ``operator_access(reason=...)`` context manager (GUC setting, audit
       logging, lifecycle, nesting safety).
-    * CR-SA14.5-001: operator_access grants cross-tenant **read** only
+    * Operator_access grants cross-tenant **read** only
       (not write or delete visibility).
-    * CR-SA14.5-002: nested operator_access() correctly restores prior
+    * Nested operator_access() correctly restores prior
       GUC state.
     * ``refresh_force_rls_policies()`` helper (table/policy iteration,
       revert→apply cycle).
@@ -39,7 +39,7 @@ from quickscale_modules_orgs.current_org import (
 
 
 class TestOperatorAccessGucLifecycle:
-    """Verify the GUC is set on entry and restored on exit (CR-SA14.5-002)."""
+    """Verify the GUC is set on entry and restored on exit."""
 
     @pytest.fixture(autouse=True)
     def _patch_connection(self) -> Generator[None, None, None]:
@@ -50,8 +50,8 @@ class TestOperatorAccessGucLifecycle:
         mock_conn = patcher.start()
         mock_conn.vendor = "postgresql"
         mock_conn.in_atomic_block = True
-        # _get_operator_access() is now called on entry (CR-SA14.5-002
-        # nesting-safety save).  Configure the mock cursor.fetchone() to
+        # _get_operator_access() is now called on entry (a nesting-safety
+        # save).  Configure the mock cursor.fetchone() to
         # return the default empty GUC value.
         mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
             "",
@@ -83,7 +83,7 @@ class TestOperatorAccessGucLifecycle:
     def test_restores_prior_on_exit(self) -> None:
         """The prior GUC value (empty string) is restored on exit.
 
-        CR-SA14.5-002: nested operator_access() must restore the outer
+        Nested operator_access() must restore the outer
         scope's GUC value instead of unconditionally clearing to ''."""
         mock_conn = self._make_conn()
         with patch("django.db.connection", mock_conn):
@@ -134,7 +134,7 @@ class TestOperatorAccessGucLifecycle:
         """Nested operator_access() must restore the outer scope's GUC
         value instead of unconditionally clearing to ''.
 
-        CR-SA14.5-002 regression: prove via patched _get_operator_access
+        Regression: prove via patched _get_operator_access
         that the outer scope's prior ('' ) is restored after the nested
         inner scope exits.
 
@@ -574,12 +574,12 @@ class TestRefreshForceRlsPoliciesMissingNames:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_sa182_project_table_refresh_uses_live_migration_policy() -> None:
+def test_project_tenant_table_refresh_uses_live_migration_policy() -> None:
     """A project-owned table is refreshed without a registry entry."""
     from django.db import connection
 
     import quickscale_modules_orgs.tenancy as tenancy_mod
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
 
     table = ProjectListing._meta.db_table
     with connection.cursor() as cursor:
@@ -632,11 +632,11 @@ def test_sa182_project_table_refresh_uses_live_migration_policy() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_sa182_refresh_preserves_quote_requiring_identifiers_exactly() -> None:
+def test_project_tenant_refresh_preserves_quote_requiring_identifiers_exactly() -> None:
     """Quoted table and policy identities refresh without folded duplicates."""
     from django.db import connection
 
-    table = "SA182QuotedTenantTable"
+    table = "ProjectTenantQuotedTenantTable"
     policy_name = "TenantPolicy"
     select_policy_name = f"{policy_name}_select"
     quote_name = connection.ops.quote_name
@@ -685,12 +685,12 @@ def test_sa182_refresh_preserves_quote_requiring_identifiers_exactly() -> None:
             cursor.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
 
 
-def test_sa182_fixture_rls_migration_reverse_removes_policy() -> None:
+def test_project_tenant_fixture_rls_migration_reverse_removes_policy() -> None:
     """The project fixture migration exposes a working reverse RLS step."""
     import importlib
 
     migration_module = importlib.import_module(
-        "tests.sa182_project_app.migrations.0001_initial"
+        "tests.project_tenant_app.migrations.0001_initial"
     )
     operation = migration_module.Migration.operations[-1]
     assert operation.reverse_code is migration_module._reverse_rls
@@ -714,14 +714,14 @@ def test_sa182_fixture_rls_migration_reverse_removes_policy() -> None:
     [[], [("first_policy",), ("second_policy",)]],
     ids=["missing", "ambiguous"],
 )
-def test_sa182_refresh_rejects_missing_or_ambiguous_policy_before_ddl(
+def test_project_tenant_refresh_rejects_missing_or_ambiguous_policy_before_ddl(
     policy_rows: list[tuple[str, ...]],
 ) -> None:
     """Malformed catalog state fails before either DDL phase starts."""
     editor = MagicMock()
     editor.connection.vendor = "postgresql"
     model = MagicMock()
-    model._meta.db_table = "sa182_missing_or_ambiguous"
+    model._meta.db_table = "project_tenant_missing_or_ambiguous"
     cursor = editor.connection.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = (True,)
     cursor.fetchall.return_value = policy_rows
@@ -742,14 +742,14 @@ def test_sa182_refresh_rejects_missing_or_ambiguous_policy_before_ddl(
 
 
 @pytest.mark.parametrize("policy_name", [None, ""], ids=["null", "empty"])
-def test_sa182_refresh_rejects_invalid_policy_name_before_ddl(
+def test_project_tenant_refresh_rejects_invalid_policy_name_before_ddl(
     policy_name: object,
 ) -> None:
     """Invalid catalog policy names fail before either DDL phase starts."""
     editor = MagicMock()
     editor.connection.vendor = "postgresql"
     model = MagicMock()
-    model._meta.db_table = "sa182_invalid_policy_name"
+    model._meta.db_table = "project_tenant_invalid_policy_name"
     cursor = editor.connection.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = (True,)
     cursor.fetchall.return_value = [(policy_name,)]
@@ -769,13 +769,13 @@ def test_sa182_refresh_rejects_invalid_policy_name_before_ddl(
     editor.execute.assert_not_called()
 
 
-def test_sa182_refresh_discovers_all_targets_before_revert() -> None:
+def test_project_tenant_refresh_discovers_all_targets_before_revert() -> None:
     """Every catalog target is bound before the first revert call."""
     editor = MagicMock()
     editor.connection.vendor = "postgresql"
     models = [MagicMock(), MagicMock()]
-    models[0]._meta.db_table = "sa182_first"
-    models[1]._meta.db_table = "sa182_second"
+    models[0]._meta.db_table = "project_tenant_first"
+    models[1]._meta.db_table = "project_tenant_second"
     cursor = editor.connection.cursor.return_value.__enter__.return_value
     cursor.fetchone.side_effect = [(True,), (True,)]
     cursor.fetchall.side_effect = [[("first_policy",)], [("second_policy",)]]
@@ -797,20 +797,26 @@ def test_sa182_refresh_discovers_all_targets_before_revert() -> None:
     assert events == ["revert", "apply"]
     revert.assert_called_once_with(
         editor,
-        (("sa182_first", "first_policy"), ("sa182_second", "second_policy")),
+        (
+            ("project_tenant_first", "first_policy"),
+            ("project_tenant_second", "second_policy"),
+        ),
     )
     apply.assert_called_once_with(
         editor,
-        (("sa182_first", "first_policy"), ("sa182_second", "second_policy")),
+        (
+            ("project_tenant_first", "first_policy"),
+            ("project_tenant_second", "second_policy"),
+        ),
     )
 
 
-def test_sa182_refresh_skips_missing_project_table() -> None:
+def test_project_tenant_refresh_skips_missing_project_table() -> None:
     """A discovered model whose table is absent remains a no-op."""
     editor = MagicMock()
     editor.connection.vendor = "postgresql"
     model = MagicMock()
-    model._meta.db_table = "sa182_not_created"
+    model._meta.db_table = "project_tenant_not_created"
     cursor = editor.connection.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = (False,)
 
@@ -824,13 +830,13 @@ def test_sa182_refresh_skips_missing_project_table() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_sa182_missing_force_rls_fails_command_and_restores_fixture() -> None:
+def test_project_tenant_missing_force_rls_fails_command_and_restores_fixture() -> None:
     """W004 and command failure do not leave the fixture policy disabled."""
     from django.core.management import CommandError, call_command
     from django.db import connection
 
     from quickscale_modules_orgs.tenancy import check_tenant_model_isolation
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
 
     table = ProjectListing._meta.db_table
     quoted_table = connection.ops.quote_name(table)
@@ -885,7 +891,7 @@ def test_sa182_missing_force_rls_fails_command_and_restores_fixture() -> None:
 
 
 # =========================================================================
-# CR-SA14.5-001 — Cross-tenant read-only proof (PostgreSQL only)
+# Cross-tenant read-only proof (PostgreSQL only)
 # =========================================================================
 # Proves that operator_access grants cross-tenant **read** visibility but
 # NOT cross-tenant write or delete visibility.  The FORCE-RLS template
@@ -923,7 +929,7 @@ class TestOperatorAccessCrossTenantReadOnly:
     The proof window opens only after ``SET ROLE`` — the test user's
     superuser/BYPASSRLS privileges do not affect the restricted-role queries.
 
-    CR-SA14.5-001 regression guard.
+    Regression guard.
     """
 
     _RESTRICTED_ROLE = _RESTRICTED_OP_ROLE
@@ -932,13 +938,13 @@ class TestOperatorAccessCrossTenantReadOnly:
     def _ensure_role() -> None:
         """Assert the pre-provisioned RLS role exists and issue table grants.
 
-        SA59.3: The role must be pre-created by the test harness
+        The role must be pre-created by the test harness
         (``scripts/provision_test_roles.sh`` or equivalent) instead of
         creating it at runtime.  Raises ``RuntimeError`` with setup
         instructions if missing.  Per-table grants are still issued here
         (idempotent, requires table existence post-migration).
 
-        SA77: converted from ``psycopg2`` direct connection to Django's
+        Converted from ``psycopg2`` direct connection to Django's
         managed ``connection.cursor()`` so the helper works under
         restricted-role (NOBYPASSRLS) environments.  Best-effort GRANTs
         are wrapped in savepoints (``transaction.atomic()``) so
@@ -948,7 +954,7 @@ class TestOperatorAccessCrossTenantReadOnly:
         from django.db import connection, transaction
 
         with connection.cursor() as cur:
-            # SA59.3: assert the role is pre-provisioned instead of CREATE ROLE.
+            # assert the role is pre-provisioned instead of CREATE ROLE.
             cur.execute(
                 "SELECT 1 FROM pg_roles WHERE rolname = %s",
                 [TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE],
@@ -962,7 +968,7 @@ class TestOperatorAccessCrossTenantReadOnly:
                 )
             # Best-effort grants wrapped in savepoints so permission-denied
             # failures under NOBYPASSRLS do not abort the outer test
-            # transaction (SA77).
+            # transaction.
             try:
                 with transaction.atomic():
                     cur.execute(
@@ -989,7 +995,7 @@ class TestOperatorAccessCrossTenantReadOnly:
         """With operator_access enabled under a restricted role, a query
         can see rows from a different organization.
 
-        CR-SA14.5-001: the FOR SELECT sub-policy carries the operator_access
+        The FOR SELECT sub-policy carries the operator_access
         OR clause, so cross-tenant reads are allowed.
         """
         self._ensure_role()
@@ -1047,7 +1053,7 @@ class TestOperatorAccessCrossTenantReadOnly:
         """With operator_access enabled under a restricted role, a DELETE
         targeting a row from any organization must fail.
 
-        CR-SA14.5-001 proof: the FOR ALL policy (which controls DELETE
+        Proof: the FOR ALL policy (which controls DELETE
         visibility) does NOT carry the operator_access OR clause.
         """
         self._ensure_role()
@@ -1103,7 +1109,7 @@ class TestOperatorAccessCrossTenantReadOnly:
         """With operator_access enabled under a restricted role, an UPDATE
         targeting a row from any organization must fail.
 
-        CR-SA14.5-001 proof: the FOR ALL policy (which controls UPDATE
+        Proof: the FOR ALL policy (which controls UPDATE
         visibility) does NOT carry the operator_access OR clause.
         """
         self._ensure_role()
@@ -1166,7 +1172,7 @@ class TestOperatorAccessCrossTenantReadOnly:
 
 
 # =========================================================================
-# CR-SA14.5-002 — _get_operator_access unit test
+# _get_operator_access unit test
 # =========================================================================
 
 
@@ -1222,14 +1228,14 @@ class TestGetOperatorAccess:
 
 
 # =========================================================================
-# SA39 — atomic guard regression tests
+# atomic guard regression tests
 # =========================================================================
 
 
 class TestOperatorAccessAtomicGuard:
     """``_get_operator_access`` and ``_set_operator_access`` raise
     ``ImproperlyConfigured`` on PostgreSQL when called outside an active
-    ``transaction.atomic()`` block (SA39)."""
+    ``transaction.atomic()`` block."""
 
     # -- _get_operator_access outside atomic -------------------------------
 

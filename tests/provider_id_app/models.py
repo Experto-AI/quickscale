@@ -1,4 +1,4 @@
-"""Project-owned provider-ID classification fixture used by the SA208 suite."""
+"""Project-owned provider-ID classification fixture used by the provider-ID suite."""
 
 from django.db import models
 

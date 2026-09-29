@@ -1,4 +1,4 @@
-"""SA14.6 — QUICKSCALE_MODE boot guard unit tests.
+"""QUICKSCALE_MODE boot guard unit tests.
 
 Tests for ``quickscale_modules_orgs.checks.check_quickscale_mode`` — the
 function run by ``QuickscaleOrgsConfig.ready()`` through

@@ -163,7 +163,7 @@ def test_invitation_admin_form_save_revalidates_after_is_valid() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA14.1 — TenantModelAdmin helper tests
+# TenantModelAdmin helper tests
 # ---------------------------------------------------------------------------
 # These tests exercise the org-resolving helper functions and the
 # TenantModelAdmin base class that generalises the per-org admin pattern
@@ -666,7 +666,7 @@ class TestTenantModelAdminEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# VIEW-AS org locking — CR-SA14.1-001
+# VIEW-AS org locking
 # ---------------------------------------------------------------------------
 # Under VIEW-AS, TenantModelAdmin.get_form disables the organization field
 # so add/change POST submissions cannot write a different org than the
