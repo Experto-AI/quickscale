@@ -39,7 +39,7 @@ def _uploaded_image(
 
 class TestSelectStorageBackend:
     def test_missing_backend_raises_improperly_configured(self) -> None:
-        """SA30: missing QUICKSCALE_STORAGE_BACKEND raises ImproperlyConfigured."""
+        """Missing QUICKSCALE_STORAGE_BACKEND raises ImproperlyConfigured."""
         with pytest.raises(
             ImproperlyConfigured,
             match="QUICKSCALE_STORAGE_BACKEND setting is required",
@@ -49,7 +49,7 @@ class TestSelectStorageBackend:
     def test_missing_backend_on_settings_object_raises_improperly_configured(
         self,
     ) -> None:
-        """SA30: missing QUICKSCALE_STORAGE_BACKEND on settings object raises."""
+        """Missing QUICKSCALE_STORAGE_BACKEND on settings object raises."""
 
         class Settings:
             pass
@@ -63,7 +63,7 @@ class TestSelectStorageBackend:
     def test_invalid_backend_on_settings_object_raises_improperly_configured(
         self,
     ) -> None:
-        """SA30: invalid backend raises ImproperlyConfigured instead of normalizing."""
+        """Invalid backend raises ImproperlyConfigured instead of normalizing."""
 
         class Settings:
             QUICKSCALE_STORAGE_BACKEND = "invalid"
@@ -75,7 +75,7 @@ class TestSelectStorageBackend:
             select_storage_backend(Settings())
 
     def test_empty_backend_string_raises_improperly_configured(self) -> None:
-        """SA30: empty QUICKSCALE_STORAGE_BACKEND raises ImproperlyConfigured."""
+        """Empty QUICKSCALE_STORAGE_BACKEND raises ImproperlyConfigured."""
         with pytest.raises(
             ImproperlyConfigured,
             match="QUICKSCALE_STORAGE_BACKEND setting is required",
@@ -83,7 +83,7 @@ class TestSelectStorageBackend:
             select_storage_backend({"QUICKSCALE_STORAGE_BACKEND": ""})
 
     def test_local_backend_explicit(self) -> None:
-        """SA30: explicit 'local' backend returns local selection."""
+        """Explicit 'local' backend returns local selection."""
         resolved = select_storage_backend({"QUICKSCALE_STORAGE_BACKEND": "local"})
         assert resolved.backend == "local"
         assert resolved.use_s3_compatible is False
