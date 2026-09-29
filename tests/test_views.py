@@ -1826,7 +1826,7 @@ class TestAccountDeleteView:
 # SA35 — account-deletion must not CASCADE-destroy org content
 #
 # The cross-module user-FK conformance gate now lives in
-# ``orgs/tests/test_sa35_conformance.py``, where the test harness
+# ``orgs/tests/test_user_fk_conformance.py``, where the test harness
 # includes blog, crm, and all other ``quickscale_modules_*`` apps.
 # ------------------------------------------------------------------
 
