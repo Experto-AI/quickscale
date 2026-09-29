@@ -9,7 +9,7 @@ SHARED_TEST_TEMPLATES = (
     Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
 )
 
-# SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
+# BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
 # NOBYPASSRLS is the default for module test suites. Mark individual
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
@@ -81,7 +81,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media files
-# SA61: Use a temporary directory so test media files never land in the
+# Use a temporary directory so test media files never land in the
 # tracked worktree. The conftest.py session fixture overrides this with
 # a pytest-managed tmp_path for proper cleanup; this is the safe fallback.
 MEDIA_URL = "/media/"
@@ -90,10 +90,10 @@ MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="qs_blog_test_media_"))
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Blog module required settings (SA17.5: fail-hard defaults)
+# Blog module required settings (fail-hard defaults)
 BLOG_ENABLE_RSS = True
 
-# SA48 — trusted-proxy settings required by get_client_ip()
+# trusted-proxy settings required by get_client_ip()
 USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
 

@@ -1,6 +1,6 @@
 """Tests for blog AppConfig startup behavior.
 
-SA17.5 — fail-hard blog module settings: ``AppConfig.ready()`` must raise
+Fail-hard blog module settings: ``AppConfig.ready()`` must raise
 ``ImproperlyConfigured`` when ``BLOG_ENABLE_RSS`` or ``MEDIA_URL`` is
 missing, or when any ``BLOG_API_TOKENS`` entry is malformed.
 """
@@ -75,7 +75,7 @@ def test_ready_raises_improperly_configured_when_media_url_is_trivial(
 
 
 class TestBlogApiTokensValidation:
-    """Startup validation for BLOG_API_TOKENS entries (SA17.5)."""
+    """Startup validation for BLOG_API_TOKENS entries."""
 
     def test_missing_tokens_does_not_raise(self, settings: Any) -> None:
         """Absent BLOG_API_TOKENS should not trigger validation."""

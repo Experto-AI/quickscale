@@ -10,7 +10,7 @@ import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 
-# SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
 # The collection hook below deselects bypass_rls-marked tests unless the env var
 # is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
@@ -35,7 +35,7 @@ User = get_user_model()
 
 @pytest.fixture(scope="session", autouse=True)
 def _sa61_media_root_tmp_path(tmp_path_factory):
-    """SA61: Redirect MEDIA_ROOT to a pytest-managed temporary directory so
+    """Redirect MEDIA_ROOT to a pytest-managed temporary directory so
     uploaded test media files are never written into the tracked worktree.
     Individual tests that also override MEDIA_ROOT (e.g. with a function-scoped
     tmp_path) are unaffected — the most recent override wins per-test.
@@ -169,9 +169,9 @@ def org_b_admin(db, org_b):
     return user
 
 
-# SA97: shared per-test state reset fixture replaces the private
+# shared per-test state reset fixture replaces the private
 # ``_reset_current_org_context`` copy.  Blog's previous ContextVar-only
-# reset is upgraded to the full superset (GUCs, AF9 memo, cache).
+# reset is upgraded to the full superset (GUCs, memo, cache).
 # See ``tests_shared/reset_state.py``.
 from tests_shared.reset_state import reset_test_state  # noqa: E402, F401
 
@@ -184,7 +184,7 @@ def blog_org_scope():
     ``quickscale_modules_orgs.current_org`` so blog tests can scope
     data creation and request execution under an explicit org context
     without leaking ``app.current_org_id`` GUC state across role
-    boundaries (SA83).
+    boundaries.
     """
     from quickscale_modules_orgs.current_org import org_scope
 
@@ -192,7 +192,7 @@ def blog_org_scope():
 
 
 # ---------------------------------------------------------------------------
-# SA14.4 — bypass_rls marker registration and collection-time opt-in
+# bypass_rls marker registration and collection-time opt-in
 # ---------------------------------------------------------------------------
 
 

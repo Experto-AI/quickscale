@@ -315,7 +315,7 @@ class TestPostDetailView:
         assert f'src="{post.featured_image.url}"' not in html
 
     # ------------------------------------------------------------------
-    # SA26 — Markdown URI scheme sanitization
+    # Markdown URI scheme sanitization
     # ------------------------------------------------------------------
 
     def test_post_detail_sanitizes_javascript_markdown_links(
