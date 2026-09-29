@@ -328,7 +328,7 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
         node.name
         for node in form_throttle.node.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    ] == ["get_rate", "get_cache_key"]
+    ] == ["get_cache_key"]
 
     relative_forms_views = (
         "quickscale_modules/forms/src/quickscale_modules_forms/views.py"
