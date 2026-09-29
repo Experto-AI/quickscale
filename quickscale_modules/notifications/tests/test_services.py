@@ -537,7 +537,6 @@ def test_webhook_ingestion_rejects_when_runtime_disabled(delivery_for_webhook) -
         with pytest.raises(NotificationDisabledError, match="disabled"):
             ingest_webhook_event(
                 body=body,
-                payload=payload,
                 signature=headers["X-QuickScale-Notifications-Signature"],
                 timestamp=headers["X-QuickScale-Notifications-Timestamp"],
             )
@@ -564,7 +563,6 @@ def test_webhook_signature_rejection_is_explicit(delivery_for_webhook) -> None:
     with pytest.raises(NotificationWebhookSignatureError, match="invalid"):
         ingest_webhook_event(
             body=body,
-            payload=payload,
             signature="sha256=invalid",
             timestamp=str(int(time.time())),
         )
@@ -588,7 +586,6 @@ def test_webhook_signature_rejects_expired_timestamps(delivery_for_webhook) -> N
     with pytest.raises(NotificationWebhookSignatureError, match="expired"):
         ingest_webhook_event(
             body=body,
-            payload=payload,
             signature=headers["X-QuickScale-Notifications-Signature"],
             timestamp=headers["X-QuickScale-Notifications-Timestamp"],
         )
@@ -611,7 +608,6 @@ def test_webhook_ingestion_requires_provider_message_id(delivery_for_webhook) ->
     with pytest.raises(Exception, match="provider_message_id"):
         ingest_webhook_event(
             body=body,
-            payload=payload,
             signature=headers["X-QuickScale-Notifications-Signature"],
             timestamp=headers["X-QuickScale-Notifications-Timestamp"],
         )
@@ -636,13 +632,11 @@ def test_webhook_ingestion_is_replay_safe_and_updates_delivery_status(
 
     first_result = ingest_webhook_event(
         body=body,
-        payload=payload,
         signature=headers["X-QuickScale-Notifications-Signature"],
         timestamp=headers["X-QuickScale-Notifications-Timestamp"],
     )
     second_result = ingest_webhook_event(
         body=body,
-        payload=payload,
         signature=headers["X-QuickScale-Notifications-Signature"],
         timestamp=headers["X-QuickScale-Notifications-Timestamp"],
     )

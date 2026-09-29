@@ -1367,12 +1367,7 @@ def test_webhook_view_passes_raw_body_and_signature_header(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "accepted",
-        "duplicate": False,
-        "event_type": "invoice.paid",
-        "processing_status": "processed",
-    }
+    assert response.json() == {"status": "accepted", "duplicate": False}
     assert captured_call == {
         "body": body,
         "signature": "t=1,v1=view-signature",
@@ -1462,7 +1457,7 @@ def test_billing_portal_return_view_keeps_flat_dashboard_link_for_authenticated_
     assert 'href="/billing/dashboard/"' in content
 
 
-def test_webhook_view_maps_signature_errors_to_403(
+def test_webhook_view_maps_signature_errors_to_400(
     client: Client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1480,11 +1475,16 @@ def test_webhook_view_maps_signature_errors_to_403(
         HTTP_STRIPE_SIGNATURE="t=1,v1=invalid",
     )
 
-    assert response.status_code == 403
-    assert response.json()["error"] == "Webhook signature is invalid."
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "webhook_signature_invalid",
+            "message": "Webhook signature is invalid.",
+        }
+    }
 
 
-def test_webhook_view_maps_disabled_runtime_to_403(
+def test_webhook_view_maps_disabled_runtime_to_404(
     client: Client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1502,8 +1502,13 @@ def test_webhook_view_maps_disabled_runtime_to_403(
         HTTP_STRIPE_SIGNATURE="t=1,v1=disabled",
     )
 
-    assert response.status_code == 403
-    assert response.json()["error"] == "Billing module is disabled."
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "not_found",
+            "message": "Billing module is disabled.",
+        }
+    }
 
 
 def test_webhook_view_maps_processing_errors_to_400(
@@ -1525,7 +1530,12 @@ def test_webhook_view_maps_processing_errors_to_400(
     )
 
     assert response.status_code == 400
-    assert response.json()["error"] == "Stripe invoice payload is missing an id."
+    assert response.json() == {
+        "error": {
+            "code": "webhook_payload_invalid",
+            "message": "Stripe invoice payload is missing an id.",
+        }
+    }
 
 
 def test_webhook_view_maps_configuration_errors_to_500(
@@ -1549,9 +1559,14 @@ def test_webhook_view_maps_configuration_errors_to_500(
     )
 
     assert response.status_code == 500
-    assert response.json()["error"] == (
-        "Stripe webhook secret is not configured in the runtime environment."
-    )
+    assert response.json() == {
+        "error": {
+            "code": "configuration_error",
+            "message": (
+                "Stripe webhook secret is not configured in the runtime environment."
+            ),
+        }
+    }
 
 
 _DRF_AUTH_ONLY_SETTINGS = {
