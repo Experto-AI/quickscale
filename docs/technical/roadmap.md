@@ -319,8 +319,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Commands and tooling.* Each module's root `mypy.ini` section relaxes at most
     module-extension.md's standard override, so orgs (98 errors under it), billing (15), forms (9),
     notifications (7), and social fix what the tighter sections report (rule 36).
-  - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
-    isolation and RLS) are added; orgs' two ticket-numbered test apps (`sa182_project_app`,
+  - *Tests.* orgs' two ticket-numbered test apps (`sa182_project_app`,
     `sa208_project_app`) are renamed by subject (D32); the remaining ticket mentions in the
     docstrings and comments of module test files go, reworded to say what each test protects where
     the number was the only explanation.
