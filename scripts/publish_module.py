@@ -128,13 +128,12 @@ def _require_authoritative_module(module_name: str) -> None:
     This is the direct single-module selector guard (F-002): it consults
     :func:`_list_modules` (backed by ``authoritative_module_names()``)
     before any release-authority check, origin prompt, subtree split, or
-    push.  A placeholder name (``teams``) and an unapproved inventory
-    addition (count drift) therefore fail before any outward or mutating
-    path, instead of relying on on-disk directory existence alone.
+    push.  An unapproved inventory addition (count drift) therefore fails
+    before any outward or mutating path, instead of relying on on-disk
+    directory existence alone.
     """
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
         ImproperlyConfigured,
-        get_placeholder_rejection_reason,
     )
 
     try:
@@ -144,13 +143,9 @@ def _require_authoritative_module(module_name: str) -> None:
         sys.exit(1)
 
     if module_name not in authoritative_names:
-        placeholder_reason = get_placeholder_rejection_reason(module_name)
-        if placeholder_reason is not None:
-            _print_error(placeholder_reason)
-        else:
-            _print_error(
-                f"Module '{module_name}' is not in the authoritative shipped-module inventory."
-            )
+        _print_error(
+            f"Module '{module_name}' is not in the authoritative shipped-module inventory."
+        )
         print()
         _print_info("Available modules:")
         for name in authoritative_names:
@@ -1626,12 +1621,11 @@ def main() -> None:
 
         # F-002: reject any direct selection absent from the authoritative
         # shipped-module inventory before the release-authority gate, origin
-        # validation, prompts, subtree split, or push.  A placeholder name
-        # (teams) and an unapproved inventory addition (count drift) both
-        # fail closed here, before any outward or mutating path.  This
-        # supersedes the previous on-disk directory-existence check: the
-        # authoritative inventory is the single source of truth for what a
-        # direct selector may publish.
+        # validation, prompts, subtree split, or push.  An unapproved
+        # inventory addition (count drift) fails closed here, before any
+        # outward or mutating path.  This supersedes the previous on-disk
+        # directory-existence check: the authoritative inventory is the
+        # single source of truth for what a direct selector may publish.
         _require_authoritative_module(module_name)
 
         # Release authority, effective origin identity, and repository-local

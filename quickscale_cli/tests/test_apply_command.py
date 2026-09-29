@@ -634,17 +634,30 @@ docker:
         assert "CRM_ENABLE_API" in str(excinfo.value)
         assert "enable_api" in str(excinfo.value)
 
-    def test_abort_for_not_ready_modules_reports_teams_reason(self, capsys):
-        """Teams should remain blocked by the non-public-ready apply helper."""
+    def test_abort_for_not_ready_modules_reports_reason(self, capsys, monkeypatch):
+        """A non-ready module in config or state aborts apply with its reason."""
+        import quickscale_cli.commands.apply_command as apply_command_module
+
+        monkeypatch.setattr(
+            apply_command_module, "find_not_ready_modules", lambda names: ["hidden"]
+        )
+        monkeypatch.setattr(
+            apply_command_module,
+            "get_module_readiness_reason",
+            lambda name: (
+                f"Module '{name}' is not a public-ready QuickScale module yet."
+            ),
+        )
+
         with pytest.raises(click.Abort):
-            _abort_for_not_ready_modules(["teams"], source="quickscale.yml")
+            _abort_for_not_ready_modules(["hidden"], source="quickscale.yml")
 
         error_output = capsys.readouterr().err
         assert (
             "quickscale.yml references modules that are not public-ready"
             in error_output
         )
-        assert "Module 'teams' remains placeholder inventory only" in error_output
+        assert "Module 'hidden' is not a public-ready" in error_output
 
 
 class TestApplyDirectoryHandling:

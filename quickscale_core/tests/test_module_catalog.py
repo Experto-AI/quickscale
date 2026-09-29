@@ -6,17 +6,14 @@ import pytest
 
 from quickscale_core.contracts.module_catalog import (
     MODULE_CATALOG,
+    ModuleCatalogEntry,
     find_not_ready_modules,
     get_discovered_module_entries,
     get_discovered_module_names,
     get_module_entry,
     get_module_readiness_reason,
 )
-from quickscale_core.contracts.module_discovery import (
-    discover_shipped_module_names,
-    get_placeholder_rejection_reason,
-    is_placeholder_module,
-)
+from quickscale_core.contracts.module_discovery import discover_shipped_module_names
 
 
 class TestGetModuleEntry:
@@ -33,10 +30,20 @@ class TestGetModuleEntry:
 
 
 class TestFindNotReadyModules:
-    def test_returns_sorted_not_ready(self) -> None:
+    def test_returns_sorted_not_ready(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Only known non-ready modules should be returned, sorted."""
-        result = find_not_ready_modules(["auth", "teams", "unknown"])
-        assert result == ["teams"]
+        from quickscale_core.contracts import module_catalog as _mc
+
+        original = _mc.get_module_entry
+
+        def fake(name: str) -> ModuleCatalogEntry | None:
+            if name == "hidden":
+                return ModuleCatalogEntry(name="hidden", description="", ready=False)
+            return original(name)
+
+        monkeypatch.setattr(_mc, "get_module_entry", fake)
+        result = find_not_ready_modules(["auth", "hidden", "unknown"])
+        assert result == ["hidden"]
 
     def test_returns_empty_when_all_ready(self) -> None:
         """All-ready module list should return empty."""
@@ -52,10 +59,20 @@ class TestFindNotReadyModules:
         """Empty input should return empty list."""
         assert find_not_ready_modules([]) == []
 
-    def test_deduplicates_repeated_names(self) -> None:
+    def test_deduplicates_repeated_names(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Duplicate module names should appear only once in the result."""
-        result = find_not_ready_modules(["teams", "teams", "auth"])
-        assert result == ["teams"]
+        from quickscale_core.contracts import module_catalog as _mc
+
+        original = _mc.get_module_entry
+
+        def fake(name: str) -> ModuleCatalogEntry | None:
+            if name == "hidden":
+                return ModuleCatalogEntry(name="hidden", description="", ready=False)
+            return original(name)
+
+        monkeypatch.setattr(_mc, "get_module_entry", fake)
+        result = find_not_ready_modules(["hidden", "hidden", "auth"])
+        assert result == ["hidden"]
 
 
 class TestGetModuleReadinessReason:
@@ -68,12 +85,24 @@ class TestGetModuleReadinessReason:
         with pytest.raises(ValueError, match="Unknown module name"):
             get_module_readiness_reason("nonexistent")
 
-    def test_returns_reason_for_non_ready_module(self) -> None:
+    def test_returns_reason_for_non_ready_module(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Non-ready modules should return an actionable readiness message."""
-        reason = get_module_readiness_reason("teams")
+        from quickscale_core.contracts import module_catalog as _mc
+
+        original = _mc.get_module_entry
+
+        def fake(name: str) -> ModuleCatalogEntry | None:
+            if name == "hidden":
+                return ModuleCatalogEntry(name="hidden", description="", ready=False)
+            return original(name)
+
+        monkeypatch.setattr(_mc, "get_module_entry", fake)
+        reason = get_module_readiness_reason("hidden")
         assert reason is not None
-        assert "teams" in reason
-        assert "placeholder inventory only" in reason
+        assert "hidden" in reason
+        assert "not a public-ready" in reason
 
 
 # ---------------------------------------------------------------------------
@@ -124,55 +153,6 @@ class TestDiscoverShippedModuleNames:
         auth_entry = entry_map.get("auth")
         assert auth_entry is not None
         assert auth_entry.description  # non-empty
-
-
-# ---------------------------------------------------------------------------
-# Placeholder module rejection
-# ---------------------------------------------------------------------------
-
-
-class TestPlaceholderModuleRejection:
-    """Tests for the fail-closed placeholder module rejection path."""
-
-    def test_teams_is_placeholder(self) -> None:
-        """Teams should be a known placeholder."""
-        assert is_placeholder_module("teams")
-
-    def test_shipped_module_not_placeholder(self) -> None:
-        """Shipped modules should not be placeholders."""
-        assert not is_placeholder_module("auth")
-
-    def test_unknown_not_placeholder(self) -> None:
-        """Unknown modules should not be placeholders."""
-        assert not is_placeholder_module("nonexistent")
-
-    def test_teams_placeholder_is_declared_in_catalog(self) -> None:
-        """The catalog is the sole source of placeholder declarations."""
-        entry = get_module_entry("teams")
-        assert entry is not None
-        assert entry.placeholder is True
-        assert entry.ready is False
-
-    def test_placeholder_rejection_reason(self) -> None:
-        """get_placeholder_rejection_reason should return a reason for teams."""
-        reason = get_placeholder_rejection_reason("teams")
-        assert reason is not None
-        assert "placeholder inventory only" in reason
-
-    def test_placeholder_rejection_none_for_shipped(self) -> None:
-        """get_placeholder_rejection_reason should return None for shipped modules."""
-        assert get_placeholder_rejection_reason("auth") is None
-
-    def test_find_not_ready_includes_placeholder(self) -> None:
-        """find_not_ready_modules should include placeholder module names."""
-        result = find_not_ready_modules(["teams", "auth"])
-        assert "teams" in result
-
-    def test_readiness_reason_via_placeholder(self) -> None:
-        """get_module_readiness_reason should route to placeholder check."""
-        reason = get_module_readiness_reason("teams")
-        assert reason is not None
-        assert "placeholder inventory only" in reason
 
 
 # ---------------------------------------------------------------------------

@@ -1066,9 +1066,7 @@ def _raise_for_retired_module_options(
         # The static catalog names the shipped release inventory without
         # touching the filesystem, so this decision holds when a module's
         # directory or manifest is missing and in bundled-only installs.
-        shipped_names = {
-            entry.name for entry in MODULE_CATALOG if not entry.placeholder
-        }
+        shipped_names = {entry.name for entry in MODULE_CATALOG}
         if module_name not in shipped_names:
             return
         raise

@@ -1,13 +1,10 @@
-"""SA49 — Derive orgs' cross-module conformance-env module list instead of
-hand-listing it.
+"""Orgs conformance-env module list derived from packaging presence.
 
 The orgs test suite (``tests/settings.py``) defines the cross-module
 conformance environment used by tenant-registry coverage, FK-conformance,
-purge-spec completeness, and other assertion gates.  Before this fix,
-``INSTALLED_APPS`` was a hand-maintained list that could silently diverge
-from the shipped module inventory — a new module with models would not
-automatically appear in the conformance env, and the existing gates would
-be blind to its tenant models and user-FKs.
+purge-spec completeness, and other assertion gates.  ``INSTALLED_APPS`` must
+not silently diverge from the shipped module inventory — a new module with
+models would otherwise stay invisible to those gates.
 
 This test derives the expected set of shipped QuickScale modules from
 ``quickscale_modules/*/pyproject.toml`` presence (the canonical packaging
@@ -42,22 +39,12 @@ _EXEMPT_NO_MODELS: frozenset[str] = frozenset(
     }
 )
 
-#: Placeholder directories under ``quickscale_modules/`` that are not yet
-#: shipped modules — they have no ``pyproject.toml`` and are skipped by
-#: the derivation entirely.  Listed here for documentation only; the test
-#: does not assert their presence or absence.
-_PLACEHOLDER_DIRS: frozenset[str] = frozenset(
-    {
-        "teams",  # Placeholder — not yet packaged (no pyproject.toml).
-    }
-)
-
 
 def _resolve_modules_root() -> Path:
     """Return the absolute path to the ``quickscale_modules/`` directory.
 
     Resolves relative to this test file::
-        quickscale_modules/orgs/tests/test_sa49_conformance.py
+        quickscale_modules/orgs/tests/test_conformance_env_modules.py
     goes up 4 levels to the repo root, then into ``quickscale_modules/``.
     """
     return Path(__file__).resolve().parent.parent.parent.parent / _MODULES_DIR
@@ -113,8 +100,7 @@ def test_shipped_modules_with_models_in_installed_apps() -> None:
     present in ``settings.INSTALLED_APPS``.
 
     Modules without models (``analytics``, ``storage``) are exempt and
-    listed as deliberate, named exceptions.  Placeholder directories
-    without ``pyproject.toml`` (``teams``) are skipped entirely.
+    listed as deliberate, named exceptions.
 
     If this test fails:
     *   A new module was added — add ``quickscale_modules_<name>`` to

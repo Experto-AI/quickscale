@@ -211,8 +211,8 @@ class TestPlanModuleSelection:
             assert "analytics:" in content
             assert "backups:" in content
 
-    def test_only_teams_is_hidden_by_default(self):
-        """Billing should be visible by default while teams stays hidden."""
+    def test_deleted_teams_is_hidden_by_default(self):
+        """Billing should be visible by default while the deleted teams module stays hidden."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -225,7 +225,7 @@ class TestPlanModuleSelection:
             assert "teams - Multi-tenancy and team management" not in result.output
 
     def test_experimental_modules_visible_with_flag(self):
-        """Discovered modules are all shipped; teams placeholder stays hidden."""
+        """Discovered modules are all shipped; the deleted teams module stays hidden."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -235,7 +235,7 @@ class TestPlanModuleSelection:
             )
 
             assert "billing - Stripe integration" in result.output
-            # Placeholder-only modules are not discovered and never visible.
+            # Deleted modules are not discovered and never visible.
             assert "teams" not in result.output
 
     def test_billing_can_be_selected_with_flag(self):
@@ -254,7 +254,7 @@ class TestPlanModuleSelection:
             assert "billing:" in content
 
     def test_teams_cannot_be_selected_with_flag(self):
-        """Placeholder modules are not in discovered catalog and cannot be selected."""
+        """The deleted teams module is not in the discovered catalog and cannot be selected."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             # "teams" is not a discovered module; the error loop re-prompts and

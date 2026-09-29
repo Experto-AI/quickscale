@@ -1,4 +1,4 @@
-"""AF9 Phase 3 — Autocommit request-path GUC priming proof (PR-AF9-001).
+"""Autocommit request-path GUC priming proof.
 
 Proves that the AF9 execute wrapper primes ``app.current_org_id`` from
 the ContextVar during an autocommit request-path cursor.execute(), and

@@ -2,8 +2,7 @@
 
 These tests verify that the discovery functions correctly enumerate shipped
 modules by scanning the repository's ``quickscale_modules/*/module.yml``
-files, exclude placeholder directories, and provide the expected fail-closed
-rejection path.
+files and provide the expected fail-closed rejection path.
 
 Phase 1 (SA109) adds explicit bundled-manifest discovery and resolution-source
 observability.
@@ -28,9 +27,7 @@ from quickscale_core.contracts.module_discovery import (
     discover_shipped_module_paths,
     get_bundled_manifests_path,
     get_modules_base_path,
-    get_placeholder_rejection_reason,
     get_resolution_source,
-    is_placeholder_module,
     set_modules_base_path,
     validate_active_module_subset,
 )
@@ -178,17 +175,15 @@ class TestDiscoverModulePresence:
         assert records[0].path == (tmp_path / "active").resolve()
         assert records[-1].path is None
 
-    def test_declared_placeholder_is_observable_as_incomplete(
-        self, tmp_path: Path
-    ) -> None:
-        (tmp_path / "teams").mkdir()
+    def test_incomplete_directory_is_observable(self, tmp_path: Path) -> None:
+        (tmp_path / "half_installed").mkdir()
 
-        records = discover_module_presence(tmp_path, expected_names=("teams",))
+        records = discover_module_presence(tmp_path, expected_names=("half_installed",))
 
         assert len(records) == 1
-        assert records[0].name == "teams"
+        assert records[0].name == "half_installed"
         assert records[0].state is ModulePresenceState.INCOMPLETE
-        assert records[0].path == (tmp_path / "teams").resolve()
+        assert records[0].path == (tmp_path / "half_installed").resolve()
 
     def test_missing_base_reports_expected_names_as_absent(
         self, tmp_path: Path
@@ -400,8 +395,8 @@ class TestDiscoverBundledModuleNames:
                 f"Shipped module '{shipped}' missing from bundled manifests"
             )
 
-    def test_excludes_placeholder(self) -> None:
-        """'teams' should not appear in bundled discovery."""
+    def test_deleted_module_directory_is_absent(self) -> None:
+        """The deleted 'teams' directory must not appear in bundled discovery."""
         names = discover_bundled_module_names()
         assert "teams" not in names
 
@@ -445,8 +440,8 @@ class TestDiscoverShippedModuleNames:
         for shipped in ("auth", "analytics", "billing", "blog", "crm", "social"):
             assert shipped in names, f"Shipped module '{shipped}' not discovered"
 
-    def test_placeholder_excluded(self) -> None:
-        """Placeholder directories without module.yml should be excluded."""
+    def test_deleted_module_directory_excluded(self) -> None:
+        """The deleted 'teams' directory must not appear in shipped discovery."""
         names = discover_shipped_module_names()
         assert "teams" not in names
 
@@ -473,20 +468,41 @@ class TestAuthoritativeModuleNames:
     def test_teams_is_excluded(self) -> None:
         assert "teams" not in authoritative_module_names()
 
-    def test_placeholder_manifest_is_rejected(self, tmp_path: Path) -> None:
+    def test_undeclared_active_module_is_rejected(self, tmp_path: Path) -> None:
+        """An undeclared directory with a manifest must not join the inventory."""
         from quickscale_core.contracts import module_discovery as _md
 
         original = _md._modules_base_path
         try:
-            (tmp_path / "teams").mkdir()
-            (tmp_path / "teams" / "module.yml").write_text("name: teams\n")
+            (tmp_path / "ghost").mkdir()
+            (tmp_path / "ghost" / "module.yml").write_text("name: ghost\n")
             _md.set_modules_base_path(tmp_path)
-            _md.AUTHORITATIVE_MODULE_COUNT = 1  # type: ignore[misc]
-            with pytest.raises(ImproperlyConfigured, match="placeholder"):
+            with pytest.raises(
+                ImproperlyConfigured, match="outside the release inventory"
+            ):
                 authoritative_module_names()
         finally:
-            _md.AUTHORITATIVE_MODULE_COUNT = AUTHORITATIVE_MODULE_COUNT  # type: ignore[misc]
             _md.set_modules_base_path(original)
+
+    def test_substitution_cannot_enter_the_release_inventory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A same-count substitution is rejected, not presented as ready."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_catalog import MODULE_CATALOG
+
+        for entry in MODULE_CATALOG:
+            name = "teams" if entry.name == "auth" else entry.name
+            module_dir = tmp_path / name
+            module_dir.mkdir()
+            (module_dir / "module.yml").write_text(f"name: {name}\n")
+
+        monkeypatch.setattr(_md, "_modules_base_path", None)
+        monkeypatch.setattr(_md, "get_modules_base_path", lambda: tmp_path)
+        with pytest.raises(
+            ImproperlyConfigured, match="missing declared module directories"
+        ):
+            authoritative_module_names()
 
     def test_count_drift_is_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from quickscale_core.contracts import module_discovery as _md
@@ -556,61 +572,10 @@ class TestDiscoverShippedModulePaths:
             assert path.is_absolute(), f"{name} path is not absolute"
             assert path.is_dir(), f"{name} path does not exist"
 
-    def test_placeholder_excluded(self) -> None:
-        """Placeholder directories should be excluded."""
+    def test_deleted_module_directory_excluded(self) -> None:
+        """The deleted 'teams' directory must not have a discovered path."""
         paths = discover_shipped_module_paths()
         assert "teams" not in paths
-
-
-class TestIsPlaceholderModule:
-    """Tests for is_placeholder_module."""
-
-    def test_teams_is_placeholder(self) -> None:
-        """'teams' should be recognised as a placeholder."""
-        assert is_placeholder_module("teams")
-
-    def test_shipped_not_placeholder(self) -> None:
-        """Shipped module names should not be placeholders."""
-        assert not is_placeholder_module("auth")
-
-    def test_unknown_not_placeholder(self) -> None:
-        """Unknown names should not be placeholders."""
-        assert not is_placeholder_module("nonexistent_module")
-
-    def test_empty_string_not_placeholder(self) -> None:
-        """Empty string should not be a placeholder."""
-        assert not is_placeholder_module("")
-
-
-class TestGetPlaceholderRejectionReason:
-    """Tests for get_placeholder_rejection_reason."""
-
-    def test_returns_reason_for_teams(self) -> None:
-        """A known placeholder should return a rejection reason."""
-        reason = get_placeholder_rejection_reason("teams")
-        assert reason is not None
-        assert isinstance(reason, str)
-        assert "placeholder" in reason.lower()
-
-    def test_returns_none_for_shipped(self) -> None:
-        """Shipped modules should return None."""
-        assert get_placeholder_rejection_reason("auth") is None
-
-    def test_returns_none_for_unknown(self) -> None:
-        """Unknown modules should return None."""
-        assert get_placeholder_rejection_reason("nonexistent") is None
-
-    def test_reason_contains_module_name(self) -> None:
-        """The rejection reason should mention the module name."""
-        reason = get_placeholder_rejection_reason("teams")
-        assert reason is not None
-        assert "teams" in reason
-
-    def test_reason_display_name_formatted(self) -> None:
-        """The display name in the reason should be title-cased."""
-        reason = get_placeholder_rejection_reason("teams")
-        assert reason is not None
-        assert "Teams" in reason
 
 
 # ---------------------------------------------------------------------------

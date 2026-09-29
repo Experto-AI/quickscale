@@ -28,7 +28,6 @@ def test_list_modules_rejects_unapproved_thirteenth(
     """An extra real manifest cannot silently expand the release inventory."""
     names = module_discovery.discover_bundled_module_names() + ["reports"]
     _write_manifests(tmp_path, names)
-    (tmp_path / "teams").mkdir()
 
     original_base = module_discovery._modules_base_path
     try:
@@ -42,17 +41,18 @@ def test_list_modules_rejects_unapproved_thirteenth(
         module_discovery.set_modules_base_path(original_base)
 
 
-def test_list_modules_rejects_placeholder_manifest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_modules_rejects_undeclared_active_module(tmp_path: Path) -> None:
+    """A manifest in an undeclared directory cannot join the inventory."""
     (tmp_path / "teams").mkdir()
     (tmp_path / "teams" / "module.yml").write_text("name: teams\n")
 
     original_base = module_discovery._modules_base_path
     try:
         module_discovery.set_modules_base_path(tmp_path)
-        monkeypatch.setattr(module_discovery, "AUTHORITATIVE_MODULE_COUNT", 1)
-        with pytest.raises(module_discovery.ImproperlyConfigured, match="placeholder"):
+        with pytest.raises(
+            module_discovery.ImproperlyConfigured,
+            match="outside the release inventory",
+        ):
             publish_module._list_modules()
     finally:
         module_discovery.set_modules_base_path(original_base)
@@ -102,14 +102,13 @@ def _spy_post_guard_path(monkeypatch: pytest.MonkeyPatch, reached: list[str]) ->
         )
 
 
-def test_direct_selector_rejects_placeholder_before_prompts_or_mutation(
+def test_direct_selector_rejects_unknown_module_before_prompts_or_mutation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """F-002: 'teams' fails closed before any release/prompt/split/push path."""
+    """F-002: an unknown module fails before any release/prompt/split/push path."""
     base = tmp_path / "quickscale_modules"
     base.mkdir()
     _write_manifests(base, module_discovery.discover_bundled_module_names())
-    (base / "teams").mkdir()
     _patch_selector_surroundings(tmp_path, monkeypatch)
 
     reached: list[str] = []
@@ -128,7 +127,7 @@ def test_direct_selector_rejects_placeholder_before_prompts_or_mutation(
         assert excinfo.value.code == 1
         assert reached == []
         out = capsys.readouterr().out
-        assert "placeholder inventory only" in out
+        assert "not in the authoritative shipped-module inventory" in out
         assert "teams" in out
     finally:
         module_discovery.set_modules_base_path(original_base)

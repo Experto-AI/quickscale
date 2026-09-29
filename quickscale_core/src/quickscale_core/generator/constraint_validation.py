@@ -36,9 +36,8 @@ _GENERATOR_PACKAGES: Sequence[str] = (
 )
 
 # Packaged module directories whose ``pyproject.toml`` is expected to
-# carry runtime-pin constraints.  Non-packaged directories such as
-# ``teams/`` (placeholder-only) and ``README.md`` are skipped
-# automatically because they lack a ``pyproject.toml``.
+# carry runtime-pin constraints.  Directories without a ``pyproject.toml``
+# (for example ``README.md``) are skipped automatically.
 _MODULES_ROOT_REL = "quickscale_modules"
 
 
@@ -134,7 +133,7 @@ def check_module_python_constraints(
     for child in sorted(modules_root.iterdir()):
         pyproject = child / "pyproject.toml"
         if not pyproject.is_file():
-            continue  # skip non-package entries (README.md, teams/, etc.)
+            continue  # skip non-package entries (README.md, etc.)
 
         actual = _parse_requires_python(pyproject)
         if actual is None:

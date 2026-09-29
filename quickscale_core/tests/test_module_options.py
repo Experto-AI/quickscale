@@ -548,8 +548,8 @@ class TestSanitizeDispatcher:
             result = sanitize_module_options("unknown_module", {"key": "value"})
         assert result == {"key": "value"}
 
-    def test_placeholder_module_without_manifest_passes_through(self) -> None:
-        """A declared placeholder has no retirement declaration to enforce."""
+    def test_module_without_manifest_passes_through(self) -> None:
+        """A module with no readable manifest has no retirement declaration to enforce."""
         result = sanitize_module_options("teams", {"key": "value"})
         assert result == {"key": "value"}
 

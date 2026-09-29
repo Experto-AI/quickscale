@@ -46,14 +46,10 @@ def test_get_module_readiness_reason_returns_none_for_public_ready_billing() -> 
     assert get_module_readiness_reason("billing") is None
 
 
-def test_get_module_readiness_reason_reports_placeholder_teams_inventory() -> None:
-    """Teams should continue exposing placeholder-only inventory wording."""
-    reason = get_module_readiness_reason("teams")
-
-    assert reason is not None
-    assert "teams" in reason
-    assert "placeholder inventory only" in reason
-    assert "public-ready QuickScale module" in reason
+def test_get_module_readiness_reason_raises_for_deleted_teams() -> None:
+    """The deleted teams placeholder is no longer a known module."""
+    with pytest.raises(ValueError, match="Unknown module name"):
+        get_module_readiness_reason("teams")
 
 
 def test_get_module_readiness_reason_raises_for_unknown_module() -> None:
@@ -63,7 +59,5 @@ def test_get_module_readiness_reason_raises_for_unknown_module() -> None:
 
 
 def test_find_not_ready_modules_filters_ready_modules() -> None:
-    """Readiness filtering should keep only known non-public modules."""
-    assert find_not_ready_modules(["auth", "billing", "teams", "unknown"]) == [
-        "teams",
-    ]
+    """Readiness filtering keeps only known non-public modules; none remain."""
+    assert find_not_ready_modules(["auth", "billing", "teams", "unknown"]) == []

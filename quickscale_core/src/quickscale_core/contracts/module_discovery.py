@@ -44,15 +44,6 @@ class ImproperlyConfigured(Exception):
 #: removals fail-hard until the shipped contract is deliberately updated.
 AUTHORITATIVE_MODULE_COUNT: Final[int] = 12
 
-#: Human-readable reason template for placeholder rejection.
-_PLACEHOLDER_REASON_TEMPLATE: Final[str] = (
-    "Module '{name}' remains placeholder inventory only and is not a "
-    "public-ready QuickScale module yet. "
-    "{display_name} remains excluded from public quickscale plan, "
-    "quickscale.yml, quickscale apply, and quickscale status workflows until "
-    "it ships."
-)
-
 # ---------------------------------------------------------------------------
 # Resolution provenance
 # ---------------------------------------------------------------------------
@@ -215,8 +206,8 @@ def discover_module_presence(
     return [records[name] for name in sorted(records)]
 
 
-def _declared_catalog() -> tuple[tuple[str, ...], frozenset[str], bool]:
-    """Return catalog names, placeholders, and whether the catalog is available.
+def _declared_catalog() -> tuple[tuple[str, ...], bool]:
+    """Return catalog names and whether the catalog is available.
 
     The discovery file is copied into hermetic release-tool trees where the
     surrounding ``quickscale_core`` package is intentionally absent.  Only
@@ -248,65 +239,60 @@ def _declared_catalog() -> tuple[tuple[str, ...], frozenset[str], bool]:
         except ModuleNotFoundError as sibling_exc:
             if sibling_exc.name != sibling_catalog_module:
                 raise
-            return (), frozenset(), False
+            return (), False
         MODULE_CATALOG = sibling_catalog.MODULE_CATALOG
 
     names = tuple(entry.name for entry in MODULE_CATALOG)
-    placeholders = frozenset(
-        entry.name for entry in MODULE_CATALOG if entry.placeholder
-    )
-    return names, placeholders, True
-
-
-def _declared_module_names() -> tuple[str, ...]:
-    """Return catalog names without creating a module-discovery import cycle."""
-    names, _placeholders, _available = _declared_catalog()
-    return names
-
-
-def _declared_placeholder_names() -> frozenset[str]:
-    """Return placeholder names from the catalog when the catalog is present."""
-    _names, placeholders, _available = _declared_catalog()
-    return placeholders
+    return names, True
 
 
 def _presence_records_for_projection(
     base_path: str | Path | None = None,
 ) -> list[ModulePresenceRecord]:
     """Return observations and reject unsafe projection inputs."""
-    declared_names, placeholder_names, _catalog_available = _declared_catalog()
+    declared_names, _catalog_available = _declared_catalog()
     records = discover_module_presence(
         base_path=base_path,
         expected_names=declared_names,
     )
-    invalid: list[str] = []
-    for record in records:
-        if (
-            record.state is ModulePresenceState.ACTIVE
-            and record.name in placeholder_names
-        ):
-            invalid.append(f"{record.name} is a declared placeholder")
-        elif (
-            record.state is ModulePresenceState.INCOMPLETE
-            and record.name not in placeholder_names
-        ):
-            invalid.append(f"{record.name} is missing module.yml")
+    invalid = [
+        f"{record.name} is missing module.yml"
+        for record in records
+        if record.state is ModulePresenceState.INCOMPLETE
+    ]
     if invalid:
         raise ImproperlyConfigured(
-            "Module presence is incomplete or contains a placeholder: "
-            + "; ".join(invalid)
+            "Module presence is incomplete: " + "; ".join(invalid)
         )
     return records
+
+
+def _ensure_declared_names_present(
+    names: Iterable[str], declared_names: Iterable[str]
+) -> None:
+    """Reject a source inventory that is missing declared catalog modules.
+
+    A count check alone cannot catch a same-count substitution, so the
+    release inventory additionally requires every declared module directory
+    to be present in the source tree.  A deliberately added module keeps
+    working: an addition changes the inventory count, which the count gate
+    already covers.
+    """
+    missing = sorted(set(declared_names) - set(names))
+    if missing:
+        raise ImproperlyConfigured(
+            "Source inventory is missing declared module directories: "
+            + ", ".join(missing)
+        )
 
 
 def discover_shipped_module_names() -> list[str]:
     """Return alphabetically sorted names of shipped modules discovered by
     scanning the configured modules base path for ``*/module.yml`` files.
 
-    Only active directories are included.  Declared placeholders remain
-    observable as incomplete records but are excluded from this projection.
-    Undeclared incomplete directories fail closed instead of being silently
-    dropped.  Returns an empty list when the workspace contains no manifests.
+    Only active directories are included.  Incomplete directories fail closed
+    instead of being silently dropped.  Returns an empty list when the
+    workspace contains no manifests.
 
     The modules base path is configurable at runtime via
     :func:`set_modules_base_path` — see :func:`get_modules_base_path`.
@@ -359,16 +345,17 @@ def authoritative_module_names() -> list[str]:
 
     Source manifests are preferred in the maintainer monorepo; installed and
     generated contexts resolve the same inventory from bundled manifests.
-    Placeholder names are never public modules, even if a malformed or future
-    repository state gives one a manifest.  A count mismatch is also rejected
-    so consumers cannot silently operate on an accidentally changed release
-    inventory.
+    Every declared module directory must be present in the source inventory,
+    so a same-count substitution cannot silently re-point the inventory, and
+    a count mismatch is also rejected so consumers cannot silently operate on
+    an accidentally changed release inventory.
 
     Raises:
-        ImproperlyConfigured: If a placeholder is discovered or the number of
-            discovered modules differs from :data:`AUTHORITATIVE_MODULE_COUNT`.
+        ImproperlyConfigured: If a declared module directory is missing from
+            the source tree or the number of discovered modules differs from
+            :data:`AUTHORITATIVE_MODULE_COUNT`.
     """
-    _declared_names, _placeholder_names, catalog_available = _declared_catalog()
+    _declared_names, catalog_available = _declared_catalog()
 
     if not catalog_available:
         # A copied lone shim has no package catalog to define a release
@@ -398,6 +385,7 @@ def authoritative_module_names() -> list[str]:
         names = discover_bundled_module_names()
     else:
         names = discover_shipped_module_names()
+        _ensure_declared_names_present(names, _declared_names)
     validate_active_module_subset(names, names)
     return names
 
@@ -422,44 +410,6 @@ def discover_shipped_module_paths() -> dict[str, Path]:
         for record in _presence_records_for_projection()
         if record.state is ModulePresenceState.ACTIVE and record.path is not None
     }
-
-
-def is_placeholder_module(name: str) -> bool:
-    """Return ``True`` when *name* is a known placeholder module that should
-    be rejected outside the discovered catalog surface.
-
-    This is the fail-closed check for explicit placeholder names like ``teams``
-    that exist as repository directories but do **not** carry a ``module.yml``.
-
-    Args:
-        name: The module name to check.
-
-    Returns:
-        ``True`` if the name is a known placeholder.
-    """
-    from quickscale_core.contracts.module_catalog import get_module_entry
-
-    entry = get_module_entry(name)
-    return entry is not None and entry.placeholder
-
-
-def get_placeholder_rejection_reason(name: str) -> str | None:
-    """Return an actionable rejection message for a known placeholder module,
-    or ``None`` if the name is not a known placeholder.
-
-    Args:
-        name: The module name to check.
-
-    Returns:
-        A human-readable rejection string, or ``None``.
-    """
-    if not is_placeholder_module(name):
-        return None
-    display_name = name.replace("_", " ").title()
-    return _PLACEHOLDER_REASON_TEMPLATE.format(
-        name=name,
-        display_name=display_name,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -648,9 +598,7 @@ __all__ = [
     "discover_shipped_module_paths",
     "get_bundled_manifests_path",
     "get_modules_base_path",
-    "get_placeholder_rejection_reason",
     "get_resolution_source",
-    "is_placeholder_module",
     "set_modules_base_path",
     "validate_active_module_subset",
 ]

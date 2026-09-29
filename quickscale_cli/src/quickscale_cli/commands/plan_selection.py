@@ -35,7 +35,7 @@ def _format_module_choice(entry: ModuleCatalogEntry) -> str:
                 f"{entry.name} - {entry.description} "
                 "(internal packaged Phase 1 foundation, not public-ready)"
             )
-        return f"{entry.name} - {entry.description} (placeholder, not public-ready)"
+        return f"{entry.name} - {entry.description} (not public-ready)"
     if entry.experimental:
         return f"{entry.name} - {entry.description} (experimental)"
     return f"{entry.name} - {entry.description}"

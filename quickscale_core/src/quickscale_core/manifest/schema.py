@@ -242,9 +242,8 @@ class ModuleManifest:
     # Readiness / lifecycle metadata
     # ------------------------------------------------------------------ #
     ready: bool = True
-    """Whether the module is considered publicly ready.  Shipped modules
-    with a valid ``module.yml`` default to ``True``; placeholder modules
-    that lack a manifest are excluded from discovery entirely."""
+    """Whether the module is considered publicly ready.  Modules discovered
+    from a valid ``module.yml`` default to ``True``."""
 
     def get_option(self, option_name: str) -> ConfigOption | None:
         """Get a config option by name from either mutable or immutable"""

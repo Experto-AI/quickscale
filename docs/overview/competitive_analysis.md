@@ -44,7 +44,7 @@ That gives QuickScale a more concrete position than a generic Django starter: it
 
 QuickScale is stronger now than an "early starter" framing suggests, but it still has practical limits compared with the broadest SaaS kits:
 
-- Billing, subscriptions, and multi-tenant organization workflows are now shipped, but some billing SPA entry points (dashboard cards, sidebar navigation, module paths) are surfaced as a module flag only and not yet fully wired into the generated `showcase_react` frontend. `teams` remains a README-only placeholder with no committed timeline.
+- Billing, subscriptions, and multi-tenant organization workflows are now shipped, but some billing SPA entry points (dashboard cards, sidebar navigation, module paths) are surfaced as a module flag only and not yet fully wired into the generated `showcase_react` frontend. `teams` remains unshipped with no committed timeline.
 - The surrounding ecosystem, commercial support story, and third-party extension surface are still smaller than the most mature paid products.
 - Some newer frontend-facing additions intentionally stay behind manual adoption boundaries for older generated projects because QuickScale does not rewrite user-owned theme files.
 

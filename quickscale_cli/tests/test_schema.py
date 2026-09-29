@@ -396,24 +396,24 @@ modules:
 
         assert "Unknown module 'unknown_module'" in str(exc.value)
 
-    @pytest.mark.parametrize("placeholder_name", ["teams"])
-    def test_placeholder_module_is_rejected(self, placeholder_name):
-        """Placeholder modules should not validate into quickscale.yml."""
+    @pytest.mark.parametrize("unknown_name", ["teams"])
+    def test_deleted_teams_module_is_rejected(self, unknown_name):
+        """The deleted teams directory is not a module and must not validate."""
         yaml_content = f"""
 version: "1"
 project:
   slug: myapp
   package: myapp
 modules:
-  {placeholder_name}:
+  {unknown_name}:
 """
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
 
         message = str(exc.value)
-        assert placeholder_name in message
-        # Placeholder-only modules are not in the discovered catalog, so the
-        # rejection is at the "unknown module" stage rather than readiness gate.
+        assert unknown_name in message
+        # teams is not in the discovered catalog, so the rejection is at the
+        # "unknown module" stage rather than a readiness gate.
         assert "Unknown module" in message
 
     def test_billing_module_is_accepted(self):
