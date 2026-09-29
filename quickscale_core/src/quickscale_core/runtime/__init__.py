@@ -18,8 +18,11 @@ Module-owned adapters (e.g. ``quickscale_modules_social.adapter``) should
 import from ``quickscale_core.runtime.manifest`` directly to avoid pulling
 in the DR surface at import time and triggering circular imports.
 
-Backward-compatible: all existing imports from ``quickscale_core.runtime``
-continue to work through this combined facade.
+Backward-compatible for the shipped surface: every symbol in ``__all__``
+imports through this combined facade.  Per-module option resolvers are not
+part of it: a module whose manifest owns its options resolves through
+``build_generic_manifest_spec`` instead, and the auth and orgs resolvers the
+facade once re-exported were removed when their manifests took over.
 
 ``__all__`` is a hardcoded literal (union of the sub-module exports) so
 the SA9.2 module-core compatibility checker's static analysis can resolve
@@ -142,14 +145,13 @@ __all__ = [
     "ResolverResult",
     "assemble_wiring_spec",
     "build_generic_manifest_spec",
+    "load_module_manifest",
+    "validate_module_options",
     "ManifestError",
-    "resolve_auth_module_options",
     "notifications_runtime_email_backend",
     "resolve_backups_module_options",
     "resolve_notifications_module_options",
-    "resolve_orgs_module_options",
     "resolve_storage_module_options",
-    "validate_orgs_module_options",
     "validate_storage_module_options",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",

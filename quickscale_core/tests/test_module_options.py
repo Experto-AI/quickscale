@@ -11,7 +11,6 @@ from unittest.mock import patch
 import pytest
 
 from quickscale_core.contracts.module_options import (
-    AUTH_REGISTRATION_ENABLED_OPTION,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
@@ -20,15 +19,12 @@ from quickscale_core.contracts.module_options import (
     ENV_VAR_PORTABILITY_MANUAL,
     ENV_VAR_PORTABILITY_PORTABLE,
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
-    format_auth_desired_config_contract,
     get_env_var_portability,
     has_legacy_backups_secret_values,
-    normalize_auth_module_options,
     normalize_backups_module_options,
     normalize_notifications_module_options,
     normalize_social_module_options,
     sanitize_module_options,
-    validate_auth_module_options,
     validate_backups_env_var_reference,
     validate_notifications_env_var_reference,
     validate_notifications_module_options,
@@ -36,33 +32,6 @@ from quickscale_core.contracts.module_options import (
 )
 from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_core.manifest.loader import ManifestError
-
-
-# ---------------------------------------------------------------------------
-# normalize_auth_module_options
-# ---------------------------------------------------------------------------
-
-
-class TestNormalizeAuth:
-    def test_none_options_returns_empty(self) -> None:
-        assert normalize_auth_module_options(None) == {}
-
-    def test_legacy_allow_registration_raises(self) -> None:
-        """allow_registration raises ConfigValidationError instead of silent migration."""
-        with pytest.raises(ConfigValidationError, match="allow_registration"):
-            normalize_auth_module_options({"allow_registration": False})
-
-    def test_legacy_social_providers_raises(self) -> None:
-        """social_providers raises ConfigValidationError instead of silent drop."""
-        with pytest.raises(ConfigValidationError, match="social_providers"):
-            normalize_auth_module_options({"social_providers": ["google"]})
-
-    def test_canonical_keys_pass_through(self) -> None:
-        """Canonical keys pass through without error."""
-        result = normalize_auth_module_options(
-            {"registration_enabled": True, "email_verification": "none"}
-        )
-        assert result[AUTH_REGISTRATION_ENABLED_OPTION] is True
 
 
 # ---------------------------------------------------------------------------
@@ -179,17 +148,6 @@ class TestNormalizeSocial:
 
 
 # ---------------------------------------------------------------------------
-# validate_auth_module_options (stub)
-# ---------------------------------------------------------------------------
-
-
-class TestValidateAuth:
-    def test_returns_empty(self) -> None:
-        assert validate_auth_module_options(None) == []
-        assert validate_auth_module_options({"any": "value"}) == []
-
-
-# ---------------------------------------------------------------------------
 # validate_backups_env_var_reference
 # ---------------------------------------------------------------------------
 
@@ -273,18 +231,6 @@ class TestHasLegacyBackupsSecrets:
 
 
 # ---------------------------------------------------------------------------
-# format_auth_desired_config_contract
-# ---------------------------------------------------------------------------
-
-
-class TestFormatAuthContract:
-    def test_returns_nonempty_string(self) -> None:
-        text = format_auth_desired_config_contract()
-        assert "registration_enabled" in text
-        assert "authentication_method" in text
-
-
-# ---------------------------------------------------------------------------
 # get_env_var_portability
 # ---------------------------------------------------------------------------
 
@@ -323,10 +269,15 @@ class TestSanitizeDispatcher:
         with pytest.raises(ConfigValidationError, match="allow_registration"):
             sanitize_module_options("auth", {"allow_registration": True})
 
+    def test_auth_dispatch_with_legacy_social_providers_raises(self) -> None:
+        """The manifest's retired_options declaration covers social_providers."""
+        with pytest.raises(ConfigValidationError, match="social_providers"):
+            sanitize_module_options("auth", {"social_providers": ["google"]})
+
     def test_auth_dispatch_with_canonical(self) -> None:
         """Canonical auth keys pass through sanitize dispatcher."""
         result = sanitize_module_options("auth", {"registration_enabled": True})
-        assert result[AUTH_REGISTRATION_ENABLED_OPTION] is True
+        assert result["registration_enabled"] is True
 
     def test_backups_dispatch(self) -> None:
         result = sanitize_module_options("backups", {"remote_access_key_id": "key123"})

@@ -32,38 +32,6 @@ ANALYTICS_PROVIDERS: Final[tuple[str, ...]] = (ANALYTICS_PROVIDER_POSTHOG,)
 
 
 # ---------------------------------------------------------------------------
-# Constants: auth
-# ---------------------------------------------------------------------------
-
-AUTH_REGISTRATION_ENABLED_OPTION: Final[str] = "registration_enabled"
-AUTH_EMAIL_VERIFICATION_OPTION: Final[str] = "email_verification"
-AUTH_AUTHENTICATION_METHOD_OPTION: Final[str] = "authentication_method"
-AUTH_SESSION_COOKIE_AGE_OPTION: Final[str] = "session_cookie_age"
-
-AUTH_EMAIL_VERIFICATION_VALUES: Final[tuple[str, ...]] = (
-    "none",
-    "optional",
-    "mandatory",
-)
-AUTH_AUTHENTICATION_METHOD_VALUES: Final[tuple[str, ...]] = (
-    "email",
-    "username",
-    "both",
-)
-CANONICAL_AUTH_MODULE_OPTION_KEYS: Final[frozenset[str]] = frozenset(
-    {
-        AUTH_REGISTRATION_ENABLED_OPTION,
-        AUTH_EMAIL_VERIFICATION_OPTION,
-        AUTH_AUTHENTICATION_METHOD_OPTION,
-        AUTH_SESSION_COOKIE_AGE_OPTION,
-    }
-)
-
-LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: Final[str] = "allow_registration"
-LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION: Final[str] = "social_providers"
-
-
-# ---------------------------------------------------------------------------
 # Constants: backups
 # ---------------------------------------------------------------------------
 
@@ -143,19 +111,6 @@ NOTIFICATIONS_LIVE_EMAIL_BACKEND: Final[str] = "anymail.backends.resend.EmailBac
 NOTIFICATIONS_CONSOLE_EMAIL_BACKEND: Final[str] = (
     "django.core.mail.backends.console.EmailBackend"
 )
-
-
-# ---------------------------------------------------------------------------
-# Constants: orgs
-# ---------------------------------------------------------------------------
-
-ORGS_MODE_SOLO: Final[str] = "solo"
-ORGS_MODE_SAAS: Final[str] = "saas"
-ORGS_MODES: Final[tuple[str, ...]] = (ORGS_MODE_SOLO, ORGS_MODE_SAAS)
-
-DEFAULT_ORGS_MODE: Final[str] = "solo"
-
-ORGS_MODULE_OPTION_KEYS: Final[frozenset[str]] = frozenset({"mode"})
 
 
 # ---------------------------------------------------------------------------
@@ -355,34 +310,6 @@ _LIKELY_AWS_ACCESS_KEY_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
 # ---------------------------------------------------------------------------
 # Normalize functions
 # ---------------------------------------------------------------------------
-
-
-def normalize_auth_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Return auth options with legacy keys raising instead of silent translation.
-
-    Raises:
-        ConfigValidationError: if any legacy key is present, naming the dead key
-            and its replacement.
-    """
-    from quickscale_core.schema.config_schema import ConfigValidationError
-
-    normalized = dict(options or {})
-
-    if LEGACY_AUTH_ALLOW_REGISTRATION_OPTION in normalized:
-        raise ConfigValidationError(
-            f"Legacy config key '{LEGACY_AUTH_ALLOW_REGISTRATION_OPTION}' is "
-            f"no longer supported. Use '{AUTH_REGISTRATION_ENABLED_OPTION}' instead."
-        )
-
-    if LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION in normalized:
-        raise ConfigValidationError(
-            f"Legacy config key '{LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION}' is "
-            "no longer supported. Remove it from the auth module options."
-        )
-
-    return normalized
 
 
 def normalize_backups_module_options(
@@ -607,18 +534,6 @@ _SOCIAL_PROVIDER_ALIASES: Final[dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 
-def validate_auth_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    """Return validation issues for auth module options.
-
-    The original CLI module did not expose a top-level
-    ``validate_auth_module_options`` helper; schema-layer callers handle
-    per-key validation directly. We provide a no-op stub here to satisfy the
-    contract surface requested by Phase 0 — the schema layer still owns the
-    full per-key validation in ``config_schema._validate_auth_module_options``.
-    """
-    return []
-
-
 def validate_backups_env_var_reference(option_name: str, value: Any) -> str | None:
     """Validate a backups env-var reference field.
 
@@ -729,23 +644,6 @@ def has_legacy_backups_secret_values(options: Mapping[str, Any] | None) -> bool:
     return False
 
 
-def format_auth_desired_config_contract() -> str:
-    """Return concise remediation text for canonical auth desired config."""
-    return "\n".join(
-        [
-            "Canonical auth keys/value shapes:",
-            "modules.auth.registration_enabled: true|false",
-            "modules.auth.email_verification: none|optional|mandatory",
-            "modules.auth.authentication_method: email|username|both",
-            "modules.auth.session_cookie_age: <positive integer seconds>  # optional",
-            (
-                "Remove legacy keys like modules.auth.allow_registration and "
-                "modules.auth.social_providers."
-            ),
-        ]
-    )
-
-
 # ---------------------------------------------------------------------------
 # DR env-var portability
 # ---------------------------------------------------------------------------
@@ -848,8 +746,6 @@ def sanitize_module_options(
     """
     _raise_for_retired_module_options(module_name, options)
 
-    if module_name == "auth":
-        return normalize_auth_module_options(options)
     if module_name == "backups":
         return normalize_backups_module_options(options)
     if module_name == "notifications":
@@ -947,16 +843,6 @@ __all__ = [
     "ANALYTICS_POSTHOG_EU_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
     "ANALYTICS_PROVIDERS",
-    # Auth constants
-    "AUTH_AUTHENTICATION_METHOD_OPTION",
-    "AUTH_AUTHENTICATION_METHOD_VALUES",
-    "AUTH_EMAIL_VERIFICATION_OPTION",
-    "AUTH_EMAIL_VERIFICATION_VALUES",
-    "AUTH_REGISTRATION_ENABLED_OPTION",
-    "AUTH_SESSION_COOKIE_AGE_OPTION",
-    "CANONICAL_AUTH_MODULE_OPTION_KEYS",
-    "LEGACY_AUTH_ALLOW_REGISTRATION_OPTION",
-    "LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION",
     # Backups constants
     "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
@@ -987,22 +873,14 @@ __all__ = [
     "NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION",
     "NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION",
     # Normalize functions
-    "normalize_auth_module_options",
     "normalize_backups_module_options",
     "normalize_notifications_module_options",
     "normalize_social_module_options",
     # Validate functions
-    "validate_auth_module_options",
     "validate_backups_env_var_reference",
     "validate_notifications_env_var_reference",
     "validate_notifications_module_options",
     "validate_social_module_options",
-    # Orgs constants
-    "DEFAULT_ORGS_MODE",
-    "ORGS_MODE_SAAS",
-    "ORGS_MODE_SOLO",
-    "ORGS_MODES",
-    "ORGS_MODULE_OPTION_KEYS",
     # Storage constants
     "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
     "DEFAULT_STORAGE_BACKEND",
@@ -1024,7 +902,6 @@ __all__ = [
     "SOCIAL_LAYOUT_VARIANTS",
     "SOCIAL_LINK_TREE_PATH",
     # Helpers
-    "format_auth_desired_config_contract",
     "has_legacy_backups_secret_values",
     # Sanitize dispatcher
     "sanitize_module_options",

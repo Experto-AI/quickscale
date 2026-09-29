@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
+from quickscale_core.manifest import ManifestError
 from quickscale_core.module_wiring import ModuleWiringSpec
-from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_modules_auth.adapter import (
     _auth_manifest_adapter,
     get_manifest_adapter,
@@ -86,8 +86,8 @@ class TestAuthManifestAdapter:
         ],
     )
     def test_legacy_options_fail_closed(self, options: dict[str, Any]) -> None:
-        """Removed legacy option names retain the resolver's explicit errors."""
-        with pytest.raises(ConfigValidationError) as exc_info:
+        """Removed legacy option names are refused by the manifest engine."""
+        with pytest.raises(ManifestError) as exc_info:
             _auth_manifest_adapter(options)
 
         assert "no longer supported" in str(exc_info.value)

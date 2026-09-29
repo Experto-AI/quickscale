@@ -8,16 +8,6 @@ from typing import Any
 import yaml
 
 from quickscale_core.contracts import (
-    AUTH_AUTHENTICATION_METHOD_OPTION,
-    AUTH_AUTHENTICATION_METHOD_VALUES,
-    AUTH_EMAIL_VERIFICATION_OPTION,
-    AUTH_EMAIL_VERIFICATION_VALUES,
-    AUTH_REGISTRATION_ENABLED_OPTION,
-    AUTH_SESSION_COOKIE_AGE_OPTION,
-    CANONICAL_AUTH_MODULE_OPTION_KEYS,
-    LEGACY_AUTH_ALLOW_REGISTRATION_OPTION,
-    LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION,
-    format_auth_desired_config_contract,
     get_discovered_module_names,
     get_module_readiness_reason,
     sanitize_module_options,
@@ -120,106 +110,6 @@ def _validate_unknown_keys(
                 f"Unknown key '{key}'{section_prefix}",
                 line=line,
                 suggestion=suggestion_text,
-            )
-
-
-def _validate_auth_module_options(
-    module_options: dict[str, Any],
-    yaml_content: str,
-) -> None:
-    """Validate desired-config auth options before sanitize/post-init mutation."""
-    auth_contract = format_auth_desired_config_contract()
-    auth_key_replacements = {
-        LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: AUTH_REGISTRATION_ENABLED_OPTION,
-        "registration": AUTH_REGISTRATION_ENABLED_OPTION,
-    }
-
-    for option_name in module_options:
-        line = _find_line_number(yaml_content, option_name)
-
-        if option_name == LEGACY_AUTH_ALLOW_REGISTRATION_OPTION:
-            raise ConfigValidationError(
-                "Legacy auth desired-config key 'modules.auth.allow_registration' "
-                "is no longer supported",
-                line=line,
-                suggestion=(
-                    "Use modules.auth.registration_enabled: true|false.\n"
-                    + auth_contract
-                ),
-            )
-
-        if option_name == LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION:
-            raise ConfigValidationError(
-                "Legacy auth desired-config key 'modules.auth.social_providers' "
-                "is no longer supported",
-                line=line,
-                suggestion=(
-                    "Remove modules.auth.social_providers from quickscale.yml.\n"
-                    + auth_contract
-                ),
-            )
-
-        if option_name not in CANONICAL_AUTH_MODULE_OPTION_KEYS:
-            replacement = auth_key_replacements.get(option_name)
-            suggestion = auth_contract
-            if replacement is not None:
-                suggestion = (
-                    f"Use modules.auth.{replacement} instead.\n" + auth_contract
-                )
-            raise ConfigValidationError(
-                f"Unknown key '{option_name}' in modules.auth section",
-                line=line,
-                suggestion=suggestion,
-            )
-
-    if AUTH_REGISTRATION_ENABLED_OPTION in module_options and not isinstance(
-        module_options[AUTH_REGISTRATION_ENABLED_OPTION],
-        bool,
-    ):
-        raise ConfigValidationError(
-            "'modules.auth.registration_enabled' must be a boolean (true/false)",
-            line=_find_line_number(yaml_content, AUTH_REGISTRATION_ENABLED_OPTION),
-            suggestion=auth_contract,
-        )
-
-    if AUTH_EMAIL_VERIFICATION_OPTION in module_options:
-        email_verification = module_options[AUTH_EMAIL_VERIFICATION_OPTION]
-        if (
-            not isinstance(email_verification, str)
-            or email_verification not in AUTH_EMAIL_VERIFICATION_VALUES
-        ):
-            raise ConfigValidationError(
-                "'modules.auth.email_verification' must be one of: "
-                + ", ".join(AUTH_EMAIL_VERIFICATION_VALUES),
-                line=_find_line_number(yaml_content, AUTH_EMAIL_VERIFICATION_OPTION),
-                suggestion=auth_contract,
-            )
-
-    if AUTH_AUTHENTICATION_METHOD_OPTION in module_options:
-        authentication_method = module_options[AUTH_AUTHENTICATION_METHOD_OPTION]
-        if (
-            not isinstance(authentication_method, str)
-            or authentication_method not in AUTH_AUTHENTICATION_METHOD_VALUES
-        ):
-            raise ConfigValidationError(
-                "'modules.auth.authentication_method' must be one of: "
-                + ", ".join(AUTH_AUTHENTICATION_METHOD_VALUES),
-                line=_find_line_number(yaml_content, AUTH_AUTHENTICATION_METHOD_OPTION),
-                suggestion=auth_contract,
-            )
-
-    if AUTH_SESSION_COOKIE_AGE_OPTION in module_options:
-        session_cookie_age = module_options[AUTH_SESSION_COOKIE_AGE_OPTION]
-        if (
-            isinstance(session_cookie_age, bool)
-            or not isinstance(session_cookie_age, int)
-            or session_cookie_age <= 0
-        ):
-            raise ConfigValidationError(
-                "'modules.auth.session_cookie_age' must be a positive integer number "
-                "of seconds",
-                line=_find_line_number(yaml_content, AUTH_SESSION_COOKIE_AGE_OPTION),
-                suggestion=auth_contract,
             )
 
 
@@ -432,8 +322,8 @@ def _validate_declared_module_keys(
     raw credential keys) is consumed before this check, while a retired key
     already failed with the manifest's own removal message in the
     option-validation engine, which runs before this check.  A normalizer that
-    refuses a key with its own authored message (a legacy notifications or auth
-    key) lets that message stand.
+    refuses a key with its own authored message (a legacy notifications key)
+    lets that message stand.
     """
     from quickscale_core.contracts.resolvers import (
         load_module_manifest_with_fallback,
@@ -566,9 +456,6 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
                     "values."
                 ),
             )
-
-        if module_name == "auth":
-            _validate_auth_module_options(module_options, yaml_content)
 
         _validate_declared_module_keys(module_name, module_options, yaml_content)
 

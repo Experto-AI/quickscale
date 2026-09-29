@@ -378,7 +378,7 @@ modules:
         [
             (
                 {"mode": "invalid"},
-                "modules.orgs.mode must be one of",
+                "QUICKSCALE_MODE (modules.orgs.mode) must be one of: solo, saas",
             ),
         ],
     )

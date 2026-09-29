@@ -2183,9 +2183,11 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         subtree_branch: str,
     ) -> None:
         """Execute the embed -> wire -> boot -> serve -> assert lifecycle."""
-        from quickscale_cli.commands.module_config import get_default_auth_config
+        from quickscale_cli.commands.module_config import (
+            default_module_config_from_manifest,
+        )
 
-        auth_options = get_default_auth_config()
+        auth_options = default_module_config_from_manifest("auth")
 
         # Declarative config + managed wiring + path-dependency registration.
         # Org is handled alongside auth because the auth manifest declares

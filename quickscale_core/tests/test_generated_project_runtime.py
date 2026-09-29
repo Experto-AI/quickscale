@@ -2253,8 +2253,7 @@ class TestGeneratedProjectRuntimeSmoke:
         the allauth login template to render successfully.
         """
         from quickscale_cli.commands.module_config import (
-            get_default_auth_config,
-            get_default_orgs_config,
+            default_module_config_from_manifest,
         )
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
@@ -2287,8 +2286,8 @@ class TestGeneratedProjectRuntimeSmoke:
             )
 
         # Phase 3: Write declarative config and sync dependencies.
-        auth_options = get_default_auth_config()
-        orgs_options = get_default_orgs_config()
+        auth_options = default_module_config_from_manifest("auth")
+        orgs_options = default_module_config_from_manifest("orgs")
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
@@ -2856,8 +2855,7 @@ class TestGeneratedProjectRuntimeSmoke:
         because ``QUICKSCALE_ALLOW_BYPASSRLS=1`` bypasses the RLS role check.
         """
         from quickscale_cli.commands.module_config import (
-            get_default_auth_config,
-            get_default_orgs_config,
+            default_module_config_from_manifest,
         )
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
@@ -2890,8 +2888,8 @@ class TestGeneratedProjectRuntimeSmoke:
             )
 
         # Phase 3: Write declarative config and sync dependencies for both modules.
-        auth_options = get_default_auth_config()
-        orgs_options = get_default_orgs_config()
+        auth_options = default_module_config_from_manifest("auth")
+        orgs_options = default_module_config_from_manifest("orgs")
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
@@ -2980,8 +2978,7 @@ class TestGeneratedProjectRuntimeSmoke:
         python manage.py createcachetable``
         """
         from quickscale_cli.commands.module_config import (
-            get_default_auth_config,
-            get_default_orgs_config,
+            default_module_config_from_manifest,
         )
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
@@ -3014,8 +3011,8 @@ class TestGeneratedProjectRuntimeSmoke:
             )
 
         # Phase 3: Write declarative config and sync dependencies for both modules.
-        auth_options = get_default_auth_config()
-        orgs_options = get_default_orgs_config()
+        auth_options = default_module_config_from_manifest("auth")
+        orgs_options = default_module_config_from_manifest("orgs")
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
@@ -3151,8 +3148,7 @@ class TestGeneratedProjectRuntimeSmoke:
     ) -> None:
         """The generated production UI must pass enforced Django CSRF."""
         from quickscale_cli.commands.module_config import (
-            get_default_auth_config,
-            get_default_orgs_config,
+            default_module_config_from_manifest,
         )
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
@@ -3173,8 +3169,8 @@ class TestGeneratedProjectRuntimeSmoke:
                 embedded_path,
             )
 
-        auth_options = get_default_auth_config()
-        orgs_options = get_default_orgs_config()
+        auth_options = default_module_config_from_manifest("auth")
+        orgs_options = default_module_config_from_manifest("orgs")
         orgs_options["mode"] = "saas"
         modules = {"auth": auth_options, "orgs": orgs_options}
         self._write_quickscale_yml_with_modules(

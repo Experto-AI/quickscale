@@ -461,12 +461,6 @@
         "symbol": "ProjectStateManager.materialize_authoritative_state",
         "type": "method"
       },
-      "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_auth_module_options": {
-        "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
-        "max_complexity": 18,
-        "symbol": "_validate_auth_module_options",
-        "type": "function"
-      },
       "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section": {
         "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
         "max_complexity": 12,

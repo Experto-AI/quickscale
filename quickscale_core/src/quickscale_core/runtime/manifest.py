@@ -42,14 +42,11 @@ from quickscale_core.contracts.module_options import (
 # Social-manifest surface: resolver
 # ---------------------------------------------------------------------------
 from quickscale_core.contracts.resolvers import (
-    resolve_auth_module_options,
     notifications_runtime_email_backend,
     resolve_backups_module_options,
     resolve_notifications_module_options,
-    resolve_orgs_module_options,
     resolve_social_module_options,
     resolve_storage_module_options,
-    validate_orgs_module_options,
     validate_storage_module_options,
 )
 
@@ -57,8 +54,12 @@ from quickscale_core.contracts.resolvers import (
 # Manifest assembler and resolver
 # ---------------------------------------------------------------------------
 from quickscale_core.manifest.assembler import assemble_wiring_spec
-from quickscale_core.manifest.entry_point import build_generic_manifest_spec
+from quickscale_core.manifest.entry_point import (
+    build_generic_manifest_spec,
+    load_module_manifest,
+)
 from quickscale_core.manifest.loader import ManifestError
+from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.manifest.resolver import ResolverResult
 
 # ---------------------------------------------------------------------------
@@ -92,14 +93,13 @@ __all__ = [
     "ResolverResult",
     "assemble_wiring_spec",
     "build_generic_manifest_spec",
+    "load_module_manifest",
+    "validate_module_options",
     "ManifestError",
-    "resolve_auth_module_options",
     "notifications_runtime_email_backend",
     "resolve_backups_module_options",
     "resolve_notifications_module_options",
-    "resolve_orgs_module_options",
     "resolve_storage_module_options",
-    "validate_orgs_module_options",
     "validate_storage_module_options",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",

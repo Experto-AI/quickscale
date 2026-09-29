@@ -13,7 +13,6 @@ import click
 
 from quickscale_core.contracts.module_options import sanitize_module_options
 from quickscale_core.contracts.resolvers import (
-    format_auth_desired_config_contract,
     notifications_production_targeted,
     validate_notifications_module_options,
 )
@@ -203,21 +202,6 @@ def _configure_selected_modules(
     return configured
 
 
-def _is_auth_config_validation_error(error: Exception) -> bool:
-    """Return whether a config validation failure came from auth desired config."""
-    message = str(error)
-    return "modules.auth" in message or any(
-        marker in message
-        for marker in (
-            "allow_registration",
-            "social_providers",
-            "registration_enabled",
-            "email_verification",
-            "authentication_method",
-        )
-    )
-
-
 def _abort_for_invalid_existing_config(config_path: Path, error: Exception) -> None:
     """Abort planner existing-project flows with actionable config remediation."""
     click.secho(
@@ -227,20 +211,10 @@ def _abort_for_invalid_existing_config(config_path: Path, error: Exception) -> N
         bold=True,
     )
     click.echo(f"  • {error}", err=True)
-
-    if _is_auth_config_validation_error(error):
-        click.echo(
-            "\n💡 Fix the auth desired config in quickscale.yml before re-running "
-            "this planner command.",
-            err=True,
-        )
-        for line in format_auth_desired_config_contract().splitlines():
-            click.echo(f"   {line}", err=True)
-    else:
-        click.echo(
-            f"\n💡 Fix {config_path} and re-run this planner command.",
-            err=True,
-        )
+    click.echo(
+        f"\n💡 Fix {config_path} and re-run this planner command.",
+        err=True,
+    )
 
     raise click.Abort()
 

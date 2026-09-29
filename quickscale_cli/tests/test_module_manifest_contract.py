@@ -158,8 +158,8 @@ def test_configurator_defaults_match_manifest_option_keys() -> None:
     discovered_names = {entry.name for entry in get_discovered_module_entries()}
     configurator_names = set(MODULE_CONFIGURATOR_REGISTRY)
 
-    assert discovered_names - configurator_names == {"orgs"}, (
-        "Every discovered module except orgs must have a desired-option "
+    assert discovered_names - configurator_names == set(), (
+        "Every discovered module must have a desired-option "
         f"configurator: missing={sorted(discovered_names - configurator_names)}"
     )
     assert configurator_names - discovered_names == set(), (

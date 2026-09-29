@@ -17,10 +17,6 @@ import re
 from typing import Any
 
 from quickscale_core.contracts.module_options import (
-    # Auth
-    AUTH_REGISTRATION_ENABLED_OPTION,
-    LEGACY_AUTH_ALLOW_REGISTRATION_OPTION,
-    LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION,
     # Backups
     normalize_backups_module_options,
     # Notifications
@@ -31,8 +27,6 @@ from quickscale_core.contracts.module_options import (
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
     NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
     normalize_notifications_module_options,
-    # Orgs
-    ORGS_MODES,
     # Storage
     STORAGE_BACKENDS,
     DEFAULT_STORAGE_MEDIA_URL,
@@ -101,64 +95,6 @@ def resolve_manifest_module_options(
     )
     result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
     return dict(result.resolved)
-
-
-# ---------------------------------------------------------------------------
-# Auth
-# ---------------------------------------------------------------------------
-
-
-def _load_auth_manifest() -> Any:
-    return load_module_manifest_with_fallback("auth")
-
-
-def _build_auth_derivation_schema() -> ModuleDerivationSchema:
-    return ModuleDerivationSchema(
-        module_name="auth", version="1", option_derivations={}
-    )
-
-
-def default_auth_module_options() -> dict[str, Any]:
-    manifest = _load_auth_manifest()
-    return dict(manifest.get_defaults())
-
-
-def normalize_auth_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    from quickscale_core.schema.config_schema import ConfigValidationError
-
-    normalized = dict(options or {})
-    if LEGACY_AUTH_ALLOW_REGISTRATION_OPTION in normalized:
-        raise ConfigValidationError(
-            f"Legacy config key '{LEGACY_AUTH_ALLOW_REGISTRATION_OPTION}' is "
-            f"no longer supported. Use '{AUTH_REGISTRATION_ENABLED_OPTION}' instead."
-        )
-    if LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION in normalized:
-        raise ConfigValidationError(
-            f"Legacy config key '{LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION}' is "
-            "no longer supported. Remove it from the auth module options."
-        )
-    return normalized
-
-
-def resolve_auth_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    manifest = _load_auth_manifest()
-    schema = _build_auth_derivation_schema()
-    normalized_overrides = normalize_auth_module_options(options)
-    result = resolve_module_config(manifest, schema, overrides=normalized_overrides)
-    return dict(result.resolved)
-
-
-def format_auth_desired_config_contract() -> str:
-    return "\n".join(
-        [
-            "Canonical auth keys/value shapes:",
-            "modules.auth.registration_enabled: true|false",
-            "modules.auth.email_verification: none|optional|mandatory",
-            "modules.auth.authentication_method: email|username|both",
-            "modules.auth.session_cookie_age: <positive integer seconds>  # optional",
-            "Remove legacy keys like modules.auth.allow_registration and modules.auth.social_providers.",
-        ]
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -581,77 +517,6 @@ def validate_notifications_module_options(
             issues.append(
                 "modules.notifications.resend_api_key_env_var is required when resend_domain is set"
             )
-    return issues
-
-
-# ---------------------------------------------------------------------------
-# Orgs
-# ---------------------------------------------------------------------------
-
-
-def _load_orgs_manifest() -> Any:
-    return load_module_manifest_with_fallback("orgs")
-
-
-def _build_orgs_derivation_schema() -> ModuleDerivationSchema:
-    return ModuleDerivationSchema(
-        module_name="orgs",
-        version="1",
-        option_derivations={
-            "mode": OptionDerivation(
-                option_key="mode",
-                normalization_rules=[
-                    NormalizationRule(
-                        source_key="mode", target_key="mode", rule_type="strip"
-                    ),
-                    NormalizationRule(
-                        source_key="mode", target_key="mode", rule_type="lowercase"
-                    ),
-                ],
-                validation_rules=[
-                    ValidationRule(
-                        option_key="mode",
-                        rule_type="choices",
-                        allowed_values=list(ORGS_MODES),
-                        description="modules.orgs.mode must be one of: "
-                        + ", ".join(ORGS_MODES),
-                    ),
-                ],
-            ),
-        },
-    )
-
-
-def default_orgs_module_options() -> dict[str, Any]:
-    manifest = _load_orgs_manifest()
-    return dict(manifest.get_defaults())
-
-
-def normalize_orgs_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    normalized = dict(options or {})
-    if "mode" in normalized:
-        normalized["mode"] = str(normalized["mode"]).strip().lower()
-    return normalized
-
-
-def resolve_orgs_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    manifest = _load_orgs_manifest()
-    schema = _build_orgs_derivation_schema()
-    result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
-    resolved = dict(result.resolved)
-    mode = str(resolved.get("mode", "")).strip().lower()
-    resolved["mode"] = mode
-    return resolved
-
-
-def validate_orgs_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    raw_normalized = normalize_orgs_module_options(options)
-    defaults = default_orgs_module_options()
-    merged: dict[str, Any] = {**defaults, **raw_normalized}
-    issues: list[str] = []
-    mode = str(merged.get("mode", "")).strip().lower()
-    if mode not in ORGS_MODES:
-        issues.append("modules.orgs.mode must be one of: " + ", ".join(ORGS_MODES))
     return issues
 
 
@@ -1082,11 +947,6 @@ __all__ = [
     # Shared manifest resolution
     "load_module_manifest_with_fallback",
     "resolve_manifest_module_options",
-    # Auth
-    "default_auth_module_options",
-    "format_auth_desired_config_contract",
-    "normalize_auth_module_options",
-    "resolve_auth_module_options",
     # Backups
     "default_backups_module_options",
     "resolve_backups_module_options",
@@ -1097,11 +957,6 @@ __all__ = [
     "notifications_runtime_email_backend",
     "resolve_notifications_module_options",
     "validate_notifications_module_options",
-    # Orgs
-    "default_orgs_module_options",
-    "normalize_orgs_module_options",
-    "resolve_orgs_module_options",
-    "validate_orgs_module_options",
     # Social
     "default_social_module_options",
     "normalize_social_module_options",

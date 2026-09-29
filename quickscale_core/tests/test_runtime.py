@@ -129,10 +129,9 @@ class TestRuntimeAllExport:
             "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
             "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-            "resolve_auth_module_options",
-            "resolve_orgs_module_options",
+            "load_module_manifest",
             "resolve_storage_module_options",
-            "validate_orgs_module_options",
+            "validate_module_options",
             "validate_storage_module_options",
         }
         assert adapter_symbols.issubset(runtime.__all__), (
@@ -210,6 +209,7 @@ class TestRuntimeAllExport:
             "iter_expired_snapshots",
             "iter_expired_unlinked_artifacts",
             "load_default_policy",
+            "load_module_manifest",
             "load_social_manifest",
             "notifications_runtime_email_backend",
             "prune_expired_backups",
@@ -226,8 +226,6 @@ class TestRuntimeAllExport:
             "resolve_social_module_options",
             "resolve_backups_module_options",
             "resolve_notifications_module_options",
-            "resolve_auth_module_options",
-            "resolve_orgs_module_options",
             "resolve_storage_module_options",
             "restore_admin_uploaded_backup",
             "restore_backup_artifact",
@@ -242,7 +240,7 @@ class TestRuntimeAllExport:
             "sync_media",
             "update_artifact_after_restore",
             "validate_backup_artifact",
-            "validate_orgs_module_options",
+            "validate_module_options",
             "validate_storage_module_options",
         }
         actual = set(runtime.__all__)
@@ -340,10 +338,9 @@ class TestRuntimeSymbolTypes:
 
     def test_manifest_adapter_contracts_are_callable(self) -> None:
         for name in (
-            "resolve_auth_module_options",
-            "resolve_orgs_module_options",
+            "load_module_manifest",
             "resolve_storage_module_options",
-            "validate_orgs_module_options",
+            "validate_module_options",
             "validate_storage_module_options",
         ):
             assert callable(getattr(runtime, name)), f"runtime.{name} is not callable"
@@ -427,6 +424,7 @@ class TestRuntimeImportable:
             "iter_expired_snapshots",
             "iter_expired_unlinked_artifacts",
             "load_default_policy",
+            "load_module_manifest",
             "load_social_manifest",
             "record_verification",
             "register_backup_persistence",
@@ -440,10 +438,8 @@ class TestRuntimeImportable:
             "set_rollback_pin",
             "social_provider_supports_embeds",
             "sync_media",
-            "resolve_auth_module_options",
-            "resolve_orgs_module_options",
             "resolve_storage_module_options",
-            "validate_orgs_module_options",
+            "validate_module_options",
             "validate_storage_module_options",
         ],
     )
@@ -462,14 +458,13 @@ class TestManifestFacade:
         "ResolverResult",
         "assemble_wiring_spec",
         "build_generic_manifest_spec",
+        "load_module_manifest",
+        "validate_module_options",
         "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
         "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
         "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
         "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-        "resolve_auth_module_options",
-        "resolve_orgs_module_options",
         "resolve_storage_module_options",
-        "validate_orgs_module_options",
         "validate_storage_module_options",
     )
 
@@ -481,7 +476,12 @@ class TestManifestFacade:
 
     def test_canonical_identity_through_both_facades(self) -> None:
         from quickscale_core.contracts import module_options, resolvers
-        from quickscale_core.manifest import assembler, entry_point, resolver
+        from quickscale_core.manifest import (
+            assembler,
+            entry_point,
+            option_validation,
+            resolver,
+        )
         from quickscale_core import module_wiring
 
         canonical = {
@@ -489,14 +489,13 @@ class TestManifestFacade:
             "ResolverResult": resolver,
             "assemble_wiring_spec": assembler,
             "build_generic_manifest_spec": entry_point,
+            "load_module_manifest": entry_point,
+            "validate_module_options": option_validation,
             "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR": module_options,
             "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR": module_options,
             "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION": module_options,
             "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION": module_options,
-            "resolve_auth_module_options": resolvers,
-            "resolve_orgs_module_options": resolvers,
             "resolve_storage_module_options": resolvers,
-            "validate_orgs_module_options": resolvers,
             "validate_storage_module_options": resolvers,
         }
         for name in self._CONTRACT_NAMES:
@@ -510,14 +509,13 @@ class TestManifestFacade:
             ResolverResult,
             assemble_wiring_spec,
             build_generic_manifest_spec,
+            load_module_manifest,
+            validate_module_options,
             DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
             DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
             STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
             STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-            resolve_auth_module_options,
-            resolve_orgs_module_options,
             resolve_storage_module_options,
-            validate_orgs_module_options,
             validate_storage_module_options,
         )
         from quickscale_core.runtime.manifest import (
@@ -525,14 +523,13 @@ class TestManifestFacade:
             ResolverResult as manifest_resolver_result,
             assemble_wiring_spec as manifest_assembler,
             build_generic_manifest_spec as manifest_generic_builder,
+            load_module_manifest as manifest_module_loader,
+            validate_module_options as manifest_option_validator,
             DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR as manifest_access_key,
             DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR as manifest_secret_key,
             STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION as manifest_access_option,
             STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION as manifest_secret_option,
-            resolve_auth_module_options as manifest_auth_resolver,
-            resolve_orgs_module_options as manifest_orgs_resolver,
             resolve_storage_module_options as manifest_storage_resolver,
-            validate_orgs_module_options as manifest_orgs_validator,
             validate_storage_module_options as manifest_storage_validator,
         )
 
@@ -541,14 +538,13 @@ class TestManifestFacade:
             ResolverResult,
             assemble_wiring_spec,
             build_generic_manifest_spec,
+            load_module_manifest,
+            validate_module_options,
             DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
             DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
             STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
             STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-            resolve_auth_module_options,
-            resolve_orgs_module_options,
             resolve_storage_module_options,
-            validate_orgs_module_options,
             validate_storage_module_options,
         )
         manifest_values = (
@@ -556,14 +552,13 @@ class TestManifestFacade:
             manifest_resolver_result,
             manifest_assembler,
             manifest_generic_builder,
+            manifest_module_loader,
+            manifest_option_validator,
             manifest_access_key,
             manifest_secret_key,
             manifest_access_option,
             manifest_secret_option,
-            manifest_auth_resolver,
-            manifest_orgs_resolver,
             manifest_storage_resolver,
-            manifest_orgs_validator,
             manifest_storage_validator,
         )
         assert root_values == manifest_values
@@ -589,10 +584,9 @@ class TestManifestFacade:
             "    'ResolverResult',\n"
             "    'assemble_wiring_spec',\n"
             "    'build_generic_manifest_spec',\n"
-            "    'resolve_auth_module_options',\n"
-            "    'resolve_orgs_module_options',\n"
+            "    'load_module_manifest',\n"
+            "    'validate_module_options',\n"
             "    'resolve_storage_module_options',\n"
-            "    'validate_orgs_module_options',\n"
             "    'validate_storage_module_options',\n"
             ")\n"
             "for name in names:\n"

@@ -35,8 +35,8 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_LINK_TREE_PATH,
 )
 from quickscale_core.contracts.resolvers import (
+    load_module_manifest_with_fallback,
     resolve_manifest_module_options,
-    validate_orgs_module_options,
     validate_storage_module_options,
     notifications_live_delivery_configured,
     notifications_production_targeted,
@@ -44,6 +44,7 @@ from quickscale_core.contracts.resolvers import (
     validate_notifications_module_options,
     validate_social_module_options,
 )
+from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
@@ -1223,8 +1224,9 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
         raise click.Abort()
 
     if "orgs" in qs_config.modules:
-        orgs_issues = validate_orgs_module_options(
-            qs_config.modules["orgs"].options or {}
+        orgs_issues = validate_module_options(
+            load_module_manifest_with_fallback("orgs"),
+            qs_config.modules["orgs"].options or {},
         )
         if orgs_issues:
             click.secho(
