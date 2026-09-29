@@ -156,6 +156,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `quickscale_forms_anonymize_submissions`, and `quickscale_orgs_promote_to_saas` report what
     they would change and write nothing, and `quickscale_orgs_check_tenant_isolation` reports
     failures through `CommandError` instead of exiting directly.
+  - **Module type checking follows one capped override.** The root `mypy.ini` sections for the
+    forms, notifications, and social modules relax only `disallow_untyped_defs`,
+    `warn_return_any`, `warn_unused_ignores`, and the `var-annotated` error code.
 
   - **Blog and listings configuration is manifest-owned.** Their option defaults, CLI prompts, and
     validation come from `module.yml` through one manifest-driven configurator and the shared
