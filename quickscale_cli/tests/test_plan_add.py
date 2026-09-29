@@ -584,12 +584,13 @@ class TestPlanNewProjectConfigureModules:
             # - \n: email verification default (none)
             # - \n: session cookie age default (1209600)
             # - \n: auth method default (email)
-            # Billing configurator (5 prompts, all defaults):
+            # Billing configurator (6 prompts, all defaults):
             # - \n: enable billing (default yes)
             # - \n: publishable key env var
             # - \n: secret key env var
             # - \n: webhook secret env var
             # - \n: billing currency
+            # - \n: api rate limit default
             # Orgs configurator (1 prompt, implied):
             # - \n: orgs mode default (solo)
             # Notifications configurator (implied, 9 prompts):
@@ -607,7 +608,7 @@ class TestPlanNewProjectConfigureModules:
                 plan,
                 ["myapp", "--configure-modules"],
                 input=(
-                    "\n\nauth,billing\nn\ny\n\n\n\n\n\n\n\n\n\ny\n\n\n\nn\nn\n\n\n\ny\n"
+                    "\n\nauth,billing\nn\ny\n\n\n\n\n\n\n\n\n\n\ny\n\n\n\nn\nn\n\n\n\ny\n"
                 ),
             )
 

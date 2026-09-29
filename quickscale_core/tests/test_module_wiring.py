@@ -170,14 +170,16 @@ class TestCollectWiring:
             "billing": ModuleWiringSpec(
                 settings={
                     "REST_FRAMEWORK": {
-                        "DEFAULT_THROTTLE_RATES": {"billing_checkout": "30/hour"}
+                        "DEFAULT_THROTTLE_RATES": {
+                            "quickscale_billing_checkout": "30/hour"
+                        }
                     }
                 }
             ),
             "forms": ModuleWiringSpec(
                 settings={
                     "REST_FRAMEWORK": {
-                        "DEFAULT_THROTTLE_RATES": {"form_submit": "5/hour"}
+                        "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "5/hour"}
                     }
                 }
             ),
@@ -185,8 +187,8 @@ class TestCollectWiring:
         _, _, settings, _ = collect_wiring(specs)
         assert settings["REST_FRAMEWORK"] == {
             "DEFAULT_THROTTLE_RATES": {
-                "billing_checkout": "30/hour",
-                "form_submit": "5/hour",
+                "quickscale_billing_checkout": "30/hour",
+                "quickscale_forms_submit": "5/hour",
             }
         }
 
@@ -196,14 +198,18 @@ class TestCollectWiring:
             "billing": ModuleWiringSpec(
                 settings={
                     "REST_FRAMEWORK": {
-                        "DEFAULT_THROTTLE_RATES": {"billing_checkout": "30/hour"}
+                        "DEFAULT_THROTTLE_RATES": {
+                            "quickscale_billing_checkout": "30/hour"
+                        }
                     }
                 }
             ),
             "forms": ModuleWiringSpec(
                 settings={
                     "REST_FRAMEWORK": {
-                        "DEFAULT_THROTTLE_RATES": {"billing_checkout": "5/hour"}
+                        "DEFAULT_THROTTLE_RATES": {
+                            "quickscale_billing_checkout": "5/hour"
+                        }
                     }
                 }
             ),
@@ -214,7 +220,7 @@ class TestCollectWiring:
         assert "'billing'" in message
         assert "'forms'" in message
         assert "DEFAULT_THROTTLE_RATES" in message
-        assert "billing_checkout" in message
+        assert "quickscale_billing_checkout" in message
 
     def test_collect_wiring_rest_framework_equal_values_are_allowed(self) -> None:
         """Equal REST_FRAMEWORK contributions merge without failing."""

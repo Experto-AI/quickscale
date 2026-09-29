@@ -2214,8 +2214,15 @@ class TestUpdateCommand:
     @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring")
+    @patch(
+        "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+        return_value=(True, "regenerated"),
+    )
     def test_update_allows_billing_module_through_standard_readiness_path(
         self,
+        mock_regenerate,
+        mock_commit_wiring,
         mock_confirm,
         mock_validate,
         mock_manager_cls,
@@ -2256,8 +2263,19 @@ class TestUpdateCommand:
     @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring")
+    @patch(
+        "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+        return_value=(True, "regenerated"),
+    )
     def test_successful_update(
-        self, mock_confirm, mock_validate, mock_manager_cls, mock_update
+        self,
+        mock_regenerate,
+        mock_commit_wiring,
+        mock_confirm,
+        mock_validate,
+        mock_manager_cls,
+        mock_update,
     ):
         """Test successful update of installed modules."""
         mock_confirm.return_value = True
@@ -2286,8 +2304,14 @@ class TestUpdateCommand:
     @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_cli.commands.module_commands._roll_back_partial_module_update")
     def test_update_stops_and_aborts_on_module_failure(
-        self, mock_confirm, mock_validate, mock_manager_cls, mock_update
+        self,
+        mock_rollback,
+        mock_confirm,
+        mock_validate,
+        mock_manager_cls,
+        mock_update,
     ):
         """Test update aborts when a module fails to update."""
         mock_confirm.return_value = True
@@ -2319,6 +2343,8 @@ class TestUpdateCommand:
         assert result.exit_code != 0
         assert "Module update stopped due to failure" in result.output
         assert "Unexpected error" not in result.output
+        mock_rollback.assert_called_once()
+        assert mock_rollback.call_args.args[2] == ["auth"]
 
     @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
@@ -2460,8 +2486,19 @@ class TestUpdateVersionDriftWarning:
     @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring")
+    @patch(
+        "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+        return_value=(True, "regenerated"),
+    )
     def test_update_emits_drift_warning_via_warn_helper(
-        self, mock_confirm, mock_validate, mock_manager_cls, mock_update
+        self,
+        mock_regenerate,
+        mock_commit_wiring,
+        mock_confirm,
+        mock_validate,
+        mock_manager_cls,
+        mock_update,
     ):
         """Update should still run when drift is detected (drift is non-fatal)."""
         mock_confirm.return_value = True

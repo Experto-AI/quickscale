@@ -1342,7 +1342,7 @@ def _source_module_inventory(embedded_root: Path) -> dict[str, Any]:
             for option_name, setting_name in mapping.items()
         }
     assert set(options) == set(names), "Module options do not cover authoritative names"
-    assert sum(len(settings) for settings in expected_settings.values()) == 68
+    assert sum(len(settings) for settings in expected_settings.values()) == 69
 
     model_modules: set[str] = set()
     service_modules: set[str] = set()
@@ -2733,7 +2733,7 @@ class TestGeneratedProjectRuntimeSmoke:
             assert runtime["manifest_settings"] == expected_settings
             assert (
                 sum(len(settings) for settings in runtime["manifest_settings"].values())
-                == 68
+                == 69
             )
             runtime_settings = [
                 value

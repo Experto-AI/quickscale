@@ -248,10 +248,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
     API, the theme's `useApi.ts` and orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception
     in the JSON API Endpoint Base Contract, and its hand-written rate parser go, with the raw-SQL
     counter table `quickscale_modules_blog_api_throttle_counter` it writes.
-  - *Throttles and shared settings.* Throttle scopes become `quickscale_<module>_<purpose>`, each
-    rate a `_RATE_LIMIT` option (billing's hard-coded `"30/hour"` included; rule 32), and
-    billing's advisory-lock key strings become `quickscale_billing:…` (rule 33; locks are
-    transient, so nothing migrates).
+  - *Throttles and shared settings.* Billing's and forms' scopes are now
+    `quickscale_billing_checkout`/`quickscale_billing_portal` and `quickscale_forms_submit`, each
+    rate the module's `_RATE_LIMIT` option contributed through the wiring merge (rule 32; billing's
+    hard-coded `"30/hour"` is now its `api_rate_limit` default), and billing's advisory-lock key
+    strings carry the `quickscale_billing:` stem (rule 33; locks are transient, so nothing
+    migrates). Blog's scope and rate move with its hand-written limiter and counter table in the
+    API slice (rule 9).
 
   **Acceptance:** every API error body matches the one shape; a list of every moved
   public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and
