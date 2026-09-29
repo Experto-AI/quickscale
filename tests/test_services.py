@@ -838,7 +838,7 @@ def test_social_cache_invalidates_old_org_partition_on_reassignment() -> None:
     no single ``current_org_id`` value can equal both the old and new
     organisation simultaneously.
 
-    ``operator_access(reason=...)`` (SA14.5) extends only the
+    ``operator_access(reason=...)`` extends only the
     ``FOR SELECT`` sub-policy — it grants cross-tenant **read**
     visibility, not write visibility.  It does NOT bypass the FOR ALL
     policy's USING or WITH CHECK clauses and cannot unblock a

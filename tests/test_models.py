@@ -233,7 +233,7 @@ def test_social_item_tenant_manager_auto_scopes_to_org_context() -> None:
 
     # all_objects escape hatch with operator_access — the FOR ALL policy
     # requires current_org_id = organization_id, so cross-org reads need
-    # operator_access to extend the FOR SELECT sub-policy (SA14.5).
+    # operator_access to extend the FOR SELECT sub-policy.
     set_current_org_id(org_b.id)
     with operator_access(reason="verify all_objects cross-org read"):
         all_links = list(SocialLink.all_objects.filter(is_published=True))

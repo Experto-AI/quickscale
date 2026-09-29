@@ -11,7 +11,7 @@ Uses PostgreSQL unconditionally.  Configure the connection via env vars:
 
 import os
 
-# SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
+# BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
 # NOBYPASSRLS is the default for module test suites. Mark individual
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
