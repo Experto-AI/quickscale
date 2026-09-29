@@ -117,7 +117,7 @@ def test_billing_checkout_refuses_the_thirty_first_request_in_an_hour(
     mock_org_resolution,
     user,
 ) -> None:
-    """SA207: once SA201's contract is adopted, the 31st checkout is 429.
+    """Once the contract is adopted, the 31st checkout is 429.
 
     The scope rate is the real ``30/hour`` the billing wiring contributes, so
     the first thirty requests reach the serializer (400 for an unknown plan)
