@@ -302,13 +302,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
   rules 11, 15–18, 24, 28, 29, and 36–38. Package roots, receivers, and file names already follow
-  rule 28; `teams/` and its core placeholder handling are deleted, and orgs' eight ticket-numbered
-  test files are renamed by subject.
+  rule 28; `teams/` and its core placeholder handling are deleted, orgs' eight ticket-numbered
+  test files are renamed by subject, and every module's `mypy.ini` section is capped at
+  module-extension.md's standard override and clean (rule 36).
 
   **Scope:**
-  - *Commands and tooling.* Each module's root `mypy.ini` section relaxes at most
-    module-extension.md's standard override. Forms, notifications, and social are capped and clean;
-    billing (15 errors under the cap) and orgs (86) fix what their tighter sections report (rule 36).
   - *Tests.* orgs' two ticket-numbered test apps (`sa182_project_app`,
     `sa208_project_app`) are renamed by subject (D32); the remaining ticket mentions in the
     docstrings and comments of module test files go, reworded to say what each test protects where

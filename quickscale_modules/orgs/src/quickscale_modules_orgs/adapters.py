@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from django.conf import settings
@@ -55,7 +55,7 @@ class OrgsAccountAdapter(_BaseAccountAdapter):
     def get_login_redirect_url(self, request: Any) -> str:
         user = getattr(request, "user", None)
         if user is None or not getattr(user, "is_authenticated", False):
-            return cast(str, super().get_login_redirect_url(request))
+            return super().get_login_redirect_url(request)
 
         # SA14.6: QUICKSCALE_MODE is guaranteed by the boot guard —
         # direct access, no fallback.
@@ -63,7 +63,7 @@ class OrgsAccountAdapter(_BaseAccountAdapter):
         has_membership = OrganizationMembership.objects.filter(user=user).exists()
         if not saas_mode and not has_membership:
             Organization.objects.create_personal_for(user)
-            return cast(str, super().get_login_redirect_url(request))
+            return super().get_login_redirect_url(request)
 
         if saas_mode:
             pending_invitation_redirect = self._get_pending_invitation_redirect_url(
@@ -73,12 +73,12 @@ class OrgsAccountAdapter(_BaseAccountAdapter):
                 return pending_invitation_redirect
             if not has_membership:
                 return "/orgs/new/"
-        return cast(str, super().get_login_redirect_url(request))
+        return super().get_login_redirect_url(request)
 
     def get_signup_redirect_url(self, request: Any) -> str:
         user = getattr(request, "user", None)
         if user is None or not getattr(user, "is_authenticated", False):
-            return cast(str, super().get_signup_redirect_url(request))
+            return super().get_signup_redirect_url(request)
 
         # SA14.6: QUICKSCALE_MODE is guaranteed by the boot guard —
         # direct access, no fallback.
@@ -88,7 +88,7 @@ class OrgsAccountAdapter(_BaseAccountAdapter):
             return "/"
 
         if OrganizationMembership.objects.filter(user=user).exists():
-            return cast(str, super().get_signup_redirect_url(request))
+            return super().get_signup_redirect_url(request)
 
         pending_invitation_redirect = self._get_pending_invitation_redirect_url(request)
         if pending_invitation_redirect is not None:

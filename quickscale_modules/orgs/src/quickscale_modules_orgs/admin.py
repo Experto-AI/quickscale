@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import uuid
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 from django import forms
 from django.contrib import admin, messages
@@ -32,9 +32,10 @@ class OrganizationInvitationAdminForm(forms.ModelForm):
         model = OrganizationInvitation
         fields = "__all__"
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.fields["role"].choices = OrganizationInvitation.supported_role_choices(
+        role_field = cast(forms.ChoiceField, self.fields["role"])
+        role_field.choices = OrganizationInvitation.supported_role_choices(
             include_unsupported_owner=(
                 self.instance.pk is not None and self.instance.role == OrgRole.OWNER
             )
