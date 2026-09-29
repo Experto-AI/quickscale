@@ -176,7 +176,7 @@ class TestBackupsRestoreCommand:
         assert stderr.getvalue() == ""
 
     # ------------------------------------------------------------------
-    # CR-SA20-006: --local-only passes resolution_mode to the adapter
+    # --local-only passes resolution_mode to the adapter
     # ------------------------------------------------------------------
 
     def test_command_passes_local_only_resolution_mode(
@@ -241,7 +241,7 @@ class TestBackupsRestoreCommand:
         assert _call_kwargs.get("resolution_mode") is None
 
     # ------------------------------------------------------------------
-    # CR-SA20-007: Failure recording for Status.RESTORING artifacts
+    # Failure recording for Status.RESTORING artifacts
     # ------------------------------------------------------------------
 
     def test_command_records_failed_on_backup_error_for_restoring_artifact(

@@ -90,7 +90,7 @@ def test_provider_id_conformance_detects_uncovered_structured_keys() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA208 — Model-level provider-ID classification
+# Model-level provider-ID classification
 # ---------------------------------------------------------------------------
 
 
@@ -219,7 +219,7 @@ def test_declared_provider_backed_fields_rejects_unknown_classification() -> Non
 
 
 # ---------------------------------------------------------------------------
-# SA213 — App-declared obligations and the shared discharge coordinator
+# App-declared obligations and the shared discharge coordinator
 # ---------------------------------------------------------------------------
 
 

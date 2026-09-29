@@ -29,7 +29,7 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
 )
 
-# SA97: shared per-test state reset fixture replaces the private
+# shared per-test state reset fixture replaces the private
 # ``_reset_crm_test_state`` copy.  See ``tests_shared/reset_state.py``.
 from tests_shared.reset_state import reset_test_state  # noqa: F401
 
@@ -113,7 +113,7 @@ def api_client():
 def authenticated_client(staff_user):
     """Create a staff-authenticated API client with personal org context.
 
-    SA11.6: uses session-based auth (``force_login``) and sets the active
+    Uses session-based auth (``force_login``) and sets the active
     org in the session so ``TenantMiddleware`` resolves ``request.org``.
     Also primes the ContextVar for TenantManager auto-scoping at the DB
     level.
@@ -133,8 +133,7 @@ def authenticated_client(staff_user):
             # fail-closed baseline (ContextVar=None).  On exit, org_scope
             # restores to None — proving the Python ContextVar, DB GUC, and
             # RLS row invisibility are restored after each synthetic request
-            # (CR-PLAN-SA84-001).
-            # SA84-REV-001: prior code cleared only the ContextVar via
+            # Prior code cleared only the ContextVar via
             # reset_current_org_id(), leaving the SET LOCAL GUC active in
             # pytest's outer transaction.
             reset_current_org_id()
@@ -164,7 +163,7 @@ def tag(db, staff_user):
     """Create a test tag stamped with the staff user's personal org (Phase 2).
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    duration of the fixture body (FORCE RLS requires ``app.current_org_id``
     to be set for INSERTs under the restricted test role).
     """
     from quickscale_modules_orgs.models import Organization
@@ -181,7 +180,7 @@ def company(db, staff_user):
     """Create a test company stamped with the staff user's personal org (Phase 2).
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    duration of the fixture body (FORCE RLS requires ``app.current_org_id``
     to be set for INSERTs under the restricted test role).
     """
     from quickscale_modules_orgs.models import Organization
@@ -203,7 +202,7 @@ def contact(db, company):
     """Create a test contact stamped with the company's org (Phase 2).
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    duration of the fixture body (FORCE RLS requires ``app.current_org_id``
     to be set for INSERTs under the restricted test role).
     """
 
@@ -224,7 +223,7 @@ def stage(db, staff_user):
     """Create a test stage stamped with the staff user's personal org (Phase 2).
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    duration of the fixture body (FORCE RLS requires ``app.current_org_id``
     to be set for INSERTs under the restricted test role).
     """
     from quickscale_modules_orgs.models import Organization
@@ -243,7 +242,7 @@ def closed_won_stage(db, staff_user):
     """Create Closed-Won stage stamped with personal org (Phase 2).
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84).
+    duration of the fixture body.
     """
     from quickscale_modules_orgs.models import Organization
 
@@ -261,7 +260,7 @@ def closed_lost_stage(db, staff_user):
     """Create Closed-Lost stage stamped with personal org (Phase 2).
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84).
+    duration of the fixture body.
     """
     from quickscale_modules_orgs.models import Organization
 
@@ -279,7 +278,7 @@ def deal(db, contact, stage, user):
     """Create a test deal stamped with the contact's org (Phase 2).
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    duration of the fixture body (FORCE RLS requires ``app.current_org_id``
     to be set for INSERTs under the restricted test role).
     """
 
@@ -300,7 +299,7 @@ def contact_note(db, contact, user):
     """Create a test contact note
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    duration of the fixture body (FORCE RLS requires ``app.current_org_id``
     to be set for INSERTs under the restricted test role).
     """
 
@@ -318,7 +317,7 @@ def deal_note(db, deal, user):
     """Create a test deal note
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
-    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    duration of the fixture body (FORCE RLS requires ``app.current_org_id``
     to be set for INSERTs under the restricted test role).
     """
 
@@ -385,7 +384,7 @@ def org_b_admin(db, org_b):
 
 
 # ---------------------------------------------------------------------------
-# SA14.4 — NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
 # The collection hook below deselects bypass_rls-marked tests unless the env var
 # is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.

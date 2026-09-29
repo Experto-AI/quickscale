@@ -8,7 +8,7 @@ SHARED_TEST_TEMPLATES = (
     Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
 )
 
-# SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
+# BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
 # NOBYPASSRLS is the default for module test suites. Mark individual
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.

@@ -260,7 +260,7 @@ class TestListingModel:
         ), "Both subclass instances should exist"
 
     def test_abstract_listing_index_names_do_not_collide(self):
-        """CR-SA90-MSQ-001: Two concrete AbstractListing subclasses must have
+        """Two concrete AbstractListing subclasses must have
         distinct resolved index names that are unique and fit within
         Django's portable 30-character limit.
 
@@ -284,7 +284,7 @@ class TestListingModel:
             )
 
     def test_abstract_listing_indexes_pass_system_checks(self):
-        """CR-SA90-MSQ-001: Django system checks pass for two subclasses
+        """Django system checks pass for two subclasses
         with collision-safe auto-generated index names.
 
         Asserts zero index-related errors (models.E034, models.E035, etc.)
@@ -318,7 +318,7 @@ class TestListingModel:
         reason="Physical index name check requires PostgreSQL.",
     )
     def test_listing_physical_index_names(self, db):
-        """CR-SA90-MSQ-001: Built-in Listing has exact baseline physical
+        """Built-in Listing has exact baseline physical
         index names on the fresh PostgreSQL schema.
 
         Verifies that ``qs_listings_listing_pub_idx``,

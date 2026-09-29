@@ -26,7 +26,7 @@ class TestGetManifestAdapter:
 
 
 class TestBillingPostHook:
-    """_billing_post_hook — bool/string coercions (SA17.2)."""
+    """_billing_post_hook — bool/string coercions."""
 
     def test_coerces_bool_enabled(self) -> None:
         """QUICKSCALE_BILLING_ENABLED must be coerced to bool."""

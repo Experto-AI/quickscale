@@ -11,7 +11,7 @@ Uses PostgreSQL unconditionally.  Configure the connection via env vars:
 
 import os
 
-# SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
+# BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
 # NOBYPASSRLS is the default for module test suites. Mark individual
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
@@ -49,8 +49,8 @@ INSTALLED_APPS = [
     "quickscale_modules_crm",
     "quickscale_modules_backups",
     "quickscale_modules_notifications",
-    "tests.sa182_project_app.apps.SA182ProjectAppConfig",
-    "tests.sa208_project_app.apps.SA208ProjectAppConfig",
+    "tests.project_tenant_app.apps.ProjectTenantAppConfig",
+    "tests.provider_id_app.apps.ProviderIdAppConfig",
 ]
 
 MIDDLEWARE = [
@@ -112,17 +112,17 @@ USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
 
 # Required by modules in INSTALLED_APPS that have AppConfig.ready() guards:
-# SA17.2 — billing enabled-flag
+# billing enabled-flag
 QUICKSCALE_BILLING_ENABLED = True
-# SA17.3 — CRM API-enable flag
+# CRM API-enable flag
 CRM_ENABLE_API = True
-# SA17.4 — forms settings
+# forms settings
 FORMS_SUBMISSIONS_API = True
 FORMS_RATE_LIMIT = "5/hour"
 FORMS_SPAM_PROTECTION = True
-# SA17.5 — blog settings
+# blog settings
 BLOG_ENABLE_RSS = True
-# SA17.6 — notifications required settings
+# notifications required settings
 QUICKSCALE_NOTIFICATIONS_ENABLED = True
 QUICKSCALE_NOTIFICATIONS_PROVIDER = "log"
 MEDIA_URL = "/media/"

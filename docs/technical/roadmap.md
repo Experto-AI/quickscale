@@ -305,23 +305,26 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
   rules 11, 15–18, 24, 28, 29, and 36–38. Package roots, receivers, and file names already follow
   rule 28; `teams/` and its core placeholder handling are deleted, orgs' eight ticket-numbered
-  test files are renamed by subject, every module's `mypy.ini` section is capped at
+  test files are renamed by subject, the two ticket-numbered test apps are renamed by subject
+  (`project_tenant_app`, `provider_id_app`) with every ticket number out of module test file names,
+  docstrings, and comments (D32; code identifiers and fixture strings keep their historical text),
+  every module's `mypy.ini` section is capped at
   module-extension.md's standard override and clean (rule 36), and core's catalog (descriptions
   from `module.yml`) plus `check_security_gates.py`, `render_j2_template.py`, `lint_frontend.sh`,
   `provision_ci_postgres.sh`, and `test_isolation_conformance.sh` derive the shipped set from
   `quickscale_modules/*/module.yml`, so social's tenant tables join the isolation gates (rule 37).
 
   **Scope:**
-  - *Tests.* orgs' two ticket-numbered test apps (`sa182_project_app`,
-    `sa208_project_app`) are renamed by subject (D32); the remaining ticket mentions in the
-    docstrings and comments of module test files go, reworded to say what each test protects where
-    the number was the only explanation.
-  - *READMEs* follow the rule 11 headings and name every option key and command (rule 38).
+  - *Tests (done).* orgs' two ticket-numbered test apps were renamed by subject (D32), and the
+    remaining ticket mentions in the docstrings and comments of module test files went, reworded to
+    say what each test protects where the number was the only explanation.
+  - *READMEs.* follow the rule 11 headings and name every option key and command (rule 38).
 
-  **Acceptance:** every module package holds only rule 28's file names; no test file or test
-  docstring names a ticket; each destructive command's `--dry-run` has a test that nothing is
-  written; `make typecheck` passes with the capped sections; no literal module list remains outside
-  the modules beyond rule 37's listed exceptions; every README names its options and commands.
+  **Acceptance:** every module package holds only rule 28's file names; no module test file name,
+  docstring, or comment names a ticket; each destructive command's `--dry-run` has a test that
+  nothing is written; `make typecheck` passes with the capped sections; no literal module list
+  remains outside the modules beyond rule 37's listed exceptions; every README names its options
+  and commands.
 
   **Surfaces:** every module's package root, commands, `pyproject.toml`, tests, README;
   core's module discovery and catalog (descriptions from manifests); the root

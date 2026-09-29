@@ -11,7 +11,7 @@ import django
 import pytest
 from django.conf import settings
 
-# SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
 # The collection hook below deselects bypass_rls-marked tests unless the env var
 # is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
@@ -54,7 +54,7 @@ from quickscale_modules_forms.models import (  # noqa: E402
 User = get_user_model()
 
 
-# SA97: shared per-test state reset fixture replaces the private
+# shared per-test state reset fixture replaces the private
 # ``_reset_test_state`` copy.  See ``tests_shared/reset_state.py``.
 from tests_shared.reset_state import reset_test_state  # noqa: E402, F401
 
@@ -74,7 +74,7 @@ def staff_user(db):
     """Staff Django user with admin access (not a superuser).
 
     This fixture provides a plain staff user for view-unit defense-in-depth
-    tests (CR-SA85-REV-001).  Session-parity proofs that exercise the real
+    tests. Session-parity proofs that exercise the real
     middleware pipeline use ``force_login`` + ``ACTIVE_ORG_SESSION_KEY``
     instead.
     """
@@ -90,7 +90,7 @@ def staff_user(db):
 def superuser(db):
     """Superuser with Django admin access.
 
-    SA85 Phase 4: superuser is the only role permitted cross-tenant SELECT
+    Superuser is the only role permitted cross-tenant SELECT
     via ``operator_access``.
     """
     return User.objects.create_user(
@@ -113,7 +113,7 @@ def staff_client(api_client, staff_user):
     """DRF API client authenticated as staff user (non-superuser).
 
     Uses ``force_authenticate`` (DRF-only, no session middleware).
-    This is a view-unit defense-in-depth fixture (CR-SA85-REV-001).
+    This is a view-unit defense-in-depth fixture.
     Session-parity proofs that exercise the real middleware pipeline
     use ``force_login`` + ``ACTIVE_ORG_SESSION_KEY`` instead.
     """
@@ -125,7 +125,7 @@ def staff_client(api_client, staff_user):
 def superuser_client(api_client, superuser):
     """DRF API client authenticated as superuser.
 
-    SA85 Phase 4: use this fixture for tests that verify cross-tenant
+    Use this fixture for tests that verify cross-tenant
     read access via ``operator_access``.
     """
     api_client.force_authenticate(user=superuser)
@@ -138,8 +138,7 @@ def form(db):
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
     for the duration of the fixture body and cleaned up before the
-    fixture returns — test bodies do not inherit fixture-held org context
-    (SA85 Phase 1).
+    fixture returns — test bodies do not inherit fixture-held org context.
     """
     from quickscale_modules_orgs.current_org import org_scope
     from quickscale_modules_orgs.models import Organization
@@ -166,7 +165,7 @@ def inactive_form(db):
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
     for the duration of the fixture body and cleaned up before the
-    fixture returns (SA85 Phase 1).
+    fixture returns.
     """
     from quickscale_modules_orgs.current_org import org_scope
     from quickscale_modules_orgs.models import Organization
@@ -186,7 +185,7 @@ def form_field(db, form):
     """Text field on the contact form.
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
-    for the duration of the fixture body (SA85 Phase 1).
+    for the duration of the fixture body.
     """
     from quickscale_modules_orgs.current_org import org_scope
 
@@ -207,7 +206,7 @@ def email_field(db, form):
     """Email field on the contact form.
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
-    for the duration of the fixture body (SA85 Phase 1).
+    for the duration of the fixture body.
     """
     from quickscale_modules_orgs.current_org import org_scope
 
@@ -228,7 +227,7 @@ def optional_field(db, form):
     """Optional text field on the contact form.
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
-    for the duration of the fixture body (SA85 Phase 1).
+    for the duration of the fixture body.
     """
     from quickscale_modules_orgs.current_org import org_scope
 
@@ -249,7 +248,7 @@ def submission(db, form):
     """A form submission for the contact form.
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
-    for the duration of the fixture body (SA85 Phase 1).
+    for the duration of the fixture body.
     """
     from quickscale_modules_orgs.current_org import org_scope
 
@@ -267,7 +266,7 @@ def field_value(db, submission, form_field):
     """A field value snapshot attached to the submission.
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
-    for the duration of the fixture body (SA85 Phase 1).
+    for the duration of the fixture body.
     """
     from quickscale_modules_orgs.current_org import org_scope
 
@@ -300,7 +299,7 @@ def org_form(db, org):
     """Active form owned by an organization.
 
     Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
-    for the duration of the fixture body (SA85 Phase 1).
+    for the duration of the fixture body.
     """
     from quickscale_modules_orgs.current_org import org_scope
 
@@ -382,7 +381,7 @@ def org_b_admin(db, org_b):
 
 
 # ---------------------------------------------------------------------------
-# SA14.4 — bypass_rls marker registration and collection-time opt-in
+# bypass_rls marker registration and collection-time opt-in
 # ---------------------------------------------------------------------------
 
 

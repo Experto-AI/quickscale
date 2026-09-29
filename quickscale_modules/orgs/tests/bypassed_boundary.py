@@ -1,4 +1,4 @@
-"""Negative control for the SA213 boundary-wiring system check.
+"""Negative control for the boundary-wiring system check.
 
 The entry point never routes a stage, while an unreachable helper keeps every
 coordinator call.  The check follows the executing path, so this module must

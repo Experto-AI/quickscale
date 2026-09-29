@@ -26,7 +26,7 @@ class TestGetManifestAdapter:
 
 
 class TestCrmPostHook:
-    """_crm_post_hook — int/bool coercions (SA17.3)."""
+    """_crm_post_hook — int/bool coercions."""
 
     def test_coerces_deals_per_page_to_int(self) -> None:
         """CRM_DEALS_PER_PAGE must be coerced to int."""

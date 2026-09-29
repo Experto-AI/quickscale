@@ -27,7 +27,7 @@ ORGS_MIG_LATEST = ("quickscale_orgs", "0001_initial")
 
 
 # ---------------------------------------------------------------------------
-# PostgreSQL expression normalization (CR-SA90-MSQ-003)
+# PostgreSQL expression normalization
 # ---------------------------------------------------------------------------
 
 
@@ -40,7 +40,7 @@ def _normalize_pg_expr(expr: str | None) -> str:
     identifiers.  Strips balanced outer parentheses that PostgreSQL's
     ``pg_policies`` view wraps around the entire expression.
 
-    CR-SA90-MSQ-003: Both case normalization and whitespace collapse
+    Both case normalization and whitespace collapse
     are quote-aware — ``.lower()`` and whitespace substitution are only
     applied outside string literals and quoted identifiers so that
     literal content, identifier casing, and whitespace inside quotes
@@ -299,7 +299,7 @@ def test_force_rls_installed_on_tenant_scoped_billing_tables() -> None:
         assert (table, policy) in found_policies, (
             f"FORCE RLS policy '{policy}' on {table} not found."
         )
-        # Verify _select policy exists (SA14.5 operator_access OR clause)
+        # Verify _select policy exists (operator_access OR clause)
         assert (table, f"{policy}_select") in found_policies, (
             f"FORCE RLS SELECT policy '{policy}_select' on {table} not found."
         )
@@ -324,7 +324,7 @@ def test_billing_partial_unique_constraints_have_correct_predicates() -> None:
     """Physical partial unique constraints have the correct ``WHERE``
     predicates.
 
-    CR-SA90-MSQ-003: Uses exact normalized comparison via
+    Uses exact normalized comparison via
     ``pg_get_expr``, not permissive fragment matching.
     """
     executor = MigrationExecutor(connection)
@@ -523,7 +523,7 @@ def test_billing_rls_policy_has_org_predicate() -> None:
     in both USING and WITH CHECK.  The _select policy must have an
     operator_access OR clause.
 
-    CR-SA90-MSQ-003: Exact normalized predicate comparison — the
+    Exact normalized predicate comparison — the
     normalized form must match the expected canonical expression from
     ``_FORCE_RLS_FORWARD_SQL``, not merely contain permissive fragments.
     """
@@ -569,7 +569,7 @@ def test_billing_rls_policy_has_org_predicate() -> None:
             ), (
                 f"FOR ALL {polname} WITH CHECK lacks current_setting/org_id: {with_check}"
             )
-            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            # exact normalized predicate comparison
             nqual = _normalize_pg_expr(qual)
             assert nqual == _EXPECTED_BILLING_FORALL_QUAL, (
                 f"{table}/{polname} normalized qual {nqual!r} "
@@ -584,7 +584,7 @@ def test_billing_rls_policy_has_org_predicate() -> None:
             sname, scmd, squal, swc = select_pol[0]
             assert scmd in ("SELECT", "s"), f"SELECT {sname} cmd={scmd!r}"
             assert swc is None, f"SELECT {sname} has unexpected WITH CHECK"
-            # CR-SA90-MSQ-003: assert squal is not None BEFORE comparison
+            # assert squal is not None BEFORE comparison
             # so NULL predicates cannot silently pass exact-match checks.
             assert squal is not None, (
                 f"SELECT {sname} has NULL USING — must have a predicate"
@@ -592,7 +592,7 @@ def test_billing_rls_policy_has_org_predicate() -> None:
             assert "operator_access" in squal.lower(), (
                 f"SELECT {sname} USING lacks operator_access: {squal}"
             )
-            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            # exact normalized predicate comparison
             nsqual = _normalize_pg_expr(squal)
             assert nsqual == _EXPECTED_BILLING_SELECT_QUAL, (
                 f"{table}/{sname} normalized SELECT qual {nsqual!r} "
@@ -615,7 +615,7 @@ def test_billing_rls_policy_has_org_predicate() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA90-MSQ-003: negative controls for _normalize_pg_expr
+# negative controls for _normalize_pg_expr
 # ---------------------------------------------------------------------------
 
 
