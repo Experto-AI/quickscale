@@ -35,22 +35,10 @@ ANALYTICS_PROVIDERS: Final[tuple[str, ...]] = (ANALYTICS_PROVIDER_POSTHOG,)
 # Constants: backups
 # ---------------------------------------------------------------------------
 
-DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR: Final[str] = (
-    "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
-)
-DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR: Final[str] = (
-    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"  # noqa: S105 - environment-variable name constant, not a credential
-)
-
 BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: Final[str] = "remote_access_key_id_env_var"
 BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: Final[str] = (
     "remote_secret_access_key_env_var"  # noqa: S105 - environment-variable name constant, not a credential
 )
-
-_LEGACY_BACKUPS_SECRET_OPTIONS: Final[dict[str, str]] = {
-    "remote_access_key_id": DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    "remote_secret_access_key": DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-}
 
 
 # ---------------------------------------------------------------------------
@@ -312,40 +300,6 @@ _LIKELY_AWS_ACCESS_KEY_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
 # ---------------------------------------------------------------------------
 
 
-def normalize_backups_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Return backups options with legacy raw-secret keys removed.
-
-    Legacy raw credential values are converted into conventional environment-variable
-    references so downstream persistence layers never re-store the secret values.
-    """
-    normalized = dict(options or {})
-
-    legacy_access_key_id = str(normalized.pop("remote_access_key_id", "")).strip()
-    legacy_secret_access_key = str(
-        normalized.pop("remote_secret_access_key", "")
-    ).strip()
-
-    access_key_env_var = str(
-        normalized.get(BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION, "")
-    ).strip()
-    secret_access_key_env_var = str(
-        normalized.get(BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION, "")
-    ).strip()
-
-    if legacy_access_key_id and not access_key_env_var:
-        normalized[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION] = (
-            DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
-        )
-    if legacy_secret_access_key and not secret_access_key_env_var:
-        normalized[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = (
-            DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-        )
-
-    return normalized
-
-
 def normalize_notifications_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
@@ -534,33 +488,6 @@ _SOCIAL_PROVIDER_ALIASES: Final[dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 
-def validate_backups_env_var_reference(option_name: str, value: Any) -> str | None:
-    """Validate a backups env-var reference field.
-
-    Returns an actionable error string when the value is not a safe environment
-    variable name or appears to be a literal credential value.
-    """
-    candidate = str(value).strip()
-    if not candidate:
-        return None
-
-    qualified_option = f"modules.backups.{option_name}"
-    if not _BACKUPS_ENV_VAR_NAME_PATTERN.fullmatch(candidate):
-        return (
-            f"{qualified_option} must be an environment variable name matching "
-            "^[A-Z][A-Z0-9_]*$"
-        )
-
-    if option_name == BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION:
-        if _LIKELY_AWS_ACCESS_KEY_ID_PATTERN.fullmatch(candidate):
-            return (
-                f"{qualified_option} must reference an environment variable name, "
-                "not a literal AWS access key id"
-            )
-
-    return None
-
-
 def validate_notifications_env_var_reference(
     option_name: str, value: Any
 ) -> str | None:
@@ -626,22 +553,6 @@ def validate_social_module_options(options: dict[str, Any] | None) -> list[str]:
     This stub preserves the public surface for consumers.
     """
     return []
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def has_legacy_backups_secret_values(options: Mapping[str, Any] | None) -> bool:
-    """Return whether backups options still include legacy raw-secret keys."""
-    if not options:
-        return False
-
-    for option_name in _LEGACY_BACKUPS_SECRET_OPTIONS:
-        if str(options.get(option_name, "")).strip():
-            return True
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -746,8 +657,6 @@ def sanitize_module_options(
     """
     _raise_for_retired_module_options(module_name, options)
 
-    if module_name == "backups":
-        return normalize_backups_module_options(options)
     if module_name == "notifications":
         return normalize_notifications_module_options(options)
     if module_name == "social":
@@ -846,8 +755,6 @@ __all__ = [
     # Backups constants
     "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-    "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
-    "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
     # Billing constants
     "BILLING_ENV_VAR_OPTION_NAMES",
     # DR env-var portability constants
@@ -873,11 +780,9 @@ __all__ = [
     "NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION",
     "NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION",
     # Normalize functions
-    "normalize_backups_module_options",
     "normalize_notifications_module_options",
     "normalize_social_module_options",
     # Validate functions
-    "validate_backups_env_var_reference",
     "validate_notifications_env_var_reference",
     "validate_notifications_module_options",
     "validate_social_module_options",
@@ -901,8 +806,6 @@ __all__ = [
     "SOCIAL_INTEGRATION_EMBEDS_PATH",
     "SOCIAL_LAYOUT_VARIANTS",
     "SOCIAL_LINK_TREE_PATH",
-    # Helpers
-    "has_legacy_backups_secret_values",
     # Sanitize dispatcher
     "sanitize_module_options",
     # Storage normalize/validate

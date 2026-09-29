@@ -70,23 +70,12 @@ ANALYTICS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 # get_manifest_inventory("auth") continue to succeed.
 AUTH_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
-BACKUPS_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Shared helpers — relocated to quickscale_core.contracts.module_options
-    ("DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR", SHARED_HELPER, "T2.3"),
-    ("DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR", SHARED_HELPER, "T2.3"),
-    ("BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION", SHARED_HELPER, "T2.3"),
-    ("BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION", SHARED_HELPER, "T2.3"),
-    ("normalize_backups_module_options", SHARED_HELPER, "T2.3"),
-    ("validate_backups_env_var_reference", SHARED_HELPER, "T2.3"),
-    # Declarative targets
-    ("BACKUPS_DEFAULT_RETENTION_DAYS", DECLARATIVE_TARGET, "T2.4"),
-    ("BACKUPS_DEFAULT_NAMING_PREFIX", DECLARATIVE_TARGET, "T2.4"),
-    ("BACKUPS_TARGET_MODES", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_backups_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_backups_module_options", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: Backups imperative inventory cleared — the manifest owns its option
+# defaults, normalization, validation, its retired raw-secret keys
+# (`retired_options`), and its CLI configurator reads the manifest.  The
+# backups key remains in MANIFEST_INVENTORY with an empty list so that
+# callers of get_manifest_inventory("backups") continue to succeed.
+BACKUPS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 # SA217: Billing imperative inventory cleared — the manifest owns its option
 # defaults, normalization, and validation, and its CLI configurator reads the

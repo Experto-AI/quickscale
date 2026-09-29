@@ -21,9 +21,6 @@ from quickscale_core.contracts.module_options import (
     ANALYTICS_POSTHOG_DEFAULT_HOST,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-    normalize_backups_module_options,
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
@@ -67,10 +64,6 @@ from quickscale_cli.commands.module_commands import (
     APPLY_MODULE_EXECUTION_MODE,
     embed_module,
     ModuleEmbedProvenance,
-)
-from quickscale_cli.commands.module_config import (
-    get_default_backups_config,
-    validate_backups_module_options,
 )
 from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError,
@@ -1289,18 +1282,21 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
 
     backups_config = qs_config.modules.get("backups")
     if backups_config is not None:
-        issues = validate_backups_module_options(backups_config.options or {})
-        if issues:
+        backups_issues = validate_module_options(
+            load_module_manifest_with_fallback("backups"),
+            backups_config.options or {},
+        )
+        if backups_issues:
             click.secho(
                 "\n❌ Backups module configuration is incomplete for apply:",
                 fg="red",
                 err=True,
             )
-            for issue in issues:
+            for issue in backups_issues:
                 click.echo(f"  • {issue}", err=True)
             click.echo(
                 "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to supply the missing private-remote env-var references.",
+                "quickscale.yml to correct the backups option values.",
                 err=True,
             )
             raise click.Abort()
@@ -1471,9 +1467,10 @@ def _ensure_backups_gitignore_rules(
         backups_config = config.modules.get("backups")
         if backups_config is None:
             return True
-        options = normalize_backups_module_options(backups_config.options or {})
-        default_local_directory = str(get_default_backups_config()["local_directory"])
-        local_directory = options.get("local_directory", default_local_directory)
+        options = resolve_manifest_module_options(
+            "backups", backups_config.options or {}
+        )
+        local_directory = options["local_directory"]
         entry = _normalize_backups_gitignore_entry(str(local_directory))
         if entry is None:
             click.secho(
@@ -2437,8 +2434,8 @@ def _display_next_steps_impl(
 
     modules = qs_config.modules if isinstance(qs_config.modules, Mapping) else {}
     if "backups" in modules:
-        backups_options = normalize_backups_module_options(
-            modules["backups"].options or {}
+        backups_options = _resolved_module_options(
+            "backups", modules["backups"].options or {}
         )
         click.echo("\n  # Backups operations")
         click.echo("  poetry run python manage.py quickscale_backups_create")
@@ -2465,18 +2462,11 @@ def _display_next_steps_impl(
             )
         if backups_options.get("target_mode") == "private_remote":
             access_key_env_var = str(
-                backups_options.get(
-                    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-                    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-                )
-                or DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+                backups_options.get(BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION) or ""
             )
             secret_key_env_var = str(
-                backups_options.get(
-                    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-                    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-                )
-                or DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
+                backups_options.get(BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION)
+                or ""
             )
             click.echo(
                 "  Configure runtime credentials via env vars "

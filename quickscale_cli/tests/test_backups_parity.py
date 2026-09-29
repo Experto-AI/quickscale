@@ -1,63 +1,27 @@
-"""Parity/regression tests for the manifest-driven backups path.
+"""Contract tests for the backups module's manifest-owned configuration.
 
-These tests encode the *legacy* ``backups_contract.py`` behaviour as gold
-expectations and verify that the manifest-driven replacement
-(``backups_manifest.py``) produces identical results for every public
-entry point.
-
-The legacy contract file was deleted when the backups module was migrated
-to the manifest-driven path (Phase 4, backups migration).  The gold values
-below were recovered from the last committed version of
-``backups_contract.py``, the core ``module_options.py`` helpers, and the
-backups ``module.yml`` manifest.
-
-Design notes
-------------
-* ``default_backups_module_options()`` sources defaults from ``module.yml``.
-  The env-var option defaults are ``""`` in the manifest by design — the
-  real fallback env-var *names* are carried by the
-  ``DEFAULT_BACKUPS_REMOTE_*`` constants which are re-exported from core.
-* ``normalize_backups_module_options``, ``has_legacy_backups_secret_values``,
-  and ``validate_backups_env_var_reference`` are thin re-exports from
-  ``quickscale_core.contracts.module_options`` — behaviour is unchanged.
-* ``sanitize_module_options`` (the cross-module dispatcher) is NOT exported
-  from ``backups_manifest``; it lives in ``quickscale_core.contracts.module_options``
-  and is tested here via that path to confirm the backups dispatch still works.
-
-Scope
------
-* Constant values (env-var option names, default env-var names)
-* Default option values (sourced from module.yml)
-* has_legacy_backups_secret_values detection
-* validate_backups_env_var_reference messages
-* normalize_backups_module_options legacy-key removal
-* sanitize_module_options dispatch for the backups module (via core)
+The backups option defaults, normalization, validation, and retired keys are
+declared in ``quickscale_modules/backups/module.yml`` and enforced through the
+shared manifest engine; its CLI configurator is the one generic
+manifest-driven configurator.  These tests pin that contract and the
+operator-facing behaviour it produces.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from unittest.mock import patch
 
-from quickscale_core.contracts.module_options import (
-    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-    has_legacy_backups_secret_values,
-    normalize_backups_module_options,
-    sanitize_module_options,
-    validate_backups_env_var_reference,
-)
+import click
+import pytest
+
+from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
 from quickscale_core.contracts.resolvers import (
-    default_backups_module_options,
-    resolve_backups_module_options,
+    load_module_manifest_with_fallback,
+    resolve_manifest_module_options,
 )
+from quickscale_core.manifest.option_validation import validate_module_options
 
-# ---------------------------------------------------------------------------
-# Gold expectations recovered from legacy contract and module.yml
-# ---------------------------------------------------------------------------
-
-_EXPECTED_DEFAULTS: dict[str, Any] = {
+_EXPECTED_DEFAULTS: dict[str, object] = {
     "retention_days": 14,
     "naming_prefix": "db",
     "target_mode": "local",
@@ -66,344 +30,320 @@ _EXPECTED_DEFAULTS: dict[str, Any] = {
     "remote_prefix": "backups/private",
     "remote_endpoint_url": "",
     "remote_region_name": "",
-    "remote_access_key_id_env_var": "",
-    "remote_secret_access_key_env_var": "",
+    "remote_access_key_id_env_var": "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID",
+    "remote_secret_access_key_env_var": "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY",
     "automation_enabled": False,
     "schedule": "0 2 * * *",
 }
 
-_EXPECTED_CONSTANT_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
-_EXPECTED_CONSTANT_SECRET_ACCESS_KEY_ENV_VAR = (
-    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
-)
+_ACCESS_KEY_OPTION = "remote_access_key_id_env_var"
+_SECRET_KEY_OPTION = "remote_secret_access_key_env_var"
+_RETIRED_OPTIONS = ("remote_access_key_id", "remote_secret_access_key")
+
+_PRIVATE_REMOTE_OPTIONS: dict[str, object] = {
+    "target_mode": "private_remote",
+    "remote_bucket_name": "private-bucket",
+    "remote_region_name": "eu-west-1",
+}
+
+
+def _manifest():
+    return load_module_manifest_with_fallback("backups")
+
+
+def _private_remote(**overrides: object) -> dict[str, object]:
+    options = dict(_PRIVATE_REMOTE_OPTIONS)
+    options.update(overrides)
+    return options
 
 
 # ===========================================================================
-# 1. Constant parity
+# 1. Manifest declarations
 # ===========================================================================
 
 
-class TestConstantsParity:
-    """Public constants must equal the values defined in core."""
+class TestManifestDeclaration:
+    """The manifest owns the option set, defaults, and declared rules."""
 
-    def test_option_name_access_key_id(self) -> None:
+    def test_defaults_match_the_manifest(self) -> None:
+        assert resolve_manifest_module_options("backups") == _EXPECTED_DEFAULTS
+
+    def test_env_var_defaults_name_the_conventional_variables(self) -> None:
+        defaults = _manifest().get_defaults()
+        assert defaults[_ACCESS_KEY_OPTION] == "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
         assert (
-            BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION
-            == "remote_access_key_id_env_var"
+            defaults[_SECRET_KEY_OPTION]
+            == "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
         )
 
-    def test_option_name_secret_access_key(self) -> None:
-        assert (
-            BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION
-            == "remote_secret_access_key_env_var"
-        )
+    def test_target_mode_choices_are_declared(self) -> None:
+        option = _manifest().get_option("target_mode")
+        assert option is not None
+        assert option.validation.get("choices") == ["local", "private_remote"]
 
-    def test_default_access_key_id_env_var(self) -> None:
-        assert (
-            DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
-            == _EXPECTED_CONSTANT_ACCESS_KEY_ID_ENV_VAR
-        )
+    def test_retention_minimum_is_declared(self) -> None:
+        option = _manifest().get_option("retention_days")
+        assert option is not None
+        assert option.validation.get("min") == 1
 
-    def test_default_secret_access_key_env_var(self) -> None:
-        assert (
-            DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-            == _EXPECTED_CONSTANT_SECRET_ACCESS_KEY_ENV_VAR
-        )
-
-    def test_default_env_vars_are_not_empty_strings(self) -> None:
-        """DEFAULT_BACKUPS_REMOTE_* are real env-var names, not blank strings."""
-        assert DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR != ""
-        assert DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR != ""
-
-    def test_default_env_vars_differ_from_manifest_defaults(self) -> None:
-        """module.yml stores '' for env-var option defaults; constants are distinct."""
-        defaults = default_backups_module_options()
-        assert defaults.get(BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION) == ""
-        assert defaults.get(BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION) == ""
-        # But the DEFAULT_BACKUPS_REMOTE_* constants are non-empty
-        assert DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR != ""
-        assert DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR != ""
-
-
-# ===========================================================================
-# 2. Default options parity
-# ===========================================================================
-
-
-class TestDefaultsParity:
-    """Manifest-driven defaults must match the expected gold values."""
-
-    def test_default_options_match_expected(self) -> None:
-        defaults = default_backups_module_options()
-        assert defaults == _EXPECTED_DEFAULTS
-
-    def test_default_options_keys_are_stable(self) -> None:
-        defaults = default_backups_module_options()
-        assert set(defaults.keys()) == set(_EXPECTED_DEFAULTS.keys())
-
-    def test_default_retention_days(self) -> None:
-        defaults = default_backups_module_options()
-        assert defaults["retention_days"] == 14
-
-    def test_default_target_mode(self) -> None:
-        defaults = default_backups_module_options()
-        assert defaults["target_mode"] == "local"
-
-    def test_default_env_var_options_are_blank(self) -> None:
-        """Env-var option defaults are '' in module.yml; operators supply them."""
-        defaults = default_backups_module_options()
-        assert defaults[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION] == ""
-        assert defaults[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] == ""
-
-    def test_default_automation_enabled_is_false(self) -> None:
-        defaults = default_backups_module_options()
-        assert defaults["automation_enabled"] is False
-
-    def test_default_options_is_stable_across_calls(self) -> None:
-        assert default_backups_module_options() == default_backups_module_options()
-
-
-# ===========================================================================
-# 3. has_legacy_backups_secret_values parity
-# ===========================================================================
-
-
-class TestHasLegacyBackupsSecretValuesParity:
-    """has_legacy_backups_secret_values must detect the legacy raw-secret keys."""
-
-    def test_none_returns_false(self) -> None:
-        assert has_legacy_backups_secret_values(None) is False
-
-    def test_empty_dict_returns_false(self) -> None:
-        assert has_legacy_backups_secret_values({}) is False
-
-    def test_canonical_options_return_false(self) -> None:
-        options = {
-            BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: "MY_ACCESS_KEY_ENV",
-            BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "MY_SECRET_ENV",
+    def test_remote_bucket_is_required_for_private_remote(self) -> None:
+        option = _manifest().get_option("remote_bucket_name")
+        assert option is not None
+        assert option.validation.get("required_when") == {
+            "target_mode": "private_remote"
         }
-        assert has_legacy_backups_secret_values(options) is False
 
-    def test_legacy_remote_access_key_id_detected(self) -> None:
-        options = {"remote_access_key_id": "AKIAFAKEACCESSKEYID123"}
-        assert has_legacy_backups_secret_values(options) is True
-
-    def test_legacy_remote_secret_access_key_detected(self) -> None:
-        options = {"remote_secret_access_key": "fakesecretvalue12345678"}
-        assert has_legacy_backups_secret_values(options) is True
-
-    def test_both_legacy_keys_detected(self) -> None:
-        options = {
-            "remote_access_key_id": "AKIAFAKEACCESSKEYID123",
-            "remote_secret_access_key": "fakesecretvalue12345678",
+    def test_endpoint_or_region_is_declared_for_private_remote(self) -> None:
+        option = _manifest().get_option("remote_endpoint_url")
+        assert option is not None
+        assert option.validation.get("required_when") == {
+            "target_mode": "private_remote"
         }
-        assert has_legacy_backups_secret_values(options) is True
+        assert option.validation.get("any_of") == ["remote_region_name"]
 
-    def test_blank_legacy_key_not_detected(self) -> None:
-        """Blank values (not real secrets) must not be flagged."""
-        options = {"remote_access_key_id": "", "remote_secret_access_key": "   "}
-        assert has_legacy_backups_secret_values(options) is False
+    def test_schedule_required_when_automation_is_enabled(self) -> None:
+        option = _manifest().get_option("schedule")
+        assert option is not None
+        assert option.validation.get("required_when") == {"automation_enabled": True}
+
+    def test_env_var_patterns_are_declared(self) -> None:
+        access_option = _manifest().get_option(_ACCESS_KEY_OPTION)
+        secret_option = _manifest().get_option(_SECRET_KEY_OPTION)
+        assert access_option is not None
+        assert secret_option is not None
+        access_pattern = access_option.validation.get("pattern", "")
+        # The access-key option keeps the literal-AWS-key guard in its pattern.
+        assert "AKIA" in access_pattern and "ASIA" in access_pattern
+        assert secret_option.validation.get("pattern") == "^(?:[A-Z][A-Z0-9_]*)?$"
+
+    def test_retired_raw_secret_keys_are_declared(self) -> None:
+        retired = _manifest().retired_options
+        assert set(retired) == set(_RETIRED_OPTIONS)
+        assert "remote_access_key_id_env_var" in retired["remote_access_key_id"]
+        assert "remote_secret_access_key_env_var" in retired["remote_secret_access_key"]
+
+    def test_normalization_rules_are_declared(self) -> None:
+        derivations = _manifest().option_derivations
+        target_rules = [
+            rule["rule_type"]
+            for rule in derivations["target_mode"]["normalization_rules"]
+        ]
+        assert target_rules == ["strip", "lowercase"]
+        prefix_rules = [
+            rule["rule_type"]
+            for rule in derivations["naming_prefix"]["normalization_rules"]
+        ]
+        assert prefix_rules == ["strip"]
+
+    @pytest.mark.parametrize(
+        "option_name", ["naming_prefix", "local_directory", "remote_prefix"]
+    )
+    def test_blank_guards_are_declared(self, option_name: str) -> None:
+        option = _manifest().get_option(option_name)
+        assert option is not None
+        assert option.validation.get("pattern") == "(?s)^.*\\S.*$"
 
 
 # ===========================================================================
-# 4. validate_backups_env_var_reference parity
+# 2. Resolution through the generic resolver
 # ===========================================================================
 
 
-class TestValidateBackupsEnvVarReferenceParity:
-    """validate_backups_env_var_reference must produce the exact legacy messages."""
+class TestBackupsResolution:
+    """The generic resolver merges defaults with canonicalized overrides."""
 
-    def test_blank_value_returns_none(self) -> None:
-        assert (
-            validate_backups_env_var_reference("remote_access_key_id_env_var", "")
-            is None
+    def test_no_overrides_returns_defaults(self) -> None:
+        assert resolve_manifest_module_options("backups") == _EXPECTED_DEFAULTS
+
+    def test_retention_override_wins(self) -> None:
+        resolved = resolve_manifest_module_options("backups", {"retention_days": 30})
+        assert resolved["retention_days"] == 30
+        assert resolved["naming_prefix"] == "db"
+
+    def test_target_mode_is_stripped_and_lowercased(self) -> None:
+        resolved = resolve_manifest_module_options(
+            "backups", {"target_mode": " Private_Remote "}
         )
+        assert resolved["target_mode"] == "private_remote"
 
-    def test_whitespace_only_returns_none(self) -> None:
-        assert (
-            validate_backups_env_var_reference("remote_access_key_id_env_var", "  ")
-            is None
+    def test_free_text_values_are_stripped(self) -> None:
+        resolved = resolve_manifest_module_options(
+            "backups", {"naming_prefix": "  nightlies  ", "remote_prefix": " b/ "}
         )
+        assert resolved["naming_prefix"] == "nightlies"
+        assert resolved["remote_prefix"] == "b/"
 
-    def test_valid_env_var_name_returns_none(self) -> None:
+    def test_invalid_values_pass_through_resolution(self) -> None:
+        """Resolution does not coerce invalid values; validation refuses them."""
+        resolved = resolve_manifest_module_options(
+            "backups", {"retention_days": 0, "target_mode": "elsewhere"}
+        )
+        assert resolved["retention_days"] == 0
+        assert resolved["target_mode"] == "elsewhere"
+
+    def test_resolution_is_idempotent(self) -> None:
+        resolved = resolve_manifest_module_options(
+            "backups", {"naming_prefix": "  db  "}
+        )
+        assert resolve_manifest_module_options("backups", resolved) == resolved
+
+    def test_resolved_keys_match_the_manifest(self) -> None:
+        resolved = resolve_manifest_module_options("backups", {"retention_days": 7})
+        assert set(resolved.keys()) == set(_EXPECTED_DEFAULTS.keys())
+
+
+# ===========================================================================
+# 3. Validation through the shared engine
+# ===========================================================================
+
+
+class TestBackupsValidation:
+    """The engine enforces the manifest's single- and cross-option rules."""
+
+    def test_defaults_pass_validation(self) -> None:
+        assert validate_module_options(_manifest(), _EXPECTED_DEFAULTS) == []
+
+    def test_private_remote_requires_the_remote_credentials(self) -> None:
+        issues = validate_module_options(_manifest(), {"target_mode": "private_remote"})
+        assert any("remote_bucket_name" in issue for issue in issues)
+        assert any("one of" in issue for issue in issues)
+
+    def test_private_remote_with_bucket_and_region_passes(self) -> None:
+        assert validate_module_options(_manifest(), _private_remote()) == []
+
+    def test_private_remote_with_bucket_and_endpoint_passes(self) -> None:
+        options = {
+            "target_mode": "private_remote",
+            "remote_bucket_name": "bucket",
+            "remote_endpoint_url": "https://s3.example.com",
+        }
+        assert validate_module_options(_manifest(), options) == []
+
+    def test_private_remote_requires_env_var_references_when_blank(self) -> None:
+        options = _private_remote(**{_ACCESS_KEY_OPTION: "", _SECRET_KEY_OPTION: ""})
+        issues = validate_module_options(_manifest(), options)
+        assert any(_ACCESS_KEY_OPTION in issue for issue in issues)
+        assert any(_SECRET_KEY_OPTION in issue for issue in issues)
+
+    def test_retention_below_minimum_fails(self) -> None:
+        issues = validate_module_options(_manifest(), {"retention_days": 0})
+        assert any("retention_days" in issue for issue in issues)
+
+    def test_invalid_target_mode_fails(self) -> None:
+        issues = validate_module_options(_manifest(), {"target_mode": "elsewhere"})
+        assert any("target_mode" in issue for issue in issues)
+
+    @pytest.mark.parametrize(
+        "option_name", ["naming_prefix", "local_directory", "remote_prefix"]
+    )
+    def test_blank_free_text_values_fail(self, option_name: str) -> None:
+        issues = validate_module_options(_manifest(), {option_name: "   "})
+        assert any(option_name in issue for issue in issues)
+
+    def test_schedule_required_when_automation_is_enabled(self) -> None:
+        options = {"automation_enabled": True, "schedule": ""}
+        issues = validate_module_options(_manifest(), options)
+        assert any("schedule" in issue for issue in issues)
+
+    def test_invalid_env_var_name_fails(self) -> None:
+        issues = validate_module_options(
+            _manifest(), {_ACCESS_KEY_OPTION: "not-valid-env"}
+        )
+        assert any("must match pattern" in issue for issue in issues)
+
+    def test_literal_aws_access_key_id_is_refused(self) -> None:
+        issues = validate_module_options(
+            _manifest(), {_ACCESS_KEY_OPTION: "AKIAFAKEACCESSKEY123"}
+        )
+        assert len(issues) == 1
+        assert "must match pattern" in issues[0]
+
+    def test_secret_option_accepts_an_aws_shaped_name(self) -> None:
+        """The literal-key guard applies to the access-key option only."""
         assert (
-            validate_backups_env_var_reference(
-                "remote_access_key_id_env_var", "MY_BACKUPS_KEY"
+            validate_module_options(
+                _manifest(), {_SECRET_KEY_OPTION: "AKIAFAKEACCESSKEY123"}
             )
-            is None
+            == []
         )
 
-    def test_invalid_pattern_returns_error(self) -> None:
-        result = validate_backups_env_var_reference(
-            "remote_access_key_id_env_var", "not-valid-env"
-        )
-        assert result is not None
-        assert "^[A-Z][A-Z0-9_]*$" in result
-        assert "modules.backups.remote_access_key_id_env_var" in result
+    @pytest.mark.parametrize("retired_key", _RETIRED_OPTIONS)
+    def test_retired_raw_secret_keys_are_refused(self, retired_key: str) -> None:
+        issues = validate_module_options(_manifest(), {retired_key: "raw-secret"})
+        assert len(issues) == 1
+        assert "no longer supported" in issues[0]
+        assert f"'{retired_key}'" in issues[0]
 
-    def test_literal_aws_access_key_id_detected(self) -> None:
-        """A value matching the AWS access key pattern must be rejected.
-
-        The pattern is ^(?:AKIA|ASIA)[A-Z0-9]{16}$ — exactly 20 chars total.
-        """
-        result = validate_backups_env_var_reference(
-            BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-            "AKIAFAKEACCESSKEY123",  # AKIA + 16 uppercase alphanum = 20 chars total
-        )
-        assert result is not None
-        assert "literal AWS access key id" in result
-
-    def test_secret_access_key_option_not_rejected_for_aws_pattern(self) -> None:
-        """Only the access key ID option triggers the AWS literal key check.
-
-        The secret access key option must NOT flag a value that matches the AWS
-        access key ID pattern format, because that check only applies to the
-        access key ID field.
-        """
-        result = validate_backups_env_var_reference(
-            BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-            "AKIAFAKEACCESSKEY123",  # AKIA + 16 chars, matches AWS key ID pattern format
-        )
-        # Secret access key option does not trigger the AWS literal key check,
-        # so this must either pass pattern validation or fail only on the
-        # general env-var pattern (here it is 20 chars of uppercase+digits = valid).
-        assert result is None
+    def test_retired_key_is_reported_before_other_issues(self) -> None:
+        options = {"remote_access_key_id": "raw", "retention_days": 0}
+        issues = validate_module_options(_manifest(), options)
+        assert "no longer supported" in issues[0]
 
 
 # ===========================================================================
-# 5. normalize_backups_module_options parity
+# 4. CLI configurator behaviour
 # ===========================================================================
 
 
-class TestNormalizeBackupsModuleOptionsParity:
-    """normalize_backups_module_options must behave identically to the core helper."""
+class TestBackupsConfigurator:
+    """The CLI configurator's defaults and prompts come from the manifest."""
 
-    def test_none_returns_empty_dict(self) -> None:
-        assert normalize_backups_module_options(None) == {}
+    def test_defaults_factory_reads_the_manifest(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["backups"]
+        assert entry.get_defaults() == _EXPECTED_DEFAULTS
 
-    def test_empty_dict_returns_empty_dict(self) -> None:
-        assert normalize_backups_module_options({}) == {}
+    def test_non_interactive_configuration_uses_manifest_defaults(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["backups"]
+        assert entry.configure(non_interactive=True) == _EXPECTED_DEFAULTS
 
-    def test_canonical_options_pass_through(self) -> None:
-        options = {
-            BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: "MY_KEY_ENV",
-            "retention_days": 30,
-        }
-        normalized = normalize_backups_module_options(options)
-        assert normalized[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION] == "MY_KEY_ENV"
-        assert normalized["retention_days"] == 30
-
-    def test_legacy_access_key_id_removed_and_env_var_set(self) -> None:
-        """Legacy raw access_key_id must be removed and env_var set to the default."""
-        options = {"remote_access_key_id": "AKIAFAKEACCESSKEYID123"}
-        normalized = normalize_backups_module_options(options)
-        assert "remote_access_key_id" not in normalized
-        assert (
-            normalized[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION]
-            == DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+    def test_existing_declared_values_are_canonicalized(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["backups"]
+        config = entry.configure(
+            non_interactive=True,
+            existing_config={"target_mode": " LOCAL ", "retention_days": 7},
         )
+        assert config["target_mode"] == "local"
+        assert config["retention_days"] == 7
+        assert config["naming_prefix"] == "db"
 
-    def test_legacy_secret_access_key_removed_and_env_var_set(self) -> None:
-        """Legacy raw secret_access_key must be removed and env_var set to the default."""
-        options = {"remote_secret_access_key": "fakesecretvalue12345678"}
-        normalized = normalize_backups_module_options(options)
-        assert "remote_secret_access_key" not in normalized
-        assert (
-            normalized[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
-            == DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-        )
+    def test_existing_retired_key_aborts(self) -> None:
+        entry = MODULE_CONFIGURATOR_REGISTRY["backups"]
+        with pytest.raises(click.Abort):
+            entry.configure(
+                non_interactive=True,
+                existing_config={"remote_access_key_id": "raw"},
+            )
 
-    def test_legacy_key_not_overwritten_when_env_var_already_set(self) -> None:
-        """If the env_var option is already set, the legacy value must not overwrite it."""
-        options = {
-            "remote_access_key_id": "AKIAFAKEACCESSKEYID123",
-            BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: "EXISTING_ENV_VAR",
-        }
-        normalized = normalize_backups_module_options(options)
-        assert "remote_access_key_id" not in normalized
-        assert (
-            normalized[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION]
-            == "EXISTING_ENV_VAR"
-        )
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    def test_interactive_prompts_read_the_manifest(
+        self, mock_prompt, mock_confirm
+    ) -> None:
+        def _answer(message: str, **kwargs: object) -> object:
+            prompt_type = kwargs.get("type")
+            choices = getattr(prompt_type, "choices", [])
+            if "private_remote" in choices:
+                return "private_remote"
+            if message.startswith("Private S3-compatible bucket"):
+                return "private-bucket"
+            if message.startswith("Cloud provider region"):
+                return "eu-west-1"
+            return kwargs.get("default")
 
+        mock_prompt.side_effect = _answer
+        mock_confirm.return_value = False
 
-# ===========================================================================
-# 6. sanitize_module_options dispatch via core (backups route)
-# ===========================================================================
+        entry = MODULE_CONFIGURATOR_REGISTRY["backups"]
+        config = entry.configure(non_interactive=False)
 
+        assert config["target_mode"] == "private_remote"
+        assert config["remote_bucket_name"] == "private-bucket"
+        assert config["remote_region_name"] == "eu-west-1"
 
-class TestSanitizeModuleOptionsBackupsDispatch:
-    """sanitize_module_options (from core) must correctly dispatch to backups normalization."""
-
-    def test_sanitize_empty_options(self) -> None:
-        result = sanitize_module_options("backups", {})
-        assert isinstance(result, dict)
-
-    def test_sanitize_none_options(self) -> None:
-        result = sanitize_module_options("backups", None)
-        assert isinstance(result, dict)
-
-    def test_sanitize_strips_legacy_keys(self) -> None:
-        """The dispatcher must route to normalize_backups_module_options."""
-        options = {"remote_access_key_id": "AKIAFAKEACCESSKEYID123"}
-        result = sanitize_module_options("backups", options)
-        assert "remote_access_key_id" not in result
-        assert (
-            result.get(BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION)
-            == DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
-        )
-
-    def test_sanitize_canonical_options_preserved(self) -> None:
-        options = {
-            BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: "MY_KEY_ENV",
-            "retention_days": 7,
-        }
-        result = sanitize_module_options("backups", options)
-        assert result[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION] == "MY_KEY_ENV"
-        assert result["retention_days"] == 7
-
-    def test_sanitize_result_matches_normalize_directly(self) -> None:
-        """The dispatcher route must produce the same result as calling normalize directly."""
-        options = {
-            "remote_access_key_id": "AKIAFAKEACCESSKEYID123",
-            "retention_days": 21,
-        }
-        via_dispatcher = sanitize_module_options("backups", options)
-        via_normalize = normalize_backups_module_options(options)
-        assert via_dispatcher == via_normalize
-
-
-# ===========================================================================
-# 6. resolve_backups_module_options
-# ===========================================================================
-
-
-class TestResolveBackupsModuleOptions:
-    """resolve_backups_module_options merges manifest defaults with caller overrides."""
-
-    def test_none_returns_manifest_defaults(self) -> None:
-        result = resolve_backups_module_options(None)
-        assert result == default_backups_module_options()
-
-    def test_empty_dict_returns_manifest_defaults(self) -> None:
-        result = resolve_backups_module_options({})
-        assert result == default_backups_module_options()
-
-    def test_caller_override_wins_over_default(self) -> None:
-        result = resolve_backups_module_options({"retention_days": 30})
-        assert result["retention_days"] == 30
-
-    def test_unspecified_keys_retain_manifest_defaults(self) -> None:
-        result = resolve_backups_module_options({"retention_days": 7})
-        defaults = default_backups_module_options()
-        assert result["target_mode"] == defaults["target_mode"]
-        assert result["naming_prefix"] == defaults["naming_prefix"]
-
-    def test_legacy_keys_are_normalized_before_merge(self) -> None:
-        options = {"remote_access_key_id": "AKIAFAKEACCESSKEYID123"}
-        result = resolve_backups_module_options(options)
-        assert "remote_access_key_id" not in result
-        assert (
-            result[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION]
-            == DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
-        )
+        choice_types = [
+            call.kwargs["type"]
+            for call in mock_prompt.call_args_list
+            if hasattr(call.kwargs.get("type"), "choices")
+        ]
+        assert len(choice_types) == 1
+        assert list(choice_types[0].choices) == ["local", "private_remote"]

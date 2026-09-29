@@ -11,74 +11,20 @@ from unittest.mock import patch
 import pytest
 
 from quickscale_core.contracts.module_options import (
-    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     ENV_VAR_PORTABILITY_IGNORED,
     ENV_VAR_PORTABILITY_MANUAL,
     ENV_VAR_PORTABILITY_PORTABLE,
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
     get_env_var_portability,
-    has_legacy_backups_secret_values,
-    normalize_backups_module_options,
     normalize_notifications_module_options,
     normalize_social_module_options,
     sanitize_module_options,
-    validate_backups_env_var_reference,
     validate_notifications_env_var_reference,
     validate_notifications_module_options,
     validate_social_module_options,
 )
 from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_core.manifest.loader import ManifestError
-
-
-# ---------------------------------------------------------------------------
-# normalize_backups_module_options
-# ---------------------------------------------------------------------------
-
-
-class TestNormalizeBackups:
-    def test_none_options_returns_empty(self) -> None:
-        assert normalize_backups_module_options(None) == {}
-
-    def test_legacy_access_key_converted_to_env_var(self) -> None:
-        result = normalize_backups_module_options(
-            {"remote_access_key_id": "AKIAIOSF000000000000"}
-        )
-        assert (
-            result[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION]
-            == DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
-        )
-
-    def test_legacy_secret_key_converted_to_env_var(self) -> None:
-        result = normalize_backups_module_options(
-            {"remote_secret_access_key": "supersecret"}
-        )
-        assert (
-            result[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
-            == DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-        )
-
-    def test_existing_env_var_not_overwritten_by_legacy(self) -> None:
-        result = normalize_backups_module_options(
-            {
-                "remote_access_key_id": "AKIAIOSF000000000000",
-                BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: "MY_CUSTOM_VAR",
-            }
-        )
-        assert result[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION] == "MY_CUSTOM_VAR"
-
-    def test_legacy_keys_removed_from_output(self) -> None:
-        result = normalize_backups_module_options(
-            {
-                "remote_access_key_id": "key",
-                "remote_secret_access_key": "secret",
-            }
-        )
-        assert "remote_access_key_id" not in result
-        assert "remote_secret_access_key" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -148,30 +94,6 @@ class TestNormalizeSocial:
 
 
 # ---------------------------------------------------------------------------
-# validate_backups_env_var_reference
-# ---------------------------------------------------------------------------
-
-
-class TestValidateBackupsEnvVar:
-    def test_empty_returns_none(self) -> None:
-        assert validate_backups_env_var_reference("key", "") is None
-
-    def test_valid_name_returns_none(self) -> None:
-        assert validate_backups_env_var_reference("key", "MY_VAR") is None
-
-    def test_invalid_name_returns_issue(self) -> None:
-        result = validate_backups_env_var_reference("key", "bad-name")
-        assert result is not None
-
-    def test_literal_aws_key_rejected(self) -> None:
-        result = validate_backups_env_var_reference(
-            BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION, "AKIAIOSF000000000000"
-        )
-        assert result is not None
-        assert "literal AWS" in result
-
-
-# ---------------------------------------------------------------------------
 # validate_notifications_env_var_reference
 # ---------------------------------------------------------------------------
 
@@ -206,28 +128,6 @@ class TestValidateNotificationsStub:
 class TestValidateSocialStub:
     def test_returns_empty(self) -> None:
         assert validate_social_module_options(None) == []
-
-
-# ---------------------------------------------------------------------------
-# has_legacy_backups_secret_values
-# ---------------------------------------------------------------------------
-
-
-class TestHasLegacyBackupsSecrets:
-    def test_none_returns_false(self) -> None:
-        assert has_legacy_backups_secret_values(None) is False
-
-    def test_empty_returns_false(self) -> None:
-        assert has_legacy_backups_secret_values({}) is False
-
-    def test_legacy_key_detected(self) -> None:
-        assert (
-            has_legacy_backups_secret_values({"remote_access_key_id": "AKIA..."})
-            is True
-        )
-
-    def test_blank_legacy_key_not_detected(self) -> None:
-        assert has_legacy_backups_secret_values({"remote_access_key_id": "  "}) is False
 
 
 # ---------------------------------------------------------------------------
@@ -279,9 +179,17 @@ class TestSanitizeDispatcher:
         result = sanitize_module_options("auth", {"registration_enabled": True})
         assert result["registration_enabled"] is True
 
-    def test_backups_dispatch(self) -> None:
-        result = sanitize_module_options("backups", {"remote_access_key_id": "key123"})
-        assert BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION in result
+    def test_backups_dispatch_with_retired_raises(self) -> None:
+        """The manifest's retired_options declaration raises through sanitize."""
+        with pytest.raises(ConfigValidationError, match="remote_access_key_id"):
+            sanitize_module_options("backups", {"remote_access_key_id": "key123"})
+
+    def test_backups_dispatch_canonicalizes_declared_keys(self) -> None:
+        result = sanitize_module_options(
+            "backups", {"naming_prefix": "  db  ", "retention_days": 7}
+        )
+        assert result["naming_prefix"] == "db"
+        assert result["retention_days"] == 7
 
     def test_billing_dispatch_passes_declared_keys_through(self) -> None:
         result = sanitize_module_options("billing", {"billing_currency": "usd"})

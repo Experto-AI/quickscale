@@ -10,27 +10,25 @@ from unittest.mock import patch
 import click
 import pytest
 
-from quickscale_core.contracts.module_options import (
-    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-)
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
-    configure_backups_module,
     configure_storage_module,
     configure_notifications_module,
     configure_social_module,
-    get_default_backups_config,
     get_default_notifications_config,
     get_default_social_config,
     get_default_storage_config,
-    validate_backups_module_options,
+)
+from quickscale_core.contracts.resolvers import (
+    load_module_manifest_with_fallback,
+    resolve_manifest_module_options,
 )
 from quickscale_core.manifest.entry_point import (
     MANIFEST_ADAPTER_REGISTRY,
     build_manifest_wiring_spec,
     refresh_managed_adapters,
 )
+from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.contracts.module_options import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
@@ -1498,87 +1496,101 @@ class TestBackupsModuleConfig:
     """Tests for backups module configurator registration and validation."""
 
     def test_backups_default_config_keys_match_manifest_contract_intent(self):
-        config = get_default_backups_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["backups"].get_defaults()
         assert config["retention_days"] == 14
         assert config["naming_prefix"] == "db"
         assert config["target_mode"] == "local"
-        assert config["remote_access_key_id_env_var"] == ""
-        assert config["remote_secret_access_key_env_var"] == ""
+        assert (
+            config["remote_access_key_id_env_var"]
+            == "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
+        )
+        assert (
+            config["remote_secret_access_key_env_var"]
+            == "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
+        )
         assert config["automation_enabled"] is False
 
     def test_backups_in_module_configurators(self):
         assert "backups" in MODULE_CONFIGURATOR_REGISTRY
-        config = configure_backups_module(non_interactive=True)
+        config = MODULE_CONFIGURATOR_REGISTRY["backups"].configure(non_interactive=True)
         assert config["target_mode"] == "local"
 
-    def test_validate_backups_module_options_local_defaults_are_valid(self):
-        assert validate_backups_module_options(get_default_backups_config()) == []
+    def test_backups_local_defaults_are_valid(self):
+        entry = MODULE_CONFIGURATOR_REGISTRY["backups"]
+        assert (
+            validate_module_options(
+                load_module_manifest_with_fallback("backups"), entry.get_defaults()
+            )
+            == []
+        )
 
-    def test_validate_backups_module_options_empty_mapping_uses_defaults(self):
-        assert validate_backups_module_options({}) == []
+    def test_backups_empty_mapping_resolves_to_defaults(self):
+        assert (
+            resolve_manifest_module_options("backups", {})
+            == MODULE_CONFIGURATOR_REGISTRY["backups"].get_defaults()
+        )
 
-    def test_validate_backups_module_options_require_remote_fields(self):
-        issues = validate_backups_module_options(
-            get_default_backups_config() | {"target_mode": "private_remote"}
+    def test_backups_private_remote_requires_remote_fields(self):
+        issues = validate_module_options(
+            load_module_manifest_with_fallback("backups"),
+            {"target_mode": "private_remote"},
         )
 
         assert any("remote_bucket_name" in issue for issue in issues)
-        assert any("remote_access_key_id_env_var" in issue for issue in issues)
-        assert any("remote_secret_access_key_env_var" in issue for issue in issues)
+        assert any("one of" in issue for issue in issues)
 
-    def test_validate_backups_module_options_reject_invalid_env_var_names(self):
-        issues = validate_backups_module_options(
-            get_default_backups_config()
-            | {
+    def test_backups_rejects_invalid_env_var_names(self):
+        issues = validate_module_options(
+            load_module_manifest_with_fallback("backups"),
+            {
                 "target_mode": "private_remote",
                 "remote_bucket_name": "private-bucket",
                 "remote_region_name": "auto",
                 "remote_access_key_id_env_var": "ops-backups-access-key-id",
                 "remote_secret_access_key_env_var": "ops-backups-secret-access-key",
-            }
+            },
         )
 
-        assert any(
-            (
-                "remote_access_key_id_env_var must be an environment variable name"
-                in issue
-            )
-            for issue in issues
-        )
-        assert any(
-            (
-                "remote_secret_access_key_env_var must be an environment variable name"
-                in issue
-            )
-            for issue in issues
-        )
+        assert sum("must match pattern" in issue for issue in issues) == 2
+        assert any("remote_access_key_id_env_var" in issue for issue in issues)
+        assert any("remote_secret_access_key_env_var" in issue for issue in issues)
 
-    def test_validate_backups_module_options_reject_literal_aws_access_key_id(self):
-        issues = validate_backups_module_options(
-            get_default_backups_config()
-            | {
+    def test_backups_rejects_literal_aws_access_key_id(self):
+        issues = validate_module_options(
+            load_module_manifest_with_fallback("backups"),
+            {
                 "target_mode": "private_remote",
                 "remote_bucket_name": "private-bucket",
                 "remote_region_name": "auto",
                 "remote_access_key_id_env_var": "AKIAIOSFODNN7EXAMPLE",
-                "remote_secret_access_key_env_var": "OPS_BACKUPS_SECRET_ACCESS_KEY",
-            }
+            },
         )
 
-        assert any("not a literal AWS access key id" in issue for issue in issues)
+        assert any(
+            "must match pattern" in issue and "AKIA" in issue for issue in issues
+        )
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
     def test_configure_backups_interactive_local(self, mock_confirm, mock_prompt):
         mock_confirm.return_value = False
         mock_prompt.side_effect = [
-            "local",
             30,
             "ops",
+            "local",
             ".private/backups",
+            "",
+            "backups/private",
+            "",
+            "",
+            "OPS_ACCESS_KEY_ID",
+            "OPS_SECRET_ACCESS_KEY",
+            "0 2 * * *",
         ]
 
-        config = configure_backups_module(non_interactive=False)
+        config = MODULE_CONFIGURATOR_REGISTRY["backups"].configure(
+            non_interactive=False
+        )
 
         assert config["target_mode"] == "local"
         assert config["retention_days"] == 30
@@ -1594,20 +1606,22 @@ class TestBackupsModuleConfig:
     ):
         mock_confirm.return_value = True
         mock_prompt.side_effect = [
-            "private_remote",
             14,
             "db",
+            "private_remote",
             ".quickscale/backups",
-            "0 3 * * *",
             "private-bucket",
             "ops/backups",
             "https://account.r2.example.com",
             "auto",
             "OPS_BACKUPS_ACCESS_KEY_ID",
             "OPS_BACKUPS_SECRET_ACCESS_KEY",
+            "0 3 * * *",
         ]
 
-        config = configure_backups_module(non_interactive=False)
+        config = MODULE_CONFIGURATOR_REGISTRY["backups"].configure(
+            non_interactive=False
+        )
 
         assert config["target_mode"] == "private_remote"
         assert config["remote_bucket_name"] == "private-bucket"
@@ -1632,8 +1646,8 @@ class TestBackupsModuleConfig:
                     "remote_prefix": "ops/backups",
                     "remote_endpoint_url": "https://account.r2.example.com",
                     "remote_region_name": "auto",
-                    "remote_access_key_id_env_var": DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-                    "remote_secret_access_key_env_var": DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+                    "remote_access_key_id_env_var": "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID",
+                    "remote_secret_access_key_env_var": "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY",
                     "automation_enabled": True,
                     "schedule": "0 2 * * *",
                 }
@@ -1644,13 +1658,11 @@ class TestBackupsModuleConfig:
 
         assert settings["QUICKSCALE_BACKUPS_TARGET_MODE"] == "private_remote"
         assert settings["QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME"] == "private-bucket"
-        assert (
-            settings["QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR"]
-            == DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+        assert settings["QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR"] == (
+            "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
         )
-        assert (
-            settings["QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR"]
-            == DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
+        assert settings["QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR"] == (
+            "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
         )
         assert "QUICKSCALE_STORAGE_PUBLIC_BASE_URL" not in settings
         assert "MEDIA_URL" not in settings
