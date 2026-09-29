@@ -157,7 +157,7 @@ class TestConcreteListingAdmin:
 
 @pytest.mark.django_db
 class TestListingAdminTenantScopedQueryset:
-    """SA14.3: verify listing admin querysets scope to org context via TenantModelAdmin."""
+    """Verify listing admin querysets scope to org context via TenantModelAdmin."""
 
     def test_abstract_listing_admin_fail_closed_without_org(self):
         """AbstractListingAdmin.get_queryset returns empty when no org context."""

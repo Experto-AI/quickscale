@@ -6,7 +6,7 @@ These tests verify that ``FORCE ROW LEVEL SECURITY`` on the Listing table
 correctly enforces org isolation at the DB layer when
 ``app.current_org_id`` is set / unset.
 
-SA11.4 — Restricted-role anonymous-read listings smoke test that proves
+Restricted-role anonymous-read listings smoke test that proves
 the full Django request path (middleware, view, template) returns
 published System-org content under the NOBYPASSRLS runtime role.
 
@@ -34,7 +34,7 @@ _LISTINGS_TABLES = ("quickscale_listings_listing",)
 
 
 def _ensure_rls_test_role() -> None:
-    """Assert the pre-provisioned RLS test role exists (SA59.3).
+    """Assert the pre-provisioned RLS test role exists.
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises
@@ -207,11 +207,11 @@ class TestListingsRlsBoundaryRestrictedRole:
 
 
 # ---------------------------------------------------------------------------
-# SA11.4 — Restricted-role anonymous-read listings smoke test
+# Restricted-role anonymous-read listings smoke test
 # ---------------------------------------------------------------------------
 # Proves the full Django request path (middleware, view, template, DB)
 # returns published System-org listing content under the NOBYPASSRLS runtime
-# role.  Without the SA11.4 migration of listings views to
+# role. Without the migration of listings views to
 # ``ListingsPublicReadMixin`` (→ ``PublicSystemOrgReadMixin``), the GUC
 # is never primed and every RLS-gated query returns zero rows — turning
 # this test red.
@@ -278,7 +278,7 @@ def _ensure_anon_listings_rls_test_role() -> None:
 
 @pytest.mark.django_db(transaction=True)
 class TestListingsRlsAnonymousReadUnderRestrictedRole:
-    """Anonymous listings reads under the NOBYPASSRLS runtime role (SA11.4).
+    """Anonymous listings reads under the NOBYPASSRLS runtime role.
 
     Proves that the full Django request pipeline returns published
     System-org listing content when running under a restricted PostgreSQL
@@ -314,7 +314,7 @@ class TestListingsRlsAnonymousReadUnderRestrictedRole:
         _ensure_anon_listings_rls_test_role()
 
         # Prime the org context so FORCE RLS allows the INSERT under the
-        # NOBYPASSRLS restricted role (SA59.3).
+        # NOBYPASSRLS restricted role.
         from quickscale_modules_orgs.current_org import set_current_org_id
 
         set_current_org_id(system_org.id)
@@ -366,7 +366,7 @@ class TestListingsRlsAnonymousReadUnderRestrictedRole:
         _ensure_anon_listings_rls_test_role()
 
         # Prime the org context so FORCE RLS allows the INSERT under the
-        # NOBYPASSRLS restricted role (SA59.3).
+        # NOBYPASSRLS restricted role.
         from quickscale_modules_orgs.current_org import set_current_org_id
 
         set_current_org_id(system_org.id)
