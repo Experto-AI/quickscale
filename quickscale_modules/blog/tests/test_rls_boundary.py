@@ -6,7 +6,7 @@ These tests verify that ``FORCE ROW LEVEL SECURITY`` on Blog tables
 correctly enforces org isolation at the DB layer when
 ``app.current_org_id`` is set / unset.
 
-SA11.2 — Restricted-role anonymous-read blog smoke test that proves
+Restricted-role anonymous-read blog smoke test that proves
 the full Django request path (middleware, view, template) returns
 published System-org content under the NOBYPASSRLS runtime role.
 
@@ -38,7 +38,7 @@ _BLOG_TABLES = (
 
 
 def _ensure_rls_test_role() -> None:
-    """Assert the pre-provisioned RLS test role exists (SA59.3).
+    """Assert the pre-provisioned RLS test role exists.
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises
@@ -250,11 +250,11 @@ class TestBlogRlsBoundaryRestrictedRole:
 
 
 # ---------------------------------------------------------------------------
-# SA11.2 — Restricted-role anonymous-read blog smoke test
+# Restricted-role anonymous-read blog smoke test
 # ---------------------------------------------------------------------------
 # Proves the full Django request path (middleware, view, template, DB)
 # returns published System-org blog content under the NOBYPASSRLS runtime
-# role.  Without the SA11.3 migration of blog views to
+# role. Without the migration of blog views to
 # ``PublicSystemOrgReadMixin``, the GUC is never primed and every RLS-gated
 # query returns zero rows — turning this test red.
 #
@@ -326,7 +326,7 @@ def _ensure_anon_blog_rls_test_role() -> None:
 
 @pytest.mark.django_db(transaction=True)
 class TestBlogRlsAnonymousReadUnderRestrictedRole:
-    """Anonymous blog reads under the NOBYPASSRLS runtime role (SA11.2).
+    """Anonymous blog reads under the NOBYPASSRLS runtime role.
 
     Proves that the full Django request pipeline returns published
     System-org blog content when running under a restricted PostgreSQL
@@ -357,7 +357,7 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
         # Create System-org blog data inside a well-scoped org context,
         # then explicitly exit before SET ROLE so the GUC is restored
         # to its default ('' — fail-closed) and cannot leak into the
-        # restricted-role request phase (SA83).
+        # restricted-role request phase.
         with blog_org_scope(system_org):
             Post.objects.create(
                 title="Anonymous Can See This",
@@ -374,7 +374,7 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
             # Wrap the anonymous request in blog_org_scope(None) so the
             # GUC is explicitly cleared before the view pipeline runs,
             # preventing the view's own org_scope(None) from seeing any
-            # stale context left by the data-setup transaction (SA83).
+            # stale context left by the data-setup transaction.
             with blog_org_scope(None):
                 response = client.get(reverse("quickscale_blog:post_list"))
         finally:
@@ -411,7 +411,7 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
         # Create System-org blog data (with category and tags) inside a
         # well-scoped org context, then explicitly exit before SET ROLE
         # so the GUC is restored to its default ('' — fail-closed) and
-        # cannot leak into the restricted-role request phase (SA83).
+        # cannot leak into the restricted-role request phase.
         with blog_org_scope(system_org):
             category = Category.objects.create(
                 name="Feed Category",
@@ -438,8 +438,7 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
             # Wrap the anonymous request in blog_org_scope(None) so the
             # GUC is explicitly cleared before the feed view pipeline
             # runs, preventing the view's own org_scope(None) from
-            # seeing any stale context left by the data-setup phase
-            # (SA83).
+            # seeing any stale context left by the data-setup phase.
             with blog_org_scope(None):
                 response = client.get(reverse("quickscale_blog:feed"))
         finally:

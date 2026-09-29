@@ -1,4 +1,4 @@
-"""SA68 Phase 1 — RLS boot guard unit tests.
+"""RLS boot guard unit tests.
 
 Tests for ``quickscale_modules_orgs.checks.check_rls_role`` — the function
 run by ``QuickscaleOrgsConfig.ready()`` through
@@ -18,17 +18,17 @@ The guard is always active (regardless of ``QUICKSCALE_MODE`` or
 
 The module guard declares its sanctioned command set in
 ``_PRIVILEGED_COMMANDS`` and checks it via ``_is_privileged_command()``
-(formerly ``_is_migrate_command()``, widened in CR-SA68-001).  The generated
+(formerly ``_is_migrate_command()``, widened by a later fix). The generated
 production-settings validator, CLI producer, and launcher independently
 declare the same fail-closed contract.
 
 ``manage.py runserver``, gunicorn, and WSGI startup must all still
 fail closed under BYPASSRLS or SUPERUSER.  The old ``sys.argv``-based
 ``_is_migrate_command`` has been replaced by the explicit env-var
-contract (SA68 Phase 1).
+contract (Phase 1).
 
-SA203 — the privileged-command exemption narrows to ``check_rls_role()``
-alone: the AF9 priming install, the SA70 ``pre_delete`` last-owner backstop,
+The privileged-command exemption narrows to ``check_rls_role()``
+alone: the priming install, the ``pre_delete`` last-owner backstop,
 and the check registration install on every startup path, including a
 privileged command.
 """
@@ -64,7 +64,7 @@ from quickscale_modules_orgs.models import OrganizationMembership
 
 @pytest.fixture(autouse=True)
 def _clear_escape_hatch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Remove the SA2.1 escape hatch before each test.
+    """Remove the escape hatch before each test.
 
     The env var is a shell-level opt-in (set before running
     pytest — no module test code primes it).  This autouse
@@ -131,7 +131,7 @@ def test_rls_guard_passes_for_nobypassrls_role(settings: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Report: SA58 — rolsuper=True + rolbypassrls=False also reports
+# Report: rolsuper=True + rolbypassrls=False also reports
 # ---------------------------------------------------------------------------
 
 
@@ -148,7 +148,7 @@ def test_rls_guard_reports_superuser_role(settings: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Report: solo mode (SA2.1 — always-on, no longer exempt)
+# Report: solo mode (always-on, no longer exempt)
 # ---------------------------------------------------------------------------
 
 
@@ -166,7 +166,7 @@ def test_rls_guard_reports_in_solo_mode(settings: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Report: DEBUG=True (SA2.1 — always-on, no longer exempt)
+# Report: DEBUG=True (always-on, no longer exempt)
 # ---------------------------------------------------------------------------
 
 
@@ -201,7 +201,7 @@ def test_rls_guard_noop_on_sqlite(settings: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA2.1 — Escape hatch: QUICKSCALE_ALLOW_BYPASSRLS=1
+# Escape hatch: QUICKSCALE_ALLOW_BYPASSRLS=1
 # ---------------------------------------------------------------------------
 
 
@@ -271,7 +271,7 @@ def test_rls_guard_escape_hatch_empty_value_does_not_bypass(settings: Any) -> No
 
 
 # ---------------------------------------------------------------------------
-# Report: unset QUICKSCALE_MODE (SA2.1 — always-on, no longer exempt)
+# Report: unset QUICKSCALE_MODE (always-on, no longer exempt)
 # ---------------------------------------------------------------------------
 
 
@@ -309,8 +309,7 @@ def test_is_privileged_command_true_for_migrate() -> None:
 
 
 def test_is_privileged_command_true_for_createcachetable() -> None:
-    """``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable`` is now sanctioned
-    (CR-SA68-001)."""
+    """``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable`` is now sanctioned."""
     with patch.dict(
         os.environ,
         {"QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable"},
@@ -383,8 +382,7 @@ def test_ready_skips_check_for_migration_command(settings: Any) -> None:
 
 def test_ready_skips_check_for_createcachetable_command(settings: Any) -> None:
     """``ready()`` must NOT raise for
-    ``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable`` even with BYPASSRLS
-    (CR-SA68-001)."""
+    ``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable`` even with BYPASSRLS."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
@@ -402,10 +400,10 @@ def test_ready_skips_check_for_createcachetable_command(settings: Any) -> None:
 
 
 def test_ready_installs_backstops_under_privileged_command(settings: Any) -> None:
-    """SA203: a privileged command skips only ``check_rls_role()``.
+    """A privileged command skips only ``check_rls_role()``.
 
-    ``ready()`` must still connect the SA70 last-owner ``pre_delete``
-    backstop and the AF9 ``connection_created`` priming install when
+    ``ready()`` must still connect the last-owner ``pre_delete``
+    backstop and the ``connection_created`` priming install when
     ``QUICKSCALE_PRIVILEGED_COMMAND=migrate``.  The backstop is connected
     sender-free, so it also fires for the historical model class a data
     migration deletes through (covered by

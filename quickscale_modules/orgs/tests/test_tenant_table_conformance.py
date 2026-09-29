@@ -1,4 +1,4 @@
-"""AF1 Phase 1 — Tenant-table isolation conformance gate.
+"""Tenant-table isolation conformance gate.
 
 This module provides the CI conformance gate that enforces Finding 1's
 corrective: ``apps.get_models()`` is walked, every concrete installed
@@ -9,7 +9,7 @@ are checked for each category.
 Negative detection tests verify that the gate catches missing
 ``organization_id`` columns, missing ``TenantManager`` declarations,
 and unaccounted or double-accounted models. Static completed-remediation
-cases retain the AF12 parent seams while the registry requires zero pending
+cases retain the parent seams while the registry requires zero pending
 entries.
 
 PostgreSQL-only RLS assertions are gated behind
@@ -46,8 +46,8 @@ from quickscale_modules_orgs.tenancy import (
 
 QS_APP_PREFIX = "quickscale_"
 
-#: (child_table, constraint_name, parent_table) for every AF12 composite FK.
-_AF12_COMPOSITE_FK_PAIRS: tuple[tuple[str, str, str], ...] = (
+#: (child_table, constraint_name, parent_table) for every composite FK.
+_COMPOSITE_FK_PAIRS: tuple[tuple[str, str, str], ...] = (
     (
         "quickscale_crm_contactnote",
         "quickscale_crm_contactnote_contact_org_fk",
@@ -107,7 +107,7 @@ def _concrete_qs_models() -> list[type[models.Model]]:
 
     Includes auto-created models (e.g. implicit ManyToMany through tables)
     so that the conformance gate covers project-owned intermediate tables
-    as well (CR-SA14-001).
+    as well.
     """
     return [
         m
@@ -171,7 +171,7 @@ def test_registry_covers_all_concrete_qs_models() -> None:
     # Also filter out entries whose app is not installed in this test
     # environment — they belong to modules (auth, backups, notifications,
     # storage) that are registered at design time in TENANT_TABLE_REGISTRY
-    # but not installed in the orgs test suite (SA15.2).
+    # but not installed in the orgs test suite.
     exempt_keys: set[tuple[str, str]] = set()
     for entry in TENANT_TABLE_REGISTRY:
         if entry.model_name in (
@@ -197,7 +197,7 @@ def test_registry_covers_all_concrete_qs_models() -> None:
 
 def test_concrete_qs_models_includes_auto_created_through() -> None:
     """Proof that auto-created ManyToMany through models are now included
-    in the conformance walk (CR-SA14-001).
+    in the conformance walk.
     """
     concrete = _concrete_qs_models()
     through_model_names = {
@@ -331,7 +331,7 @@ def test_enrolled_model_has_all_objects_bypass(entry: Any) -> None:
 def test_enrolled_model_has_base_manager_name(entry: Any) -> None:
     """Every ENROLLED model must have ``base_manager_name = 'all_objects'``.
 
-    AF2 Phase 1 gate: the unfiltered manager must be the Django base
+    Gate: the unfiltered manager must be the Django base
     manager so that ``refresh_from_db()``, forward FK traversal, and
     other internal Django operations bypass tenant scoping.
     """
@@ -354,7 +354,7 @@ def test_enrolled_model_has_base_manager_name(entry: Any) -> None:
 def test_enrolled_model_base_manager_is_unfiltered(entry: Any) -> None:
     """The ``_base_manager`` of every ENROLLED model must be the unfiltered manager.
 
-    AF2 Phase 1 gate: verifies that the resolved base manager is the
+    Gate: verifies that the resolved base manager is the
     ``all_objects`` (super_scope=True) manager, not a scoped manager.
     """
     model = apps.get_model(entry.app_label, entry.model_name)
@@ -407,7 +407,7 @@ def test_excluded_model_lacks_tenant_manager(entry: Any) -> None:
     subclasses.  Test-only models that happen to use TenantModel for
     behaviour testing are also skipped.  Entries from non-installed
     modules (e.g. auth, backups, notifications when not in the test
-    environment) are skipped as well (SA15.2).
+    environment) are skipped as well.
     """
     # Abstract models (TenantModel, AbstractListing, BaseSocialItem)
     # cannot be resolved via apps.get_model() — they are not in the
@@ -444,10 +444,10 @@ def test_excluded_model_lacks_tenant_manager(entry: Any) -> None:
 
 @pytest.mark.parametrize(
     "child_table",
-    tuple(dict.fromkeys(pair[0] for pair in _AF12_COMPOSITE_FK_PAIRS)),
+    tuple(dict.fromkeys(pair[0] for pair in _COMPOSITE_FK_PAIRS)),
 )
 def test_completed_remediation_child_is_enrolled(child_table: str) -> None:
-    """Every remediated AF12 child is enrolled with direct organization ownership."""
+    """Every remediated child is enrolled with direct organization ownership."""
     model = _model_for_db_table(child_table)
     registry_entries = [
         entry
@@ -461,19 +461,19 @@ def test_completed_remediation_child_is_enrolled(child_table: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# COMPLETED REMEDIATION — parent FK must retain the AF12 seam
+# COMPLETED REMEDIATION — parent FK must retain the seam
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "fk_pair",
-    _AF12_COMPOSITE_FK_PAIRS,
+    _COMPOSITE_FK_PAIRS,
     ids=lambda pair: pair[1],
 )
 def test_completed_remediation_parent_fk_matches_seam(
     fk_pair: tuple[str, str, str],
 ) -> None:
-    """Every remediated child retains a Django FK to its AF12 parent."""
+    """Every remediated child retains a Django FK to its parent."""
     child_table, constraint_name, parent_table = fk_pair
     model = _model_for_db_table(child_table)
     parent_model = _model_for_db_table(parent_table)
@@ -577,7 +577,7 @@ except Exception:
 )
 def test_enrolled_model_has_force_rls_policy() -> None:
     """Every marker-enrolled model has the exact rendered RLS contract."""
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
 
     tenant_models = get_tenant_models()
     assert ProjectListing in tenant_models, (
@@ -604,7 +604,7 @@ def test_weakened_rls_predicate_is_rejected_and_restored() -> None:
     """A permissive predicate fails conformance and the exact policy is restored."""
     from django.db import connection
 
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
 
     db_table = ProjectListing._meta.db_table
     quoted_table = connection.ops.quote_name(db_table)
@@ -659,7 +659,7 @@ def test_force_rls_rejects_base_name_that_would_truncate_select_policy() -> None
     """A base name longer than 56 bytes fails before helper-owned DDL."""
     from django.db import connection
 
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
 
     db_table = ProjectListing._meta.db_table
 
@@ -694,7 +694,7 @@ def test_force_rls_catalog_checks_ignore_same_named_table_in_other_schema() -> N
     """A same-named table in another schema cannot satisfy conformance."""
     from django.db import connection
 
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
 
     db_table = ProjectListing._meta.db_table
     shadow_schema = "sa177_policy_shadow"
@@ -791,13 +791,13 @@ def test_force_rls_catalog_checks_ignore_same_named_table_in_other_schema() -> N
 
 
 # ---------------------------------------------------------------------------
-# Composite FK conformance — PostgreSQL only (AF12 Phase 1)
+# Composite FK conformance — PostgreSQL only (Phase 1)
 # ---------------------------------------------------------------------------
 # Enrolled child/detail tables must have a live composite FOREIGN KEY
 # constraint in ``pg_constraint`` enforcing child-parent ``organization_id``
 # equality.  Each constraint references the parent table's
 # ``(id, organization_id)`` unique pair, replacing the old trigger-based
-# equality approach (AF1 Phase 2).
+# equality approach (Phase 2).
 # ---------------------------------------------------------------------------
 
 
@@ -808,14 +808,14 @@ def test_force_rls_catalog_checks_ignore_same_named_table_in_other_schema() -> N
 )
 @pytest.mark.parametrize(
     "fk_pair",
-    _AF12_COMPOSITE_FK_PAIRS,
+    _COMPOSITE_FK_PAIRS,
     ids=lambda p: p[1],
 )
 def test_enrolled_child_table_has_composite_fk(fk_pair: tuple[str, str, str]) -> None:
     """Every enrolled child/detail table must have a composite FK constraint
     in ``pg_constraint``.
 
-    Verifies that a constraint matching the AF12 naming contract exists in
+    Verifies that a constraint matching the naming contract exists in
     ``pg_constraint``, proving the DB-level child-parent ``organization_id``
     equality is enforced through a composite FOREIGN KEY rather than the old
     trigger-based approach.
@@ -848,7 +848,7 @@ def test_enrolled_child_table_has_composite_fk(fk_pair: tuple[str, str, str]) ->
 
 
 # ---------------------------------------------------------------------------
-# Negative parent-organization mutation proof — PostgreSQL only (AF12 Phase 2)
+# Negative parent-organization mutation proof — PostgreSQL only (Phase 2)
 # ---------------------------------------------------------------------------
 # Proves that the composite FK ``quickscale_crm_contactnote_contact_org_fk`` rejects
 # assignments where ``ContactNote.organization_id`` does not match
@@ -992,7 +992,7 @@ def test_registry_entry_model_exists(entry: Any) -> None:
     test runs.  Their existence is verified by ``test_registry_covers_all_concrete_qs_models``
     (stale-entry check) and ``test_excluded_model_lacks_tenant_manager`` instead.
 
-    Entries from non-installed modules are skipped at runtime (SA15.2).
+    Entries from non-installed modules are skipped at runtime.
     """
     try:
         apps.get_app_config(entry.app_label)
@@ -1028,9 +1028,9 @@ def test_abstract_registry_entries_are_abstract() -> None:
 
 
 def test_exactly_zero_pending_remediation_entries() -> None:
-    """There must be zero pending-remediation entries (AF1 Phase 4).
+    """There must be zero pending-remediation entries.
 
-    After AF1 Phase 4, all remaining forms child/detail tables — FormField,
+    After the remediation, all remaining forms child/detail tables — FormField,
     FormSubmission, and FormFieldValue — are promoted to ENROLLED with
     direct organization_id + FORCE-RLS.
     """
@@ -1047,14 +1047,14 @@ def test_exactly_zero_pending_remediation_entries() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Restricted-role helper for the AF11 Phase 4 conformance proof
+# Restricted-role helper for the conformance proof
 # ---------------------------------------------------------------------------
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
 
 
 def _ensure_rls_test_role() -> None:
-    """Assert the pre-provisioned RLS test role exists (SA59.3, SA77).
+    """Assert the pre-provisioned RLS test role exists.
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises
@@ -1062,7 +1062,7 @@ def _ensure_rls_test_role() -> None:
     Grants SELECT on every ENROLLED tenant table so the restricted role
     can verify RLS policy enforcement.
 
-    SA77: converted from ``psycopg2`` direct connection to Django's
+    Converted from ``psycopg2`` direct connection to Django's
     managed ``connection.cursor()`` so the helper works under restricted-role
     (NOBYPASSRLS) environments where a separate psycopg2 connection may
     fail or misbehave.  Best-effort GRANTs are wrapped in savepoints
@@ -1072,7 +1072,7 @@ def _ensure_rls_test_role() -> None:
     from django.db import connection, transaction
 
     with connection.cursor() as cur:
-        # SA59.3: assert the role is pre-provisioned instead of CREATE ROLE.
+        # assert the role is pre-provisioned instead of CREATE ROLE.
         cur.execute(
             "SELECT 1 FROM pg_roles WHERE rolname = %s",
             [_RESTRICTED_ROLE],
@@ -1085,7 +1085,7 @@ def _ensure_rls_test_role() -> None:
             )
         # Best-effort grants: each is wrapped in a savepoint so
         # a permission-denied failure under NOBYPASSRLS does not
-        # abort the outer test transaction (SA77).
+        # abort the outer test transaction.
         try:
             with transaction.atomic():
                 cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
@@ -1106,13 +1106,13 @@ def _ensure_rls_test_role() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AF11 Phase 4 — Restricted-role conformance proof
+# Restricted-role conformance proof
 # ---------------------------------------------------------------------------
 # Seeds one representative row per enrolled policy table, then proves that
 # both RESET app.current_org_id (NULL GUC) and SET app.current_org_id = ''
 # yield zero rows without raising.  PostgreSQL only.
 #
-# This is the AF11 conformance extension: the ``NULLIF`` guard in the
+# This is the conformance extension: the ``NULLIF`` guard in the
 # FORCE-RLS policy template ensures that a pooled connection that has
 # served a ``SET LOCAL`` request and now sits at ``''`` returns zero rows
 # instead of raising ``invalid input syntax for type uuid``.
@@ -1131,7 +1131,7 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
     1. SET app.current_org_id = <org-uuid> → rows exist (proves policy works).
     2. RESET app.current_org_id            → 0 rows (NULL GUC is safe).
     3. SET app.current_org_id = ''          → 0 rows (no ``invalid input
-       syntax for type uuid`` — the AF11 fix).
+       syntax for type uuid`` — the fix).
     """
     import tempfile
 
@@ -1212,7 +1212,7 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
 
     # Seed one representative row per enrolled table.
     # Use org context so FORCE-RLS policies accept the INSERTs under the
-    # restricted role (SA59.1).
+    # restricted role.
     set_current_org_id(org.pk)
     # -- CRM --
     CrmTag.all_objects.create(organization=org, name="AF11 CRM Tag")
@@ -1399,14 +1399,14 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AF9 Phase 3 — Restricted-role cursor proof for Listings (PR-AF9-005)
+# Restricted-role cursor proof for Listings
 # ---------------------------------------------------------------------------
-# Proves that the AF9 execute wrapper primes ``app.current_org_id`` from
+# Proves that the execute wrapper primes ``app.current_org_id`` from
 # the ContextVar under a restricted PostgreSQL role, using the Listing
 # table as the probe.
 #
-# Unlike the AF11 proof (which uses manual ``SET app.current_org_id``),
-# this proof calls ``set_current_org_id(org.pk)`` and lets the AF9
+# Unlike the proof (which uses manual ``SET app.current_org_id``),
+# this proof calls ``set_current_org_id(org.pk)`` and lets the
 # execute wrapper derive the GUC from the ContextVar.  Under ``SET ROLE``,
 # a SELECT on the RLS-protected Listing table must return the expected row.
 #
@@ -1416,8 +1416,8 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
 # because the listings conftest has a pre-existing database-setup issue
 # that blocks test-connection creation.
 #
-# Soundness guard (CR-AF9-001): seeding uses ``all_objects`` with no
-# ContextVar so the AF9 wrapper does NOT pre-prime the GUC.  A pre-SELECT
+# Soundness guard: seeding uses ``all_objects`` with no
+# ContextVar so the wrapper does NOT pre-prime the GUC. A pre-SELECT
 # guard assertion verifies the GUC is at session default before the
 # restricted probe establishes the proof window.
 #
@@ -1451,16 +1451,16 @@ def _close_connection() -> Generator[None, None, None]:
     reason="Restricted-role cursor proof requires PostgreSQL.",
 )
 def test_af9_listings_restricted_role_cursor_proof() -> None:
-    """PR-AF9-005: The AF9 execute wrapper primes ``app.current_org_id``
+    """The execute wrapper primes ``app.current_org_id``
     from the ContextVar under a restricted PostgreSQL role for the
     Listings module.
 
-    Soundness (CR-AF9-001):
+    Soundness:
     * Uses ``@pytest.mark.django_db(transaction=True)`` so each
       ``cursor.execute()`` is its own short transaction, not a shared
       ambient test transaction.  No statement can consume the GUC
       priming of a later statement in the same proof window.
-    * Seeds data via ``all_objects`` with no ContextVar set, so the AF9
+    * Seeds data via ``all_objects`` with no ContextVar set, so the
       execute wrapper passes through and does NOT pre-prime the GUC.
     * A guard ``SELECT current_setting(...)`` asserts the GUC is at the
       session default before the restricted SELECT establishes the proof
@@ -1485,7 +1485,7 @@ def test_af9_listings_restricted_role_cursor_proof() -> None:
     )
 
     # Pre-seed data with ContextVar active so FORCE-RLS allows the INSERT
-    # under the restricted role.  The AF9 wrapper primes the GUC inside a
+    # under the restricted role. The wrapper primes the GUC inside a
     # short atomic block (autocommit path), so the GUC is transaction-scoped
     # and resets to the session default when the atomic exits — the
     # soundness guard below still sees the session default.
@@ -1517,11 +1517,11 @@ def test_af9_listings_restricted_role_cursor_proof() -> None:
         # Switch to restricted role.
         cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
         try:
-            # Now set the ContextVar — the AF9 wrapper primes the GUC
+            # Now set the ContextVar — the wrapper primes the GUC
             # from this.  No manual ``SET LOCAL`` or ``SET app.current_org_id``.
             set_current_org_id(org.id)
             try:
-                # SELECT triggers the AF9 execute wrapper, which issues
+                # SELECT triggers the execute wrapper, which issues
                 # SET LOCAL from the ContextVar before running the query.
                 # This is the FIRST statement in this restricted-role
                 # window that can establish the GUC.

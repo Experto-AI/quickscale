@@ -141,7 +141,7 @@ class TestSocialIsolation:
         The operator escape hatch provides unfiltered cross-tenant access
         for admin/operator paths.  Under ``NOBYPASSRLS`` the FOR ALL RLS
         policy restricts cross-org reads; ``operator_access`` extends the
-        FOR SELECT sub-policy (SA14.5) so that ``all_objects`` queries
+        FOR SELECT sub-policy so that ``all_objects`` queries
         can see rows from any organization.
         """
         from quickscale_modules_orgs.current_org import operator_access

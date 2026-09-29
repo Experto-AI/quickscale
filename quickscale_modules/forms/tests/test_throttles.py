@@ -72,7 +72,7 @@ def test_form_submit_throttle_uses_configured_rate() -> None:
 
 
 def test_form_submit_throttle_missing_rate_raises_improperly_configured() -> None:
-    """SA17.4 — missing FORMS_RATE_LIMIT must raise at request time."""
+    """Missing FORMS_RATE_LIMIT must raise at request time."""
     throttle = FormSubmitThrottle()
 
     with override_settings(FORMS_RATE_LIMIT=None):
@@ -120,7 +120,7 @@ def test_form_submit_throttle_builds_cache_key_from_default_scope() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA21.2-001 — short/invalid XFF chain parity with get_client_ip
+# short/invalid XFF chain parity with get_client_ip
 # ---------------------------------------------------------------------------
 # Regression: FormSubmitThrottle.get_ident() now delegates to the shared
 # get_client_ip() helper.  Short XFF chains (shorter than
@@ -183,7 +183,7 @@ def test_form_submit_throttle_sufficient_xff_chain_resolves_from_xff() -> None:
 )
 def test_form_submit_throttle_use_xff_false_ignores_xff() -> None:
     """When USE_X_FORWARDED_FOR is False, the throttle ident must be
-    REMOTE_ADDR even when X-Forwarded-For is present (CR-SA21.2-001)."""
+    REMOTE_ADDR even when X-Forwarded-For is present."""
     throttle = FormSubmitThrottle()
     request = _make_request(remote_addr="10.0.0.99", xff="198.51.100.1")
     view = SimpleNamespace(throttle_scope="form_submit")

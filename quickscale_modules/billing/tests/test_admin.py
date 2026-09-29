@@ -162,7 +162,7 @@ class TestPlanAdmin:
 
 @pytest.mark.django_db
 class TestBillingAdminTenantScopedQueryset:
-    """CR-SA14.3-002: verify billing TenantModelAdmin querysets scope to org context."""
+    """Verify billing TenantModelAdmin querysets scope to org context."""
 
     def test_credit_balance_admin_fail_closed_without_org(self):
         """CreditBalanceAdmin.get_queryset returns empty when no org context."""

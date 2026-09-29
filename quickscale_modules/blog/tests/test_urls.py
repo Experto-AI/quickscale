@@ -65,7 +65,7 @@ class TestBlogUrls:
     def test_feed_url(self, settings, configured_value):
         """Test RSS feed URL resolves correctly when enabled.
 
-        Note: ``BLOG_ENABLE_RSS`` is now required (SA17.5) — the
+        Note: ``BLOG_ENABLE_RSS`` is now required — the
         ``None``/unset case is no longer valid and is covered by
         startup validation in ``AppConfig.ready()``.
         """

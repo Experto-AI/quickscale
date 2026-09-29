@@ -459,7 +459,7 @@ class TestPerOrgHelpers:
 
     def test_get_queryset_reads_validated_org_id(self, rf: RequestFactory) -> None:
         """SocialLinkAdmin.get_queryset reads ``request._validated_org_id``
-        set by ``_org_db_context`` (CR-SA13.3-001)."""
+        set by ``_org_db_context``."""
         from quickscale_modules_social.admin import SocialLinkAdmin
 
         site = AdminSite()
@@ -904,19 +904,19 @@ class TestSocialAdminEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA13.3-001 — regression: unknown-org fail-closed with AF9 context re-priming
+# regression: unknown-org fail-closed with context re-priming
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestSocialAdminNonexistentOrg:
     """Regression: admin stays fail-closed for a syntactically valid but
-    nonexistent org UUID (CR-SA13.3-001).
+    nonexistent org UUID.
 
     Before the fix, ``get_queryset`` re-resolved the raw session UUID via
     ``_resolve_active_org_id`` and called ``set_current_org_id(org_id)``
     with the bogus UUID, undoing the ``org_scope(None)`` fail-closed state
-    that ``_org_db_context`` had already established.  Under AF9 the
+    that ``_org_db_context`` had already established. Under the
     priming wrapper would then propagate the bogus UUID as the DB-level
     ``app.current_org_id``, undoing the DB-level fail-closed state.
 
@@ -1022,7 +1022,7 @@ class TestSocialAdminNonexistentOrg:
         ContextVar remains ``None`` during view processing (no re-priming).
 
         This is the direct proof that ``get_queryset`` no longer calls
-        ``set_current_org_id`` with the bogus UUID (CR-SA13.3-001).
+        ``set_current_org_id`` with the bogus UUID.
         """
         from quickscale_modules_social.admin import (
             SocialLinkAdmin,
@@ -1050,7 +1050,7 @@ class TestSocialAdminNonexistentOrg:
 
 
 # ---------------------------------------------------------------------------
-# SA64 — VIEW-AS priority tests
+# VIEW-AS priority tests
 # ---------------------------------------------------------------------------
 # Under TenantModelAdmin, _resolve_active_org_id follows a three-priority
 # order: VIEW-AS debug session > explicit selection > session persistence.
@@ -1104,7 +1104,7 @@ class TestSocialAdminViewAsPriority:
 
 
 # ---------------------------------------------------------------------------
-# SA64 — VIEW-AS org-field locking via TenantModelAdmin.get_form
+# VIEW-AS org-field locking via TenantModelAdmin.get_form
 # ---------------------------------------------------------------------------
 # Under VIEW-AS, TenantModelAdmin.get_form disables the organization field
 # so add/change POST submissions cannot write a different org than the
@@ -1277,7 +1277,7 @@ _SOCIAL_TABLES = (
 
 
 def _ensure_rls_test_role() -> None:
-    """Assert the pre-provisioned RLS test role exists (SA59.3).
+    """Assert the pre-provisioned RLS test role exists.
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises

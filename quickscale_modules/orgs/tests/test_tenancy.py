@@ -1,4 +1,4 @@
-"""AF1 Phase 2 — Tenancy helper infrastructure tests.
+"""Tenancy helper infrastructure tests.
 
 Tests for the shared FORCE-RLS and child-parent equality helpers added
 to ``quickscale_modules_orgs.tenancy`` in Phase 2.
@@ -111,7 +111,7 @@ class TestForceRlsSqlTemplates:
         """The guarded cast must appear exactly three times: once in FOR ALL
         USING, once in FOR ALL WITH CHECK, and once in FOR SELECT USING.
 
-        CR-SA14.5-001 split the operator_access OR clause into a separate
+        Split the operator_access OR clause into a separate
         FOR SELECT sub-policy, adding a third guarded-cast occurrence."""
         guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
         assert _FORCE_RLS_FORWARD_SQL.count(guarded_cast) == 3
@@ -133,7 +133,7 @@ class TestForceRlsSqlTemplates:
         )
 
     def test_forward_sql_contains_operator_access_predicate(self) -> None:
-        """The SA14.5 operator_access OR clause is present in the template."""
+        """The operator_access OR clause is present in the template."""
         assert (
             "NULLIF(current_setting('app.operator_access', true), '') = 'on'"
             in _FORCE_RLS_FORWARD_SQL
@@ -141,7 +141,7 @@ class TestForceRlsSqlTemplates:
 
     def test_forward_sql_operator_access_in_for_select_only(self) -> None:
         """The operator_access predicate appears in the FOR SELECT sub-policy's
-        USING clause only, never in FOR ALL or WITH CHECK (CR-SA14.5-001).
+        USING clause only, never in FOR ALL or WITH CHECK.
 
         operator_access must grant cross-tenant **read** visibility only,
         not write or delete visibility."""
@@ -166,7 +166,7 @@ class TestForceRlsSqlTemplates:
         """The FOR ALL policy's WITH CHECK clause still uses only the
         current_org_id guard (no operator_access bypass).
 
-        CR-SA14.5-001: operator_access appears only in the FOR SELECT
+        Operator_access appears only in the FOR SELECT
         sub-policy, never in any WITH CHECK clause."""
         guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
         assert (
@@ -235,7 +235,7 @@ class TestApplyForceRlsPostgres:
     def test_forward_sql_coherent(self, pg_schema_editor: MagicMock) -> None:
         """Smoke: the formatted SQL is syntactically plausible.
 
-        CR-SA14.5-001 split the template into two policies:
+        Split the template into two policies:
         - FOR ALL (standard write path, no operator_access bypass)
         - FOR SELECT (read-only operator elevation)
         """
@@ -474,7 +474,7 @@ class TestEnableDisableChildParentEquality:
 
 
 # =========================================================================
-# Composite FK — SQL template content (AF12 Phase 1)
+# Composite FK — SQL template content (Phase 1)
 # =========================================================================
 
 
@@ -614,7 +614,7 @@ class TestAddRemoveParentUniqueConstraint:
         assert self.CONSTRAINT in sql
 
     def test_formats_crm_contact_constraint(self) -> None:
-        """The constraint name follows the AF12 naming contract."""
+        """The constraint name follows the naming contract."""
         schema_editor = MagicMock()
         schema_editor.connection.vendor = "postgresql"
 
@@ -785,7 +785,7 @@ def test_apply_force_rls_twice_preserves_policies_and_force_flag() -> None:
 
 
 # ---------------------------------------------------------------------------
-# FormFieldValue.field delete-path proof (AF12 Phase 2)
+# FormFieldValue.field delete-path proof (Phase 2)
 # ---------------------------------------------------------------------------
 # Proves that the DB-level composite FK ``quickscale_forms_formfieldvalue_field_org_fk``
 # with ``ON DELETE SET NULL (field_id)`` correctly sets only ``field_id``
@@ -985,7 +985,7 @@ class TestCompositeFkFormFieldValueDeletePath:
 
 
 # =========================================================================
-# Composite FK — naming constants (AF12 Phase 1)
+# Composite FK — naming constants (Phase 1)
 # =========================================================================
 
 

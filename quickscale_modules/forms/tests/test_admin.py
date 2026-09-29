@@ -203,7 +203,7 @@ class TestAdminCsvExportCoverage:
 
 @pytest.mark.django_db
 class TestFormAdminTenantScopedQueryset:
-    """SA14.3: verify FormAdmin queryset scopes to org context via TenantModelAdmin."""
+    """Verify FormAdmin queryset scopes to org context via TenantModelAdmin."""
 
     def test_form_admin_fail_closed_without_org(self):
         """FormAdmin.get_queryset returns empty when no org context."""
@@ -265,7 +265,7 @@ class TestFormAdminTenantScopedQueryset:
 
 
 # ---------------------------------------------------------------------------
-# AF1-CR-002: Operator/admin child-data reads are handled by
+# Operator/admin child-data reads are handled by
 # TenantModelAdmin view wrappers (org context priming), no custom all_objects
 # bypass needed — inline formsets use the default BaseInlineFormSet.
 # ---------------------------------------------------------------------------
@@ -273,7 +273,7 @@ class TestFormAdminTenantScopedQueryset:
 
 @pytest.mark.django_db
 class TestAdminSubmissionAPIPrefetch:
-    """AF1-CR-002: Admin submission API views must use all_objects-backed Prefetch
+    """Admin submission API views must use all_objects-backed Prefetch
     for child FormFieldValue reads."""
 
     def test_admin_submission_list_prefetch_uses_all_objects(
@@ -325,13 +325,13 @@ class TestAdminSubmissionAPIPrefetch:
 
 
 # ---------------------------------------------------------------------------
-# AF1-CR-003: FormAdmin organization read-only on change
+# FormAdmin organization read-only on change
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestAdminSubmissionExportViewAllObjects:
-    """AF1-CR-002: AdminSubmissionExportView must use all_objects for child field values."""
+    """AdminSubmissionExportView must use all_objects for child field values."""
 
     def test_export_uses_all_objects_for_field_values(
         self, superuser_client, form, submission, field_value
@@ -359,7 +359,7 @@ class TestAdminSubmissionExportViewAllObjects:
         """Export includes field values from submissions across orgs (all_objects path).
 
         Each submission now belongs to the same org as its parent form, respecting
-        the AF12 composite FK invariant.  The cross-org proof uses separate forms
+        the composite FK invariant. The cross-org proof uses separate forms
         per org.
         """
         from quickscale_modules_forms.models import (
@@ -451,7 +451,7 @@ class TestAdminSubmissionExportViewAllObjects:
     def test_csv_export_column_order_matches_form_field_order(
         self, superuser_client, form, form_field, email_field, optional_field
     ):
-        """CSV column order follows form field definition order (AF1-CR-REV-001)."""
+        """CSV column order follows form field definition order."""
         from quickscale_modules_orgs.current_org import org_scope
 
         with org_scope(form.organization):
@@ -529,7 +529,7 @@ class TestAdminSubmissionExportViewAllObjects:
     ):
         """Operator path preserves column order when no current org context is set.
 
-        Regression for AF1-CR-REV-001: a staff user without org affinity must
+        Regression: a staff user without org affinity must
         still see form-designer field ordering.  If the view used the default
         (RLS-scoped) ``form.fields`` manager, a missing org context would
         return ``.none()`` and columns would collapse to only extras — or be
@@ -618,7 +618,7 @@ class TestAdminSubmissionExportViewAllObjects:
     ):
         """Operator path preserves column order when current org does not match form org.
 
-        Regression for AF1-CR-REV-001: a staff user whose active org differs
+        Regression: a staff user whose active org differs
         from the form's owning org must still see the correct column order.
         If the view used the default (RLS-scoped) ``form.fields`` manager, a
         mismatched org would filter fields to the wrong tenant — returning
@@ -644,12 +644,12 @@ class TestAdminSubmissionExportViewAllObjects:
             OrganizationMembership,
         )
 
-        # SA85 Phase 4: This test verifies the export column-order invariant
+        # This test verifies the export column-order invariant
         # via the superuser operator path (cross-tenant read).  The superuser
         # uses ``all_objects`` regardless of org context, so the mismatched
         # session org is irrelevant for the data path — but the test proves
-        # ``FormField.all_objects`` is used for column ordering (the invariant
-        # from AF1-CR-REV-001).  Set up the session for a complete audit trail.
+        # ``FormField.all_objects`` is used for column ordering. Set up the
+        # session for a complete audit trail.
         OrganizationMembership.objects.create(
             user=superuser,
             organization=org_b,
@@ -748,7 +748,7 @@ class TestAdminSubmissionExportViewAllObjects:
 
 @pytest.mark.django_db
 class TestFormAdminOrganizationReadonly:
-    """AF1-CR-003: FormAdmin must prevent ad-hoc org changes that desync descendants."""
+    """FormAdmin must prevent ad-hoc org changes that desync descendants."""
 
     def test_organization_readonly_on_change(self, form):
         """FormAdmin.get_readonly_fields must include organization when obj exists."""
@@ -777,7 +777,7 @@ class TestFormAdminOrganizationReadonly:
 
 @pytest.mark.django_db
 class TestFormSubmissionAdminOrganizationReadonly:
-    """CR-SA14.3-001: FormSubmissionAdmin must lock organization on change forms."""
+    """FormSubmissionAdmin must lock organization on change forms."""
 
     def test_organization_readonly_on_change(self, submission):
         """FormSubmissionAdmin.get_readonly_fields must include organization when obj exists."""

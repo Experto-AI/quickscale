@@ -1,4 +1,4 @@
-"""Initial schema and FORCE-RLS policy for the SA208 project fixture."""
+"""Initial schema and FORCE-RLS policy for the provider-ID fixture."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from django.db import migrations, models
 
 from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
 
-PROVIDER_RECORD_TABLE = "sa208_project_app_projectproviderrecord"
-PROVIDER_RECORD_RLS_POLICY = "sa208_provider_record_org_isolation"
+PROVIDER_RECORD_TABLE = "provider_id_app_projectproviderrecord"
+PROVIDER_RECORD_RLS_POLICY = "provider_id_provider_record_org_isolation"
 _PROVIDER_RECORD_RLS_TARGETS = ((PROVIDER_RECORD_TABLE, PROVIDER_RECORD_RLS_POLICY),)
 
 

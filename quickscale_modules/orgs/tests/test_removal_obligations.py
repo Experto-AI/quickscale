@@ -1,6 +1,6 @@
 """App-declared removal obligations are enforced at the boundaries.
 
-The project app fixture (``tests.sa208_project_app``) declares its own
+The project app fixture (``tests.provider_id_app``) declares its own
 obligation from its ``AppConfig`` and monkeypatches its model classification
 away for the declared field, so the refusal can only come from the declared
 provider field the shared guard reads — not from bespoke boundary code.
@@ -36,7 +36,7 @@ DECLARED_PROJECT_OBLIGATION = OrganizationRemovalObligation(
     account_delete_skip_reason="Account deletion retains the organization's records.",
     external_provider_fields=(
         ExternalProviderField(
-            "sa208_project_app.projectproviderrecord",
+            "provider_id_app.projectproviderrecord",
             "local_ref_id",
         ),
     ),
@@ -60,14 +60,14 @@ DECLARED_ORGANIZATION_OBLIGATION = OrganizationRemovalObligation(
 @pytest.fixture
 def declared_project_obligation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Declare a provider field that no model classification covers."""
-    from tests.sa208_project_app.models import ProjectProviderRecord
+    from tests.provider_id_app.models import ProjectProviderRecord
 
     monkeypatch.setattr(
         ProjectProviderRecord,
         "provider_id_classification",
         {"mls_id": "provider-backed"},
     )
-    config = apps.get_app_config("sa208_project_app")
+    config = apps.get_app_config("provider_id_app")
     monkeypatch.setattr(
         config,
         "removal_obligations",
@@ -95,7 +95,7 @@ def test_shared_guard_reads_the_declared_provider_field(
     """The refusal entry point lists the declared, non-boundary-guarded field."""
     assert declared_refusal_fields(RemovalBoundary.PURGE) == (
         ExternalProviderField(
-            "sa208_project_app.projectproviderrecord",
+            "provider_id_app.projectproviderrecord",
             "local_ref_id",
         ),
     )
@@ -106,7 +106,7 @@ def test_purge_refuses_a_populated_declared_provider_field(
     declared_project_obligation: None,
 ) -> None:
     """A declared project provider value refuses dry-run and purge alike."""
-    from tests.sa208_project_app.models import ProjectProviderRecord
+    from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
         name="SA213 Declared Provider Refusal",
@@ -125,7 +125,7 @@ def test_purge_refuses_a_populated_declared_provider_field(
 
     expected = (
         r"provider-backed values: "
-        r"sa208_project_app\.projectproviderrecord\.local_ref_id"
+        r"provider_id_app\.projectproviderrecord\.local_ref_id"
     )
     with pytest.raises(CommandError, match=expected):
         call_command(
@@ -155,7 +155,7 @@ def test_purge_deletes_rows_with_an_empty_declared_provider_field(
     declared_project_obligation: None,
 ) -> None:
     """An empty declared provider field does not refuse the purge."""
-    from tests.sa208_project_app.models import ProjectProviderRecord
+    from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
         name="SA213 Declared Provider Empty",
@@ -188,7 +188,7 @@ def test_purge_deletes_rows_with_an_empty_declared_provider_field(
 @pytest.fixture
 def declared_organization_obligation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Declare an unguarded provider field on the organization row itself."""
-    config = apps.get_app_config("sa208_project_app")
+    config = apps.get_app_config("provider_id_app")
     monkeypatch.setattr(
         config,
         "removal_obligations",
@@ -287,7 +287,7 @@ UNSCOPED_DECLARATION = OrganizationRemovalObligation(
 @pytest.fixture
 def declared_unscoped_obligation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Declare a provider field on a model no organization scope can reach."""
-    config = apps.get_app_config("sa208_project_app")
+    config = apps.get_app_config("provider_id_app")
     monkeypatch.setattr(
         config,
         "removal_obligations",
@@ -331,7 +331,7 @@ DECLARED_CACHE_OBLIGATION = OrganizationRemovalObligation(
 def declared_cache_hook(monkeypatch: pytest.MonkeyPatch) -> list:
     """Declare a cache obligation and provide its executor hook."""
     calls: list = []
-    config = apps.get_app_config("sa208_project_app")
+    config = apps.get_app_config("provider_id_app")
     monkeypatch.setattr(
         config,
         "removal_obligations",
@@ -384,7 +384,7 @@ DECLARED_UNKNOWN_LABEL_OBLIGATION = OrganizationRemovalObligation(
 @pytest.fixture
 def declared_unknown_label_obligation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Declare a provider field on a misspelled model label."""
-    config = apps.get_app_config("sa208_project_app")
+    config = apps.get_app_config("provider_id_app")
     monkeypatch.setattr(
         config,
         "removal_obligations",
@@ -500,7 +500,7 @@ UNDISCHARGEABLE_DECLARATION = OrganizationRemovalObligation(
 @pytest.fixture
 def declared_undischargeable_obligation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Declare a purge action the purge boundary has no stage for."""
-    config = apps.get_app_config("sa208_project_app")
+    config = apps.get_app_config("provider_id_app")
     monkeypatch.setattr(
         config,
         "removal_obligations",

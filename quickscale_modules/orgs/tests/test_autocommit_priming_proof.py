@@ -1,8 +1,8 @@
 """Autocommit request-path GUC priming proof.
 
-Proves that the AF9 execute wrapper primes ``app.current_org_id`` from
+Proves that the execute wrapper primes ``app.current_org_id`` from
 the ContextVar during an autocommit request-path cursor.execute(), and
-that the GUC does NOT persist after the request completes (AF4 regression
+that the GUC does NOT persist after the request completes (regression
 guard — no request-long transaction).
 
 Structure
@@ -43,7 +43,7 @@ from tests.urls import af9_guc_probe_view
 
 @pytest.mark.django_db(transaction=True)
 class TestAf9AutocommitRequestPathProof:
-    """PR-AF9-001: Autocommit GUC priming proof through a request path."""
+    """Autocommit GUC priming proof through a request path."""
 
     @pytest.fixture(autouse=True)
     def _setup(self, settings) -> None:
@@ -77,7 +77,7 @@ class TestAf9AutocommitRequestPathProof:
 
     def test_guc_is_primed_during_request(self) -> None:
         """The autocommit request-path receives the primed GUC inside
-        the view's ``cursor.execute()`` — proving the AF9 execute wrapper
+        the view's ``cursor.execute()`` — proving the execute wrapper
         issues ``SET LOCAL`` from the ContextVar in the same short
         ``transaction.atomic()`` block as the view's DB statement."""
         body = self._send_autocommit_request()
