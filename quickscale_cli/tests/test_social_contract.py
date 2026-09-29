@@ -11,18 +11,16 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
-    SOCIAL_LAYOUT_VARIANTS,
     SOCIAL_LINK_TREE_PATH,
 )
-from quickscale_core.contracts.resolvers import (
-    default_social_module_options,
-    normalize_social_provider_allowlist,
-    validate_social_module_options,
-)
+from quickscale_core.contracts.resolvers import resolve_manifest_module_options
+from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.manifest.social_manifest import (
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
+    SOCIAL_LAYOUT_VARIANTS,
     SOCIAL_PAYLOAD_STATUSES,
+    SOCIAL_PROVIDER_CATALOG,
     SOCIAL_STATUS_DISABLED,
     SOCIAL_STATUS_EMPTY,
     SOCIAL_STATUS_ENABLED,
@@ -92,9 +90,18 @@ def test_normalize_social_provider_aliases(
 
 def test_normalize_social_provider_allowlist_preserves_order_and_deduplicates() -> None:
     """Allowlist normalization should preserve first-seen canonical order."""
-    normalized = normalize_social_provider_allowlist(
-        [" YouTube ", "twitter", "youtube", "Tik Tok", "twitter"]
-    )
+    normalized = resolve_manifest_module_options(
+        "social",
+        {
+            "provider_allowlist": [
+                " YouTube ",
+                "twitter",
+                "youtube",
+                "Tik Tok",
+                "twitter",
+            ]
+        },
+    )["provider_allowlist"]
 
     assert normalized == ["youtube", "x", "tiktok"]
 
@@ -161,45 +168,53 @@ def test_social_provider_supports_embeds_only_for_approved_set() -> None:
 
 def test_validate_social_module_options_accepts_defaults() -> None:
     """The default Phase A contract should validate cleanly."""
-    assert validate_social_module_options(default_social_module_options()) == []
+    assert validate_module_options(_load_social_manifest(), {}) == []
 
 
 def test_validate_social_module_options_rejects_disabled_public_surfaces() -> None:
     """The contract must keep at least one public surface enabled."""
-    issues = validate_social_module_options(
+    issues = validate_module_options(
+        _load_social_manifest(),
         {
             "link_tree_enabled": False,
             "embeds_enabled": False,
-        }
+        },
     )
 
-    assert (
-        "modules.social must leave link_tree_enabled or embeds_enabled enabled"
-        in issues
-    )
+    assert any("is required" in issue for issue in issues)
 
 
 def test_validate_social_module_options_requires_embed_provider_when_embeds_enabled() -> (
     None
 ):
     """Embed support requires an allowlisted provider that actually supports embeds."""
-    issues = validate_social_module_options(
+    issues = validate_module_options(
+        _load_social_manifest(),
         {
             "provider_allowlist": ["facebook", "instagram", "linkedin", "x"],
             "embeds_enabled": True,
-        }
+        },
     )
 
-    assert (
-        "modules.social.provider_allowlist must include tiktok or youtube when embeds_enabled is true"
-        in issues
-    )
+    assert any("must include one of: tiktok, youtube" in issue for issue in issues)
+
+
+def test_manifest_embed_intersects_list_matches_embed_capable_providers() -> None:
+    """The manifest's intersects list stays pinned to the embed-capable set."""
+    manifest = _load_social_manifest()
+    intersects = manifest.mutable_options["provider_allowlist"].validation["intersects"]
+    expected = [
+        provider.name
+        for provider in SOCIAL_PROVIDER_CATALOG
+        if provider.supports_embeds
+    ]
+    assert intersects["values"] == expected
 
 
 def test_social_manifest_defaults_match_cli_contract_defaults() -> None:
-    """The social manifest should stay in lockstep with the CLI contract defaults."""
+    """The social manifest should stay in lockstep with the resolved defaults."""
     manifest = _load_social_manifest()
-    defaults = default_social_module_options()
+    defaults = resolve_manifest_module_options("social", {})
 
     assert set(manifest.mutable_options.keys()) == set(defaults.keys())
     assert manifest.mutable_options["provider_allowlist"].default == list(

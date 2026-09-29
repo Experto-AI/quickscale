@@ -6,7 +6,6 @@ import yaml
 from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
-from quickscale_core.contracts.resolvers import default_notifications_module_options
 from quickscale_core.contracts.module_catalog import (
     get_discovered_module_entries,
     get_discovered_module_names,
@@ -112,9 +111,9 @@ docker:
             result = runner.invoke(plan, ["--add"], input="auth\n")
 
             assert result.exit_code != 0
-            assert "Notifications module configuration is incomplete" in result.output
-            assert "sender_email cannot use the default placeholder" in result.output
-            assert "planner refuses to rewrite quickscale.yml" in result.output
+            # The manifest-declared check fails the config at load time.
+            assert "QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL" in result.output
+            assert "must not be one of: noreply@example.com" in result.output
             with open("quickscale.yml") as f:
                 assert f.read() == original_content
 
@@ -363,7 +362,7 @@ docker:
             assert "analytics:" in content
 
     def test_plan_add_auto_adds_default_notifications_when_orgs_selected(self) -> None:
-        """Selecting orgs should also materialize default notifications config."""
+        """Selecting orgs should also materialize the implied notifications module."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             with open("quickscale.yml", "w") as f:
@@ -389,7 +388,7 @@ docker:
 
             modules = (config or {}).get("modules") or {}
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert modules["notifications"] in (None, {})
 
     def test_plan_add_auto_adds_orgs_and_notifications_when_billing_selected(
         self,
@@ -421,7 +420,7 @@ docker:
             modules = (config or {}).get("modules") or {}
             assert "billing" in modules
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert modules["notifications"] in (None, {})
 
     def test_plan_add_auto_adds_orgs_and_notifications_when_crm_selected(
         self,
@@ -453,7 +452,7 @@ docker:
             modules = (config or {}).get("modules") or {}
             assert "crm" in modules
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert modules["notifications"] in (None, {})
 
     def test_plan_add_refuses_legacy_storage_custom_domain(self) -> None:
         """A retired storage key is refused by name instead of silently dropped."""
@@ -578,7 +577,7 @@ class TestPlanNewProjectConfigureModules:
 
             modules = (config or {}).get("modules") or {}
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert modules["notifications"] in (None, {})
 
     def test_plan_new_project_auto_adds_orgs_and_notifications_for_crm(self) -> None:
         """New-project planning should materialize orgs+notifications when crm selected."""
@@ -597,7 +596,7 @@ class TestPlanNewProjectConfigureModules:
             modules = (config or {}).get("modules") or {}
             assert "crm" in modules
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert modules["notifications"] in (None, {})
 
     def test_plan_new_project_configure_modules_configures_implied_notifications(
         self,
@@ -628,22 +627,23 @@ class TestPlanNewProjectConfigureModules:
             # - \n: billing currency
             # Orgs configurator (1 prompt, implied):
             # - \n: orgs mode default (solo)
-            # Notifications configurator (implied, 9 prompts):
-            # - y: enable notifications runtime
+            # Notifications configurator (implied, 10 prompts, manifest order):
+            # - \n: enable notifications runtime (default yes)
             # - \n: sender name default
             # - \n: sender email default
             # - \n: reply-to default
-            # - n: skip live Resend delivery
-            # - n: skip webhook signing
-            # - \n: allowed tags default
+            # - \n: resend domain default (blank: console-safe)
+            # - \n: resend api key env var default
+            # - \n: webhook secret env var default
             # - \n: default tags default
+            # - \n: allowed tags default
             # - \n: webhook ttl default
             # - y: confirm save
             result = runner.invoke(
                 plan,
                 ["myapp", "--configure-modules"],
                 input=(
-                    "\n\nauth,billing\nn\ny\n\n\n\n\n\n\n\n\n\ny\n\n\n\nn\nn\n\n\n\ny\n"
+                    "\n\nauth,billing\nn\ny\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ny\n"
                 ),
             )
 

@@ -4,8 +4,8 @@ These tests exercise the runtime engine that executes derivation rules:
 computing defaults, normalizing overrides, validating resolved values,
 and projecting derived Django settings.
 
-The resolver is additive to the existing manifest loader and does not
-replace or migrate the legacy contract-file path.
+The resolver is the path every module's declared options flow through; the
+per-module contract-file logic it replaced is gone.
 """
 
 from __future__ import annotations
@@ -1856,3 +1856,144 @@ class TestPublicExports:
     def test_resolve_module_config_importable(self) -> None:
         """resolve_module_config is exported from quickscale_core.manifest."""
         assert resolve_module_config is resolve_module_config_direct
+
+
+# ---------------------------------------------------------------------------
+# slug and list normalization kinds (Module Conventions rule 12)
+# ---------------------------------------------------------------------------
+
+
+def _string_option(name: str, setting: str) -> ConfigOption:
+    return ConfigOption(
+        name=name,
+        option_type="string",
+        default="",
+        django_setting=setting,
+        description="A demo option",
+        mutability="mutable",
+    )
+
+
+def _list_option(name: str, setting: str) -> ConfigOption:
+    return ConfigOption(
+        name=name,
+        option_type="list",
+        default=[],
+        django_setting=setting,
+        description="A demo option",
+        mutability="mutable",
+    )
+
+
+class TestSlugNormalization:
+    """The slug kind lowercases, maps separators, drops chars, and truncates."""
+
+    def test_slug_applies_replace_then_the_canonical_form(self) -> None:
+        manifest = _make_manifest(mutable_options={"tag": _string_option("tag", "TAG")})
+        schema = _make_schema(
+            option_derivations={
+                "tag": OptionDerivation(
+                    option_key="tag",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="tag",
+                            target_key="tag",
+                            rule_type="slug",
+                            max_length=5,
+                            replace={"&": "and"},
+                        )
+                    ],
+                )
+            }
+        )
+        result = resolve_module_config(manifest, schema, overrides={"tag": "A&B C__D"})
+        assert result.resolved["tag"] == "aandb"
+
+    def test_slug_collapses_and_trims_dashes(self) -> None:
+        manifest = _make_manifest(mutable_options={"tag": _string_option("tag", "TAG")})
+        schema = _make_schema(
+            option_derivations={
+                "tag": OptionDerivation(
+                    option_key="tag",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="tag", target_key="tag", rule_type="slug"
+                        )
+                    ],
+                )
+            }
+        )
+        result = resolve_module_config(manifest, schema, overrides={"tag": "  _Ops  "})
+        assert result.resolved["tag"] == "ops"
+
+
+class TestListNormalization:
+    """The list kind splits or wraps, runs item rules, drops empties, dedupes."""
+
+    @staticmethod
+    def _schema() -> ModuleDerivationSchema:
+        return _make_schema(
+            option_derivations={
+                "providers": OptionDerivation(
+                    option_key="providers",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="list",
+                            item_rules=[
+                                NormalizationRule(
+                                    source_key="providers",
+                                    target_key="providers",
+                                    rule_type="slug",
+                                    replace={"&": "and", "/": "-"},
+                                ),
+                                NormalizationRule(
+                                    source_key="providers",
+                                    target_key="providers",
+                                    rule_type="choice_map",
+                                    mapping={
+                                        "fb": "facebook",
+                                        "facebook": "facebook",
+                                        "twitter": "x",
+                                        "x-twitter": "x",
+                                        "x": "x",
+                                        "youtube": "youtube",
+                                    },
+                                ),
+                            ],
+                        )
+                    ],
+                )
+            }
+        )
+
+    def test_list_splits_applies_item_rules_and_dedupes_in_order(self) -> None:
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        result = resolve_module_config(
+            manifest,
+            self._schema(),
+            overrides={"providers": " YouTube, FB ,x/twitter,fb"},
+        )
+        assert result.resolved["providers"] == ["youtube", "facebook", "x"]
+
+    def test_list_wraps_a_scalar_and_drops_empty_items(self) -> None:
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        result = resolve_module_config(
+            manifest, self._schema(), overrides={"providers": "a,, b"}
+        )
+        assert result.resolved["providers"] == ["a", "b"]
+
+        scalar = resolve_module_config(
+            manifest, self._schema(), overrides={"providers": 123}
+        )
+        assert scalar.resolved["providers"] == ["123"]
+
+        empty = resolve_module_config(
+            manifest, self._schema(), overrides={"providers": None}
+        )
+        assert empty.resolved["providers"] == []

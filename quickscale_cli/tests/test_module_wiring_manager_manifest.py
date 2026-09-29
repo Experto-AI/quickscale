@@ -1088,6 +1088,7 @@ class TestRegenerateManagedWiringPriorBasePath:
                 "social": {
                     "provider_allowlist": ["x"],
                     "layout_variant": "list",
+                    "embeds_enabled": False,
                 }
             },
         )

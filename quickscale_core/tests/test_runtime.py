@@ -107,14 +107,13 @@ class TestRuntimeAllExport:
             "ModuleWiringSpec",
             "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-            "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
             "ResolverResult",
             "assemble_wiring_spec",
             "load_social_manifest",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",
-            "resolve_social_module_options",
+            "resolve_manifest_module_options",
             "social_provider_supports_embeds",
         }
         assert social_symbols.issubset(runtime.__all__), (
@@ -149,7 +148,6 @@ class TestRuntimeAllExport:
             "ModuleWiringSpec",
             "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-            "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
             "PersistedBackupArtifact",
             "PersistedBackupPolicy",
             "PersistedBackupSnapshot",
@@ -199,7 +197,6 @@ class TestRuntimeAllExport:
             "load_default_policy",
             "load_module_manifest",
             "load_social_manifest",
-            "notifications_runtime_email_backend",
             "prune_expired_backups",
             "refresh_snapshot",
             "record_backup_snapshot_verification",
@@ -211,8 +208,7 @@ class TestRuntimeAllExport:
             "render_social_managed_views_module",
             "report_backup_snapshot",
             "resolve_admin_uploaded_restore_artifact",
-            "resolve_social_module_options",
-            "resolve_notifications_module_options",
+            "resolve_manifest_module_options",
             "restore_admin_uploaded_backup",
             "restore_backup_artifact",
             "restore_backup_source",
@@ -290,9 +286,9 @@ class TestRuntimeSymbolTypes:
         for name in (
             "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-            "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
-            "notifications_runtime_email_backend",
-            "resolve_notifications_module_options",
+            "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+            "resolve_manifest_module_options",
         ):
             assert hasattr(runtime, name), f"runtime.{name} is not accessible"
 
@@ -315,8 +311,8 @@ class TestRuntimeSymbolTypes:
     def test_social_provider_supports_embeds_is_function(self) -> None:
         assert isfunction(runtime.social_provider_supports_embeds)
 
-    def test_resolve_social_module_options_is_callable(self) -> None:
-        assert callable(runtime.resolve_social_module_options)
+    def test_resolve_manifest_module_options_is_callable(self) -> None:
+        assert callable(runtime.resolve_manifest_module_options)
 
     def test_manifest_adapter_contracts_are_callable(self) -> None:
         for name in (
@@ -411,7 +407,7 @@ class TestRuntimeImportable:
             "render_social_managed_urls_module",
             "render_social_managed_views_module",
             "resolve_admin_uploaded_restore_artifact",
-            "resolve_social_module_options",
+            "resolve_manifest_module_options",
             "save_default_policy",
             "set_rollback_pin",
             "social_provider_supports_embeds",

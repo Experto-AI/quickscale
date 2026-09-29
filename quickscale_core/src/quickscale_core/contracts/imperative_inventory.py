@@ -105,27 +105,13 @@ FORMS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 # callers of get_manifest_inventory("listings") continue to succeed.
 LISTINGS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
-NOTIFICATIONS_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Shared helpers — relocated to quickscale_core.contracts.module_options
-    ("DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR", SHARED_HELPER, "T2.3"),
-    ("DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR", SHARED_HELPER, "T2.3"),
-    ("NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION", SHARED_HELPER, "T2.3"),
-    ("NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION", SHARED_HELPER, "T2.3"),
-    ("normalize_notifications_module_options", SHARED_HELPER, "T2.3"),
-    ("validate_notifications_module_options", SHARED_HELPER, "T2.3"),
-    ("validate_notifications_env_var_reference", SHARED_HELPER, "T2.3"),
-    # Declarative targets
-    ("DEFAULT_NOTIFICATIONS_ALLOWED_TAGS", DECLARATIVE_TARGET, "T2.4"),
-    ("NOTIFICATIONS_DEFAULT_TAGS", DECLARATIVE_TARGET, "T2.4"),
-    ("NOTIFICATIONS_LIVE_EMAIL_BACKEND", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_notifications_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_notifications_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_notifications_module_options", ADAPTER_ONLY, "T2.5"),
-    ("notifications_runtime_email_backend", ADAPTER_ONLY, "T2.5"),
-    ("notifications_production_targeted", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: Notifications imperative inventory cleared — the manifest owns its
+# option defaults, normalization, validation, and its retired raw-secret keys
+# (`retired_options`), its CLI configurator reads the manifest, and its runtime
+# backend predicates live in the module adapter.  The notifications key remains
+# in MANIFEST_INVENTORY with an empty list so that callers of
+# get_manifest_inventory("notifications") continue to succeed.
+NOTIFICATIONS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 # SA217: Orgs imperative inventory cleared — the manifest owns its option
 # defaults, normalization, and validation, and its CLI configurator reads the
@@ -133,46 +119,12 @@ NOTIFICATIONS_MANIFEST: Final[list[tuple[str, str, str]]] = [
 # that callers of get_manifest_inventory("orgs") continue to succeed.
 ORGS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
-SOCIAL_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Declarative targets
-    ("SOCIAL_LINK_TREE_PATH", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_EMBEDS_PATH", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_INTEGRATION_BASE_PATH", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_INTEGRATION_EMBEDS_PATH", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_LAYOUT_VARIANTS", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_STATUS_ENABLED", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_STATUS_EMPTY", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_STATUS_DISABLED", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_STATUS_ERROR", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_PAYLOAD_STATUSES", DECLARATIVE_TARGET, "T2.4"),
-    ("SOCIAL_PAYLOAD_HTTP_STATUS", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_SOCIAL_PROVIDER_ALLOWLIST", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_social_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    ("load_social_manifest", MANIFEST_RESOLVER, "T2.4"),
-    # Shared helpers — relocated to quickscale_core.contracts.module_options
-    ("normalize_social_module_options", SHARED_HELPER, "T2.3"),
-    ("validate_social_module_options", SHARED_HELPER, "T2.3"),
-    # Adapter-only
-    ("default_social_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_social_module_options", ADAPTER_ONLY, "T2.5"),
-    # Social domain logic — tightly coupled, stays in CLI until deletion
-    ("SocialProviderMetadata", ADAPTER_ONLY, "T2.5"),
-    ("ResolvedSocialTarget", ADAPTER_ONLY, "T2.5"),
-    ("get_social_provider_metadata", ADAPTER_ONLY, "T2.5"),
-    ("social_provider_supports_embeds", ADAPTER_ONLY, "T2.5"),
-    ("social_payload_status_code", ADAPTER_ONLY, "T2.5"),
-    ("normalize_social_provider_allowlist", ADAPTER_ONLY, "T2.5"),
-    ("normalize_social_provider", ADAPTER_ONLY, "T2.5"),
-    ("detect_social_provider", ADAPTER_ONLY, "T2.5"),
-    ("resolve_social_target", ADAPTER_ONLY, "T2.5"),
-    ("normalize_social_url", ADAPTER_ONLY, "T2.5"),
-    # Renderers — tightly coupled to adapter
-    ("render_social_managed_init_module", ADAPTER_ONLY, "T2.5"),
-    ("render_social_managed_urls_module", ADAPTER_ONLY, "T2.5"),
-    ("render_social_managed_views_module", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: Social imperative inventory cleared — the manifest owns its option
+# defaults, normalization (provider alias expansion and dedupe), and
+# validation, and its CLI configurator reads the manifest.  The social key
+# remains in MANIFEST_INVENTORY with an empty list so that callers of
+# get_manifest_inventory("social") continue to succeed.
+SOCIAL_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 # SA217: Storage imperative inventory cleared — the manifest owns its option
 # defaults, normalization, validation, its retired raw-credential keys

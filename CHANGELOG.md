@@ -187,6 +187,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     manifest-driven configurator and shared engine, and its retired raw `access_key_id` and
     `secret_access_key` keys are refused by the manifest's `retired_options` block with their
     env-var replacements named.
+  - **Notifications and social configuration is manifest-owned.** Their option defaults, CLI
+    prompts, validation, and tag/provider normalization come from `module.yml` through the same
+    manifest-driven configurator and shared engine, and notifications' runtime email-backend
+    selection lives in its module adapter. Manifests can now declare `not_empty`, per-item
+    `choices`, `subset_of`, `excludes`, `intersects`, multi-entry conditions, and `slug`/`list`
+    normalization.
   - **The `teams` placeholder is removed.** `quickscale_modules/teams/` no longer exists,
     `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`, and the
     planning note lives at `docs/planning/teams.md`.

@@ -18,7 +18,7 @@ from quickscale_cli.commands.apply_command import (
     _validate_required_module_versions,
     apply,
 )
-from quickscale_core.contracts.resolvers import default_notifications_module_options
+from quickscale_core.contracts.resolvers import resolve_manifest_module_options
 from quickscale_core.manifest.schema import ModuleManifest
 from quickscale_core.schema.config_schema import (
     ConfigValidationError,
@@ -250,7 +250,7 @@ modules:
             modules={
                 "orgs": SimpleNamespace(options={}),
                 "notifications": SimpleNamespace(
-                    options=default_notifications_module_options()
+                    options=resolve_manifest_module_options("notifications", {})
                 ),
             }
         )
@@ -613,7 +613,7 @@ docker:
                 "crm": SimpleNamespace(options={}),
                 "orgs": SimpleNamespace(options={}),
                 "notifications": SimpleNamespace(
-                    options=default_notifications_module_options()
+                    options=resolve_manifest_module_options("notifications", {})
                 ),
             }
         )

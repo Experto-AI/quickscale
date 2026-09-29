@@ -6,19 +6,33 @@ in ``module.yml``.  ``quickscale plan`` and ``quickscale apply`` run it from
 the generated-project startup check consumes the same block once ``apply``
 writes the settings schema.
 
-Recognised keys, as Module Conventions rule 12 records them:
+The complete vocabulary, as Module Conventions rule 12 records it:
 
-* single-value checks — ``choices`` (a closed set), ``min`` / ``max`` (numeric
-  bounds), ``pattern`` (a full-match regular expression);
-* cross-option checks — ``required_when`` (a single-entry mapping of another
-  option to the value, or list of values, that makes this option required) and
-  ``any_of`` (a list of sibling option names, at least one of which must be
-  set).  ``any_of`` on an option with ``required_when`` applies only while the
-  condition holds; alone it applies always.
+* single-value checks — ``choices`` (a closed set; on a ``list`` option each
+  item is checked), ``min`` / ``max`` (numeric bounds), ``pattern`` (a
+  full-match regular expression), and ``not_empty: true`` (a string not blank;
+  a list or mapping not empty);
+* cross-option checks — ``required_when`` (this option must be set while the
+  condition holds), ``any_of`` (at least one sibling is set; a boolean ``false``
+  counts as unset inside ``any_of`` only, so a boolean option that must be true
+  participates correctly while ``option_value_is_empty`` itself is unchanged),
+  ``subset_of`` (every item of this list is in the other list), ``excludes``
+  (the value must equal none of the listed values, compared case-insensitively;
+  optional ``when``), and ``intersects`` (the list must contain at least one of
+  the listed values; optional ``when``);
+* the condition grammar shared by ``required_when``, ``excludes.when``, and
+  ``intersects.when``: a mapping whose entries must all hold; each entry's
+  value is a literal, a list of literals, or ``{not_empty: true}``.  Existing
+  single-entry literal/list conditions keep their meaning.
+
+A check this vocabulary cannot express needs a decision edit before it is
+added.  A runtime predicate that decides module behavior from resolved options
+— notifications' production-targeted / live-delivery email-backend selection —
+is adapter code, not validation, and is never declared here.
 
 Messages name the setting a module author or operator must fix — the option's
 ``django_setting`` with its ``quickscale.yml`` path — including the setting
-named in a ``required_when`` condition.
+named in a condition.
 
 The manifest's top-level ``retired_options`` section names keys that no longer
 exist together with the message that must refuse them; a supplied retired key
@@ -42,9 +56,14 @@ from typing import Any
 from quickscale_core.manifest.resolver import normalize_module_option_values
 from quickscale_core.manifest.schema import ConfigOption, ModuleManifest
 
-#: Keys accepted inside a per-option ``validation`` block.
-SINGLE_OPTION_VALIDATION_KEYS = frozenset({"choices", "min", "max", "pattern"})
-CROSS_OPTION_VALIDATION_KEYS = frozenset({"required_when", "any_of"})
+#: Single-value keys accepted inside a per-option ``validation`` block.
+SINGLE_OPTION_VALIDATION_KEYS = frozenset(
+    {"choices", "min", "max", "pattern", "not_empty"}
+)
+#: Cross-option keys accepted inside a per-option ``validation`` block.
+CROSS_OPTION_VALIDATION_KEYS = frozenset(
+    {"required_when", "any_of", "subset_of", "excludes", "intersects"}
+)
 ALLOWED_VALIDATION_KEYS = SINGLE_OPTION_VALIDATION_KEYS | CROSS_OPTION_VALIDATION_KEYS
 
 #: Option types the loader accepts, with their message labels.
@@ -134,32 +153,63 @@ def _render_condition_value(value: Any) -> str:
     return repr(value)
 
 
+def _is_not_empty_condition(expected: Any) -> bool:
+    """Return whether an entry value is the ``{not_empty: true}`` condition."""
+    return isinstance(expected, Mapping) and expected.get("not_empty") is True
+
+
+def _condition_entry_matches(expected: Any, actual: Any) -> bool:
+    """Return whether one condition entry holds against *actual*.
+
+    An entry value is a literal (equality), a list of literals (any of them),
+    or ``{not_empty: true}`` (the option counts as set).
+    """
+    if _is_not_empty_condition(expected):
+        return not option_value_is_empty(actual)
+    if isinstance(expected, list):
+        return any(actual == allowed for allowed in expected)
+    return bool(actual == expected)
+
+
 def _condition_matches(
-    condition: Mapping[str, Any], resolved: Mapping[str, Any]
+    condition: Mapping[str, Any] | None, resolved: Mapping[str, Any]
 ) -> bool:
-    """Return whether a single-pair ``required_when`` condition holds."""
+    """Return whether every entry of a condition mapping holds.
+
+    An entry over an option the resolved mapping does not carry never holds.
+    """
+    if not isinstance(condition, Mapping) or not condition:
+        return False
     for condition_option, expected in condition.items():
         if not isinstance(condition_option, str) or condition_option not in resolved:
             return False
-        actual = resolved[condition_option]
-        if isinstance(expected, list):
-            return any(actual == allowed for allowed in expected)
-        return bool(actual == expected)
-    return False
+        if not _condition_entry_matches(expected, resolved[condition_option]):
+            return False
+    return True
+
+
+def _render_condition_entry(
+    manifest: ModuleManifest, condition_option: str, expected: Any
+) -> str:
+    """Render one condition entry for a failure message."""
+    label = _option_label(manifest, condition_option)
+    if _is_not_empty_condition(expected):
+        return f"{label} is set"
+    if isinstance(expected, list):
+        values = ", ".join(str(value) for value in expected)
+        return f"{label} is one of: {values}"
+    return f"{label} is {_render_condition_value(expected)}"
 
 
 def _render_condition(
     manifest: ModuleManifest,
     condition: Mapping[str, Any],
 ) -> str:
-    """Render a single-pair ``required_when`` condition for a failure message."""
-    for condition_option, expected in condition.items():
-        label = _option_label(manifest, str(condition_option))
-        if isinstance(expected, list):
-            values = ", ".join(str(value) for value in expected)
-            return f"{label} is one of: {values}"
-        return f"{label} is {_render_condition_value(expected)}"
-    return "the condition is met"
+    """Render a condition mapping for a failure message."""
+    return " and ".join(
+        _render_condition_entry(manifest, str(condition_option), expected)
+        for condition_option, expected in condition.items()
+    )
 
 
 def _numeric(value: Any) -> int | float | None:
@@ -182,9 +232,19 @@ def _single_value_issues(
     issues: list[str] = []
 
     choices = validation.get("choices")
-    if isinstance(choices, list) and value not in choices:
-        allowed = ", ".join(str(choice) for choice in choices)
-        issues.append(f"{label} must be one of: {allowed}")
+    if isinstance(choices, list) and choices:
+        if option.option_type == "list" and isinstance(value, list):
+            unsupported = [item for item in value if item not in choices]
+            if unsupported:
+                allowed = ", ".join(str(choice) for choice in choices)
+                rendered = ", ".join(sorted(str(item) for item in unsupported))
+                issues.append(
+                    f"{label} contains unsupported values: {rendered} "
+                    f"(allowed: {allowed})"
+                )
+        elif value not in choices:
+            allowed = ", ".join(str(choice) for choice in choices)
+            issues.append(f"{label} must be one of: {allowed}")
 
     minimum = validation.get("min")
     maximum = validation.get("max")
@@ -203,7 +263,23 @@ def _single_value_issues(
         if not re.fullmatch(pattern, str(value)):
             issues.append(f"{label} must match pattern {pattern}")
 
+    if validation.get("not_empty") is True and option_value_is_empty(value):
+        issues.append(f"{label} cannot be empty")
+
     return issues
+
+
+def _any_of_counts_as_unset(value: Any) -> bool:
+    """Return whether *value* counts as unset inside ``any_of``.
+
+    A boolean ``false`` is unset here only: ``any_of`` is how a manifest says
+    "at least one of these boolean surfaces must be true", while
+    ``option_value_is_empty`` keeps its meaning everywhere else so
+    ``required_when`` on a boolean option still reads the option as present.
+    """
+    if value is False:
+        return True
+    return option_value_is_empty(value)
 
 
 def _cross_option_issues(
@@ -211,33 +287,89 @@ def _cross_option_issues(
     option: ConfigOption,
     resolved: Mapping[str, Any],
 ) -> list[str]:
-    """Check ``required_when`` / ``any_of`` constraints of *option*."""
+    """Check every cross-option constraint of *option*."""
     validation = option.validation or {}
+    label = setting_display_name(manifest.name, option)
+    issues: list[str] = []
+
     required_when = validation.get("required_when")
-    condition: Mapping[str, Any] | None = None
-    if isinstance(required_when, Mapping):
-        if not _condition_matches(required_when, resolved):
-            return []
-        condition = required_when
+    required_when_condition = (
+        required_when if isinstance(required_when, Mapping) else None
+    )
+    condition_met = required_when_condition is not None and _condition_matches(
+        required_when_condition, resolved
+    )
+    has_required_when = required_when_condition is not None
 
     any_of = validation.get("any_of")
-    if isinstance(any_of, list) and any_of:
+    if has_required_when and not condition_met:
+        # The option is not required, and a declared ``any_of`` is gated off
+        # while the condition is unmet.
+        pass
+    elif isinstance(any_of, list) and any_of:
         siblings = [option.name]
         siblings.extend(str(name) for name in any_of if str(name) != option.name)
-        if all(option_value_is_empty(resolved.get(name)) for name in siblings):
+        if all(_any_of_counts_as_unset(resolved.get(name)) for name in siblings):
             labels = ", ".join(_option_label(manifest, name) for name in siblings)
             suffix = ""
-            if condition is not None:
-                suffix = f" when {_render_condition(manifest, condition)}"
-            return [f"one of {labels} is required{suffix}"]
-        return []
+            if condition_met and required_when_condition is not None:
+                suffix = f" when {_render_condition(manifest, required_when_condition)}"
+            issues.append(f"one of {labels} is required{suffix}")
+    elif (
+        condition_met
+        and required_when_condition is not None
+        and option_value_is_empty(resolved.get(option.name))
+    ):
+        rendered = _render_condition(manifest, required_when_condition)
+        issues.append(f"{label} is required when {rendered}")
 
-    if condition is not None and option_value_is_empty(resolved.get(option.name)):
-        label = setting_display_name(manifest.name, option)
-        rendered = _render_condition(manifest, condition)
-        return [f"{label} is required when {rendered}"]
+    subset_of = validation.get("subset_of")
+    if isinstance(subset_of, str) and subset_of:
+        value = resolved.get(option.name)
+        superset = resolved.get(subset_of)
+        superset_values = superset if isinstance(superset, (list, tuple, set)) else []
+        if isinstance(value, (list, tuple, set)):
+            missing = [item for item in value if item not in superset_values]
+            if missing:
+                other_label = _option_label(manifest, subset_of)
+                issues.append(f"{label} must be a subset of {other_label}")
 
-    return []
+    excludes = validation.get("excludes")
+    if isinstance(excludes, Mapping):
+        when = excludes.get("when")
+        when_condition = when if isinstance(when, Mapping) else None
+        if when_condition is None or _condition_matches(when_condition, resolved):
+            forbidden = excludes.get("values", [])
+            value = str(resolved.get(option.name))
+            if any(
+                value.casefold() == str(candidate).casefold() for candidate in forbidden
+            ):
+                rendered = ", ".join(str(candidate) for candidate in forbidden)
+                suffix = (
+                    f" when {_render_condition(manifest, when_condition)}"
+                    if when_condition is not None
+                    else ""
+                )
+                issues.append(f"{label} must not be one of: {rendered}{suffix}")
+
+    intersects = validation.get("intersects")
+    if isinstance(intersects, Mapping):
+        when = intersects.get("when")
+        when_condition = when if isinstance(when, Mapping) else None
+        if when_condition is None or _condition_matches(when_condition, resolved):
+            expected_values = intersects.get("values", [])
+            value = resolved.get(option.name)
+            items = value if isinstance(value, (list, tuple, set)) else []
+            if not any(item in expected_values for item in items):
+                rendered = ", ".join(str(candidate) for candidate in expected_values)
+                suffix = (
+                    f" when {_render_condition(manifest, when_condition)}"
+                    if when_condition is not None
+                    else ""
+                )
+                issues.append(f"{label} must include one of: {rendered}{suffix}")
+
+    return issues
 
 
 def collect_option_validation_issues(

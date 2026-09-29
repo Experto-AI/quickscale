@@ -390,8 +390,9 @@ derivation section keeps normalisation, those computed settings, and wiring.
   through `yaml.safe_load` without custom codecs
 - ✅ `ModuleDerivationSchema` is a **companion** to `ModuleManifest` — it does not
   extend, subclass, or alter `ModuleManifest` or `ConfigOption`
-- ✅ Runtime derivation execution is currently active for analytics and listings;
-  completing the migration across the remaining modules is separate work
+- ✅ Runtime derivation execution runs through the manifest engine for every module; the
+  per-module option code is gone, and a module's adapter contributes only what the declarative
+  resolver cannot express
 - ❌ No new imperative `normalize_*` / `validate_*` contract logic, and no
   hand-written CLI contract files — an imperative-freeze guardrail enforces this
 
@@ -717,28 +718,48 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
   §[Module Manifest Architecture](#module-manifest-architecture) already requires.
 - ✅ The manifest is the only place option values are checked (rule 3). Each option carries its
   checks in its own `validation` block (the authoring form §[Module Derivation
-  Schema](#module-derivation-schema) records) — `choices`, `min` / `max`, or `pattern` — parsed into the
-  `ValidationRule` kinds `choices`, `range`, and `pattern`. `plan`, `apply`, and the startup check read that block; the
-  `derivation.validation_rules` list is removed (listings is its only user).
+  Schema](#module-derivation-schema) records). `plan`, `apply`, and the startup check read that block;
+  the `derivation.validation_rules` list is removed (listings is its only user).
+- ✅ **This is the complete validation vocabulary** — these single-value and cross-option keys, and
+  no others. A check it cannot express needs a decision edit before it is added.
+  - Single-value: `choices` (a closed set; on a `list` option it checks each item), `min` / `max`
+    (numeric bounds), `pattern` (a full-match regular expression), and `not_empty: true` (a string
+    not blank; a list or mapping not empty).
+  - Cross-option: `required_when` (the option must be set when the condition holds),
+    `any_of: [<option>, …]` (at least one listed sibling is set — backups' `endpoint_url` or
+    `region_name`; a boolean `false` counts as unset inside `any_of` only, so a boolean option that
+    must be true participates correctly, while `option_value_is_empty` itself is unchanged and
+    `required_when` keeps its boolean meaning), `subset_of: <option>` (every item of this list is
+    in the other list — notifications' `default_tags` inside `allowed_tags`),
+    `excludes: {values: [...], when: <condition>}` (the value must equal none of the listed values,
+    compared case-insensitively; `when` optional — notifications' placeholder sender), and
+    `intersects: {values: [...], when: <condition>}` (the list must contain at least one of the
+    listed values; `when` optional — social's embed-capable providers).
+  - Condition grammar, shared by `required_when`, `excludes.when`, and `intersects.when`: a mapping
+    whose entries must **all** hold; each entry's value is a literal, a list of literals (the
+    condition holds on any of them), or `{not_empty: true}` (the option is set). Existing
+    single-entry literal/list conditions keep their meaning.
 - ✅ Every option whose type admits invalid values has a check: `<THING>_PER_PAGE` a range from 1,
   `_RETENTION_DAYS` from 0, or from 1 where the module offers no keep-forever (backups),
   `_TTL_SECONDS` from 1; `_RATE_LIMIT` the pattern
   `^\d+/(second|minute|hour|day)$`; a closed set of strings its `choices`. Booleans and free text
   are exempt.
-- ✅ A check that spans options uses one of two declarative keys in the same block, and no others:
-  `required_when: {<option>: <value or list>}` (the option must be set when another has that
-  value — backups' `private_remote` mode needs its bucket and credential env-var names, storage's
-  `s3` / `r2` backends need theirs, `automation_enabled` needs `schedule`) and
-  `any_of: [<option>, …]` (at least one is set — backups' `endpoint_url` or `region_name`), two new
-  `ValidationRule` kinds. The
-  schema `apply` writes carries them, so `plan`, `apply`, and the startup check run the same checks.
-  A check neither key can express needs a decision edit before it is added.
+- ✅ Declarative normalization kinds are `identity`, `strip`, `lowercase`, `url`, `choice_map`,
+  `coerce_int`, `coerce_bool`, `slug`, and `list`. `slug` lowercases, maps `_` and whitespace to
+  `-`, drops characters outside `[a-z0-9-]`, collapses repeated dashes, trims leading/trailing
+  dashes, and takes an optional `max_length` and an optional `replace` mapping applied first.
+  `list` comma-splits a string or wraps a scalar, applies its nested `item_rules` to each item,
+  drops empties, and dedupes preserving order; a provider alias table is a `choice_map` item rule.
 - ✅ A mutable option's `django_setting` is its only projection when the setting equals the option
   value; `derivation.option_derivations.<option>.derived_settings` is only for a setting computed
   from several options or transformed, and never repeats a setting name or a default. The
   option's `default` is the manifest's only default (rule 3).
 - ✅ `config` always has `mutable` and `immutable` (`{}` when empty); `dependencies` is always
   present (`[]` when empty). Top-level key order is not a rule.
+- ✅ A runtime predicate that decides module behavior from resolved options — notifications'
+  production-targeted / live-delivery checks that select the runtime email backend — is adapter
+  code in the module's `adapter.py`, not an option validation rule: it constrains no supplied
+  value, so the option-validation engine never runs it.
 - ❌ Option checks, defaults, or legacy option names written for a named module in core or the CLI
   (today `quickscale_core.contracts.resolvers`, `contracts.module_options`,
   `schema.config_schema`, and the CLI's `module_config`); option validation in module code — a
