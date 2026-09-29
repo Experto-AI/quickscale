@@ -16,56 +16,73 @@ config:
       default: "QuickScale"
       django_setting: QUICKSCALE_NOTIFICATIONS_SENDER_NAME
       description: "Display name used for outbound transactional email."
-      validation: {}
+      validation:
+        not_empty: true
 
     sender_email:
       type: string
       default: "noreply@example.com"
       django_setting: QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL
       description: "Authoritative sender email address used for outbound transactional email. The default placeholder must be overridden before live delivery is configured."
-      validation: {}
+      validation:
+        not_empty: true
+        pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+        excludes:
+          values: ["noreply@example.com"]
+          when:
+            enabled: true
+            resend_domain: {not_empty: true}
 
     reply_to_email:
       type: string
       default: ""
       django_setting: QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL
       description: "Optional reply-to email address for transactional messages."
-      validation: {}
+      validation:
+        pattern: '^(?:[^@\s]+@[^@\s]+\.[^@\s]+)?$'
 
     resend_domain:
       type: string
       default: ""
       django_setting: QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN
       description: "Verified Resend sending domain for operational visibility."
-      validation: {}
+      validation:
+        pattern: '^(?:|(?!\.)(?!.*\.$)[A-Za-z0-9.-]*\.[A-Za-z0-9.-]*)$'
 
     resend_api_key_env_var:
       type: string
       default: "RESEND_API_KEY"
       django_setting: QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
       description: "Environment-variable name containing the Resend API key."
-      validation: {}
+      validation:
+        pattern: '^(?:[A-Z][A-Z0-9_]*)?$'
+        required_when:
+          enabled: true
+          resend_domain: {not_empty: true}
 
     webhook_secret_env_var:
       type: string
       default: "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
       django_setting: QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
       description: "Environment-variable name containing the shared webhook signing secret."
-      validation: {}
+      validation:
+        pattern: '^(?:[A-Z][A-Z0-9_]*)?$'
 
     default_tags:
       type: list
       default: ["quickscale", "transactional"]
       django_setting: QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS
       description: "Provider-visible default tags from the approved non-sensitive allowlist."
-      validation: {}
+      validation:
+        subset_of: allowed_tags
 
     allowed_tags:
       type: list
       default: ["quickscale", "transactional", "notifications", "auth", "forms", "ops", "testing"]
       django_setting: QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS
       description: "Tiny non-sensitive allowlist for provider-visible tags."
-      validation: {}
+      validation:
+        not_empty: true
 
     webhook_ttl_seconds:
       type: integer
@@ -73,6 +90,7 @@ config:
       django_setting: QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS
       description: "Maximum accepted webhook timestamp skew in seconds."
       validation:
+        pattern: '^\d+$'
         min: 1
 
   immutable: {}
@@ -80,6 +98,15 @@ config:
 dependencies:
   - djangorestframework>=3.17.2
   - django-anymail>=15.0,<16.0
+
+# Retired option keys are refused by name with the message declared here.
+retired_options:
+  resend_api_key: >-
+    Legacy config key 'resend_api_key' is no longer supported. Use
+    'resend_api_key_env_var' to reference an environment variable instead.
+  webhook_secret: >-
+    Legacy config key 'webhook_secret' is no longer supported. Use
+    'webhook_secret_env_var' to reference an environment variable instead.
 
 derivation:
   wiring_projections:
@@ -90,3 +117,59 @@ derivation:
           - rest_framework
           - quickscale_modules_notifications
       description: "Notifications Django app labels"
+
+  option_derivations:
+    sender_name:
+      normalization_rules:
+        - source_key: sender_name
+          target_key: sender_name
+          rule_type: strip
+          description: "Strip whitespace from the sender display name"
+    sender_email:
+      normalization_rules:
+        - source_key: sender_email
+          target_key: sender_email
+          rule_type: strip
+          description: "Strip whitespace from the sender email"
+    reply_to_email:
+      normalization_rules:
+        - source_key: reply_to_email
+          target_key: reply_to_email
+          rule_type: strip
+          description: "Strip whitespace from the reply-to email"
+    resend_domain:
+      normalization_rules:
+        - source_key: resend_domain
+          target_key: resend_domain
+          rule_type: strip
+          description: "Strip whitespace from the Resend sending domain"
+    resend_api_key_env_var:
+      normalization_rules:
+        - source_key: resend_api_key_env_var
+          target_key: resend_api_key_env_var
+          rule_type: strip
+          description: "Strip whitespace from the API-key env-var name"
+    webhook_secret_env_var:
+      normalization_rules:
+        - source_key: webhook_secret_env_var
+          target_key: webhook_secret_env_var
+          rule_type: strip
+          description: "Strip whitespace from the webhook-secret env-var name"
+    default_tags:
+      normalization_rules:
+        - source_key: default_tags
+          target_key: default_tags
+          rule_type: list
+          item_rules:
+            - rule_type: slug
+              max_length: 50
+          description: "Split, slug, drop empties, and dedupe provider-visible tags"
+    allowed_tags:
+      normalization_rules:
+        - source_key: allowed_tags
+          target_key: allowed_tags
+          rule_type: list
+          item_rules:
+            - rule_type: slug
+              max_length: 50
+          description: "Split, slug, drop empties, and dedupe provider-visible tags"

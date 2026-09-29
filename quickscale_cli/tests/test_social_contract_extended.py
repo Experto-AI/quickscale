@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from quickscale_core.contracts.module_options import sanitize_module_options
 from quickscale_core.contracts.resolvers import (
-    normalize_social_module_options,
-    normalize_social_provider_allowlist,
-    resolve_social_module_options,
-    validate_social_module_options,
+    load_module_manifest_with_fallback,
+    resolve_manifest_module_options,
 )
+from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.manifest.social_manifest import (
     get_social_provider_metadata,
     normalize_social_provider,
@@ -29,20 +29,23 @@ def test_get_social_provider_metadata_returns_none_for_unknown_token() -> None:
 
 
 def test_normalize_social_provider_allowlist_accepts_scalar_inputs() -> None:
-    assert normalize_social_provider_allowlist("youtube, twitter, youtube") == [
-        "youtube",
-        "x",
-    ]
-    assert normalize_social_provider_allowlist(123) == ["123"]
+    resolved = resolve_manifest_module_options(
+        "social", {"provider_allowlist": "youtube, twitter, youtube"}
+    )
+    assert resolved["provider_allowlist"] == ["youtube", "x"]
+    assert resolve_manifest_module_options("social", {"provider_allowlist": 123})[
+        "provider_allowlist"
+    ] == ["123"]
 
 
-def test_normalize_social_module_options_normalizes_known_fields_only() -> None:
-    normalized = normalize_social_module_options(
+def test_sanitize_normalizes_supplied_fields_only() -> None:
+    normalized = sanitize_module_options(
+        "social",
         {
             "provider_allowlist": [" YouTube ", "twitter"],
             "layout_variant": "  GRID ",
             "links_per_page": 48,
-        }
+        },
     )
 
     assert normalized == {
@@ -52,14 +55,13 @@ def test_normalize_social_module_options_normalizes_known_fields_only() -> None:
     }
 
 
-def test_resolve_social_module_options_reapplies_default_allowlist_normalization() -> (
-    None
-):
-    resolved = resolve_social_module_options(
+def test_resolve_reapplies_default_allowlist_normalization() -> None:
+    resolved = resolve_manifest_module_options(
+        "social",
         {
             "provider_allowlist": ["twitter", "youtube", "twitter"],
             "layout_variant": "Cards",
-        }
+        },
     )
 
     assert resolved["provider_allowlist"] == ["x", "youtube"]
@@ -68,7 +70,8 @@ def test_resolve_social_module_options_reapplies_default_allowlist_normalization
 
 
 def test_validate_social_module_options_reports_invalid_scalar_values() -> None:
-    issues = validate_social_module_options(
+    issues = validate_module_options(
+        load_module_manifest_with_fallback("social"),
         {
             "link_tree_enabled": "yes",
             "embeds_enabled": "yes",
@@ -77,30 +80,30 @@ def test_validate_social_module_options_reports_invalid_scalar_values() -> None:
             "cache_ttl_seconds": 0,
             "links_per_page": "many",
             "embeds_per_page": 0,
-        }
+        },
     )
 
-    assert "modules.social.link_tree_enabled must be a boolean" in issues
-    assert "modules.social.embeds_enabled must be a boolean" in issues
-    assert "modules.social.layout_variant must be one of: list, cards, grid" in issues
-    assert "modules.social.provider_allowlist cannot be empty" in issues
-    assert "modules.social.cache_ttl_seconds must be at least 1" in issues
-    assert "modules.social.links_per_page must be an integer" in issues
-    assert "modules.social.embeds_per_page must be at least 1" in issues
+    assert any("link_tree_enabled" in issue and "boolean" in issue for issue in issues)
+    assert any("embeds_enabled" in issue and "boolean" in issue for issue in issues)
+    assert any("must be one of: list, cards, grid" in issue for issue in issues)
+    assert any(
+        "provider_allowlist" in issue and "cannot be empty" in issue for issue in issues
+    )
+    assert any("cache_ttl_seconds" in issue and ">= 1" in issue for issue in issues)
+    assert any("links_per_page" in issue and "integer" in issue for issue in issues)
+    assert any("embeds_per_page" in issue and ">= 1" in issue for issue in issues)
 
 
 def test_validate_social_module_options_reports_unknown_provider() -> None:
-    issues = validate_social_module_options(
+    issues = validate_module_options(
+        load_module_manifest_with_fallback("social"),
         {
             "provider_allowlist": ["youtube", "mystery-network"],
             "embeds_enabled": False,
-        }
+        },
     )
 
-    assert (
-        "modules.social.provider_allowlist contains unsupported providers: mystery-network"
-        in issues
-    )
+    assert any("unsupported values: mystery-network" in issue for issue in issues)
 
 
 def test_social_payload_status_code_normalizes_case_and_whitespace() -> None:

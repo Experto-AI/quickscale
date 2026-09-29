@@ -6,14 +6,15 @@ for module manifests (module.yml files).
 The ``derivation`` sub-module supplies companion dataclasses that describe
 how manifest options normalise, validate, and project into Django settings
 and module wiring.  Those types are additive to the existing
-:class:`ModuleManifest` / :class:`ConfigOption` schema and do not alter
-current loader behaviour.
+:class:`ModuleManifest` / :class:`ConfigOption` schema; the loader wires the
+``derivation`` section into them.
 
 The ``resolver`` sub-module provides the runtime engine that executes
 derivation rules: computing defaults, normalizing overrides, validating
 resolved values, projecting derived Django settings, and projecting wiring
-contributions (apps, middleware, URL includes).  It is additive to the
-existing loader and does not replace the legacy contract-file path.
+contributions (apps, middleware, URL includes).  It is the path every
+module's declared options flow through; the legacy per-module contract-file
+logic it replaced is gone.
 
 The ``assembler`` sub-module turns a :class:`ResolverResult` into a
 :class:`~quickscale_core.module_wiring.ModuleWiringSpec`, with an optional

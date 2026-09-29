@@ -500,7 +500,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
 - [ ] Tests use concrete models (not abstract stubs)
 - [ ] Required test files: `test_apps.py`, `test_services.py`, `test_migrations.py` (with models), and `test_isolation.py` plus `test_rls_boundary.py` (with tenant models)
-- [ ] Every `module.yml` option has `type`, `default`, `description`, `django_setting`, and its own `validation` block where invalid values exist; checks spanning options use only `required_when` / `any_of`; core and the CLI hold no code for the module's options (Module Conventions rule 12)
+- [ ] Every `module.yml` option has `type`, `default`, `description`, and its own `validation` block where invalid values exist; a mutable option also has `django_setting`; checks spanning options use rule 12's declarative keys (`required_when`, `any_of`, `subset_of`, `excludes`, `intersects`); core and the CLI hold no code for the module's options (Module Conventions rule 12)
 - [ ] Tenant models subclass `TenantModel` (directly or through a module base) with a `Meta` that inherits the base's — the only tenant marker; relations to other modules' models use a `quickscale_<module>_<name>` `related_name` (plural, or singular for a one-to-one); concrete models define `__str__` and `Meta.ordering` (rules 13–14)
 - [ ] `__init__.py` holds only `__version__` and `__all__ = ["__version__"]`; `signals.py` holds only sent signals and receivers live in `receivers.py` (rules 15–16)
 - [ ] Commands raise `CommandError` on expected failure (no `print()` or `sys.exit()`); data-destroying commands take `--dry-run` (rule 17)

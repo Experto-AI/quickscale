@@ -35,18 +35,6 @@ from quickscale_core.contracts.module_catalog import (
     get_module_entry,
     get_module_readiness_reason,
 )
-from quickscale_core.contracts.resolvers import (  # noqa: F401
-    default_notifications_module_options,
-    default_social_module_options,
-    normalize_social_module_options,
-    notifications_live_delivery_configured,
-    notifications_production_targeted,
-    notifications_runtime_email_backend,
-    resolve_notifications_module_options,
-    resolve_social_module_options,
-    validate_notifications_module_options,
-    validate_social_module_options,
-)
 from quickscale_core.contracts.module_discovery import (
     AUTHORITATIVE_MODULE_COUNT,
     ModulePresenceRecord,
@@ -63,8 +51,6 @@ from quickscale_core.contracts.module_options import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     BILLING_ENV_VAR_OPTION_NAMES,
-    DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
-    DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
     ENV_VAR_PORTABILITY_IGNORED,
     ENV_VAR_PORTABILITY_MANUAL,
     ENV_VAR_PORTABILITY_PORTABLE,
@@ -80,9 +66,7 @@ from quickscale_core.contracts.module_options import (
     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     PORTABLE_ENV_PREFIXES,
     get_env_var_portability,
-    normalize_notifications_module_options,
     sanitize_module_options,
-    validate_notifications_env_var_reference,
 )
 
 __all__ = [
@@ -94,17 +78,6 @@ __all__ = [
     "get_discovered_module_names",
     "get_module_entry",
     "get_module_readiness_reason",
-    # Resolver functions
-    "default_notifications_module_options",
-    "default_social_module_options",
-    "normalize_social_module_options",
-    "notifications_live_delivery_configured",
-    "notifications_production_targeted",
-    "notifications_runtime_email_backend",
-    "resolve_notifications_module_options",
-    "resolve_social_module_options",
-    "validate_notifications_module_options",
-    "validate_social_module_options",
     # Module discovery
     "AUTHORITATIVE_MODULE_COUNT",
     "ModulePresenceRecord",
@@ -148,21 +121,12 @@ __all__ = [
     "PORTABLE_ENV_PREFIXES",
     # DR env-var portability function
     "get_env_var_portability",
-    # Notifications constants
-    "DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR",
-    "DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
+    # Notifications option-name constants
     "NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION",
     "NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION",
     # Storage option-name constants
     "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-    # Normalize functions
-    "normalize_notifications_module_options",
-    "normalize_social_module_options",
-    # Validate functions
-    "validate_notifications_env_var_reference",
-    "validate_notifications_module_options",
-    "validate_social_module_options",
     # Sanitize dispatcher
     "sanitize_module_options",
 ]

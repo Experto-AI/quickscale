@@ -141,22 +141,21 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA217 — Read the manifest option schema in core and check settings at startup.**
 
   **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. `plan`/`apply`
-  enforce each manifest option's `validation` block; blog, listings, CRM, forms, analytics,
-  billing, auth, orgs, backups, and storage are fully manifest-owned (their per-module option
-  functions are gone and their CLI configurators read the manifest), a manifest's
+  enforce each manifest option's `validation` block; every module is fully manifest-owned (its
+  per-module option functions are gone and its CLI configurator reads the manifest), a manifest's
   `retired_options` block is the one home of a retired key's refusal, and config load refuses a
-  key no manifest declares; notifications and social still carry per-module option code, and every
-  module still carries per-module settings readers. Notifications' and social's residual
-  cross-option checks (the placeholder sender and tag subset; the enabled-surface and
-  embed-provider rules) are expressible neither by `required_when` nor `any_of`, so converting
-  them needs the rule 12 decision edit.
+  key no manifest declares. The rule 12 decision edit landed: the validation vocabulary is
+  `choices`, `min`/`max`, `pattern`, `not_empty`, `required_when`, `any_of`, `subset_of`,
+  `excludes`, and `intersects` over one condition grammar, with `slug`/`list` normalization;
+  notifications' runtime backend predicates live in its adapter. Every module still carries
+  per-module settings readers, which the settings-reading half removes.
 
   **Scope:**
-  - *Option code.* Core's and the CLI's per-module option code goes: the
+  - *Option code (done).* Core's and the CLI's per-module option code went: the
     `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
     `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
     `schema.config_schema`, and the CLI's `module_config`, with `contracts.imperative_inventory`.
-    Notifications and social convert to the generic manifest-driven CLI configurator.
+    Notifications and social converted to the generic manifest-driven CLI configurator.
   - *Settings reading (last).* `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
     one generic startup check in `quickscale_core.runtime`, run through the shared checks helper
     and registered by each module, validates every declared setting; per-module readers and code

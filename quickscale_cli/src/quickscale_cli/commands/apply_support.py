@@ -82,6 +82,30 @@ def _report_theme_preflight_error(error: ValueError) -> None:
     )
 
 
+def notifications_adapter_module() -> Any | None:
+    """Return the notifications adapter module, or ``None`` when unreachable.
+
+    The notifications production-targeted / live-delivery predicates are module
+    adapter code (Module Conventions rule 12).  A context with no importable
+    module source (a bundled-only install) cannot load the adapter; callers then
+    render the generic remediation hint instead of failing, while the
+    option-validation engine still owns the abort.
+    """
+    try:
+        from quickscale_core.contracts.module_discovery import (
+            ImproperlyConfigured,
+        )
+        from quickscale_core.manifest.entry_point import (
+            load_managed_adapter_module,
+        )
+    except ImportError:  # pragma: no cover - core always ships with the CLI
+        return None
+    try:
+        return load_managed_adapter_module("notifications")
+    except ImproperlyConfigured:
+        return None
+
+
 def _confirm_apply(ctx: Any, *, no_docker: bool, verbose_docker: bool) -> bool:
     """Collect confirmation choices without mutating the project."""
     show_docker_output = verbose_docker

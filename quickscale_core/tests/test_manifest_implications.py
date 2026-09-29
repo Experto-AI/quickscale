@@ -138,7 +138,7 @@ class TestBillingImplications:
         assert "orgs" in result
         assert "notifications" in result
         assert result["orgs"] == {}
-        # notifications has no inline defaults — they come from its own manifest
+        # An implied module materialises its own manifest defaults.
         assert isinstance(result["notifications"], dict)
         assert result["notifications"] == {}
 

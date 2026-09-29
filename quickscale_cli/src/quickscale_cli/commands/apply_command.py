@@ -21,8 +21,6 @@ from quickscale_core.contracts.module_options import (
     ANALYTICS_POSTHOG_DEFAULT_HOST,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-    DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
-    DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
     NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
     sanitize_module_options,
@@ -34,11 +32,6 @@ from quickscale_core.contracts.module_options import (
 from quickscale_core.contracts.resolvers import (
     load_module_manifest_with_fallback,
     resolve_manifest_module_options,
-    notifications_live_delivery_configured,
-    notifications_production_targeted,
-    resolve_notifications_module_options,
-    validate_notifications_module_options,
-    validate_social_module_options,
 )
 from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.contracts.module_catalog import (
@@ -51,6 +44,7 @@ from quickscale_cli.commands.apply_support import (
     _build_quickscale_env,
     _confirm_apply,
     _report_theme_preflight_error,
+    notifications_adapter_module,
 )
 from quickscale_cli.commands.apply_support import _resolve_apply_raw_root  # noqa: F401
 from quickscale_cli.commands.contract_vintage import (
@@ -1305,7 +1299,10 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
 
     social_config = qs_config.modules.get("social")
     if social_config is not None:
-        social_issues = validate_social_module_options(social_config.options or {})
+        social_issues = validate_module_options(
+            load_module_manifest_with_fallback("social"),
+            social_config.options or {},
+        )
         if social_issues:
             click.secho(
                 "\n❌ Social module configuration is incomplete for apply:",
@@ -1329,7 +1326,10 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
         return
 
     notifications_options = notifications_config.options or {}
-    notification_issues = validate_notifications_module_options(notifications_options)
+    notification_issues = validate_module_options(
+        load_module_manifest_with_fallback("notifications"),
+        notifications_options,
+    )
     if not notification_issues:
         return
 
@@ -1340,7 +1340,10 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     )
     for issue in notification_issues:
         click.echo(f"  • {issue}", err=True)
-    if notifications_production_targeted(notifications_options):
+    notifications_adapter = notifications_adapter_module()
+    if notifications_adapter is not None and (
+        notifications_adapter.notifications_production_targeted(notifications_options)
+    ):
         click.echo(
             "\n💡 This configuration targets live Resend delivery, so apply refuses "
             "to leave production on the console email backend. Complete the missing "
@@ -2477,26 +2480,23 @@ def _display_next_steps_impl(
             )
 
     if "notifications" in modules:
-        notifications_options = resolve_notifications_module_options(
-            modules["notifications"].options or {}
+        notifications_options = _resolved_module_options(
+            "notifications", modules["notifications"].options or {}
         )
         resend_api_key_env_var = str(
-            notifications_options.get(
-                NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
-                DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
-            )
-            or DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
+            notifications_options.get(NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION) or ""
         )
         webhook_secret_env_var = str(
-            notifications_options.get(
-                NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
-                DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
-            )
-            or DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
+            notifications_options.get(NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION) or ""
         )
         click.echo("\n  # Notifications setup")
+        notifications_adapter = notifications_adapter_module()
         if bool(notifications_options.get("enabled", True)):
-            if notifications_live_delivery_configured(notifications_options):
+            if notifications_adapter is not None and (
+                notifications_adapter.notifications_live_delivery_configured(
+                    notifications_options
+                )
+            ):
                 resend_domain = str(
                     notifications_options.get("resend_domain", "")
                 ).strip()

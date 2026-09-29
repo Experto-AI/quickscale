@@ -12,10 +12,7 @@ import pytest
 
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
-    configure_notifications_module,
-    configure_social_module,
-    get_default_notifications_config,
-    get_default_social_config,
+    configure_module_from_manifest,
 )
 from quickscale_core.contracts.resolvers import (
     load_module_manifest_with_fallback,
@@ -1575,7 +1572,7 @@ class TestNotificationsModuleConfig:
     """Tests for notifications module configurator registration and wiring."""
 
     def test_notifications_default_config_keys_match_manifest_contract_intent(self):
-        config = get_default_notifications_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["notifications"].get_defaults()
 
         assert config["enabled"] is True
         assert config["sender_name"] == "QuickScale"
@@ -1586,7 +1583,7 @@ class TestNotificationsModuleConfig:
     def test_notifications_in_module_configurators(self):
         assert "notifications" in MODULE_CONFIGURATOR_REGISTRY
 
-        config = configure_notifications_module(non_interactive=True)
+        config = configure_module_from_manifest("notifications", non_interactive=True)
 
         assert config["enabled"] is True
         assert config["sender_email"] == "noreply@example.com"
@@ -1598,7 +1595,8 @@ class TestNotificationsModuleConfig:
     ):
         """Configurator should fail when existing config targets live Resend with the placeholder sender."""
         with pytest.raises(click.Abort):
-            configure_notifications_module(
+            configure_module_from_manifest(
+                "notifications",
                 non_interactive=True,
                 existing_config={
                     "enabled": True,
@@ -1682,11 +1680,54 @@ class TestNotificationsModuleConfig:
         assert "EMAIL_BACKEND" not in settings
 
 
+class TestConvertedConfiguratorListInput:
+    """The generic configurator canonicalizes declared list values first."""
+
+    def test_notifications_string_tag_lists_are_canonicalized(self):
+        config = configure_module_from_manifest(
+            "notifications",
+            non_interactive=True,
+            existing_config={"default_tags": "quickscale, transactional"},
+        )
+        assert config["default_tags"] == ["quickscale", "transactional"]
+
+    def test_social_string_provider_allowlist_is_canonicalized(self):
+        config = configure_module_from_manifest(
+            "social",
+            non_interactive=True,
+            existing_config={"provider_allowlist": "youtube, twitter"},
+        )
+        assert config["provider_allowlist"] == ["youtube", "x"]
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_interactive_accepts_canonicalized_stored_list_defaults(
+        self, mock_confirm, mock_prompt
+    ):
+        """Accepting every displayed default preserves the canonical lists."""
+        mock_confirm.return_value = True
+        mock_prompt.side_effect = lambda *args, **kwargs: kwargs.get("default", "")
+
+        notifications = configure_module_from_manifest(
+            "notifications",
+            non_interactive=False,
+            existing_config={"default_tags": "quickscale, transactional"},
+        )
+        assert notifications["default_tags"] == ["quickscale", "transactional"]
+
+        social = configure_module_from_manifest(
+            "social",
+            non_interactive=False,
+            existing_config={"provider_allowlist": "youtube, twitter"},
+        )
+        assert social["provider_allowlist"] == ["youtube", "x"]
+
+
 class TestSocialModuleConfig:
     """Tests for social module configurator registration and wiring."""
 
     def test_social_default_config_keys_match_manifest_contract_intent(self):
-        config = get_default_social_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["social"].get_defaults()
 
         assert config["link_tree_enabled"] is True
         assert config["layout_variant"] == "list"
@@ -1703,7 +1744,7 @@ class TestSocialModuleConfig:
     def test_social_in_module_configurators(self):
         assert "social" in MODULE_CONFIGURATOR_REGISTRY
 
-        config = configure_social_module(non_interactive=True)
+        config = configure_module_from_manifest("social", non_interactive=True)
 
         assert config["link_tree_enabled"] is True
         assert config["embeds_enabled"] is True
@@ -1718,7 +1759,7 @@ class TestSocialModuleConfig:
         mock_confirm.side_effect = [True, True]
         mock_prompt.side_effect = ["cards", "Twitter, YouTube", 600, 18, 9]
 
-        config = configure_social_module(non_interactive=False)
+        config = configure_module_from_manifest("social", non_interactive=False)
 
         assert config["layout_variant"] == "cards"
         assert config["provider_allowlist"] == ["x", "youtube"]

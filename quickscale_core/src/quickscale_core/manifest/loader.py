@@ -14,6 +14,7 @@ from typing import Any
 import yaml
 
 from quickscale_core import __version__ as _core_version
+from quickscale_core.manifest.derivation import NORMALIZATION_RULE_KINDS
 from quickscale_core.manifest.option_validation import (
     ALLOWED_VALIDATION_KEYS,
     OPTION_TYPE_LABELS,
@@ -189,6 +190,55 @@ def _validate_numeric_bound(
         )
 
 
+def _validate_condition_mapping(
+    condition: dict[str, Any],
+    key_path: str,
+    option_name: str,
+    module_name: str | None,
+) -> None:
+    """Validate the shared condition grammar of a validation block.
+
+    A condition is a non-empty mapping whose entries must all hold; an entry's
+    value is a literal, a non-empty list of literals, or ``{not_empty: true}``.
+    """
+    if not condition:
+        raise ManifestError(
+            f"Option '{option_name}' validation.{key_path} must be a "
+            "non-empty mapping of another option to its condition",
+            module_name,
+        )
+    for condition_option, expected in condition.items():
+        if not isinstance(condition_option, str) or not condition_option:
+            raise ManifestError(
+                f"Option '{option_name}' validation.{key_path} keys "
+                "must be non-empty option names",
+                module_name,
+            )
+        if isinstance(expected, list):
+            if not expected:
+                raise ManifestError(
+                    f"Option '{option_name}' validation.{key_path}."
+                    f"{condition_option} must be a literal, a non-empty list, "
+                    "or {not_empty: true}",
+                    module_name,
+                )
+        elif isinstance(expected, dict):
+            if expected != {"not_empty": True}:
+                raise ManifestError(
+                    f"Option '{option_name}' validation.{key_path}."
+                    f"{condition_option} must be a literal, a non-empty list, "
+                    "or {not_empty: true}",
+                    module_name,
+                )
+        elif expected is None:
+            raise ManifestError(
+                f"Option '{option_name}' validation.{key_path}."
+                f"{condition_option} must be a literal, a non-empty list, "
+                "or {not_empty: true}",
+                module_name,
+            )
+
+
 def _validate_validation_block(
     validation: dict[str, Any], option_name: str, module_name: str | None
 ) -> None:
@@ -215,6 +265,13 @@ def _validate_validation_block(
                 module_name,
             )
 
+    if "not_empty" in validation:
+        if validation["not_empty"] is not True:
+            raise ManifestError(
+                f"Option '{option_name}' validation.not_empty must be true",
+                module_name,
+            )
+
     if "min" in validation:
         _validate_numeric_bound(validation, "min", option_name, module_name)
     if "max" in validation:
@@ -238,32 +295,15 @@ def _validate_validation_block(
 
     if "required_when" in validation:
         required_when = validation["required_when"]
-        if not isinstance(required_when, dict) or len(required_when) != 1:
+        if not isinstance(required_when, dict):
             raise ManifestError(
                 f"Option '{option_name}' validation.required_when must be a "
-                "single-entry mapping of another option to its value",
+                "mapping of another option to its condition",
                 module_name,
             )
-        for condition_option, expected in required_when.items():
-            if not isinstance(condition_option, str) or not condition_option:
-                raise ManifestError(
-                    f"Option '{option_name}' validation.required_when keys "
-                    "must be non-empty option names",
-                    module_name,
-                )
-            if isinstance(expected, list):
-                if not expected:
-                    raise ManifestError(
-                        f"Option '{option_name}' validation.required_when."
-                        f"{condition_option} must be a value or a non-empty list",
-                        module_name,
-                    )
-            elif isinstance(expected, (dict, type(None))):
-                raise ManifestError(
-                    f"Option '{option_name}' validation.required_when."
-                    f"{condition_option} must be a scalar value or a list",
-                    module_name,
-                )
+        _validate_condition_mapping(
+            required_when, "required_when", option_name, module_name
+        )
 
     if "any_of" in validation:
         any_of = validation["any_of"]
@@ -280,6 +320,48 @@ def _validate_validation_block(
                     module_name,
                 )
 
+    if "subset_of" in validation:
+        subset_of = validation["subset_of"]
+        if not isinstance(subset_of, str) or not subset_of:
+            raise ManifestError(
+                f"Option '{option_name}' validation.subset_of must name an option",
+                module_name,
+            )
+
+    for key in ("excludes", "intersects"):
+        if key not in validation:
+            continue
+        block = validation[key]
+        if not isinstance(block, dict):
+            raise ManifestError(
+                f"Option '{option_name}' validation.{key} must be a mapping "
+                "with 'values' and an optional 'when'",
+                module_name,
+            )
+        values = block.get("values")
+        if not isinstance(values, list) or not values:
+            raise ManifestError(
+                f"Option '{option_name}' validation.{key}.values must be a "
+                "non-empty list",
+                module_name,
+            )
+        if "when" in block:
+            when = block["when"]
+            if not isinstance(when, dict):
+                raise ManifestError(
+                    f"Option '{option_name}' validation.{key}.when must be a "
+                    "condition mapping",
+                    module_name,
+                )
+            _validate_condition_mapping(when, f"{key}.when", option_name, module_name)
+
+
+def _condition_references(condition: Any) -> list[str]:
+    """Return the option names a condition mapping references."""
+    if not isinstance(condition, dict):
+        return []
+    return [key for key in condition if isinstance(key, str)]
+
 
 def _validate_option_references(
     mutable_options: dict[str, ConfigOption],
@@ -292,12 +374,17 @@ def _validate_option_references(
         for option_name, option in section.items():
             validation = option.validation or {}
             references: list[str] = []
-            required_when = validation.get("required_when")
-            if isinstance(required_when, dict):
-                references.extend(key for key in required_when if isinstance(key, str))
+            references.extend(_condition_references(validation.get("required_when")))
             any_of = validation.get("any_of")
             if isinstance(any_of, list):
                 references.extend(entry for entry in any_of if isinstance(entry, str))
+            subset_of = validation.get("subset_of")
+            if isinstance(subset_of, str):
+                references.append(subset_of)
+            for key in ("excludes", "intersects"):
+                block = validation.get(key)
+                if isinstance(block, dict):
+                    references.extend(_condition_references(block.get("when")))
             for reference in references:
                 if reference not in declared:
                     raise ManifestError(
@@ -588,6 +675,17 @@ def _parse_managed_files(
 # Derivation section parsing (T2.3+)
 # ---------------------------------------------------------------------------
 
+#: Parameter keys every normalization rule may carry, whatever its kind.
+_NORMALIZATION_RULE_COMMON_KEYS = frozenset(
+    {"rule_type", "source_key", "target_key", "description"}
+)
+#: Kind-specific parameter keys; a kind absent here takes no other parameter.
+_NORMALIZATION_RULE_KIND_KEYS: dict[str, frozenset[str]] = {
+    "choice_map": frozenset({"mapping"}),
+    "slug": frozenset({"max_length", "replace"}),
+    "list": frozenset({"item_rules"}),
+}
+
 _DERIVATION_LIST_FIELDS = frozenset(
     {
         "normalization_rules",
@@ -619,6 +717,81 @@ def _assert_is_list(
     if not isinstance(value, list):
         raise ManifestError(f"'{path}' must be a list", module_name)
     return value
+
+
+def _validate_normalization_rule_list(
+    rules: Any,
+    path: str,
+    module_name: str | None,
+) -> None:
+    """Validate the shape of a declared normalization-rule list.
+
+    Structural errors fail the load so a rule parameter the resolver would
+    silently ignore (a non-integer ``slug.max_length``) cannot ship.
+    """
+    if not isinstance(rules, list):
+        raise ManifestError(f"'{path}' must be a list", module_name)
+    for index, rule in enumerate(rules):
+        rule_path = f"{path}[{index}]"
+        if not isinstance(rule, dict):
+            raise ManifestError(f"'{rule_path}' must be a mapping", module_name)
+        rule_type = rule.get("rule_type")
+        if not isinstance(rule_type, str) or not rule_type:
+            raise ManifestError(
+                f"'{rule_path}.rule_type' must be a non-empty string",
+                module_name,
+            )
+        if rule_type not in NORMALIZATION_RULE_KINDS:
+            allowed = ", ".join(sorted(NORMALIZATION_RULE_KINDS))
+            raise ManifestError(
+                f"'{rule_path}.rule_type' must be one of: {allowed}",
+                module_name,
+            )
+        allowed_keys = (
+            _NORMALIZATION_RULE_COMMON_KEYS
+            | _NORMALIZATION_RULE_KIND_KEYS.get(rule_type, frozenset())
+        )
+        for parameter in rule:
+            if parameter not in allowed_keys:
+                raise ManifestError(
+                    f"'{rule_path}.{parameter}' is not a supported parameter "
+                    f"for rule_type '{rule_type}'",
+                    module_name,
+                )
+        if "max_length" in rule:
+            max_length = rule["max_length"]
+            if (
+                isinstance(max_length, bool)
+                or not isinstance(max_length, int)
+                or max_length < 1
+            ):
+                raise ManifestError(
+                    f"'{rule_path}.max_length' must be a positive integer",
+                    module_name,
+                )
+        if "replace" in rule:
+            replace = rule["replace"]
+            if not isinstance(replace, dict) or any(
+                not isinstance(key, str) or not isinstance(value, str)
+                for key, value in replace.items()
+            ):
+                raise ManifestError(
+                    f"'{rule_path}.replace' must be a mapping of strings",
+                    module_name,
+                )
+        if "mapping" in rule:
+            mapping = rule["mapping"]
+            if not isinstance(mapping, dict) or any(
+                not isinstance(key, str) for key in mapping
+            ):
+                raise ManifestError(
+                    f"'{rule_path}.mapping' must be a mapping keyed by strings",
+                    module_name,
+                )
+        if "item_rules" in rule:
+            _validate_normalization_rule_list(
+                rule["item_rules"], f"{rule_path}.item_rules", module_name
+            )
 
 
 def _parse_derivation_section(
@@ -682,6 +855,18 @@ def _parse_derivation_section(
     else:
         raise ManifestError(
             "derivation.option_derivations must be a mapping",
+            module_name,
+        )
+
+    _validate_normalization_rule_list(
+        result.get("normalization_rules", []),
+        "derivation.normalization_rules",
+        module_name,
+    )
+    for opt_key, opt_value in result["option_derivations"].items():
+        _validate_normalization_rule_list(
+            opt_value.get("normalization_rules", []),
+            f"derivation.option_derivations.{opt_key}.normalization_rules",
             module_name,
         )
 

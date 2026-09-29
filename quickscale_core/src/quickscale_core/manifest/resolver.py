@@ -5,19 +5,18 @@ paired with a ``ModuleDerivationSchema`` and optional user-supplied overrides.
 
 This module is the runtime engine that the derivation schema types
 (:mod:`quickscale_core.manifest.derivation`) describe but do not execute.
-It is **additive** to the existing manifest loader and does not alter,
-replace, or migrate any legacy contract-file path.
+It is the one path every module's declared options flow through; the
+per-module contract files it replaced are gone.
 
 The resolver is intentionally generic — it operates on the declarative
-derivation rules rather than module-specific imperative logic.  Later
-roadmap phases will wire concrete modules (starting with ``analytics``)
-through this path and eventually retire the per-module contract files.
+derivation rules rather than module-specific imperative logic.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+import re
 from typing import Any
 
 from quickscale_core.manifest.derivation import (
@@ -97,6 +96,54 @@ def _canonical_url(value: str) -> str:
     return candidate.rstrip("/")
 
 
+def _slugify(value: Any, *, max_length: Any, replace: Mapping[str, Any]) -> str:
+    """Canonicalize *value* as a slug.
+
+    Applies the declared literal replacements first, then lowercases, maps
+    whitespace and ``_`` to ``-``, drops characters outside ``[a-z0-9-]``,
+    collapses repeated dashes, trims leading/trailing dashes, and truncates
+    to *max_length* when one is declared.
+    """
+    candidate = str(value)
+    for source, target in replace.items():
+        candidate = candidate.replace(str(source), str(target))
+    candidate = candidate.lower()
+    candidate = re.sub(r"[\s_]+", "-", candidate)
+    candidate = re.sub(r"[^a-z0-9-]+", "", candidate)
+    candidate = re.sub(r"-{2,}", "-", candidate).strip("-")
+    if isinstance(max_length, int):
+        candidate = candidate[:max_length]
+    return candidate
+
+
+def _coerce_list_items(value: Any) -> list[Any]:
+    """Coerce a raw value into the items a ``list`` rule normalizes."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return list(value.split(","))
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
+
+
+def _apply_list_rule(value: Any, rule: NormalizationRule) -> list[Any]:
+    """Apply a ``list`` rule: coerce, run nested item rules, drop empties/dedupe."""
+    normalized: list[Any] = []
+    for item in _coerce_list_items(value):
+        candidate = item
+        for item_rule in rule.item_rules:
+            candidate = _apply_normalization_rule(candidate, item_rule)
+        if candidate is None:
+            continue
+        if isinstance(candidate, str) and not candidate.strip():
+            continue
+        if candidate in normalized:
+            continue
+        normalized.append(candidate)
+    return normalized
+
+
 def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
     """Apply a single normalization rule to a value.
 
@@ -145,6 +192,12 @@ def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
         if isinstance(value, (int, float)):
             return bool(value)
         return value
+
+    if rule_type == "slug":
+        return _slugify(value, max_length=rule.max_length, replace=rule.replace)
+
+    if rule_type == "list":
+        return _apply_list_rule(value, rule)
 
     # Unknown rule type: pass through unchanged
     return value
@@ -666,8 +719,8 @@ def resolve_module_config(
     5. Validate each resolved value against shared and per-option rules.
     6. Project derived Django settings from the resolved values.
 
-    The legacy contract-file path is **not** touched.  Callers that still
-    use per-module manifest adapters or similar modules are unaffected.
+    The manifest engine is the only path: the per-module contract-file logic
+    it replaced is gone.
 
     Args:
         manifest: The loaded module manifest.

@@ -251,18 +251,6 @@
         "symbol": "sanitize_module_options",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/contracts/resolvers.py::validate_notifications_module_options": {
-        "file": "quickscale_core/src/quickscale_core/contracts/resolvers.py",
-        "max_complexity": 20,
-        "symbol": "validate_notifications_module_options",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/contracts/resolvers.py::validate_social_module_options": {
-        "file": "quickscale_core/src/quickscale_core/contracts/resolvers.py",
-        "max_complexity": 17,
-        "symbol": "validate_social_module_options",
-        "type": "function"
-      },
       "quickscale_core/src/quickscale_core/dr_engine/_paths.py::_snapshot_capture_is_complete": {
         "file": "quickscale_core/src/quickscale_core/dr_engine/_paths.py",
         "max_complexity": 17,

@@ -333,32 +333,137 @@ description: Module without name
         with pytest.raises(ManifestError, match="not a valid"):
             load_manifest(yaml_content, "mymod")
 
-    def test_load_manifest_option_required_when_is_single_entry(self) -> None:
-        """required_when must be a single-entry mapping."""
+    def test_load_manifest_option_required_when_accepts_multiple_entries(self) -> None:
+        """required_when entries all hold, and {not_empty: true} is a value."""
         yaml_content = (
             "name: mymod\nversion: '1.0.0'\n"
-            "config:\n  immutable:\n    my_option:\n"
+            "config:\n  immutable:\n"
+            "    first:\n"
+            "      type: boolean\n"
+            "      default: true\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    second:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
             "      type: string\n"
             "      default: ''\n"
             "      description: A description\n"
             "      validation:\n        required_when:\n"
-            "          first: true\n          second: true\n"
+            "          first: true\n          second: {not_empty: true}\n"
         )
-        with pytest.raises(ManifestError, match="single-entry mapping"):
-            load_manifest(yaml_content, "mymod")
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.get_option("my_option") is not None
 
-    def test_load_manifest_option_required_when_needs_scalar_or_list(self) -> None:
-        """A required_when value must be a scalar or a list, not a mapping."""
+    def test_load_manifest_option_required_when_rejects_other_mappings(self) -> None:
+        """A condition value may only be a literal, a list, or {not_empty: true}."""
         yaml_content = (
             "name: mymod\nversion: '1.0.0'\n"
-            "config:\n  immutable:\n    my_option:\n"
+            "config:\n  immutable:\n"
+            "    other:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
             "      type: string\n"
             "      default: ''\n"
             "      description: A description\n"
             "      validation:\n        required_when:\n"
             "          other: {nested: true}\n"
         )
-        with pytest.raises(ManifestError, match="scalar value or a list"):
+        with pytest.raises(ManifestError, match="must be a literal"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_not_empty_must_be_true(self) -> None:
+        """validation.not_empty only takes the literal true."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        not_empty: false\n"
+        )
+        with pytest.raises(ManifestError, match="not_empty must be true"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_subset_of_references_an_option(self) -> None:
+        """subset_of must name a declared option."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option:\n"
+            "      type: list\n"
+            "      default: []\n"
+            "      description: A description\n"
+            "      validation:\n        subset_of: missing_option\n"
+        )
+        with pytest.raises(ManifestError, match="unknown option 'missing_option'"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_excludes_requires_values(self) -> None:
+        """excludes and intersects require a non-empty values list."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    other:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        excludes:\n"
+            "          values: []\n"
+        )
+        with pytest.raises(ManifestError, match="values must be a non-empty list"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_excludes_null_when_rejected(self) -> None:
+        """An explicitly null condition is malformed, not absent."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    other:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        excludes:\n"
+            "          values: [noreply@example.com]\n"
+            "          when: null\n"
+        )
+        with pytest.raises(ManifestError, match="when must be a condition mapping"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_excludes_when_must_be_a_mapping(self) -> None:
+        """A condition block is a mapping, never a literal."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    other:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        excludes:\n"
+            "          values: [noreply@example.com]\n"
+            "          when: true\n"
+        )
+        with pytest.raises(ManifestError, match="when must be a condition mapping"):
             load_manifest(yaml_content, "mymod")
 
     def test_load_manifest_option_reference_must_exist(self) -> None:
@@ -1489,6 +1594,150 @@ derivation:
         assert manifest.validation_rules[0]["option_key"] == "provider"
         assert manifest.validation_rules[0]["rule_type"] == "choices"
         assert manifest.validation_rules[1]["option_key"] == "enabled"
+
+    def test_derivation_normalization_rule_shapes_are_validated(self) -> None:
+        """A malformed slug/list rule parameter fails the load, never silently."""
+        bad_max_length = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    tags:
+      type: list
+      default: []
+      django_setting: TAGS
+      description: Tags
+      validation: {}
+derivation:
+  option_derivations:
+    tags:
+      normalization_rules:
+        - rule_type: slug
+          max_length: five
+"""
+        with pytest.raises(ManifestError, match="max_length.*positive integer"):
+            load_manifest(bad_max_length, "mymod")
+
+        bad_item_rules = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    tags:
+      type: list
+      default: []
+      django_setting: TAGS
+      description: Tags
+      validation: {}
+derivation:
+  option_derivations:
+    tags:
+      normalization_rules:
+        - rule_type: list
+          item_rules: not-a-list
+"""
+        with pytest.raises(ManifestError, match="item_rules.*must be a list"):
+            load_manifest(bad_item_rules, "mymod")
+
+        bad_replace = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    slug:
+      type: string
+      default: ''
+      django_setting: SLUG
+      description: Slug
+      validation: {}
+derivation:
+  option_derivations:
+    slug:
+      normalization_rules:
+        - rule_type: slug
+          replace: [not, a, mapping]
+"""
+        with pytest.raises(ManifestError, match="replace.*mapping of strings"):
+            load_manifest(bad_replace, "mymod")
+
+    def test_derivation_normalization_rule_unknown_kind_rejected(self) -> None:
+        """A rule kind outside rule 12's complete vocabulary fails the load."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    name:
+      type: string
+      default: ''
+      django_setting: NAME
+      description: Name
+      validation: {}
+derivation:
+  option_derivations:
+    name:
+      normalization_rules:
+        - rule_type: slgu
+"""
+        with pytest.raises(ManifestError, match="rule_type.*must be one of"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_normalization_rule_null_parameters_rejected(self) -> None:
+        """An explicitly null rule parameter the builder cannot consume fails."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    name:
+      type: string
+      default: ''
+      django_setting: NAME
+      description: Name
+      validation: {}
+derivation:
+  option_derivations:
+    name:
+      normalization_rules:
+        - rule_type: slug
+          replace: null
+"""
+        with pytest.raises(ManifestError, match="replace.*mapping of strings"):
+            load_manifest(yaml_content, "mymod")
+
+        nested_null = yaml_content.replace(
+            "        - rule_type: slug\n          replace: null\n",
+            "        - rule_type: list\n          item_rules: null\n",
+        )
+        with pytest.raises(ManifestError, match="item_rules.*must be a list"):
+            load_manifest(nested_null, "mymod")
+
+    def test_derivation_normalization_rule_unknown_parameter_rejected(self) -> None:
+        """A misspelled rule parameter fails the load instead of being ignored."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    tags:
+      type: list
+      default: []
+      django_setting: TAGS
+      description: Tags
+      validation: {}
+derivation:
+  option_derivations:
+    tags:
+      normalization_rules:
+        - rule_type: list
+          item_rules:
+            - rule_type: slug
+              max_lenght: 50
+"""
+        with pytest.raises(
+            ManifestError, match="max_lenght.*not a supported parameter"
+        ):
+            load_manifest(yaml_content, "mymod")
 
     def test_derivation_legacy_aliases(self) -> None:
         """Legacy aliases in the derivation section are parsed."""
