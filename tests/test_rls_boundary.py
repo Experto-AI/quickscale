@@ -32,7 +32,7 @@ _FORMS_TABLES = (
 
 
 def _ensure_rls_test_role() -> None:
-    """Assert the pre-provisioned RLS test role exists (SA59.3, SA77).
+    """Assert the pre-provisioned RLS test role exists.
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises
@@ -40,7 +40,7 @@ def _ensure_rls_test_role() -> None:
     SELECT grants are still issued here (idempotent, requires table
     existence post-migration).
 
-    SA77: converted from ``psycopg2`` direct connection to Django's
+    Converted from ``psycopg2`` direct connection to Django's
     managed ``connection.cursor()`` so the helper works under
     restricted-role (NOBYPASSRLS) environments where a separate
     psycopg2 connection may fail or misbehave.  Best-effort GRANTs
@@ -63,7 +63,7 @@ def _ensure_rls_test_role() -> None:
             )
         # Best-effort grants wrapped in savepoints so permission-denied
         # failures under NOBYPASSRLS do not abort the outer test
-        # transaction (SA77).
+        # transaction.
         try:
             with transaction.atomic():
                 cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")

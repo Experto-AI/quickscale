@@ -154,13 +154,13 @@ class TestNotifySubmission:
 
 
 # ---------------------------------------------------------------------------
-# AF1-CR-005: Notification content rendered inside org_scope
+# Notification content rendered inside org_scope
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestNotifySubmissionOrgScope:
-    """AF1-CR-005: Notification content must render org-scoped field values correctly.
+    """Notification content must render org-scoped field values correctly.
 
     notify_submission is called inside the view's org_scope() block in
     production. The FK traversal submission.values.all() inside
@@ -280,13 +280,13 @@ class TestNotifySubmissionOrgScope:
 
 
 # ---------------------------------------------------------------------------
-# SA85 Phase 3 — notify_submission without ambient org context or atomic
+# notify_submission without ambient org context or atomic
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestNotifySubmissionNoContext:
-    """SA85 Phase 3: notify_submission works without ambient org context or atomic.
+    """notify_submission works without ambient org context or atomic.
 
     Creates data inside a controlled org_scope, exits scope, then calls
     notify_submission() directly — proving that rendered field values
@@ -367,7 +367,7 @@ class TestNotifySubmissionNoContext:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA85-REV-003 — real-helper django_db(transaction=True) notification
+# real-helper django_db(transaction=True) notification
 # proof with no ambient atomic/org context, rendered content, dispatch,
 # and no leak
 # ---------------------------------------------------------------------------
@@ -375,7 +375,7 @@ class TestNotifySubmissionNoContext:
 
 @pytest.mark.django_db(transaction=True)
 class TestNotifySubmissionTransactionTrue:
-    """CR-SA85-REV-003: prove notify_submission works under
+    """Prove notify_submission works under
     django_db(transaction=True) with no ambient org context or atomic block,
     dispatching a real untracked email with rendered content and no leak.
 
@@ -472,14 +472,14 @@ class TestNotifySubmissionTransactionTrue:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA85-REV-007 — submission.form dereference inside org_scope,
+# submission.form dereference inside org_scope,
 # freshly reloaded uncached submission
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
 class TestNotifySubmissionFormFkInScope:
-    """CR-SA85-REV-007: submission.form FK is dereferenced inside org_scope.
+    """Submission.form FK is dereferenced inside org_scope.
 
     Creates a submission under an explicit org scope, then refreshes it from
     the database (clearing any in-memory FK cache), exits the setup scope,

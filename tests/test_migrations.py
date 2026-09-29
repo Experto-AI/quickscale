@@ -1,6 +1,6 @@
 """Fresh-0001 contract tests for the Forms final-schema migration.
 
-Phase 3 SA92: verifies the consolidated 0001 migration produces the
+Verifies the consolidated 0001 migration produces the
 correct final schema — three parent UNIQUE constraints, four composite
 child FKs with ordered columns and NOT DEFERRABLE enforcement,
 required NOT NULL/PROTECT org ownership, FORCE RLS on all forms
@@ -395,7 +395,7 @@ class TestFormsCompositeFkCatalogProofs:
                 )
 
     def test_composite_fks_are_not_deferrable(self) -> None:
-        """Each composite FK is NOT DEFERRABLE (SA60 uniform policy)."""
+        """Each composite FK is NOT DEFERRABLE (uniform policy)."""
         with connection.cursor() as cursor:
             for entry in self.EXPECTED_FKS:
                 cursor.execute(
@@ -682,7 +682,7 @@ def _normalize_pg_expr(expr: str | None) -> str:
     identifiers.  Strips balanced outer parentheses that PostgreSQL's
     ``pg_policies`` view wraps around the entire expression.
 
-    CR-SA90-MSQ-003: Both case normalization and whitespace collapse
+    Both case normalization and whitespace collapse
     are quote-aware — ``.lower()`` and whitespace substitution are only
     applied outside string literals and quoted identifiers so that
     literal content, identifier casing, and whitespace inside quotes
@@ -765,7 +765,7 @@ def test_forms_rls_policy_has_org_predicate() -> None:
     """Each Forms RLS FOR ALL policy has current_setting USING/WITH CHECK
     and the _select policy has an operator_access OR clause.
 
-    CR-SA90-MSQ-003: Exact normalized predicate comparison — the
+    Exact normalized predicate comparison — the
     normalized form must match the expected canonical expression from
     ``_FORCE_RLS_FORWARD_SQL``, not merely contain permissive fragments.
     """
@@ -813,7 +813,7 @@ def test_forms_rls_policy_has_org_predicate() -> None:
             ), (
                 f"FOR ALL {polname} WITH CHECK lacks current_setting/org_id: {with_check}"
             )
-            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            # exact normalized predicate comparison
             nqual = _normalize_pg_expr(qual)
             assert nqual == _EXPECTED_FORMS_FORALL_QUAL, (
                 f"{table}/{polname} normalized qual {nqual!r} "
@@ -829,7 +829,7 @@ def test_forms_rls_policy_has_org_predicate() -> None:
             sname, scmd, squal, swc = select_pol[0]
             assert scmd in ("SELECT", "s"), f"SELECT {sname} cmd={scmd!r}"
             assert swc is None, f"SELECT {sname} has unexpected WITH CHECK"
-            # CR-SA90-MSQ-003: assert squal is not None BEFORE comparison
+            # assert squal is not None BEFORE comparison
             # so NULL predicates cannot silently pass exact-match checks.
             assert squal is not None, (
                 f"SELECT {sname} has NULL USING — must have a predicate"
@@ -837,7 +837,7 @@ def test_forms_rls_policy_has_org_predicate() -> None:
             assert "operator_access" in squal.lower(), (
                 f"SELECT {sname} USING lacks operator_access: {squal}"
             )
-            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            # exact normalized predicate comparison
             nsqual = _normalize_pg_expr(squal)
             assert nsqual == _EXPECTED_FORMS_SELECT_QUAL, (
                 f"{table}/{sname} normalized SELECT qual {nsqual!r} "
@@ -846,7 +846,7 @@ def test_forms_rls_policy_has_org_predicate() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA90-MSQ-003: negative controls for _normalize_pg_expr
+# negative controls for _normalize_pg_expr
 # ---------------------------------------------------------------------------
 
 
