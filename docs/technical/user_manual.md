@@ -461,7 +461,7 @@ quickscale plan myapp --overwrite
 
 The wizard guides you through:
 1. **Theme selection**: The sole theme is `showcase_react` (the former `showcase_html` option has been removed). Fresh `showcase_react` generations scaffold Django-owned public `/social` and `/social/embeds` pages.
-2. **Module selection**: Select optional modules to include. In the current implementation line, implemented first-party modules include analytics, auth, backups, billing, blog, crm, forms, listings, notifications, social, and storage. Billing now participates in public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows, and fresh starter output links into the billing module's Django-owned `/billing/pricing/` (public) and `/billing/dashboard/` (authenticated) pages without generating a starter-owned billing React page. `quickscale apply` requires `auth` whenever billing is selected. The `teams` directory remains placeholder inventory only.
+2. **Module selection**: Select optional modules to include. In the current implementation line, implemented first-party modules include analytics, auth, backups, billing, blog, crm, forms, listings, notifications, social, and storage. Billing now participates in public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows, and fresh starter output links into the billing module's Django-owned `/billing/pricing/` (public) and `/billing/dashboard/` (authenticated) pages without generating a starter-owned billing React page. `quickscale apply` requires `auth` whenever billing is selected.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:

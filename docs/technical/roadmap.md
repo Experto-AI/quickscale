@@ -311,19 +311,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
   rules 11, 15–18, 24, 28, 29, and 36–38. Package roots, receivers, and file names already follow
-  rule 28.
+  rule 28; `teams/` and its core placeholder handling are deleted, and orgs' eight ticket-numbered
+  test files are renamed by subject.
 
   **Scope:**
   - *Commands and tooling.* Each module's root `mypy.ini` section relaxes at most
     module-extension.md's standard override, so orgs (98 errors under it), billing (15), forms (9),
-    notifications (7), and social fix what the tighter sections report (rule 36);
-    `quickscale_modules/teams/` is deleted (README to `docs/planning/teams.md`) with core's
-    placeholder handling.
+    notifications (7), and social fix what the tighter sections report (rule 36).
   - *Tests.* Missing required tests (`test_apps`, `test_migrations`, tenant
-    isolation and RLS) are added; orgs' eight ticket-numbered test files and two ticket-numbered
-    test apps are renamed by subject, with the docs that cite them (decisions rule 27 cites the
-    SA35 gate's file); the 747 ticket mentions in the docstrings and comments of 103 module test
-    files go, reworded to say what each test protects where the number was the only explanation.
+    isolation and RLS) are added; orgs' two ticket-numbered test apps (`sa182_project_app`,
+    `sa208_project_app`) are renamed by subject (D32); the remaining ticket mentions in the
+    docstrings and comments of module test files go, reworded to say what each test protects where
+    the number was the only explanation.
   - *Module lists.* Core's catalog (descriptions from `module.yml`), `check_security_gates.py`,
     `render_j2_template.py`, `lint_frontend.sh`, `provision_ci_postgres.sh`, and
     `test_isolation_conformance.sh` compute the module set from discovery, so social's tenant tables
@@ -336,7 +335,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   the modules beyond rule 37's listed exceptions; every README names its options and commands.
 
   **Surfaces:** every module's package root, commands, `pyproject.toml`, tests, README;
-  core's module discovery and catalog (placeholder handling and descriptions); the root
+  core's module discovery and catalog (descriptions from manifests); the root
   `mypy.ini`; the listed `scripts/`; decisions; the billing recovery section of organizations.md.
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
@@ -590,7 +589,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - Their posts, deals, notes, and billing records remain, attributed to "Deleted user", and each
     organization's data is otherwise untouched.
   - The same email can register again; the old account cannot sign in.
-  - A rolled-back removal leaves no effect (Module Conventions rule 21); operator hard delete still passes SA35's gate.
+  - A rolled-back removal leaves no effect (Module Conventions rule 21); operator hard delete still passes the user-FK conformance gate.
 
   **Surfaces:** auth (`views.py`, `AppConfig`, README); orgs (`removal.py`, the
   account-deletion lookup, memberships, invitations); blog, notifications, billing, crm, forms,

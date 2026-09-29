@@ -35,7 +35,7 @@ class TestErrorPageGeneration:
         # Verify module hints are present
         assert "accounts/" in content, "Should detect auth module URLs"
         assert "billing/" in content, "Should surface billing helper guidance"
-        assert "teams/" not in content, "Should not surface teams placeholders"
+        assert "teams/" not in content, "Should not surface teams routes"
 
         # Verify installation instructions
         assert "quickscale.yml" in content, "Should reference the plan/apply config"
@@ -159,15 +159,13 @@ class TestModuleInstallationHints:
         assert "/billing/pricing/" in content
         assert "quickscale apply" in content
 
-    def test_teams_placeholder_hint_removed(self, generated_project_path: Path) -> None:
-        """Test that teams placeholder guidance does not leak into 404 output."""
+    def test_teams_hint_removed(self, generated_project_path: Path) -> None:
+        """Test that teams guidance does not leak into 404 output."""
         template_404 = generated_project_path / "templates" / "404.html"
         content = template_404.read_text()
 
         assert "teams/" not in content, "Should not check for teams/ routes"
-        assert "Teams Module" not in content, (
-            "Should not mention placeholder teams guidance"
-        )
+        assert "Teams Module" not in content, "Should not mention teams guidance"
         assert "quickscale embed --module" not in content, (
             "Should remove legacy embed guidance entirely"
         )

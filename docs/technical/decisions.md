@@ -146,8 +146,10 @@ Adding or swapping a frontend dependency requires a decision entry here.
   teams ships as a valid public `quickscale plan` / `quickscale.yml` /
   `quickscale apply` selection
 
-**Teams tie-breaker:** `quickscale_modules/teams/` is a README-only placeholder.
-It is **not next** and **not planned** — no committed timeline, no kickoff date.
+**Teams tie-breaker:** `teams` is not a shipped module and nothing is committed
+— no timeline, no kickoff date. Its preserved planning note lives at
+[docs/planning/teams.md](../planning/teams.md); the former README-only
+placeholder directory under `quickscale_modules/` has been deleted.
 Any [arch-audit.md](../others/arch-audit.md) finding whose horizon keys off "teams
 kickoff" describes a condition that applies *if and when* teams is scheduled. Treat
 every such finding as open-ended and deferred — not a roadmap item on a clock —
@@ -813,10 +815,9 @@ public surface is `services.py` (rule 4).
   root `mypy.ini` only (rule 36).
 - ✅ Test settings are `tests/settings.py`; an additional file is `tests/settings_<purpose>.py`.
 - ✅ Every directory under `quickscale_modules/` is a module with a `module.yml`; there are no
-  placeholder directories. The `teams` placeholder is deleted, its README moves to
+  placeholder directories. The `teams` placeholder is deleted, its README moved to
   `docs/planning/teams.md`, and core's placeholder handling (the catalog's `teams` entry and the
-  skips in module discovery and constraint validation) goes with it. The **Teams tie-breaker**
-  note above describes the shipped state until SA215 lands.
+  skips in module discovery and constraint validation) is gone with it.
 
 **19. Authorization.**
 - ✅ A view or API that manages a tenant model's data authorizes by org role through orgs'
@@ -906,7 +907,7 @@ public surface is `services.py` (rule 4).
   adding one is a decision edit and an edit of the gate's allowlist.
 - ❌ `PROTECT` on `User`: it makes account deletion fail because of one module. A module that must
   keep a record past its user handles it in its SA213 removal obligation, visibly.
-- SA35's gate (`orgs/tests/test_sa35_conformance.py`) enforces this; rule 40 does not repeat it.
+- The user-FK conformance gate (`orgs/tests/test_user_fk_conformance.py`) enforces this; rule 40 does not repeat it.
   It runs in orgs' test suite, so it sees the modules installed there and orgs' project-style test
   apps; nothing checks a generated project's own apps, where the rule is a review rule.
 
@@ -1026,7 +1027,7 @@ headings.
   is a requirement under rule 20).
 
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–39 (rule 27 through SA35's gate; rule 30
+and the CLI's option handling fails on each of rules 1–39 (rule 27 through the user-FK conformance gate; rule 30
 in `apply` itself): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
@@ -2017,8 +2018,10 @@ out by hand.
      a project subset is not a release inventory and must not be answered with one.
 3. The subset-validity rule has **one** implementation. No consumer may hand-copy it or its
    diagnostic text.
-4. A placeholder is an INCOMPLETE directory that is **declared** as such, not a name matched
-   against a literal set.
+4. A placeholder was an INCOMPLETE directory that is **declared** as such, not a name matched
+   against a literal set.  The catalog no longer declares any: every directory under
+   ``quickscale_modules/`` carries a ``module.yml``, and an incomplete directory fails closed
+   (Module Conventions rule 18).
 5. No consumer may classify module presence by string-matching an exception message.
 
 **Cross-reference.** This is a direct application of the

@@ -10,8 +10,8 @@ entries provide descriptive metadata and UX labels; the manifest discovery
 provides the authoritative list of shipped modules by scanning
 ``quickscale_modules/*/module.yml``.
 
-Known placeholder modules (such as ``teams``) that lack a ``module.yml`` are
-**not** discovered and are instead rejected through a fail-closed path.
+A module directory without a ``module.yml`` is never a shipped module:
+source discovery rejects it fail-closed, while bundled discovery skips it.
 """
 
 from collections.abc import Iterable
@@ -26,7 +26,6 @@ class ModuleCatalogEntry:
     description: str
     ready: bool
     experimental: bool = False
-    placeholder: bool = False
 
 
 MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
@@ -90,13 +89,6 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         description="Organizations and multi-tenant foundations with memberships and invitations",
         ready=True,
     ),
-    ModuleCatalogEntry(
-        name="teams",
-        description="Multi-tenancy and team management",
-        ready=False,
-        experimental=True,
-        placeholder=True,
-    ),
 )
 
 
@@ -144,8 +136,9 @@ def get_discovered_module_names() -> list[str]:
     3.  **Fail-hard** — raises :exc:`ImproperlyConfigured` if neither
         source nor bundled inventory can be resolved.
 
-    Placeholder directories (e.g. ``teams``) without ``module.yml`` are
-    excluded in both paths.
+    A module directory without a ``module.yml`` is never a shipped module:
+    source discovery fails closed on such a directory, while bundled
+    discovery skips it.
 
     Returns:
         Sorted list of shipped module names.
@@ -190,16 +183,14 @@ def get_discovered_module_entries() -> list[ModuleCatalogEntry]:
 
 
 # ---------------------------------------------------------------------------
-# Readiness / placeholder rejection
+# Readiness
 # ---------------------------------------------------------------------------
 
 
 def find_not_ready_modules(module_names: Iterable[str]) -> list[str]:
     """Return known module names that are present but not publicly ready.
 
-    This includes modules from the static catalog flagged as non-ready, as
-    well as known placeholder module names (e.g. ``teams``) that are
-    fail-closed outside the discovered catalog.
+    This includes modules from the static catalog flagged as non-ready.
 
     Args:
         module_names: Iterable of module names to check.
@@ -210,18 +201,15 @@ def find_not_ready_modules(module_names: Iterable[str]) -> list[str]:
     not_ready: list[str] = []
     for module_name in module_names:
         entry = get_module_entry(module_name)
-        if entry is not None and (entry.placeholder or not entry.ready):
-            if module_name not in not_ready:
-                not_ready.append(module_name)
-            continue
+        if entry is not None and not entry.ready and module_name not in not_ready:
+            not_ready.append(module_name)
     return sorted(not_ready)
 
 
 def get_module_readiness_reason(module_name: str) -> str | None:
     """Return an actionable readiness error for non-public-ready modules.
 
-    Checks known placeholder module names first (fail-closed), then falls
-    back to the static catalog.
+    Looks the module name up in the static catalog.
 
     Args:
         module_name: The module name to check.
@@ -233,16 +221,6 @@ def get_module_readiness_reason(module_name: str) -> str | None:
     Raises:
         ValueError: If the module name is not recognized.
     """
-    # Fail-closed check for known placeholder names outside the catalog.
-    from quickscale_core.contracts.module_discovery import (
-        get_placeholder_rejection_reason,
-    )
-
-    placeholder_reason = get_placeholder_rejection_reason(module_name)
-    if placeholder_reason is not None:
-        return placeholder_reason
-
-    # Fall back to the static catalog.
     entry = get_module_entry(module_name)
     if entry is None:
         raise ValueError(
@@ -254,8 +232,7 @@ def get_module_readiness_reason(module_name: str) -> str | None:
 
     module_display_name = module_name.replace("_", " ").title()
     return (
-        f"Module '{module_name}' remains placeholder inventory only and is not a "
-        "public-ready QuickScale module yet. "
+        f"Module '{module_name}' is not a public-ready QuickScale module yet. "
         f"{module_display_name} remains excluded from public quickscale plan, "
         "quickscale.yml, quickscale apply, and quickscale status workflows until "
         "it ships."

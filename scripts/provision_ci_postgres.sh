@@ -90,7 +90,6 @@ load_inventory() {
     seen["$item"]=1
     [[ -z "$previous" || "$previous" < "$item" ]] || die "module inventory is not sorted"
     previous="$item"
-    [[ "$item" != teams ]] || die "placeholder module is not provisionable: teams"
     MODULES+=("$item")
   done <<< "$output"
   ((${#MODULES[@]} == 12)) || die "module inventory count drift: expected 12, found ${#MODULES[@]}"

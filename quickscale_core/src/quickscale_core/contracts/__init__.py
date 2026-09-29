@@ -68,8 +68,6 @@ from quickscale_core.contracts.module_discovery import (
     discover_module_presence,
     discover_shipped_module_names,
     discover_shipped_module_paths,
-    get_placeholder_rejection_reason,
-    is_placeholder_module,
     validate_active_module_subset,
 )
 from quickscale_core.contracts.module_options import (
@@ -161,8 +159,6 @@ __all__ = [
     "discover_module_presence",
     "discover_shipped_module_names",
     "discover_shipped_module_paths",
-    "get_placeholder_rejection_reason",
-    "is_placeholder_module",
     "validate_active_module_subset",
     # Imperative-logic inventory
     "ADAPTER_ONLY",

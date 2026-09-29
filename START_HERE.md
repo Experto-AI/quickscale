@@ -224,7 +224,7 @@ Public release notes live in [docs/releases/](./docs/releases/). Each version th
 [CHANGELOG.md](./CHANGELOG.md) remains the canonical all-version history index.
 
 ### "What modules are available?"
-Current published first-party modules include **analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage**. The monorepo still contains the **teams** directory as placeholder inventory with no committed timeline.
+Current published first-party modules include **analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage**. A future **teams** module is unscheduled; its planning note lives at [docs/planning/teams.md](./docs/planning/teams.md).
 See: [quickscale_modules/](./quickscale_modules/) for the current package list and per-module README files.
 
 ### "Can I contribute?"

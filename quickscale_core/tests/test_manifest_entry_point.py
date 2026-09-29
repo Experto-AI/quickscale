@@ -1115,56 +1115,17 @@ class TestDiscoveredInventoryRegistryTransition:
             MANAGED_ADAPTER_ORIGINS.clear()
             MANAGED_ADAPTER_ORIGINS.update(original_origins)
 
-    def test_declared_placeholder_is_observable_but_not_loaded(
+    def test_undeclared_active_module_fails_before_import_atomically(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The catalog placeholder remains excluded from adapter loading."""
-        from quickscale_core.contracts.module_discovery import (
-            get_modules_base_path,
-            set_modules_base_path,
-        )
-
-        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
-        original_origins = set(MANAGED_ADAPTER_ORIGINS)
-        original_base = get_modules_base_path()
-        loaded: list[str] = []
-
-        def record_import(module_name: str) -> object:
-            loaded.append(module_name)
-            raise AssertionError("placeholder adapters must not be imported")
-
-        try:
-            (tmp_path / "modules" / "teams").mkdir(parents=True)
-            MANIFEST_ADAPTER_REGISTRY.clear()
-            MANAGED_ADAPTER_ORIGINS.clear()
-            set_modules_base_path(tmp_path / "modules")
-            monkeypatch.setattr(
-                entry_point_module, "_load_managed_adapter", record_import
-            )
-
-            refresh_managed_adapters()
-
-            assert loaded == []
-            assert "teams" not in MANIFEST_ADAPTER_REGISTRY
-            assert MANAGED_ADAPTER_ORIGINS == set()
-        finally:
-            set_modules_base_path(original_base)
-            MANIFEST_ADAPTER_REGISTRY.clear()
-            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
-            MANAGED_ADAPTER_ORIGINS.clear()
-            MANAGED_ADAPTER_ORIGINS.update(original_origins)
-
-    def test_active_declared_placeholder_fails_before_import_atomically(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """An active catalog placeholder is rejected before any import or commit."""
+        """An undeclared active module is rejected before any import or commit."""
         from quickscale_core.contracts.module_discovery import (
             ImproperlyConfigured,
             get_modules_base_path,
             set_modules_base_path,
         )
 
-        module_name = "teams"
+        module_name = "ghost"
         package_name = f"quickscale_modules_{module_name}"
         modules_dir = tmp_path / "modules"
         module_dir = modules_dir / module_name
@@ -1202,7 +1163,9 @@ class TestDiscoveredInventoryRegistryTransition:
 
         def fail_if_imported(name: str) -> object:
             imports.append(name)
-            raise AssertionError("active placeholders must fail before adapter import")
+            raise AssertionError(
+                "undeclared active modules must fail before adapter import"
+            )
 
         try:
             MANIFEST_ADAPTER_REGISTRY.clear()
@@ -1217,11 +1180,11 @@ class TestDiscoveredInventoryRegistryTransition:
             )
 
             with pytest.raises(
-                ImproperlyConfigured, match="teams.*placeholder"
+                ImproperlyConfigured, match="outside the release inventory"
             ) as exc_info:
                 refresh_managed_adapters()
 
-            assert str(manifest_path) in str(exc_info.value)
+            assert "ghost" in str(exc_info.value)
             assert imports == []
             assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
             assert id(MANAGED_ADAPTER_ORIGINS) == origins_identity

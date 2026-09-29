@@ -191,33 +191,14 @@ def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
         sys.modules.update(original_package_modules)
 
 
-def _active_placeholder_records(presence: list[Any]) -> list[Any]:
-    """Return active records whose names are declared catalog placeholders."""
-    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
-        ModulePresenceState,
-        is_placeholder_module,
-    )
-
-    return [
-        record
-        for record in presence
-        if record.state is ModulePresenceState.ACTIVE
-        and is_placeholder_module(record.name)
-    ]
-
-
-def _non_placeholder_incomplete_records(presence: list[Any]) -> list[Any]:
+def _incomplete_records(presence: list[Any]) -> list[Any]:
     """Return incomplete records that cannot be safely ignored."""
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
         ModulePresenceState,
-        is_placeholder_module,
     )
 
     return [
-        record
-        for record in presence
-        if record.state is ModulePresenceState.INCOMPLETE
-        and not is_placeholder_module(record.name)
+        record for record in presence if record.state is ModulePresenceState.INCOMPLETE
     ]
 
 
@@ -231,19 +212,7 @@ def _validate_managed_presence(
         validate_active_module_subset,
     )
 
-    active_placeholders = _active_placeholder_records(presence)
-    if active_placeholders:
-        details = "; ".join(
-            f"module '{record.name}' has declared placeholder manifest "
-            f"'{record.manifest_path}'"
-            for record in active_placeholders
-        )
-        raise ImproperlyConfigured(
-            "Cannot refresh managed adapters: active placeholder modules must "
-            f"remain unloaded ({details})."
-        )
-
-    incomplete = _non_placeholder_incomplete_records(presence)
+    incomplete = _incomplete_records(presence)
     if incomplete:
         details = "; ".join(
             f"module '{record.name}' is missing manifest '{record.manifest_path}'"
@@ -263,8 +232,8 @@ def refresh_managed_adapters() -> None:
 
     Presence discovery is performed exactly once per refresh.  A generated
     project's embedded modules may be a strict subset of the authoritative
-    bundled inventory; only active adapters are loaded.  Incomplete non-
-    placeholder module directories fail before any adapter import.  All
+    bundled inventory; only active adapters are loaded.  Incomplete module
+    directories fail before any adapter import.  All
     sentinels are resolved before the live registry or origins are changed,
     preserving registry identity, custom entries, and prior state on failure.
     """

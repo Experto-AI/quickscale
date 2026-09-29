@@ -162,11 +162,6 @@ class TestManifestInventoryHelpers:
         entries = get_manifest_inventory("nonexistent")
         assert entries == []
 
-    def test_get_manifest_inventory_placeholder(self) -> None:
-        """get_manifest_inventory returns empty list for placeholder names."""
-        entries = get_manifest_inventory("teams")
-        assert entries == []
-
     def test_count_inventory_category(self) -> None:
         """count_inventory_category returns a positive count for each category."""
         for category in (

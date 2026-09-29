@@ -80,7 +80,7 @@ quickscale/
 ├── quickscale_modules/     # All modules (auth, billing, etc.)
 │   ├── auth/
 │   ├── billing/
-│   └── teams/
+│   └── storage/
 └── pyproject.toml         # Monorepo package manager
 ```
 

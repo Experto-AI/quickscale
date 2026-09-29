@@ -25,13 +25,7 @@ These directories currently include packaging and implementation scaffolding. Us
 | [storage](./storage/README.md) | Storage module with local packaging, tests, and manifest |
 | [backups](./backups/README.md) | Admin/ops-first backups module with private local/remote artifact workflows |
 
-### Placeholder directories
-
-These directories currently act as placeholders or documentation stubs. They do not yet have the same local packaging/test structure as the packaged modules above, and they remain inventory-only until implementation ships.
-
-| Module | Notes |
-|--------|-------|
-| [teams](./teams/README.md) | Reserved module directory with README-only local context |
+Every directory here is a packaged module; there are no placeholder directories.
 
 ## Notes for maintainers
 

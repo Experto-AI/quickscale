@@ -1133,8 +1133,8 @@ class TestLoadAndValidateConfig:
 
         assert result.modules["backups"].options == {}
 
-    def test_teams_placeholder_module_is_rejected_on_load(self, tmp_path):
-        """Apply should reject placeholder modules even if they are hand-edited in."""
+    def test_deleted_teams_module_is_rejected_on_load(self, tmp_path):
+        """Apply should reject modules absent from the catalog even if hand-edited in."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -1620,8 +1620,8 @@ class TestLoadAndValidateConfig:
 class TestPrepareApplyContext:
     """Tests for apply preflight context loading."""
 
-    def test_rejects_teams_placeholder_module_in_existing_state(self, tmp_path):
-        """Apply should abort when legacy state still references placeholders."""
+    def test_rejects_unknown_module_in_existing_state(self, tmp_path):
+        """Apply should abort when legacy state still references unknown modules."""
         project_path = tmp_path / "myapp"
         project_path.mkdir()
         config_path = project_path / "quickscale.yml"
@@ -4374,7 +4374,7 @@ class TestExecuteApplySteps:
                 "listings": Mock(options={}),
                 "crm": Mock(options={}),
                 "billing": Mock(options={}),
-                "teams": Mock(options={}),
+                "ghost": Mock(options={}),
             },
         ],
     )
