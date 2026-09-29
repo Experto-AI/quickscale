@@ -42,6 +42,12 @@ QUICKSCALE_MODE = "solo"
 QUICKSCALE_BILLING_ENABLED = True
 ROOT_URLCONF = "tests.urls"
 
+# The generated settings install the shared rule 9 handler; the module suite
+# mirrors it so error responses assert the shipped shape.
+REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
+}
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",

@@ -60,6 +60,9 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "form_submit": "5/hour",
     },
+    # The generated settings install the shared rule 9 handler; the module
+    # suite mirrors it so error responses assert the shipped shape.
+    "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
 }
 
 TEMPLATES = [

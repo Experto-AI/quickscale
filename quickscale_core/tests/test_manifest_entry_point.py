@@ -2311,7 +2311,10 @@ _SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {
         "allauth.account",
     ),
     "backups": ("quickscale_modules_backups",),
-    "notifications": ("quickscale_modules_notifications",),
+    "notifications": (
+        "rest_framework",
+        "quickscale_modules_notifications",
+    ),
     "orgs": ("quickscale_modules_orgs",),
     "storage": ("quickscale_modules_storage",),
 }

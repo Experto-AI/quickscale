@@ -740,8 +740,8 @@ class TestCsrfExemptVisitorClassLevel:
         )
         assert _get_violation_count(source) == 0
 
-    def test_notifications_webhook_pattern_passes(self) -> None:
-        """Real notifications-style: post() has ingest_webhook_event."""
+    def test_removed_webhook_helper_is_not_approved(self) -> None:
+        """A csrf_exempt scope calling a retired webhook helper now fails the gate."""
         source = (
             "@method_decorator(csrf_exempt, name='dispatch')\n"
             "class NotificationWebhookView(View):\n"
@@ -750,13 +750,12 @@ class TestCsrfExemptVisitorClassLevel:
             "    def post(self, request):\n"
             "        result = ingest_webhook_event(\n"
             "            body=request.body,\n"
-            "            payload={},\n"
             "            signature='',\n"
             "            timestamp='',\n"
             "        )\n"
             "        return JsonResponse({'status': 'accepted'})\n"
         )
-        assert _get_violation_count(source) == 0
+        assert _get_violation_count(source) == 1
 
     def test_sibling_handler_with_helper_passes(self) -> None:
         """Helper in ``dispatch`` itself also satisfies the check."""
@@ -2518,38 +2517,6 @@ class TestCurrentCallSites:
             "        if csrf_response is not None:\n"
             "            return csrf_response\n"
             "        return JsonResponse({'checkout_url': 'https://...'})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_billing_stripe_webhook_pattern(self) -> None:
-        """Stripe webhook view: post() has handle_stripe_event."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class StripeWebhookView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request, *args, **kwargs):\n"
-            "        result = handle_stripe_event(\n"
-            "            body=request.body,\n"
-            "            signature=request.headers.get('Stripe-Signature', ''),\n"
-            "        )\n"
-            "        return JsonResponse({'ok': True})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_notifications_webhook_pattern(self) -> None:
-        """Notification webhook: post() has ingest_webhook_event."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class NotificationWebhookView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request, *args, **kwargs):\n"
-            "        result = ingest_webhook_event(\n"
-            "            body=request.body,\n"
-            "            payload={},\n"
-            "            signature=request.headers.get('Signature', ''),\n"
-            "            timestamp=request.headers.get('Timestamp', ''),\n"
-            "        )\n"
-            "        return JsonResponse({'status': 'accepted'})\n"
         )
         assert _get_violation_count(source) == 0
 

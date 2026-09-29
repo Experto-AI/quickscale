@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SA46 — Hard-fail AST lint gate requiring csrf_exempt + _enforce_csrf/signature pair.
+SA46 — Hard-fail AST lint gate requiring csrf_exempt + an approved verification helper.
 
 Scans ``quickscale_modules/*/src/`` for function and class definitions that
 apply ``csrf_exempt`` (directly, via ``@method_decorator(csrf_exempt, ...)``,
@@ -9,11 +9,13 @@ callable (or a method of the same class) calls at least one approved
 verification helper.
 
 Approved verification helpers:
-  - ``_enforce_csrf``               — explicit CSRF re-enforcement (billing/blog)
+  - ``_enforce_csrf``               — explicit CSRF re-enforcement (blog)
   - ``authenticate_blog_api_request`` — blog session+token auth (calls
     ``_enforce_csrf`` for session-authenticated requests)
-  - ``handle_stripe_event``         — Stripe webhook signature verification
-  - ``ingest_webhook_event``        — notifications HMAC signature verification
+
+The Stripe and notifications webhooks are DRF ``APIView``s (Module
+Conventions rule 26); DRF does not CSRF-check them, so they carry no helper
+here.
 
 Any ``csrf_exempt``-annotated scope that lacks a call to one of these helpers
 **fails CI** (exit 1).
@@ -62,8 +64,6 @@ APPROVED_VERIFICATION_HELPERS: frozenset[str] = frozenset(
     {
         "_enforce_csrf",
         "authenticate_blog_api_request",
-        "handle_stripe_event",
-        "ingest_webhook_event",
     }
 )
 

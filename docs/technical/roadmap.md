@@ -252,11 +252,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
     rate a `_RATE_LIMIT` option (billing's hard-coded `"30/hour"` included; rule 32), and
     billing's advisory-lock key strings become `quickscale_billing:…` (rule 33; locks are
     transient, so nothing migrates).
-  - *Webhooks.* billing's and notifications' webhooks become DRF `APIView`s answering
-    `200`/`400`/`404` in rule 9's shape, with the missing secret moved to `checks.py`; they stay
-    signature-verified; `scripts/check_csrf_exempt_gate.py` loses its two webhook helpers.
 
-  **Acceptance:** every API and webhook error body matches the one shape; a list of every moved
+  **Acceptance:** every API error body matches the one shape; a list of every moved
   public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and
   its rate from a setting.
 

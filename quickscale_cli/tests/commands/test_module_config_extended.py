@@ -1723,8 +1723,9 @@ class TestNotificationsModuleConfig:
             }
         )
 
-        _, _, settings, urls = collect_wiring(specs)
+        apps, _, settings, urls = collect_wiring(specs)
 
+        assert "rest_framework" in apps
         assert (
             settings["EMAIL_BACKEND"]
             == "django.core.mail.backends.console.EmailBackend"

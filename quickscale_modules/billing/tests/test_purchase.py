@@ -1194,12 +1194,7 @@ def test_purchase_webhook_view_accepts_checkout_session_completed_event(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "accepted",
-        "duplicate": False,
-        "event_type": "checkout.session.completed",
-        "processing_status": "processed",
-    }
+    assert response.json() == {"status": "accepted", "duplicate": False}
 
 
 def test_purchase_webhook_view_maps_processing_errors_to_400(
@@ -1221,7 +1216,12 @@ def test_purchase_webhook_view_maps_processing_errors_to_400(
     )
 
     assert response.status_code == 400
-    assert response.json()["error"] == "Stripe checkout session payment is not settled."
+    assert response.json() == {
+        "error": {
+            "code": "webhook_payload_invalid",
+            "message": "Stripe checkout session payment is not settled.",
+        }
+    }
 
 
 def test_stripe_client_create_checkout_session_uses_checkout_api() -> None:

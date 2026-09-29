@@ -14,7 +14,7 @@ from email.utils import formataddr
 from typing import Any, Protocol, cast
 
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
 from django.db import transaction
@@ -547,14 +547,33 @@ def build_webhook_signature_headers(
     }
 
 
+def _parse_webhook_payload(body: bytes) -> dict[str, Any]:
+    """Parse a signature-verified webhook body into a JSON object.
+
+    A body that is not UTF-8 JSON, or not a JSON object, is a payload error:
+    the rule 9 handler answers it as ``webhook_payload_invalid``.
+    """
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise NotificationWebhookError("Webhook payload is invalid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise NotificationWebhookError("Webhook payload must be a JSON object.")
+    return payload
+
+
 def ingest_webhook_event(
     *,
     body: bytes,
-    payload: Mapping[str, Any],
     signature: str,
     timestamp: str,
 ) -> WebhookIngestionResult:
-    """Verify and ingest a signed provider delivery event idempotently."""
+    """Verify and ingest a signed provider delivery event idempotently.
+
+    The signature is verified before the body is parsed (Module Conventions
+    rule 26), so an unsigned or mis-signed request never reaches JSON
+    parsing.
+    """
     settings_snapshot = load_settings_snapshot()
     _ensure_notifications_enabled(settings_snapshot)
     _verify_webhook_signature(
@@ -563,6 +582,7 @@ def ingest_webhook_event(
         timestamp=timestamp,
         settings_snapshot=settings_snapshot,
     )
+    payload = _parse_webhook_payload(body)
 
     event_type = str(payload.get("event_type") or payload.get("type") or "").strip()
     provider_event_id = str(payload.get("event_id") or payload.get("id") or "").strip()
@@ -585,7 +605,10 @@ def ingest_webhook_event(
     if not recipient_email:
         raise NotificationWebhookError("Webhook payload is missing recipient.")
 
-    validate_email(recipient_email)
+    try:
+        validate_email(recipient_email)
+    except ValidationError as exc:
+        raise NotificationWebhookError("Webhook payload recipient is invalid.") from exc
     delivery = (
         NotificationDelivery.objects.select_related("message")
         .filter(
