@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -22,6 +22,9 @@ from quickscale_modules_social.contracts import (
     social_provider_supports_embeds,
 )
 from quickscale_modules_orgs.models import TenantModel
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 class BaseSocialItem(TenantModel):
@@ -54,6 +57,10 @@ class BaseSocialItem(TenantModel):
 
     cache_keys: ClassVar[tuple[str, ...]] = ()
     require_embed_support: ClassVar[bool] = False
+
+    if TYPE_CHECKING:
+        # FK attname on TenantModel; unset until the organization is assigned.
+        organization_id: UUID | None
 
     class Meta(TenantModel.Meta):
         abstract = True
