@@ -254,12 +254,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     in the JSON API Endpoint Base Contract, and its hand-written rate parser go, with the raw-SQL
     counter table `quickscale_modules_blog_api_throttle_counter` it writes.
   - *Throttles and shared settings.* Throttle scopes become `quickscale_<module>_<purpose>`, each
-    rate a `_RATE_LIMIT` option (billing's hard-coded `"30/hour"` included; rule 32). Core's
-    `collect_wiring` fails `apply` when two modules write one key differently and merges
-    `REST_FRAMEWORK` key by key (rule 30) — this lands first: today a second module contributing
-    `REST_FRAMEWORK` would replace billing's rates, and its throttled views would raise
-    `ImproperlyConfigured`. billing's advisory-lock key strings become `quickscale_billing:…`
-    (rule 33; locks are transient, so nothing migrates).
+    rate a `_RATE_LIMIT` option (billing's hard-coded `"30/hour"` included; rule 32), and
+    billing's advisory-lock key strings become `quickscale_billing:…` (rule 33; locks are
+    transient, so nothing migrates). Core's `collect_wiring` now fails `apply` when two modules
+    write one key differently and merges `REST_FRAMEWORK` key by key (rule 30, landed); auth
+    stopped writing `ACCOUNT_ADAPTER`, so orgs is its only writer until D6 inverts ownership.
   - *Webhooks.* billing's and notifications' webhooks become DRF `APIView`s answering
     `200`/`400`/`404` in rule 9's shape, with the missing secret moved to `checks.py`; they stay
     signature-verified; `scripts/check_csrf_exempt_gate.py` loses its two webhook helpers.

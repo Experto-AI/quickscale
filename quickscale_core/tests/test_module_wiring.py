@@ -121,15 +121,119 @@ class TestCollectWiring:
         apps, _, _, _ = collect_wiring(specs)
         assert apps.count("shared_app") == 1
 
-    def test_collect_wiring_settings_last_writer_wins(self) -> None:
-        """For colliding setting keys, the last module (alphabetically) wins."""
+    def test_collect_wiring_equal_setting_values_from_two_modules_are_allowed(
+        self,
+    ) -> None:
+        """Two modules may write one setting when their values are equal."""
+        extensions = ["markdown.extensions.fenced_code"]
         specs = {
-            "beta": ModuleWiringSpec(settings={"KEY": "beta_value"}),
-            "alpha": ModuleWiringSpec(settings={"KEY": "alpha_value"}),
+            "blog": ModuleWiringSpec(
+                settings={"MARKDOWNX_MARKDOWN_EXTENSIONS": extensions}
+            ),
+            "listings": ModuleWiringSpec(
+                settings={"MARKDOWNX_MARKDOWN_EXTENSIONS": extensions}
+            ),
         }
         _, _, settings, _ = collect_wiring(specs)
-        # alpha < beta alphabetically, so beta is processed last → wins
-        assert settings["KEY"] == "beta_value"
+        assert settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] == extensions
+
+    def test_collect_wiring_conflicting_setting_values_fail(self) -> None:
+        """A differing second value fails, naming both modules and the key."""
+        specs = {
+            "auth": ModuleWiringSpec(settings={"ACCOUNT_ADAPTER": "auth.Adapter"}),
+            "orgs": ModuleWiringSpec(settings={"ACCOUNT_ADAPTER": "orgs.Adapter"}),
+        }
+        with pytest.raises(ValueError) as exc_info:
+            collect_wiring(specs)
+        message = str(exc_info.value)
+        assert "'auth'" in message
+        assert "'orgs'" in message
+        assert "ACCOUNT_ADAPTER" in message
+
+    def test_collect_wiring_rest_framework_merges_top_level_keys(self) -> None:
+        """Different top-level REST_FRAMEWORK keys from two modules both survive."""
+        specs = {
+            "billing": ModuleWiringSpec(
+                settings={"REST_FRAMEWORK": {"DEFAULT_THROTTLE_RATES": {"a": "1/hour"}}}
+            ),
+            "crm": ModuleWiringSpec(settings={"REST_FRAMEWORK": {"PAGE_SIZE": 25}}),
+        }
+        _, _, settings, _ = collect_wiring(specs)
+        assert settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {"a": "1/hour"},
+            "PAGE_SIZE": 25,
+        }
+
+    def test_collect_wiring_rest_framework_merges_nested_dicts(self) -> None:
+        """REST_FRAMEWORK sub-dicts merge key by key across modules."""
+        specs = {
+            "billing": ModuleWiringSpec(
+                settings={
+                    "REST_FRAMEWORK": {
+                        "DEFAULT_THROTTLE_RATES": {"billing_checkout": "30/hour"}
+                    }
+                }
+            ),
+            "forms": ModuleWiringSpec(
+                settings={
+                    "REST_FRAMEWORK": {
+                        "DEFAULT_THROTTLE_RATES": {"form_submit": "5/hour"}
+                    }
+                }
+            ),
+        }
+        _, _, settings, _ = collect_wiring(specs)
+        assert settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {
+                "billing_checkout": "30/hour",
+                "form_submit": "5/hour",
+            }
+        }
+
+    def test_collect_wiring_rest_framework_sub_key_conflict_fails(self) -> None:
+        """Two modules may not set one REST_FRAMEWORK sub-key differently."""
+        specs = {
+            "billing": ModuleWiringSpec(
+                settings={
+                    "REST_FRAMEWORK": {
+                        "DEFAULT_THROTTLE_RATES": {"billing_checkout": "30/hour"}
+                    }
+                }
+            ),
+            "forms": ModuleWiringSpec(
+                settings={
+                    "REST_FRAMEWORK": {
+                        "DEFAULT_THROTTLE_RATES": {"billing_checkout": "5/hour"}
+                    }
+                }
+            ),
+        }
+        with pytest.raises(ValueError) as exc_info:
+            collect_wiring(specs)
+        message = str(exc_info.value)
+        assert "'billing'" in message
+        assert "'forms'" in message
+        assert "DEFAULT_THROTTLE_RATES" in message
+        assert "billing_checkout" in message
+
+    def test_collect_wiring_rest_framework_equal_values_are_allowed(self) -> None:
+        """Equal REST_FRAMEWORK contributions merge without failing."""
+        contribution = {"DEFAULT_THROTTLE_RATES": {"shared": "30/hour"}}
+        specs = {
+            "billing": ModuleWiringSpec(settings={"REST_FRAMEWORK": contribution}),
+            "forms": ModuleWiringSpec(settings={"REST_FRAMEWORK": contribution}),
+        }
+        _, _, settings, _ = collect_wiring(specs)
+        assert settings["REST_FRAMEWORK"] == contribution
+
+    def test_collect_wiring_unlisted_dict_settings_do_not_merge(self) -> None:
+        """Only listed settings merge sub-keys; other dict keys must match."""
+        specs = {
+            "mod_a": ModuleWiringSpec(settings={"SOME_DICT": {"a": 1}}),
+            "mod_b": ModuleWiringSpec(settings={"SOME_DICT": {"b": 2}}),
+        }
+        with pytest.raises(ValueError, match="SOME_DICT"):
+            collect_wiring(specs)
 
     def test_collect_wiring_deduplicates_urls(self) -> None:
         """Duplicate URL includes appear only once."""

@@ -6,12 +6,13 @@ string patching `settings/base.py` and `urls.py`.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from pprint import pformat
 import re
 import shutil
-from typing import Any, Iterable, Mapping, TypeVar
+from typing import Any, TypeVar
 
 
 #: Sentinel prefix for environment variable references in derived settings.
@@ -19,6 +20,11 @@ from typing import Any, Iterable, Mapping, TypeVar
 #: ``os.environ.get()`` call instead of a string literal so the generated
 #: ``modules.py`` never stores credential material at rest.
 _QS_ENV_PREFIX: str = "__QS_ENV__:"
+
+#: Settings whose mapping values merge key by key across modules instead of
+#: being replaced whole (Module Conventions rule 30).  A second module may add
+#: sub-keys; the same sub-key with a different value fails the merge.
+_DEEP_MERGED_SETTINGS: frozenset[str] = frozenset({"REST_FRAMEWORK"})
 
 
 T = TypeVar("T")
@@ -52,22 +58,103 @@ def _sort_module_items(
     return sorted(module_specs.items(), key=lambda item: item[0])
 
 
+def _setting_path_text(path: tuple[str, ...]) -> str:
+    """Render a setting path for conflict messages."""
+    text = path[0]
+    for part in path[1:]:
+        text += f"[{part!r}]"
+    return text
+
+
+def _setting_conflict(
+    path: tuple[str, ...], first_module: str, second_module: str
+) -> ValueError:
+    """Build the error raised when two modules write one setting differently."""
+    return ValueError(
+        f"Module wiring conflict: modules '{first_module}' and '{second_module}' "
+        f"both write setting {_setting_path_text(path)} with different values. "
+        "Two modules may write one setting only with an equal value."
+    )
+
+
+def _record_path_owners(
+    writers: dict[tuple[str, ...], str],
+    path: tuple[str, ...],
+    value: Any,
+    module: str,
+) -> None:
+    """Record the first module to write *path* and every mapping below it."""
+    writers.setdefault(path, module)
+    if isinstance(value, Mapping):
+        for sub_key, sub_value in value.items():
+            _record_path_owners(writers, (*path, str(sub_key)), sub_value, module)
+
+
+def _merge_setting_value(
+    existing: Any,
+    incoming: Any,
+    *,
+    path: tuple[str, ...],
+    writers: dict[tuple[str, ...], str],
+    module: str,
+) -> Any:
+    """Merge a second value into an existing one, or fail on a conflict."""
+    if existing == incoming:
+        return existing
+    if isinstance(existing, Mapping) and isinstance(incoming, Mapping):
+        merged = dict(existing)
+        for sub_key, sub_value in incoming.items():
+            sub_path = (*path, str(sub_key))
+            if sub_key in merged:
+                merged[sub_key] = _merge_setting_value(
+                    merged[sub_key],
+                    sub_value,
+                    path=sub_path,
+                    writers=writers,
+                    module=module,
+                )
+            else:
+                merged[sub_key] = sub_value
+                _record_path_owners(writers, sub_path, sub_value, module)
+        return merged
+    raise _setting_conflict(path, writers[path], module)
+
+
 def collect_wiring(
     module_specs: Mapping[str, ModuleWiringSpec],
 ) -> tuple[list[str], list[str], dict[str, Any], list[tuple[str, str]]]:
-    """Collect merged wiring artifacts from module specs."""
+    """Collect merged wiring artifacts from module specs.
+
+    Two modules may write the same setting only with an equal value; a
+    differing value fails the merge, naming both modules and the setting.
+    Settings listed in ``_DEEP_MERGED_SETTINGS`` merge their mapping values
+    key by key instead of replacing the whole value.
+    """
     apps: list[str] = []
     middleware: list[str] = []
     settings: dict[str, Any] = {}
+    setting_writers: dict[tuple[str, ...], str] = {}
     urls: list[tuple[str, str]] = []
 
-    for _, spec in _sort_module_items(module_specs):
+    for module_name, spec in _sort_module_items(module_specs):
         _merge_unique(apps, spec.apps)
         _merge_unique(middleware, spec.middleware)
 
-        # Last writer wins for setting collisions, deterministic by module name.
         for key, value in spec.settings.items():
-            settings[key] = value
+            path = (key,)
+            if key not in settings:
+                settings[key] = value
+                _record_path_owners(setting_writers, path, value, module_name)
+            elif key in _DEEP_MERGED_SETTINGS:
+                settings[key] = _merge_setting_value(
+                    settings[key],
+                    value,
+                    path=path,
+                    writers=setting_writers,
+                    module=module_name,
+                )
+            elif settings[key] != value:
+                raise _setting_conflict(path, setting_writers[path], module_name)
 
     pre_home_urls, post_home_urls = collect_url_wiring(module_specs)
     urls.extend(pre_home_urls)

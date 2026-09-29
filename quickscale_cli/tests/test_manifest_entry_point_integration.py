@@ -23,7 +23,7 @@ from quickscale_core.manifest import (
     refresh_managed_adapters,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
-from quickscale_core.module_wiring import ModuleWiringSpec
+from quickscale_core.module_wiring import ModuleWiringSpec, collect_wiring
 
 # SA44 Phase 1: managed adapters require explicit
 # refresh_managed_adapters() before use.
@@ -66,6 +66,25 @@ class TestSourceDiscoveredManifestAdapterParity:
                 for app in (projection.get("expression") or {}).get("value", [])
             }
             assert declared_apps <= set(specs[module_name].apps)
+
+    def test_all_source_modules_wire_without_setting_conflicts(self) -> None:
+        """The shipped module set merges without conflicting setting values."""
+        module_names = discover_shipped_module_names()
+        refresh_managed_adapters()
+        specs = {
+            module_name: build_manifest_wiring_spec(
+                module_name, {}, project_package="myproject"
+            )
+            for module_name in module_names
+        }
+
+        _, _, settings, _ = collect_wiring(specs)
+
+        assert (
+            settings["ACCOUNT_ADAPTER"]
+            == "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
+        )
+        assert "MARKDOWNX_MARKDOWN_EXTENSIONS" in settings
 
 
 # ---------------------------------------------------------------------------
