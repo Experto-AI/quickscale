@@ -279,6 +279,54 @@ class TestOptionValidationEngine:
         assert [issue.option_name for issue in issues] == ["per_page"]
 
 
+class TestRetiredOptionRefusal:
+    """A manifest declares retired keys with the message that refuses them."""
+
+    def test_retired_key_is_reported_with_its_declared_message(self) -> None:
+        manifest = _manifest(
+            _option("per_page", option_type="integer", default=1, setting="PER_PAGE")
+        )
+        manifest.retired_options = {"default_pipeline_stages": "Retired: remove it."}
+        issues = collect_option_validation_issues(
+            manifest, {"default_pipeline_stages": ["lead"]}
+        )
+        assert [(issue.option_name, issue.message) for issue in issues] == [
+            ("default_pipeline_stages", "Retired: remove it.")
+        ]
+
+    def test_retired_key_is_reported_before_declared_option_issues(self) -> None:
+        manifest = _manifest(
+            _option(
+                "per_page",
+                option_type="integer",
+                default=1,
+                setting="PER_PAGE",
+                validation={"min": 1},
+            )
+        )
+        manifest.retired_options = {"retired_key": "Retired: remove it."}
+        issues = collect_option_validation_issues(
+            manifest, {"retired_key": 1, "per_page": 0}
+        )
+        assert issues[0].option_name == "retired_key"
+
+    def test_absent_retired_key_is_not_reported(self) -> None:
+        manifest = _manifest()
+        manifest.retired_options = {"retired_key": "Retired: remove it."}
+        assert validate_module_options(manifest, {}) == []
+
+    def test_shipped_crm_manifest_refuses_its_retired_key(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        manifest = load_manifest_from_path(
+            repo_root / "quickscale_modules" / "crm" / "module.yml"
+        )
+        issues = collect_option_validation_issues(
+            manifest, {"default_pipeline_stages": ["lead"]}
+        )
+        assert [issue.option_name for issue in issues] == ["default_pipeline_stages"]
+        assert "no longer supported" in issues[0].message
+
+
 class TestShippedManifestConformance:
     """Every shipped manifest conforms to the schema SA217 makes live."""
 
@@ -376,6 +424,13 @@ class TestPlanApplyEnforcement:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(self._config(body))
         assert "QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME" in str(exc_info.value)
+
+    def test_retired_option_fails_with_its_declared_message(self) -> None:
+        body = "  crm:\n    default_pipeline_stages:\n      - lead\n"
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(self._config(body))
+        assert "default_pipeline_stages" in str(exc_info.value)
+        assert "no longer supported" in str(exc_info.value)
 
     def test_valid_options_pass(self) -> None:
         config = validate_config(

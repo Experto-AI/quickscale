@@ -130,38 +130,14 @@ BILLING_MANIFEST: Final[list[tuple[str, str, str]]] = [
 # get_manifest_inventory("blog") continue to succeed.
 BLOG_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
-CRM_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Shared helpers — relocated to quickscale_core.contracts.module_options
-    ("normalize_crm_module_options", SHARED_HELPER, "T2.3"),
-    # Declarative targets
-    ("LEGACY_CRM_DEFAULT_PIPELINE_STAGES_OPTION", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_CRM_DEALS_PER_PAGE", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_CRM_CONTACTS_PER_PAGE", DECLARATIVE_TARGET, "T2.4"),
-    ("CRM_MODULE_OPTION_KEYS", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_crm_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_crm_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_crm_module_options", ADAPTER_ONLY, "T2.5"),
-    ("validate_crm_module_options", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: CRM imperative inventory cleared — the manifest owns its option
+# defaults, normalization, validation, and its retired-key refusal
+# (`retired_options`), and its CLI configurator reads the manifest.  The CRM
+# key remains in MANIFEST_INVENTORY with an empty list so that callers of
+# get_manifest_inventory("crm") continue to succeed.
+CRM_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
-FORMS_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Declarative targets
-    ("DEFAULT_FORMS_PER_PAGE", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_FORMS_SPAM_PROTECTION_ENABLED", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_FORMS_RATE_LIMIT", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_FORMS_DATA_RETENTION_DAYS", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_FORMS_SUBMISSIONS_API_ENABLED", DECLARATIVE_TARGET, "T2.4"),
-    ("FORMS_MODULE_OPTION_KEYS", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_forms_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_forms_module_options", ADAPTER_ONLY, "T2.5"),
-    ("normalize_forms_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_forms_module_options", ADAPTER_ONLY, "T2.5"),
-    ("validate_forms_module_options", ADAPTER_ONLY, "T2.5"),
-]
+FORMS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 # SA6.2: Listings imperative inventory cleared — all symbols are now
 # served by the manifest-driven derivation path in module.yml.

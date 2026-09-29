@@ -20,6 +20,10 @@ Messages name the setting a module author or operator must fix — the option's
 ``django_setting`` with its ``quickscale.yml`` path — including the setting
 named in a ``required_when`` condition.
 
+The manifest's top-level ``retired_options`` section names keys that no longer
+exist together with the message that must refuse them; a supplied retired key
+is reported first, so a retired name is never mistaken for an undeclared one.
+
 Values are canonicalized before the value-level checks: the caller's own
 canonicalization runs first, then the manifest's declared normalization rules
 through :func:`~quickscale_core.manifest.resolver.normalize_module_option_values`,
@@ -257,12 +261,16 @@ def collect_option_validation_issues(
 
     Returns:
         Every failed constraint, in option-name order, each carrying the
-        option that must be fixed.
+        option that must be fixed.  A supplied key the manifest declares
+        retired is reported first, with the manifest's removal message.
     """
     resolved = normalize_module_option_values(manifest, overrides)
     raw_values = dict(overrides or {}) if supplied is None else dict(supplied)
 
     issues: list[OptionValidationIssue] = []
+    for retired_name, message in sorted(manifest.retired_options.items()):
+        if retired_name in raw_values:
+            issues.append(OptionValidationIssue(retired_name, message))
     for option_name in sorted(resolved):
         option = manifest.get_option(option_name)
         if option is None:

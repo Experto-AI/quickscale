@@ -444,6 +444,60 @@ def _validate_mutable_options(
             )
 
 
+def _parse_retired_options(
+    data: dict[str, Any],
+    mutable_options: dict[str, ConfigOption],
+    immutable_options: dict[str, ConfigOption],
+    module_name: str | None,
+) -> dict[str, str]:
+    """Parse and validate the optional top-level ``retired_options`` section.
+
+    Each entry maps a retired option key to the message that names its
+    removal.  A key that is still a declared option is rejected: a key is
+    either live or retired, never both.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        mutable_options: Declared mutable options (collision check).
+        immutable_options: Declared immutable options (collision check).
+        module_name: Optional module name for error messages.
+
+    Returns:
+        A mapping of retired option names to their removal messages.  Empty
+        when the section is absent.
+
+    Raises:
+        ManifestError: If the section is malformed or names a declared option.
+    """
+    raw_section = data.get("retired_options")
+    if raw_section is None:
+        return {}
+
+    if not isinstance(raw_section, dict):
+        raise ManifestError("'retired_options' must be a mapping", module_name)
+
+    declared = set(mutable_options) | set(immutable_options)
+    retired: dict[str, str] = {}
+    for key, message in raw_section.items():
+        if not isinstance(key, str) or not key:
+            raise ManifestError(
+                "'retired_options' keys must be non-empty option names",
+                module_name,
+            )
+        if not isinstance(message, str) or not message:
+            raise ManifestError(
+                f"'retired_options.{key}' must be a non-empty removal message",
+                module_name,
+            )
+        if key in declared:
+            raise ManifestError(
+                f"'retired_options.{key}' is also a declared option",
+                module_name,
+            )
+        retired[key] = message
+    return retired
+
+
 def _parse_managed_files(
     data: dict[str, Any], module_name: str | None
 ) -> dict[str, ManagedFileDeclaration]:
@@ -905,6 +959,11 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     _validate_mutable_options(mutable_options, module_name)
     _validate_option_references(mutable_options, immutable_options, module_name)
 
+    # Parse retired-option declarations (additive; empty when absent)
+    retired_options = _parse_retired_options(
+        data, mutable_options, immutable_options, module_name
+    )
+
     # Parse list fields
     required_modules = _validate_list_field(data, "required_modules", module_name)
     dependencies = _validate_list_field(data, "dependencies", module_name)
@@ -937,6 +996,7 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         derived_settings=derivation.get("derived_settings", []),
         wiring_projections=derivation.get("wiring_projections", []),
         option_derivations=derivation.get("option_derivations", {}),
+        retired_options=retired_options,
         contract_vintage=contract_vintage,
     )
 
