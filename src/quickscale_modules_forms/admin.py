@@ -103,7 +103,7 @@ class FormAdmin(TenantModelAdmin):
 
     @admin.display(description="Submissions", ordering="_submission_count")
     def submission_count(self, obj: Form) -> int:
-        return obj._submission_count  # type: ignore[no-any-return]
+        return obj._submission_count  # type: ignore[attr-defined]
 
     @admin.action(description="Mark selected forms as inactive")
     def mark_inactive(self, request: HttpRequest, queryset: QuerySet) -> None:
