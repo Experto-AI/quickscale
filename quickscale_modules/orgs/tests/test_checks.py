@@ -1,4 +1,4 @@
-"""Tests for the SA1.3/SA1.4 tenant-isolation system checks (checks.py).
+"""Tests for the tenant-isolation system checks (checks.py).
 
 Covers every code path in ``check_tenant_isolation()``:
 
@@ -20,12 +20,12 @@ Covers the ``check_tenant_manager_inheritance()`` paths:
 * E003 — a model carrying a ``TenantManager`` without ``TenantModel``
 * Happy path — an inheriting model and the installed walk pass
 
-Covers the SA208 ``check_provider_id_conformance()`` paths:
+Covers the ``check_provider_id_conformance()`` paths:
 
 * E001 — exception during tenant-model discovery
 * E001 — undeclared ``*_id`` field, declared field, and the real installed walk
 
-Covers the SA213 ``check_removal_obligation_discharge()`` paths:
+Covers the ``check_removal_obligation_discharge()`` paths:
 
 * E002 — exception during obligation discovery
 * E002 — a declared action its boundary has no coordinator route for
@@ -225,7 +225,7 @@ class TestCheckTenantIsolationMultiModel:
 
 
 # ---------------------------------------------------------------------------
-# SA1.4 — Default-deny classification check (W005) tests
+# Default-deny classification check (W005) tests
 # ---------------------------------------------------------------------------
 
 
@@ -278,7 +278,7 @@ class TestCheckModelClassificationHappy:
 
 
 # ---------------------------------------------------------------------------
-# SA15.1 — Implicit M2M through model detection
+# Implicit M2M through model detection
 # ---------------------------------------------------------------------------
 
 
@@ -329,12 +329,12 @@ class TestIsImplicitM2MThrough:
 
 
 # ---------------------------------------------------------------------------
-# SA15.1 — tenant_excluded marker test
+# tenant_excluded marker test
 # ---------------------------------------------------------------------------
 
 
 class TestHasTenantExcludedMarker:
-    """Verify ``has_tenant_excluded_marker()`` behavior (CR-SA15.1-003)."""
+    """Verify ``has_tenant_excluded_marker()`` behavior."""
 
     def _make_model_with_attr(self, **attrs: object) -> MagicMock:
         model = MagicMock(spec=[])
@@ -374,7 +374,7 @@ class TestHasTenantExcludedMarker:
 
 
 # ---------------------------------------------------------------------------
-# SA15.1 — W005 hint includes marker-based and M2M inference guidance
+# W005 hint includes marker-based and M2M inference guidance
 # ---------------------------------------------------------------------------
 
 
@@ -435,7 +435,7 @@ class TestW005HintIncludesRemediationGuidance:
 
 
 # ---------------------------------------------------------------------------
-# SA15.1 — is_classified_in_registry includes implicit M2M path
+# is_classified_in_registry includes implicit M2M path
 # ---------------------------------------------------------------------------
 
 
@@ -480,11 +480,11 @@ class TestIsClassifiedInRegistryWithImplicitM2M:
         assert is_classified_in_registry(model) is False
 
 
-def test_sa182_project_listing_is_marker_classified_without_registry() -> None:
+def test_project_tenant_listing_is_marker_classified_without_registry() -> None:
     """A project-owned ``AbstractListing`` subclass needs no registry entry."""
     import quickscale_modules_orgs.tenancy as tenancy_mod
 
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
     from quickscale_modules_orgs.tenancy import (
         get_unclassified_concrete_models,
         is_classified_in_registry,
@@ -501,11 +501,11 @@ def test_sa182_project_listing_is_marker_classified_without_registry() -> None:
         tenancy_mod.REGISTRY_LOOKUP = original_lookup
 
 
-def test_sa182_tenant_excluded_wins_over_tenant_manager(
+def test_project_tenant_excluded_wins_over_tenant_manager(
     monkeypatch: MonkeyPatch,
 ) -> None:
     """An explicit exclusion overrides the project's positive tenant marker."""
-    from tests.sa182_project_app.models import ProjectListing
+    from tests.project_tenant_app.models import ProjectListing
     from quickscale_modules_orgs.tenancy import (
         get_tenant_models,
         is_classified_in_registry,
@@ -611,7 +611,7 @@ class TestCheckTenantManagerInheritance:
 
 
 # ---------------------------------------------------------------------------
-# SA208 — Provider-ID removal-conformance check (E001)
+# Provider-ID removal-conformance check (E001)
 # ---------------------------------------------------------------------------
 
 
@@ -621,7 +621,7 @@ def _provider_model(
     """Build a model-like object with one non-relational ``*_id`` field."""
     model = SimpleNamespace(
         _meta=SimpleNamespace(
-            label_lower="sa208_checks_app.tenantrecord",
+            label_lower="provider_id_checks_app.tenantrecord",
             get_fields=lambda: [
                 SimpleNamespace(name="acme_customer_id", is_relation=False)
             ],
@@ -657,7 +657,7 @@ class TestCheckProviderIdConformanceE001:
 
         assert len(messages) == 1
         assert messages[0].id == "quickscale_orgs.E001"
-        assert "sa208_checks_app.tenantrecord.acme_customer_id" in messages[0].msg
+        assert "provider_id_checks_app.tenantrecord.acme_customer_id" in messages[0].msg
         assert "provider_id_classification" in messages[0].hint
 
     @patch("quickscale_modules_orgs.checks.get_tenant_models")
@@ -695,7 +695,7 @@ def test_undeclared_project_field_fails_the_real_walk(
 ) -> None:
     """Removing a project model's declaration fails the check, naming fields."""
     from quickscale_modules_orgs.checks import check_provider_id_conformance
-    from tests.sa208_project_app.models import ProjectProviderRecord
+    from tests.provider_id_app.models import ProjectProviderRecord
 
     monkeypatch.delattr(ProjectProviderRecord, "provider_id_classification")
 
@@ -704,12 +704,12 @@ def test_undeclared_project_field_fails_the_real_walk(
     assert messages
     assert all(message.id == "quickscale_orgs.E001" for message in messages)
     named = " ".join(message.msg for message in messages)
-    assert "sa208_project_app.projectproviderrecord.mls_id" in named
-    assert "sa208_project_app.projectproviderrecord.local_ref_id" in named
+    assert "provider_id_app.projectproviderrecord.mls_id" in named
+    assert "provider_id_app.projectproviderrecord.local_ref_id" in named
 
 
 # ---------------------------------------------------------------------------
-# SA213 — Removal-obligation discharge check (E002)
+# Removal-obligation discharge check (E002)
 # ---------------------------------------------------------------------------
 
 
@@ -782,7 +782,7 @@ def test_removal_obligation_discharge_passes_for_installed_apps() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA213 — Boundary wiring and account-deletion reconciliation (E002)
+# Boundary wiring and account-deletion reconciliation (E002)
 # ---------------------------------------------------------------------------
 
 

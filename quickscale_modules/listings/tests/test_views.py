@@ -51,7 +51,7 @@ class TestListingListView:
         listing_factory,
         settings,
     ):
-        """SA30: invalid LISTINGS_PER_PAGE raises ImproperlyConfigured instead of falling back."""
+        """Invalid LISTINGS_PER_PAGE raises ImproperlyConfigured instead of falling back."""
         settings.LISTINGS_PER_PAGE = "invalid"
 
         with pytest.raises(ImproperlyConfigured, match="LISTINGS_PER_PAGE"):
@@ -63,7 +63,7 @@ class TestListingListView:
         listing_factory,
         settings,
     ):
-        """SA30: bool LISTINGS_PER_PAGE raises ImproperlyConfigured."""
+        """Bool LISTINGS_PER_PAGE raises ImproperlyConfigured."""
         settings.LISTINGS_PER_PAGE = False
 
         with pytest.raises(ImproperlyConfigured, match="LISTINGS_PER_PAGE"):
@@ -216,7 +216,7 @@ class TestListingListView:
 
 @override_settings(LISTINGS_PER_PAGE=None)
 def test_listings_page_size_missing_setting_raises_improperly_configured() -> None:
-    """SA30: missing LISTINGS_PER_PAGE raises ImproperlyConfigured."""
+    """Missing LISTINGS_PER_PAGE raises ImproperlyConfigured."""
     with pytest.raises(
         ImproperlyConfigured, match="LISTINGS_PER_PAGE setting is required"
     ):
@@ -228,7 +228,7 @@ def test_listings_page_size_missing_setting_raises_improperly_configured() -> No
 
 @override_settings(LISTINGS_PER_PAGE="not-a-number")
 def test_listings_page_size_non_numeric_setting_raises_improperly_configured() -> None:
-    """SA30: non-numeric LISTINGS_PER_PAGE raises ImproperlyConfigured."""
+    """Non-numeric LISTINGS_PER_PAGE raises ImproperlyConfigured."""
     with pytest.raises(ImproperlyConfigured, match="LISTINGS_PER_PAGE"):
         from quickscale_modules_listings.views import _get_positive_int_setting
 
@@ -237,7 +237,7 @@ def test_listings_page_size_non_numeric_setting_raises_improperly_configured() -
 
 @override_settings(LISTINGS_PER_PAGE=0)
 def test_listings_page_size_non_positive_setting_raises_improperly_configured() -> None:
-    """SA30: non-positive LISTINGS_PER_PAGE raises ImproperlyConfigured."""
+    """Non-positive LISTINGS_PER_PAGE raises ImproperlyConfigured."""
     with pytest.raises(ImproperlyConfigured, match="positive integer"):
         from quickscale_modules_listings.views import _get_positive_int_setting
 
@@ -246,7 +246,7 @@ def test_listings_page_size_non_positive_setting_raises_improperly_configured() 
 
 @override_settings(LISTINGS_PER_PAGE=-5)
 def test_listings_page_size_negative_setting_raises_improperly_configured() -> None:
-    """SA30: negative LISTINGS_PER_PAGE raises ImproperlyConfigured."""
+    """Negative LISTINGS_PER_PAGE raises ImproperlyConfigured."""
     with pytest.raises(ImproperlyConfigured, match="positive integer"):
         from quickscale_modules_listings.views import _get_positive_int_setting
 
@@ -255,7 +255,7 @@ def test_listings_page_size_negative_setting_raises_improperly_configured() -> N
 
 @override_settings(LISTINGS_PER_PAGE=24)
 def test_listings_page_size_valid_setting_passes() -> None:
-    """SA30: valid LISTINGS_PER_PAGE returns the value."""
+    """Valid LISTINGS_PER_PAGE returns the value."""
     from quickscale_modules_listings.views import _get_positive_int_setting
 
     assert _get_positive_int_setting("LISTINGS_PER_PAGE") == 24
@@ -379,7 +379,7 @@ class TestListingDetailView:
         assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in html
 
     # ------------------------------------------------------------------
-    # SA26 — Markdown URI scheme sanitization
+    # Markdown URI scheme sanitization
     # ------------------------------------------------------------------
 
     def test_listing_detail_sanitizes_javascript_markdown_links(

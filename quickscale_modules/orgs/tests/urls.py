@@ -52,14 +52,14 @@ def current_org_id_view(request, org_slug: str):
 
 
 # ---------------------------------------------------------------------------
-# AF9 Phase 3 — autocommit GUC probe
+# autocommit GUC probe
 # ---------------------------------------------------------------------------
 
 
 def _af9_guc_probe(request) -> str:
     """Return the current DB-level ``app.current_org_id`` GUC value.
 
-    Issued via a direct ``cursor.execute()`` so the AF9 priming execute
+    Issued via a direct ``cursor.execute()`` so the priming execute
     wrapper fires and sets the GUC from the ContextVar.  The GUC is
     read inside the same ``cursor.execute()`` call, proving that the
     priming and the tenant SQL share the same short atomic block.
@@ -73,9 +73,9 @@ def _af9_guc_probe(request) -> str:
 
 
 def af9_guc_probe_view(request):
-    """AF9 autocommit GUC probe: returns the GUC set by the execute wrapper.
+    """Autocommit GUC probe: returns the GUC set by the execute wrapper.
 
-    The AF9 execute wrapper issues ``SET LOCAL app.current_org_id``
+    The execute wrapper issues ``SET LOCAL app.current_org_id``
     from the ContextVar before this view's ``SELECT current_setting``
     runs — inside the same short ``transaction.atomic()`` block.
 
@@ -146,7 +146,7 @@ urlpatterns = [
         feature_view,
         name="feature-view",
     ),
-    # SA4.1 benchmark path — non-management route that triggers middleware
+    # benchmark path — non-management route that triggers middleware
     # session-org resolution (not a /orgs/<slug>/ management bypass).
     path(
         "sa41-bench/<slug:org_slug>/",
@@ -154,7 +154,7 @@ urlpatterns = [
         name="sa41-org-dashboard",
     ),
     path("", include("quickscale_modules_orgs.urls")),
-    # SA35: AccountDeleteView needs auth URL routing in the test harness
+    # AccountDeleteView needs auth URL routing in the test harness
     # so view-level survivor regression can reach it.
     # Use the same explicit namespace tuple pattern as the auth test harness
     # to ensure reverse("quickscale_auth:account-delete") resolves reliably.

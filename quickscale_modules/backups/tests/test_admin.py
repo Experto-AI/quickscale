@@ -39,7 +39,7 @@ from quickscale_modules_backups.services import (
     StagedAdminRestoreUpload,
 )
 
-# SA52: All TestBackupPolicyAdmin tests that exercise dispatch
+# All TestBackupPolicyAdmin tests that exercise dispatch
 # (restore/create/prune) need _get_manage_py() to resolve to a valid
 # path since the test environment has no manage.py.  An autouse fixture
 # inside that class provides the patch; tests that explicitly test the
@@ -569,7 +569,7 @@ class TestBackupPolicyAdmin:
         ]
 
     # ------------------------------------------------------------------
-    # CR-SA37-001: regression — async admin create dispatch preserves
+    # regression — async admin create dispatch preserves
     # trigger="admin" in the subprocess argv
     # ------------------------------------------------------------------
 
@@ -578,7 +578,7 @@ class TestBackupPolicyAdmin:
         admin_client: Client,
         backup_policy: BackupPolicy,
     ) -> None:
-        """CR-SA37-001: Async create dispatch passes ``--trigger admin``
+        """Async create dispatch passes ``--trigger admin``
         to the child process, not only in the admin-layer call.
 
         Patches ``services.subprocess.Popen`` so we can inspect the argv
@@ -705,7 +705,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """SA20: Admin-triggered restore is dispatched async via subprocess.
+        """Admin-triggered restore is dispatched async via subprocess.
 
         The artifact should transition to Status.RESTORING immediately, and the
         management command is invoked in the background. The admin returns to the
@@ -739,7 +739,7 @@ class TestBackupPolicyAdmin:
         assert str(postgresql_backup_artifact.pk) in popen_args
         assert "--confirm" in popen_args
         assert postgresql_backup_artifact.filename in popen_args
-        # CR-SA20-006: admin dispatch always includes --local-only
+        # admin dispatch always includes --local-only
         assert "--local-only" in popen_args
 
         assert [message.message for message in get_messages(response.wsgi_request)] == [
@@ -892,7 +892,7 @@ class TestBackupPolicyAdmin:
         ]
 
     # ------------------------------------------------------------------
-    # SA20 regression: uploaded-file restore through trusted seam
+    # regression: uploaded-file restore through trusted seam
     # ------------------------------------------------------------------
 
     def test_restore_page_dispatches_uploaded_restore_through_trusted_seam(
@@ -902,7 +902,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """SA20: Uploaded-file restore dispatch routes through the trusted seam.
+        """Uploaded-file restore dispatch routes through the trusted seam.
 
         The uploaded content goes through the shared staging + trusted resolver
         (not inline candidate selection).  The dispatch uses the artifact-id path
@@ -967,7 +967,7 @@ class TestBackupPolicyAdmin:
         assert "--file" not in popen_args  # artifact-id, not --file
         assert "--confirm" in popen_args
         assert postgresql_backup_artifact.filename in popen_args
-        # CR-SA20-006: admin dispatch always includes --local-only
+        # admin dispatch always includes --local-only
         assert "--local-only" in popen_args
 
         assert [message.message for message in get_messages(response.wsgi_request)] == [
@@ -982,7 +982,7 @@ class TestBackupPolicyAdmin:
         admin_client: Client,
         backup_policy: BackupPolicy,
     ) -> None:
-        """SA20: Uploaded file with no matching artifact by checksum+size raises."""
+        """Uploaded file with no matching artifact by checksum+size raises."""
         del backup_policy
         uploaded_file = SimpleUploadedFile(
             "unknown.dump",
@@ -1015,7 +1015,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA20-REV-001: Uploaded-file restore rejects already-RESTORING artifacts.
+        """Uploaded-file restore rejects already-RESTORING artifacts.
 
         Parity regression matching the recorded-artifact branch's
         _get_admin_restore_ineligible_reason guard.
@@ -1076,7 +1076,7 @@ class TestBackupPolicyAdmin:
         )
 
     # ------------------------------------------------------------------
-    # SA20 regression: spawn-failure rollback (no stranded Status.RESTORING)
+    # regression: spawn-failure rollback (no stranded Status.RESTORING)
     # ------------------------------------------------------------------
 
     def test_restore_page_does_not_strand_status_restoring_on_spawn_failure(
@@ -1085,7 +1085,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """SA20: When subprocess.Popen raises, Status.RESTORING is not persisted."""
+        """When subprocess.Popen raises, Status.RESTORING is not persisted."""
         del backup_policy
         original_status = postgresql_backup_artifact.status
 
@@ -1118,7 +1118,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """SA20: Uploaded-file restore reports spawn failure without stranding."""
+        """Uploaded-file restore reports spawn failure without stranding."""
         del backup_policy
         content = postgresql_artifact_file.read_bytes()
         uploaded_file = SimpleUploadedFile(
@@ -1170,7 +1170,7 @@ class TestBackupPolicyAdmin:
         mocked_popen.assert_called_once()
 
     # ------------------------------------------------------------------
-    # CR-SA20-007: regression — parent does not clobber fast child
+    # regression — parent does not clobber fast child
     # terminal status.  The new design persists Status.RESTORING before
     # Popen, so a child that completes during Popen (simulated here by
     # writing a terminal status inside the Popen mock) must not be
@@ -1183,7 +1183,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """CR-SA20-007: Recorded-artifact dispatch preserves fast child terminal status.
+        """Recorded-artifact dispatch preserves fast child terminal status.
 
         The mock simulates a child that completes immediately inside the
         Popen call, setting Status.FAILED before the parent return path
@@ -1238,7 +1238,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA20-007: Uploaded-file dispatch preserves fast child terminal status."""
+        """Uploaded-file dispatch preserves fast child terminal status."""
         del backup_policy
         content = postgresql_artifact_file.read_bytes()
         uploaded_file = SimpleUploadedFile(
@@ -1298,7 +1298,7 @@ class TestBackupPolicyAdmin:
         mocked_popen.assert_called_once()
 
     # ------------------------------------------------------------------
-    # CR-SA20-007: regression — spawn-failure rollback preserves prior
+    # regression — spawn-failure rollback preserves prior
     # restore_started_at and restore_error on retry from FAILED/RESTORED
     # when Popen raises (branch-parity: recorded-artifact + uploaded)
     # ------------------------------------------------------------------
@@ -1309,7 +1309,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """CR-SA20-007: Recorded-artifact retry from FAILED preserves
+        """Recorded-artifact retry from FAILED preserves
         pre-spawn restore_started_at and restore_error when Popen raises."""
         del backup_policy
         prior_started_at = timezone.now() - timedelta(hours=1)
@@ -1359,7 +1359,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA20-007: Uploaded-file retry from FAILED preserves
+        """Uploaded-file retry from FAILED preserves
         pre-spawn restore_started_at and restore_error when Popen raises."""
         del backup_policy
         prior_started_at = timezone.now() - timedelta(hours=2)
@@ -1428,7 +1428,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """CR-SA20-007: Recorded-artifact retry from RESTORED preserves
+        """Recorded-artifact retry from RESTORED preserves
         pre-spawn restore_started_at and restore_error when Popen raises."""
         del backup_policy
         prior_started_at = timezone.now() - timedelta(hours=3)
@@ -1477,7 +1477,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA20-007: Uploaded-file retry from RESTORED preserves
+        """Uploaded-file retry from RESTORED preserves
         pre-spawn restore_started_at and restore_error when Popen raises."""
         del backup_policy
         prior_started_at = timezone.now() - timedelta(hours=4)
@@ -1541,7 +1541,7 @@ class TestBackupPolicyAdmin:
         mocked_popen.assert_called_once()
 
     # ------------------------------------------------------------------
-    # CR-SA20-004: regression — async uploaded-file restore rejects
+    # regression — async uploaded-file restore rejects
     # ambiguous / incomplete-snapshot cases through shared resolver
     # ------------------------------------------------------------------
 
@@ -1667,7 +1667,7 @@ class TestBackupPolicyAdmin:
         assert postgresql_backup_artifact.status != BackupArtifact.Status.RESTORING
 
     # ------------------------------------------------------------------
-    # CR-SA20-005: regression — async uploaded-file restore ignores
+    # regression — async uploaded-file restore ignores
     # unsafe persisted local_path (out-of-tree and symlinked destinations)
     # ------------------------------------------------------------------
 
@@ -1679,7 +1679,7 @@ class TestBackupPolicyAdmin:
         postgresql_artifact_file: Path,
         local_backup_settings: Path,
     ) -> None:
-        """CR-SA20-005: Out-of-tree persisted local_path is always
+        """Out-of-tree persisted local_path is always
         replaced by a safe path under get_local_backup_directory().
 
         The async uploaded-file restore branch must NOT copy bytes to
@@ -1754,7 +1754,7 @@ class TestBackupPolicyAdmin:
         postgresql_artifact_file: Path,
         local_backup_settings: Path,
     ) -> None:
-        """CR-SA20-005: Symlink-based local_path is always replaced by a
+        """Symlink-based local_path is always replaced by a
         safe direct path under get_local_backup_directory().
 
         The async uploaded-file restore branch must NOT follow a symlink
@@ -1840,7 +1840,7 @@ class TestBackupPolicyAdmin:
         assert safe_path.read_bytes() == content
 
     # ------------------------------------------------------------------
-    # CR-SA20-REV-002: regression — atomic restore claim prevents
+    # regression — atomic restore claim prevents
     # double-dispatch of concurrent restore submissions for the same
     # artifact (stale-row / double-dispatch)
     # ------------------------------------------------------------------
@@ -1851,7 +1851,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """CR-SA20-REV-002: Two sequential recorded-artifact restore
+        """Two sequential recorded-artifact restore
         submissions for the same artifact — exactly one reaches Popen,
         the second receives a blocked message.
 
@@ -1909,7 +1909,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA20-REV-002: Two sequential uploaded-file restore
+        """Two sequential uploaded-file restore
         submissions for the same artifact — exactly one reaches Popen,
         the second receives a blocked message.
 
@@ -2006,7 +2006,7 @@ class TestBackupPolicyAdmin:
         )
 
     # ------------------------------------------------------------------
-    # CR-SA20-REV-002: regression — atomic-claim-failure defensive paths
+    # regression — atomic-claim-failure defensive paths
     # (lines 570-581 recorded-artifact; lines 743-755 uploaded-file).
     # These are unreachable in normal flow because earlier guards catch
     # ineligible statuses before the atomic claim.  Patch the helper to
@@ -2020,7 +2020,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """CR-SA20-REV-002: Recorded-artifact atomic claim failure with
+        """Recorded-artifact atomic claim failure with
         ineligible_reason (lines 575-576).
 
         When _atomic_claim_restore fails and the artifact's post-claim
@@ -2067,7 +2067,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """CR-SA20-REV-002: Recorded-artifact atomic claim fallback
+        """Recorded-artifact atomic claim fallback
         (lines 577-581).
 
         When _atomic_claim_restore fails and the artifact's post-claim
@@ -2115,7 +2115,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA20-REV-002: Uploaded-file atomic claim failure with
+        """Uploaded-file atomic claim failure with
         Status.DELETED (lines 743-749).
 
         When _atomic_claim_restore fails and the artifact's post-claim
@@ -2185,7 +2185,7 @@ class TestBackupPolicyAdmin:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA20-REV-002: Uploaded-file atomic claim fallback
+        """Uploaded-file atomic claim fallback
         (lines 751-755).
 
         When _atomic_claim_restore fails and the artifact's post-claim
@@ -2730,7 +2730,7 @@ class TestBackupArtifactAdmin:
 
 @pytest.mark.django_db
 class TestBackupArtifactAdminStaleRestore:
-    """SA38: Stale restore detection and reset on BackupArtifactAdmin."""
+    """Stale restore detection and reset on BackupArtifactAdmin."""
 
     def _make_stale_artifact(
         self,
@@ -2847,7 +2847,7 @@ class TestBackupArtifactAdminStaleRestore:
 
 @pytest.mark.django_db
 class TestBackupPolicyAdminStaleRestore:
-    """SA38: Stale-aware restore eligibility on BackupPolicyAdmin."""
+    """Stale-aware restore eligibility on BackupPolicyAdmin."""
 
     def _make_eligible_artifact(
         self,
@@ -2893,7 +2893,7 @@ class TestBackupPolicyAdminStaleRestore:
         assert "currently being restored" in reason
         assert "stale" not in reason.lower()
 
-    # CR-SA38-001: uploaded-file restore path stale-awareness —
+    # uploaded-file restore path stale-awareness
     # the stale-aware refusal message must match the recorded-artifact
     # branch's recovery guidance instead of a permanent block.
 
@@ -2904,7 +2904,7 @@ class TestBackupPolicyAdminStaleRestore:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA38-001: Uploaded-file restore shows recovery guidance for
+        """Uploaded-file restore shows recovery guidance for
         a stale Status.RESTORING artifact instead of a permanent block."""
         del backup_policy
         content = postgresql_artifact_file.read_bytes()
@@ -2963,7 +2963,7 @@ class TestBackupPolicyAdminStaleRestore:
         # Must NOT say "currently being restored" (the old permanent block).
         assert "currently being restored" not in content
 
-    # CR-SA38-001: uploaded-file dry-run path stale-awareness —
+    # uploaded-file dry-run path stale-awareness
     # the stale-aware refusal message must match the recorded-artifact
     # branch's recovery guidance instead of a permanent block.
 
@@ -2974,7 +2974,7 @@ class TestBackupPolicyAdminStaleRestore:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA38-001: Uploaded-file dry-run rejects a stale
+        """Uploaded-file dry-run rejects a stale
         Status.RESTORING artifact with recovery guidance (child process
         likely died), matching the recorded-artifact branch."""
         del backup_policy
@@ -3036,7 +3036,7 @@ class TestBackupPolicyAdminStaleRestore:
         postgresql_backup_artifact: BackupArtifact,
         postgresql_artifact_file: Path,
     ) -> None:
-        """CR-SA38-001: Uploaded-file dry-run rejects a recent
+        """Uploaded-file dry-run rejects a recent
         Status.RESTORING artifact with the standard wait message,
         matching the recorded-artifact branch."""
         del backup_policy

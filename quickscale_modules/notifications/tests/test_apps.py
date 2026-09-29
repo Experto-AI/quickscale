@@ -1,6 +1,6 @@
 """Tests for notifications AppConfig startup behavior.
 
-SA17.6 — fail-hard notifications module settings: require explicit
+Fail-hard notifications module settings: require explicit
 ``QUICKSCALE_NOTIFICATIONS_ENABLED`` and
 ``QUICKSCALE_NOTIFICATIONS_PROVIDER`` at startup instead of silently
 defaulting them.

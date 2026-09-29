@@ -1,4 +1,4 @@
-"""Tests for backups module persistence providers (SA89a Phase 2).
+"""Tests for backups module persistence providers.
 
 Covers:
 * ``_BackupArtifactPersistenceProvider.resolve_admin_uploaded_restore_artifact``

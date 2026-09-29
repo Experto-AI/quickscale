@@ -37,7 +37,7 @@ class TestUserFkDeleteRuleConformance:
     """
 
     # ---- Required modules: all quickscale_* apps with user-FKs ---
-    # CR-SA35-001: This set acts as a registration guard so that adding a
+    # This set acts as a registration guard so that adding a
     # new user-FK-bearing module to INSTALLED_APPS requires an explicit
     # entry here (and removing one produces a clear test failure).
     REQUIRED_MODULES: frozenset[str] = frozenset(
@@ -73,7 +73,7 @@ class TestUserFkDeleteRuleConformance:
     )
 
     def test_required_modules_installed(self) -> None:
-        """CR-SA35-001: Verify every user-FK-bearing module is loaded.
+        """Verify every user-FK-bearing module is loaded.
 
         If this test fails, add the missing module to both
         ``REQUIRED_MODULES`` (here) and ``INSTALLED_APPS``
@@ -250,7 +250,7 @@ def test_account_deletion_reference_discovery_query_count_ignores_tenant_count()
 
 
 # ---------------------------------------------------------------------------
-# SA35 — AccountDeleteView-level survivor regression (view + cross-module)
+# AccountDeleteView-level survivor regression (view + cross-module)
 #
 # The conformance tests above prove user-FKs are SET_NULL at the schema
 # level.  This test proves the full AccountDeleteView path preserves
@@ -277,7 +277,7 @@ def _sa35_user(db: None) -> object:
 
 @pytest.fixture
 def _sa35_authenticated_client(db: None, _sa35_user: object) -> Client:
-    """Return a client authenticated as the SA35 survivor test user."""
+    """Return a client authenticated as the survivor test user."""
     client = Client()
     client.force_login(_sa35_user)
     return client
@@ -287,7 +287,7 @@ def _sa35_authenticated_client(db: None, _sa35_user: object) -> Client:
 # from the conftest (reset_current_org_id) apply automatically.
 @pytest.mark.django_db
 class TestAccountDeleteViewSurvivorRegression:
-    """SA35 regression: AccountDeleteView preserves blog + CRM content."""
+    """Regression: AccountDeleteView preserves blog + CRM content."""
 
     def _setup_org_and_membership(self, user: object) -> tuple[object, object]:
         """Create a personal org and membership so deletion is permitted.
@@ -332,7 +332,7 @@ class TestAccountDeleteViewSurvivorRegression:
 
     def _create_project_listing(self, user: object, org: object) -> object:
         """Create project-owned tenant content with user provenance."""
-        from tests.sa182_project_app.models import ProjectListing
+        from tests.project_tenant_app.models import ProjectListing
 
         set_current_org_id(org.pk)
         try:
@@ -519,7 +519,7 @@ class TestAccountDeleteViewSurvivorRegression:
 
 
 # ---------------------------------------------------------------------------
-# SA47 — concurrent account-deletion regression
+# concurrent account-deletion regression
 #
 # Two co-owners of the same shared org (with a third non-owner member)
 # attempt to delete their accounts concurrently.  ``AccountDeleteView``
@@ -540,7 +540,7 @@ def test_concurrent_account_deletion_locking_protects_last_owner() -> None:
     """Two co-owners deleting accounts concurrently: the ``select_for_update``
     lock on the shared org serializes access so that at most one owner
     is deleted and the org never becomes ownerless while non-owner
-    members remain (SA47).
+    members remain.
 
     Thread A acquires the org lock first, sees the other owner (not
     blocked), and deletes owner A.  Thread B then acquires the lock
@@ -655,7 +655,7 @@ def test_concurrent_account_deletion_locking_protects_last_owner() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA47 — lock-order deadlock regression (CR-SA47-001)
+# lock-order deadlock regression
 #
 # AccountDeleteView locks org rows first (via select_for_update before
 # user.delete()), while OrganizationMembership.save()/delete() previously
@@ -673,7 +673,7 @@ def test_concurrent_account_deletion_locking_protects_last_owner() -> None:
 def test_account_deletion_and_membership_remove_no_deadlock() -> None:
     """Concurrent account deletion and membership removal do not
     deadlock.  Both paths now lock the org row before the membership
-    row (SA47 CR-SA47-001)."""
+    row."""
     import concurrent.futures
 
     from django.contrib.auth import get_user_model
@@ -727,7 +727,7 @@ def test_account_deletion_and_membership_remove_no_deadlock() -> None:
             Organization.objects.select_for_update().get(pk=org_pk)
             try:
                 # Delete user — cascades to the membership row.
-                # SA70 pre_delete backstop may block this if the user is
+                # pre_delete backstop may block this if the user is
                 # the sole owner with other members.
                 User.objects.filter(pk=owner_pk).delete()
                 return {"ok": True, "stage": "account-deleted"}
@@ -762,7 +762,7 @@ def test_account_deletion_and_membership_remove_no_deadlock() -> None:
     # At most one thread succeeded in removing the membership.
     # (The account deletion cascades; the membership.remove is
     #  expected to be blocked if the account deletion didn't race.)
-    # SA70: the account deletion backstop may block the cascade when
+    # The account deletion backstop may block the cascade when
     # the user is the sole owner; the remove thread may then delete
     # the surviving membership row.
     assert (

@@ -1,4 +1,4 @@
-"""Project-owned tenant model used by the SA182 regression suite."""
+"""Project-owned tenant model used by the purge-ordering regression suite."""
 
 from django.conf import settings
 from django.db import models
@@ -25,15 +25,15 @@ class ProjectListing(AbstractListing):
         indexes = [
             models.Index(
                 fields=["-published_date"],
-                name="sa182_project_listing_pub_idx",
+                name="project_listing_pub_idx",
             ),
-            models.Index(fields=["status"], name="sa182_project_listing_status_idx"),
-            models.Index(fields=["slug"], name="sa182_project_listing_slug_idx"),
+            models.Index(fields=["status"], name="project_listing_status_idx"),
+            models.Index(fields=["slug"], name="project_listing_slug_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],
-                name="sa182_project_listing_slug_org_uq",
+                name="project_listing_slug_org_uq",
             ),
         ]
 

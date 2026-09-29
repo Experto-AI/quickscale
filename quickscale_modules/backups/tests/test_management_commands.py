@@ -87,7 +87,7 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA37-001: regression — async admin dispatching must preserve
+# regression — async admin dispatching must preserve
 # trigger="admin" instead of falling back to "manual"
 # ---------------------------------------------------------------------------
 
@@ -95,7 +95,7 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
 def test_backups_create_command_routes_admin_trigger() -> None:
     """``quickscale_backups_create --trigger admin`` preserves admin provenance.
 
-    CR-SA37-001: ``dispatch_background_create(trigger="admin")`` spawns
+    ``dispatch_background_create(trigger="admin")`` spawns
     ``quickscale_backups_create --trigger admin``.  The management command must pass
     ``trigger="admin"`` through to the adapter so the resulting artifact
     records admin provenance instead of silently falling back to

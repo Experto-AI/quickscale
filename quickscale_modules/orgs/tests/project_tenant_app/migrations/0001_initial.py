@@ -1,4 +1,4 @@
-"""Initial schema and FORCE-RLS policy for the SA182 project fixture."""
+"""Initial schema and FORCE-RLS policy for the project tenant fixture."""
 
 from __future__ import annotations
 
@@ -19,16 +19,16 @@ from quickscale_modules_orgs.tenancy import (
 )
 
 
-PROJECT_LISTING_RLS_POLICY = "sa182_project_listing_org_isolation"
-PROJECT_LISTING_TABLE = "sa182_project_app_projectlisting"
-PROJECT_LISTING_IMAGE_RLS_POLICY = "sa182_project_listing_image_org_isolation"
-PROJECT_LISTING_IMAGE_TABLE = "sa182_project_app_projectlistingimage"
-PROJECT_LISTING_PARENT_UNIQUE = "sa182_project_listing_id_org_unique"
-PROJECT_LISTING_IMAGE_COMPOSITE_FK = "sa182_project_listing_image_listing_org_fk"
-PROJECT_FOLDER_RLS_POLICY = "sa182_project_folder_org_isolation"
-PROJECT_FOLDER_TABLE = "sa182_project_app_projectfolder"
-PROJECT_FOLDER_PARENT_UNIQUE = "sa182_project_folder_id_org_unique"
-PROJECT_FOLDER_PARENT_COMPOSITE_FK = "sa182_project_folder_parent_org_fk"
+PROJECT_LISTING_RLS_POLICY = "project_listing_org_isolation"
+PROJECT_LISTING_TABLE = "project_tenant_app_projectlisting"
+PROJECT_LISTING_IMAGE_RLS_POLICY = "project_listing_image_org_isolation"
+PROJECT_LISTING_IMAGE_TABLE = "project_tenant_app_projectlistingimage"
+PROJECT_LISTING_PARENT_UNIQUE = "project_listing_id_org_unique"
+PROJECT_LISTING_IMAGE_COMPOSITE_FK = "project_listing_image_listing_org_fk"
+PROJECT_FOLDER_RLS_POLICY = "project_folder_org_isolation"
+PROJECT_FOLDER_TABLE = "project_tenant_app_projectfolder"
+PROJECT_FOLDER_PARENT_UNIQUE = "project_folder_id_org_unique"
+PROJECT_FOLDER_PARENT_COMPOSITE_FK = "project_folder_parent_org_fk"
 _PROJECT_LISTING_RLS_TARGETS = (
     (PROJECT_LISTING_TABLE, PROJECT_LISTING_RLS_POLICY),
     (PROJECT_LISTING_IMAGE_TABLE, PROJECT_LISTING_IMAGE_RLS_POLICY),
@@ -211,19 +211,15 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(
                         fields=["-published_date"],
-                        name="sa182_project_listing_pub_idx",
+                        name="project_listing_pub_idx",
                     ),
-                    models.Index(
-                        fields=["status"], name="sa182_project_listing_status_idx"
-                    ),
-                    models.Index(
-                        fields=["slug"], name="sa182_project_listing_slug_idx"
-                    ),
+                    models.Index(fields=["status"], name="project_listing_status_idx"),
+                    models.Index(fields=["slug"], name="project_listing_slug_idx"),
                 ],
                 "constraints": [
                     models.UniqueConstraint(
                         fields=("slug", "organization"),
-                        name="sa182_project_listing_slug_org_uq",
+                        name="project_listing_slug_org_uq",
                     ),
                 ],
             },
@@ -250,7 +246,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="images",
-                        to="sa182_project_app.projectlisting",
+                        to="project_tenant_app.projectlisting",
                     ),
                 ),
                 (
@@ -300,7 +296,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="children",
-                        to="sa182_project_app.projectfolder",
+                        to="project_tenant_app.projectfolder",
                     ),
                 ),
             ],

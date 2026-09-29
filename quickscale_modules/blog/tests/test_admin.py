@@ -430,7 +430,7 @@ class TestPostAdmin:
 
 @pytest.mark.django_db
 class TestBlogAdminTenantScopedQueryset:
-    """SA14.3: verify blog admin querysets scope to org context via TenantModelAdmin."""
+    """Verify blog admin querysets scope to org context via TenantModelAdmin."""
 
     def test_category_admin_fail_closed_without_org(self):
         """CategoryAdmin.get_queryset returns empty when no org context."""

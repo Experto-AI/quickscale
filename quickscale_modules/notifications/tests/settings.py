@@ -2,7 +2,7 @@
 
 import os
 
-# SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
+# BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
 # NOBYPASSRLS is the default for module test suites. Mark individual
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
@@ -35,7 +35,7 @@ INSTALLED_APPS = [
     "quickscale_modules_notifications",
 ]
 
-# SA17.4 — required forms settings; forms AppConfig.ready() will fail
+# required forms settings; forms AppConfig.ready() will fail
 # startup otherwise.
 FORMS_SUBMISSIONS_API = True
 FORMS_RATE_LIMIT = "5/hour"
@@ -90,7 +90,7 @@ DATABASES = {
         "PASSWORD": os.environ.get("QS_NOTIFICATIONS_DB_PASSWORD", ""),
         "HOST": os.environ.get("QS_NOTIFICATIONS_DB_HOST", "localhost"),
         "PORT": os.environ.get("QS_NOTIFICATIONS_DB_PORT", "5432"),
-        # SA78: Use a fixed test database name instead of the default
+        # Use a fixed test database name instead of the default
         # test_test_quickscale_notifications.  Together with reuse_db
         # in conftest.py this avoids ownership/duplicate-database
         # failures on rerun under a restricted role.

@@ -1,4 +1,4 @@
-"""SA15.3 — CI doc-consistency gate.
+"""CI doc-consistency gate.
 
 Verifies that the marker-based derived registry overview
 (:func:`get_derived_registry_overview`) agrees with the shipped-module literal
@@ -12,7 +12,7 @@ derived overview. The literal ``TENANT_TABLE_REGISTRY`` remains as a
 shipped-module cross-check target. Project-owned app models are validated
 separately through marker discovery and do not edit the literal.
 
-After the SA15.3 marker backfill, all excluded models carry explicit
+After the marker backfill, all excluded models carry explicit
 ``tenant_excluded`` class attributes, so the derived view is purely
 marker-driven with no silent fallback to ``REGISTRY_LOOKUP``.
 """
@@ -151,7 +151,7 @@ def test_derived_registry_full_overview_matches_literal() -> None:
 def test_derived_registry_no_fallback_reason() -> None:
     """No entry in the derived overview should use a registry-fallback reason.
 
-    After the SA15.3 marker backfill, every excluded model carries an
+    After the marker backfill, every excluded model carries an
     explicit ``tenant_excluded`` marker.  The derived overview must not
     contain any entry whose reason references registry-based fallback
     classification.
@@ -254,7 +254,7 @@ def test_derived_registry_works_without_registry_lookup() -> None:
         tenancy_mod.REGISTRY_LOOKUP = original_lookup
 
 
-def test_sa182_project_model_is_derived_from_markers() -> None:
+def test_project_tenant_model_is_derived_from_markers() -> None:
     """Project-owned tenant models appear without literal registry entries."""
     from django.apps import apps
 
@@ -264,13 +264,13 @@ def test_sa182_project_model_is_derived_from_markers() -> None:
         is_tenant_model,
     )
 
-    project_listing = apps.get_model("sa182_project_app", "ProjectListing")
+    project_listing = apps.get_model("project_tenant_app", "ProjectListing")
     assert project_listing is not None
     assert is_tenant_model(project_listing) is True
     assert is_classified_in_registry(project_listing) is True
     assert (
         TenantTableStatus.ENROLLED,
-        "sa182_project_app",
+        "project_tenant_app",
         "ProjectListing",
     ) in {
         (entry.status, entry.app_label, entry.model_name)
@@ -330,7 +330,7 @@ def test_no_for_org_on_tenantmanager() -> None:
 
     Both docs state that the authoritative tenant-facing API is ambient
     scoping via the ContextVar, not ``.for_org(...)`` chaining — the old
-    pattern was explicitly removed in SA3.1.
+    pattern was explicitly removed.
     """
     from quickscale_modules_orgs.managers import TenantManager
 
@@ -345,7 +345,7 @@ def test_no_for_org_on_tenantmanager() -> None:
 # ---------------------------------------------------------------------------
 # Stale-manager-name guard
 # ---------------------------------------------------------------------------
-# SA3.1 removed the old ``TenantScopedManager`` / ``OperatorManager`` names
+# The old ``TenantScopedManager`` / ``OperatorManager`` names were removed
 # from the codebase and the docs.  This guard prevents them from reappearing
 # in the managers module or in the authoritative decision docs.
 # ---------------------------------------------------------------------------
@@ -356,7 +356,7 @@ _STALE_MANAGER_NAMES = frozenset({"TenantScopedManager", "OperatorManager"})
 def test_no_stale_manager_names_in_managers_module() -> None:
     """The managers module must not define stale manager classes.
 
-    ``TenantScopedManager`` and ``OperatorManager`` were removed in SA3.1.
+    ``TenantScopedManager`` and ``OperatorManager`` were removed.
     Re-adding one without updating the docs would silently widen the API
     surface beyond what the docs describe.
     """
@@ -373,7 +373,7 @@ def test_no_stale_manager_names_in_managers_module() -> None:
 def test_no_stale_manager_names_in_decisions_doc() -> None:
     """decisions.md must not reference stale manager names.
 
-    SA3.1 replaced all mentions of ``TenantScopedManager`` and
+    Replaced all mentions of ``TenantScopedManager`` and
     ``OperatorManager`` with the current ``TenantManager`` API.
     """
     path = _REPO_ROOT / "docs/technical/decisions.md"
@@ -390,7 +390,7 @@ def test_no_stale_manager_names_in_decisions_doc() -> None:
 def test_no_stale_manager_names_in_organizations_doc() -> None:
     """organizations.md must not reference stale manager names.
 
-    SA3.1 replaced all mentions of ``TenantScopedManager`` and
+    Replaced all mentions of ``TenantScopedManager`` and
     ``OperatorManager`` with the current ``TenantManager`` API.
     """
     path = _REPO_ROOT / "docs/technical/organizations.md"
@@ -405,7 +405,7 @@ def test_no_stale_manager_names_in_organizations_doc() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA15.3 — Marker-only M2M through classification with non-project endpoints
+# Marker-only M2M through classification with non-project endpoints
 # ---------------------------------------------------------------------------
 # The marker-only M2M through classification must handle the case where
 # one endpoint is not a project-owned model.  For example,
@@ -427,7 +427,7 @@ def test_m2m_through_marker_only_with_non_project_target() -> None:
 
     Finds a project-owned through model where both endpoints are currently
     project-owned and classified, then simulates the auth scenario by
-    making the target appear non-project.  With the SA15.3 fix, the through
+    making the target appear non-project. With the fix, the through
     model must remain classifiable via markers alone — non-project endpoints
     are treated as externally classified.
     """

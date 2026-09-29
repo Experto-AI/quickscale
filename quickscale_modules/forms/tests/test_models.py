@@ -50,7 +50,7 @@ class TestFormModel:
             set_current_org_id(org.pk)
             set_db_current_org_id(org.pk)
             # Savepoint atomic wraps the actual IntegrityError trigger so the
-            # outer transaction remains usable (CR-SA85-REV-006).
+            # outer transaction remains usable.
             with transaction.atomic():
                 with pytest.raises(IntegrityError):
                     Form.objects.create(
@@ -201,7 +201,7 @@ class TestFormFieldModel:
             set_current_org_id(form.organization.pk)
             set_db_current_org_id(form.organization.pk)
             # Savepoint atomic wraps the actual IntegrityError trigger so the
-            # outer transaction remains usable (CR-SA85-REV-006).
+            # outer transaction remains usable.
             with transaction.atomic():
                 with pytest.raises(IntegrityError):
                     FormField.all_objects.create(

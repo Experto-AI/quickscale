@@ -21,9 +21,9 @@ leak for the tested path (company list) is now fixed, so the xfail marker
 has been removed.  Remaining seams (bulk actions, admin/operator paths) are
 out of scope for F11.5.
 
-AF10 addition: ``test_restricted_role_authenticated_list_view`` exercises the
+Addition: ``test_restricted_role_authenticated_list_view`` exercises the
 full Django request path under the NOBYPASSRLS runtime role without
-presetting the GUC.  This is the red-green verification test for AF9 — without
+presetting the GUC. This is the red-green verification test without
 the ``execute_wrapper`` that sets ``app.current_org_id`` from the ContextVar,
 every RLS-gated query returns zero rows.
 """
@@ -34,7 +34,7 @@ from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from tests_shared.isolation import assert_org_scoped_response
 
 # ---------------------------------------------------------------------------
-# Restricted-role helpers (AF10 — isolation-conformance CI job)
+# Restricted-role helpers (isolation-conformance CI job)
 # ---------------------------------------------------------------------------
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
@@ -65,7 +65,7 @@ _ORGS_TABLES = (
 
 
 def _ensure_rls_test_role_with_grants() -> None:
-    """Assert the pre-provisioned RLS test role exists and issue grants (SA59.3).
+    """Assert the pre-provisioned RLS test role exists and issue grants.
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises
@@ -149,7 +149,7 @@ class TestCRMCrossTenantIsolation:
         from quickscale_modules_orgs.current_org import set_current_org_id
 
         # Prime the org context so FORCE RLS allows the INSERT under the
-        # NOBYPASSRLS restricted role (SA59.3).
+        # NOBYPASSRLS restricted role.
         set_current_org_id(org_a.id)
         try:
             Company.objects.create(
@@ -193,7 +193,7 @@ class TestCRMCrossTenantIsolation:
         from quickscale_modules_orgs.current_org import set_current_org_id
 
         # Prime the org context so FORCE RLS allows INSERTs under the
-        # NOBYPASSRLS restricted role (SA59.3).
+        # NOBYPASSRLS restricted role.
         set_current_org_id(org_a.id)
         try:
             Company.objects.create(
@@ -229,12 +229,12 @@ class TestCRMCrossTenantIsolation:
 
         Exercises the full Django request pipeline (middleware, auth, view,
         serializer, ORM) under the NOBYPASSRLS runtime role without
-        presetting the GUC.  Without the AF9 ``execute_wrapper`` that issues
+        presetting the GUC. Without the ``execute_wrapper`` that issues
         ``SET LOCAL app.current_org_id`` from the ContextVar, every
         RLS-gated query returns zero rows — turning this test red.
 
-        This is the red-green verification test for AF9.  It stays RED on
-        v87 until AF9's connection-layer execute_wrapper is implemented.
+        This is the red-green verification test. It stays RED on
+        v87 until the connection-layer execute_wrapper is implemented.
         """
         from quickscale_modules_crm.models import Company
         from quickscale_modules_crm.services import ensure_org_default_stages
@@ -244,7 +244,7 @@ class TestCRMCrossTenantIsolation:
         _ensure_rls_test_role_with_grants()
 
         # Prime the org context so FORCE RLS allows INSERTs under the
-        # NOBYPASSRLS restricted role (SA59.3).
+        # NOBYPASSRLS restricted role.
         set_current_org_id(org_a.id)
         try:
             Company.objects.create(
@@ -257,7 +257,7 @@ class TestCRMCrossTenantIsolation:
         _activate_org_in_session(client, org_a)
 
         # Seed default stages before SET ROLE.  Prime the org context so
-        # FORCE RLS allows the INSERT under the NOBYPASSRLS role (SA59.3).
+        # FORCE RLS allows the INSERT under the NOBYPASSRLS role.
         set_current_org_id(org_a.id)
         try:
             ensure_org_default_stages(org_a)

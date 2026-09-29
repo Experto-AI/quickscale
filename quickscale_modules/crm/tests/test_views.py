@@ -977,7 +977,7 @@ class TestCRMPageSizeSettings:
 
 
 class TestCRMPageSizeFailHard:
-    """SA17.3 — Page-size settings must raise descriptively when missing or malformed."""
+    """Page-size settings must raise descriptively when missing or malformed."""
 
     @override_settings(CRM_CONTACTS_PER_PAGE=None)
     def test_contact_page_size_missing_setting_raises_improperly_configured(
@@ -1060,7 +1060,7 @@ class TestFlatRouteCreateStamping:
         _activate_org_in_session(client, org_a)
 
         # Scope the pre-request count explicitly to org_a so that FORCE RLS
-        # allows the TenantManager-scoped query (SA84-REV-001).
+        # allows the TenantManager-scoped query.
         with org_scope(org_a):
             before = Tag.objects.count()
         response = client.post(
@@ -1332,7 +1332,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "contact" in response.data
         # Verify no ContactNote was created in either implicated org
-        # (SA84-REV-001: check each org separately).
+        # (check each org separately).
         with org_scope(staff_personal_org):
             assert ContactNote.all_objects.count() == before
         with org_scope(personal_org_user):
@@ -1443,7 +1443,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "deal" in response.data
         # Verify no DealNote was created in either implicated org
-        # (SA84-REV-001: check each org separately).
+        # (check each org separately).
         with org_scope(staff_personal_org):
             assert DealNote.all_objects.count() == before
         with org_scope(personal_org_user):

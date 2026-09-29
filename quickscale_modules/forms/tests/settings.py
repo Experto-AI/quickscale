@@ -2,7 +2,7 @@
 
 import os
 
-# SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
+# BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
 # NOBYPASSRLS is the default for module test suites. Mark individual
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
@@ -25,7 +25,7 @@ INSTALLED_APPS = [
     "quickscale_modules_forms",
 ]
 
-# SA17.4 — required settings; AppConfig.ready() will fail startup otherwise.
+# required settings; AppConfig.ready() will fail startup otherwise.
 FORMS_SUBMISSIONS_API = True
 FORMS_RATE_LIMIT = "5/hour"
 FORMS_SPAM_PROTECTION = True
@@ -68,7 +68,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
-# SA48 — trusted-proxy settings required by get_client_ip()
+# trusted-proxy settings required by get_client_ip()
 USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
 
