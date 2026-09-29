@@ -472,7 +472,7 @@ class TestF1110AdminTagFormLevelValidation:
     ):
         """ContactAdmin add form rejects a foreign-org tag selection.
 
-        SA14.2: Under TenantModelAdmin, the tags field queryset is scoped to
+        Under TenantModelAdmin, the tags field queryset is scoped to
         the active org. Django's field-level ``ModelMultipleChoiceField``
         validation rejects the foreign-org tag (not in the scoped queryset)
         before the form-level same-org ``clean()`` runs.
@@ -592,7 +592,7 @@ class TestF1110AdminTagFormLevelValidation:
     def test_deal_admin_add_form_rejects_foreign_tag(self, admin_client, org_a, org_b):
         """DealAdmin add form rejects a foreign-org tag selection.
 
-        SA14.2: Under TenantModelAdmin, the tags field queryset is scoped to
+        Under TenantModelAdmin, the tags field queryset is scoped to
         the active org. Django's field-level ``ModelMultipleChoiceField``
         validation rejects the foreign-org tag before the form-level
         same-org ``clean()`` runs.
@@ -804,18 +804,18 @@ class TestCRT15001ContactNoteTimestampAdminRegression:
 
 
 # ---------------------------------------------------------------------------
-# AF1-CR-004: Standalone ContactNoteAdmin/DealNoteAdmin parent/org validation
+# Standalone ContactNoteAdmin/DealNoteAdmin parent/org validation
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestContactNoteAdminSameOrgValidation:
-    """AF1-CR-004: ContactNoteAdmin add form must validate contact/org membership."""
+    """ContactNoteAdmin add form must validate contact/org membership."""
 
     def test_add_form_rejects_cross_org_contact(self, admin_client, org_a, org_b):
         """ContactNoteAdmin add form rejects a contact from a different organization.
 
-        SA14.2: Under TenantModelAdmin, the contact field queryset is scoped to
+        Under TenantModelAdmin, the contact field queryset is scoped to
         the active org. Django's field-level ``ModelChoiceField`` validation
         rejects the foreign-org contact before the form-level same-org
         ``clean()`` runs.
@@ -905,12 +905,12 @@ class TestContactNoteAdminSameOrgValidation:
 
 @pytest.mark.django_db
 class TestDealNoteAdminSameOrgValidation:
-    """AF1-CR-004: DealNoteAdmin add form must validate deal/org membership."""
+    """DealNoteAdmin add form must validate deal/org membership."""
 
     def test_add_form_rejects_cross_org_deal(self, admin_client, org_a, org_b):
         """DealNoteAdmin add form rejects a deal from a different organization.
 
-        SA14.2: Under TenantModelAdmin, the deal field queryset is scoped to
+        Under TenantModelAdmin, the deal field queryset is scoped to
         the active org. Django's field-level ``ModelChoiceField`` validation
         rejects the foreign-org deal before the form-level same-org
         ``clean()`` runs.
@@ -1042,13 +1042,13 @@ class TestDealNoteAdminSameOrgValidation:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA14.2-001: Inline note save_formset must stamp created_by
+# Inline note save_formset must stamp created_by
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestContactAdminInlineNoteCreatedBy:
-    """CR-SA14.2-001: Inline ContactNote creation through ContactAdmin must stamp created_by."""
+    """Inline ContactNote creation through ContactAdmin must stamp created_by."""
 
     def test_contact_admin_inline_note_sets_created_by(self, admin_client, org_a):
         """ContactAdmin POST with inline ContactNote creates note with created_by."""
@@ -1149,7 +1149,7 @@ class TestContactAdminInlineNoteCreatedBy:
 
 @pytest.mark.django_db
 class TestDealAdminInlineNoteCreatedBy:
-    """CR-SA14.2-001: Inline DealNote creation through DealAdmin must stamp created_by."""
+    """Inline DealNote creation through DealAdmin must stamp created_by."""
 
     def test_deal_admin_inline_note_sets_created_by(self, admin_client, org_a):
         """DealAdmin POST with inline DealNote creates note with created_by."""

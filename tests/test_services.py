@@ -39,7 +39,7 @@ class TestEnsureOrgDefaultStages:
 
         assert len(result) == 4
         # Prime the org context so RLS allows the read-back query
-        # (CR-SA74-001: GUC is now cleared on exit — must re-prime).
+        # (GUC is now cleared on exit — must re-prime).
         set_current_org_id(org_a.pk)
         assert Stage.all_objects.filter(organization=org_a).count() == 4
         reset_current_org_id()
@@ -159,7 +159,7 @@ class TestEnsureOrgDefaultStages:
 
 @pytest.mark.django_db
 def test_seeds_without_ambient_org_context() -> None:
-    """Regression test for SA74: seeding works when no tenant context is set.
+    """Regression test: seeding works when no tenant context is set.
 
     Under a restricted (NOBYPASSRLS) database role, FORCE RLS policies
     require ``app.current_org_id`` to match the organization being written.
@@ -196,7 +196,7 @@ def test_seeds_without_ambient_org_context() -> None:
 def test_organization_created_receiver_calls_ensure_org_default_stages(org_a) -> None:
     """The CRM receiver for organization_created delegates to ensure_org_default_stages.
 
-    SA7.1 establishes the signal/receiver seam.  This test verifies the
+    Establishes the signal/receiver seam. This test verifies the
     CRM-side receiver is correctly wired: firing the signal from orgs
     must trigger the same ``ensure_org_default_stages`` call that the
     old ``crm_bootstrap.maybe_seed_crm_default_stages`` used to make.
@@ -218,7 +218,7 @@ def test_organization_created_receiver_calls_ensure_org_default_stages(org_a) ->
 
 @pytest.mark.django_db(transaction=True)
 def test_ensure_org_default_stages_restores_db_guc_in_outer_transaction(org_a) -> None:
-    """CR-SA74-001 regression: DB-side GUC must be restored on exit when
+    """Regression: DB-side GUC must be restored on exit when
     called inside an outer transaction, so that subsequent no-context queries
     in the same transaction fail closed instead of inheriting the seeded org.
 

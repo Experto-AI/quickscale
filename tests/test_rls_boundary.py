@@ -35,7 +35,7 @@ _CRM_TABLES = (
 
 
 def _ensure_rls_test_role() -> None:
-    """Assert the pre-provisioned RLS test role exists (SA59.3).
+    """Assert the pre-provisioned RLS test role exists.
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises
@@ -218,16 +218,16 @@ class TestCrmRlsBoundaryRestrictedRole:
                 cursor.execute("RESET ROLE")
 
     # ------------------------------------------------------------------
-    # AF9 Phase 3 — Restricted-role cursor proof (PR-AF9-003)
+    # Restricted-role cursor proof
     # ------------------------------------------------------------------
 
     def test_af9_priming_proof_restricted_role_cursor(self, org_a) -> None:
-        """PR-AF9-003: The AF9 execute wrapper primes the GUC from the
+        """The execute wrapper primes the GUC from the
         ContextVar under a restricted PostgreSQL role.
 
         Unlike the existing T1.11 tests that manually issue
         ``SET app.current_org_id`` on the cursor, this test calls
-        ``set_current_org_id(org.pk)`` and lets the AF9 execute wrapper
+        ``set_current_org_id(org.pk)`` and lets the execute wrapper
         derive the GUC.  Under the restricted role, a SELECT on an
         RLS-protected table must return the expected rows — proving
         the wrapper correctly issues ``SET LOCAL`` on the live cursor
@@ -238,7 +238,7 @@ class TestCrmRlsBoundaryRestrictedRole:
         2. Call ``set_current_org_id(org.pk)`` — no manual SET LOCAL.
         3. ``SET ROLE`` to the restricted role.
         4. Run a SELECT through the connection cursor.
-        5. The AF9 execute wrapper fires, issues ``SET LOCAL`` from
+        5. The execute wrapper fires, issues ``SET LOCAL`` from
            the ContextVar, then runs the SELECT.
         6. Assert the RLS-gated query returns the expected rows.
         """
@@ -254,13 +254,13 @@ class TestCrmRlsBoundaryRestrictedRole:
         finally:
             set_current_org_id(None)
 
-        # Set the ContextVar — the AF9 wrapper derives the GUC from this.
+        # Set the ContextVar — the wrapper derives the GUC from this.
         set_current_org_id(org_a.id)
         try:
             with connection.cursor() as cursor:
                 cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
                 try:
-                    # SELECT triggers the AF9 execute wrapper, which
+                    # SELECT triggers the execute wrapper, which
                     # issues SET LOCAL from the ContextVar before
                     # running the query — no manual SET required.
                     cursor.execute("SELECT name FROM quickscale_crm_tag ORDER BY name")
@@ -310,12 +310,12 @@ class TestCrmRlsBoundaryRestrictedRole:
 
 
 # ---------------------------------------------------------------------------
-# SA84 Phase 2 — authenticated-client fail-closed restoration
+# authenticated-client fail-closed restoration
 # ---------------------------------------------------------------------------
 # Proves that OrgEnrichedAPIClient.request() restores the Python ContextVar,
 # the DB GUC app.current_org_id, and RLS row invisibility after each
 # synthetic request, using the same authenticated_client for two sequential
-# requests in one pytest outer transaction (CR-PLAN-SA84-001).
+# requests in one pytest outer transaction.
 # ---------------------------------------------------------------------------
 
 
@@ -323,7 +323,7 @@ class TestCrmRlsBoundaryRestrictedRole:
 class TestAuthenticatedClientFailClosedRestoration:
     """Prove authenticated client requests restore fail-closed org state.
 
-    SA84 Phase 2 regression test for CR-PLAN-SA84-001:
+    Regression test:
     ``OrgEnrichedAPIClient.request()`` must reset fixture-seeded current-org
     before entering ``org_scope`` so the Python ContextVar, DB GUC
     ``app.current_org_id``, and RLS row invisibility are all restored to
@@ -378,7 +378,7 @@ class TestAuthenticatedClientFailClosedRestoration:
             )
 
         # 3. Tag invisible without org context (unscoped DB cursor query
-        #    under FORCE RLS — no AF9 priming because ContextVar is None).
+        # under FORCE RLS — no priming because ContextVar is None).
         with connection.cursor() as cursor:
             cursor.execute(
                 f"SELECT COUNT(*) FROM {_CRM_TAG_TABLE} WHERE name = %s",

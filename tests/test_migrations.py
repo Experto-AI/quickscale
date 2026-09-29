@@ -1,6 +1,6 @@
 """Fresh-0001 contract tests for the CRM final-schema migration.
 
-Phase 3 SA92: verifies the consolidated 0001 migration produces the
+Verifies the consolidated 0001 migration produces the
 correct final schema — parent UNIQUE constraints, composite child FKs
 with ordered columns and NOT DEFERRABLE enforcement, required
 NOT NULL/PROTECT org ownership, and FORCE RLS on all tenant-scoped
@@ -139,7 +139,7 @@ class TestCrmCompositeFkCatalogProofs:
                 )
 
     def test_composite_fks_are_not_deferrable(self) -> None:
-        """Each composite FK is NOT DEFERRABLE (SA60 uniform policy)."""
+        """Each composite FK is NOT DEFERRABLE (uniform policy)."""
         with connection.cursor() as cursor:
             for entry in self.EXPECTED_FKS:
                 cursor.execute(
@@ -383,7 +383,7 @@ def test_force_rls_installed_on_all_crm_tables() -> None:
             f"FORCE RLS policy '{policy}' on {table} not found."
         )
 
-    # Verify _select policies also exist (SA14.5 operator_access OR clause)
+    # Verify _select policies also exist (operator_access OR clause)
     for table, policy in expected_policies:
         select_policy = f"{policy}_select"
         assert (table, select_policy) in found_policies, (
@@ -451,7 +451,7 @@ def _normalize_pg_expr(expr: str | None) -> str:
     identifiers.  Strips balanced outer parentheses that PostgreSQL's
     ``pg_policies`` view wraps around the entire expression.
 
-    CR-SA90-MSQ-003: Both case normalization and whitespace collapse
+    Both case normalization and whitespace collapse
     are quote-aware — ``.lower()`` and ``\\s+`` substitution are only
     applied outside string literals and quoted identifiers so that
     literal content, identifier casing, and whitespace inside quotes
@@ -546,7 +546,7 @@ def test_crm_rls_policy_has_org_predicate() -> None:
     and ``roles`` as plain text, avoiding ``pg_get_expr`` compatibility
     issues with psycopg3.
 
-    CR-SA90-MSQ-003: Exact normalized predicate comparison — the
+    Exact normalized predicate comparison — the
     normalized form must match the expected canonical expression from
     ``_FORCE_RLS_FORWARD_SQL``, not merely contain permissive fragments.
     """
@@ -618,7 +618,7 @@ def test_crm_rls_policy_has_org_predicate() -> None:
             ), (
                 f"FOR ALL {polname} WITH CHECK lacks current_setting/org_id: {with_check}"
             )
-            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            # exact normalized predicate comparison
             nqual = _normalize_pg_expr(qual)
             assert nqual == _EXPECTED_CRM_FORALL_QUAL, (
                 f"{table}/{polname} normalized qual {nqual!r} "
@@ -639,7 +639,7 @@ def test_crm_rls_policy_has_org_predicate() -> None:
             # Absence of write bypass: SELECT policy must have NULL with_check
             # (no write permission means no WITH CHECK needed)
             assert swith_check is None, f"SELECT {sname} has unexpected WITH CHECK"
-            # CR-SA90-MSQ-003: assert squal is not None BEFORE comparison
+            # assert squal is not None BEFORE comparison
             # so NULL predicates cannot silently pass exact-match checks.
             assert squal is not None, (
                 f"SELECT {sname} has NULL USING — must have a predicate"
@@ -647,7 +647,7 @@ def test_crm_rls_policy_has_org_predicate() -> None:
             assert "operator_access" in squal.lower(), (
                 f"SELECT {sname} USING lacks operator_access: {squal}"
             )
-            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            # exact normalized predicate comparison
             nsqual = _normalize_pg_expr(squal)
             assert nsqual == _EXPECTED_CRM_SELECT_QUAL, (
                 f"{table}/{sname} normalized SELECT qual {nsqual!r} "
@@ -656,7 +656,7 @@ def test_crm_rls_policy_has_org_predicate() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CR-SA90-MSQ-003: negative controls for _normalize_pg_expr
+# negative controls for _normalize_pg_expr
 # ---------------------------------------------------------------------------
 
 
@@ -737,7 +737,7 @@ def test_normalize_pg_expr_parentheses_in_quotes_preserved() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Preserved: parent-org mutation rejection proofs (CR-AF12-001 resolution)
+# Preserved: parent-org mutation rejection proofs (resolved)
 # ---------------------------------------------------------------------------
 # These tests prove the composite FKs installed by the 0001 migration
 # reject attempts to change a parent's organization_id when child rows

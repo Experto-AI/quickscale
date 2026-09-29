@@ -1,6 +1,6 @@
 """Tests for CRM AppConfig startup behavior.
 
-SA17.3 — fail-hard CRM API-enable flag: ``AppConfig.ready()`` must raise
+Fail-hard CRM API-enable flag: ``AppConfig.ready()`` must raise
 ``ImproperlyConfigured`` when ``CRM_ENABLE_API`` is missing from Django settings.
 """
 

@@ -434,7 +434,7 @@ class TestF115Phase2SerializerHelperOrgScoping:
     These tests verify that serializer helper methods (counts, tag names)
     scope their related queries to the active organization when serializing
     on an org-scoped SaaS route, while solo routes scope to the caller's
-    personal org (SA84-REV-002: removed the false ``operator_access`` /
+    personal org (removed the false ``operator_access`` /
     ``unscoped`` premise — the real solo middleware always sets
     ``request.org`` and the ContextVar).
 
@@ -681,7 +681,7 @@ class TestF115Phase2SerializerHelperOrgScoping:
     ):
         """Solo route serializer helpers scope to caller's personal org (Phase 2).
 
-        SA84-REV-002: the real solo middleware always sets ``request.org`` and
+        The real solo middleware always sets ``request.org`` and
         the ContextVar to the caller's personal org.  Solo routes are therefore
         scoped to the personal org — not "unscoped" — and ``operator_access``
         is never used for a normal staff caller.
@@ -779,7 +779,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
     These tests verify that org-scoped contact/deal reads do not serialize
     foreign-org related objects (company, contact, stage, tags) in the
     serialized output.  On solo routes the caller's personal org is the
-    active scope (SA84-REV-002/005), so foreign-org related objects are
+    active scope, so foreign-org related objects are
     also hidden — the old "unscoped solo" premise is superseded.
 
     Coverage matrix:
@@ -1603,7 +1603,7 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
 
     These tests verify that the BulkUpdateStageSerializer validates stage_id
     against the active organization on both org-scoped SaaS routes and solo
-    routes. Solo routes scope to the caller's personal org (SA84-REV-005).
+    routes. Solo routes scope to the caller's personal org.
 
     Coverage matrix:
     - Org-scoped route: foreign-org stage_id is rejected
@@ -1723,7 +1723,7 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
             data={"deal_ids": [1], "stage_id": stage_b.id},
             context={"request": request},
         )
-        # SA11.6: foreign-org stages rejected via request.org on factory request.
+        # foreign-org stages rejected via request.org on factory request.
         assert not serializer.is_valid()
         assert "stage_id" in serializer.errors
 
@@ -1752,5 +1752,5 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
             data={"deal_ids": [1], "stage_id": stage.id},
             context={"request": request},
         )
-        # SA11.6: same-org stages accepted via request.org on factory request.
+        # same-org stages accepted via request.org on factory request.
         assert serializer.is_valid(), serializer.errors
