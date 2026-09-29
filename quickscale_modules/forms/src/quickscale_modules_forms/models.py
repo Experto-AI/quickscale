@@ -1,5 +1,7 @@
 """Data models for QuickScale Forms module"""
 
+from typing import TYPE_CHECKING
+
 from django.conf import settings
 from django.db import models
 
@@ -66,6 +68,10 @@ class Form(TenantModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    if TYPE_CHECKING:
+        # Reverse FK accessor from FormField.form.
+        fields: models.Manager["FormField"]
 
     class Meta(TenantModel.Meta):
         app_label = "quickscale_forms"
@@ -159,6 +165,10 @@ class FormSubmission(TenantModel):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING
     )
+
+    if TYPE_CHECKING:
+        # FK attname set by ``form``; unset until the form is assigned.
+        form_id: int | None
 
     class Meta(TenantModel.Meta):
         app_label = "quickscale_forms"

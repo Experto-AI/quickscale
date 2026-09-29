@@ -156,6 +156,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `quickscale_forms_anonymize_submissions`, and `quickscale_orgs_promote_to_saas` report what
     they would change and write nothing, and `quickscale_orgs_check_tenant_isolation` reports
     failures through `CommandError` instead of exiting directly.
+  - **Module type checking follows one capped override.** The root `mypy.ini` sections for the
+    forms, notifications, and social modules relax only `disallow_untyped_defs`,
+    `warn_return_any`, `warn_unused_ignores`, and the `var-annotated` error code.
 
   - **Blog and listings configuration is manifest-owned.** Their option defaults, CLI prompts, and
     validation come from `module.yml` through one manifest-driven configurator and the shared
@@ -173,6 +176,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     validation come from `module.yml` through the same manifest-driven configurator and shared
     engine, and auth's retired `allow_registration` and `social_providers` keys are refused by the
     manifest's `retired_options` block with their replacement named.
+  - **Backups configuration is manifest-owned.** Its option defaults, CLI prompts, env-var-name
+    patterns, and private-remote cross-option rules come from `module.yml` through the same
+    manifest-driven configurator and shared engine, and its retired raw `remote_access_key_id` and
+    `remote_secret_access_key` keys are refused by the manifest's `retired_options` block with
+    their env-var replacements named.
   - **The `teams` placeholder is removed.** `quickscale_modules/teams/` no longer exists,
     `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`, and the
     planning note lives at `docs/planning/teams.md`.

@@ -12,7 +12,7 @@ class Command(BaseCommand):
 
     help = "Seed built-in form presets (contact, newsletter, feedback, support)"
 
-    PRESETS = [
+    PRESETS: list[dict[str, Any]] = [
         {
             "title": "Contact",
             "slug": "contact",

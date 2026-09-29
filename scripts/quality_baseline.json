@@ -119,18 +119,6 @@
         "symbol": "update",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/module_config.py::configure_backups_module": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
-        "max_complexity": 11,
-        "symbol": "configure_backups_module",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/module_config.py::validate_backups_module_options": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
-        "max_complexity": 16,
-        "symbol": "validate_backups_module_options",
-        "type": "function"
-      },
       "quickscale_cli/src/quickscale_cli/commands/plan_command.py::_handle_add_modules": {
         "file": "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
         "max_complexity": 13,

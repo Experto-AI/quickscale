@@ -911,7 +911,8 @@ class TestRegenerateManagedWiringFailHard:
         )
 
         assert success is False
-        assert "modules.backups.target_mode must be one of" in message
+        assert "modules.backups.target_mode" in message
+        assert "must be one of: local, private_remote" in message
 
 
 class TestRegenerateManagedWiringIncompleteManifest:
