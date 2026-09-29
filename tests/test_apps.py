@@ -1,4 +1,4 @@
-"""Tests for backups module AppConfig.ready() persistence registration (SA89a Phase 2).
+"""Tests for backups module AppConfig.ready() persistence registration.
 
 Covers:
 * ``QuickscaleBackupsConfig.ready()`` registers module-level singleton

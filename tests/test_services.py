@@ -419,7 +419,7 @@ class TestBackupLifecycle:
         local_backup_settings: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # SA59.2 — the default test settings now use PostgreSQL, so this
+        # the default test settings now use PostgreSQL, so this
         # test forces the connection engine to SQLite to exercise the JSON
         # export codepath that would otherwise be unreachable under PG.
         from django.db import connections
@@ -2229,7 +2229,7 @@ class TestBackupLifecycle:
         postgresql_backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # SA59.2 — test settings now default to PostgreSQL, so explicitly force
+        # test settings now default to PostgreSQL, so explicitly force
         # a non-matching engine to trigger the artifact compatibility check.
         monkeypatch.setitem(
             connections["default"].settings_dict,
@@ -2951,7 +2951,7 @@ class TestBackupLifecycle:
         postgresql_artifact_file: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # SA59.2 — test settings now default to PostgreSQL, so explicitly
+        # test settings now default to PostgreSQL, so explicitly
         # set a non-PostgreSQL engine to trigger the target-runtime check.
         monkeypatch.setitem(
             connections["default"].settings_dict,
@@ -4136,7 +4136,7 @@ class TestBackupServiceEdgeCases:
 
 @pytest.mark.django_db
 class TestStaleRestoreDetection:
-    """SA38: Stale Status.RESTORING detection and guarded reset."""
+    """Stale Status.RESTORING detection and guarded reset."""
 
     def test_is_restore_stale_returns_false_for_non_restoring_artifact(
         self,
@@ -4242,7 +4242,7 @@ class TestStaleRestoreDetection:
         ):
             backup_services.reset_stale_restore(backup_artifact)
 
-    # CR-SA38-002: concurrency regression — compare-and-swap prevents
+    # concurrency regression — compare-and-swap prevents
     # overwriting a terminal status set by a concurrently finishing
     # child process.
 
@@ -4286,11 +4286,11 @@ class TestStaleRestoreDetection:
         assert backup_artifact.restore_error == "real child failure"
 
     # ------------------------------------------------------------------
-    # SA54 — Deduplicate the stale-restore threshold constant
+    # Deduplicate the stale-restore threshold constant
     # ------------------------------------------------------------------
 
     def test_sa54_stale_threshold_default_matches_constant(self) -> None:
-        """SA54: The default ``stale_threshold_minutes`` parameter of
+        """The default ``stale_threshold_minutes`` parameter of
         ``restore_admin_uploaded_backup`` must match the canonical
         ``STALE_RESTORE_THRESHOLD_MINUTES`` constant in services.py.
         Changing one without the other will fail this test."""
@@ -4306,16 +4306,16 @@ class TestStaleRestoreDetection:
 
 
 # ---------------------------------------------------------------------------
-# SA52 — _get_manage_py fail-hard on unresolvable manage.py
+# _get_manage_py fail-hard on unresolvable manage.py
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestGetManagePySA52:
-    """SA52: Regression tests for _get_manage_py fail-hard behavior."""
+    """Regression tests for _get_manage_py fail-hard behavior."""
 
     def test_get_manage_py_raises_when_unresolvable(self) -> None:
-        """SA52: _get_manage_py raises BackupError when neither sys.argv[0]
+        """_get_manage_py raises BackupError when neither sys.argv[0]
         nor settings.BASE_DIR/manage.py resolves."""
         with patch.object(backup_services.sys, "argv", ["/usr/bin/gunicorn"]):
             with pytest.raises(BackupError, match="manage.py could not be resolved"):
@@ -4325,7 +4325,7 @@ class TestGetManagePySA52:
         self,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
-        """SA52: dispatch_background_restore raises BackupError from
+        """Dispatch_background_restore raises BackupError from
         _get_manage_py BEFORE _atomic_claim_restore, so no artifact
         is left claimed."""
         with patch.object(
@@ -4347,7 +4347,7 @@ class TestGetManagePySA52:
     def test_dispatch_background_create_fails_hard_when_unresolvable(
         self,
     ) -> None:
-        """SA52: dispatch_background_create raises BackupError from
+        """Dispatch_background_create raises BackupError from
         _get_manage_py."""
         with patch.object(
             backup_services,
@@ -4360,7 +4360,7 @@ class TestGetManagePySA52:
     def test_dispatch_background_prune_fails_hard_when_unresolvable(
         self,
     ) -> None:
-        """SA52: dispatch_background_prune raises BackupError from
+        """Dispatch_background_prune raises BackupError from
         _get_manage_py."""
         with patch.object(
             backup_services,
@@ -4374,7 +4374,7 @@ class TestGetManagePySA52:
         self,
         tmp_path: Path,
     ) -> None:
-        """SA52: _get_manage_py returns the resolved path when
+        """_get_manage_py returns the resolved path when
         sys.argv[0] points to an existing manage.py."""
         manage_py = tmp_path / "manage.py"
         manage_py.touch()
@@ -4384,13 +4384,13 @@ class TestGetManagePySA52:
 
 
 # ---------------------------------------------------------------------------
-# SA53 — Crash-safe copy for prepare_admin_uploaded_restore_artifact
+# Crash-safe copy for prepare_admin_uploaded_restore_artifact
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestPrepareAdminUploadedRestoreArtifactSA53:
-    """SA53: Crash-safe local artifact copy in prepare_admin_uploaded_restore_artifact."""
+    """Crash-safe local artifact copy in prepare_admin_uploaded_restore_artifact."""
 
     def test_copy_failure_preserves_existing_artifact_and_cleans_staging(
         self,
@@ -4398,7 +4398,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """SA53 / CR-SA53-REV-001: A write failure (disk full, permissions)
+        """A write failure (disk full, permissions)
         during the fd-based copy leaves the pre-existing local artifact file
         intact and the staging directory is cleaned up."""
         # Pre-existing artifact file at the target backup location
@@ -4495,7 +4495,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """SA53: On success, the staged file is safely materialized at the
+        """On success, the staged file is safely materialized at the
         authoritative backup location and local_path is persisted."""
         target_dir = tmp_path / "backups"
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -4584,7 +4584,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """CR-SA53-REV-001 regression: A symlink pre-seeded at the former
+        """Regression: A symlink pre-seeded at the former
         deterministic temp location must not redirect the copy. Because the
         fix uses mkstemp (unique, non-deterministic path), the pre-seeded
         symlink is never accessed. The final persisted path must be a regular
@@ -4596,7 +4596,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         original_escape_content = escape_target.read_bytes()
 
         # Pre-seed the old deterministic temp path as an out-of-tree symlink
-        # (CR-SA53-REV-001 vulnerability vector)
+        # (vulnerability vector)
         artifact_filename = backup_artifact.filename
         symlink_path = target_dir / f"{artifact_filename}.tmp"
         symlink_path.symlink_to(escape_target)
@@ -4673,7 +4673,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """CR-SA53-REV-001 seam-specific regression: The implementation must
+        """Seam-specific regression: The implementation must
         write through the file descriptor and never reopen the temp pathname
         by name for writing.  After the fix, ``shutil.copy2`` must not be
         called during the copy-and-replace sequence — that would reintroduce
@@ -4759,7 +4759,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """CR-SA53-REV-002: Partial os.write() returns (short writes) still
+        """Partial os.write() returns (short writes) still
         result in a byte-identical copy at the target path.  The retry loop
         slices the unwritten remainder via memoryview until the full chunk
         is flushed.
