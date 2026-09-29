@@ -16,28 +16,57 @@ config:
       default: "STRIPE_PUBLISHABLE_KEY"
       django_setting: QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR
       description: "Environment-variable name containing the Stripe publishable key used by billing checkout flows."
-      validation: {}
+      validation:
+        pattern: ^(?:[A-Z][A-Z0-9_]*)?$
 
     secret_key_env_var:
       type: string
       default: "STRIPE_SECRET_KEY"
       django_setting: QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR
       description: "Environment-variable name containing the Stripe secret key for server-side API calls."
-      validation: {}
+      validation:
+        pattern: ^(?:[A-Z][A-Z0-9_]*)?$
 
     webhook_secret_env_var:
       type: string
       default: "QUICKSCALE_BILLING_WEBHOOK_SECRET"
       django_setting: QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR
       description: "Environment-variable name containing the Stripe webhook signing secret."
-      validation: {}
+      validation:
+        pattern: ^(?:[A-Z][A-Z0-9_]*)?$
 
     billing_currency:
       type: string
       default: "usd"
       django_setting: QUICKSCALE_BILLING_CURRENCY
       description: "ISO 4217 billing currency code used for plan metadata and Checkout validation."
-      validation: {}
+      validation:
+        choices:
+          - aud
+          - brl
+          - cad
+          - chf
+          - czk
+          - dkk
+          - eur
+          - gbp
+          - hkd
+          - huf
+          - inr
+          - jpy
+          - mxn
+          - myr
+          - nok
+          - nzd
+          - php
+          - pln
+          - ron
+          - sek
+          - sgd
+          - thb
+          - try
+          - usd
+          - zar
 
   immutable: {}
 
@@ -76,3 +105,28 @@ derivation:
           - - ""
             - quickscale_modules_billing.urls
       description: "Billing URL includes"
+
+  option_derivations:
+    publishable_key_env_var:
+      normalization_rules:
+        - source_key: publishable_key_env_var
+          target_key: publishable_key_env_var
+          rule_type: strip
+    secret_key_env_var:
+      normalization_rules:
+        - source_key: secret_key_env_var
+          target_key: secret_key_env_var
+          rule_type: strip
+    webhook_secret_env_var:
+      normalization_rules:
+        - source_key: webhook_secret_env_var
+          target_key: webhook_secret_env_var
+          rule_type: strip
+    billing_currency:
+      normalization_rules:
+        - source_key: billing_currency
+          target_key: billing_currency
+          rule_type: strip
+        - source_key: billing_currency
+          target_key: billing_currency
+          rule_type: lowercase
