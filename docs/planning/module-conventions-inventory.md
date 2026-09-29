@@ -1274,7 +1274,7 @@ installed or switched on. Today every pair solves this its own way. Real example
 # forms/views.py — forms sends an analytics event
 if not apps.is_installed("quickscale_modules_analytics"):
     return
-if not bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", True)):   # reads analytics' setting
+if not bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", True)):  # reads analytics' setting
     return
 from quickscale_modules_analytics.services import capture_form_submit, get_distinct_id
 
@@ -1314,9 +1314,11 @@ announces itself.
 def is_enabled() -> bool: ...
 def capture_form_submit(request, form) -> None: ...
 
+
 # forms/views.py
 from quickscale_core.modules import optional_service
-analytics = optional_service("analytics")     # None if not installed or not enabled
+
+analytics = optional_service("analytics")  # None if not installed or not enabled
 if analytics is not None:
     analytics.capture_form_submit(request, form)
 ```
@@ -1340,7 +1342,9 @@ form_submitted.connect(capture_form_submit)
 ```python
 # billing/apps.py — billing declares what it provides
 class QuickscaleBillingConfig(AppConfig):
-    def account_deletion_handlers(self): return (reconcile_provider_state,)
+    def account_deletion_handlers(self):
+        return (reconcile_provider_state,)
+
 
 # auth/views.py — auth asks core for every installed provider
 for handler in collect("account_deletion_handlers"):

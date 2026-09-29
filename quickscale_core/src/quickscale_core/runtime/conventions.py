@@ -66,6 +66,12 @@ _SKIP_EAGER_CHECKS_ENV_VAR = "QUICKSCALE_SKIP_MODULE_CHECKS"
 #: The one Django command the skip is effective for.
 _SKIP_EAGER_CHECKS_COMMAND = "collectstatic"
 
+#: The argv[0] basenames that identify Django's management entry points, so a
+#: serving executable whose first argument merely reads ``collectstatic``
+#: (for example ``gunicorn collectstatic`` serving a module of that name)
+#: never matches.
+_MANAGEMENT_ENTRY_POINTS = frozenset({"manage.py", "django-admin", "django-admin.py"})
+
 _VALIDATION_ERROR_CODE = "validation_error"
 _VALIDATION_ERROR_MESSAGE = "Invalid input."
 _NON_FIELD_ERRORS_KEY = "non_field_errors"
@@ -162,12 +168,15 @@ def _declared_capabilities(
 def _eager_run_is_skipped(label: str) -> bool:
     """Return whether the one-shot skip names *label* (or ``all``).
 
-    Effective only when the invoked management command is ``collectstatic``
-    (``sys.argv[1]`` after ``manage.py``/``django-admin``), the generated
-    image build's credential-free step, so a skip value that survives into a
-    serving process — or a serving argv that merely carries ``collectstatic``
-    as an option value — cannot disable the checks there.
+    Effective only in a genuine Django management invocation of the
+    ``collectstatic`` command — ``sys.argv[0]`` basenamed to ``manage.py`` or
+    ``django-admin`` and ``sys.argv[1]`` equal to ``collectstatic`` — the
+    generated image build's credential-free step.  A skip value that survives
+    into a serving process, or a serving executable whose argument merely
+    reads ``collectstatic``, cannot disable the checks there.
     """
+    if os.path.basename(sys.argv[0]) not in _MANAGEMENT_ENTRY_POINTS:
+        return False
     if len(sys.argv) < 2 or sys.argv[1] != _SKIP_EAGER_CHECKS_COMMAND:
         return False
     declared = os.environ.get(_SKIP_EAGER_CHECKS_ENV_VAR, "").strip()

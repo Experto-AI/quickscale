@@ -685,10 +685,11 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
 - ✅ **Build-time check skip:** the generated image build may set the one-shot
   `QUICKSCALE_SKIP_MODULE_CHECKS=all` (comma-separated labels, or `all`) so its credential-free
   `collectstatic` step does not run the eager checks — a configured credential name cannot be known
-  statically at build. The skip is effective only when the invoked management command is
-  `collectstatic` (`sys.argv[1]`), the callables stay registered, and the launcher never sets the
-  variable, so a value left in a serving environment — or a serving argv that merely carries
-  `collectstatic` as an option value — cannot disable the checks there.
+  statically at build. The skip is effective only in a genuine Django management invocation of
+  `collectstatic` (`sys.argv[0]` basenamed to `manage.py`/`django-admin` and `sys.argv[1]` equal to
+  `collectstatic`), the callables stay registered, and the launcher never sets the variable, so a
+  value left in a serving environment — or a serving executable whose argument merely reads
+  `collectstatic` — cannot disable the checks there.
 - ❌ A hand-written `raise` or check in `ready()` outside the helper, or catching and logging a
   configuration failure (Fail-Hard Principle).
 

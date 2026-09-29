@@ -391,14 +391,31 @@ class TestRegisterModuleChecks:
             return [Error("boom", id="quickscale_test_module.E001")]
 
         monkeypatch.setenv("QUICKSCALE_SKIP_MODULE_CHECKS", "all")
-        monkeypatch.setattr(
-            conventions.sys,
-            "argv",
+        for argv in (
             ["gunicorn", "--name", "collectstatic", "myproject.wsgi:application"],
-        )
+            ["/usr/local/bin/gunicorn", "collectstatic"],
+        ):
+            monkeypatch.setattr(conventions.sys, "argv", argv)
+            with pytest.raises(ImproperlyConfigured):
+                conventions.register_module_checks(app_config, [failing_check])
 
-        with pytest.raises(ImproperlyConfigured):
-            conventions.register_module_checks(app_config, [failing_check])
+    def test_skip_env_var_applies_to_django_admin_collectstatic(
+        self, system_check_registry, monkeypatch
+    ) -> None:
+        """The django-admin entry point is a genuine management invocation."""
+        from django.core.checks import Error
+
+        app_config = _FakeAppConfig("quickscale_test_module")
+
+        def failing_check(app_configs: object = None, **kwargs: object) -> list:
+            return [Error("boom", id="quickscale_test_module.E001")]
+
+        monkeypatch.setenv("QUICKSCALE_SKIP_MODULE_CHECKS", "all")
+        monkeypatch.setattr(conventions.sys, "argv", ["django-admin", "collectstatic"])
+
+        conventions.register_module_checks(app_config, [failing_check])
+
+        assert failing_check in system_check_registry.registered_checks
 
 
 # ===================================================================
