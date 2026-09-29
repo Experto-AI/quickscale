@@ -24,21 +24,24 @@ config:
       default: "POSTHOG_API_KEY"
       django_setting: QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
       description: "Environment-variable name containing the PostHog project API key."
-      validation: {}
+      validation:
+        pattern: ^(?:[A-Z][A-Z0-9_]*)?$
 
     posthog_host_env_var:
       type: string
       default: "POSTHOG_HOST"
       django_setting: QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR
       description: "Optional environment-variable name containing the PostHog ingestion host override."
-      validation: {}
+      validation:
+        pattern: ^(?:[A-Z][A-Z0-9_]*)?$
 
     posthog_host:
       type: string
       default: "https://us.i.posthog.com"
       django_setting: QUICKSCALE_ANALYTICS_POSTHOG_HOST
       description: "Fallback PostHog ingestion host used when the host env var is blank."
-      validation: {}
+      validation:
+        pattern: ^(?:https?://[^\s/?#][^\s]*|(?![A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#][^\s]*)$
 
     exclude_debug:
       type: boolean
@@ -85,3 +88,28 @@ derivation:
           - - analytics/
             - quickscale_modules_analytics.urls
       description: "Analytics URL include"
+
+  option_derivations:
+    provider:
+      normalization_rules:
+        - source_key: provider
+          target_key: provider
+          rule_type: strip
+        - source_key: provider
+          target_key: provider
+          rule_type: lowercase
+    posthog_api_key_env_var:
+      normalization_rules:
+        - source_key: posthog_api_key_env_var
+          target_key: posthog_api_key_env_var
+          rule_type: strip
+    posthog_host_env_var:
+      normalization_rules:
+        - source_key: posthog_host_env_var
+          target_key: posthog_host_env_var
+          rule_type: strip
+    posthog_host:
+      normalization_rules:
+        - source_key: posthog_host
+          target_key: posthog_host
+          rule_type: url
