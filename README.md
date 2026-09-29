@@ -17,7 +17,7 @@ QuickScale billing is a credits-first org-backed module. Django owns plans, bala
 ## Current Boundaries
 
 - Billing requires the `orgs` and `auth` modules at plan/apply/runtime; QuickScale does not support a standalone billing install without those foundations
-- Planner/apply now auto-materialize the `orgs` module when billing is selected, and `orgs` continues to auto-materialize default notifications config; auth remains an explicit prerequisite
+- Planner/apply now auto-materialize the `orgs` module when billing is selected, and `orgs` continues to auto-materialize the `notifications` module; notifications' declared defaults resolve from its manifest at apply time, and auth remains an explicit prerequisite
 - All billing pages and APIs use flat routes (`/billing/...`, `/api/billing/...`) in both Solo and SaaS modes; no org-scoped billing URL tree exists after T1.10
 - `GET /api/billing/plans/` is intentionally recurring-only; one-time credit packs are purchaseable but do not currently ship through a public catalog endpoint
 - Checkout success, cancel, and portal return URLs are server-owned; callers may not supply them in API requests
