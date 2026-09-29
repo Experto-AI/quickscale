@@ -329,10 +329,7 @@ class RoleChangeForm(forms.Form):
         return self.target_membership
 
     def _owner_count(self) -> int:
-        return cast(
-            int,
-            OrganizationMembership.objects.filter(
-                organization=self.target_membership.organization,
-                role=OrgRole.OWNER,
-            ).count(),
-        )
+        return OrganizationMembership.objects.filter(
+            organization=self.target_membership.organization,
+            role=OrgRole.OWNER,
+        ).count()

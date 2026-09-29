@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC
 from importlib import import_module
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from django.apps import apps
 from django.conf import settings
@@ -280,6 +280,10 @@ class OrgApiBaseView(OrganizationContextMixin, View):
 
     min_org_role: OrgRole | None = None
 
+    if TYPE_CHECKING:
+        # Provided by django.views.View; django-stubs omits the private name.
+        def _allowed_methods(self) -> list[str]: ...
+
     def json_error(
         self,
         message: str,
@@ -370,7 +374,10 @@ class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
 
     def form_valid(self, form: OrgCreateForm) -> HttpResponse:
         organization = form.save(user=self.request.user)
-        return redirect(_org_creation_redirect_urls(organization)["next_url"])
+        next_url = _org_creation_redirect_urls(organization)["next_url"]
+        # ``next_url`` is always a string: the helper falls back to the
+        # canonical org detail path when the billing pricing route is absent.
+        return redirect(cast(str, next_url))
 
 
 class OrgInvitationAcceptView(SaasModeRequiredMixin, TemplateView):
@@ -563,7 +570,7 @@ class OrgDashboardView(
         if _is_saas_mode():
             organization = self.get_organization()
             request.session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
-        return cast(HttpResponse, super().get(request, *args, **kwargs))
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)

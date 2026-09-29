@@ -21,6 +21,7 @@ and exits non-zero.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, models
@@ -46,7 +47,7 @@ class Command(BaseCommand):
         "FORCE RLS policies."
     )
 
-    def add_arguments(self, parser: object) -> None:
+    def add_arguments(self, parser: Any) -> None:
         """Add CLI options."""
         parser.add_argument(
             "--postgres-only",

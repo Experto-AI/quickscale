@@ -661,19 +661,19 @@ def get_client_ip(request: object) -> str:
         )
 
     if not use_xff or proxy_count <= 0:
-        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[attr-defined]
 
     x_forwarded_for: str = (
-        request.META.get("HTTP_X_FORWARDED_FOR", "")  # type: ignore[union-attr]
+        request.META.get("HTTP_X_FORWARDED_FOR", "")  # type: ignore[attr-defined]
     ).strip()
     if not x_forwarded_for:
-        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[attr-defined]
 
     ips = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
     if len(ips) >= proxy_count:
         return ips[-proxy_count]
 
-    return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+    return request.META.get("REMOTE_ADDR", "")  # type: ignore[attr-defined]
 
 
 class ClientIPThrottleMixin:

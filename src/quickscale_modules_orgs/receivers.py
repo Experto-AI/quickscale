@@ -10,6 +10,8 @@ the model's app label and name.
 ``signals.py`` holds only the ``Signal()`` objects orgs sends (rule 16).
 """
 
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.signals import pre_delete
@@ -19,7 +21,7 @@ from django.dispatch import receiver
 @receiver(pre_delete)
 def _protect_last_owner_on_membership_delete(
     sender: type[models.Model],
-    instance: models.Model,
+    instance: Any,
     **kwargs: object,
 ) -> None:
     """SA70 backstop: prevent cascade deletion from removing the last owner.

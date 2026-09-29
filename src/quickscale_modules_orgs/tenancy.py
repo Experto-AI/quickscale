@@ -1292,7 +1292,7 @@ def _is_django_contrib_app(app_label: str) -> bool:
             from django.apps import apps
 
             app_config = apps.get_app_config(app_label)
-            module_name: str = app_config.module.__name__
+            module_name: str = app_config.name
             _contrib_app_labels[app_label] = module_name.startswith("django.contrib.")
         except Exception:
             _contrib_app_labels[app_label] = False
@@ -1318,7 +1318,7 @@ def _is_third_party_app(app_label: str) -> bool:
             from django.apps import apps
 
             app_config = apps.get_app_config(app_label)
-            module_name: str = app_config.module.__name__
+            module_name: str = app_config.name
             _third_party_app_labels[app_label] = any(
                 module_name == pkg or module_name.startswith(f"{pkg}.")
                 for pkg in THIRD_PARTY_APP_PREFIXES

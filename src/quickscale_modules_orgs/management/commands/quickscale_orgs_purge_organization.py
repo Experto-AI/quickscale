@@ -33,6 +33,7 @@ import uuid
 from collections import Counter
 from contextlib import nullcontext
 from heapq import heappop, heappush
+from typing import Any, cast
 
 from django.apps import apps
 from django.core.exceptions import FieldDoesNotExist
@@ -189,7 +190,7 @@ def _disambiguated_model_labels(
     ]
 
 
-def _resolve_models() -> list[dict[str, object]]:
+def _resolve_models() -> list[dict[str, Any]]:
     """Derive the installed purge plan from marker-enrolled tenant models."""
     tenant_models = get_tenant_models()
     missing_organization_id = sorted(
@@ -233,16 +234,16 @@ def _get_filter_for_org(
     return {filter_key: value}
 
 
-def _get_qs(model: object, filter_kwargs: dict[str, object]) -> object:
+def _get_qs(model: type[models.Model], filter_kwargs: dict[str, object]) -> Any:
     """Get a QuerySet for *model* filtered by *filter_kwargs*.
 
     Tries ``all_objects`` first (TenantManager super-scope bypass), then
     falls back to the default ``objects`` manager.
     """
     try:
-        return model.all_objects.filter(**filter_kwargs)  # type: ignore[union-attr]
+        return model.all_objects.filter(**filter_kwargs)  # type: ignore[attr-defined]
     except AttributeError:
-        return model.objects.filter(**filter_kwargs)  # type: ignore[union-attr]
+        return model.objects.filter(**filter_kwargs)
 
 
 def _carries_provider_value(field: models.Field, value: object) -> bool:
@@ -275,7 +276,7 @@ class Command(BaseCommand):
         "--slug <slug> for non-destructive preflight only."
     )
 
-    def add_arguments(self, parser) -> None:
+    def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
             "--organization-id",
             dest="organization_id",
@@ -304,7 +305,7 @@ class Command(BaseCommand):
             help="Override reserved-org guard (System and personal orgs).",
         )
 
-    def handle(self, *args: object, **options: object) -> str | None:
+    def handle(self, *args: object, **options: Any) -> str | None:
         del args
         raw_org_id: str | None = options.get("organization_id")
         slug: str | None = options.get("slug")
@@ -691,7 +692,7 @@ class Command(BaseCommand):
                 f"organization removal: {exc}"
             ) from exc
 
-    def _billing_provider_mutation_lock(self, org_id: object):
+    def _billing_provider_mutation_lock(self, org_id: object) -> Any:
         """Hold billing's provider mutex through reconciliation and purge."""
         if not apps.is_installed("quickscale_modules_billing"):
             return nullcontext()
@@ -829,7 +830,7 @@ class Command(BaseCommand):
             if not has_organization_id_field(model):
                 continue
             try:
-                field = model._meta.get_field(field_name)
+                field = cast(models.Field, model._meta.get_field(field_name))
             except FieldDoesNotExist as exc:
                 raise CommandError(
                     f"Cannot purge organization {organization.pk}: "

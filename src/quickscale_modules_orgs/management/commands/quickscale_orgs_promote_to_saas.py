@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from itertools import count
+from typing import Any, cast
 
 from django.core.management.base import BaseCommand
+from django.db import models
 from django.utils.text import slugify
 
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
 
 
 def _personal_slug_bases(organization: Organization) -> list[str]:
-    slug_field = Organization._meta.get_field("slug")
+    slug_field = cast(models.SlugField, Organization._meta.get_field("slug"))
     max_length = slug_field.max_length or 150
     owner_membership = (
         OrganizationMembership.objects.select_related("user")
@@ -42,7 +44,7 @@ def _personal_slug_bases(organization: Organization) -> list[str]:
 
 
 def _iter_slug_candidates(organization: Organization) -> Iterator[str]:
-    slug_field = Organization._meta.get_field("slug")
+    slug_field = cast(models.SlugField, Organization._meta.get_field("slug"))
     max_length = slug_field.max_length or 150
     bases = _personal_slug_bases(organization)
 
@@ -62,7 +64,7 @@ class Command(BaseCommand):
         "required QUICKSCALE_MODE SaaS setting change."
     )
 
-    def add_arguments(self, parser: object) -> None:
+    def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
