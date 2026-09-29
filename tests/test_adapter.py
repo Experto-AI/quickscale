@@ -53,3 +53,9 @@ def test_disabled_notifications_leave_email_backend_unmanaged() -> None:
 def test_required_derived_reads_fail_hard() -> None:
     with pytest.raises(KeyError, match="enabled"):
         _notifications_derived_settings({})
+
+
+def test_null_reply_to_email_wires_blank() -> None:
+    spec = _notifications_manifest_adapter({"reply_to_email": None})
+
+    assert spec.settings["QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL"] == ""
