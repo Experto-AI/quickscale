@@ -1,4 +1,4 @@
-"""SA213 — app-declared removal obligations are enforced at the boundaries.
+"""App-declared removal obligations are enforced at the boundaries.
 
 The project app fixture (``tests.sa208_project_app``) declares its own
 obligation from its ``AppConfig`` and monkeypatches its model classification

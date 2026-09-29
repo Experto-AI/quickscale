@@ -50,7 +50,7 @@ select = ["E4", "E7", "E9", "F", "S"]
 DJANGO_SETTINGS_MODULE = "tests.settings"
 pythonpath = [".", "src", "../billing/src", "../social/src", "../forms/src", "../listings/src", "../blog/src", "../crm/src"]
 python_files = ["test_*.py"]
-norecursedirs = [".*", "build", "dist", "node_modules", "quickscale_cli", "quickscale_core", "analytics", "auth", "backups", "billing", "blog", "crm", "forms", "listings", "notifications", "social", "storage", "teams"]
+norecursedirs = [".*", "build", "dist", "node_modules", "quickscale_cli", "quickscale_core", "analytics", "auth", "backups", "billing", "blog", "crm", "forms", "listings", "notifications", "social", "storage"]
 testpaths = ["tests"]
 addopts = "-v --cov=quickscale_modules_orgs --cov-report=html --cov-report=term-missing --cov-fail-under=90"
 markers = [

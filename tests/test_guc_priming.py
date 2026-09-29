@@ -1,4 +1,4 @@
-"""AF9 Phase 1 — Connection-layer GUC priming lifecycle/install tests.
+"""Connection-layer GUC priming lifecycle/install tests.
 
 Phase 1 scope
 -------------

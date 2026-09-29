@@ -1,4 +1,4 @@
-"""SA35 cross-module user-FK conformance gate.
+"""Cross-module user-FK conformance gate.
 
 This test lives in the orgs test suite because ``orgs/tests/settings.py``
 is the smallest truthful cross-module harness: it includes blog, crm,
@@ -31,7 +31,7 @@ class TestUserFkDeleteRuleConformance:
     explicitly allowlisted as CASCADE. PROTECT is rejected: it would block
     account deletion.
 
-    This is a conformance / regression gate for SA35: FK referential
+    This is a conformance / regression gate: FK referential
     actions bypass RLS, so a CASCADE user-FK in any tenant-scoped model
     would destroy org content when a user's account is deleted.
     """

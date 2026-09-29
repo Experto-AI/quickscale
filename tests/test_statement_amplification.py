@@ -1,4 +1,4 @@
-"""SA4.1 — Statement amplification measurement harness.
+"""Statement amplification measurement harness.
 
 Measures statements-per-request and ``BEGIN``/``COMMIT`` counts for
 representative tenant traffic through the orgs module, providing a

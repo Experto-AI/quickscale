@@ -1,4 +1,4 @@
-"""SA60 cross-module composite-FK deferability conformance gate.
+"""Cross-module composite-FK deferability conformance gate.
 
 This test lives in the orgs test suite because ``orgs/tests/settings.py``
 is the smallest truthful cross-module harness: it includes crm, forms,

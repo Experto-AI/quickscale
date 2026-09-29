@@ -1,4 +1,4 @@
-"""SA92 — Forward guardrail: no cross-table organization_id DML in migrations.
+"""Forward guardrail: no cross-table organization_id DML in migrations.
 
 Bounded literal tripwire (maintainer-selected Option 1, 2026-07-16).
 This is a deliberately shallow smoke alarm, NOT a soundness proof.
@@ -62,7 +62,7 @@ def _scan_migrations(manifest: dict[str, dict[str, Any]]) -> tuple[list[str], in
     findings: list[str] = []
     scanned = 0
     for name in manifest:
-        if name in ("analytics", "storage", "teams"):
+        if name in ("analytics", "storage"):
             continue
         for pf in sorted(_migdir(name).iterdir()):
             if pf.suffix != ".py" or pf.name == "__init__.py" or not pf.is_file():
