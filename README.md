@@ -116,10 +116,21 @@ INSTALLED_APPS = [
     # Third-party apps
     "allauth",
     "allauth.account",
-    # QuickScale modules
+    # QuickScale modules (orgs is required alongside auth)
     "quickscale_modules_auth",
+    "quickscale_modules_orgs",
     # Your apps
     # ...
+]
+```
+
+#### Add the required middleware in `settings.py`:
+
+```python
+MIDDLEWARE = [
+    # ... existing middleware, AuthenticationMiddleware included ...
+    "allauth.account.middleware.AccountMiddleware",
+    "quickscale_modules_orgs.middleware.TenantMiddleware",
 ]
 ```
 
@@ -143,7 +154,11 @@ ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"  # Set to "mandatory" or "optional" as needed
 ACCOUNT_ALLOW_REGISTRATION = True  # Set to False to disable signups
-ACCOUNT_ADAPTER = "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
+# orgs installs alongside auth; its adapter extends auth's and keeps the
+# organization-aware post-login redirects.
+ACCOUNT_ADAPTER = "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
+# Required when orgs is installed: "solo" (single-tenant) or "saas".
+QUICKSCALE_MODE = "solo"
 ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"
 LOGIN_REDIRECT_URL = "/accounts/profile/"
 LOGOUT_REDIRECT_URL = "/"
@@ -162,14 +177,31 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("accounts/", include("quickscale_modules_auth.urls")),  # Auth URLs
+    # Required alongside auth. In solo mode keep this include before your
+    # home route; in saas mode place it after the home route.
+    path("", include("quickscale_modules_orgs.urls")),  # Orgs URLs
     # Your other URLs
 ]
 ```
 
+orgs is required alongside auth; the app, middleware, URL include, and
+`QUICKSCALE_MODE` entries above are its minimum manual configuration. Orgs
+refuses a superuser or BYPASSRLS database connection unless the command is its
+guarded one-shot migration:
+
+```bash
+QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate
+```
+
+Serve under a restricted role (NOSUPERUSER, NOBYPASSRLS). The
+`QUICKSCALE_ALLOW_BYPASSRLS=1` opt-in is for non-serving single-tenant
+development and tests, never serving; see the
+[Launcher One-Shot Command-Env Contract](../../docs/technical/decisions.md#launcher-one-shot-command-env-contract).
+
 ### 3. Run Migrations
 
 ```bash
-python manage.py migrate
+QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate
 ```
 
 ### 4. Create Superuser (Optional)

@@ -71,12 +71,20 @@ class TestAuthManifestAdapter:
             ("accounts/", "quickscale_modules_auth.urls"),
         )
         assert spec.pre_home_url_includes == ()
-        assert spec.settings["ACCOUNT_ADAPTER"] == (
-            "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
-        )
         assert spec.settings["ACCOUNT_SIGNUP_FORM_CLASS"] == (
             "quickscale_modules_auth.forms.SignupForm"
         )
+
+    def test_account_adapter_stays_single_writer(self) -> None:
+        """Auth does not wire ACCOUNT_ADAPTER; the orgs adapter owns the key.
+
+        orgs' adapter extends this module's adapter, and every auth install
+        also selects orgs, so the configured adapter keeps auth's behavior
+        while the key has one writer.
+        """
+        spec = _auth_manifest_adapter({"authentication_method": "email"})
+
+        assert "ACCOUNT_ADAPTER" not in spec.settings
 
     @pytest.mark.parametrize(
         "options",
