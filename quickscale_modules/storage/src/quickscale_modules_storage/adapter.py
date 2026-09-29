@@ -1,19 +1,28 @@
-"""Dependency-light storage adapter for pre-install managed wiring."""
+"""Module-owned storage manifest adapter."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from quickscale_core.runtime.manifest import (
+    ManifestError,
     ModuleWiringSpec,
-    ResolverResult,
     STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-    assemble_wiring_spec,
     build_generic_manifest_spec,
-    resolve_storage_module_options,
-    validate_storage_module_options,
+    load_module_manifest,
+    validate_module_options,
 )
+
+
+def _canonical_media_url(media_url: str) -> str:
+    """Return *media_url* in the canonical leading/trailing-slash form."""
+    normalized = (media_url or "/media/").strip()
+    if not normalized.startswith("/") and not normalized.startswith("http"):
+        normalized = "/" + normalized
+    if not normalized.endswith("/"):
+        normalized += "/"
+    return normalized
 
 
 def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
@@ -81,27 +90,33 @@ def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
     return settings
 
 
-def _storage_manifest_adapter(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
+def _storage_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Build the storage module's manifest-driven wiring specification."""
-    del project_package
+    """Project storage's settings from the resolved options.
 
-    resolved = resolve_storage_module_options(options)
-    validation_issues = validate_storage_module_options(options)
+    The manifest declares every option's default, normalization rule, and
+    validation block; this hook validates the resolved values through the
+    same engine ``plan`` and ``apply`` use, then applies the coercions and
+    canonical forms the declarative resolver cannot express (the media URL's
+    canonical slashes and the ordered cloud-backend settings block).
+    """
+    issues = validate_module_options(load_module_manifest("storage"), resolved)
+    if issues:
+        raise ManifestError(
+            "Module 'storage' has validation issues that must be resolved before "
+            "assembly:\n" + "\n".join(f"  • {issue}" for issue in issues)
+        )
+
     backend = str(resolved["backend"]).lower()
-    manifest_spec = build_generic_manifest_spec("storage", options)
-
-    media_url = str(resolved["media_url"])
-    public_base_url = str(resolved["public_base_url"]).strip()
-    settings = dict(manifest_spec.settings)
+    settings = dict(spec.settings)
     settings.update(
         {
             "QUICKSCALE_STORAGE_BACKEND": backend,
-            "MEDIA_URL": media_url,
-            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": public_base_url,
+            "MEDIA_URL": _canonical_media_url(str(resolved["media_url"])),
+            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": str(
+                resolved["public_base_url"]
+            ).strip(),
             "AWS_STORAGE_BUCKET_NAME": str(resolved["bucket_name"]).strip(),
             "AWS_S3_ENDPOINT_URL": str(resolved["endpoint_url"]).strip(),
             "AWS_S3_REGION_NAME": str(resolved["region_name"]).strip(),
@@ -122,19 +137,29 @@ def _storage_manifest_adapter(
     if backend in {"s3", "r2"}:
         settings.update(_cloud_storage_settings(resolved))
 
-    result = ResolverResult(
-        module_name="storage",
-        defaults={},
-        resolved=resolved,
-        validation_issues=validation_issues,
-        derived_settings=settings,
-        apps=manifest_spec.apps,
-        middleware=manifest_spec.middleware,
-        url_includes=manifest_spec.url_includes,
-        pre_home_url_includes=manifest_spec.pre_home_url_includes,
-        managed_files=(),
+    return ModuleWiringSpec(
+        apps=spec.apps,
+        middleware=spec.middleware,
+        settings=settings,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        managed_files=spec.managed_files,
     )
-    return assemble_wiring_spec(result)
+
+
+def _storage_manifest_adapter(
+    options: dict[str, Any],
+    *,
+    project_package: str | None = None,
+) -> ModuleWiringSpec:
+    """Build the storage module's manifest-driven wiring specification."""
+    del project_package
+
+    return build_generic_manifest_spec(
+        "storage",
+        options,
+        post_hook=_storage_post_hook,
+    )
 
 
 def get_manifest_adapter() -> Any:

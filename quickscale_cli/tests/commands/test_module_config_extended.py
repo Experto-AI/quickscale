@@ -12,12 +12,10 @@ import pytest
 
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
-    configure_storage_module,
     configure_notifications_module,
     configure_social_module,
     get_default_notifications_config,
     get_default_social_config,
-    get_default_storage_config,
 )
 from quickscale_core.contracts.resolvers import (
     load_module_manifest_with_fallback,
@@ -916,8 +914,8 @@ class TestModuleWiringSpecs:
                     "bucket_name": "assets",
                     "endpoint_url": "",
                     "region_name": "us-east-1",
-                    "access_key_id": "key",
-                    "secret_access_key": "secret",
+                    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "AWS_ACCESS_KEY_ID",
+                    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "AWS_SECRET_ACCESS_KEY",
                     "default_acl": "",
                     "querystring_auth": False,
                     "private_media_enabled": False,
@@ -1211,180 +1209,85 @@ class TestFormsModuleConfig:
 
 
 class TestStorageModuleConfig:
-    """Tests for storage module configurator registration and defaults."""
+    """Tests for storage module configurator registration and validation."""
 
     def test_storage_default_config_keys_match_manifest_contract_intent(self):
-        config = get_default_storage_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["storage"].get_defaults()
         assert config["backend"] == "local"
         assert config["media_url"] == "/media/"
         assert "custom_domain" not in config
         assert config["querystring_auth"] is False
-
-    def test_storage_in_module_configurators(self):
-        assert "storage" in MODULE_CONFIGURATOR_REGISTRY
-        config = configure_storage_module(non_interactive=True)
-        assert config["backend"] == "local"
-
-    @patch("quickscale_cli.commands.module_config.click.prompt")
-    @patch("quickscale_cli.commands.module_config.click.confirm")
-    def test_configure_storage_interactive_local(self, mock_confirm, mock_prompt):
-        """Interactive local storage configuration should skip cloud-only prompts."""
-        mock_confirm.return_value = False
-        mock_prompt.side_effect = ["local", "media", "https://cdn.example.com/media"]
-
-        config = configure_storage_module(non_interactive=False)
-
-        assert config["backend"] == "local"
-        assert config["media_url"] == "media"
-        assert config["public_base_url"] == "https://cdn.example.com/media"
-        assert config["bucket_name"] == ""
-
-    @patch("quickscale_cli.commands.module_config.click.prompt")
-    @patch("quickscale_cli.commands.module_config.click.confirm")
-    def test_configure_storage_interactive_cloud(self, mock_confirm, mock_prompt):
-        """Interactive cloud storage configuration should collect provider settings."""
-        mock_confirm.return_value = True
-        mock_prompt.side_effect = [
-            "r2",
-            "/media/",
-            "https://cdn.example.com/media",
-            "assets",
-            "https://account.r2.cloudflarestorage.com",
-            "auto",
-            "AWS_MY_ACCESS_KEY_ID",
-            "AWS_MY_SECRET_ACCESS_KEY",
-            "public-read",
-        ]
-
-        config = configure_storage_module(non_interactive=False)
-
-        assert config["backend"] == "r2"
-        assert config["bucket_name"] == "assets"
-        assert config["endpoint_url"] == "https://account.r2.cloudflarestorage.com"
-        assert config["region_name"] == "auto"
-        assert config[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] == "AWS_MY_ACCESS_KEY_ID"
-        assert (
-            config[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
-            == "AWS_MY_SECRET_ACCESS_KEY"
-        )
-        assert config["default_acl"] == "public-read"
-        assert config["querystring_auth"] is True
-
-    @patch("quickscale_cli.commands.module_config.click.prompt")
-    @patch("quickscale_cli.commands.module_config.click.confirm")
-    def test_configure_storage_interactive_reuses_existing_values(
-        self,
-        mock_confirm,
-        mock_prompt,
-    ):
-        """Interactive storage configuration should surface existing values as defaults."""
-        mock_confirm.return_value = False
-        mock_prompt.side_effect = [
-            "s3",
-            "/media/",
-            "https://cdn.example.com/media",
-            "assets",
-            "",
-            "eu-west-1",
-            "OPS_AWS_ACCESS_KEY_ID",
-            "OPS_AWS_SECRET_ACCESS_KEY",
-            "",
-        ]
-
-        config = configure_storage_module(
-            non_interactive=False,
-            existing_config={
-                "backend": "s3",
-                "media_url": "/media/",
-                "public_base_url": "https://cdn.example.com/media",
-                "bucket_name": "assets",
-                "region_name": "eu-west-1",
-                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "OPS_AWS_ACCESS_KEY_ID",
-                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "OPS_AWS_SECRET_ACCESS_KEY",
-            },
-        )
-
-        assert config["backend"] == "s3"
-        assert config["public_base_url"] == "https://cdn.example.com/media"
-        assert config["bucket_name"] == "assets"
-
-    @patch("quickscale_cli.commands.module_config.click.prompt")
-    @patch("quickscale_cli.commands.module_config.click.confirm")
-    def test_configure_storage_switching_to_local_clears_cloud_values(
-        self,
-        mock_confirm,
-        mock_prompt,
-    ):
-        """Switching storage to local should clear stale cloud-only settings."""
-        mock_confirm.return_value = False
-        mock_prompt.side_effect = ["local", "/media/", ""]
-
-        config = configure_storage_module(
-            non_interactive=False,
-            existing_config={
-                "backend": "s3",
-                "media_url": "/media/",
-                "public_base_url": "https://cdn.example.com/media",
-                "bucket_name": "assets",
-                "endpoint_url": "https://account.r2.cloudflarestorage.com",
-                "region_name": "auto",
-                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "OPS_AWS_ACCESS_KEY_ID",
-                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "OPS_AWS_SECRET_ACCESS_KEY",
-                "default_acl": "public-read",
-                "querystring_auth": True,
-            },
-        )
-
-        assert config["backend"] == "local"
-        assert config["bucket_name"] == ""
-        assert config["endpoint_url"] == ""
-        assert config["region_name"] == ""
-        assert config[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] == ""
-        assert config[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] == ""
-        assert config["default_acl"] == ""
-        assert config["querystring_auth"] is False
-
-    @patch("quickscale_cli.commands.module_config.click.prompt")
-    @patch("quickscale_cli.commands.module_config.click.confirm")
-    def test_configure_storage_local_to_cloud_fallback_to_default_env_var_names(
-        self,
-        mock_confirm,
-        mock_prompt,
-    ):
-        """Local→cloud reconfigure with blank env-var defaults should use canonical env-var names."""
-        mock_confirm.return_value = False
-        mock_prompt.side_effect = [
-            "s3",
-            "/media/",
-            "",
-            "assets",
-            "",
-            "eu-west-1",
-            "",  # Blank input for access key env var
-            "",  # Blank input for secret access key env var
-            "",
-        ]
-
-        config = configure_storage_module(
-            non_interactive=False,
-            existing_config={
-                "backend": "local",
-                "bucket_name": "",
-                "endpoint_url": "",
-                "region_name": "",
-                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "",
-                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "",
-                "default_acl": "",
-                "querystring_auth": False,
-            },
-        )
-
-        assert config["backend"] == "s3"
-        assert config["bucket_name"] == "assets"
         assert config[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] == "AWS_ACCESS_KEY_ID"
         assert (
             config[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] == "AWS_SECRET_ACCESS_KEY"
         )
+
+    def test_storage_in_module_configurators(self):
+        assert "storage" in MODULE_CONFIGURATOR_REGISTRY
+        config = MODULE_CONFIGURATOR_REGISTRY["storage"].configure(non_interactive=True)
+        assert config["backend"] == "local"
+
+    def test_storage_local_defaults_are_valid(self):
+        entry = MODULE_CONFIGURATOR_REGISTRY["storage"]
+        assert (
+            validate_module_options(
+                load_module_manifest_with_fallback("storage"), entry.get_defaults()
+            )
+            == []
+        )
+
+    def test_storage_empty_mapping_resolves_to_defaults(self):
+        assert (
+            resolve_manifest_module_options("storage", {})
+            == MODULE_CONFIGURATOR_REGISTRY["storage"].get_defaults()
+        )
+
+    def test_storage_cloud_backend_requires_credential_env_var_names(self):
+        issues = validate_module_options(
+            load_module_manifest_with_fallback("storage"),
+            {
+                "backend": "s3",
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "",
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "",
+            },
+        )
+
+        assert any(STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION in issue for issue in issues)
+        assert any(
+            STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION in issue for issue in issues
+        )
+
+    def test_storage_rejects_literal_aws_access_key_id(self):
+        issues = validate_module_options(
+            load_module_manifest_with_fallback("storage"),
+            {
+                "backend": "s3",
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "AKIAFAKEACCESSKEY123",
+            },
+        )
+
+        assert sum("must match pattern" in issue for issue in issues) == 1
+
+    def test_storage_rejects_retired_raw_credentials(self):
+        issues = validate_module_options(
+            load_module_manifest_with_fallback("storage"),
+            {"access_key_id": "raw-secret"},
+        )
+
+        assert any("access_key_id_env_var" in issue for issue in issues)
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_storage_interactive_defaults(self, mock_confirm, mock_prompt):
+        """Interactive prompts default to the manifest's declared values."""
+        mock_confirm.return_value = False
+        mock_prompt.side_effect = lambda message, **kwargs: kwargs.get("default")
+
+        config = MODULE_CONFIGURATOR_REGISTRY["storage"].configure(
+            non_interactive=False
+        )
+
+        assert config == MODULE_CONFIGURATOR_REGISTRY["storage"].get_defaults()
 
 
 class TestAnalyticsModuleConfig:

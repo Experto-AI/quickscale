@@ -174,23 +174,12 @@ SOCIAL_MANIFEST: Final[list[tuple[str, str, str]]] = [
     ("render_social_managed_views_module", ADAPTER_ONLY, "T2.5"),
 ]
 
-STORAGE_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Declarative targets
-    ("STORAGE_BACKEND_LOCAL", DECLARATIVE_TARGET, "T2.4"),
-    ("STORAGE_BACKEND_S3", DECLARATIVE_TARGET, "T2.4"),
-    ("STORAGE_BACKEND_R2", DECLARATIVE_TARGET, "T2.4"),
-    ("STORAGE_BACKENDS", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_STORAGE_BACKEND", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_STORAGE_MEDIA_URL", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_STORAGE_PUBLIC_BASE_URL", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_STORAGE_PRIVATE_MEDIA_ENABLED", DECLARATIVE_TARGET, "T2.4"),
-    ("STORAGE_MODULE_OPTION_KEYS", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_storage_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_storage_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_storage_module_options", ADAPTER_ONLY, "T2.5"),
-]
+# SA217: Storage imperative inventory cleared — the manifest owns its option
+# defaults, normalization, validation, its retired raw-credential keys
+# (`retired_options`), and its CLI configurator reads the manifest.  The
+# storage key remains in MANIFEST_INVENTORY with an empty list so that callers
+# of get_manifest_inventory("storage") continue to succeed.
+STORAGE_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 # ---------------------------------------------------------------------------
 # Freeze guardrail baseline

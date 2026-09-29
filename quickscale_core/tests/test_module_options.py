@@ -221,6 +221,18 @@ class TestSanitizeDispatcher:
         result = sanitize_module_options("social", {"provider_allowlist": ["Facebook"]})
         assert "facebook" in result["provider_allowlist"]
 
+    def test_storage_dispatch_with_retired_raises(self) -> None:
+        """The manifest's retired_options declaration raises through sanitize."""
+        with pytest.raises(ConfigValidationError, match="access_key_id"):
+            sanitize_module_options("storage", {"access_key_id": "raw-secret"})
+
+    def test_storage_dispatch_canonicalizes_declared_keys(self) -> None:
+        result = sanitize_module_options(
+            "storage", {"backend": " S3 ", "bucket_name": "  assets  "}
+        )
+        assert result["backend"] == "s3"
+        assert result["bucket_name"] == "assets"
+
     def test_unknown_module_passthrough(self) -> None:
         result = sanitize_module_options("unknown_module", {"key": "value"})
         assert result == {"key": "value"}

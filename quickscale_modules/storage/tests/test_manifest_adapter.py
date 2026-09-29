@@ -234,22 +234,29 @@ class TestStorageManifestAdapter:
         with pytest.raises(ManifestError, match="validation issues"):
             _storage_manifest_adapter(options)
 
-    def test_legacy_literal_credentials_are_not_emitted(self) -> None:
-        """Legacy raw credential keys are converted to default env references."""
-        spec = _storage_manifest_adapter(
-            {
-                "backend": "s3",
-                "access_key_id": "AKIA1234567890123456",
-                "secret_access_key": "literal-secret",
-            }
-        )
+    @pytest.mark.parametrize(
+        ("retired_key", "replacement"),
+        [
+            ("access_key_id", "access_key_id_env_var"),
+            ("secret_access_key", "secret_access_key_env_var"),
+        ],
+    )
+    def test_legacy_literal_credentials_are_refused(
+        self, retired_key: str, replacement: str
+    ) -> None:
+        """Legacy raw credential keys are refused with their replacement named."""
+        with pytest.raises(ManifestError) as excinfo:
+            _storage_manifest_adapter(
+                {
+                    "backend": "s3",
+                    retired_key: "literal-secret",
+                }
+            )
 
-        assert spec.settings["AWS_ACCESS_KEY_ID"] == "__QS_ENV__:AWS_ACCESS_KEY_ID"
-        assert spec.settings["AWS_SECRET_ACCESS_KEY"] == (
-            "__QS_ENV__:AWS_SECRET_ACCESS_KEY"
-        )
-        assert "AKIA1234567890123456" not in str(spec)
-        assert "literal-secret" not in str(spec)
+        message = str(excinfo.value)
+        assert f"'{retired_key}'" in message
+        assert replacement in message
+        assert "literal-secret" not in message
 
     def test_repeated_mixed_calls_do_not_leak_backend_state(self) -> None:
         """Repeated calls remain independent across local, S3, and R2."""
