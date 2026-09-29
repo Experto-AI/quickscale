@@ -302,18 +302,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
   rules 11, 15–18, 24, 28, 29, and 36–38. Package roots, receivers, and file names already follow
   rule 28; `teams/` and its core placeholder handling are deleted, orgs' eight ticket-numbered
-  test files are renamed by subject, and every module's `mypy.ini` section is capped at
-  module-extension.md's standard override and clean (rule 36).
+  test files are renamed by subject, every module's `mypy.ini` section is capped at
+  module-extension.md's standard override and clean (rule 36), and core's catalog (descriptions
+  from `module.yml`) plus `check_security_gates.py`, `render_j2_template.py`, `lint_frontend.sh`,
+  `provision_ci_postgres.sh`, and `test_isolation_conformance.sh` derive the shipped set from
+  `quickscale_modules/*/module.yml`, so social's tenant tables join the isolation gates (rule 37).
 
   **Scope:**
   - *Tests.* orgs' two ticket-numbered test apps (`sa182_project_app`,
     `sa208_project_app`) are renamed by subject (D32); the remaining ticket mentions in the
     docstrings and comments of module test files go, reworded to say what each test protects where
     the number was the only explanation.
-  - *Module lists.* Core's catalog (descriptions from `module.yml`), `check_security_gates.py`,
-    `render_j2_template.py`, `lint_frontend.sh`, `provision_ci_postgres.sh`, and
-    `test_isolation_conformance.sh` compute the module set from discovery, so social's tenant tables
-    join the isolation gates (rule 37).
   - *READMEs* follow the rule 11 headings and name every option key and command (rule 38).
 
   **Acceptance:** every module package holds only rule 28's file names; no test file or test

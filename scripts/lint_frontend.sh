@@ -167,8 +167,12 @@ NO_SOCIAL_DIR="$WORK_DIR/no_social"
 rm -rf "$NO_SOCIAL_DIR"
 mkdir -p "$NO_SOCIAL_DIR"
 
-# Build the no-social selected_modules list (all modules except 'social')
-NO_SOCIAL_MODULES='["auth","blog","listings","crm","forms","storage","backups","notifications","analytics","billing"]'
+# Build the no-social selected_modules list: every discovered module except
+# 'social', whose exclusion is what proves the theme compiles without its
+# React surface.  Discovery (Module Conventions rule 37) and its fail-closed
+# incomplete-directory check live in render_j2_template.py, never in a
+# hand-kept list here.
+NO_SOCIAL_MODULES=$("$PYTHON" "$SCRIPT_DIR/render_j2_template.py" --list-modules --exclude social)
 
 render_template_no_social() {
 	local src="$1"

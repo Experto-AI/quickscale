@@ -1027,14 +1027,21 @@ test checks both. Other files in `tests/` are `conftest.py`,
   `ignore_missing_imports` in a module section, or another disabled error code.
 
 **37. Module lists.**
-- ✅ Code outside `quickscale_modules/` that needs the set of modules (core's catalog, the CLI,
+- ✅ Code outside `quickscale_modules/` that needs the set of modules (the CLI,
   scripts and CI gates, generator templates including the seam producer of rule 31) computes it
   from discovery
   (`quickscale_modules/*/module.yml`) plus what each module states about itself: a tenant model is
   a `TenantModel` subclass (rule 13), a description is `module.yml`'s. A list that must exclude a
   module states the exclusion and its reason beside the derivation.
+- ✅ Core's declared release inventory (`contracts.module_catalog.MODULE_CATALOG`) names the
+  shipped modules and their readiness metadata, and its consistency test keeps it equal to
+  discovery.  Discovery refuses a declared module directory that is missing, so a same-count
+  substitution cannot re-point the inventory, and `AUTHORITATIVE_MODULE_COUNT` keeps an addition
+  or removal fail-hard until the shipped contract — inventory, count, and manifests — is
+  deliberately updated together.
 - ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
-  test-owned mapping, and the theme's TypeScript module surfaces (rule 31).
+  test-owned mapping, the theme's TypeScript module surfaces (rule 31), and core's declared release
+  inventory above.
 
 **38. README content.** Rule 11's Configuration heading names every manifest option key, and its
 Management commands heading every command the module ships; the test checks both, besides the
