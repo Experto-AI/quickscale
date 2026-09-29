@@ -2,9 +2,9 @@
 # provision_ci_postgres.sh — the single PostgreSQL environment contract.
 #
 # ``describe`` is deliberately a pure projection of the repository's module
-# discovery shim and the profile table below.  ``hosted-setup`` and ``run``
-# consume that projection; neither command is permitted to invent a second
-# module or database list.
+# discovery shim, each module's self-stated isolation suites, and the profile
+# table below.  ``hosted-setup`` and ``run`` consume that projection; neither
+# command is permitted to invent a second module or database list.
 
 set -euo pipefail
 
@@ -148,7 +148,19 @@ build_profile() {
       done
       case "$PROFILE" in
         restricted) MAPPING_MODULES=("${MODULES[@]}"); ROLE_NAME=quickscale_test_role; ROLE_FLAGS=(LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE) ;;
-        isolation) MAPPING_MODULES=(orgs billing blog crm forms listings); ROLE_NAME=quickscale_test_role; ROLE_FLAGS=(LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE) ;;
+        isolation)
+          # The isolation gates consume a mapping for the modules whose suites
+          # they run: orgs' conformance gate plus every module that ships an
+          # RLS boundary suite.  The set is discovered (rule 37) from the
+          # module inventory plus that self-stated fact, so social's tenant
+          # tables join the gates without a second hand-kept list.
+          MAPPING_MODULES=()
+          for item in "${MODULES[@]}"; do
+            if [[ "$item" == orgs || -f "$ROOT/quickscale_modules/$item/tests/test_rls_boundary.py" ]]; then
+              MAPPING_MODULES+=("$item")
+            fi
+          done
+          ROLE_NAME=quickscale_test_role; ROLE_FLAGS=(LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE) ;;
         bypassrls) MAPPING_MODULES=("${MODULES[@]}"); ROLE_NAME=quickscale_bypassrls_test_role; ROLE_FLAGS=(LOGIN CREATEDB BYPASSRLS NOINHERIT NOSUPERUSER NOCREATEROLE); ALLOW_BYPASS=1 ;;
       esac
       ;;

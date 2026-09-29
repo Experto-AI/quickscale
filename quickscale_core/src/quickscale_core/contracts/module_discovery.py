@@ -270,18 +270,20 @@ def _presence_records_for_projection(
 def _ensure_declared_names_present(
     names: Iterable[str], declared_names: Iterable[str]
 ) -> None:
-    """Reject a source inventory that is missing declared catalog modules.
+    """Reject a discovered inventory that is missing declared catalog modules.
 
     A count check alone cannot catch a same-count substitution, so the
     release inventory additionally requires every declared module directory
-    to be present in the source tree.  A deliberately added module keeps
+    to be present in the discovered set.  A deliberately added module keeps
     working: an addition changes the inventory count, which the count gate
-    already covers.
+    already covers, and the shipped state's declared inventory is kept equal
+    to discovery by its consistency test.  Rule 37 records the declared
+    inventory as its allowed exception.
     """
     missing = sorted(set(declared_names) - set(names))
     if missing:
         raise ImproperlyConfigured(
-            "Source inventory is missing declared module directories: "
+            "Discovered module inventory is missing declared module directories: "
             + ", ".join(missing)
         )
 
@@ -345,14 +347,16 @@ def authoritative_module_names() -> list[str]:
 
     Source manifests are preferred in the maintainer monorepo; installed and
     generated contexts resolve the same inventory from bundled manifests.
-    Every declared module directory must be present in the source inventory,
-    so a same-count substitution cannot silently re-point the inventory, and
-    a count mismatch is also rejected so consumers cannot silently operate on
-    an accidentally changed release inventory.
+    Every declared module directory must be present in the discovered
+    inventory, so a same-count substitution cannot silently re-point it, and
+    a count mismatch is rejected so consumers cannot silently operate on an
+    accidentally changed release inventory.  A deliberate addition changes
+    the count, which the count gate covers until the shipped contract —
+    declared inventory, count, and manifests — is updated together.
 
     Raises:
-        ImproperlyConfigured: If a declared module directory is missing from
-            the source tree or the number of discovered modules differs from
+        ImproperlyConfigured: If the discovered inventory differs from the
+            declared release inventory or its number of modules differs from
             :data:`AUTHORITATIVE_MODULE_COUNT`.
     """
     _declared_names, catalog_available = _declared_catalog()

@@ -123,11 +123,19 @@ run_suite \
 
 # ---------------------------------------------------------------------------
 # 2. Module RLS boundary tests — each module's test_rls_boundary.py
+#
+# The shipped set is discovered from quickscale_modules/*/module.yml (Module
+# Conventions rule 37), not listed: a module that ships an RLS boundary suite
+# enrolls itself in the gate, and orgs' conformance gate above covers the
+# foundation.
 # ---------------------------------------------------------------------------
-RLS_MODULES=(billing blog crm forms listings)
-for mod in "${RLS_MODULES[@]}"; do
+RLS_SUITES=0
+for manifest in quickscale_modules/*/module.yml; do
+  [ -f "$manifest" ] || continue
+  mod="$(basename "$(dirname "$manifest")")"
   test_file="quickscale_modules/${mod}/tests/test_rls_boundary.py"
   if [ -f "$test_file" ]; then
+    RLS_SUITES=$((RLS_SUITES + 1))
     run_suite \
       "rls-${mod}" \
       "tests.settings" \
@@ -135,6 +143,10 @@ for mod in "${RLS_MODULES[@]}"; do
       "$test_file"
   fi
 done
+if [ "$RLS_SUITES" -eq 0 ]; then
+  echo "❌ No module RLS boundary suites were discovered — the isolation gate cannot pass by omission" >&2
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # 3. CRM authenticated-request isolation test

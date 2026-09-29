@@ -5,10 +5,12 @@ so that both the CLI and the schema layer can consume module catalog metadata
 without depending on the CLI.
 
 Starting with T2.3 Phase 2, the module catalog is supplemented by
-manifest-backed discovery via :mod:`module_discovery`.  The static catalog
-entries provide descriptive metadata and UX labels; the manifest discovery
+manifest-backed discovery via :mod:`module_discovery`.  The manifest discovery
 provides the authoritative list of shipped modules by scanning
-``quickscale_modules/*/module.yml``.
+``quickscale_modules/*/module.yml``, and a discovered entry's description is
+read from that module's manifest — the manifest is a module's one home for
+facts about itself (Module Conventions rule 37).  The static catalog declares
+the shipped-contract inventory and its readiness flags only.
 
 A module directory without a ``module.yml`` is never a shipped module:
 source discovery rejects it fail-closed, while bundled discovery skips it.
@@ -20,7 +22,12 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ModuleCatalogEntry:
-    """Metadata describing a module's availability and UX label."""
+    """Metadata describing a module's availability and UX label.
+
+    ``description`` is carried by discovered entries and read from the
+    module's ``module.yml``; the static catalog declares only names and
+    readiness, so its entries leave the description empty.
+    """
 
     name: str
     description: str
@@ -28,68 +35,60 @@ class ModuleCatalogEntry:
     experimental: bool = False
 
 
+#: The shipped-contract inventory: every module name the contract declares,
+#: with its readiness flag.  Descriptions are deliberately absent — a
+#: module's ``module.yml`` is their one home (Module Conventions rule 37).
+#:
+#: Rule 37 names this declared release inventory as its allowed exception.
+#: :mod:`module_discovery` refuses a declared module directory that is
+#: missing, a consistency test keeps the declaration equal to discovery in
+#: the shipped state, and ``AUTHORITATIVE_MODULE_COUNT`` keeps an addition or
+#: removal fail-hard until the shipped contract — this inventory, the count,
+#: and the manifests — is deliberately updated together.
 MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
-    ModuleCatalogEntry(
-        name="auth",
-        description="Authentication with django-allauth",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="blog",
-        description="Markdown-powered blog with categories and RSS",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="listings",
-        description="Generic listings for marketplace verticals",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="crm",
-        description="Customer Relationship Management (contacts, deals, pipeline)",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="forms",
-        description="Generic form builder with admin management and React renderer",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="storage",
-        description="Shared media storage infrastructure (local + S3-compatible)",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="backups",
-        description="Private operational database backups with guarded restore workflows",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="notifications",
-        description="Transactional email delivery with Resend and Anymail",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="analytics",
-        description="PostHog website analytics with flat settings and starter-theme support",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="social",
-        description="Curated social links and embeds with managed backend integration",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="billing",
-        description="Stripe integration with credits-first pricing and dashboard routes",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="orgs",
-        description="Organizations and multi-tenant foundations with memberships and invitations",
-        ready=True,
-    ),
+    ModuleCatalogEntry(name="auth", description="", ready=True),
+    ModuleCatalogEntry(name="blog", description="", ready=True),
+    ModuleCatalogEntry(name="listings", description="", ready=True),
+    ModuleCatalogEntry(name="crm", description="", ready=True),
+    ModuleCatalogEntry(name="forms", description="", ready=True),
+    ModuleCatalogEntry(name="storage", description="", ready=True),
+    ModuleCatalogEntry(name="backups", description="", ready=True),
+    ModuleCatalogEntry(name="notifications", description="", ready=True),
+    ModuleCatalogEntry(name="analytics", description="", ready=True),
+    ModuleCatalogEntry(name="social", description="", ready=True),
+    ModuleCatalogEntry(name="billing", description="", ready=True),
+    ModuleCatalogEntry(name="orgs", description="", ready=True),
 )
+
+
+# ---------------------------------------------------------------------------
+# Manifest description resolution
+# ---------------------------------------------------------------------------
+
+
+def _manifest_descriptions(names: Iterable[str]) -> dict[str, str]:
+    """Return each named module's description, read from its ``module.yml``.
+
+    The manifest is the one home of a module's description (Module Conventions
+    rule 37).  Manifests are read from the maintainer-monorepo workspace when
+    it exists and from the manifests bundled inside the installed
+    ``quickscale_core`` package otherwise, the same precedence source
+    discovery uses; a manifest that cannot be read fails hard.
+    """
+    from quickscale_core.contracts.module_discovery import resolve_manifest_base_path
+    from quickscale_core.manifest.loader import load_manifest_from_path
+
+    base_path = resolve_manifest_base_path()
+    descriptions: dict[str, str] = {}
+    for name in names:
+        manifest = load_manifest_from_path(base_path / name / "module.yml")
+        descriptions[name] = manifest.description
+    return descriptions
+
+
+def _manifest_description(module_name: str) -> str:
+    """Return one module's description, read from its ``module.yml``."""
+    return _manifest_descriptions([module_name])[module_name]
 
 
 # ---------------------------------------------------------------------------
@@ -98,18 +97,27 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
 
 
 def get_module_entry(module_name: str) -> ModuleCatalogEntry | None:
-    """Return module metadata for a module name from the static catalog.
+    """Return module metadata for a declared module name.
+
+    The declared name and readiness flag come from the static catalog; the
+    description is read from the module's ``module.yml``, its one home
+    (Module Conventions rule 37).
 
     Args:
         module_name: The module name to look up.
 
     Returns:
-        A :class:`ModuleCatalogEntry` if the module exists in the static
+        A :class:`ModuleCatalogEntry` if the module is declared in the static
         catalog, ``None`` otherwise.
     """
     for entry in MODULE_CATALOG:
         if entry.name == module_name:
-            return entry
+            return ModuleCatalogEntry(
+                name=entry.name,
+                description=_manifest_description(entry.name),
+                ready=entry.ready,
+                experimental=entry.experimental,
+            )
     return None
 
 
@@ -153,8 +161,8 @@ def get_discovered_module_names() -> list[str]:
 
 def get_discovered_module_entries() -> list[ModuleCatalogEntry]:
     """Return :class:`ModuleCatalogEntry` instances for every shipped module
-    discovered via manifest scanning, supplemented with descriptive metadata
-    from the static catalog where available.
+    discovered via manifest scanning, with each description read from that
+    module's ``module.yml``.
 
     Entries are sorted alphabetically by name.  Every discovered module is
     marked as ``ready=True`` (a valid ``module.yml`` is the readiness signal).
@@ -165,6 +173,7 @@ def get_discovered_module_entries() -> list[ModuleCatalogEntry]:
         List of :class:`ModuleCatalogEntry` for discovered modules.
     """
     discovered_names = get_discovered_module_names()
+    descriptions = _manifest_descriptions(discovered_names)
 
     entries: list[ModuleCatalogEntry] = []
     seen: set[str] = set()
@@ -172,11 +181,8 @@ def get_discovered_module_entries() -> list[ModuleCatalogEntry]:
         if name in seen:
             continue
         seen.add(name)
-        # Supplement with static catalog description when available.
-        static_entry = get_module_entry(name)
-        description = static_entry.description if static_entry else ""
         entries.append(
-            ModuleCatalogEntry(name=name, description=description, ready=True)
+            ModuleCatalogEntry(name=name, description=descriptions[name], ready=True)
         )
 
     return entries
