@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.apps import apps
 from django.conf import settings
 from django.db import models, transaction
 
 from quickscale_modules_orgs.models import TenantModel
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 CURRENT_SUBSCRIPTION_STATUSES = (
@@ -74,6 +77,10 @@ class Plan(models.Model):
     )
     features = models.JSONField(default=list, blank=True)
     is_active = models.BooleanField(default=True)
+
+    if TYPE_CHECKING:
+        # Render-time price label set by PricingPageView.get_context_data.
+        price_display: str
 
     class Meta:
         app_label = "quickscale_billing"
@@ -208,6 +215,11 @@ class PurchaseCheckout(TenantModel):
     checkout_expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    if TYPE_CHECKING:
+        # FK attnames; unset until the relation is assigned.
+        user_id: int | None
+        plan_id: int
+
     class Meta(TenantModel.Meta):
         app_label = "quickscale_billing"
         ordering = ["-id"]
@@ -273,6 +285,11 @@ class Subscription(TenantModel):
     checkout_expires_at = models.DateTimeField(null=True, blank=True)
     current_period_start = models.DateTimeField(null=True, blank=True)
     current_period_end = models.DateTimeField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        # FK attnames; unset until the relation is assigned.
+        user_id: int | None
+        organization_id: UUID | None
 
     class Meta(TenantModel.Meta):
         app_label = "quickscale_billing"

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
+
+if TYPE_CHECKING:
+    from django.db.models import Model
 
 from quickscale_modules_orgs.admin import TenantModelAdmin
 
@@ -23,6 +26,10 @@ class ReadOnlyAdminMixin:
     """Shared read-only admin behavior for operational billing models."""
 
     _extra_readonly_fields: list[str] = []
+
+    if TYPE_CHECKING:
+        # Provided by admin.ModelAdmin in the concrete admin classes.
+        model: type[Model]
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         del request
