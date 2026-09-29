@@ -1,9 +1,10 @@
 """Throttling contract tests for the billing module.
 
-The generated settings compose the billing-contributed ``billing_checkout``
-and ``billing_portal`` scopes over their conservative ``user``/``anon``
-defaults.  These tests pin that contribution and prove a Stripe-calling view
-throttles past its scope rate with a 429.
+The generated settings compose the billing-contributed
+``quickscale_billing_checkout`` and ``quickscale_billing_portal`` scopes over
+their conservative ``user``/``anon`` defaults.  These tests pin that
+contribution and prove a Stripe-calling view throttles past its scope rate
+with a 429.
 """
 
 from __future__ import annotations
@@ -28,22 +29,27 @@ from quickscale_modules_billing.views import (
 )
 
 BILLING_SCOPE_RATES = {
-    "billing_checkout": "30/hour",
-    "billing_portal": "30/hour",
+    "quickscale_billing_checkout": "30/hour",
+    "quickscale_billing_portal": "30/hour",
 }
 #: Tight scope rates for the 429 path.  DRF binds the generated settings'
 #: ``DEFAULT_THROTTLE_RATES`` onto ``SimpleRateThrottle`` at import time, so a
 #: settings override cannot reach it; the test applies both bindings itself.
 THROTTLE_RATES = {
-    "billing_checkout": "2/hour",
-    "billing_portal": "2/hour",
+    "quickscale_billing_checkout": "2/hour",
+    "quickscale_billing_portal": "2/hour",
 }
 
 
 def test_billing_wiring_contributes_tighter_throttle_scopes() -> None:
     """The billing wiring spec ships both Stripe-calling throttle scopes."""
     spec = _billing_post_hook(
-        ModuleWiringSpec(settings={"QUICKSCALE_BILLING_ENABLED": True}),
+        ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_BILLING_ENABLED": True,
+                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
+            }
+        ),
         {},
     )
 
@@ -51,12 +57,33 @@ def test_billing_wiring_contributes_tighter_throttle_scopes() -> None:
     assert rest_framework["DEFAULT_THROTTLE_RATES"] == BILLING_SCOPE_RATES
 
 
+def test_billing_wiring_carries_the_configured_rate() -> None:
+    """Both scopes take their rate from the module's api_rate_limit option."""
+    spec = _billing_post_hook(
+        ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_BILLING_ENABLED": True,
+                "QUICKSCALE_BILLING_API_RATE_LIMIT": " 7/hour ",
+            }
+        ),
+        {},
+    )
+
+    rest_framework = spec.settings["REST_FRAMEWORK"]
+    assert rest_framework["DEFAULT_THROTTLE_RATES"] == {
+        "quickscale_billing_checkout": "7/hour",
+        "quickscale_billing_portal": "7/hour",
+    }
+
+
 def test_stripe_calling_views_declare_throttle_scopes() -> None:
     """Every Stripe-calling view carries an explicit throttle scope."""
-    assert CreateCheckoutSessionView.throttle_scope == "billing_checkout"
-    assert CreateSubscriptionCheckoutView.throttle_scope == "billing_checkout"
-    assert CreateBillingPortalSessionView.throttle_scope == "billing_portal"
-    assert CancelSubscriptionView.throttle_scope == "billing_portal"
+    assert CreateCheckoutSessionView.throttle_scope == "quickscale_billing_checkout"
+    assert (
+        CreateSubscriptionCheckoutView.throttle_scope == "quickscale_billing_checkout"
+    )
+    assert CreateBillingPortalSessionView.throttle_scope == "quickscale_billing_portal"
+    assert CancelSubscriptionView.throttle_scope == "quickscale_billing_portal"
 
 
 @pytest.fixture

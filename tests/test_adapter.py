@@ -31,7 +31,10 @@ class TestBillingPostHook:
     def test_coerces_bool_enabled(self) -> None:
         """QUICKSCALE_BILLING_ENABLED must be coerced to bool."""
         spec = ModuleWiringSpec(
-            settings={"QUICKSCALE_BILLING_ENABLED": 1},
+            settings={
+                "QUICKSCALE_BILLING_ENABLED": 1,
+                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
+            },
         )
         result = _billing_post_hook(spec, {})
         assert result.settings["QUICKSCALE_BILLING_ENABLED"] is True
@@ -39,7 +42,10 @@ class TestBillingPostHook:
     def test_coerces_bool_enabled_from_falsy_int(self) -> None:
         """Falsy int values produce False."""
         spec = ModuleWiringSpec(
-            settings={"QUICKSCALE_BILLING_ENABLED": 0},
+            settings={
+                "QUICKSCALE_BILLING_ENABLED": 0,
+                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
+            },
         )
         result = _billing_post_hook(spec, {})
         assert result.settings["QUICKSCALE_BILLING_ENABLED"] is False
@@ -53,6 +59,7 @@ class TestBillingPostHook:
                 "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR": 456,
                 "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR": 789,
                 "QUICKSCALE_BILLING_CURRENCY": 999,
+                "QUICKSCALE_BILLING_API_RATE_LIMIT": 3030,
             },
         )
         result = _billing_post_hook(spec, {})
@@ -60,13 +67,17 @@ class TestBillingPostHook:
         assert result.settings["QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR"] == "456"
         assert result.settings["QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR"] == "789"
         assert result.settings["QUICKSCALE_BILLING_CURRENCY"] == "999"
+        assert result.settings["QUICKSCALE_BILLING_API_RATE_LIMIT"] == "3030"
 
     def test_preserves_non_setting_fields(self) -> None:
         """Fields other than settings must pass through unchanged."""
         spec = ModuleWiringSpec(
             apps=("quickscale_modules_billing",),
             middleware=("some.middleware",),
-            settings={"QUICKSCALE_BILLING_ENABLED": 0},
+            settings={
+                "QUICKSCALE_BILLING_ENABLED": 0,
+                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
+            },
         )
         result = _billing_post_hook(spec, {})
         assert result.apps == ("quickscale_modules_billing",)
@@ -75,7 +86,10 @@ class TestBillingPostHook:
     def test_missing_optional_str_key_does_not_raise(self) -> None:
         """Optional string keys that are absent are silently skipped."""
         spec = ModuleWiringSpec(
-            settings={"QUICKSCALE_BILLING_ENABLED": True},
+            settings={
+                "QUICKSCALE_BILLING_ENABLED": True,
+                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
+            },
         )
         result = _billing_post_hook(spec, {})
         assert result.settings["QUICKSCALE_BILLING_ENABLED"] is True

@@ -68,6 +68,14 @@ config:
           - usd
           - zar
 
+    api_rate_limit:
+      type: string
+      default: "30/hour"
+      django_setting: QUICKSCALE_BILLING_API_RATE_LIMIT
+      description: "Throttle rate per client for billing's Stripe-calling checkout and portal endpoints. Format: '<count>/<period>'."
+      validation:
+        pattern: ^\d+/(second|minute|hour|day)$
+
   immutable: {}
 
 required_modules:
@@ -130,3 +138,9 @@ derivation:
         - source_key: billing_currency
           target_key: billing_currency
           rule_type: lowercase
+    api_rate_limit:
+      normalization_rules:
+        - source_key: api_rate_limit
+          target_key: api_rate_limit
+          rule_type: strip
+          description: "Strip whitespace from api_rate_limit"

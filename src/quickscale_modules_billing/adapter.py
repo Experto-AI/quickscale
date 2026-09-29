@@ -26,8 +26,9 @@ def _billing_post_hook(
     Reproduces the legacy coercion behaviour that the declarative resolver
     cannot express: ``QUICKSCALE_BILLING_ENABLED`` is forced to ``bool``
     and env-var name settings are forced to ``str``.  It also contributes
-    the billing throttle scopes, which the generated settings merge over
-    their own ``user``/``anon`` defaults.
+    the stemmed billing throttle scopes at the module's ``api_rate_limit``
+    option value, which the generated settings merge over their own
+    ``user``/``anon`` defaults.
     """
     settings = dict(spec.settings)
 
@@ -43,18 +44,22 @@ def _billing_post_hook(
         "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
         "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
         "QUICKSCALE_BILLING_CURRENCY",
+        "QUICKSCALE_BILLING_API_RATE_LIMIT",
     ):
         if str_key in settings:
             settings[str_key] = str(settings[str_key])
 
-    # SA201 — every billing endpoint that calls Stripe carries an explicit
-    # scope, and the rate for those scopes travels with the module. 30/hour
-    # per client leaves room for retries while bounding a checkout loop that
-    # would otherwise exhaust the Stripe rate limit for every tenant.
+    # Rule 32 — every Stripe-calling billing endpoint carries an explicit
+    # scope stemmed as quickscale_billing_<purpose>, and the rate for those
+    # scopes is the module's _RATE_LIMIT option, contributed here for rule
+    # 30's merge. The default 30/hour per client leaves room for retries while
+    # bounding a checkout loop that would otherwise exhaust the Stripe rate
+    # limit for every tenant.
+    api_rate_limit = str(settings["QUICKSCALE_BILLING_API_RATE_LIMIT"]).strip()
     settings["REST_FRAMEWORK"] = {
         "DEFAULT_THROTTLE_RATES": {
-            "billing_checkout": "30/hour",
-            "billing_portal": "30/hour",
+            "quickscale_billing_checkout": api_rate_limit,
+            "quickscale_billing_portal": api_rate_limit,
         },
     }
 
