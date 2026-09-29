@@ -28,7 +28,7 @@ from quickscale_core.runtime.manifest import (
     render_social_managed_init_module,
     render_social_managed_urls_module,
     render_social_managed_views_module,
-    resolve_social_module_options,
+    resolve_manifest_module_options,
     social_provider_supports_embeds,
 )
 
@@ -67,7 +67,7 @@ def _social_manifest_adapter(
     if project_package is None:
         raise ValueError("project_package is required for managed social wiring")
 
-    resolved = resolve_social_module_options(dict(options))
+    resolved = resolve_manifest_module_options("social", dict(options))
     provider_allowlist = list(resolved["provider_allowlist"])
     embed_provider_allowlist = [
         provider

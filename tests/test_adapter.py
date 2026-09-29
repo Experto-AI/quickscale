@@ -136,7 +136,7 @@ class TestSocialManifestAdapterApps:
 
     @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
     @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_social_module_options")
+    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
     def test_synthetic_manifest_app_propagates(
         self,
         mock_resolve: MagicMock,
@@ -266,7 +266,7 @@ class TestSocialManifestAdapterApps:
         ],
     )
     @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_social_module_options")
+    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
     def test_malformed_apps_projection_fails_loudly(
         self,
         mock_resolve: MagicMock,
@@ -293,7 +293,7 @@ class TestSocialManifestAdapterEmbedFiltering:
     )
     @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
     @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_social_module_options")
+    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
     def test_filters_embed_providers(
         self,
         mock_resolve: MagicMock,
@@ -344,7 +344,7 @@ class TestSocialManifestAdapterEmbedFiltering:
     )
     @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
     @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_social_module_options")
+    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
     def test_empty_embed_allowlist_when_no_providers_support_embeds(
         self,
         mock_resolve: MagicMock,
@@ -393,7 +393,7 @@ class TestSocialManifestAdapterRendererIdReplacement:
     @patch("quickscale_modules_social.adapter.render_social_managed_views_module")
     @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
     @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_social_module_options")
+    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
     def test_renderer_id_placeholders_replaced(
         self,
         mock_resolve: MagicMock,
@@ -462,7 +462,7 @@ class TestSocialManifestAdapterRendererIdReplacement:
 
     @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
     @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_social_module_options")
+    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
     def test_unknown_renderer_id_skipped(
         self,
         mock_resolve: MagicMock,
