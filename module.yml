@@ -55,6 +55,7 @@ config:
       validation:
         required_when:
           backend: ["s3", "r2"]
+        pattern: '^(?!(?:AKIA|ASIA)[A-Z0-9]{16}$)(?:[A-Z][A-Z0-9_]*)?$'
 
     secret_access_key_env_var:
       type: string
@@ -64,6 +65,7 @@ config:
       validation:
         required_when:
           backend: ["s3", "r2"]
+        pattern: '^(?:[A-Z][A-Z0-9_]*)?$'
 
     default_acl:
       type: string
@@ -96,6 +98,12 @@ retired_options:
   custom_domain: >-
     Legacy config key 'custom_domain' is no longer supported. Use
     'public_base_url' instead.
+  access_key_id: >-
+    Legacy config key 'access_key_id' is no longer supported. Use
+    'access_key_id_env_var' to reference an environment variable instead.
+  secret_access_key: >-
+    Legacy config key 'secret_access_key' is no longer supported. Use
+    'secret_access_key_env_var' to reference an environment variable instead.
 
 derivation:
   wiring_projections:
@@ -105,3 +113,63 @@ derivation:
         value:
           - quickscale_modules_storage
       description: "Storage Django app label"
+
+  option_derivations:
+    backend:
+      normalization_rules:
+        - source_key: backend
+          target_key: backend
+          rule_type: strip
+          description: "Strip whitespace from backend"
+        - source_key: backend
+          target_key: backend
+          rule_type: lowercase
+          description: "Canonicalize backend to lowercase"
+    media_url:
+      normalization_rules:
+        - source_key: media_url
+          target_key: media_url
+          rule_type: strip
+          description: "Strip whitespace from media_url"
+    public_base_url:
+      normalization_rules:
+        - source_key: public_base_url
+          target_key: public_base_url
+          rule_type: strip
+          description: "Strip whitespace from public_base_url"
+    bucket_name:
+      normalization_rules:
+        - source_key: bucket_name
+          target_key: bucket_name
+          rule_type: strip
+          description: "Strip whitespace from bucket_name"
+    endpoint_url:
+      normalization_rules:
+        - source_key: endpoint_url
+          target_key: endpoint_url
+          rule_type: strip
+          description: "Strip whitespace from endpoint_url"
+    region_name:
+      normalization_rules:
+        - source_key: region_name
+          target_key: region_name
+          rule_type: strip
+          description: "Strip whitespace from region_name"
+    access_key_id_env_var:
+      normalization_rules:
+        - source_key: access_key_id_env_var
+          target_key: access_key_id_env_var
+          rule_type: strip
+          description: "Strip whitespace from access_key_id_env_var"
+    secret_access_key_env_var:
+      normalization_rules:
+        - source_key: secret_access_key_env_var
+          target_key: secret_access_key_env_var
+          rule_type: strip
+          description: "Strip whitespace from secret_access_key_env_var"
+    default_acl:
+      normalization_rules:
+        - source_key: default_acl
+          target_key: default_acl
+          rule_type: strip
+          description: "Strip whitespace from default_acl"
