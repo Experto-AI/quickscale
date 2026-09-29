@@ -21,8 +21,9 @@ in the DR surface at import time and triggering circular imports.
 Backward-compatible for the shipped surface: every symbol in ``__all__``
 imports through this combined facade.  Per-module option resolvers are not
 part of it: a module whose manifest owns its options resolves through
-``build_generic_manifest_spec`` instead, and the auth and orgs resolvers the
-facade once re-exported were removed when their manifests took over.
+``resolve_manifest_module_options`` / ``build_generic_manifest_spec``, and the
+auth, orgs, notifications, and social resolvers the facade once re-exported
+were removed when their manifests took over.
 
 ``__all__`` is a hardcoded literal (union of the sub-module exports) so
 the SA9.2 module-core compatibility checker's static analysis can resolve
@@ -134,9 +135,6 @@ __all__ = [
     "ModuleWiringSpec",
     "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-    "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
-    "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
-    "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
     "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
     # Manifest/resolver types
@@ -146,10 +144,7 @@ __all__ = [
     "load_module_manifest",
     "validate_module_options",
     "ManifestError",
-    "notifications_runtime_email_backend",
-    "resolve_notifications_module_options",
-    "resolve_storage_module_options",
-    "validate_storage_module_options",
+    "resolve_manifest_module_options",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",
     "SOCIAL_INTEGRATION_BASE_PATH",
@@ -160,7 +155,6 @@ __all__ = [
     "render_social_managed_init_module",
     "render_social_managed_urls_module",
     "render_social_managed_views_module",
-    "resolve_social_module_options",
     "social_provider_supports_embeds",
     # Module-convention helpers (from conventions)
     "collect_capabilities",

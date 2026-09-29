@@ -279,6 +279,268 @@ class TestOptionValidationEngine:
         assert [issue.option_name for issue in issues] == ["per_page"]
 
 
+class TestExtendedValidationVocabulary:
+    """The rule 12 vocabulary the notifications/social conversion added."""
+
+    def test_not_empty_refuses_blank_strings(self) -> None:
+        manifest = _manifest(
+            _option(
+                "sender_name",
+                default="",
+                setting="SENDER_NAME",
+                validation={"not_empty": True},
+            )
+        )
+        assert validate_module_options(manifest, {"sender_name": "   "}) == [
+            "SENDER_NAME (modules.demo.sender_name) cannot be empty"
+        ]
+        assert validate_module_options(manifest, {"sender_name": "QuickScale"}) == []
+
+    def test_not_empty_refuses_empty_lists(self) -> None:
+        manifest = _manifest(
+            _option(
+                "allowed_tags",
+                option_type="list",
+                default=[],
+                setting="ALLOWED_TAGS",
+                validation={"not_empty": True},
+            )
+        )
+        assert validate_module_options(manifest, {"allowed_tags": []}) == [
+            "ALLOWED_TAGS (modules.demo.allowed_tags) cannot be empty"
+        ]
+        assert validate_module_options(manifest, {"allowed_tags": ["ops"]}) == []
+
+    def test_choices_on_a_list_checks_each_item(self) -> None:
+        manifest = _manifest(
+            _option(
+                "provider_allowlist",
+                option_type="list",
+                default=["facebook"],
+                setting="PROVIDER_ALLOWLIST",
+                validation={"choices": ["facebook", "youtube"]},
+            )
+        )
+        assert validate_module_options(
+            manifest, {"provider_allowlist": ["facebook", "myspace"]}
+        ) == [
+            "PROVIDER_ALLOWLIST (modules.demo.provider_allowlist) contains "
+            "unsupported values: myspace (allowed: facebook, youtube)"
+        ]
+        assert (
+            validate_module_options(
+                manifest, {"provider_allowlist": ["facebook", "youtube"]}
+            )
+            == []
+        )
+
+    def test_subset_of_requires_every_item_in_the_other_list(self) -> None:
+        manifest = _manifest(
+            _option(
+                "allowed_tags",
+                option_type="list",
+                default=["ops"],
+                setting="ALLOWED_TAGS",
+            ),
+            _option(
+                "default_tags",
+                option_type="list",
+                default=[],
+                setting="DEFAULT_TAGS",
+                validation={"subset_of": "allowed_tags"},
+            ),
+        )
+        assert validate_module_options(
+            manifest, {"default_tags": ["ops", "forms"]}
+        ) == [
+            "DEFAULT_TAGS (modules.demo.default_tags) must be a subset of "
+            "ALLOWED_TAGS (modules.demo.allowed_tags)"
+        ]
+        assert validate_module_options(manifest, {"default_tags": []}) == []
+        assert validate_module_options(manifest, {"default_tags": ["ops"]}) == []
+
+    def test_excludes_compares_case_insensitively(self) -> None:
+        manifest = _manifest(
+            _option(
+                "sender_email",
+                default="hi@example.com",
+                setting="SENDER_EMAIL",
+                validation={"excludes": {"values": ["noreply@example.com"]}},
+            )
+        )
+        assert validate_module_options(
+            manifest, {"sender_email": "Noreply@Example.com"}
+        ) == [
+            "SENDER_EMAIL (modules.demo.sender_email) must not be one of: "
+            "noreply@example.com"
+        ]
+        assert (
+            validate_module_options(manifest, {"sender_email": "hi@example.com"}) == []
+        )
+
+    def test_excludes_when_gates_the_forbidden_value(self) -> None:
+        manifest = _manifest(
+            _option(
+                "enabled",
+                option_type="boolean",
+                default=True,
+                setting="ENABLED",
+            ),
+            _option(
+                "sender_email",
+                default="noreply@example.com",
+                setting="SENDER_EMAIL",
+                validation={
+                    "excludes": {
+                        "values": ["noreply@example.com"],
+                        "when": {"enabled": True},
+                    }
+                },
+            ),
+        )
+        assert validate_module_options(manifest, {"enabled": False}) == []
+        assert validate_module_options(manifest, {"enabled": True}) == [
+            "SENDER_EMAIL (modules.demo.sender_email) must not be one of: "
+            "noreply@example.com when ENABLED (modules.demo.enabled) is true"
+        ]
+
+    def test_intersects_requires_one_listed_value(self) -> None:
+        manifest = _manifest(
+            _option(
+                "embeds_enabled",
+                option_type="boolean",
+                default=True,
+                setting="EMBEDS_ENABLED",
+            ),
+            _option(
+                "allowlist",
+                option_type="list",
+                default=[],
+                setting="ALLOWLIST",
+                validation={
+                    "intersects": {
+                        "values": ["tiktok", "youtube"],
+                        "when": {"embeds_enabled": True},
+                    }
+                },
+            ),
+        )
+        assert validate_module_options(manifest, {"embeds_enabled": False}) == []
+        assert validate_module_options(
+            manifest, {"allowlist": ["facebook"], "embeds_enabled": True}
+        ) == [
+            "ALLOWLIST (modules.demo.allowlist) must include one of: tiktok, "
+            "youtube when EMBEDS_ENABLED (modules.demo.embeds_enabled) is true"
+        ]
+        assert (
+            validate_module_options(
+                manifest, {"allowlist": ["youtube"], "embeds_enabled": True}
+            )
+            == []
+        )
+
+    def test_condition_grammar_requires_every_entry(self) -> None:
+        manifest = _manifest(
+            _option(
+                "enabled",
+                option_type="boolean",
+                default=True,
+                setting="ENABLED",
+            ),
+            _option("resend_domain", default="", setting="RESEND_DOMAIN"),
+            _option(
+                "resend_api_key_env_var",
+                default="RESEND_API_KEY",
+                setting="RESEND_API_KEY_ENV_VAR",
+                validation={
+                    "required_when": {
+                        "enabled": True,
+                        "resend_domain": {"not_empty": True},
+                    }
+                },
+            ),
+        )
+        assert validate_module_options(manifest, {"resend_domain": ""}) == []
+        assert validate_module_options(
+            manifest,
+            {"resend_domain": "send.example.com", "resend_api_key_env_var": "  "},
+        ) == [
+            "RESEND_API_KEY_ENV_VAR (modules.demo.resend_api_key_env_var) is "
+            "required when ENABLED (modules.demo.enabled) is true and "
+            "RESEND_DOMAIN (modules.demo.resend_domain) is set"
+        ]
+
+    def test_condition_list_entries_keep_their_meaning(self) -> None:
+        manifest = _manifest(
+            _option(
+                "mode",
+                default="local",
+                setting="MODE",
+                validation={"choices": ["local", "s3"]},
+            ),
+            _option(
+                "key",
+                default="KEY",
+                setting="KEY",
+                validation={"required_when": {"mode": ["s3", "r2"]}},
+            ),
+        )
+        assert validate_module_options(manifest, {"mode": "local"}) == []
+        assert validate_module_options(manifest, {"mode": "s3", "key": " "}) == [
+            "KEY (modules.demo.key) is required when MODE (modules.demo.mode) "
+            "is one of: s3, r2"
+        ]
+
+    def test_any_of_counts_boolean_false_as_unset(self) -> None:
+        manifest = _manifest(
+            _option(
+                "link_tree_enabled",
+                option_type="boolean",
+                default=True,
+                setting="LINK_TREE",
+                validation={"any_of": ["embeds_enabled"]},
+            ),
+            _option(
+                "embeds_enabled",
+                option_type="boolean",
+                default=False,
+                setting="EMBEDS",
+            ),
+        )
+        assert validate_module_options(
+            manifest, {"link_tree_enabled": False, "embeds_enabled": False}
+        ) == [
+            "one of LINK_TREE (modules.demo.link_tree_enabled), "
+            "EMBEDS (modules.demo.embeds_enabled) is required"
+        ]
+        assert (
+            validate_module_options(
+                manifest, {"link_tree_enabled": False, "embeds_enabled": True}
+            )
+            == []
+        )
+
+    def test_required_when_still_reads_a_false_boolean_as_present(self) -> None:
+        manifest = _manifest(
+            _option(
+                "mode",
+                default="local",
+                setting="MODE",
+                validation={"choices": ["local", "on"]},
+            ),
+            _option(
+                "flag",
+                option_type="boolean",
+                default=False,
+                setting="FLAG",
+                validation={"required_when": {"mode": "on"}},
+            ),
+        )
+        assert validate_module_options(manifest, {"mode": "local"}) == []
+        # option_value_is_empty(False) is unchanged: the option counts as set.
+        assert validate_module_options(manifest, {"mode": "on", "flag": False}) == []
+
+
 class TestRetiredOptionRefusal:
     """A manifest declares retired keys with the message that refuses them."""
 

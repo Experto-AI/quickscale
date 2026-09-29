@@ -37,6 +37,11 @@ Recommended workflow:
 
 Manual editing of `quickscale.yml` remains supported.
 
+Reconfiguring storage to the local backend keeps previously authored cloud
+options (bucket, endpoint, region, credential-variable names, ACL) in
+`quickscale.yml`; they take effect only while the backend is `s3` or `r2`, and
+are available again if a cloud backend is selected later.
+
 The supported configuration shape is:
 
 ```yaml

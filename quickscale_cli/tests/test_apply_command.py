@@ -18,7 +18,7 @@ from quickscale_cli.commands.apply_command import (
     _validate_required_module_versions,
     apply,
 )
-from quickscale_core.contracts.resolvers import default_notifications_module_options
+from quickscale_core.contracts.resolvers import resolve_manifest_module_options
 from quickscale_core.manifest.schema import ModuleManifest
 from quickscale_core.schema.config_schema import (
     ConfigValidationError,
@@ -250,7 +250,7 @@ modules:
             modules={
                 "orgs": SimpleNamespace(options={}),
                 "notifications": SimpleNamespace(
-                    options=default_notifications_module_options()
+                    options=resolve_manifest_module_options("notifications", {})
                 ),
             }
         )
@@ -346,7 +346,15 @@ modules:
         [
             (
                 {"backend": "invalid"},
-                "modules.storage.backend must be one of",
+                "QUICKSCALE_STORAGE_BACKEND (modules.storage.backend) must be one of",
+            ),
+            (
+                {"backend": "s3", "access_key_id_env_var": ""},
+                "QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+            ),
+            (
+                {"access_key_id": "raw-secret"},
+                "'access_key_id' is no longer supported",
             ),
         ],
     )
@@ -605,7 +613,7 @@ docker:
                 "crm": SimpleNamespace(options={}),
                 "orgs": SimpleNamespace(options={}),
                 "notifications": SimpleNamespace(
-                    options=default_notifications_module_options()
+                    options=resolve_manifest_module_options("notifications", {})
                 ),
             }
         )

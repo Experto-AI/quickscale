@@ -12,10 +12,9 @@ from typing import Any
 import click
 
 from quickscale_core.contracts.module_options import sanitize_module_options
-from quickscale_core.contracts.resolvers import (
-    notifications_production_targeted,
-    validate_notifications_module_options,
-)
+from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
+from quickscale_core.manifest.option_validation import validate_module_options
+from quickscale_cli.commands.apply_support import notifications_adapter_module
 from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
 from quickscale_cli.commands.plan_selection import (
     AVAILABLE_THEMES,  # noqa: F401 - preserve the historical import seam
@@ -228,7 +227,10 @@ def _validate_existing_project_notifications_or_abort(
         return
 
     notifications_options = notifications_config.options or {}
-    notification_issues = validate_notifications_module_options(notifications_options)
+    notification_issues = validate_module_options(
+        load_module_manifest_with_fallback("notifications"),
+        notifications_options,
+    )
     if not notification_issues:
         return
 
@@ -241,7 +243,10 @@ def _validate_existing_project_notifications_or_abort(
     for issue in notification_issues:
         click.echo(f"  • {issue}", err=True)
 
-    if notifications_production_targeted(notifications_options):
+    notifications_adapter = notifications_adapter_module()
+    if notifications_adapter is not None and (
+        notifications_adapter.notifications_production_targeted(notifications_options)
+    ):
         click.echo(
             "\n💡 This configuration targets live Resend delivery, so planner "
             "refuses to rewrite quickscale.yml until the missing notifications "

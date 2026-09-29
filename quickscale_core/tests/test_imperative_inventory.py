@@ -163,15 +163,25 @@ class TestManifestInventoryHelpers:
         assert entries == []
 
     def test_count_inventory_category(self) -> None:
-        """count_inventory_category returns a positive count for each category."""
+        """count_inventory_category reports zero once every module is migrated.
+
+        SA217 cleared the last per-module option code (notifications and
+        social); the inventory stays as the freeze guardrail for future
+        modules, so every category is empty now.
+        """
         for category in (
             DECLARATIVE_TARGET,
             SHARED_HELPER,
             MANIFEST_RESOLVER,
             ADAPTER_ONLY,
         ):
-            count = count_inventory_category(category)
-            assert count > 0, f"Category '{category}' has zero entries"
+            assert count_inventory_category(category) == 0, (
+                f"Category '{category}' still carries imperative entries"
+            )
+
+    def test_every_module_inventory_is_empty(self) -> None:
+        """No module may carry imperative option code after SA217."""
+        assert all(entries == [] for entries in MANIFEST_INVENTORY.values())
 
     def test_total_symbols(self) -> None:
         """The sum of category counts should equal the total inventory size."""

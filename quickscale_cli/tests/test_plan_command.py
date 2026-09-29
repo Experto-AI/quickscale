@@ -5,6 +5,7 @@ import os
 from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
+from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 
 
 class TestPlanCommandBasic:
@@ -221,7 +222,12 @@ class TestPlanModuleSelection:
                 input="\n1\n\ny\ny\nn\n",
             )
 
-            assert "billing - Stripe integration" in result.output
+            billing_description = next(
+                entry.description
+                for entry in get_discovered_module_entries()
+                if entry.name == "billing"
+            )
+            assert f"billing - {billing_description}" in result.output
             assert "teams - Multi-tenancy and team management" not in result.output
 
     def test_experimental_modules_visible_with_flag(self):
@@ -234,7 +240,12 @@ class TestPlanModuleSelection:
                 input="\n1\n\ny\ny\nn\nn\n",
             )
 
-            assert "billing - Stripe integration" in result.output
+            billing_description = next(
+                entry.description
+                for entry in get_discovered_module_entries()
+                if entry.name == "billing"
+            )
+            assert f"billing - {billing_description}" in result.output
             # Deleted modules are not discovered and never visible.
             assert "teams" not in result.output
 

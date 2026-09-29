@@ -7,12 +7,45 @@ Handles all Jinja2 constructs: {% if %}, {% for %}, {% set %},
 {% raw %}...{% endraw %}, whitespace control, {{ variables }}, etc.
 
 Usage: render_j2_template.py <source.j2> <destination>
+       render_j2_template.py --list-modules [--exclude MODULE]
+
+``--list-modules`` prints the discovered shipped module names as a JSON
+array (minus ``--exclude`` when given) so the lint pipeline derives its
+``selected_modules`` variants from one discovery implementation.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+from pathlib import Path
+
+
+def _discover_modules() -> list[str]:
+    """
+    Return the shipped module names, discovered from quickscale_modules.
+
+    The workspace's ``module.yml`` files are the module inventory (Module
+    Conventions rule 37), so a module added to the repository joins the lint
+    context without editing this script.  Discovery fails closed: a missing
+    workspace, an empty workspace, or a directory without a ``module.yml``
+    (Module Conventions rule 18) is an error rather than a silently shrunken
+    module set.
+    """
+    modules_dir = Path(__file__).resolve().parents[1] / "quickscale_modules"
+    if not modules_dir.is_dir():
+        raise SystemExit(f"Error: module workspace not found: {modules_dir}")
+    modules: list[str] = []
+    for entry in sorted(modules_dir.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        if not (entry / "module.yml").is_file():
+            raise SystemExit(f"Error: module directory without module.yml: {entry}")
+        modules.append(entry.name)
+    if not modules:
+        raise SystemExit(f"Error: no module manifests found under {modules_dir}")
+    return modules
 
 
 def get_lint_context() -> dict:
@@ -22,26 +55,12 @@ def get_lint_context() -> dict:
     Strategy: treat all module features as enabled so that ESLint and
     TypeScript can validate every code path in the rendered output.
     """
-    _all_modules = [
-        "auth",
-        "blog",
-        "listings",
-        "crm",
-        "forms",
-        "storage",
-        "backups",
-        "notifications",
-        "analytics",
-        "billing",
-        "social",
-    ]
+    _all_modules = _discover_modules()
 
     # Allow SELECTED_MODULES env var override so the lint pipeline can
     # render a no-social variant for TypeScript validation coverage.
     env_modules = os.environ.get("SELECTED_MODULES")
     if env_modules is not None:
-        import json
-
         try:
             modules = json.loads(env_modules)
         except json.JSONDecodeError as exc:
@@ -65,12 +84,30 @@ def get_lint_context() -> dict:
 
 
 def main() -> None:
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <source.j2> <destination>", file=sys.stderr)
+    args = sys.argv[1:]
+    if args[:1] == ["--list-modules"]:
+        exclude = None
+        if len(args) > 1:
+            if len(args) != 3 or args[1] != "--exclude":
+                print(
+                    f"Usage: {sys.argv[0]} --list-modules [--exclude MODULE]",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            exclude = args[2]
+        print(json.dumps([name for name in _discover_modules() if name != exclude]))
+        return
+
+    if len(args) != 2:
+        print(
+            f"Usage: {sys.argv[0]} <source.j2> <destination>"
+            f" | {sys.argv[0]} --list-modules [--exclude MODULE]",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-    src = sys.argv[1]
-    dest = sys.argv[2]
+    src = args[0]
+    dest = args[1]
 
     # Read the template source
     try:

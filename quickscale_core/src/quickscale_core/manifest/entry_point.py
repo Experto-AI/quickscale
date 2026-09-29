@@ -153,8 +153,16 @@ def _evict_package_modules(package_name: str) -> None:
             sys.modules.pop(name, None)
 
 
-def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
-    """Load one adapter from the active base without leaking import state."""
+def load_managed_adapter_module(module_name: str) -> Any:
+    """Import and return a module's adapter module from the active base.
+
+    The adapter module is imported as ``quickscale_modules_<name>.adapter``
+    with the active modules base path's ``<name>/src`` on ``sys.path`` when it
+    exists, so an uninstalled module source resolves; the previous import state
+    is restored afterwards.  A module whose adapter cannot be imported is
+    fail-hard: a caller that needs module-owned code (runtime predicates,
+    wiring) never silently degrades.
+    """
     import importlib  # noqa: PLC0415
 
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
@@ -171,14 +179,7 @@ def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
         if adapter_src_path.is_dir():
             sys.path.insert(0, str(adapter_src_path))
         importlib.invalidate_caches()
-        adapter_module = importlib.import_module(adapter_name)
-        sentinel = getattr(adapter_module, "get_manifest_adapter", None)
-        if sentinel is None:
-            raise ImproperlyConfigured(
-                f"Managed adapter for '{module_name}' not importable: "
-                f"{adapter_name} has no get_manifest_adapter function."
-            )
-        return cast(Callable[..., ModuleWiringSpec], sentinel())
+        return importlib.import_module(adapter_name)
     except ImportError as exc:
         raise ImproperlyConfigured(
             f"Managed adapter for '{module_name}' not importable: "
@@ -189,6 +190,23 @@ def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
         sys.path[:] = original_sys_path
         _evict_package_modules(package_name)
         sys.modules.update(original_package_modules)
+
+
+def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
+    """Load one adapter from the active base without leaking import state."""
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ImproperlyConfigured,
+    )
+
+    adapter_module = load_managed_adapter_module(module_name)
+    sentinel = getattr(adapter_module, "get_manifest_adapter", None)
+    if sentinel is None:
+        raise ImproperlyConfigured(
+            f"Managed adapter for '{module_name}' not importable: "
+            f"quickscale_modules_{module_name}.adapter has no "
+            "get_manifest_adapter function."
+        )
+    return cast(Callable[..., ModuleWiringSpec], sentinel())
 
 
 def _incomplete_records(presence: list[Any]) -> list[Any]:
@@ -306,6 +324,7 @@ __all__ = [
     "ManifestAdapterNotFound",
     "build_generic_manifest_spec",
     "build_manifest_wiring_spec",
+    "load_managed_adapter_module",
     "load_module_manifest",
     "refresh_managed_adapters",
 ]

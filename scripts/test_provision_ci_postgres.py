@@ -591,7 +591,15 @@ def test_all_profiles_have_exact_database_and_environment_contract(profile: str)
                     if key.startswith("QS_")
                 }
             )
-            assert len(mapped) == 6
+            # The mapping covers exactly the suites the isolation gate runs:
+            # orgs' conformance gate plus every module that ships an RLS
+            # boundary suite (rule 37 discovery, so social is enrolled).
+            rls_suite_modules = sorted(
+                path.parent.parent.name
+                for path in (ROOT / "quickscale_modules").glob("*/tests/test_rls_boundary.py")
+            )
+            assert mapped == sorted({"orgs", *rls_suite_modules})
+            assert "social" in mapped
             assert "backups" not in mapped
         else:
             mapped = [entry["module"] for entry in data["databases"] if entry["module"]]

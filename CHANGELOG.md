@@ -188,6 +188,17 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     manifest-driven configurator and shared engine, and its retired raw `remote_access_key_id` and
     `remote_secret_access_key` keys are refused by the manifest's `retired_options` block with
     their env-var replacements named.
+  - **Storage configuration is manifest-owned.** Its option defaults, CLI prompts, env-var-name
+    patterns, and cloud-backend credential rules come from `module.yml` through the same
+    manifest-driven configurator and shared engine, and its retired raw `access_key_id` and
+    `secret_access_key` keys are refused by the manifest's `retired_options` block with their
+    env-var replacements named.
+  - **Notifications and social configuration is manifest-owned.** Their option defaults, CLI
+    prompts, validation, and tag/provider normalization come from `module.yml` through the same
+    manifest-driven configurator and shared engine, and notifications' runtime email-backend
+    selection lives in its module adapter. Manifests can now declare `not_empty`, per-item
+    `choices`, `subset_of`, `excludes`, `intersects`, multi-entry conditions, and `slug`/`list`
+    normalization.
   - **The `teams` placeholder is removed.** `quickscale_modules/teams/` no longer exists,
     `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`, and the
     planning note lives at `docs/planning/teams.md`.
@@ -196,6 +207,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `REST_FRAMEWORK` contributions merge key by key so one module's throttle rates cannot replace
     another's. Auth no longer contributes `ACCOUNT_ADAPTER`; the orgs adapter, which extends
     auth's, is its single writer.
+  - **Shipped-module lists derive from module manifests.** Core's catalog descriptions, the Bandit
+    scan roots, the theme lint's module set, and the PostgreSQL isolation profile and runner read
+    the shipped set from `quickscale_modules/*/module.yml`, so a module that ships an RLS boundary
+    suite joins the isolation gate automatically, and an incomplete module directory fails those
+    gates closed instead of dropping out of them.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

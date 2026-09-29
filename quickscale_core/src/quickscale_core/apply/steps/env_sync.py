@@ -40,10 +40,6 @@ from quickscale_core.contracts.module_options import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     BILLING_ENV_VAR_OPTION_NAMES,
-    DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
-    DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
-    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
     NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
     STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
@@ -52,8 +48,6 @@ from quickscale_core.contracts.module_options import (
 from quickscale_core.contracts.resolvers import (
     load_module_manifest_with_fallback,
     resolve_manifest_module_options,
-    resolve_notifications_module_options,
-    resolve_storage_module_options,
 )
 
 #: Generated file that carries the managed module credential contract.
@@ -189,15 +183,7 @@ ENV_EXAMPLE_MODULE_SPECS: tuple[EnvExampleModuleSpec, ...] = (
             NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
             NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
         ),
-        env_var_defaults={
-            NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION: (
-                DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
-            ),
-            NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION: (
-                DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
-            ),
-        },
-        resolve_options=resolve_notifications_module_options,
+        resolve_options=partial(resolve_manifest_module_options, "notifications"),
         prose=_notifications_prose,
     ),
     EnvExampleModuleSpec(
@@ -227,15 +213,7 @@ ENV_EXAMPLE_MODULE_SPECS: tuple[EnvExampleModuleSpec, ...] = (
             STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
             STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
         ),
-        env_var_defaults={
-            STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: (
-                DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR
-            ),
-            STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: (
-                DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
-            ),
-        },
-        resolve_options=resolve_storage_module_options,
+        resolve_options=partial(resolve_manifest_module_options, "storage"),
         prose=_storage_prose,
         remove_when_absent=True,
     ),

@@ -19,7 +19,6 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINK_TREE_PATH,
 )
-from quickscale_core.contracts.resolvers import default_notifications_module_options
 from quickscale_core.apply.steps.env_sync import render_env_example_block
 
 # AF5 Phase 4: Bypass the late destructive/remote confirmation gate in
@@ -1199,13 +1198,9 @@ class TestLoadAndValidateConfig:
             "orgs",
         }
         assert result.modules["orgs"].options == {}
-        assert result.modules["notifications"].options == (
-            default_notifications_module_options()
-        )
+        assert result.modules["notifications"].options == {}
         assert "orgs:" in rewritten
         assert "notifications:" in rewritten
-        assert "sender_email: noreply@example.com" in rewritten
-        assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
 
     def test_orgs_module_requires_auth_on_load(self, tmp_path, capsys):
         """Apply load should reject orgs until auth is present in the desired config."""
@@ -1251,12 +1246,8 @@ class TestLoadAndValidateConfig:
         rewritten = config.read_text()
 
         assert set(result.modules.keys()) == {"auth", "orgs", "notifications"}
-        assert result.modules["notifications"].options == (
-            default_notifications_module_options()
-        )
+        assert result.modules["notifications"].options == {}
         assert "notifications:" in rewritten
-        assert "sender_email: noreply@example.com" in rewritten
-        assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
 
     def test_crm_module_materializes_orgs_and_notifications_on_load(self, tmp_path):
         """Apply load should persist orgs+notifications when crm is configured with auth."""
@@ -1284,13 +1275,9 @@ class TestLoadAndValidateConfig:
             "orgs",
         }
         assert result.modules["orgs"].options == {}
-        assert result.modules["notifications"].options == (
-            default_notifications_module_options()
-        )
+        assert result.modules["notifications"].options == {}
         assert "orgs:" in rewritten
         assert "notifications:" in rewritten
-        assert "sender_email: noreply@example.com" in rewritten
-        assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
 
     def test_crm_module_requires_auth_on_load_via_implied_orgs(self, tmp_path, capsys):
         """Apply load should reject crm until auth is present because crm implies orgs."""
@@ -9033,3 +9020,24 @@ class TestConfirmDestructiveRemotePhase:
             "❌ Destructive/remote phase cancelled. Steps 1-10 completed successfully."
             in out
         )
+
+
+class TestNotificationsAdapterModuleAccessor:
+    """The CLI reaches module-owned runtime predicates through the adapter loader."""
+
+    def test_returns_the_notifications_adapter_module(self) -> None:
+        from quickscale_cli.commands.apply_support import notifications_adapter_module
+
+        module = notifications_adapter_module()
+        assert module is not None
+        assert callable(module.notifications_production_targeted)
+
+    def test_returns_none_when_module_source_is_unreachable(self) -> None:
+        from quickscale_core.contracts.module_discovery import ImproperlyConfigured
+        from quickscale_cli.commands.apply_support import notifications_adapter_module
+
+        with patch(
+            "quickscale_core.manifest.entry_point.load_managed_adapter_module",
+            side_effect=ImproperlyConfigured("no module source"),
+        ):
+            assert notifications_adapter_module() is None

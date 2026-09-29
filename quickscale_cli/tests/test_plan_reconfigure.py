@@ -11,7 +11,7 @@ from quickscale_cli.commands.plan_command import (
     _get_project_info_for_reconfig,
     plan,
 )
-from quickscale_core.contracts.resolvers import default_notifications_module_options
+from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 
 
 class TestPlanReconfigureBasic:
@@ -169,7 +169,7 @@ class TestPlanReconfigureWithState:
 
             assert result.exit_code != 0
             assert "Notifications module configuration is incomplete" in result.output
-            assert "sender_email cannot use the default placeholder" in result.output
+            assert "must not be one of: noreply@example.com" in result.output
             assert not Path("quickscale.yml").exists()
 
     def test_plan_reconfigure_aborts_for_invalid_manifest_option(self) -> None:
@@ -373,7 +373,7 @@ class TestPlanReconfigureAddModules:
     def test_plan_reconfigure_auto_adds_default_notifications_when_orgs_selected(
         self,
     ) -> None:
-        """Adding orgs during reconfigure should materialize default notifications."""
+        """Adding orgs during reconfigure should materialize the implied notifications module."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             os.makedirs(".quickscale", exist_ok=True)
@@ -422,7 +422,7 @@ docker:
 
             modules = (config or {}).get("modules") or {}
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert modules["notifications"] in (None, {})
 
     def test_plan_reconfigure_auto_adds_orgs_and_notifications_when_crm_selected(
         self,
@@ -477,7 +477,7 @@ docker:
             modules = (config or {}).get("modules") or {}
             assert "crm" in modules
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert modules["notifications"] in (None, {})
 
     def test_plan_reconfigure_preserves_explicit_notifications_when_adding_orgs(
         self,
@@ -579,7 +579,12 @@ docker:
             )
 
             assert result.exit_code == 0
-            assert "billing - Stripe integration" in result.output
+            billing_description = next(
+                entry.description
+                for entry in get_discovered_module_entries()
+                if entry.name == "billing"
+            )
+            assert f"billing - {billing_description}" in result.output
             # teams is not in the discovered catalog; the error loop re-prompts.
             assert "Unknown or already installed module" in result.output
 
@@ -821,9 +826,10 @@ docker:
                     "assets\n"
                     "\n"
                     "eu-west-1\n"
-                    "key-id\n"
-                    "secret-key\n"
+                    "OPS_AWS_ACCESS_KEY_ID\n"
+                    "OPS_AWS_SECRET_ACCESS_KEY\n"
                     "\n"
+                    "n\n"
                     "n\n"
                     "n\n"
                     "y\n"

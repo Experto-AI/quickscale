@@ -141,19 +141,21 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA217 — Read the manifest option schema in core and check settings at startup.**
 
   **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. `plan`/`apply`
-  enforce each manifest option's `validation` block; blog, listings, CRM, forms, analytics,
-  billing, auth, orgs, and backups are fully manifest-owned (their per-module option functions are
-  gone and their CLI configurators read the manifest), a manifest's `retired_options` block is the
-  one home of a retired key's refusal, and config load refuses a key no manifest declares; the
-  other three modules (notifications, social, storage) still carry per-module option code, and all
-  four still carry per-module settings readers.
+  enforce each manifest option's `validation` block; every module is fully manifest-owned (its
+  per-module option functions are gone and its CLI configurator reads the manifest), a manifest's
+  `retired_options` block is the one home of a retired key's refusal, and config load refuses a
+  key no manifest declares. The rule 12 decision edit landed: the validation vocabulary is
+  `choices`, `min`/`max`, `pattern`, `not_empty`, `required_when`, `any_of`, `subset_of`,
+  `excludes`, and `intersects` over one condition grammar, with `slug`/`list` normalization;
+  notifications' runtime backend predicates live in its adapter. Every module still carries
+  per-module settings readers, which the settings-reading half removes.
 
   **Scope:**
-  - *Option code.* Core's and the CLI's per-module option code goes: the
+  - *Option code (done).* Core's and the CLI's per-module option code went: the
     `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
     `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
     `schema.config_schema`, and the CLI's `module_config`, with `contracts.imperative_inventory`.
-    Notifications, social, and storage convert to the generic manifest-driven CLI configurator.
+    Notifications and social converted to the generic manifest-driven CLI configurator.
   - *Settings reading (last).* `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
     one generic startup check in `quickscale_core.runtime`, run through the shared checks helper
     and registered by each module, validates every declared setting; per-module readers and code
@@ -303,18 +305,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
   rules 11, 15–18, 24, 28, 29, and 36–38. Package roots, receivers, and file names already follow
   rule 28; `teams/` and its core placeholder handling are deleted, orgs' eight ticket-numbered
-  test files are renamed by subject, and every module's `mypy.ini` section is capped at
-  module-extension.md's standard override and clean (rule 36).
+  test files are renamed by subject, every module's `mypy.ini` section is capped at
+  module-extension.md's standard override and clean (rule 36), and core's catalog (descriptions
+  from `module.yml`) plus `check_security_gates.py`, `render_j2_template.py`, `lint_frontend.sh`,
+  `provision_ci_postgres.sh`, and `test_isolation_conformance.sh` derive the shipped set from
+  `quickscale_modules/*/module.yml`, so social's tenant tables join the isolation gates (rule 37).
 
   **Scope:**
   - *Tests.* orgs' two ticket-numbered test apps (`sa182_project_app`,
     `sa208_project_app`) are renamed by subject (D32); the remaining ticket mentions in the
     docstrings and comments of module test files go, reworded to say what each test protects where
     the number was the only explanation.
-  - *Module lists.* Core's catalog (descriptions from `module.yml`), `check_security_gates.py`,
-    `render_j2_template.py`, `lint_frontend.sh`, `provision_ci_postgres.sh`, and
-    `test_isolation_conformance.sh` compute the module set from discovery, so social's tenant tables
-    join the isolation gates (rule 37).
   - *READMEs* follow the rule 11 headings and name every option key and command (rule 38).
 
   **Acceptance:** every module package holds only rule 28's file names; no test file or test

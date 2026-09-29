@@ -6,15 +6,13 @@ and projected Django settings.
 
 These types are **additive** to the existing :class:`ModuleManifest` and
 :class:`ConfigOption` schema in ``schema.py``.  They do **not** extend or alter
-the current manifest loader, runtime behaviour, or CLI contract-file path.
-YAML serialisation and loader wiring are intentionally deferred to a later
-roadmap phase; the shapes here use only simple scalars, lists, and dicts so
-that future ``module.yml`` sections can be round-tripped through
+``ModuleManifest`` or ``ConfigOption``.  The manifest loader wires the
+``derivation`` section into these types, and the shapes use only simple
+scalars, lists, and dicts so ``module.yml`` sections round-trip through
 ``yaml.safe_load`` without custom codecs.
 
-This foundation is the first step toward eventually replacing the imperative
-``normalize_*`` / ``validate_*`` helpers and CLI contract files that currently
-duplicate per-module knowledge (see roadmap Phase 4, Finding 1).
+They replaced the imperative ``normalize_*`` / ``validate_*`` helpers and CLI
+contract files that once duplicated per-module option knowledge.
 """
 
 from __future__ import annotations
@@ -25,6 +23,22 @@ from dataclasses import (
     field as _field,
 )  # alias to avoid name collision in WiringProjection
 from typing import Any
+
+
+#: The complete normalization-rule vocabulary Module Conventions rule 12 names.
+NORMALIZATION_RULE_KINDS: frozenset[str] = frozenset(
+    {
+        "identity",
+        "strip",
+        "lowercase",
+        "url",
+        "choice_map",
+        "coerce_int",
+        "coerce_bool",
+        "slug",
+        "list",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -43,10 +57,15 @@ class NormalizationRule:
             a key.
         rule_type: The kind of normalization to apply.  Recognised values
             are ``"choice_map"``, ``"lowercase"``, ``"strip"``,
-            ``"coerce_int"``, ``"coerce_bool"``, and ``"identity"``.
+            ``"coerce_int"``, ``"coerce_bool"``, ``"slug"``, ``"list"``,
+            and ``"identity"``.
         mapping: Optional lookup table for ``choice_map`` rules.  Keys are
             raw input values; values are the canonical outputs.
         description: Human-readable explanation of what this rule does.
+        max_length: Optional maximum output length for ``slug`` rules.
+        replace: Optional literal replacement mapping for ``slug`` rules,
+            applied before the slug transformation.
+        item_rules: Nested rules a ``list`` rule applies to each item.
     """
 
     source_key: str
@@ -54,6 +73,9 @@ class NormalizationRule:
     rule_type: str
     mapping: dict[str, Any] = field(default_factory=dict)
     description: str = ""
+    max_length: int | None = None
+    replace: dict[str, Any] = field(default_factory=dict)
+    item_rules: list["NormalizationRule"] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -226,8 +248,8 @@ class ModuleDerivationSchema:
     projection, legacy-key migration, and wiring projection.
 
     This type does **not** replace ``ModuleManifest``.  It is a parallel
-    descriptor that later phases will load from a ``derivation`` section
-    inside ``module.yml`` (or a sibling file) and use to replace the
+    descriptor the loader builds from the ``derivation`` section inside
+    ``module.yml``, and the resolver executes it in place of the former
     imperative contract-file logic.
 
     Attributes:
@@ -357,6 +379,13 @@ def _parse_normalization_rule(raw: dict[str, Any]) -> NormalizationRule:
         rule_type=str(raw.get("rule_type", "identity")),
         mapping=dict(raw.get("mapping", {})),
         description=str(raw.get("description", "")),
+        max_length=raw.get("max_length"),
+        replace=dict(raw.get("replace", {})),
+        item_rules=[
+            _parse_normalization_rule(item)
+            for item in raw.get("item_rules", [])
+            if isinstance(item, dict)
+        ],
     )
 
 
@@ -526,6 +555,7 @@ __all__ = [
     "DerivedSetting",
     "LegacyKeyAlias",
     "ModuleDerivationSchema",
+    "NORMALIZATION_RULE_KINDS",
     "NormalizationRule",
     "OptionDerivation",
     "ValidationRule",

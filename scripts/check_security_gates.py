@@ -68,29 +68,7 @@ MISCONFIG_SEVERITIES = ("HIGH", "CRITICAL")
 BAD_DOCKERFILE_PROBE = "FROM ubuntu:latest\nUSER root\n"
 COMMAND_TIMEOUT = 180.0
 
-SOURCE_ROOTS = (
-    ROOT / "quickscale" / "src",
-    ROOT / "quickscale_cli" / "src",
-    ROOT / "quickscale_core" / "src",
-    ROOT / "quickscale_devtools" / "src",
-    *(
-        ROOT / "quickscale_modules" / name / "src"
-        for name in (
-            "analytics",
-            "auth",
-            "backups",
-            "billing",
-            "blog",
-            "crm",
-            "forms",
-            "listings",
-            "notifications",
-            "orgs",
-            "social",
-            "storage",
-        )
-    ),
-)
+MODULES_ROOT = ROOT / "quickscale_modules"
 
 CATEGORY_TESTS: dict[str, tuple[str, ...]] = {
     "subprocess-shell": ("B602",),
@@ -120,6 +98,42 @@ class GateError(RuntimeError):
 
 class FindingsError(GateError):
     """The scanner returned findings which were not accountable."""
+
+
+def _discover_module_source_roots() -> tuple[Path, ...]:
+    """
+    Return every shipped module's ``src`` root, discovered from its manifest.
+
+    A module directory is one carrying a ``module.yml`` (Module Conventions
+    rule 18); an incomplete directory fails closed instead of silently
+    dropping out of the Bandit scan.
+    """
+    if not MODULES_ROOT.is_dir():
+        raise GateError(f"missing module workspace: {MODULES_ROOT}")
+    roots: list[Path] = []
+    for entry in sorted(MODULES_ROOT.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        if not (entry / "module.yml").is_file():
+            raise GateError(f"module directory without module.yml: {entry}")
+        source_root = entry / "src"
+        if not source_root.is_dir():
+            raise GateError(f"module directory without src: {entry}")
+        roots.append(source_root)
+    if not roots:
+        raise GateError(f"no shipped modules discovered under {MODULES_ROOT}")
+    return tuple(roots)
+
+
+def _source_roots() -> tuple[Path, ...]:
+    """Return the Bandit scan roots: the fixed packages and every module's src."""
+    return (
+        ROOT / "quickscale" / "src",
+        ROOT / "quickscale_cli" / "src",
+        ROOT / "quickscale_core" / "src",
+        ROOT / "quickscale_devtools" / "src",
+        *_discover_module_source_roots(),
+    )
 
 
 @dataclass(frozen=True)
@@ -558,7 +572,7 @@ def _bandit_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _source_files() -> list[Path]:
     files: list[Path] = []
-    for source_root in SOURCE_ROOTS:
+    for source_root in _source_roots():
         if not source_root.is_dir():
             raise GateError(f"missing Bandit source root: {source_root}")
         for path in source_root.rglob("*.py"):
@@ -589,7 +603,7 @@ def _bandit_scan() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         "bandit",
         "-q",
         "-r",
-        *[str(root) for root in SOURCE_ROOTS],
+        *[str(root) for root in _source_roots()],
         "--format",
         "json",
         "--ignore-nosec",
