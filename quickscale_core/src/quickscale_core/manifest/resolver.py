@@ -83,6 +83,20 @@ class ResolverResult:
 # ---------------------------------------------------------------------------
 
 
+def _canonical_url(value: str) -> str:
+    """Return *value* as an absolute URL with no trailing slash.
+
+    A value without a scheme gets ``https://`` prepended, matching the
+    canonical form modules store for an operator-configured URL.
+    """
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    if not candidate.startswith(("http://", "https://")):
+        candidate = "https://" + candidate.lstrip("/")
+    return candidate.rstrip("/")
+
+
 def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
     """Apply a single normalization rule to a value.
 
@@ -106,6 +120,11 @@ def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
     if rule_type == "lowercase":
         if isinstance(value, str):
             return value.lower()
+        return value
+
+    if rule_type == "url":
+        if isinstance(value, str):
+            return _canonical_url(value)
         return value
 
     if rule_type == "choice_map":

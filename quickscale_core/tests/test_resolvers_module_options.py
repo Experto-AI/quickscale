@@ -1,9 +1,9 @@
-"""Tests for quickscale_core.contracts.resolvers per-module option functions.
+"""Tests for quickscale_core.contracts.resolvers option functions.
 
-Covers the resolve_*_module_options, validate_*_module_options,
-default_*_module_options, and production-targeted helpers for every
-QuickScale module.  Manifest I/O is mocked so these tests exercise
-the resolver/wiring logic without requiring module.yml files on disk.
+Covers the shared manifest resolution surface and the remaining per-module
+``resolve_*_module_options``/``default_*_module_options``/``validate_*``
+helpers.  Manifest I/O is mocked so these tests exercise the resolver/wiring
+logic without requiring module.yml files on disk.
 """
 
 from __future__ import annotations
@@ -14,12 +14,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from quickscale_core.contracts.resolvers import (
-    # Analytics
-    analytics_production_targeted,
-    default_analytics_module_options,
-    resolve_analytics_module_options,
-    validate_analytics_env_var_reference,
-    validate_analytics_module_options,
+    # Shared manifest resolution
+    resolve_manifest_module_options,
     # Auth
     default_auth_module_options,
     format_auth_desired_config_contract,
@@ -27,13 +23,6 @@ from quickscale_core.contracts.resolvers import (
     # Backups
     default_backups_module_options,
     resolve_backups_module_options,
-    # Billing
-    billing_production_targeted,
-    default_billing_module_options,
-    resolve_billing_module_options,
-    validate_billing_env_var_reference,
-    validate_billing_currency,
-    validate_billing_module_options,
     # Notifications
     default_notifications_module_options,
     notifications_live_delivery_configured,
@@ -88,105 +77,30 @@ _MANIFEST_PATCH_PATH = "quickscale_core.contracts.resolvers.load_manifest_from_p
 
 
 # ===================================================================
-# Analytics
+# Shared manifest resolution
 # ===================================================================
 
 
-class TestResolversAnalytics:
-    """Tests for analytics module resolver/validate/default functions."""
+class TestResolveManifestModuleOptions:
+    """The one generic resolver converted modules' callers share."""
 
     @patch(_MANIFEST_PATCH_PATH)
-    def test_default_analytics(self, mock_load: MagicMock) -> None:
-        """default_analytics_module_options returns manifest defaults."""
+    def test_returns_manifest_defaults(self, mock_load: MagicMock) -> None:
         mock_load.return_value = _make_mock_manifest(
-            "analytics", {"provider": "posthog", "enabled": True}
+            "analytics", {"enabled": True, "provider": "posthog"}
         )
-        result = default_analytics_module_options()
-        assert result["provider"] == "posthog"
-        assert result["enabled"] is True
-
-    def test_validate_analytics_env_var_reference(self) -> None:
-        """validate_analytics_env_var_reference validates env var names."""
-        assert validate_analytics_env_var_reference("key", "") is None
-        assert validate_analytics_env_var_reference("key", "MY_VAR") is None
-        result = validate_analytics_env_var_reference("key", "bad-name")
-        assert result is not None
-        assert "modules.analytics.key" in result
+        assert resolve_manifest_module_options("analytics") == {
+            "enabled": True,
+            "provider": "posthog",
+        }
 
     @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_analytics_with_options(self, mock_load: MagicMock) -> None:
-        """resolve_analytics_module_options normalises options and resolves."""
+    def test_overrides_replace_defaults(self, mock_load: MagicMock) -> None:
         mock_load.return_value = _make_mock_manifest(
-            "analytics",
-            {
-                "provider": "posthog",
-                "enabled": True,
-                "exclude_debug": False,
-                "exclude_staff": False,
-                "anonymous_by_default": True,
-                "posthog_api_key_env_var": "PH_KEY",
-                "posthog_host_env_var": "PH_HOST",
-                "posthog_host": "https://us.i.posthog.com",
-            },
+            "billing", {"enabled": True, "billing_currency": "usd"}
         )
-        result = resolve_analytics_module_options({"provider": "  PostHog "})
-        assert result["provider"] == "posthog"
-        assert result["enabled"] is True
-        assert result["posthog_host"] == "https://us.i.posthog.com"
-        assert result["posthog_api_key_env_var"] == "PH_KEY"
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_analytics_valid(self, mock_load: MagicMock) -> None:
-        """validate_analytics_module_options returns no issues for valid config."""
-        mock_load.return_value = _make_mock_manifest(
-            "analytics",
-            {
-                "provider": "posthog",
-                "enabled": True,
-                "exclude_debug": False,
-                "exclude_staff": False,
-                "anonymous_by_default": True,
-                "posthog_host": "https://us.i.posthog.com",
-            },
-        )
-        assert validate_analytics_module_options(None) == []
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_analytics_invalid_options(self, mock_load: MagicMock) -> None:
-        """validate_analytics_module_options reports invalid options."""
-        mock_load.return_value = _make_mock_manifest(
-            "analytics",
-            {
-                "provider": "posthog",
-                "enabled": "not_bool",
-                "exclude_debug": "also_not_bool",
-                "exclude_staff": False,
-                "anonymous_by_default": True,
-                "posthog_host": "",
-            },
-        )
-        issues = validate_analytics_module_options(None)
-        assert len(issues) >= 2
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_analytics_production_targeted(self, mock_load: MagicMock) -> None:
-        """analytics_production_targeted detects production-readiness."""
-        mock_load.return_value = _make_mock_manifest(
-            "analytics",
-            {
-                "enabled": True,
-                "posthog_api_key_env_var": "MY_KEY",
-                "provider": "posthog",
-            },
-        )
-        assert (
-            analytics_production_targeted(
-                {"enabled": True, "posthog_api_key_env_var": "MY_KEY"}
-            )
-            is True
-        )
-        # Disabled is not production-targeted
-        assert analytics_production_targeted({"enabled": False}) is False
+        result = resolve_manifest_module_options("billing", {"enabled": False})
+        assert result == {"enabled": False, "billing_currency": "usd"}
 
 
 # ===================================================================
@@ -254,100 +168,6 @@ class TestResolversBackups:
         result = resolve_backups_module_options({"remote_enabled": True})
         assert result["remote_enabled"] is True
         assert result["keep_local"] is True
-
-
-# ===================================================================
-# Billing
-# ===================================================================
-
-
-class TestResolversBilling:
-    """Tests for billing module resolver/validate functions."""
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_default_billing(self, mock_load: MagicMock) -> None:
-        """default_billing_module_options returns manifest defaults."""
-        mock_load.return_value = _make_mock_manifest(
-            "billing", {"enabled": True, "billing_currency": "usd"}
-        )
-        result = default_billing_module_options()
-        assert result["enabled"] is True
-        assert result["billing_currency"] == "usd"
-
-    def test_validate_billing_env_var_reference(self) -> None:
-        """validate_billing_env_var_reference validates env var names."""
-        assert validate_billing_env_var_reference("key", "") is None
-        assert validate_billing_env_var_reference("key", "MY_VAR") is None
-        result = validate_billing_env_var_reference("key", "123bad")
-        assert result is not None
-
-    def test_validate_billing_currency(self) -> None:
-        """validate_billing_currency validates currency codes."""
-        assert validate_billing_currency("usd") is None
-        result_blank = validate_billing_currency("")
-        assert result_blank is not None
-        assert "blank" in result_blank
-        result_unsupported = validate_billing_currency("XYZ")
-        assert result_unsupported is not None
-        assert "supported" in result_unsupported
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_billing_with_options(self, mock_load: MagicMock) -> None:
-        """resolve_billing_module_options resolves and normalizes."""
-        mock_load.return_value = _make_mock_manifest(
-            "billing",
-            {
-                "enabled": True,
-                "billing_currency": "usd",
-                "publishable_key_env_var": "PK_KEY",
-                "secret_key_env_var": "SK_KEY",
-                "webhook_secret_env_var": "WH_SECRET",
-            },
-        )
-        result = resolve_billing_module_options({"billing_currency": "  EUR "})
-        assert result["billing_currency"] == "eur"
-        assert result["enabled"] is True
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_billing_module_options(self, mock_load: MagicMock) -> None:
-        """validate_billing_module_options identifies issues."""
-        mock_load.return_value = _make_mock_manifest(
-            "billing",
-            {
-                "enabled": True,
-                "billing_currency": "usd",
-                "publishable_key_env_var": "PK_KEY",
-                "secret_key_env_var": "SK_KEY",
-                "webhook_secret_env_var": "WH_SECRET",
-            },
-        )
-        issues = validate_billing_module_options(None)
-        assert issues == []
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_billing_production_targeted(self, mock_load: MagicMock) -> None:
-        """billing_production_targeted detects production-readiness."""
-        mock_load.return_value = _make_mock_manifest(
-            "billing",
-            {
-                "enabled": True,
-                "billing_currency": "usd",
-                "publishable_key_env_var": "PK_KEY",
-                "secret_key_env_var": "SK_KEY",
-                "webhook_secret_env_var": "WH_SECRET",
-            },
-        )
-        assert (
-            billing_production_targeted(
-                {
-                    "enabled": True,
-                    "billing_currency": "usd",
-                    "publishable_key_env_var": "PK_KEY",
-                }
-            )
-            is True
-        )
-        assert billing_production_targeted({"enabled": False}) is False
 
 
 # ===================================================================

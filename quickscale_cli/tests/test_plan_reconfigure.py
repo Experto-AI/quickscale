@@ -708,8 +708,8 @@ docker:
                 content = f.read()
             assert "public_base_url: https://cdn.example.com/media" in content
 
-    def test_plan_reconfigure_prunes_legacy_storage_custom_domain(self) -> None:
-        """Reconfigure should remove legacy storage custom_domain options on save."""
+    def test_plan_reconfigure_refuses_legacy_storage_custom_domain(self) -> None:
+        """Reconfigure refuses a retired storage key by name instead of dropping it."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             os.makedirs(".quickscale", exist_ok=True)
@@ -759,11 +759,9 @@ docker:
 
             result = runner.invoke(plan, ["--reconfigure"], input="n\nn\ny\n")
 
-            assert result.exit_code == 0
-            with open("quickscale.yml") as f:
-                content = f.read()
-            assert "custom_domain" not in content
-            assert "public_base_url: https://cdn.example.com/media" in content
+            assert result.exit_code != 0
+            assert "custom_domain" in result.output
+            assert "public_base_url" in result.output
 
     def test_plan_reconfigure_configure_modules_updates_storage_options(self) -> None:
         """Reconfigure should allow interactive storage option updates when requested."""

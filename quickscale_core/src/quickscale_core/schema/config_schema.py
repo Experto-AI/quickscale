@@ -14,8 +14,6 @@ from quickscale_core.contracts import (
     AUTH_EMAIL_VERIFICATION_VALUES,
     AUTH_REGISTRATION_ENABLED_OPTION,
     AUTH_SESSION_COOKIE_AGE_OPTION,
-    BILLING_ENV_VAR_OPTION_NAMES,
-    BILLING_MODULE_OPTION_KEYS,
     CANONICAL_AUTH_MODULE_OPTION_KEYS,
     LEGACY_AUTH_ALLOW_REGISTRATION_OPTION,
     LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION,
@@ -23,8 +21,6 @@ from quickscale_core.contracts import (
     get_discovered_module_names,
     get_module_readiness_reason,
     sanitize_module_options,
-    validate_billing_currency,
-    validate_billing_env_var_reference,
 )
 from quickscale_core.utils.file_utils import validate_project_name
 from quickscale_core.utils.theme_validation import (
@@ -99,6 +95,8 @@ def _find_line_number(yaml_content: str, key: str) -> int | None:
 
 
 def _suggest_similar_key(invalid_key: str, valid_keys: set[str]) -> str | None:
+    if not invalid_key:
+        return None
     for valid_key in valid_keys:
         # Simple similarity check: same first letter and close length
         if (
@@ -222,67 +220,6 @@ def _validate_auth_module_options(
                 "of seconds",
                 line=_find_line_number(yaml_content, AUTH_SESSION_COOKIE_AGE_OPTION),
                 suggestion=auth_contract,
-            )
-
-
-def _validate_billing_module_options(
-    module_options: dict[str, Any],
-    yaml_content: str,
-) -> None:
-    """Validate billing config keys and value shapes before readiness gating."""
-    billing_option_keys = set(BILLING_MODULE_OPTION_KEYS)
-
-    for option_name in module_options:
-        if option_name not in billing_option_keys:
-            line = _find_line_number(yaml_content, option_name)
-            suggestion = _suggest_similar_key(option_name, billing_option_keys)
-            suggestion_text = (
-                f"Use modules.billing.{suggestion} instead."
-                if suggestion
-                else "Supported keys: "
-                + ", ".join(
-                    f"modules.billing.{key}" for key in sorted(billing_option_keys)
-                )
-            )
-            raise ConfigValidationError(
-                f"Unknown key '{option_name}' in modules.billing section",
-                line=line,
-                suggestion=suggestion_text,
-            )
-
-    if "enabled" in module_options and not isinstance(module_options["enabled"], bool):
-        raise ConfigValidationError(
-            "'modules.billing.enabled' must be a boolean (true/false)",
-            line=_find_line_number(yaml_content, "enabled"),
-        )
-
-    for option_name in BILLING_ENV_VAR_OPTION_NAMES:
-        if option_name not in module_options:
-            continue
-
-        issue = validate_billing_env_var_reference(
-            option_name,
-            module_options[option_name],
-        )
-        if issue:
-            raise ConfigValidationError(
-                issue,
-                line=_find_line_number(yaml_content, option_name),
-                suggestion=(
-                    "Use uppercase environment-variable names such as "
-                    "STRIPE_SECRET_KEY."
-                ),
-            )
-
-    if "billing_currency" in module_options:
-        currency_issue = validate_billing_currency(
-            module_options["billing_currency"],
-        )
-        if currency_issue:
-            raise ConfigValidationError(
-                currency_issue,
-                line=_find_line_number(yaml_content, "billing_currency"),
-                suggestion="Use a supported ISO 4217 code such as usd or eur.",
             )
 
 
@@ -481,6 +418,58 @@ def _validate_docker_section(data: dict, yaml_content: str) -> DockerConfig:
     )
 
 
+def _validate_declared_module_keys(
+    module_name: str,
+    module_options: dict[str, Any],
+    yaml_content: str,
+) -> None:
+    """Refuse a module option key the module's manifest does not declare.
+
+    A manifest's declared option set is the only option surface: a
+    ``quickscale.yml`` key outside it is refused with the key named rather
+    than silently dropped later.  The check judges the module's *canonicalized*
+    keys: a legacy key the module's normalizer migrates (backups' and storage's
+    raw credential keys) is consumed before this check, while a retired key
+    already failed with the manifest's own removal message in the
+    option-validation engine, which runs before this check.  A normalizer that
+    refuses a key with its own authored message (a legacy notifications or auth
+    key) lets that message stand.
+    """
+    from quickscale_core.contracts.resolvers import (
+        load_module_manifest_with_fallback,
+    )
+
+    if not module_options:
+        return
+
+    canonical = sanitize_module_options(module_name, module_options)
+    manifest = load_module_manifest_with_fallback(module_name)
+    declared = set(manifest.get_all_options())
+    unknown = sorted(
+        (
+            key
+            for key in canonical
+            if key not in declared and key not in manifest.retired_options
+        ),
+        key=str,
+    )
+    if not unknown:
+        return
+
+    key = str(unknown[0])
+    suggestion = _suggest_similar_key(key, declared)
+    raise ConfigValidationError(
+        f"Unknown key '{key}' in modules.{module_name} section",
+        line=_find_line_number(yaml_content, key),
+        suggestion=(
+            f"Use modules.{module_name}.{suggestion} instead."
+            if suggestion
+            else "Supported keys: "
+            + ", ".join(f"modules.{module_name}.{name}" for name in sorted(declared))
+        ),
+    )
+
+
 def _manifest_option_issue(
     module_name: str,
     module_options: dict[str, Any],
@@ -580,8 +569,8 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
 
         if module_name == "auth":
             _validate_auth_module_options(module_options, yaml_content)
-        if module_name == "billing":
-            _validate_billing_module_options(module_options, yaml_content)
+
+        _validate_declared_module_keys(module_name, module_options, yaml_content)
 
         readiness_reason = get_module_readiness_reason(module_name)
         if readiness_reason is not None:

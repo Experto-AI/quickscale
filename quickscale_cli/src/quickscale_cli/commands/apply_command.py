@@ -19,13 +19,10 @@ import yaml
 
 from quickscale_core.contracts.module_options import (
     ANALYTICS_POSTHOG_DEFAULT_HOST,
-    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
     normalize_backups_module_options,
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
@@ -38,10 +35,7 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_LINK_TREE_PATH,
 )
 from quickscale_core.contracts.resolvers import (
-    resolve_analytics_module_options,
-    resolve_billing_module_options,
-    validate_analytics_module_options,
-    validate_billing_module_options,
+    resolve_manifest_module_options,
     validate_orgs_module_options,
     validate_storage_module_options,
     notifications_live_delivery_configured,
@@ -1249,24 +1243,6 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
 
     billing_config = qs_config.modules.get("billing")
     if billing_config is not None:
-        billing_issues = validate_billing_module_options(billing_config.options or {})
-        if billing_issues:
-            click.secho(
-                "\n❌ Billing module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in billing_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or "
-                "edit quickscale.yml to correct the billing option values. "
-                "Billing apply requires valid env-var references and a supported "
-                "currency code.",
-                err=True,
-            )
-            raise click.Abort()
-
         if "auth" not in qs_config.modules:
             click.secho(
                 "\n❌ Billing requires the auth module before apply can continue:",
@@ -1323,27 +1299,6 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
             click.echo(
                 "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
                 "quickscale.yml to supply the missing private-remote env-var references.",
-                err=True,
-            )
-            raise click.Abort()
-
-    analytics_config = qs_config.modules.get("analytics")
-    if analytics_config is not None:
-        analytics_issues = validate_analytics_module_options(
-            analytics_config.options or {}
-        )
-        if analytics_issues:
-            click.secho(
-                "\n❌ Analytics module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in analytics_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the analytics values. Existing React and HTML "
-                "theme files remain user-owned and are not rewritten by analytics apply.",
                 err=True,
             )
             raise click.Abort()
@@ -2429,6 +2384,23 @@ def _save_project_state(
         return False
 
 
+def _resolved_module_options(
+    module_name: str,
+    options: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Resolved option values with a blank string falling back to the default.
+
+    Operator guidance names the conventional value when a configured string is
+    blank, the same way the manifest default applies at apply time.
+    """
+    resolved = resolve_manifest_module_options(module_name, options)
+    defaults = resolve_manifest_module_options(module_name)
+    return {
+        key: (defaults.get(key, value) if value in ("", None) else value)
+        for key, value in resolved.items()
+    }
+
+
 def _display_next_steps_impl(
     output_path: Path,
     qs_config: QuickScaleConfig,
@@ -2560,31 +2532,19 @@ def _display_next_steps_impl(
             )
 
     if "analytics" in modules:
-        analytics_options = resolve_analytics_module_options(
-            modules["analytics"].options or {}
+        analytics_options = _resolved_module_options(
+            "analytics", modules["analytics"].options or {}
         )
         click.echo("\n  # Analytics setup")
         if bool(analytics_options.get("enabled", True)):
             posthog_api_key_env_var = str(
-                analytics_options.get(
-                    "posthog_api_key_env_var",
-                    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-                )
-                or DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
+                analytics_options.get("posthog_api_key_env_var") or ""
             )
             posthog_host_env_var = str(
-                analytics_options.get(
-                    "posthog_host_env_var",
-                    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
-                )
-                or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR
+                analytics_options.get("posthog_host_env_var") or ""
             )
             posthog_host = str(
-                analytics_options.get(
-                    "posthog_host",
-                    ANALYTICS_POSTHOG_DEFAULT_HOST,
-                )
-                or ANALYTICS_POSTHOG_DEFAULT_HOST
+                analytics_options.get("posthog_host") or ANALYTICS_POSTHOG_DEFAULT_HOST
             )
             click.echo("  PostHog dashboard: https://app.posthog.com")
             click.echo(
@@ -2632,15 +2592,11 @@ def _display_next_steps_impl(
         )
 
     if "billing" in modules:
-        billing_options = resolve_billing_module_options(
-            modules["billing"].options or {}
+        billing_options = _resolved_module_options(
+            "billing", modules["billing"].options or {}
         )
         webhook_secret_env_var = str(
-            billing_options.get(
-                "webhook_secret_env_var",
-                DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-            )
-            or DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR
+            billing_options.get("webhook_secret_env_var") or ""
         )
         click.echo("\n  # Billing setup")
         click.echo(

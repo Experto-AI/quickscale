@@ -91,6 +91,12 @@ dependencies:
   - boto3>=1.43.58
   - Pillow>=12.3.0,<13.0.0
 
+# Retired option keys are refused by name with the message declared here.
+retired_options:
+  custom_domain: >-
+    Legacy config key 'custom_domain' is no longer supported. Use
+    'public_base_url' instead.
+
 derivation:
   wiring_projections:
     - wiring_field: apps

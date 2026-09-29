@@ -30,9 +30,6 @@ from typing import Any, Final
 ANALYTICS_PROVIDER_POSTHOG: Final[str] = "posthog"
 ANALYTICS_PROVIDERS: Final[tuple[str, ...]] = (ANALYTICS_PROVIDER_POSTHOG,)
 
-DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR: Final[str] = "POSTHOG_API_KEY"
-DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR: Final[str] = "POSTHOG_HOST"
-
 
 # ---------------------------------------------------------------------------
 # Constants: auth
@@ -92,49 +89,10 @@ _LEGACY_BACKUPS_SECRET_OPTIONS: Final[dict[str, str]] = {
 # Constants: billing
 # ---------------------------------------------------------------------------
 
-DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR: Final[str] = "STRIPE_PUBLISHABLE_KEY"
-DEFAULT_BILLING_SECRET_KEY_ENV_VAR: Final[str] = "STRIPE_SECRET_KEY"  # noqa: S105 - environment-variable name constant, not a credential
-DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR: Final[str] = "QUICKSCALE_BILLING_WEBHOOK_SECRET"  # noqa: S105 - environment-variable name constant, not a credential
-DEFAULT_BILLING_CURRENCY: Final[str] = "usd"
-
 BILLING_ENV_VAR_OPTION_NAMES: Final[tuple[str, ...]] = (
     "publishable_key_env_var",
     "secret_key_env_var",
     "webhook_secret_env_var",
-)
-BILLING_MODULE_OPTION_KEYS: Final[frozenset[str]] = frozenset(
-    {
-        "enabled",
-        *BILLING_ENV_VAR_OPTION_NAMES,
-        "billing_currency",
-    }
-)
-BILLING_SUPPORTED_CURRENCIES: Final[tuple[str, ...]] = (
-    "aud",
-    "brl",
-    "cad",
-    "chf",
-    "czk",
-    "dkk",
-    "eur",
-    "gbp",
-    "hkd",
-    "huf",
-    "inr",
-    "jpy",
-    "mxn",
-    "myr",
-    "nok",
-    "nzd",
-    "php",
-    "pln",
-    "ron",
-    "sek",
-    "sgd",
-    "thb",
-    "try",
-    "usd",
-    "zar",
 )
 
 
@@ -385,10 +343,6 @@ NON_PORTABLE_ENV_CONTAINS: Final[tuple[str, ...]] = (
 # Regex patterns
 # ---------------------------------------------------------------------------
 
-_ANALYTICS_ENV_VAR_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Z][A-Z0-9_]*$"
-)
-_BILLING_ENV_VAR_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _NOTIFICATIONS_ENV_VAR_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^[A-Z][A-Z0-9_]*$"
 )
@@ -401,29 +355,6 @@ _LIKELY_AWS_ACCESS_KEY_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
 # ---------------------------------------------------------------------------
 # Normalize functions
 # ---------------------------------------------------------------------------
-
-
-def normalize_analytics_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Return analytics options with normalized provider and host fields."""
-    normalized = dict(options or {})
-
-    if "provider" in normalized:
-        provider = str(normalized["provider"]).strip().lower()
-        normalized["provider"] = provider
-
-    for option_name in ("posthog_api_key_env_var", "posthog_host_env_var"):
-        if option_name in normalized:
-            normalized[option_name] = str(normalized[option_name]).strip()
-
-    if "posthog_host" in normalized:
-        candidate = str(normalized["posthog_host"]).strip()
-        if candidate and not candidate.startswith(("http://", "https://")):
-            candidate = "https://" + candidate.lstrip("/")
-        normalized["posthog_host"] = candidate.rstrip("/")
-
-    return normalized
 
 
 def normalize_auth_module_options(
@@ -483,24 +414,6 @@ def normalize_backups_module_options(
     if legacy_secret_access_key and not secret_access_key_env_var:
         normalized[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = (
             DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-        )
-
-    return normalized
-
-
-def normalize_billing_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Return billing options with normalized env-var and currency values."""
-    normalized = dict(options or {})
-
-    for option_name in BILLING_ENV_VAR_OPTION_NAMES:
-        if option_name in normalized:
-            normalized[option_name] = str(normalized[option_name]).strip()
-
-    if "billing_currency" in normalized:
-        normalized["billing_currency"] = (
-            str(normalized["billing_currency"]).strip().lower()
         )
 
     return normalized
@@ -694,46 +607,6 @@ _SOCIAL_PROVIDER_ALIASES: Final[dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 
-def validate_analytics_env_var_reference(option_name: str, value: Any) -> str | None:
-    """Validate an analytics env-var reference field."""
-    candidate = str(value).strip()
-    if not candidate:
-        return None
-
-    qualified_option = f"modules.analytics.{option_name}"
-    if not _ANALYTICS_ENV_VAR_NAME_PATTERN.fullmatch(candidate):
-        return (
-            f"{qualified_option} must be an environment variable name matching "
-            "^[A-Z][A-Z0-9_]*$"
-        )
-    return None
-
-
-def validate_analytics_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    """Return validation issues for analytics module options."""
-    issues: list[str] = []
-
-    if options is not None and "provider" in options:
-        provider = str(options.get("provider", "")).strip().lower()
-        if provider not in ANALYTICS_PROVIDERS:
-            issues.append(
-                "modules.analytics.provider must be one of: "
-                + ", ".join(ANALYTICS_PROVIDERS)
-            )
-
-    for option_name in ("posthog_api_key_env_var", "posthog_host_env_var"):
-        if options is None or option_name not in options:
-            continue
-        issue = validate_analytics_env_var_reference(
-            option_name,
-            options.get(option_name, ""),
-        )
-        if issue:
-            issues.append(issue)
-
-    return issues
-
-
 def validate_auth_module_options(options: Mapping[str, Any] | None) -> list[str]:
     """Return validation issues for auth module options.
 
@@ -771,47 +644,6 @@ def validate_backups_env_var_reference(option_name: str, value: Any) -> str | No
             )
 
     return None
-
-
-def validate_billing_currency(value: Any) -> str | None:
-    """Validate the configured billing currency code."""
-    candidate = str(value).strip().lower()
-    if not candidate:
-        return "modules.billing.billing_currency cannot be blank"
-
-    if candidate not in BILLING_SUPPORTED_CURRENCIES:
-        return (
-            "modules.billing.billing_currency must be one of the supported "
-            "QuickScale billing currency codes: "
-            + ", ".join(BILLING_SUPPORTED_CURRENCIES)
-        )
-    return None
-
-
-def validate_billing_env_var_reference(option_name: str, value: Any) -> str | None:
-    """Validate a billing env-var reference field."""
-    candidate = str(value).strip()
-    if not candidate:
-        return None
-
-    qualified_option = f"modules.billing.{option_name}"
-    if not _BILLING_ENV_VAR_NAME_PATTERN.fullmatch(candidate):
-        return (
-            f"{qualified_option} must be an environment variable name matching "
-            "^[A-Z][A-Z0-9_]*$"
-        )
-    return None
-
-
-def validate_billing_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    """Return validation issues for billing module options.
-
-    The original CLI implementation resolves defaults and re-validates; the
-    schema layer performs the same checks inline via
-    ``_validate_billing_module_options``. We expose a no-op stub here so
-    consumers of the central contract surface see a stable symbol.
-    """
-    return []
 
 
 def validate_notifications_env_var_reference(
@@ -1010,26 +842,56 @@ def sanitize_module_options(
 
     This is the canonical module-name dispatcher previously located in
     ``quickscale_cli.backups_contract``. It routes to the per-module
-    ``normalize_*_module_options`` helper above, and first refuses any key the
+    ``normalize_*_module_options`` helper above while one exists, otherwise to
+    the manifest's declared normalization rules, and first refuses any key the
     module's manifest declares retired.
     """
     _raise_for_retired_module_options(module_name, options)
 
-    if module_name == "analytics":
-        return normalize_analytics_module_options(options)
     if module_name == "auth":
         return normalize_auth_module_options(options)
     if module_name == "backups":
         return normalize_backups_module_options(options)
-    if module_name == "billing":
-        return normalize_billing_module_options(options)
     if module_name == "notifications":
         return normalize_notifications_module_options(options)
     if module_name == "social":
         return normalize_social_module_options(dict(options or {}))
     if module_name == "storage":
         return normalize_storage_module_options(options)
-    return dict(options or {})
+    return _normalize_manifest_owned_options(module_name, options)
+
+
+def _normalize_manifest_owned_options(
+    module_name: str,
+    options: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Canonicalize a manifest-owned module's supplied option values.
+
+    A module whose per-module option code is gone has no normalizer branch
+    above; its manifest's declared normalization rules are the
+    canonicalization, applied to the keys the caller supplied (defaults are
+    not materialized here).  Undeclared keys pass through unchanged so the
+    layer that refuses them can name them; an unknown module or an unreadable
+    manifest keeps the supplied values.
+    """
+    supplied = dict(options or {})
+    if not supplied:
+        return supplied
+
+    from quickscale_core.contracts.module_discovery import ImproperlyConfigured
+    from quickscale_core.contracts.resolvers import (
+        load_module_manifest_with_fallback,
+    )
+    from quickscale_core.manifest.loader import ManifestError
+    from quickscale_core.manifest.resolver import normalize_module_option_values
+
+    try:
+        manifest = load_module_manifest_with_fallback(module_name)
+    except ManifestError, ImproperlyConfigured, OSError:
+        return supplied
+
+    canonical = normalize_module_option_values(manifest, supplied)
+    return {key: canonical.get(key, value) for key, value in supplied.items()}
 
 
 def _raise_for_retired_module_options(
@@ -1087,8 +949,6 @@ __all__ = [
     "ANALYTICS_POSTHOG_EU_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
     "ANALYTICS_PROVIDERS",
-    "DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-    "DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR",
     # Auth constants
     "AUTH_AUTHENTICATION_METHOD_OPTION",
     "AUTH_AUTHENTICATION_METHOD_VALUES",
@@ -1106,12 +966,6 @@ __all__ = [
     "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
     # Billing constants
     "BILLING_ENV_VAR_OPTION_NAMES",
-    "BILLING_MODULE_OPTION_KEYS",
-    "BILLING_SUPPORTED_CURRENCIES",
-    "DEFAULT_BILLING_CURRENCY",
-    "DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-    "DEFAULT_BILLING_SECRET_KEY_ENV_VAR",
-    "DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR",
     # DR env-var portability constants
     "ENV_VAR_PORTABILITY_IGNORED",
     "ENV_VAR_PORTABILITY_MANUAL",
@@ -1135,20 +989,13 @@ __all__ = [
     "NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION",
     "NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION",
     # Normalize functions
-    "normalize_analytics_module_options",
     "normalize_auth_module_options",
     "normalize_backups_module_options",
-    "normalize_billing_module_options",
     "normalize_notifications_module_options",
     "normalize_social_module_options",
     # Validate functions
-    "validate_analytics_env_var_reference",
-    "validate_analytics_module_options",
     "validate_auth_module_options",
     "validate_backups_env_var_reference",
-    "validate_billing_currency",
-    "validate_billing_env_var_reference",
-    "validate_billing_module_options",
     "validate_notifications_env_var_reference",
     "validate_notifications_module_options",
     "validate_social_module_options",

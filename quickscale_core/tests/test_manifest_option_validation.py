@@ -459,8 +459,9 @@ class TestPlanApplyEnforcement:
         assert "QUICKSCALE_BILLING_ENABLED" in str(exc_info.value)
 
     def test_canonicalizable_values_pass(self) -> None:
+        """An accepted spelling loads in the manifest's canonical form."""
         config = validate_config(self._config("  orgs:\n    mode: SAAS\n"))
-        assert config.modules["orgs"].options["mode"] == "SAAS"
+        assert config.modules["orgs"].options["mode"] == "saas"
 
     def test_canonicalized_backups_private_remote_passes(self) -> None:
         body = (

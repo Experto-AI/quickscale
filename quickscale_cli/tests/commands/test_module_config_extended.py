@@ -16,17 +16,13 @@ from quickscale_core.contracts.module_options import (
 )
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
-    configure_analytics_module,
     configure_auth_module,
     configure_backups_module,
-    configure_billing_module,
     configure_storage_module,
     configure_notifications_module,
     configure_social_module,
-    get_default_analytics_config,
     get_default_auth_config,
     get_default_backups_config,
-    get_default_billing_config,
     get_default_notifications_config,
     get_default_social_config,
     get_default_storage_config,
@@ -1399,7 +1395,7 @@ class TestAnalyticsModuleConfig:
     """Tests for analytics module configurator registration and wiring."""
 
     def test_analytics_default_config_keys_match_manifest_contract_intent(self):
-        config = get_default_analytics_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["analytics"].get_defaults()
 
         assert config["enabled"] is True
         assert config["provider"] == "posthog"
@@ -1413,7 +1409,9 @@ class TestAnalyticsModuleConfig:
     def test_analytics_in_module_configurators(self):
         assert "analytics" in MODULE_CONFIGURATOR_REGISTRY
 
-        config = configure_analytics_module(non_interactive=True)
+        config = MODULE_CONFIGURATOR_REGISTRY["analytics"].configure(
+            non_interactive=True
+        )
 
         assert config["enabled"] is True
         assert config["provider"] == "posthog"
@@ -1423,30 +1421,33 @@ class TestAnalyticsModuleConfig:
     @patch("quickscale_cli.commands.module_config.click.confirm")
     def test_configure_analytics_interactive(self, mock_confirm, mock_prompt):
         """Interactive analytics configuration should normalize custom values."""
-        mock_confirm.side_effect = [True, False, True, False]
+        mock_confirm.side_effect = [True, True, False, True]
         mock_prompt.side_effect = [
+            "POSTHOG",
             "OPS_POSTHOG_API_KEY",
             "OPS_POSTHOG_HOST",
             "eu.i.posthog.com/",
         ]
 
-        config = configure_analytics_module(non_interactive=False)
+        config = MODULE_CONFIGURATOR_REGISTRY["analytics"].configure(
+            non_interactive=False
+        )
 
         assert config["enabled"] is True
         assert config["provider"] == "posthog"
         assert config["posthog_api_key_env_var"] == "OPS_POSTHOG_API_KEY"
         assert config["posthog_host_env_var"] == "OPS_POSTHOG_HOST"
         assert config["posthog_host"] == "https://eu.i.posthog.com"
-        assert config["exclude_debug"] is False
-        assert config["exclude_staff"] is True
-        assert config["anonymous_by_default"] is False
+        assert config["exclude_debug"] is True
+        assert config["exclude_staff"] is False
+        assert config["anonymous_by_default"] is True
 
 
 class TestBillingModuleConfig:
     """Tests for billing module configurator registration and normalization."""
 
     def test_billing_default_config_keys_match_manifest_contract_intent(self):
-        config = get_default_billing_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["billing"].get_defaults()
 
         assert config["enabled"] is True
         assert config["publishable_key_env_var"] == "STRIPE_PUBLISHABLE_KEY"
@@ -1457,7 +1458,7 @@ class TestBillingModuleConfig:
     def test_billing_in_module_configurators(self):
         assert "billing" in MODULE_CONFIGURATOR_REGISTRY
 
-        config = configure_billing_module(non_interactive=True)
+        config = MODULE_CONFIGURATOR_REGISTRY["billing"].configure(non_interactive=True)
 
         assert config["enabled"] is True
         assert config["billing_currency"] == "usd"
@@ -1468,7 +1469,6 @@ class TestBillingModuleConfig:
         self,
         mock_confirm,
         mock_prompt,
-        capsys,
     ):
         mock_confirm.return_value = True
         mock_prompt.side_effect = [
@@ -1478,8 +1478,9 @@ class TestBillingModuleConfig:
             " EUR ",
         ]
 
-        config = configure_billing_module(non_interactive=False)
-        output = capsys.readouterr().out
+        config = MODULE_CONFIGURATOR_REGISTRY["billing"].configure(
+            non_interactive=False
+        )
 
         assert config == {
             "enabled": True,
@@ -1488,11 +1489,6 @@ class TestBillingModuleConfig:
             "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
             "billing_currency": "eur",
         }
-        assert "Billing is public-ready in quickscale plan, quickscale.yml" in output
-        assert (
-            "quickscale apply still requires auth before billing can be enabled"
-            in output
-        )
 
 
 # ============================================================================

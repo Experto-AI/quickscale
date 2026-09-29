@@ -240,6 +240,53 @@ class TestValidateModules:
                 "modules:\n  billing:\n    unknown_billing_key: true\n"
             )
 
+    def test_backups_unknown_key_is_refused(self) -> None:
+        with pytest.raises(ConfigValidationError, match="backups"):
+            validate_config(
+                'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n'
+                "modules:\n  backups:\n    unknown_backups_key: true\n"
+            )
+
+    def test_backups_legacy_credential_keys_still_migrate(self) -> None:
+        """A legacy raw credential key is consumed by the sanitizer, not refused."""
+        config = validate_config(
+            'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n'
+            "modules:\n  backups:\n    target_mode: private_remote\n"
+            "    remote_bucket_name: private-bucket\n"
+            "    remote_region_name: auto\n"
+            "    remote_access_key_id: legacy-key\n"
+            "    remote_secret_access_key: legacy-secret\n"
+        )
+        options = config.modules["backups"].options
+        assert options["remote_access_key_id_env_var"] == (
+            "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
+        )
+        assert options["remote_secret_access_key_env_var"] == (
+            "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
+        )
+        assert "remote_access_key_id" not in options
+
+    def test_non_string_module_key_is_refused_by_name(self) -> None:
+        with pytest.raises(ConfigValidationError, match="123"):
+            validate_config(
+                'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n'
+                "modules:\n  analytics:\n    123: true\n"
+            )
+
+    def test_empty_module_key_is_refused_by_name(self) -> None:
+        with pytest.raises(ConfigValidationError, match="Unknown key"):
+            validate_config(
+                'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n'
+                'modules:\n  analytics:\n    "": true\n'
+            )
+
+    def test_storage_retired_custom_domain_is_refused_with_replacement(self) -> None:
+        with pytest.raises(ConfigValidationError, match="public_base_url"):
+            validate_config(
+                'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n'
+                "modules:\n  storage:\n    custom_domain: cdn.example.com\n"
+            )
+
     def test_billing_enabled_not_bool(self) -> None:
         with pytest.raises(ConfigValidationError, match="enabled"):
             validate_config(

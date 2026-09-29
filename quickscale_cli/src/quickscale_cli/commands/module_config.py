@@ -12,9 +12,6 @@ from typing import Any, Callable, Mapping
 import click
 
 from quickscale_core.contracts.module_options import (
-    ANALYTICS_POSTHOG_DEFAULT_HOST,
-    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
@@ -37,12 +34,6 @@ from quickscale_core.contracts.module_options import (
     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
 )
 from quickscale_core.contracts.resolvers import (
-    default_analytics_module_options,
-    resolve_analytics_module_options,
-    validate_analytics_module_options,
-    default_billing_module_options,
-    resolve_billing_module_options,
-    validate_billing_module_options,
     default_auth_module_options,
     resolve_auth_module_options,
     default_notifications_module_options,
@@ -689,189 +680,6 @@ def configure_notifications_module(
 
 
 # ============================================================================
-# ANALYTICS MODULE CONFIGURATION
-# ============================================================================
-
-
-def get_default_analytics_config() -> dict[str, Any]:
-    """Return default configuration for the analytics module."""
-    return default_analytics_module_options()
-
-
-def _raise_for_invalid_analytics_config(config: Mapping[str, Any]) -> None:
-    """Abort with actionable messaging when analytics config is invalid."""
-    issues = validate_analytics_module_options(config)
-    if not issues:
-        return
-
-    click.secho("\n❌ Invalid analytics module configuration:", fg="red", err=True)
-    for issue in issues:
-        click.echo(f"  • {issue}", err=True)
-    raise click.Abort()
-
-
-def configure_analytics_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Configure analytics module settings interactively or with defaults."""
-    defaults = resolve_analytics_module_options(existing_config)
-
-    if non_interactive:
-        click.echo("\n⚙️  Using default analytics module configuration...")
-        click.echo("  • Runtime: " + ("Enabled" if defaults["enabled"] else "Disabled"))
-        click.echo(f"  • Provider: {defaults['provider']}")
-        click.echo("  • API key env var: " + str(defaults["posthog_api_key_env_var"]))
-        click.echo("  • Host: " + str(defaults["posthog_host"]))
-        _raise_for_invalid_analytics_config(defaults)
-        return defaults
-
-    click.echo("\n⚙️  Configuring analytics module...")
-    click.echo(
-        "Analytics is PostHog-only in v0.80.0. QuickScale owns the backend "
-        "settings and capture helpers, while existing React/HTML theme files stay "
-        "user-owned for manual frontend adoption.\n"
-    )
-
-    config = resolve_analytics_module_options(
-        {
-            "enabled": click.confirm(
-                "Enable the analytics runtime?",
-                default=bool(defaults["enabled"]),
-            ),
-            "provider": "posthog",
-            "posthog_api_key_env_var": click.prompt(
-                "PostHog API key environment variable",
-                default=(
-                    str(defaults["posthog_api_key_env_var"]).strip()
-                    or DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
-                ),
-                show_default=True,
-            ).strip(),
-            "posthog_host_env_var": click.prompt(
-                "PostHog host environment variable",
-                default=(
-                    str(defaults["posthog_host_env_var"]).strip()
-                    or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR
-                ),
-                show_default=True,
-            ).strip(),
-            "posthog_host": (
-                click.prompt(
-                    "PostHog host URL",
-                    default=(
-                        str(defaults["posthog_host"]).strip()
-                        or ANALYTICS_POSTHOG_DEFAULT_HOST
-                    ),
-                    show_default=True,
-                ).strip()
-                or ANALYTICS_POSTHOG_DEFAULT_HOST
-            ),
-            "exclude_debug": click.confirm(
-                "Disable analytics automatically when DEBUG=True?",
-                default=bool(defaults["exclude_debug"]),
-            ),
-            "exclude_staff": click.confirm(
-                "Exclude staff users from analytics capture?",
-                default=bool(defaults["exclude_staff"]),
-            ),
-            "anonymous_by_default": click.confirm(
-                "Use anonymous session-based distinct IDs by default?",
-                default=bool(defaults["anonymous_by_default"]),
-            ),
-        }
-    )
-    _raise_for_invalid_analytics_config(config)
-    return config
-
-
-# ============================================================================
-# BILLING MODULE CONFIGURATION
-# ============================================================================
-
-
-def get_default_billing_config() -> dict[str, Any]:
-    """Return default configuration for the billing module."""
-    return default_billing_module_options()
-
-
-def _raise_for_invalid_billing_config(config: Mapping[str, Any]) -> None:
-    """Abort with actionable messaging when billing config is invalid."""
-    issues = validate_billing_module_options(config)
-    if not issues:
-        return
-
-    click.secho("\n❌ Invalid billing module configuration:", fg="red", err=True)
-    for issue in issues:
-        click.echo(f"  • {issue}", err=True)
-    raise click.Abort()
-
-
-def configure_billing_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Configure billing module settings interactively or with defaults."""
-    defaults = resolve_billing_module_options(existing_config)
-
-    if non_interactive:
-        click.echo("\n⚙️  Using default billing module configuration...")
-        click.echo("  • Runtime: " + ("Enabled" if defaults["enabled"] else "Disabled"))
-        click.echo(
-            "  • Publishable key env var: " + str(defaults["publishable_key_env_var"])
-        )
-        click.echo("  • Secret key env var: " + str(defaults["secret_key_env_var"]))
-        click.echo(
-            "  • Webhook secret env var: " + str(defaults["webhook_secret_env_var"])
-        )
-        click.echo("  • Stripe webhook endpoint API version: 2026-06-24.dahlia")
-        click.echo("  • Billing currency: " + str(defaults["billing_currency"]))
-        _raise_for_invalid_billing_config(defaults)
-        return defaults
-
-    click.echo("\n⚙️  Configuring billing module...")
-    click.echo(
-        "Billing is public-ready in quickscale plan, quickscale.yml, and "
-        "quickscale apply flows. These settings configure the managed Stripe "
-        "runtime, while quickscale apply still requires auth before billing "
-        "can be enabled. The Stripe webhook endpoint must use API version "
-        "2026-06-24.dahlia.\n"
-    )
-
-    config = resolve_billing_module_options(
-        {
-            "enabled": click.confirm(
-                "Enable the billing runtime?",
-                default=bool(defaults["enabled"]),
-            ),
-            "publishable_key_env_var": click.prompt(
-                "Stripe publishable key environment variable",
-                default=str(defaults["publishable_key_env_var"]),
-                show_default=True,
-            ).strip(),
-            "secret_key_env_var": click.prompt(
-                "Stripe secret key environment variable",
-                default=str(defaults["secret_key_env_var"]),
-                show_default=True,
-            ).strip(),
-            "webhook_secret_env_var": click.prompt(
-                "Stripe webhook secret environment variable",
-                default=str(defaults["webhook_secret_env_var"]),
-                show_default=True,
-            ).strip(),
-            "billing_currency": click.prompt(
-                "Billing currency (ISO 4217)",
-                default=str(defaults["billing_currency"]),
-                show_default=True,
-            ).strip(),
-        }
-    )
-
-    _raise_for_invalid_billing_config(config)
-    return config
-
-
-# ============================================================================
 # SOCIAL MODULE CONFIGURATION
 # ============================================================================
 
@@ -1182,8 +990,8 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
         ),
         ModuleConfigurator(
             name="billing",
-            configure=configure_billing_module,
-            get_defaults=get_default_billing_config,
+            configure=partial(configure_module_from_manifest, "billing"),
+            get_defaults=partial(default_module_config_from_manifest, "billing"),
         ),
         ModuleConfigurator(
             name="notifications",
@@ -1192,8 +1000,8 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
         ),
         ModuleConfigurator(
             name="analytics",
-            configure=configure_analytics_module,
-            get_defaults=get_default_analytics_config,
+            configure=partial(configure_module_from_manifest, "analytics"),
+            get_defaults=partial(default_module_config_from_manifest, "analytics"),
         ),
         ModuleConfigurator(
             name="social",
