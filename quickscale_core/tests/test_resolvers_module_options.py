@@ -14,9 +14,6 @@ from unittest.mock import MagicMock, patch
 from quickscale_core.contracts.resolvers import (
     # Shared manifest resolution
     resolve_manifest_module_options,
-    # Backups
-    default_backups_module_options,
-    resolve_backups_module_options,
     # Notifications
     default_notifications_module_options,
     notifications_live_delivery_configured,
@@ -89,34 +86,6 @@ class TestResolveManifestModuleOptions:
         )
         result = resolve_manifest_module_options("billing", {"enabled": False})
         assert result == {"enabled": False, "billing_currency": "usd"}
-
-
-# ===================================================================
-# Backups
-# ===================================================================
-
-
-class TestResolversBackups:
-    """Tests for backups module resolver functions."""
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_default_backups(self, mock_load: MagicMock) -> None:
-        """default_backups_module_options returns manifest defaults."""
-        mock_load.return_value = _make_mock_manifest(
-            "backups", {"remote_enabled": True}
-        )
-        result = default_backups_module_options()
-        assert result["remote_enabled"] is True
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_backups(self, mock_load: MagicMock) -> None:
-        """resolve_backups_module_options merges defaults with overrides."""
-        mock_load.return_value = _make_mock_manifest(
-            "backups", {"remote_enabled": False, "keep_local": True}
-        )
-        result = resolve_backups_module_options({"remote_enabled": True})
-        assert result["remote_enabled"] is True
-        assert result["keep_local"] is True
 
 
 # ===================================================================

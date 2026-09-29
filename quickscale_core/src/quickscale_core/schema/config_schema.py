@@ -318,8 +318,8 @@ def _validate_declared_module_keys(
     A manifest's declared option set is the only option surface: a
     ``quickscale.yml`` key outside it is refused with the key named rather
     than silently dropped later.  The check judges the module's *canonicalized*
-    keys: a legacy key the module's normalizer migrates (backups' and storage's
-    raw credential keys) is consumed before this check, while a retired key
+    keys: a legacy key the module's normalizer migrates (storage's raw
+    credential keys) is consumed before this check, while a retired key
     already failed with the manifest's own removal message in the
     option-validation engine, which runs before this check.  A normalizer that
     refuses a key with its own authored message (a legacy notifications key)

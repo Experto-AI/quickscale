@@ -107,8 +107,6 @@ class TestRuntimeAllExport:
             "ModuleWiringSpec",
             "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-            "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
-            "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
             "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
             "ResolverResult",
             "assemble_wiring_spec",
@@ -157,8 +155,6 @@ class TestRuntimeAllExport:
             "ModuleWiringSpec",
             "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-            "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
-            "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
             "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
             "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
             "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
@@ -224,7 +220,6 @@ class TestRuntimeAllExport:
             "report_backup_snapshot",
             "resolve_admin_uploaded_restore_artifact",
             "resolve_social_module_options",
-            "resolve_backups_module_options",
             "resolve_notifications_module_options",
             "resolve_storage_module_options",
             "restore_admin_uploaded_backup",
@@ -305,11 +300,8 @@ class TestRuntimeSymbolTypes:
         for name in (
             "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-            "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
-            "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
             "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
             "notifications_runtime_email_backend",
-            "resolve_backups_module_options",
             "resolve_notifications_module_options",
         ):
             assert hasattr(runtime, name), f"runtime.{name} is not accessible"

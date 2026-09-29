@@ -34,8 +34,6 @@ from quickscale_core.apply.steps.env_sync import (
     sync_env_example_blocks,
 )
 from quickscale_core.contracts.module_options import (
-    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
 )
@@ -67,12 +65,6 @@ _DECLARING_MODULES: tuple[str, ...] = (
 #: snapshot with these fallbacks), so a blank declaration still has to show up
 #: as a placeholder under one of them.
 _BLANK_DEFAULT_NAMES: dict[tuple[str, str], str] = {
-    ("backups", "remote_access_key_id_env_var"): (
-        DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
-    ),
-    ("backups", "remote_secret_access_key_env_var"): (
-        DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-    ),
     ("storage", "access_key_id_env_var"): DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
     ("storage", "secret_access_key_env_var"): (
         DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
@@ -201,8 +193,8 @@ def test_backups_private_remote_placeholders_are_present(
 ) -> None:
     """The runtime-required private-remote names are shown to the operator."""
     content = generated_env_example.read_text()
-    assert f"{DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR}=" in content
-    assert f"{DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR}=" in content
+    assert "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID=" in content
+    assert "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY=" in content
 
 
 def test_covered_module_blocks_stay_byte_identical() -> None:
@@ -253,7 +245,7 @@ def test_absent_storage_and_backups_blocks_are_removed(tmp_path: Path) -> None:
     ).success
     content = (output_path / ".env.example").read_text()
     assert "AWS_ACCESS_KEY_ID=" in content
-    assert f"{DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR}=" in content
+    assert "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID=" in content
 
     result = sync_env_example_blocks(
         output_path,

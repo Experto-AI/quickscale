@@ -36,7 +36,6 @@ from quickscale_core.contracts.module_catalog import (
     get_module_readiness_reason,
 )
 from quickscale_core.contracts.resolvers import (  # noqa: F401
-    default_backups_module_options,
     default_notifications_module_options,
     default_social_module_options,
     default_storage_module_options,
@@ -45,7 +44,6 @@ from quickscale_core.contracts.resolvers import (  # noqa: F401
     notifications_live_delivery_configured,
     notifications_production_targeted,
     notifications_runtime_email_backend,
-    resolve_backups_module_options,
     resolve_notifications_module_options,
     resolve_social_module_options,
     resolve_storage_module_options,
@@ -69,8 +67,6 @@ from quickscale_core.contracts.module_options import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     BILLING_ENV_VAR_OPTION_NAMES,
-    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
@@ -90,11 +86,8 @@ from quickscale_core.contracts.module_options import (
     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     PORTABLE_ENV_PREFIXES,
     get_env_var_portability,
-    has_legacy_backups_secret_values,
-    normalize_backups_module_options,
     normalize_notifications_module_options,
     sanitize_module_options,
-    validate_backups_env_var_reference,
     validate_notifications_env_var_reference,
     validate_storage_env_var_reference,
 )
@@ -109,7 +102,6 @@ __all__ = [
     "get_module_entry",
     "get_module_readiness_reason",
     # Resolver functions
-    "default_backups_module_options",
     "default_notifications_module_options",
     "default_social_module_options",
     "default_storage_module_options",
@@ -118,7 +110,6 @@ __all__ = [
     "notifications_live_delivery_configured",
     "notifications_production_targeted",
     "notifications_runtime_email_backend",
-    "resolve_backups_module_options",
     "resolve_notifications_module_options",
     "resolve_social_module_options",
     "resolve_storage_module_options",
@@ -153,8 +144,6 @@ __all__ = [
     # Backups constants
     "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
-    "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
-    "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
     # Billing constants
     "BILLING_ENV_VAR_OPTION_NAMES",
     # DR env-var portability constants
@@ -181,18 +170,14 @@ __all__ = [
     "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
     # Normalize functions
-    "normalize_backups_module_options",
     "normalize_notifications_module_options",
     "normalize_social_module_options",
     "normalize_storage_module_options",
     # Validate functions
-    "validate_backups_env_var_reference",
     "validate_notifications_env_var_reference",
     "validate_notifications_module_options",
     "validate_social_module_options",
     "validate_storage_env_var_reference",
-    # Helpers
-    "has_legacy_backups_secret_values",
     # Sanitize dispatcher
     "sanitize_module_options",
 ]

@@ -17,8 +17,6 @@ import re
 from typing import Any
 
 from quickscale_core.contracts.module_options import (
-    # Backups
-    normalize_backups_module_options,
     # Notifications
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
@@ -95,28 +93,6 @@ def resolve_manifest_module_options(
     )
     result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
     return dict(result.resolved)
-
-
-# ---------------------------------------------------------------------------
-# Backups
-# ---------------------------------------------------------------------------
-
-
-def _load_backups_manifest() -> Any:
-    return load_module_manifest_with_fallback("backups")
-
-
-def default_backups_module_options() -> dict[str, Any]:
-    manifest = _load_backups_manifest()
-    return dict(manifest.get_defaults())
-
-
-def resolve_backups_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
-    defaults = default_backups_module_options()
-    normalized = normalize_backups_module_options(options)
-    merged = dict(defaults)
-    merged.update(normalized)
-    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -947,9 +923,6 @@ __all__ = [
     # Shared manifest resolution
     "load_module_manifest_with_fallback",
     "resolve_manifest_module_options",
-    # Backups
-    "default_backups_module_options",
-    "resolve_backups_module_options",
     # Notifications
     "default_notifications_module_options",
     "notifications_live_delivery_configured",

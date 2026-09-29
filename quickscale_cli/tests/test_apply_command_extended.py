@@ -14,8 +14,6 @@ import yaml
 
 from quickscale_core import __version__ as CORE_VERSION
 from quickscale_core.contracts.module_options import (
-    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
@@ -1318,8 +1316,8 @@ class TestLoadAndValidateConfig:
             in error_output
         )
 
-    def test_legacy_backups_secrets_are_sanitized_on_load(self, tmp_path):
-        """Legacy raw backup secrets should be rewritten to env-var references."""
+    def test_legacy_backups_secrets_are_refused_on_load(self, tmp_path):
+        """Legacy raw backup secrets fail load, naming their replacements."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -1338,27 +1336,12 @@ class TestLoadAndValidateConfig:
             "  start: false\n"
         )
 
-        result = _load_and_validate_config(config)
-        rewritten = config.read_text()
+        original = config.read_text()
 
-        assert (
-            result.modules["backups"].options["remote_access_key_id_env_var"]
-            == DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
-        )
-        assert (
-            result.modules["backups"].options["remote_secret_access_key_env_var"]
-            == DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-        )
-        assert "legacy-key" not in rewritten
-        assert "legacy-secret" not in rewritten
-        assert (
-            "remote_access_key_id_env_var: QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
-            in rewritten
-        )
-        assert (
-            "remote_secret_access_key_env_var: QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
-            in rewritten
-        )
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
+
+        assert config.read_text() == original
 
     def test_auth_legacy_keys_fail_before_sanitize_on_load(self, tmp_path):
         """Desired-config auth must fail before apply load tries to sanitize it."""
@@ -3152,8 +3135,8 @@ class TestSaveProjectState:
             mock_sm.return_value.save.side_effect = OSError("write error")
             assert _save_project_state(tmp_path, config, None, [], delta) is False
 
-    def test_backups_state_save_sanitizes_legacy_secret_values(self, tmp_path):
-        """Backups state should persist env-var references, not raw secrets."""
+    def test_backups_state_save_refuses_legacy_secret_values(self, tmp_path):
+        """Backups state must never persist legacy raw secret values."""
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
@@ -3172,13 +3155,8 @@ class TestSaveProjectState:
         delta = Mock()
         delta.config_deltas = {}
 
-        assert _save_project_state(tmp_path, config, None, ["backups"], delta) is True
-
-        state_text = (tmp_path / ".quickscale" / "state.yml").read_text()
-        assert "legacy-key" not in state_text
-        assert "legacy-secret" not in state_text
-        assert "remote_access_key_id_env_var" in state_text
-        assert "remote_secret_access_key_env_var" in state_text
+        assert _save_project_state(tmp_path, config, None, ["backups"], delta) is False
+        assert not (tmp_path / ".quickscale" / "state.yml").exists()
 
     def test_state_and_legacy_config_versions_sync_from_embedded_manifest(
         self, tmp_path
@@ -3709,7 +3687,14 @@ class TestBackupsApplyHelpers:
         }
         (tmp_path / ".gitignore").write_text("existing\n")
 
-        with patch.object(Path, "read_text", side_effect=OSError("read denied")):
+        original_read_text = Path.read_text
+
+        def _read_text_with_gitignore_failure(self: Path, *args, **kwargs):
+            if self.name == ".gitignore":
+                raise OSError("read denied")
+            return original_read_text(self, *args, **kwargs)
+
+        with patch.object(Path, "read_text", _read_text_with_gitignore_failure):
             result = _ensure_backups_gitignore_rules(tmp_path, qs_config)
 
         assert result is False

@@ -142,11 +142,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. `plan`/`apply`
   enforce each manifest option's `validation` block; blog, listings, CRM, forms, analytics,
-  billing, auth, and orgs are fully manifest-owned (their per-module option functions are gone and
-  their CLI configurators read the manifest), a manifest's `retired_options` block is the one home
-  of a retired key's refusal, and config load refuses a key no manifest declares; the other four
-  modules (backups, notifications, social, storage) still carry per-module option code and settings
-  readers.
+  billing, auth, orgs, and backups are fully manifest-owned (their per-module option functions are
+  gone and their CLI configurators read the manifest), a manifest's `retired_options` block is the
+  one home of a retired key's refusal, and config load refuses a key no manifest declares; the
+  other three modules (notifications, social, storage) still carry per-module option code, and all
+  four still carry per-module settings readers.
 
   **Scope:**
   - *Option code.* Core's and the CLI's per-module option code goes: the
@@ -154,8 +154,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
     `schema.config_schema`, and the CLI's `module_config`, with `contracts.imperative_inventory`.
     One generic manifest-driven CLI configurator now reads the manifest (blog, listings, CRM,
-    forms, analytics, billing, auth, and orgs use it); the other modules convert to it, and the
-    adapter path still needs backups, notifications, social, and storage.
+    forms, analytics, billing, auth, orgs, and backups use it); the other modules convert to it,
+    and the adapter path still needs notifications, social, and storage.
   - *Settings reading (last).* `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
     one generic startup check in `quickscale_core.runtime`, run through the shared checks helper
     and registered by each module, validates every declared setting; per-module readers and code

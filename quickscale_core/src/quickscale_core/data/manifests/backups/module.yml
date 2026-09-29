@@ -17,7 +17,8 @@ config:
       default: "db"
       django_setting: QUICKSCALE_BACKUPS_NAMING_PREFIX
       description: "Prefix used when generating backup filenames."
-      validation: {}
+      validation:
+        pattern: '(?s)^.*\S.*$'
 
     target_mode:
       type: string
@@ -32,7 +33,8 @@ config:
       default: ".quickscale/backups"
       django_setting: QUICKSCALE_BACKUPS_LOCAL_DIRECTORY
       description: "Private local directory used for stored backup artifacts."
-      validation: {}
+      validation:
+        pattern: '(?s)^.*\S.*$'
 
     remote_bucket_name:
       type: string
@@ -48,7 +50,8 @@ config:
       default: "backups/private"
       django_setting: QUICKSCALE_BACKUPS_REMOTE_PREFIX
       description: "Object-key prefix for private remote backup artifacts."
-      validation: {}
+      validation:
+        pattern: '(?s)^.*\S.*$'
 
     remote_endpoint_url:
       type: string
@@ -70,21 +73,23 @@ config:
 
     remote_access_key_id_env_var:
       type: string
-      default: ""
+      default: "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
       django_setting: QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
       description: "Environment-variable name containing the private remote access key id."
       validation:
         required_when:
           target_mode: private_remote
+        pattern: '^(?!(?:AKIA|ASIA)[A-Z0-9]{16}$)(?:[A-Z][A-Z0-9_]*)?$'
 
     remote_secret_access_key_env_var:
       type: string
-      default: ""
+      default: "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
       django_setting: QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
       description: "Environment-variable name containing the private remote secret access key."
       validation:
         required_when:
           target_mode: private_remote
+        pattern: '^(?:[A-Z][A-Z0-9_]*)?$'
 
     automation_enabled:
       type: boolean
@@ -114,6 +119,17 @@ dependencies:
   - boto3>=1.43.58
   - quickscale-core>=0.89.0,<0.90.0
 
+# Retired option keys are refused by name with the message declared here.
+retired_options:
+  remote_access_key_id: >-
+    Legacy config key 'remote_access_key_id' is no longer supported. Use
+    'remote_access_key_id_env_var' to reference an environment variable
+    instead.
+  remote_secret_access_key: >-
+    Legacy config key 'remote_secret_access_key' is no longer supported. Use
+    'remote_secret_access_key_env_var' to reference an environment variable
+    instead.
+
 derivation:
   wiring_projections:
     - wiring_field: apps
@@ -124,6 +140,54 @@ derivation:
       description: "Backups Django app label"
 
   option_derivations:
+    naming_prefix:
+      normalization_rules:
+        - source_key: naming_prefix
+          target_key: naming_prefix
+          rule_type: strip
+          description: "Strip whitespace from naming_prefix"
+    local_directory:
+      normalization_rules:
+        - source_key: local_directory
+          target_key: local_directory
+          rule_type: strip
+          description: "Strip whitespace from local_directory"
+    remote_bucket_name:
+      normalization_rules:
+        - source_key: remote_bucket_name
+          target_key: remote_bucket_name
+          rule_type: strip
+          description: "Strip whitespace from remote_bucket_name"
+    remote_prefix:
+      normalization_rules:
+        - source_key: remote_prefix
+          target_key: remote_prefix
+          rule_type: strip
+          description: "Strip whitespace from remote_prefix"
+    remote_endpoint_url:
+      normalization_rules:
+        - source_key: remote_endpoint_url
+          target_key: remote_endpoint_url
+          rule_type: strip
+          description: "Strip whitespace from remote_endpoint_url"
+    remote_region_name:
+      normalization_rules:
+        - source_key: remote_region_name
+          target_key: remote_region_name
+          rule_type: strip
+          description: "Strip whitespace from remote_region_name"
+    remote_access_key_id_env_var:
+      normalization_rules:
+        - source_key: remote_access_key_id_env_var
+          target_key: remote_access_key_id_env_var
+          rule_type: strip
+          description: "Strip whitespace from remote_access_key_id_env_var"
+    remote_secret_access_key_env_var:
+      normalization_rules:
+        - source_key: remote_secret_access_key_env_var
+          target_key: remote_secret_access_key_env_var
+          rule_type: strip
+          description: "Strip whitespace from remote_secret_access_key_env_var"
     target_mode:
       normalization_rules:
         - source_key: target_mode
