@@ -18,7 +18,9 @@ from quickscale_modules_notifications.models import (
 from quickscale_modules_notifications.services import build_webhook_signature_headers
 
 
-def test_webhook_view_rejects_invalid_json_payload(client: Client) -> None:
+@pytest.mark.django_db
+def test_webhook_view_rejects_unsigned_invalid_json_payload(client: Client) -> None:
+    """The signature is verified before the body is parsed."""
     response = client.post(
         reverse("quickscale_notifications:resend-webhook"),
         data="{bad-json",
@@ -28,7 +30,78 @@ def test_webhook_view_rejects_invalid_json_payload(client: Client) -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["error"] == "Invalid JSON payload."
+    assert response.json() == {
+        "error": {
+            "code": "webhook_signature_invalid",
+            "message": "Webhook signature is invalid.",
+        }
+    }
+
+
+@pytest.mark.django_db
+def test_webhook_view_rejects_signed_invalid_json_payload(client: Client) -> None:
+    body = b"{bad-json"
+    headers = build_webhook_signature_headers(
+        body,
+        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        timestamp=int(time.time()),
+    )
+
+    response = client.post(
+        reverse("quickscale_notifications:resend-webhook"),
+        data=body,
+        content_type="application/json",
+        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
+            "X-QuickScale-Notifications-Signature"
+        ],
+        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=headers[
+            "X-QuickScale-Notifications-Timestamp"
+        ],
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "webhook_payload_invalid",
+            "message": "Webhook payload is invalid JSON.",
+        }
+    }
+
+
+@pytest.mark.django_db
+def test_webhook_view_rejects_invalid_recipient_email(client: Client) -> None:
+    payload = {
+        "id": "evt-invalid-recipient",
+        "type": "email.delivered",
+        "provider_message_id": "pm-invalid-recipient",
+        "recipient": "not-an-email",
+    }
+    body = json.dumps(payload).encode("utf-8")
+    headers = build_webhook_signature_headers(
+        body,
+        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        timestamp=int(time.time()),
+    )
+
+    response = client.post(
+        reverse("quickscale_notifications:resend-webhook"),
+        data=body,
+        content_type="application/json",
+        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
+            "X-QuickScale-Notifications-Signature"
+        ],
+        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=headers[
+            "X-QuickScale-Notifications-Timestamp"
+        ],
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "webhook_payload_invalid",
+            "message": "Webhook payload recipient is invalid.",
+        }
+    }
 
 
 @pytest.mark.django_db
@@ -51,8 +124,13 @@ def test_webhook_view_rejects_invalid_signature(
         HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=str(int(time.time())),
     )
 
-    assert response.status_code == 403
-    assert response.json()["error"] == "Webhook signature is invalid."
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "webhook_signature_invalid",
+            "message": "Webhook signature is invalid.",
+        }
+    }
 
 
 @pytest.mark.django_db
@@ -75,8 +153,13 @@ def test_webhook_view_rejects_non_ascii_signature(
         HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=str(int(time.time())),
     )
 
-    assert response.status_code == 403
-    assert response.json()["error"] == "Webhook signature is invalid."
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "webhook_signature_invalid",
+            "message": "Webhook signature is invalid.",
+        }
+    }
 
 
 @pytest.mark.django_db
@@ -110,8 +193,13 @@ def test_webhook_view_rejects_when_runtime_disabled(
             ],
         )
 
-    assert response.status_code == 403
-    assert response.json()["error"] == "Notifications module is disabled."
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "not_found",
+            "message": "Notifications module is disabled.",
+        }
+    }
     assert (
         NotificationDeliveryEvent.objects.filter(delivery=delivery_for_webhook).count()
         == 0
@@ -151,11 +239,8 @@ def test_webhook_view_accepts_valid_signed_event(
     delivery_for_webhook.refresh_from_db()
 
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "accepted",
-        "duplicate": False,
-        "delivery_status": NotificationDelivery.Status.DELIVERED,
-    }
+    assert response.json() == {"status": "accepted", "duplicate": False}
+    assert delivery_for_webhook.status == NotificationDelivery.Status.DELIVERED
     assert (
         NotificationDeliveryEvent.objects.filter(delivery=delivery_for_webhook).count()
         == 1
