@@ -113,9 +113,13 @@ def _capture_submission_analytics(submission: FormSubmission, request: Request) 
         if not distinct_id.strip():
             return
 
+        form_id = submission.form_id
+        if form_id is None:
+            return
+
         capture_form_submit(
             distinct_id,
-            submission.form_id,
+            form_id,
             submission.form.title,
             extra={"form_slug": submission.form.slug},
         )
@@ -133,6 +137,8 @@ class FormsAdminApiMixin:
 
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
+    # Set by APIView.dispatch on every concrete view that mixes this in.
+    request: Request
 
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
         # SA17.4 — no True default: FORMS_SUBMISSIONS_API must be explicitly
