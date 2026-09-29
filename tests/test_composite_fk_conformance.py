@@ -6,7 +6,7 @@ and all other ``quickscale_*`` apps.  This ensures all Option C
 composite FKs (the child-table ``organization_id`` + local-key pair) are
 visible for a single ``pg_constraint`` query.
 
-SA60 (ratified 2026-07-12): every Option C composite FK is ``NOT
+Ratified 2026-07-12: every Option C composite FK is ``NOT
 DEFERRABLE`` — consistent with the fail-hard principle described in
 ``docs/technical/decisions.md §Multi-tenant SaaS Architecture``.
 """
@@ -17,9 +17,9 @@ import pytest
 from django.db import connection
 
 
-#: (child_table, constraint_name) for every AF12 composite FK subject to the
+#: (child_table, constraint_name) for every composite FK subject to the
 #: NOT DEFERRABLE policy.  The same pairs are listed in
-#: ``test_tenant_table_conformance.py:_AF12_COMPOSITE_FK_PAIRS`` — this is a
+#: ``test_tenant_table_conformance.py:_COMPOSITE_FK_PAIRS`` — this is a
 #: focused subset for deferability-only checking.
 _SA60_COMPOSITE_FKS: tuple[tuple[str, str], ...] = (
     ("quickscale_crm_contactnote", "quickscale_crm_contactnote_contact_org_fk"),
@@ -45,7 +45,7 @@ _SA60_COMPOSITE_FKS: tuple[tuple[str, str], ...] = (
 class TestCompositeFkDeferabilityConformance:
     """Verify every Option C composite FK is NOT DEFERRABLE.
 
-    SA60 uniform policy (``decisions.md §Multi-tenant SaaS Architecture``):
+    Uniform policy (``decisions.md §Multi-tenant SaaS Architecture``):
     all child-table ``organization_id`` + local-key composite FKs must be
     ``NOT DEFERRABLE``.  A ``DEFERRABLE`` or ``INITIALLY DEFERRED`` FK
     would silently bypass the immediate FK enforcement that the fail-fast

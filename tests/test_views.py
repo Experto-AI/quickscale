@@ -1105,7 +1105,7 @@ def test_member_list_blocks_last_owner_demotion_but_allows_removal_when_sole_mem
 ) -> None:
     """Last-owner demotion is blocked (model-level invariant) but
     removal is now permitted when the owner is the sole member —
-    nobody is stranded (SA47)."""
+    nobody is stranded."""
     settings.QUICKSCALE_MODE = "saas"
     organization = Organization.objects.create(name="Orbit", slug="orbit")
     owner = get_user_model().objects.create_user(
@@ -1152,7 +1152,7 @@ def test_member_list_blocks_last_owner_removal_when_other_members_exist(
     client, settings
 ) -> None:
     """Last-owner removal is blocked when other members would be
-    stranded ownerless (SA47)."""
+    stranded ownerless."""
     settings.QUICKSCALE_MODE = "saas"
     organization = Organization.objects.create(name="Vega", slug="vega")
     owner = get_user_model().objects.create_user(
@@ -2154,7 +2154,7 @@ def test_org_api_settings_updates_slug_and_returns_json(client, settings) -> Non
 
 
 # ---------------------------------------------------------------------------
-# SA50 — missing-slug vs unauthorized-slug parity on role-scoped OrgApi views
+# missing-slug vs unauthorized-slug parity on role-scoped OrgApi views
 # ---------------------------------------------------------------------------
 
 

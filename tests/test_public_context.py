@@ -1,10 +1,10 @@
-"""SA13.1 — Tests for orgs-owned public-context helpers.
+"""Tests for orgs-owned public-context helpers.
 
 Verifies the ``PublicSystemOrgReadMixin`` CBV seam, the acceptance
 contract, and the backward-compat alias surface:
 * Mixin ``dispatch()`` wraps the view in ``org_scope()``.
 * System org resolution and fail-closed behavior.
-* ``resolve_public_org_context`` was deleted in SA13.1.
+* ``resolve_public_org_context`` was deleted.
 """
 
 from __future__ import annotations
@@ -140,8 +140,8 @@ class TestPublicSystemOrgReadMixinDispatch:
     def test_mixin_forces_template_response_render(self) -> None:
         """Prove ``TemplateResponse.render()`` is called inside
         ``org_scope()`` so lazy queryset evaluation during template
-        rendering sees the primed tenant context.  (Closes
-        CR-SA11.1-002; strengthened by CR-SA11.1-003.)
+        rendering sees the primed tenant context.  (Closes the original
+        coverage gap; strengthened by a later review fix.)
 
         Without the render-forcing fix, a ``TemplateResponse`` returned
         from ``dispatch()`` would be rendered *after* the
@@ -149,7 +149,7 @@ class TestPublicSystemOrgReadMixinDispatch:
         ``app.current_org_id`` (``SET LOCAL`` — transaction-scoped)
         would be gone when the template engine evaluates lazy querysets.
 
-        Unlike the original CR-SA11.1-002 test (which used an eagerly-
+        Unlike the original test (which used an eagerly-
         evaluated ``Category.objects.count()`` in the context dict),
         this version passes a **lazy** ``QuerySet`` that evaluates only
         during template rendering — exactly the pattern that
@@ -239,7 +239,7 @@ class TestPublicSystemOrgReadMixinInterface:
 
     @pytest.mark.django_db
     def test_get_public_org_context_yields_resolved_org_uuid(self) -> None:
-        """get_public_org_context() yields the resolved org UUID (CR-SA13.1-002).
+        """get_public_org_context() yields the resolved org UUID.
 
         The documented/type-annotated contract says it yields ``uuid.UUID or
         None`` — the resolved organization UUID.  This test proves the enter
@@ -284,7 +284,7 @@ class TestPublicSystemOrgReadMixinInterface:
 
 
 # =========================================================================
-# SA21.2 — get_client_ip helper
+# get_client_ip helper
 # =========================================================================
 
 

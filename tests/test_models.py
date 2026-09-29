@@ -139,7 +139,7 @@ def test_last_owner_cannot_be_demoted_via_model_save() -> None:
 @pytest.mark.django_db
 def test_last_owner_cannot_be_removed_when_other_members_exist() -> None:
     """Direct ORM deletes should block removal of the last owner when
-    other members (non-owners) would be stranded ownerless (SA47)."""
+    other members (non-owners) would be stranded ownerless."""
 
     owner = _create_user(
         username="remove-owner",
@@ -175,7 +175,7 @@ def test_last_owner_cannot_be_removed_when_other_members_exist() -> None:
 @pytest.mark.django_db
 def test_last_owner_removal_allowed_when_sole_member() -> None:
     """Direct ORM deletes should allow removing the last owner when no
-    other members exist — nobody is stranded (SA47)."""
+    other members exist — nobody is stranded."""
 
     user = _create_user(
         username="sole-owner",
@@ -198,13 +198,13 @@ def test_last_owner_removal_allowed_when_sole_member() -> None:
 @pytest.mark.django_db(transaction=True)
 def test_user_delete_of_last_owner_in_multi_member_org_is_refused() -> None:
     """Direct ORM user.delete() on a sole owner of a multi-member org
-    should be refused (SA70 pre_delete backstop).
+    should be refused (pre_delete backstop).
 
     The model-level ``delete()`` override on OrganizationMembership
-    (SA47) enforces the last-owner invariant when a membership is
+    enforces the last-owner invariant when a membership is
     removed through the model.  However, Django's deletion collector
     can cascade-delete via ``user.delete()`` without calling the
-    membership model's ``delete()`` — this test proves the SA70
+    membership model's ``delete()`` — this test proves the
     ``pre_delete`` signal receiver closes that gap.
 
     The deliberate sole-member self-removal path is not affected —
@@ -254,7 +254,7 @@ def test_user_delete_of_last_owner_in_multi_member_org_is_refused() -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_historical_model_delete_of_last_owner_in_multi_member_org_is_refused() -> None:
-    """SA203: a data migration's historical model also hits the backstop.
+    """A data migration's historical model also hits the backstop.
 
     A ``RunPython`` migration deletes through the historical model class
     that ``apps.get_model()`` renders, which is not the live class — a
@@ -737,7 +737,7 @@ def test_get_system_org_raises_on_wrong_slug_system_row() -> None:
     """
 
     # Ensure the System org exists before corrupting it.  The historical
-    # data migration that pre-created __system__ was removed by the SA92
+    # data migration that pre-created __system__ was removed by the
     # migration squash, so we create it explicitly here.
     Organization.objects.get_system_org()
 
@@ -761,7 +761,7 @@ def test_get_system_org_raises_on_reserved_slug_non_system() -> None:
     raw SQL bypass).
     """
     # Ensure the System org exists before corrupting it.  The historical
-    # data migration that pre-created __system__ was removed by the SA92
+    # data migration that pre-created __system__ was removed by the
     # migration squash, so we create it explicitly here.
     Organization.objects.get_system_org()
 
@@ -786,7 +786,7 @@ def test_get_system_org_raises_on_personal_system_org() -> None:
     raw SQL bypass).
     """
     # Ensure the System org exists before corrupting it.  The historical
-    # data migration that pre-created __system__ was removed by the SA92
+    # data migration that pre-created __system__ was removed by the
     # migration squash, so we create it explicitly here.
     Organization.objects.get_system_org()
 
@@ -1036,7 +1036,7 @@ def test_tenant_manager_cross_org_isolation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AF2 Phase 1 — no-context ORM regression coverage
+# no-context ORM regression coverage
 # ---------------------------------------------------------------------------
 # These tests prove that ``base_manager_name = "all_objects"`` prevents
 # the scoped manager's fail-closed ``.none()`` from breaking internal
@@ -1048,7 +1048,7 @@ def test_tenant_manager_cross_org_isolation() -> None:
 @pytest.mark.usefixtures("_tenant_resource_db")
 @pytest.mark.django_db(transaction=True)
 def test_refresh_from_db_without_org_context() -> None:
-    """refresh_from_db() should work when no tenant context is set (AF2 Phase 1).
+    """refresh_from_db() should work when no tenant context is set.
 
     This regression test proves that ``_base_manager`` returns the
     unfiltered queryset (via ``all_objects``) so that internal Django
@@ -1081,7 +1081,7 @@ def test_refresh_from_db_without_org_context() -> None:
 @pytest.mark.usefixtures("_tenant_resource_db")
 @pytest.mark.django_db(transaction=True)
 def test_forward_fk_traversal_without_org_context() -> None:
-    """Forward FK traversal should work when no tenant context is set (AF2 Phase 1).
+    """Forward FK traversal should work when no tenant context is set.
 
     Django uses the related model's ``_base_manager`` to fetch FK targets.
     This test proves that ``ConcreteTenantResource._base_manager`` is the
