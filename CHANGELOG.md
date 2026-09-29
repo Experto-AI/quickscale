@@ -169,6 +169,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     env-var-name patterns, and billing's currency choices come from `module.yml` through the same
     manifest-driven configurator and shared engine, and `quickscale.yml` refuses any key no module
     manifest declares.
+  - **Auth and orgs configuration is manifest-owned.** Their option defaults, CLI prompts, and
+    validation come from `module.yml` through the same manifest-driven configurator and shared
+    engine, and auth's retired `allow_registration` and `social_providers` keys are refused by the
+    manifest's `retired_options` block with their replacement named.
   - **The `teams` placeholder is removed.** `quickscale_modules/teams/` no longer exists,
     `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`, and the
     planning note lives at `docs/planning/teams.md`.

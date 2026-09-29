@@ -34,8 +34,6 @@ from quickscale_core.contracts.module_options import (
     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
 )
 from quickscale_core.contracts.resolvers import (
-    default_auth_module_options,
-    resolve_auth_module_options,
     default_notifications_module_options,
     resolve_notifications_module_options,
     validate_notifications_module_options,
@@ -68,73 +66,6 @@ def _parse_notification_tag_input(raw_value: str, field_name: str) -> list[str]:
     """Normalize comma-separated notification tags using the shared contract."""
     normalized = resolve_notifications_module_options({field_name: raw_value})
     return list(normalized[field_name])
-
-
-# ============================================================================
-# AUTH MODULE CONFIGURATION
-# ============================================================================
-
-
-def get_default_auth_config() -> dict[str, Any]:
-    """Get default configuration for auth module (non-interactive mode)"""
-    return default_auth_module_options()
-
-
-def configure_auth_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Interactive configuration for auth module"""
-    defaults = resolve_auth_module_options(existing_config)
-
-    if non_interactive:
-        click.echo("\n⚙️  Using default auth module configuration...")
-        config = defaults
-        click.echo(
-            "  • Registration: "
-            + ("Enabled" if config["registration_enabled"] else "Disabled")
-        )
-        click.echo(f"  • Email verification: {config['email_verification']}")
-        click.echo(f"  • Authentication: {config['authentication_method']}")
-        return config
-
-    click.echo("\n⚙️  Configuring auth module...")
-    click.echo("Answer these questions to customize the authentication setup:\n")
-
-    config = {
-        "registration_enabled": click.confirm(
-            "Enable user registration?",
-            default=bool(defaults["registration_enabled"]),
-        ),
-        "email_verification": click.prompt(
-            "Email verification",
-            type=click.Choice(["none", "optional", "mandatory"], case_sensitive=False),
-            default=str(defaults["email_verification"]),
-            show_choices=True,
-        ),
-        "authentication_method": click.prompt(
-            "Authentication method",
-            type=click.Choice(["email", "username", "both"], case_sensitive=False),
-            default=str(defaults["authentication_method"]),
-            show_choices=True,
-        ),
-        "session_cookie_age": int(defaults.get("session_cookie_age", 1209600)),
-    }
-
-    return config
-
-
-def _normalize_auth_config(config: dict[str, Any]) -> dict[str, Any]:
-    """Normalize legacy auth config keys to manifest-aligned keys."""
-    normalized = dict(config)
-    if "registration_enabled" not in normalized and "allow_registration" in normalized:
-        normalized["registration_enabled"] = normalized["allow_registration"]
-    normalized.setdefault("registration_enabled", True)
-    normalized.setdefault("email_verification", "none")
-    normalized.setdefault("authentication_method", "email")
-    normalized.setdefault("social_providers", [])
-    normalized.setdefault("session_cookie_age", 1209600)
-    return normalized
 
 
 # ============================================================================
@@ -776,16 +707,6 @@ def configure_social_module(
 
 
 # ============================================================================
-# ORGS MODULE
-# ============================================================================
-
-
-def get_default_orgs_config() -> dict[str, Any]:
-    """Return default configuration for the orgs module."""
-    return {"mode": "solo"}
-
-
-# ============================================================================
 # MANIFEST-DRIVEN MODULE CONFIGURATION
 # ============================================================================
 
@@ -955,8 +876,8 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
     entries: list[ModuleConfigurator] = [
         ModuleConfigurator(
             name="auth",
-            configure=configure_auth_module,
-            get_defaults=get_default_auth_config,
+            configure=partial(configure_module_from_manifest, "auth"),
+            get_defaults=partial(default_module_config_from_manifest, "auth"),
         ),
         ModuleConfigurator(
             name="blog",
@@ -997,6 +918,11 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
             name="notifications",
             configure=configure_notifications_module,
             get_defaults=get_default_notifications_config,
+        ),
+        ModuleConfigurator(
+            name="orgs",
+            configure=partial(configure_module_from_manifest, "orgs"),
+            get_defaults=partial(default_module_config_from_manifest, "orgs"),
         ),
         ModuleConfigurator(
             name="analytics",

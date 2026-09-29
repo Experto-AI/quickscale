@@ -16,12 +16,10 @@ from quickscale_core.contracts.module_options import (
 )
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
-    configure_auth_module,
     configure_backups_module,
     configure_storage_module,
     configure_notifications_module,
     configure_social_module,
-    get_default_auth_config,
     get_default_backups_config,
     get_default_notifications_config,
     get_default_social_config,
@@ -767,18 +765,18 @@ class TestUnpublishedCoreWheelhouseRegression:
 
 
 class TestAuthModuleConfig:
-    """Tests for auth configurator defaults and legacy normalization."""
+    """Tests for the auth configurator's manifest-backed defaults."""
 
     def test_auth_default_config_omits_legacy_social_providers(self):
         """New auth defaults should not emit the removed social provider surface."""
-        config = get_default_auth_config()
+        config = MODULE_CONFIGURATOR_REGISTRY["auth"].get_defaults()
 
         assert "social_providers" not in config
         assert config["authentication_method"] == "email"
 
     def test_configure_auth_non_interactive_with_canonical_keys(self, capsys):
         """Canonical keys pass through non-interactive auth config."""
-        config = configure_auth_module(
+        config = MODULE_CONFIGURATOR_REGISTRY["auth"].configure(
             non_interactive=True,
             existing_config={
                 "registration_enabled": False,
@@ -790,7 +788,7 @@ class TestAuthModuleConfig:
         output = capsys.readouterr().out
 
         assert config["registration_enabled"] is False
-        assert "Registration: Disabled" in output
+        assert "Allow new user registration: False" in output
 
 
 class TestModuleWiringSpecs:

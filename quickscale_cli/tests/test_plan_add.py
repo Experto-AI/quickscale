@@ -82,7 +82,6 @@ docker:
             assert "quickscale.yml is invalid" in result.output
             assert "allow_registration" in result.output
             assert "registration_enabled" in result.output
-            assert "authentication_method" in result.output
 
     def test_plan_add_aborts_before_rewrite_for_invalid_live_notifications_config(
         self,
@@ -580,9 +579,10 @@ class TestPlanNewProjectConfigureModules:
             # - \n: default theme (showcase_react)
             # - auth,billing: select auth + billing (implies orgs → notifications)
             # - n: don't start Docker
-            # Auth configurator (3 prompts):
+            # Auth configurator (4 prompts, manifest order):
             # - y: enable registration
             # - \n: email verification default (none)
+            # - \n: session cookie age default (1209600)
             # - \n: auth method default (email)
             # Billing configurator (5 prompts, all defaults):
             # - \n: enable billing (default yes)
@@ -590,6 +590,8 @@ class TestPlanNewProjectConfigureModules:
             # - \n: secret key env var
             # - \n: webhook secret env var
             # - \n: billing currency
+            # Orgs configurator (1 prompt, implied):
+            # - \n: orgs mode default (solo)
             # Notifications configurator (implied, 9 prompts):
             # - y: enable notifications runtime
             # - \n: sender name default
@@ -605,7 +607,7 @@ class TestPlanNewProjectConfigureModules:
                 plan,
                 ["myapp", "--configure-modules"],
                 input=(
-                    "\n\nauth,billing\nn\ny\n\n\n\n\n\n\n\ny\n\n\n\nn\nn\n\n\n\ny\n"
+                    "\n\nauth,billing\nn\ny\n\n\n\n\n\n\n\n\n\ny\n\n\n\nn\nn\n\n\n\ny\n"
                 ),
             )
 

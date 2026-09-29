@@ -11,15 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from quickscale_core.contracts.resolvers import (
     # Shared manifest resolution
     resolve_manifest_module_options,
-    # Auth
-    default_auth_module_options,
-    format_auth_desired_config_contract,
-    resolve_auth_module_options,
     # Backups
     default_backups_module_options,
     resolve_backups_module_options,
@@ -30,11 +24,6 @@ from quickscale_core.contracts.resolvers import (
     notifications_runtime_email_backend,
     resolve_notifications_module_options,
     validate_notifications_module_options,
-    # Orgs
-    default_orgs_module_options,
-    normalize_orgs_module_options,
-    resolve_orgs_module_options,
-    validate_orgs_module_options,
     # Social
     default_social_module_options,
     normalize_social_provider,
@@ -48,7 +37,6 @@ from quickscale_core.contracts.resolvers import (
     validate_storage_module_options,
 )
 from quickscale_core.contracts.module_discovery import ImproperlyConfigured
-from quickscale_core.schema.config_schema import ConfigValidationError
 
 from quickscale_core.manifest.schema import ModuleManifest
 
@@ -101,45 +89,6 @@ class TestResolveManifestModuleOptions:
         )
         result = resolve_manifest_module_options("billing", {"enabled": False})
         assert result == {"enabled": False, "billing_currency": "usd"}
-
-
-# ===================================================================
-# Auth
-# ===================================================================
-
-
-class TestResolversAuth:
-    """Tests for auth module resolver functions."""
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_default_auth(self, mock_load: MagicMock) -> None:
-        """default_auth_module_options returns manifest defaults."""
-        mock_load.return_value = _make_mock_manifest(
-            "auth", {"registration_enabled": True}
-        )
-        result = default_auth_module_options()
-        assert result["registration_enabled"] is True
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_auth(self, mock_load: MagicMock) -> None:
-        """resolve_auth_module_options normalises and resolves auth options."""
-        mock_load.return_value = _make_mock_manifest(
-            "auth", {"registration_enabled": True}
-        )
-        result = resolve_auth_module_options(None)
-        assert result["registration_enabled"] is True
-
-    def test_resolve_auth_with_legacy_key_raises(self) -> None:
-        """resolve_auth_module_options raises on legacy allow_registration."""
-        with pytest.raises(ConfigValidationError, match="allow_registration"):
-            resolve_auth_module_options({"allow_registration": False})
-
-    def test_format_auth_contract(self) -> None:
-        """format_auth_desired_config_contract returns expected text."""
-        text = format_auth_desired_config_contract()
-        assert "registration_enabled" in text
-        assert "authentication_method" in text
-        assert "allow_registration" in text
 
 
 # ===================================================================
@@ -404,51 +353,6 @@ class TestResolversNotifications:
         bundled_call_path = str(mock_load.call_args[0][0])
         assert "/bundled/manifests" in bundled_call_path
         assert "notifications" in bundled_call_path
-
-
-# ===================================================================
-# Orgs
-# ===================================================================
-
-
-class TestResolversOrgs:
-    """Tests for Orgs module option functions."""
-
-    def test_normalize_orgs_lowers_mode(self) -> None:
-        result = normalize_orgs_module_options({"mode": "  Multi "})
-        assert result["mode"] == "multi"
-
-    def test_normalize_orgs_none_returns_empty(self) -> None:
-        assert normalize_orgs_module_options(None) == {}
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_default_orgs(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest("orgs", {"mode": "solo"})
-        result = default_orgs_module_options()
-        assert result["mode"] == "solo"
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_orgs(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest("orgs", {"mode": "solo"})
-        result = resolve_orgs_module_options({"mode": "saas"})
-        assert result["mode"] == "saas"
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_orgs_passes_through_invalid_mode(
-        self, mock_load: MagicMock
-    ) -> None:
-        mock_load.return_value = _make_mock_manifest("orgs", {"mode": "solo"})
-        result = resolve_orgs_module_options({"mode": "unknown"})
-        # SA27: silent coercion removed; invalid mode passes through.
-        # Validation is now gated at the apply path via _validate_module_prerequisites
-        # and at the assembler via validation_issues.
-        assert result["mode"] == "unknown"
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_orgs_invalid_mode(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest("orgs", {"mode": "unknown"})
-        issues = validate_orgs_module_options(None)
-        assert any("mode" in i for i in issues)
 
 
 # ===================================================================
