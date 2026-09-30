@@ -1,6 +1,11 @@
 """Django settings for testing auth module"""
 
 import os
+from pathlib import Path
+
+from quickscale_core.manifest.settings_schema import load_settings_schema
+
+_MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
 
 SECRET_KEY = "test-secret-key-for-auth-module"
 
@@ -52,6 +57,20 @@ ACCOUNT_LOGIN_METHODS = {"email", "username"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_ALLOW_REGISTRATION = True
+SESSION_COOKIE_AGE = 1209600
+
+# billing is installed in this suite; declare its options.
+QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"
+QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"
+QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR = "QUICKSCALE_BILLING_WEBHOOK_SECRET"
+QUICKSCALE_BILLING_CURRENCY = "usd"
+QUICKSCALE_BILLING_API_RATE_LIMIT = "30/hour"
+
+# Rule 3: schemas for every installed module that registers the generic check.
+MODULE_SETTINGS_SCHEMA = {
+    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
+    for name in ("auth", "orgs", "billing")
+}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
