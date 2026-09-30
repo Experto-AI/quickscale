@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from quickscale_core.manifest.settings_schema import load_settings_schema
+
 SHARED_TEST_TEMPLATES = (
     Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
 )
@@ -66,3 +68,11 @@ QUICKSCALE_ANALYTICS_POSTHOG_HOST = "https://us.i.posthog.com"
 QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = True
 QUICKSCALE_ANALYTICS_EXCLUDE_STAFF = False
 QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT = True
+
+# Rule 3: the compiled option schema the generic startup check reads, derived
+# from the module's own manifest so it can never drift from the declarations.
+MODULE_SETTINGS_SCHEMA = {
+    "analytics": load_settings_schema(
+        Path(__file__).resolve().parent.parent / "module.yml"
+    )
+}
