@@ -21,6 +21,7 @@ from quickscale_core.contracts.resolvers import (
     resolve_manifest_module_options,
 )
 from quickscale_core.manifest.option_validation import validate_module_options
+from quickscale_core.manifest.resolver import ResolverResult
 from quickscale_core.manifest.schema import ModuleManifest
 from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_modules_notifications.adapter import (
@@ -123,10 +124,54 @@ class TestResolveManifestModuleOptions:
 
     def test_generic_adapter_boundary_refuses_a_retired_key(self) -> None:
         """The adapter entry point refuses a retired key before resolving."""
+        from quickscale_core.manifest import ManifestError
         from quickscale_core.manifest.entry_point import build_generic_manifest_spec
 
-        with pytest.raises(ConfigValidationError, match="access_key_id"):
+        with pytest.raises(ManifestError, match="access_key_id"):
             build_generic_manifest_spec("storage", {"access_key_id": "raw-secret"})
+
+    def test_resolution_boundary_refuses_validation_issues(self) -> None:
+        """A resolution issue fails closed at the non-adapter boundary."""
+        fake = ResolverResult(
+            module_name="analytics",
+            defaults={},
+            resolved={},
+            validation_issues=["modules.analytics.routes cannot feed url_includes"],
+        )
+        with (
+            patch(_MANIFEST_PATCH_PATH) as mock_load,
+            patch(
+                "quickscale_core.contracts.resolvers.resolve_module_config",
+                return_value=fake,
+            ),
+        ):
+            mock_load.return_value = _make_mock_manifest("analytics", {})
+            with pytest.raises(ConfigValidationError, match="cannot feed url_includes"):
+                resolve_manifest_module_options("analytics", {})
+
+    def test_adapter_boundary_refuses_validation_issues(self) -> None:
+        """A resolution issue fails closed at the adapter boundary too."""
+        from quickscale_core.manifest import ManifestError
+        from quickscale_core.manifest.entry_point import build_generic_manifest_spec
+
+        fake = ResolverResult(
+            module_name="analytics",
+            defaults={},
+            resolved={},
+            validation_issues=["modules.analytics.routes cannot feed url_includes"],
+        )
+        with (
+            patch(
+                "quickscale_core.manifest.entry_point.load_module_manifest"
+            ) as mock_manifest,
+            patch(
+                "quickscale_core.manifest.entry_point.resolve_module_config",
+                return_value=fake,
+            ),
+        ):
+            mock_manifest.return_value = _make_mock_manifest("analytics", {})
+            with pytest.raises(ManifestError, match="cannot feed url_includes"):
+                build_generic_manifest_spec("analytics", {})
 
 
 # ===================================================================

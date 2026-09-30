@@ -779,6 +779,44 @@ def normalize_module_option_values(
     return resolved
 
 
+def _url_projection_issues(
+    derivation_schema: ModuleDerivationSchema, resolved: dict[str, Any]
+) -> list[str]:
+    """Return issues for direct URL projections whose values are not pairs.
+
+    A direct projection reads an option's runtime value; when that value is a
+    non-``None`` item that is not a ``[route, include]`` pair of strings the
+    contribution would be silently discarded, so resolution records the issue
+    for the boundaries to refuse.
+    """
+    issues: list[str] = []
+    for projection in derivation_schema.get_all_wiring_projections():
+        if (
+            projection.wiring_field not in _WIRING_URL_FIELDS
+            or projection.derivation_type != "direct"
+        ):
+            continue
+        option_key = projection.expression.get("option")
+        if not isinstance(option_key, str) or option_key not in resolved:
+            continue
+        value = resolved[option_key]
+        if value is None:
+            continue
+        items = value if isinstance(value, (list, tuple)) else [value]
+        for index, item in enumerate(items):
+            if (
+                not isinstance(item, (list, tuple))
+                or len(item) != 2
+                or not all(isinstance(part, str) for part in item)
+            ):
+                issues.append(
+                    f"modules.{derivation_schema.module_name}.{option_key} cannot "
+                    f"feed {projection.wiring_field}: item {index} is not a "
+                    "[route, include] pair of strings"
+                )
+    return issues
+
+
 def resolve_module_config(
     manifest: ModuleManifest,
     derivation_schema: ModuleDerivationSchema,
@@ -852,6 +890,7 @@ def resolve_module_config(
     # Step 7: Project wiring contributions (apps, middleware, url_includes,
     # pre_home_url_includes) from the derivation schema's wiring projections.
     wiring = _project_all_wiring(derivation_schema, resolved)
+    validation_issues.extend(_url_projection_issues(derivation_schema, resolved))
 
     def _to_str_tuple(items: list[Any]) -> tuple[str, ...]:
         return tuple(str(x) for x in items)

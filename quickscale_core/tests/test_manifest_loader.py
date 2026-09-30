@@ -1832,8 +1832,6 @@ config:
 derivation:
   derived_settings:
     - setting_key: MY_APP_ENABLED
-      source_options:
-        - enabled
       derivation_type: direct
       expression:
         option: enabled
@@ -1956,14 +1954,12 @@ derivation:
     enabled:
       derived_settings:
         - setting_key: QUICKSCALE_ANALYTICS_ENABLED
-          source_options: [enabled]
           derivation_type: direct
           expression:
             option: enabled
     provider:
       derived_settings:
         - setting_key: QUICKSCALE_ANALYTICS_PROVIDER
-          source_options: [provider]
           derivation_type: direct
           expression:
             option: provider
@@ -2402,7 +2398,7 @@ derivation:
             "    mode:\n      type: string\n      default: go\n"
             "      description: A description\n      validation: {}\n"
             "derivation:\n  derived_settings:\n"
-            "    - setting_key: X\n      source_options: [mode]\n"
+            "    - setting_key: X\n"
             "      derivation_type: direct\n"
         )
         with pytest.raises(
@@ -2600,6 +2596,54 @@ derivation:
         with pytest.raises(
             ManifestError,
             match="must be a non-empty template",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_expression_unknown_key_is_refused(self) -> None:
+        """An unconsumed expression key cannot be ignored."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: conditional\n"
+            "      source_options: [mode]\n"
+            "      expression:\n"
+            "        branches: {x: [y]}\n        default: [fallback_app]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression declares unknown key 'default'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_computed_values_must_not_be_empty(self) -> None:
+        """A computed projection with no template cannot load inert."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: computed\n"
+            "      expression:\n        values: []\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.values must be a non-empty list",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_source_options_are_conditional_only(self) -> None:
+        """Source metadata a projection does not execute cannot load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  derived_settings:\n"
+            "    - setting_key: X\n      source_options: [mode]\n"
+            "      derivation_type: direct\n"
+            "      expression:\n        option: mode\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match="source_options is only valid for a conditional projection",
         ):
             load_manifest(yaml_content, "mymod")
 

@@ -271,8 +271,6 @@ config:
 derivation:
   derived_settings:
     - setting_key: MY_APP_ENABLED
-      source_options:
-        - enabled
       derivation_type: direct
       expression:
         option: enabled
@@ -299,7 +297,6 @@ derivation:
     enabled:
       derived_settings:
         - setting_key: MY_APP_ENABLED
-          source_options: [enabled]
           derivation_type: direct
           expression:
             option: enabled
@@ -313,7 +310,6 @@ derivation:
           description: Normalise provider to lowercase
       derived_settings:
         - setting_key: MY_APP_PROVIDER
-          source_options: [provider]
           derivation_type: direct
           expression:
             option: provider
@@ -343,7 +339,6 @@ derivation:
             shared_derived_settings=[
                 DerivedSetting(
                     setting_key="MY_APP_ENABLED",
-                    source_options=["enabled"],
                     derivation_type="direct",
                     expression={"option": "enabled"},
                     description="Whether the app is enabled",
@@ -374,7 +369,6 @@ derivation:
                     derived_settings=[
                         DerivedSetting(
                             setting_key="MY_APP_ENABLED",
-                            source_options=["enabled"],
                             derivation_type="direct",
                             expression={"option": "enabled"},
                             description="Whether the app is enabled",
@@ -394,7 +388,6 @@ derivation:
                     derived_settings=[
                         DerivedSetting(
                             setting_key="MY_APP_PROVIDER",
-                            source_options=["provider"],
                             derivation_type="direct",
                             expression={"option": "provider"},
                             description="The analytics provider name",
@@ -457,7 +450,6 @@ derivation:
           description: Map legacy mode names to canonical values
       derived_settings:
         - setting_key: APP_MODE
-          source_options: [mode]
           derivation_type: direct
           expression:
             option: mode
@@ -498,7 +490,6 @@ derivation:
                     "derived_settings": [
                         {
                             "setting_key": "APP_MODE",
-                            "source_options": ["mode"],
                             "derivation_type": "direct",
                             "expression": {"option": "mode"},
                             "description": "The application mode setting",

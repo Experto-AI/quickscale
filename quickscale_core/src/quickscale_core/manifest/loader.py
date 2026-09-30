@@ -1066,9 +1066,10 @@ def _validate_derivation_entry(
             if wiring:
                 if "values" in expression:
                     values = expression["values"]
-                    if not isinstance(values, list):
+                    if not isinstance(values, list) or not values:
                         raise ManifestError(
-                            f"{path}.expression.values must be a list", module_name
+                            f"{path}.expression.values must be a non-empty list",
+                            module_name,
                         )
                     for index, value in enumerate(values):
                         if not isinstance(value, str):
@@ -1120,6 +1121,20 @@ def _validate_derivation_entry(
                 f"{path}: computed projections cannot target URL wiring fields",
                 module_name,
             )
+        allowed_expression_keys = {
+            "direct": {"option"},
+            "static": {"value"},
+            "conditional": {"branches"},
+            "computed": {"values"} if wiring else {"template"},
+        }[derivation_type]
+        for expression_key in expression:
+            if expression_key not in allowed_expression_keys:
+                allowed = ", ".join(sorted(allowed_expression_keys))
+                raise ManifestError(
+                    f"{path}.expression declares unknown key '{expression_key}' "
+                    f"(allowed: {allowed})",
+                    module_name,
+                )
     if derivation_type == "direct":
         expression = entry.get("expression")
         if not isinstance(expression, dict):
@@ -1188,6 +1203,11 @@ def _validate_derivation_entry(
             raise ManifestError(
                 f"{path}.setting_key must be a non-empty string", module_name
             )
+    if "source_options" in entry and derivation_type != "conditional":
+        raise ManifestError(
+            f"{path}.source_options is only valid for a conditional projection",
+            module_name,
+        )
     if "source_options" in entry:
         source_options = entry["source_options"]
         if not isinstance(source_options, list):

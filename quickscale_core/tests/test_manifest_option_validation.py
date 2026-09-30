@@ -316,9 +316,26 @@ class TestExtendedValidationVocabulary:
         manifest = _manifest(
             _option("tags", option_type="list", default=[], setting="TAGS")
         )
+        manifest.option_derivations = {
+            "tags": {
+                "normalization_rules": [
+                    {"source_key": "tags", "target_key": "tags", "rule_type": "list"}
+                ]
+            }
+        }
         assert validate_module_options(manifest, {"tags": ["ok", {"x": True}]}) == [
             "TAGS (modules.demo.tags) contains unsupported items: {'x': True}"
         ]
+
+    def test_pair_list_without_a_list_rule_is_allowed(self) -> None:
+        """A list with no list rule keeps its own item shapes (URL pairs)."""
+        manifest = _manifest(
+            _option("routes", option_type="list", default=[], setting="ROUTES")
+        )
+        assert (
+            validate_module_options(manifest, {"routes": [["users/", "app.urls"]]})
+            == []
+        )
 
     def test_rule_after_list_that_changes_shape_is_refused(self) -> None:
         """A chain that stringifies the list is refused as the wrong shape."""

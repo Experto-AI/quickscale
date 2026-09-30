@@ -182,6 +182,23 @@ def _unsupported_list_items(value: Any) -> list[Any]:
     return unsupported
 
 
+def _has_list_normalizer(manifest: ModuleManifest, option_name: str) -> bool:
+    """Return whether *option_name* declares a ``list`` normalization rule.
+
+    The scalar-item rule exists for lists a ``list`` rule canonicalizes; a
+    list without one (a URL-pair list feeding a direct projection) keeps its
+    own item shapes, which the resolution boundary validates.
+    """
+    rules: list[Any] = list(manifest.derivation_rules or [])
+    derivations = manifest.option_derivations or {}
+    entry = derivations.get(option_name)
+    if isinstance(entry, dict):
+        rules.extend(entry.get("normalization_rules") or [])
+    return any(
+        isinstance(rule, dict) and rule.get("rule_type") == "list" for rule in rules
+    )
+
+
 def _type_issue(
     manifest: ModuleManifest, option: ConfigOption, option_name: str
 ) -> OptionValidationIssue:
@@ -284,7 +301,11 @@ def _single_value_issues(
     label = setting_display_name(manifest.name, option)
     issues: list[str] = []
 
-    unsupported_items = _unsupported_list_items(value)
+    unsupported_items = (
+        _unsupported_list_items(value)
+        if _has_list_normalizer(manifest, option.name)
+        else []
+    )
     if unsupported_items:
         rendered = ", ".join(str(item) for item in unsupported_items)
         issues.append(f"{label} contains unsupported items: {rendered}")

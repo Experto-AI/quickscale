@@ -47,8 +47,9 @@ def raise_for_retired_options(manifest: Any, options: Mapping[str, Any]) -> None
 
     ``retired_options`` is the one home of a retired key's refusal; resolving
     fails closed with the authored message instead of silently dropping the
-    key, matching the sanitize and validation layers.  Both the generic
-    resolver here and the adapter entry point call this guard.
+    key, matching the sanitize and validation layers.  The non-adapter resolver
+    here calls this guard; the adapter entry point enforces the same refusal
+    with the module layer's ``ManifestError``.
     """
     retired = sorted(name for name in manifest.retired_options if name in options)
     if not retired:
@@ -68,7 +69,9 @@ def resolve_manifest_module_options(
     is the one path non-adapter callers use to read resolved values (module
     adapters use ``quickscale_core.runtime.build_generic_manifest_spec``).
     Declared normalization rules are applied, so the returned mapping carries
-    the manifest's canonical forms.
+    the manifest's canonical forms.  A supplied retired key and a resolution
+    issue (an executable projection whose value cannot be represented) each
+    fail closed with the manifest's own message.
     """
     manifest = load_module_manifest_with_fallback(module_name)
     supplied = dict(options or {})
@@ -81,6 +84,10 @@ def resolve_manifest_module_options(
         version="1",
     )
     result = resolve_module_config(manifest, schema, overrides=supplied)
+    if result.validation_issues:
+        from quickscale_core.schema.config_schema import ConfigValidationError
+
+        raise ConfigValidationError(result.validation_issues[0])
     return dict(result.resolved)
 
 
