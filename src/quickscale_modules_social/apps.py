@@ -2,6 +2,8 @@
 
 from django.apps import AppConfig
 
+from quickscale_core.runtime import register_module_settings_check
+
 
 class QuickscaleSocialConfig(AppConfig):
     """Configuration for the QuickScale social module."""
@@ -10,3 +12,7 @@ class QuickscaleSocialConfig(AppConfig):
     name = "quickscale_modules_social"
     label = "quickscale_social"
     verbose_name = "QuickScale Social"
+
+    def ready(self) -> None:
+        """Register rule 3's generic settings check for this module."""
+        register_module_settings_check(self, "social")

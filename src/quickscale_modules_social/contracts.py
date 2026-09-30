@@ -452,107 +452,24 @@ def normalize_social_url(url: str, *, provider: Any | None = None) -> str:
     return resolve_social_target(url, provider=provider).url
 
 
-def _coerce_bool_setting(value: Any, setting_name: str) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, int) and value in {0, 1}:
-        return bool(value)
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in _TRUE_VALUES:
-            return True
-        if lowered in _FALSE_VALUES:
-            return False
-    raise SocialConfigurationError(f"{setting_name} must be a boolean")
-
-
-def _coerce_positive_int_setting(value: Any, setting_name: str) -> int:
-    try:
-        normalized = int(value)
-    except (TypeError, ValueError) as exc:
-        raise SocialConfigurationError(f"{setting_name} must be an integer") from exc
-
-    if normalized < 1:
-        raise SocialConfigurationError(f"{setting_name} must be at least 1")
-    return normalized
-
-
 def get_social_runtime_settings() -> SocialRuntimeSettingsSnapshot:
-    """Return the authoritative social runtime settings from Django settings."""
-    link_tree_enabled = _coerce_bool_setting(
-        getattr(settings, "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED", True),
-        "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED",
-    )
-    embeds_enabled = _coerce_bool_setting(
-        getattr(settings, "QUICKSCALE_SOCIAL_EMBEDS_ENABLED", True),
-        "QUICKSCALE_SOCIAL_EMBEDS_ENABLED",
-    )
-    layout_variant = (
-        str(getattr(settings, "QUICKSCALE_SOCIAL_LAYOUT_VARIANT", "list"))
-        .strip()
-        .lower()
-    )
-    provider_allowlist = tuple(
-        normalize_social_provider_allowlist(
-            getattr(
-                settings,
-                "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST",
-                DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
-            )
-        )
-    )
-    cache_ttl_seconds = _coerce_positive_int_setting(
-        getattr(settings, "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS", 300),
-        "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS",
-    )
-    links_per_page = _coerce_positive_int_setting(
-        getattr(settings, "QUICKSCALE_SOCIAL_LINKS_PER_PAGE", 24),
-        "QUICKSCALE_SOCIAL_LINKS_PER_PAGE",
-    )
-    embeds_per_page = _coerce_positive_int_setting(
-        getattr(settings, "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE", 12),
-        "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE",
-    )
+    """Return the authoritative social runtime settings.
 
-    if layout_variant not in SOCIAL_LAYOUT_VARIANTS:
-        raise SocialConfigurationError(
-            "QUICKSCALE_SOCIAL_LAYOUT_VARIANT must be one of: list, cards, grid"
-        )
-    if not provider_allowlist:
-        raise SocialConfigurationError(
-            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST cannot be empty"
-        )
-
-    unknown_providers = [
-        provider
-        for provider in provider_allowlist
-        if provider not in _SOCIAL_PROVIDER_BY_NAME
-    ]
-    if unknown_providers:
-        joined = ", ".join(sorted(unknown_providers))
-        raise SocialConfigurationError(
-            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST contains unsupported providers: "
-            f"{joined}"
-        )
-    if not link_tree_enabled and not embeds_enabled:
-        raise SocialConfigurationError(
-            "QuickScale social must leave link_tree_enabled or embeds_enabled enabled"
-        )
-    if embeds_enabled and not any(
-        social_provider_supports_embeds(provider) for provider in provider_allowlist
-    ):
-        raise SocialConfigurationError(
-            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST must include TikTok or YouTube when embeds are enabled"
-        )
-
+    Rule 3: every value is read directly from Django settings, which the
+    module's generic startup check has validated against the manifest's
+    schema — the layout choices, the provider allowlist's closed set and
+    non-emptiness, the numeric bounds, and the cross-option rules that keep
+    one public surface enabled and embeds backed by an embed-capable
+    provider.  Apply writes canonical values, so no coercion happens here.
+    """
     return SocialRuntimeSettingsSnapshot(
-        link_tree_enabled=link_tree_enabled,
-        layout_variant=layout_variant,
-        embeds_enabled=embeds_enabled,
-        provider_allowlist=provider_allowlist,
-        cache_ttl_seconds=cache_ttl_seconds,
-        links_per_page=links_per_page,
-        embeds_per_page=embeds_per_page,
+        link_tree_enabled=settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED,
+        layout_variant=settings.QUICKSCALE_SOCIAL_LAYOUT_VARIANT,
+        embeds_enabled=settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED,
+        provider_allowlist=tuple(settings.QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST),
+        cache_ttl_seconds=settings.QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS,
+        links_per_page=settings.QUICKSCALE_SOCIAL_LINKS_PER_PAGE,
+        embeds_per_page=settings.QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE,
     )
 
 
