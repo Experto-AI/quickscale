@@ -104,3 +104,9 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current .github/workflows/ci.yml job environment: when analytics, billing, or notifications is selected it defines non-live placeholder credentials (POSTHOG_API_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY, QUICKSCALE_BILLING_WEBHOOK_SECRET, RESEND_API_KEY, QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET) so an enabled module's startup check passes in CI, which never calls the live vendors."
       - "A project that configured a custom *_env_var name adds that variable to the same job environment; the placeholders are test values only and do not belong in a serving environment."
+  - id: sa217-settings-schema
+    minimum: "0.89.0"
+    title: "Adopt the managed settings schema import"
+    adoption_steps:
+      - "Add MODULE_SETTINGS_SCHEMA to the `from .modules import ...` statement in <package>/settings/base.py (or otherwise expose the managed schema to Django settings), then run `quickscale apply` or `quickscale update` so settings/modules.py carries the compiled schema every installed module's startup check validates against. Until both are in place a module refuses startup with quickscale_settings.E001."
+      - "A project generated at this version or later already imports the schema; only an earlier project needs the manual edit."

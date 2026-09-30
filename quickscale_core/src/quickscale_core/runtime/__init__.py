@@ -49,6 +49,7 @@ _LAZY_CONVENTIONS_SYMBOLS: frozenset[str] = frozenset(
         "collect_capabilities",
         "exception_handler",
         "register_module_checks",
+        "register_module_settings_check",
     }
 )
 
@@ -160,6 +161,7 @@ __all__ = [
     "collect_capabilities",
     "exception_handler",
     "register_module_checks",
+    "register_module_settings_check",
 ]
 
 

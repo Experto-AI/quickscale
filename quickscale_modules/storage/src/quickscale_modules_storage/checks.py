@@ -4,6 +4,12 @@ Rule 10: these functions are run from ``AppConfig.ready()`` through
 ``quickscale_core.runtime.register_module_checks``, so a failure refuses
 ``runserver``, ``migrate``, and ``manage.py check`` alike.  Rule 35: a
 secret a switched-on feature needs must not be empty.
+
+Rule 12: the declared options (presence, type, choices, the cross-option
+credential rules) are validated by the generic settings check registered
+alongside this one.  This check covers the credential pair's runtime shape:
+both credentials empty may fall back to boto3's default credential chain,
+while a half-configured static pair is refused.
 """
 
 from __future__ import annotations
@@ -14,6 +20,19 @@ from django.core.exceptions import ImproperlyConfigured
 
 from quickscale_modules_storage.helpers import select_storage_backend
 
+#: The declared settings the backend selection reads.  While any is absent
+#: the check stays silent: the generic settings check reports the missing
+#: declared setting, and the applied settings arrive together through
+#: ``quickscale apply``.
+_DECLARED_SETTINGS = (
+    "QUICKSCALE_STORAGE_BACKEND",
+    "AWS_STORAGE_BUCKET_NAME",
+    "AWS_S3_ENDPOINT_URL",
+    "AWS_S3_REGION_NAME",
+    "AWS_DEFAULT_ACL",
+    "AWS_QUERYSTRING_AUTH",
+)
+
 
 def check_vendor_secrets(
     app_configs: object = None,
@@ -21,15 +40,21 @@ def check_vendor_secrets(
 ) -> list[CheckMessage]:
     """Fail startup when an s3-compatible backend lacks its credentials.
 
-    The selection is read with the module's own helper, so the check and the
-    storage wiring agree on the backend and on the credential settings.
     Local storage needs no credentials, and an s3-compatible backend with both
     credentials empty may resolve them from boto3's default credential chain;
-    only a half-configured static pair is invalid.
+    only a half-configured static pair is invalid.  The projected credential
+    settings (``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``) are not
+    manifest options — ``apply`` writes them alongside the declared settings —
+    so a missing one is reported here rather than silently skipped.
     """
+    if any(not hasattr(settings, name) for name in _DECLARED_SETTINGS):
+        return []
+
     try:
         selection = select_storage_backend(settings)
     except ImproperlyConfigured as exc:
+        # A missing projected credential, or a backend value the generic
+        # settings check also refuses; report it here so neither stays silent.
         return [Error(str(exc), id="quickscale_storage.E001")]
 
     if not selection.use_s3_compatible:

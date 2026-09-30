@@ -2,7 +2,10 @@
 
 from django.apps import AppConfig
 
-from quickscale_core.runtime import register_module_checks
+from quickscale_core.runtime import (
+    register_module_checks,
+    register_module_settings_check,
+)
 
 
 class QuickscaleStorageConfig(AppConfig):
@@ -18,4 +21,7 @@ class QuickscaleStorageConfig(AppConfig):
         # populating the app registry.
         from quickscale_modules_storage.checks import check_vendor_secrets
 
+        # Rule 3 first: a missing or invalid declared setting is reported
+        # by the generic check before the vendor check reads it.
+        register_module_settings_check(self, "storage")
         register_module_checks(self, [check_vendor_secrets])

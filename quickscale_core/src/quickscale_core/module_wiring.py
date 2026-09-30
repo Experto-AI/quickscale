@@ -40,6 +40,8 @@ class ModuleWiringSpec:
     pre_home_url_includes: tuple[tuple[str, str], ...] = ()
     url_includes: tuple[tuple[str, str], ...] = ()
     managed_files: Mapping[str, str] = field(default_factory=dict)
+    settings_schema: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
+    """Compiled ``MODULE_SETTINGS_SCHEMA`` entry for this module (rule 3)."""
 
 
 def _merge_unique(items: list[T], additions: Iterable[T]) -> None:
@@ -177,6 +179,17 @@ def collect_url_wiring(
     return pre_home_urls, post_home_urls
 
 
+def collect_settings_schema(
+    module_specs: Mapping[str, ModuleWiringSpec],
+) -> dict[str, dict[str, Mapping[str, object]]]:
+    """Collect each module's compiled settings schema, keyed by module name."""
+    return {
+        module_name: dict(spec.settings_schema)
+        for module_name, spec in _sort_module_items(module_specs)
+        if spec.settings_schema
+    }
+
+
 def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
     """Render `<package>/settings/modules.py` content.
 
@@ -184,8 +197,12 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
     ``os.environ.get("VAR_NAME", "")`` calls so the generated file never
     contains credential material at rest.  An ``import os`` is added to
     the module preamble when any such reference is present.
+
+    Each module's compiled option schema (rule 3) is rendered as
+    ``MODULE_SETTINGS_SCHEMA``, the block the generic startup check reads.
     """
     apps, middleware, settings, _ = collect_wiring(module_specs)
+    schema = collect_settings_schema(module_specs)
 
     has_env_ref = any(
         isinstance(v, str) and v.startswith(_QS_ENV_PREFIX) for v in settings.values()
@@ -194,6 +211,7 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
     apps_text = pformat(apps, sort_dicts=True, width=88)
     middleware_text = pformat(middleware, sort_dicts=True, width=88)
     settings_text = pformat(settings, sort_dicts=True, width=88)
+    schema_text = pformat(schema, sort_dicts=True, width=88)
 
     if has_env_ref:
         # Replace '__QS_ENV__:VAR_NAME' with os.environ.get('VAR_NAME', '')
@@ -215,7 +233,9 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
         + imports
         + f"MODULE_INSTALLED_APPS: list[str] = {apps_text}\n\n"
         + f"MODULE_MIDDLEWARE: list[str] = {middleware_text}\n\n"
-        + f"MODULE_SETTINGS: dict[str, object] = {settings_text}\n"
+        + f"MODULE_SETTINGS: dict[str, object] = {settings_text}\n\n"
+        + "MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = "
+        + f"{schema_text}\n"
     )
 
 

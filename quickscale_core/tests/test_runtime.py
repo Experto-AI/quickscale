@@ -203,6 +203,7 @@ class TestRuntimeAllExport:
             "record_verification",
             "register_backup_persistence",
             "register_module_checks",
+            "register_module_settings_check",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",
@@ -335,6 +336,7 @@ class TestRuntimeSymbolTypes:
             "collect_capabilities",
             "exception_handler",
             "register_module_checks",
+            "register_module_settings_check",
         ):
             symbol = getattr(runtime, name, None)
             assert symbol is not None, f"runtime.{name} is None"
@@ -403,6 +405,7 @@ class TestRuntimeImportable:
             "record_verification",
             "register_backup_persistence",
             "register_module_checks",
+            "register_module_settings_check",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",

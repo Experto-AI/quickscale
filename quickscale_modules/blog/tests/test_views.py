@@ -94,25 +94,9 @@ class TestPostListView:
         assert len(response.context["page_obj"].object_list) == 2
         assert response.context["is_paginated"] is True
 
-    def test_post_list_invalid_posts_per_page_falls_back_to_default(
-        self,
-        client,
-        author_user,
-        system_org,
-        settings,
-        blog_org_scope,
-    ):
-        """Test invalid BLOG_POSTS_PER_PAGE values fall back to the default."""
-        settings.BLOG_POSTS_PER_PAGE = "invalid"
-        _create_published_posts(
-            author_user, system_org, count=11, blog_org_scope=blog_org_scope
-        )
-
-        with blog_org_scope(None):
-            response = client.get(reverse("quickscale_blog:post_list"))
-
-        assert response.status_code == 200
-        assert response.context["paginator"].per_page == 10
+    # An invalid BLOG_POSTS_PER_PAGE is refused by the generic startup check
+    # (rule 3) before a request runs; the view reads the value directly and
+    # never falls back to a code default.
 
 
 @pytest.mark.django_db

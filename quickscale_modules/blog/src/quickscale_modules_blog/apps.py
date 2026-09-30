@@ -2,7 +2,10 @@
 
 from django.apps import AppConfig
 
-from quickscale_core.runtime import register_module_checks
+from quickscale_core.runtime import (
+    register_module_checks,
+    register_module_settings_check,
+)
 
 
 class QuickscaleBlogConfig(AppConfig):
@@ -14,9 +17,10 @@ class QuickscaleBlogConfig(AppConfig):
     verbose_name = "QuickScale Blog"
 
     def ready(self) -> None:
-        """Run the blog module startup checks through the shared helper."""
+        """Run the blog startup checks through the shared helpers."""
         # Late import: keep the app config importable while Django is still
         # populating the app registry.
-        from quickscale_modules_blog.checks import check_required_settings
+        from quickscale_modules_blog.checks import check_media_url
 
-        register_module_checks(self, [check_required_settings])
+        register_module_checks(self, [check_media_url])
+        register_module_settings_check(self, "blog")

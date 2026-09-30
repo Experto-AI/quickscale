@@ -141,10 +141,9 @@ class FormsAdminApiMixin:
     request: Request
 
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
-        # SA17.4 — no True default: FORMS_SUBMISSIONS_API must be explicitly
-        # set.  AppConfig.ready() enforces presence at startup; this is a
-        # defensive check so a missing value is treated as disabled.
-        if not bool(getattr(settings, "FORMS_SUBMISSIONS_API", None)):
+        # Rule 3: the startup check has validated the declared value, so the
+        # view reads it directly (and is never reached while it is missing).
+        if not settings.FORMS_SUBMISSIONS_API:
             raise Http404
         APIView.initial(self, request, *args, **kwargs)
 
@@ -213,7 +212,9 @@ class FormsSubmissionPagination(PageNumberPagination):
 
     def get_page_size(self, request: Request) -> int:
         del request
-        return int(getattr(settings, "FORMS_PER_PAGE", 25) or 25)
+        # Rule 3: read the declared setting directly; the startup check has
+        # already refused a missing or invalid value.
+        return settings.FORMS_PER_PAGE
 
     def get_paginated_response(self, data: list[Any]) -> Response:
         return Response(data)

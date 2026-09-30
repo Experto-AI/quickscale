@@ -126,6 +126,7 @@ def _execute_rendered_settings(
     target_module_name: str,
     config_values: dict[str, object],
     module_settings: dict[str, object] | None = None,
+    module_settings_schema: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Execute rendered settings modules with lightweight import stubs."""
     settings_package_name = f"{package_name}.settings"
@@ -140,6 +141,11 @@ def _execute_rendered_settings(
     setattr(modules_module, "MODULE_INSTALLED_APPS", [])
     setattr(modules_module, "MODULE_MIDDLEWARE", [])
     setattr(modules_module, "MODULE_SETTINGS", dict(module_settings or {}))
+    setattr(
+        modules_module,
+        "MODULE_SETTINGS_SCHEMA",
+        dict(module_settings_schema or {}),
+    )
 
     decouple_module = types.ModuleType("decouple")
     setattr(decouple_module, "config", _build_fake_config(config_values))
@@ -1305,6 +1311,53 @@ class TestProductionReadyFeatures:
         assert 'STATIC_URL = "static/"' not in output
         assert 'MEDIA_URL = "media/"' not in output
 
+    def test_modules_stub_declares_the_empty_settings_schema(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The pre-apply modules.py stub defines the managed schema name."""
+        output = _render_template(
+            jinja_env, "project_name/settings/modules.py.j2", test_context
+        )
+
+        assert (
+            "MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {}"
+            in output
+        )
+
+    def test_base_settings_expose_the_managed_settings_schema(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Rule 3: the generated schema reaches Django settings from base.py."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+        schema = {
+            "listings": {
+                "listings_per_page": {
+                    "setting": "LISTINGS_PER_PAGE",
+                    "type": "integer",
+                    "validation": {"min": 1},
+                }
+            }
+        }
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=base_output,
+            target_module_name="base",
+            config_values={},
+            module_settings={"LISTINGS_PER_PAGE": 12},
+            module_settings_schema=schema,
+        )
+
+        assert namespace["MODULE_SETTINGS_SCHEMA"] == schema
+        assert namespace["LISTINGS_PER_PAGE"] == 12
+
     def test_local_settings_preserve_default_storage_backend(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
@@ -1353,6 +1406,7 @@ class TestProductionReadyFeatures:
         setattr(modules_module, "MODULE_INSTALLED_APPS", [])
         setattr(modules_module, "MODULE_MIDDLEWARE", [])
         setattr(modules_module, "MODULE_SETTINGS", {})
+        setattr(modules_module, "MODULE_SETTINGS_SCHEMA", {})
 
         def fake_config(
             _key: str,
@@ -2046,6 +2100,7 @@ class TestCorrelationIdFilterRuntime:
         setattr(modules_module, "MODULE_INSTALLED_APPS", [])
         setattr(modules_module, "MODULE_MIDDLEWARE", [])
         setattr(modules_module, "MODULE_SETTINGS", {})
+        setattr(modules_module, "MODULE_SETTINGS_SCHEMA", {})
 
         def fake_config(
             _key: str,
@@ -2110,6 +2165,7 @@ class TestCorrelationIdFilterRuntime:
         setattr(modules_module, "MODULE_INSTALLED_APPS", [])
         setattr(modules_module, "MODULE_MIDDLEWARE", [])
         setattr(modules_module, "MODULE_SETTINGS", {})
+        setattr(modules_module, "MODULE_SETTINGS_SCHEMA", {})
 
         def fake_config(
             _key: str,

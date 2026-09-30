@@ -486,16 +486,16 @@
       "sha256": "c8c9c4f7977a8f9ddc6e552d974d4cce1dabd811a36e3dc5b977419043d5db4c"
     },
     "testproject/settings/base.py": {
-      "mode": "664",
-      "sha256": "609211e6352cb1aa4c9408fbc54eba254a6c28b134846eedc38f91701f1466a9"
+      "mode": "644",
+      "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
     },
     "testproject/settings/local.py": {
       "mode": "664",
       "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
-      "mode": "664",
-      "sha256": "bf792c1befae52ea0703b98c03bbe6f30655a0170a5af9752129061fe393abc6"
+      "mode": "644",
+      "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
     },
     "testproject/settings/production.py": {
       "mode": "664",
@@ -956,16 +956,16 @@
       "sha256": "c8c9c4f7977a8f9ddc6e552d974d4cce1dabd811a36e3dc5b977419043d5db4c"
     },
     "testproject/settings/base.py": {
-      "mode": "664",
-      "sha256": "609211e6352cb1aa4c9408fbc54eba254a6c28b134846eedc38f91701f1466a9"
+      "mode": "644",
+      "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
     },
     "testproject/settings/local.py": {
       "mode": "664",
       "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
-      "mode": "664",
-      "sha256": "bf792c1befae52ea0703b98c03bbe6f30655a0170a5af9752129061fe393abc6"
+      "mode": "644",
+      "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
     },
     "testproject/settings/production.py": {
       "mode": "664",
@@ -1426,16 +1426,16 @@
       "sha256": "c8c9c4f7977a8f9ddc6e552d974d4cce1dabd811a36e3dc5b977419043d5db4c"
     },
     "testproject/settings/base.py": {
-      "mode": "664",
-      "sha256": "609211e6352cb1aa4c9408fbc54eba254a6c28b134846eedc38f91701f1466a9"
+      "mode": "644",
+      "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
     },
     "testproject/settings/local.py": {
       "mode": "664",
       "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
-      "mode": "664",
-      "sha256": "bf792c1befae52ea0703b98c03bbe6f30655a0170a5af9752129061fe393abc6"
+      "mode": "644",
+      "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
     },
     "testproject/settings/production.py": {
       "mode": "664",

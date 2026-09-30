@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from quickscale_core.manifest.settings_schema import load_settings_schema
+
 SHARED_TEST_TEMPLATES = (
     Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
 )
@@ -85,3 +87,11 @@ LOGIN_URL = "/accounts/login/"
 CRM_ENABLE_API = True
 CRM_DEALS_PER_PAGE = 25
 CRM_CONTACTS_PER_PAGE = 50
+
+# Rule 3: the compiled option schema the generic startup check reads, derived
+# from the module's own manifest so it can never drift from the declarations.
+_MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
+MODULE_SETTINGS_SCHEMA = {
+    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
+    for name in ("crm", "orgs")
+}

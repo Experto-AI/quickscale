@@ -108,41 +108,22 @@ class BillingSettingsSnapshot:
 
     @classmethod
     def from_settings(cls) -> BillingSettingsSnapshot:
-        """Create a billing runtime snapshot from Django settings."""
+        """Create a billing runtime snapshot from Django settings.
+
+        Rule 3: every value is read directly; apply wrote the canonical
+        values and the module's startup check has validated them, so the
+        snapshot neither defaults nor coerces.
+        """
         return cls(
             enabled=bool(settings.QUICKSCALE_BILLING_ENABLED),
             publishable_key_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-                    DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-                )
-            ).strip()
-            or DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-            secret_key_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
-                    DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-                )
-            ).strip()
-            or DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
+                settings.QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR
+            ),
+            secret_key_env_var=str(settings.QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR),
             webhook_secret_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
-                    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-                )
-            ).strip()
-            or DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-            billing_currency=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_BILLING_CURRENCY",
-                    DEFAULT_BILLING_CURRENCY,
-                )
-            ).strip()
-            or DEFAULT_BILLING_CURRENCY,
+                settings.QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR
+            ),
+            billing_currency=str(settings.QUICKSCALE_BILLING_CURRENCY),
         )
 
     def resolve_publishable_key(self) -> str:

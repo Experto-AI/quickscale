@@ -1,6 +1,9 @@
 """Django settings for QuickScale notifications module tests."""
 
 import os
+from pathlib import Path
+
+from quickscale_core.manifest.settings_schema import load_settings_schema
 
 # BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
@@ -40,6 +43,8 @@ INSTALLED_APPS = [
 FORMS_SUBMISSIONS_API = True
 FORMS_RATE_LIMIT = "5/hour"
 FORMS_SPAM_PROTECTION = True
+FORMS_PER_PAGE = 25
+FORMS_DATA_RETENTION_DAYS = 365
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -119,7 +124,7 @@ CACHES = {
 QUICKSCALE_NOTIFICATIONS_ENABLED = True
 QUICKSCALE_NOTIFICATIONS_PROVIDER = "resend"
 QUICKSCALE_NOTIFICATIONS_SENDER_NAME = "QuickScale"
-QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL = "noreply@example.com"
+QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL = "noreply@quickscale.example"
 QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL = "support@example.com"
 QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN = "mg.example.com"
 QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR = "RESEND_API_KEY"
@@ -137,3 +142,9 @@ QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
     "testing",
 ]
 QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS = 300
+
+_MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
+MODULE_SETTINGS_SCHEMA = {
+    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
+    for name in ("notifications", "orgs", "forms")
+}

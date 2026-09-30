@@ -501,6 +501,7 @@ class TestBackupLifecycle:
         AWS_S3_REGION_NAME="auto",
         AWS_ACCESS_KEY_ID="media-access-key",
         AWS_SECRET_ACCESS_KEY="media-secret-key",
+        AWS_DEFAULT_ACL="",
         AWS_QUERYSTRING_AUTH=False,
     )
     def test_create_backup_captures_s3_compatible_media_inventory(

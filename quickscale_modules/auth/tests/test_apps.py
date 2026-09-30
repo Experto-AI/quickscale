@@ -11,42 +11,26 @@ from django.core.management.base import SystemCheckError
 from django.core.management.commands import migrate, runserver
 
 from quickscale_modules_auth.apps import QuickscaleAuthConfig
-from quickscale_modules_auth.checks import check_required_settings
 
 
-def test_check_passes_when_setting_present(settings) -> None:
-    """``ACCOUNT_ALLOW_REGISTRATION`` set means no failure is reported."""
-    settings.ACCOUNT_ALLOW_REGISTRATION = True
-
-    assert check_required_settings() == []
-
-
-def test_check_reports_missing_setting(settings) -> None:
-    """A missing ``ACCOUNT_ALLOW_REGISTRATION`` is reported by name."""
-    del settings.ACCOUNT_ALLOW_REGISTRATION
-
-    messages = check_required_settings()
-
-    assert messages
-    assert "ACCOUNT_ALLOW_REGISTRATION" in messages[0].msg
-
-
-def test_ready_raises_improperly_configured_when_setting_missing(settings) -> None:
-    """``ready()`` refuses startup when the setting is absent."""
-    del settings.ACCOUNT_ALLOW_REGISTRATION
-
-    config = QuickscaleAuthConfig(
+def _auth_config() -> QuickscaleAuthConfig:
+    return QuickscaleAuthConfig(
         "quickscale_modules_auth",
         import_module("quickscale_modules_auth"),
     )
 
+
+def test_ready_raises_improperly_configured_when_setting_missing(settings) -> None:
+    """Rule 3: a missing declared setting refuses startup naming it."""
+    del settings.ACCOUNT_ALLOW_REGISTRATION
+
     with pytest.raises(ImproperlyConfigured, match="ACCOUNT_ALLOW_REGISTRATION"):
-        config.ready()
+        _auth_config().ready()
 
 
 @pytest.mark.django_db
 def test_missing_setting_fails_check_migrate_and_runserver(settings) -> None:
-    """The registered guard fails check, migrate, and runserver alike."""
+    """The registered generic check fails check, migrate, and runserver alike."""
     del settings.ACCOUNT_ALLOW_REGISTRATION
 
     with pytest.raises(SystemCheckError, match="ACCOUNT_ALLOW_REGISTRATION"):

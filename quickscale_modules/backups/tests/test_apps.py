@@ -250,3 +250,17 @@ class TestPrivateRemoteCredentialCheck:
                 migrate.Command().check()
             with pytest.raises(SystemCheckError, match="private_remote"):
                 runserver.Command().check()
+
+
+def test_startup_check_refuses_a_wrong_typed_setting(settings) -> None:
+    """Rule 3: a wrong-typed declared setting fails startup naming the setting."""
+    from django.apps import apps
+    from django.core.exceptions import ImproperlyConfigured
+
+    settings.QUICKSCALE_BACKUPS_RETENTION_DAYS = "fourteen"
+
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="QUICKSCALE_BACKUPS_RETENTION_DAYS",
+    ):
+        apps.get_app_config("quickscale_backups").ready()

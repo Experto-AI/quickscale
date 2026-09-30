@@ -56,74 +56,38 @@ class AnalyticsRuntimeSettingsSnapshot:
 
     @classmethod
     def from_settings(cls) -> AnalyticsRuntimeSettingsSnapshot:
-        """Create a runtime snapshot from Django settings."""
+        """Create a runtime snapshot from Django settings.
+
+        Rule 3: every value is read directly; apply wrote the canonical
+        values and the module's startup check has validated them, so the
+        snapshot neither defaults nor coerces.
+        """
         return cls(
             enabled=bool(settings.QUICKSCALE_ANALYTICS_ENABLED),
-            provider=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_ANALYTICS_PROVIDER",
-                    ANALYTICS_PROVIDER_POSTHOG,
-                )
-            )
-            .strip()
-            .lower(),
+            provider=str(settings.QUICKSCALE_ANALYTICS_PROVIDER),
             posthog_api_key_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-                    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-                )
-            ).strip()
-            or DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
+                settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
+            ),
             posthog_host_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-                    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
-                )
-            ).strip()
-            or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
-            posthog_host=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-                    ANALYTICS_POSTHOG_DEFAULT_HOST,
-                )
-            ).strip()
-            or ANALYTICS_POSTHOG_DEFAULT_HOST,
-            exclude_debug=bool(
-                getattr(settings, "QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG", True)
+                settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR
             ),
-            exclude_staff=bool(
-                getattr(settings, "QUICKSCALE_ANALYTICS_EXCLUDE_STAFF", False)
-            ),
+            posthog_host=str(settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST),
+            exclude_debug=bool(settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG),
+            exclude_staff=bool(settings.QUICKSCALE_ANALYTICS_EXCLUDE_STAFF),
             anonymous_by_default=bool(
-                getattr(
-                    settings,
-                    "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
-                    True,
-                )
+                settings.QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT
             ),
         )
 
     def resolve_posthog_api_key(self) -> str:
         """Resolve the PostHog API key from the configured environment variable."""
-        env_var_name = (
-            self.posthog_api_key_env_var.strip()
-            or DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
-        )
-        return os.getenv(env_var_name, "").strip()
+        return os.getenv(self.posthog_api_key_env_var.strip(), "").strip()
 
     def resolve_posthog_host(self) -> str:
-        """Resolve the PostHog host from env vars with settings fallback."""
-        env_var_name = (
-            self.posthog_host_env_var.strip() or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR
-        )
+        """Resolve the PostHog host from the configured env var, else the setting."""
         return (
-            os.getenv(env_var_name, "").strip()
+            os.getenv(self.posthog_host_env_var.strip(), "").strip()
             or self.posthog_host.strip()
-            or ANALYTICS_POSTHOG_DEFAULT_HOST
         )
 
 
@@ -181,7 +145,7 @@ def analytics_enabled_for_request(
         return False
     if snapshot.provider != ANALYTICS_PROVIDER_POSTHOG:
         return False
-    if snapshot.exclude_debug and bool(getattr(settings, "DEBUG", False)):
+    if snapshot.exclude_debug and bool(settings.DEBUG):
         return False
     if snapshot.exclude_staff and _request_is_staff(request):
         return False
@@ -208,7 +172,7 @@ def configure_analytics_client() -> bool:
             )
             return _set_disabled_state(snapshot, "unsupported-provider")
 
-        if snapshot.exclude_debug and bool(getattr(settings, "DEBUG", False)):
+        if snapshot.exclude_debug and bool(settings.DEBUG):
             return _set_disabled_state(snapshot, "debug-excluded")
 
         api_key = snapshot.resolve_posthog_api_key()
@@ -247,7 +211,7 @@ def configure_analytics_client() -> bool:
         except Exception:
             logger.warning(
                 "QuickScale analytics failed to initialize the PostHog client. Analytics capture remains disabled.",
-                exc_info=bool(getattr(settings, "DEBUG", False)),
+                exc_info=bool(settings.DEBUG),
             )
             return _set_disabled_state(snapshot, "init-error")
 
@@ -339,13 +303,13 @@ def capture_event(
             logger.warning(
                 "QuickScale analytics failed to capture event '%s'.",
                 event,
-                exc_info=bool(getattr(settings, "DEBUG", False)),
+                exc_info=bool(settings.DEBUG),
             )
     except Exception:
         logger.warning(
             "QuickScale analytics failed to capture event '%s'.",
             event,
-            exc_info=bool(getattr(settings, "DEBUG", False)),
+            exc_info=bool(settings.DEBUG),
         )
 
 
