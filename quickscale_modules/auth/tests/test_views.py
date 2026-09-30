@@ -2456,3 +2456,67 @@ class TestAccountDeleteViewDeclaredHandlers:
             ("enter", first_organization_id),
             ("exit", first_organization_id),
         ]
+
+    def test_account_delete_preserves_the_acquisition_error_when_cleanup_fails(
+        self, authenticated_client, user
+    ):
+        """A failing lock release cannot replace the error that triggered it."""
+        from contextlib import contextmanager
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organizations = [
+            Organization.objects.create(
+                name=f"Cleanup Failure {index}",
+                slug=f"cleanup-failure-{index}",
+                is_personal=True,
+            )
+            for index in range(2)
+        ]
+        for organization in organizations:
+            OrganizationMembership.objects.create(
+                user=user,
+                organization=organization,
+                role=OrgRole.OWNER,
+            )
+        events: list[tuple[str, Any]] = []
+        handler = _StubAccountDeletionHandler([])
+        acquisitions = {"count": 0}
+
+        @contextmanager
+        def failing_release_lock(organization_id):
+            events.append(("enter", organization_id))
+            try:
+                yield
+            finally:
+                events.append(("exit", organization_id))
+                raise RuntimeError("unlock failed")
+
+        def fail_second_lock(organization_id):
+            acquisitions["count"] += 1
+            if acquisitions["count"] == 2:
+                raise ValueError("unexpected lock defect")
+            return failing_release_lock(organization_id)
+
+        handler.account_deletion_subscription_mutation_lock = fail_second_lock
+        first_organization_id = sorted(
+            (organization.pk for organization in organizations), key=str
+        )[0]
+
+        with (
+            _declared_handlers(handler),
+            pytest.raises(ValueError, match="unexpected lock defect"),
+        ):
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
+
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert events == [
+            ("enter", first_organization_id),
+            ("exit", first_organization_id),
+        ]
