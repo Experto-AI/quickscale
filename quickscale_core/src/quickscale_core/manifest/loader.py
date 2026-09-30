@@ -215,11 +215,13 @@ def _validate_condition_mapping(
                 module_name,
             )
         if isinstance(expected, list):
-            if not expected:
+            if not expected or not all(
+                isinstance(item, (str, int, float, bool)) for item in expected
+            ):
                 raise ManifestError(
                     f"Option '{option_name}' validation.{key_path}."
-                    f"{condition_option} must be a literal, a non-empty list, "
-                    "or {not_empty: true}",
+                    f"{condition_option} must be a literal, a non-empty list of "
+                    "literals, or {not_empty: true}",
                     module_name,
                 )
         elif isinstance(expected, dict):
@@ -231,6 +233,13 @@ def _validate_condition_mapping(
                     module_name,
                 )
         elif expected is None:
+            raise ManifestError(
+                f"Option '{option_name}' validation.{key_path}."
+                f"{condition_option} must be a literal, a non-empty list, "
+                "or {not_empty: true}",
+                module_name,
+            )
+        elif not isinstance(expected, (str, int, float, bool)):
             raise ManifestError(
                 f"Option '{option_name}' validation.{key_path}."
                 f"{condition_option} must be a literal, a non-empty list, "
@@ -696,6 +705,24 @@ _DERIVATION_LIST_FIELDS = frozenset(
     }
 )
 
+#: Top-level derivation sections nothing executes.  A non-null declaration is
+#: refused at load so a rule or alias that would silently do nothing fails hard
+#: instead of shipping.
+_INERT_DERIVATION_SECTION_ERRORS = {
+    "normalization_rules": (
+        "derivation.normalization_rules is no longer executed; declare the rule "
+        "under derivation.option_derivations.<option>.normalization_rules"
+    ),
+    "validation_rules": (
+        "derivation.validation_rules is no longer executed; declare the option's "
+        "checks in its config validation block"
+    ),
+    "legacy_aliases": (
+        "derivation.legacy_aliases is no longer executed; a renamed option is "
+        "refused by name through the manifest's retired_options block"
+    ),
+}
+
 
 def _assert_is_mapping(
     value: Any,
@@ -804,7 +831,10 @@ def _parse_derivation_section(
     ``derivation_rules``, ``validation_rules``, ``legacy_aliases``,
     ``derived_settings``, ``wiring_projections``, and ``option_derivations``.
     List fields default to empty lists; ``option_derivations`` defaults to
-    an empty dict.
+    an empty dict.  The legacy top-level ``normalization_rules``,
+    ``validation_rules``, and ``legacy_aliases`` sections are refused: nothing
+    in the live engine executes them, so accepting one would ship an unread
+    declaration.
 
     Args:
         data: The full parsed YAML data dictionary.
@@ -814,7 +844,8 @@ def _parse_derivation_section(
         Dict of parsed derivation sub-sections.
 
     Raises:
-        ManifestError: If a section is malformed.
+        ManifestError: If a section is malformed or an inert legacy section is
+            declared.
     """
     raw = data.get("derivation")
     if raw is None:
@@ -823,6 +854,9 @@ def _parse_derivation_section(
         return result
 
     derivation = _assert_is_mapping(raw, "derivation", module_name)
+    for inert_field, inert_message in _INERT_DERIVATION_SECTION_ERRORS.items():
+        if inert_field in derivation:
+            raise ManifestError(inert_message, module_name)
 
     result = {}
     for field in _DERIVATION_LIST_FIELDS:
@@ -858,6 +892,30 @@ def _parse_derivation_section(
             module_name,
         )
 
+    for opt_key, opt_value in result["option_derivations"].items():
+        if "validation_rules" in opt_value:
+            raise ManifestError(
+                f"derivation.option_derivations.{opt_key}.validation_rules is no "
+                "longer executed; declare the option's checks in its config "
+                "validation block",
+                module_name,
+            )
+        if "legacy_aliases" in opt_value:
+            raise ManifestError(
+                f"derivation.option_derivations.{opt_key}.legacy_aliases is no "
+                "longer executed; a renamed option is refused by name through "
+                "the manifest's retired_options block",
+                module_name,
+            )
+        for section_key in ("derived_settings", "wiring_projections"):
+            if section_key in opt_value and not isinstance(
+                opt_value[section_key], list
+            ):
+                raise ManifestError(
+                    f"derivation.option_derivations.{opt_key}.{section_key} "
+                    "must be a list",
+                    module_name,
+                )
     _validate_normalization_rule_list(
         result.get("normalization_rules", []),
         "derivation.normalization_rules",

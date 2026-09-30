@@ -237,38 +237,20 @@ class TestBuildSchemaFromManifest:
 class TestYamlToModuleDerivationSchema:
     """Full round-trip test: YAML ``module.yml`` → ``ModuleDerivationSchema``.
 
-    Proves that a ``module.yml`` with a ``derivation:`` section containing
-    all six field categories (normalization_rules, validation_rules,
-    legacy_aliases, derived_settings, wiring_projections, and
-    option_derivations) round-trips through ``yaml.safe_load`` into a
-    typed ``ModuleDerivationSchema`` equal to a hand-built equivalent.
+    Proves that a ``module.yml`` with a ``derivation:`` section carrying every
+    supported category — per-option normalization rules, plus module-level
+    derived settings, wiring projections, and per-option derivations —
+    round-trips through ``yaml.safe_load`` into a typed
+    ``ModuleDerivationSchema`` equal to a hand-built equivalent.
     """
 
     def test_full_derivation_section_round_trip(self) -> None:
-        """All six derivation field categories round-trip correctly."""
+        """Every supported derivation category round-trips correctly."""
         yaml_content = """
 name: sample-module
 version: "1.0.0"
 
 derivation:
-  # Module-level lists (shared across all options)
-  normalization_rules:
-    - source_key: email
-      target_key: email
-      rule_type: strip
-      description: Strip whitespace from email
-
-  validation_rules:
-    - option_key: email
-      rule_type: required
-      description: Email is required
-
-  legacy_aliases:
-    - legacy_key: old_email_key
-      current_key: email_key
-      transform: identity
-      description: Renamed in v1.1.0
-
   derived_settings:
     - setting_key: MY_APP_ENABLED
       source_options:
@@ -289,6 +271,13 @@ derivation:
 
   # Per-option derivation metadata
   option_derivations:
+    email:
+      normalization_rules:
+        - source_key: email
+          target_key: email
+          rule_type: strip
+          description: Strip whitespace from email
+
     enabled:
       derived_settings:
         - setting_key: MY_APP_ENABLED
@@ -304,13 +293,6 @@ derivation:
           target_key: provider
           rule_type: lowercase
           description: Normalise provider to lowercase
-      validation_rules:
-        - option_key: provider
-          rule_type: choices
-          allowed_values:
-            - posthog
-            - segment
-          description: Provider must be a known backend
       derived_settings:
         - setting_key: MY_APP_PROVIDER
           source_options: [provider]
@@ -328,9 +310,6 @@ derivation:
         # derivation fields (raw dicts/lists).
         schema_from_yaml = build_schema_from_manifest(
             manifest_name="sample-module",
-            derivation_rules=manifest.derivation_rules,
-            validation_rules=manifest.validation_rules,
-            legacy_aliases=manifest.legacy_aliases,
             derived_settings=manifest.derived_settings,
             wiring_projections=manifest.wiring_projections,
             option_derivations=manifest.option_derivations,
@@ -343,29 +322,6 @@ derivation:
             module_name="sample-module",
             version="1",
             description="",
-            shared_normalization_rules=[
-                NormalizationRule(
-                    source_key="email",
-                    target_key="email",
-                    rule_type="strip",
-                    description="Strip whitespace from email",
-                ),
-            ],
-            shared_validation_rules=[
-                ValidationRule(
-                    option_key="email",
-                    rule_type="required",
-                    description="Email is required",
-                ),
-            ],
-            shared_legacy_aliases=[
-                LegacyKeyAlias(
-                    legacy_key="old_email_key",
-                    current_key="email_key",
-                    transform="identity",
-                    description="Renamed in v1.1.0",
-                ),
-            ],
             shared_derived_settings=[
                 DerivedSetting(
                     setting_key="MY_APP_ENABLED",
@@ -384,6 +340,17 @@ derivation:
                 ),
             ],
             option_derivations={
+                "email": OptionDerivation(
+                    option_key="email",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="email",
+                            target_key="email",
+                            rule_type="strip",
+                            description="Strip whitespace from email",
+                        ),
+                    ],
+                ),
                 "enabled": OptionDerivation(
                     option_key="enabled",
                     derived_settings=[
@@ -404,14 +371,6 @@ derivation:
                             target_key="provider",
                             rule_type="lowercase",
                             description="Normalise provider to lowercase",
-                        ),
-                    ],
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="provider",
-                            rule_type="choices",
-                            allowed_values=["posthog", "segment"],
-                            description="Provider must be a known backend",
                         ),
                     ],
                     derived_settings=[
@@ -438,22 +397,22 @@ derivation:
         # Also verify key structural properties explicitly so test failure
         # messages are more helpful.
         assert schema_from_yaml.module_name == "sample-module"
-        assert len(schema_from_yaml.shared_normalization_rules) == 1
-        assert len(schema_from_yaml.shared_validation_rules) == 1
-        assert len(schema_from_yaml.shared_legacy_aliases) == 1
+        assert len(schema_from_yaml.shared_normalization_rules) == 0
+        assert len(schema_from_yaml.shared_validation_rules) == 0
+        assert len(schema_from_yaml.shared_legacy_aliases) == 0
         assert len(schema_from_yaml.shared_derived_settings) == 1
         assert (
             schema_from_yaml.shared_derived_settings[0].setting_key == "MY_APP_ENABLED"
         )
         assert len(schema_from_yaml.module_wiring_projections) == 1
-        assert len(schema_from_yaml.option_derivations) == 2
+        assert len(schema_from_yaml.option_derivations) == 3
 
     def test_yaml_derivation_section_converts_typed_nested_rules(self) -> None:
         """Nested rules inside option_derivations are typed correctly.
 
-        Verifies that a ``module.yml`` with per-option normalisation,
-        validation, and derivation metadata produces the same typed
-        ``OptionDerivation`` instances as a hand-built equivalent.
+        Verifies that a ``module.yml`` with per-option normalisation and
+        derivation metadata produces the same typed ``OptionDerivation``
+        instances as a hand-built equivalent.
         """
         yaml_content = """
 name: sample-module
@@ -470,21 +429,6 @@ derivation:
             basic: simple
             advanced: full
           description: Map legacy mode names to canonical values
-      validation_rules:
-        - option_key: mode
-          rule_type: choices
-          allowed_values:
-            - simple
-            - full
-          description: Mode must be simple or full
-      legacy_aliases:
-        - legacy_key: old_mode
-          current_key: mode
-          transform: rename_value
-          transform_params:
-            basic: simple
-            advanced: full
-          description: Renamed and value-mapped in v2.0
       derived_settings:
         - setting_key: APP_MODE
           source_options: [mode]
@@ -524,23 +468,6 @@ derivation:
                             "description": "Map legacy mode names to canonical values",
                         },
                     ],
-                    "validation_rules": [
-                        {
-                            "option_key": "mode",
-                            "rule_type": "choices",
-                            "allowed_values": ["simple", "full"],
-                            "description": "Mode must be simple or full",
-                        },
-                    ],
-                    "legacy_aliases": [
-                        {
-                            "legacy_key": "old_mode",
-                            "current_key": "mode",
-                            "transform": "rename_value",
-                            "transform_params": {"basic": "simple", "advanced": "full"},
-                            "description": "Renamed and value-mapped in v2.0",
-                        },
-                    ],
                     "derived_settings": [
                         {
                             "setting_key": "APP_MODE",
@@ -570,7 +497,7 @@ derivation:
         assert schema_from_yaml == hand_built
         mode_opt = schema_from_yaml.option_derivations["mode"]
         assert len(mode_opt.normalization_rules) == 1
-        assert len(mode_opt.validation_rules) == 1
-        assert len(mode_opt.legacy_aliases) == 1
+        assert len(mode_opt.validation_rules) == 0
+        assert len(mode_opt.legacy_aliases) == 0
         assert len(mode_opt.derived_settings) == 1
         assert len(mode_opt.wiring_projections) == 1

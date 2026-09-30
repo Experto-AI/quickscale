@@ -116,27 +116,73 @@ def _slugify(value: Any, *, max_length: Any, replace: Mapping[str, Any]) -> str:
     return candidate
 
 
-def _coerce_list_items(value: Any) -> list[Any]:
-    """Coerce a raw value into the items a ``list`` rule normalizes."""
+def _is_supported_list_item(item: Any) -> bool:
+    """Return whether *item* is a scalar or an empty container.
+
+    The ``list`` rule documents comma-split strings and wrapped scalars; an
+    empty container is an emptied item the rule drops.  Anything else (a
+    mapping, a non-empty container, an arbitrary object) is not representable.
+    """
+    if item is None or isinstance(item, (str, int, float, bool)):
+        return True
+    if isinstance(item, (list, tuple, set, frozenset, Mapping)):
+        return not item
+    return False
+
+
+def _coerce_list_items(value: Any) -> list[Any] | None:
+    """Return the items a ``list`` rule normalizes, or ``None`` when *value*
+    is a shape the rule cannot represent.
+
+    ``None`` is empty; a string comma-splits; a list or tuple is taken as
+    items when every item is a scalar or an empty container; a scalar wraps.
+    An unsupported shape — a mapping, a set, an item the rule would silently
+    stringify — returns ``None`` so the declared type check refuses the value
+    instead of the rule turning it into a plausible-looking list.
+    """
     if value is None:
         return []
     if isinstance(value, str):
         return list(value.split(","))
     if isinstance(value, (list, tuple)):
-        return list(value)
-    return [value]
+        items = list(value)
+        if not all(_is_supported_list_item(item) for item in items):
+            return None
+        return items
+    if isinstance(value, (int, float, bool)):
+        return [value]
+    return None
 
 
-def _apply_list_rule(value: Any, rule: NormalizationRule) -> list[Any]:
-    """Apply a ``list`` rule: coerce, run nested item rules, drop empties/dedupe."""
+def _is_empty_container(value: Any) -> bool:
+    """Return whether *value* is an empty list or mapping item."""
+    return isinstance(value, (list, tuple, set, frozenset, Mapping)) and not value
+
+
+def _apply_list_rule(value: Any, rule: NormalizationRule) -> Any:
+    """Apply a ``list`` rule: coerce, run nested item rules, drop empties/dedupe.
+
+    An empty item — ``None`` or an empty container — is dropped before the item
+    rules run, so a rule can never stringify it (``slug`` would turn an empty
+    set into the literal ``"set"``).  A value the rule cannot represent (a
+    mapping or another non-scalar container) is returned unchanged, so the
+    declared type check refuses it instead of the rule silently stringifying it.
+    """
+    items = _coerce_list_items(value)
+    if items is None:
+        return value
     normalized: list[Any] = []
-    for item in _coerce_list_items(value):
+    for item in items:
+        if item is None or _is_empty_container(item):
+            continue
         candidate = item
         for item_rule in rule.item_rules:
             candidate = _apply_normalization_rule(candidate, item_rule)
         if candidate is None:
             continue
         if isinstance(candidate, str) and not candidate.strip():
+            continue
+        if _is_empty_container(candidate):
             continue
         if candidate in normalized:
             continue
@@ -203,6 +249,22 @@ def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
     return value
 
 
+def _list_chain_declines(value: Any, rules: list[NormalizationRule]) -> bool:
+    """Return whether a list-normalization chain must leave *value* alone.
+
+    An unsupported shape must reach the declared type check unchanged; when the
+    chain declares a ``list`` rule, an earlier rule (``slug``) must not
+    stringify its items first.
+    """
+    if not any(rule.rule_type == "list" for rule in rules):
+        return False
+    if value is None:
+        return False
+    if isinstance(value, (list, tuple)):
+        return not all(_is_supported_list_item(item) for item in value)
+    return not isinstance(value, (str, int, float, bool))
+
+
 def _normalize_value(
     value: Any,
     option_key: str,
@@ -211,10 +273,12 @@ def _normalize_value(
 ) -> Any:
     """Apply all applicable normalization rules to a single option value.
 
-    Shared rules are applied first (in order), then per-option rules.
+    Shared rules are applied first (in order), then per-option rules.  A chain
+    that declares a ``list`` rule declines an unsupported shape entirely, so no
+    earlier rule in the chain can stringify it before the type check sees it.
 
     Args:
-        value: The raw value to normalize.
+        value: The raw input value.
         option_key: The option key being normalized.
         option_derivation: The per-option derivation metadata, if any.
         shared_rules: Module-wide normalization rules.
@@ -222,17 +286,20 @@ def _normalize_value(
     Returns:
         The normalized value.
     """
-    result = value
-
-    # Apply shared rules first
-    for rule in shared_rules:
-        if rule.source_key == "*" or rule.source_key == option_key:
-            result = _apply_normalization_rule(result, rule)
-
-    # Apply per-option rules
+    rules = [
+        rule
+        for rule in shared_rules
+        if rule.source_key == "*" or rule.source_key == option_key
+    ]
     if option_derivation is not None:
-        for rule in option_derivation.normalization_rules:
-            result = _apply_normalization_rule(result, rule)
+        rules.extend(option_derivation.normalization_rules)
+
+    if _list_chain_declines(value, rules):
+        return value
+
+    result = value
+    for rule in rules:
+        result = _apply_normalization_rule(result, rule)
 
     return result
 

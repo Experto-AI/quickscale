@@ -379,7 +379,9 @@ projects into a Django setting.
 `module.yml`, an option's checks are written in its own `validation` block under
 `config` and compiled into the derivation schema's `ValidationRule`s — one engine,
 authored next to the option; `derivation.option_derivations.<option>.validation_rules`
-is no longer written. A direct one-to-one projection is the option's `django_setting`
+and `legacy_aliases` are refused at load, as are the top-level
+`derivation.validation_rules` and `derivation.legacy_aliases` lists (rule 6
+forbids aliases). A direct one-to-one projection is the option's `django_setting`
 alone; `derived_settings` is only for a setting computed from several options or
 transformed, and carries no default (the option's `default` is the only one). The
 derivation section keeps normalisation, those computed settings, and wiring.

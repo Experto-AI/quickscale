@@ -378,6 +378,66 @@ description: Module without name
         with pytest.raises(ManifestError, match="must be a literal"):
             load_manifest(yaml_content, "mymod")
 
+    def test_load_manifest_condition_list_of_literals_is_accepted(self) -> None:
+        """A list entry is accepted when every element is a literal."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n"
+            "      type: string\n"
+            "      default: local\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        required_when:\n"
+            "          mode: [local, remote]\n"
+        )
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.get_option("my_option") is not None
+
+    def test_load_manifest_condition_list_elements_must_be_literals(self) -> None:
+        """A nested condition or container is not a literal list element."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n"
+            "      type: string\n"
+            "      default: local\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        required_when:\n"
+            "          mode: [{not_empty: true}]\n"
+        )
+        with pytest.raises(ManifestError, match="list of literals"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_condition_nonliteral_scalar_is_rejected(self) -> None:
+        """A YAML set is not a condition literal."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n"
+            "      type: string\n"
+            "      default: local\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        required_when:\n"
+            "          mode: !!set {local: null}\n"
+        )
+        with pytest.raises(ManifestError, match="must be a literal"):
+            load_manifest(yaml_content, "mymod")
+
     def test_load_manifest_option_not_empty_must_be_true(self) -> None:
         """validation.not_empty only takes the literal true."""
         yaml_content = (
@@ -1550,8 +1610,8 @@ class TestLoadManifestDerivation:
         assert manifest.derived_settings == []
         assert manifest.wiring_projections == []
 
-    def test_derivation_normalization_rules(self) -> None:
-        """Normalization rules in the derivation section are parsed."""
+    def test_derivation_normalization_rules_is_refused(self) -> None:
+        """A top-level normalization rule nothing executes fails the load."""
         yaml_content = """
 name: mymod
 version: '1.0.0'
@@ -1567,15 +1627,13 @@ derivation:
         basic: simple
         full: detailed
 """
-        manifest = load_manifest(yaml_content, "mymod")
-        assert len(manifest.derivation_rules) == 2
-        assert manifest.derivation_rules[0]["source_key"] == "provider"
-        assert manifest.derivation_rules[0]["rule_type"] == "lowercase"
-        assert manifest.derivation_rules[1]["source_key"] == "mode"
-        assert manifest.derivation_rules[1]["rule_type"] == "choice_map"
+        with pytest.raises(
+            ManifestError, match="derivation.normalization_rules is no longer"
+        ):
+            load_manifest(yaml_content, "mymod")
 
-    def test_derivation_validation_rules(self) -> None:
-        """Validation rules in the derivation section are parsed."""
+    def test_derivation_validation_rules_is_refused(self) -> None:
+        """A top-level validation rule nothing executes fails the load."""
         yaml_content = """
 name: mymod
 version: '1.0.0'
@@ -1589,11 +1647,10 @@ derivation:
     - option_key: enabled
       rule_type: required
 """
-        manifest = load_manifest(yaml_content, "mymod")
-        assert len(manifest.validation_rules) == 2
-        assert manifest.validation_rules[0]["option_key"] == "provider"
-        assert manifest.validation_rules[0]["rule_type"] == "choices"
-        assert manifest.validation_rules[1]["option_key"] == "enabled"
+        with pytest.raises(
+            ManifestError, match="derivation.validation_rules is no longer"
+        ):
+            load_manifest(yaml_content, "mymod")
 
     def test_derivation_normalization_rule_shapes_are_validated(self) -> None:
         """A malformed slug/list rule parameter fails the load, never silently."""
@@ -1739,8 +1796,8 @@ derivation:
         ):
             load_manifest(yaml_content, "mymod")
 
-    def test_derivation_legacy_aliases(self) -> None:
-        """Legacy aliases in the derivation section are parsed."""
+    def test_derivation_legacy_aliases_is_refused(self) -> None:
+        """A top-level alias nothing executes fails the load."""
         yaml_content = """
 name: mymod
 version: '1.0.0'
@@ -1755,10 +1812,10 @@ derivation:
       transform_params:
         basic: posthog
 """
-        manifest = load_manifest(yaml_content, "mymod")
-        assert len(manifest.legacy_aliases) == 2
-        assert manifest.legacy_aliases[0]["legacy_key"] == "old_api_key"
-        assert manifest.legacy_aliases[1]["transform"] == "rename_value"
+        with pytest.raises(
+            ManifestError, match="derivation.legacy_aliases is no longer"
+        ):
+            load_manifest(yaml_content, "mymod")
 
     def test_derivation_derived_settings(self) -> None:
         """Derived settings in the derivation section are parsed."""
@@ -1810,9 +1867,9 @@ derivation:
         """A derivation sub-section that is not a list raises ManifestError."""
         yaml_content = (
             "name: mymod\nversion: '1.0.0'\n"
-            "derivation:\n  validation_rules: not_a_list\n"
+            "derivation:\n  wiring_projections: not_a_list\n"
         )
-        with pytest.raises(ManifestError, match="validation_rules"):
+        with pytest.raises(ManifestError, match="wiring_projections"):
             load_manifest(yaml_content, "mymod")
 
     def test_derivation_not_mapping_raises(self) -> None:
@@ -1829,15 +1886,22 @@ version: '1.0.0'
 implies:
   - name: orgs
 derivation:
-  normalization_rules:
-    - source_key: provider
-      target_key: provider
-      rule_type: lowercase
+  option_derivations:
+    provider:
+      normalization_rules:
+        - source_key: provider
+          target_key: provider
+          rule_type: lowercase
 """
         manifest = load_manifest(yaml_content, "billing")
         assert len(manifest.implies) == 1
         assert manifest.implies[0].name == "orgs"
-        assert len(manifest.derivation_rules) == 1
+        assert (
+            manifest.option_derivations["provider"]["normalization_rules"][0][
+                "rule_type"
+            ]
+            == "lowercase"
+        )
 
     def test_derivation_does_not_break_backward_compat(self) -> None:
         """A manifest without derivation loads cleanly with empty derivation fields."""
@@ -1881,10 +1945,6 @@ derivation:
         - source_key: provider
           target_key: provider
           rule_type: lowercase
-      validation_rules:
-        - option_key: provider
-          rule_type: choices
-          allowed_values: [posthog]
 """
         manifest = load_manifest(yaml_content, "analytics")
         assert "enabled" in manifest.option_derivations
@@ -1895,12 +1955,77 @@ derivation:
             == "QUICKSCALE_ANALYTICS_ENABLED"
         )
         assert len(manifest.option_derivations["provider"]["normalization_rules"]) == 1
-        assert len(manifest.option_derivations["provider"]["validation_rules"]) == 1
-        assert (
-            manifest.option_derivations["provider"]["validation_rules"][0]["rule_type"]
-            == "choices"
-        )
         assert len(manifest.wiring_projections) == 1
+
+    def test_derivation_option_validation_rules_is_refused(self) -> None:
+        """A per-option derivation check nothing executes fails the load."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  option_derivations:
+    mode:
+      validation_rules:
+        - option_key: mode
+          rule_type: choices
+          allowed_values: [simple]
+"""
+        with pytest.raises(
+            ManifestError,
+            match=r"option_derivations\.mode\.validation_rules is no longer",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_option_legacy_aliases_is_refused(self) -> None:
+        """Rule 6: a renamed option is refused by name, never aliased."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  option_derivations:
+    mode:
+      legacy_aliases:
+        - legacy_key: old_mode
+          current_key: mode
+          transform: identity
+"""
+        with pytest.raises(
+            ManifestError,
+            match=r"option_derivations\.mode\.legacy_aliases is no longer",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_option_alias_null_is_refused(self) -> None:
+        """An explicitly present alias key is refused even when null."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  option_derivations:
+    mode:
+      legacy_aliases: null
+"""
+        with pytest.raises(
+            ManifestError,
+            match=r"option_derivations\.mode\.legacy_aliases is no longer",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_option_subsection_must_be_a_list(self) -> None:
+        """A null wireable sub-section is refused, not crashed on later."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  option_derivations:
+    mode:
+      derived_settings: null
+"""
+        with pytest.raises(
+            ManifestError,
+            match=r"option_derivations\.mode\.derived_settings must be a list",
+        ):
+            load_manifest(yaml_content, "mymod")
 
     def test_option_derivations_empty_when_absent(self) -> None:
         """option_derivations defaults to empty dict when the derivation section

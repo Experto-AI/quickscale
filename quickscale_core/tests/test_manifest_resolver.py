@@ -1997,3 +1997,88 @@ class TestListNormalization:
             manifest, self._schema(), overrides={"providers": None}
         )
         assert empty.resolved["providers"] == []
+
+    def test_list_drops_empty_container_items(self) -> None:
+        """An empty list/mapping item is an emptied item, item rules or not."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        schema = _make_schema(
+            option_derivations={
+                "providers": OptionDerivation(
+                    option_key="providers",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="list",
+                        )
+                    ],
+                )
+            }
+        )
+        result = resolve_module_config(
+            manifest, schema, overrides={"providers": [[], {}, "ok"]}
+        )
+        assert result.resolved["providers"] == ["ok"]
+
+    def test_list_leaves_an_unsupported_container_unchanged(self) -> None:
+        """A mapping is not stringified into items; the type check refuses it."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        result = resolve_module_config(
+            manifest, self._schema(), overrides={"providers": {"youtube": True}}
+        )
+        assert result.resolved["providers"] == {"youtube": True}
+
+    def test_list_with_an_unsupported_item_is_left_unchanged(self) -> None:
+        """One unrepresentable item leaves the whole list for the type check."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        result = resolve_module_config(
+            manifest, self._schema(), overrides={"providers": ["ok", {"x": 1}]}
+        )
+        assert result.resolved["providers"] == ["ok", {"x": 1}]
+
+    def test_list_drops_empty_items_before_item_rules(self) -> None:
+        """An empty container or null item never reaches the slug rule."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        result = resolve_module_config(
+            manifest,
+            self._schema(),
+            overrides={"providers": ["ok", set(), None, "ok"]},
+        )
+        assert result.resolved["providers"] == ["ok"]
+
+    def test_preceding_rule_cannot_erase_an_unsupported_item(self) -> None:
+        """A list-target chain declines before an earlier slug can stringify."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        schema = _make_schema(
+            option_derivations={
+                "providers": OptionDerivation(
+                    option_key="providers",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="slug",
+                        ),
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="list",
+                        ),
+                    ],
+                )
+            }
+        )
+        result = resolve_module_config(
+            manifest, schema, overrides={"providers": ["ok", {"ops": True}]}
+        )
+        assert result.resolved["providers"] == ["ok", {"ops": True}]

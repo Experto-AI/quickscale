@@ -6,7 +6,9 @@ non-adapter callers use (``resolve_manifest_module_options``).  A module's
 option defaults, normalization, and validation live in its ``module.yml``;
 adapter code resolves through the manifest engine via
 ``quickscale_core.runtime.build_generic_manifest_spec``.  SA217 removed the last
-per-module option functions from this surface.
+per-module option functions from this surface.  A supplied key the manifest
+declares retired is refused with the manifest's message before anything is
+resolved, so a retired name is never silently ignored.
 """
 
 from __future__ import annotations
@@ -40,6 +42,21 @@ def load_module_manifest_with_fallback(module_name: str) -> Any:
     )
 
 
+def _raise_for_retired_options(manifest: Any, options: Mapping[str, Any]) -> None:
+    """Refuse a supplied key the manifest declares retired.
+
+    ``retired_options`` is the one home of a retired key's refusal; resolving
+    fails closed with the authored message instead of silently dropping the
+    key, matching the sanitize and validation layers.
+    """
+    retired = sorted(name for name in manifest.retired_options if name in options)
+    if not retired:
+        return
+    from quickscale_core.schema.config_schema import ConfigValidationError
+
+    raise ConfigValidationError(manifest.retired_options[retired[0]])
+
+
 def resolve_manifest_module_options(
     module_name: str,
     options: Mapping[str, Any] | None = None,
@@ -53,6 +70,8 @@ def resolve_manifest_module_options(
     the manifest's canonical forms.
     """
     manifest = load_module_manifest_with_fallback(module_name)
+    supplied = dict(options or {})
+    _raise_for_retired_options(manifest, supplied)
     schema = build_schema_from_manifest(
         manifest_name=module_name,
         wiring_projections=manifest.wiring_projections,
@@ -60,7 +79,7 @@ def resolve_manifest_module_options(
         option_derivations=manifest.option_derivations,
         version="1",
     )
-    result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
+    result = resolve_module_config(manifest, schema, overrides=supplied)
     return dict(result.resolved)
 
 

@@ -22,6 +22,7 @@ from quickscale_core.contracts.resolvers import (
 )
 from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.manifest.schema import ModuleManifest
+from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_modules_notifications.adapter import (
     NOTIFICATIONS_CONSOLE_EMAIL_BACKEND,
     NOTIFICATIONS_LIVE_EMAIL_BACKEND,
@@ -46,6 +47,7 @@ def _make_mock_manifest(
     manifest.name = name
     manifest.get_defaults.return_value = defaults or {}
     manifest.managed_files = {}
+    manifest.retired_options = {}
     # SA5.1: manifest bridge reads derivation attributes from the manifest.
     manifest.wiring_projections = None
     manifest.derived_settings = None
@@ -111,6 +113,13 @@ class TestResolveManifestModuleOptions:
             "ops",
             "testing",
         ]
+
+    def test_retired_key_is_refused_before_resolving(self) -> None:
+        """A retired key fails closed with the manifest's authored message."""
+        with pytest.raises(ConfigValidationError, match="resend_api_key"):
+            resolve_manifest_module_options(
+                "notifications", {"resend_api_key": "raw-secret"}
+            )
 
 
 # ===================================================================
@@ -226,6 +235,11 @@ class TestNotificationsAdapterPredicates:
         """A null state value wires a blank setting, never the string "None"."""
         spec = get_notifications_adapter()({"reply_to_email": None})
         assert spec.settings["QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL"] == ""
+
+    def test_adapter_refuses_a_retired_key(self) -> None:
+        """The adapter path refuses a retired raw-secret key, never drops it."""
+        with pytest.raises(ConfigValidationError, match="webhook_secret"):
+            get_notifications_adapter()({"webhook_secret": "whsec_raw"})
 
 
 # ===================================================================

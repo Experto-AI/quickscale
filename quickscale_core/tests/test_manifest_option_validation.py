@@ -311,6 +311,15 @@ class TestExtendedValidationVocabulary:
         ]
         assert validate_module_options(manifest, {"allowed_tags": ["ops"]}) == []
 
+    def test_list_with_a_mapping_item_is_refused(self) -> None:
+        """A non-scalar item never canonicalizes into a plausible list value."""
+        manifest = _manifest(
+            _option("tags", option_type="list", default=[], setting="TAGS")
+        )
+        assert validate_module_options(manifest, {"tags": ["ok", {"x": True}]}) == [
+            "TAGS (modules.demo.tags) contains unsupported items: {'x': True}"
+        ]
+
     def test_choices_on_a_list_checks_each_item(self) -> None:
         manifest = _manifest(
             _option(
@@ -738,3 +747,54 @@ class TestPlanApplyEnforcement:
 
     def test_stripped_rate_limit_passes(self) -> None:
         validate_config(self._config("  blog:\n    api_rate_limit: ' 5/hour '\n"))
+
+    def test_comma_string_list_option_loads_canonical_values(self) -> None:
+        """A ``list`` rule's comma-split spelling is accepted at the boundary."""
+        social = validate_config(
+            self._config("  social:\n    provider_allowlist: youtube, tiktok\n")
+        )
+        assert social.modules["social"].options["provider_allowlist"] == [
+            "youtube",
+            "tiktok",
+        ]
+        notifications = validate_config(
+            self._config("  notifications:\n    default_tags: quickscale, ops\n")
+        )
+        assert notifications.modules["notifications"].options["default_tags"] == [
+            "quickscale",
+            "ops",
+        ]
+
+    def test_mapping_for_a_list_option_is_refused(self) -> None:
+        """Only string spellings canonicalize; a mapping stays a type error."""
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                self._config("  notifications:\n    allowed_tags: {ops: true}\n")
+            )
+        assert "QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS" in str(exc_info.value)
+        assert "must be a list" in str(exc_info.value)
+
+    def test_nested_mapping_item_for_a_list_option_is_refused(self) -> None:
+        """An item the list rule cannot represent is refused, never slugified."""
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                self._config(
+                    "  notifications:\n"
+                    "    allowed_tags: [quickscale, transactional, {ops: true}]\n"
+                )
+            )
+        assert "QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS" in str(exc_info.value)
+        assert "unsupported items" in str(exc_info.value)
+
+    def test_empty_set_item_for_a_list_option_is_dropped(self) -> None:
+        """An empty container item is an emptied item, never the slug "set"."""
+        config = validate_config(
+            self._config(
+                "  notifications:\n"
+                "    allowed_tags: [quickscale, transactional, !!set {}]\n"
+            )
+        )
+        assert config.modules["notifications"].options["allowed_tags"] == [
+            "quickscale",
+            "transactional",
+        ]

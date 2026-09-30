@@ -783,6 +783,62 @@ class TestAuthModuleConfig:
         assert config["registration_enabled"] is False
         assert "Allow new user registration: False" in output
 
+    def test_non_interactive_config_refuses_a_mapping_list_option(self):
+        """A raw mapping is not a list spelling; the declared type still fails."""
+        with pytest.raises(click.Abort):
+            MODULE_CONFIGURATOR_REGISTRY["notifications"].configure(
+                non_interactive=True,
+                existing_config={
+                    "allowed_tags": {"ops": True},
+                    "default_tags": [],
+                },
+            )
+
+    def test_non_interactive_config_accepts_a_comma_string_list_option(self):
+        """A comma string is an accepted list spelling and loads canonical."""
+        config = MODULE_CONFIGURATOR_REGISTRY["notifications"].configure(
+            non_interactive=True,
+            existing_config={
+                "allowed_tags": "quickscale, transactional",
+                "default_tags": "quickscale",
+            },
+        )
+
+        assert config["allowed_tags"] == ["quickscale", "transactional"]
+        assert config["default_tags"] == ["quickscale"]
+
+    def test_interactive_config_does_not_launder_a_mapping_default(self):
+        """Accepting every prompt never turns a stored mapping into a list."""
+
+        def _prompt(_description, **kwargs):
+            return kwargs.get("default", "")
+
+        with (
+            patch("click.prompt", side_effect=_prompt),
+            patch("click.confirm", return_value=True),
+        ):
+            config = MODULE_CONFIGURATOR_REGISTRY["notifications"].configure(
+                existing_config={
+                    "allowed_tags": {
+                        "quickscale": True,
+                        "transactional": True,
+                        "ops": True,
+                    },
+                    "default_tags": [],
+                },
+            )
+
+        assert config["allowed_tags"] == [
+            "quickscale",
+            "transactional",
+            "notifications",
+            "auth",
+            "forms",
+            "ops",
+            "testing",
+        ]
+        assert config["default_tags"] == ["quickscale", "transactional"]
+
 
 class TestModuleWiringSpecs:
     """Regression tests for module wiring spec collisions"""
