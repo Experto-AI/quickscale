@@ -58,6 +58,9 @@ def test_post_hook_coerces_and_adds_static_settings() -> None:
     assert result.settings["BLOG_POSTS_PER_PAGE"] == 10
     assert result.settings["BLOG_ENABLE_RSS"] is True
     assert result.settings["BLOG_API_RATE_LIMIT"] == "5/hour"
+    assert result.settings["REST_FRAMEWORK"] == {
+        "DEFAULT_THROTTLE_RATES": {"quickscale_blog_api": "5/hour"}
+    }
     assert result.settings["MARKDOWNX_MEDIA_PATH"] == "blog/markdownx/"
 
 

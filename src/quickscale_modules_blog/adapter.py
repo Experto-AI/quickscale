@@ -25,6 +25,14 @@ def _blog_post_hook(
             "The manifest derivation produced an invalid result."
         )
     settings["BLOG_API_RATE_LIMIT"] = api_rate
+    # Rule 32 — the blog automation API's scope carries the module stem and
+    # its rate is the module's _RATE_LIMIT option, contributed here for rule
+    # 30's merge.
+    settings["REST_FRAMEWORK"] = {
+        "DEFAULT_THROTTLE_RATES": {
+            "quickscale_blog_api": api_rate,
+        },
+    }
     settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
         "markdown.extensions.fenced_code",
         "markdown.extensions.tables",

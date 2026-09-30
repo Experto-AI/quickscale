@@ -55,6 +55,7 @@ the current organization correctly.
    ```python
    INSTALLED_APPS = [
        # ... other apps
+       "rest_framework",
        "markdownx",
        "quickscale_modules_orgs",
        "quickscale_modules_blog",
@@ -71,8 +72,13 @@ the current organization correctly.
    ]
    ```
 
-3. Configure Markdownx in `settings.py`:
+3. Configure media, the RSS switch, and Markdownx in `settings.py` — the module's
+   startup checks require `BLOG_ENABLE_RSS` and a non-trivial `MEDIA_URL`:
    ```python
+   MEDIA_URL = "/media/"
+   MEDIA_ROOT = BASE_DIR / "media"
+   BLOG_ENABLE_RSS = True
+
    # Markdownx settings
    MARKDOWNX_MARKDOWN_EXTENSIONS = [
        "markdown.extensions.fenced_code",
@@ -82,30 +88,43 @@ the current organization correctly.
    MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
    ```
 
-4. Root-include blog URLs and the Markdownx upload URLs in `urls.py`:
+4. Configure DRF — the shared error shape and the blog API throttle scope:
+   ```python
+   BLOG_API_RATE_LIMIT = "5/hour"  # or the rate your traffic needs
+
+   REST_FRAMEWORK = {
+       "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
+       "DEFAULT_THROTTLE_RATES": {
+           "quickscale_blog_api": BLOG_API_RATE_LIMIT,
+       },
+   }
+   ```
+
+5. Include blog URLs and the Markdownx upload URLs in `urls.py`:
    ```python
    from django.urls import include, path
 
    urlpatterns = [
        # ... other patterns
-       path("", include("quickscale_modules_blog.urls")),
+       path("blog/", include("quickscale_modules_blog.urls")),
        path("markdownx/", include("markdownx.urls")),
    ]
    ```
 
-   > **Note**: The blog module's ``urls.py`` already defines the ``/blog/...``
-   > prefix, so it must be included at root (``path('', ...)``). Keep the
-   > sibling ``markdownx/`` include as shown so the editor upload/browser URLs
-   > resolve correctly. There are no ``/orgs/<slug>/blog/...`` paths — the
-   > active organization is resolved from ``request.org`` at runtime (System org
-   > for anonymous readers, session- or personal-org for authenticated readers).
+   > **Note**: The module's mount lives in its manifest's `url_includes` entry
+   > (`blog/`), and its `urls.py` holds no prefix (Module Conventions rule 7).
+   > Keep the sibling `markdownx/` include as shown so the editor
+   > upload/browser URLs resolve correctly. There are no
+   > ``/orgs/<slug>/blog/...`` paths — the active organization is resolved from
+   > ``request.org`` at runtime (System org for anonymous readers, session- or
+   > personal-org for authenticated readers).
 
-5. Run migrations:
+6. Run migrations:
    ```bash
    python manage.py migrate quickscale_blog
    ```
 
-6. Collect static files:
+7. Collect static files:
    ```bash
    python manage.py collectstatic
    ```
@@ -137,8 +156,8 @@ The blog module now supports a two-step automation flow:
 **Request**
 
 - `POST /blog/api/media/`
-- Auth: staff session + CSRF, or bearer token configured in `BLOG_API_TOKENS`
-- Rate limit: `BLOG_API_RATE_LIMIT` (default `5/hour`) applies after successful auth/CSRF checks
+- Auth: staff session + CSRF (DRF session authentication only)
+- Rate limit: `BLOG_API_RATE_LIMIT` (default `5/hour`), enforced by the DRF throttle scope `quickscale_blog_api`
 - `multipart/form-data`
 - Fields:
     - `file` (required)
@@ -167,8 +186,8 @@ The blog module now supports a two-step automation flow:
 **Request**
 
 - `POST /blog/api/publish/`
-- Auth: staff session + CSRF, or bearer token configured in `BLOG_API_TOKENS`
-- Rate limit: `BLOG_API_RATE_LIMIT` (default `5/hour`) applies after successful auth/CSRF checks
+- Auth: staff session + CSRF (DRF session authentication only)
+- Rate limit: `BLOG_API_RATE_LIMIT` (default `5/hour`), enforced by the DRF throttle scope `quickscale_blog_api`
 - `application/json`
 - Fields:
     - `title` (required)
@@ -192,24 +211,9 @@ The blog module now supports a two-step automation flow:
 
 #### Non-browser automation auth
 
-For pipelines, configure bearer tokens in Django settings:
-
-```python
-BLOG_API_TOKENS = [
-    {
-        "token": os.environ["BLOG_API_TOKEN"],
-        "username": "blogpublisher",
-    },
-]
-```
-
-Then send:
-
-```http
-Authorization: Bearer <BLOG_API_TOKEN>
-```
-
-If you do not configure bearer tokens, both endpoints continue to work with standard Django staff sessions and CSRF protection.
+Both endpoints accept the standard Django staff session only: a pipeline signs in as a staff user
+and sends the session cookie with the CSRF token. The former bearer-token scheme
+(`BLOG_API_TOKENS`) is removed; a shared token scheme is future work.
 
 ### Creating Posts
 
@@ -418,7 +422,14 @@ BLOG_API_ALLOWED_IMAGE_FORMATS = ["PNG", "JPEG", "WEBP", "GIF"]
 BLOG_API_UPLOAD_MAX_WIDTH = 4096
 BLOG_API_UPLOAD_MAX_HEIGHT = 4096
 BLOG_API_RATE_LIMIT = "5/hour"
-BLOG_API_TOKENS = []  # Optional machine-auth tokens for automation pipelines
+
+# DRF: the shared error shape and the blog API throttle scope
+REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
+    "DEFAULT_THROTTLE_RATES": {
+        "quickscale_blog_api": BLOG_API_RATE_LIMIT,
+    },
+}
 
 # Featured image settings
 BLOG_THUMBNAIL_SIZES = {

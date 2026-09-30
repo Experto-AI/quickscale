@@ -28,30 +28,6 @@ _BLOG_RLS_TARGETS = (
     (BLOG_POST_TABLE, BLOG_POST_RLS_POLICY),
 )
 
-# Dedicated counter table for the blog API limiter.  The counter is
-# deliberately not a Django model: it holds no tenant-owned data, so it stays
-# out of the model-based tenant classification and purge contract and is only
-# ever touched by the limiter's single atomic upsert.  The table name must
-# match ``BLOG_API_THROTTLE_COUNTER_TABLE`` in ``quickscale_modules_blog.views``.
-BLOG_API_THROTTLE_COUNTER_TABLE = "quickscale_blog_api_throttle_counter"
-_CREATE_BLOG_API_THROTTLE_COUNTER_SQL = f"""
-CREATE TABLE IF NOT EXISTS {BLOG_API_THROTTLE_COUNTER_TABLE} (
-    counter_key varchar(96) NOT NULL PRIMARY KEY,
-    request_count integer NOT NULL DEFAULT 0,
-    expires_at timestamp with time zone NOT NULL
-)
-"""
-_CREATE_BLOG_API_THROTTLE_COUNTER_INDEX_SQL = f"""
-CREATE INDEX IF NOT EXISTS {BLOG_API_THROTTLE_COUNTER_TABLE}_expires_at_idx
-    ON {BLOG_API_THROTTLE_COUNTER_TABLE} (expires_at)
-"""
-_DROP_BLOG_API_THROTTLE_COUNTER_INDEX_SQL = (
-    f"DROP INDEX IF EXISTS {BLOG_API_THROTTLE_COUNTER_TABLE}_expires_at_idx"
-)
-_DROP_BLOG_API_THROTTLE_COUNTER_SQL = (
-    f"DROP TABLE IF EXISTS {BLOG_API_THROTTLE_COUNTER_TABLE}"
-)
-
 
 def _forward_rls(apps: Any, schema_editor: Any) -> None:
     """Drop stale policies then re-create from the NULLIF-guarded template."""
@@ -387,16 +363,6 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             code=_forward_rls,
             reverse_code=migrations.RunPython.noop,
-            hints={"target_db": "default"},
-        ),
-        migrations.RunSQL(
-            sql=_CREATE_BLOG_API_THROTTLE_COUNTER_SQL,
-            reverse_sql=_DROP_BLOG_API_THROTTLE_COUNTER_SQL,
-            hints={"target_db": "default"},
-        ),
-        migrations.RunSQL(
-            sql=_CREATE_BLOG_API_THROTTLE_COUNTER_INDEX_SQL,
-            reverse_sql=_DROP_BLOG_API_THROTTLE_COUNTER_INDEX_SQL,
             hints={"target_db": "default"},
         ),
     ]

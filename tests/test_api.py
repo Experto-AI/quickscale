@@ -1,6 +1,7 @@
-"""Tests for blog publish API endpoint (T1.6: single flat URL tree)."""
+"""Tests for the blog module's DRF automation API endpoints."""
 
 import json
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,22 +13,22 @@ from django.db import IntegrityError
 from django.test import Client, override_settings
 from django.urls import reverse
 from PIL import Image
+from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.throttling import ScopedRateThrottle
 
 from quickscale_modules_blog.models import BlogMediaAsset, Category, Post, Tag
+from quickscale_modules_blog.throttles import BlogApiThrottle
 from quickscale_modules_blog.views import (
+    MediaUploadAPIView,
+    PostPublishAPIView,
     _build_media_response_url,
-    _enforce_blog_api_rate_limit,
-    _get_authorization_token,
-    _get_blog_api_rate_limit_counter_key,
-    _get_blog_api_rate_limit_ident,
-    _get_blog_api_tokens,
-    authenticate_blog_api_request,
 )
 from quickscale_modules_orgs.current_org import get_client_ip
 from quickscale_modules_storage.helpers import (
     validate_file_upload as storage_validate_file_upload,
 )
 
+BLOG_API_SCOPE = "quickscale_blog_api"
 
 UPLOAD_VALIDATION_PATHS = (
     pytest.param(storage_validate_file_upload, id="helper-backed"),
@@ -115,6 +116,42 @@ def make_uploaded_test_image(
     )
 
 
+def _rest_framework(rate: str) -> dict[str, object]:
+    """Return a REST_FRAMEWORK dict carrying *rate* for the blog API scope."""
+    return {
+        "DEFAULT_AUTHENTICATION_CLASSES": [
+            "rest_framework.authentication.SessionAuthentication",
+        ],
+        "DEFAULT_THROTTLE_RATES": {BLOG_API_SCOPE: rate},
+        "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
+    }
+
+
+@contextmanager
+def blog_api_rate(rate: str):
+    """Apply *rate* as the blog API throttle rate for one test block.
+
+    DRF binds ``DEFAULT_THROTTLE_RATES`` onto the throttle class at import
+    time, so the test applies both bindings, as the sibling DRF module's
+    suite does.
+    """
+    cache.clear()
+    rates = {BLOG_API_SCOPE: rate}
+    with (
+        override_settings(REST_FRAMEWORK=_rest_framework(rate)),
+        patch.object(ScopedRateThrottle, "THROTTLE_RATES", rates),
+    ):
+        yield
+    cache.clear()
+
+
+def _error(response) -> dict:
+    """Return the one QuickScale error body from *response*."""
+    body = response.json()
+    assert "error" in body, body
+    return body["error"]
+
+
 @pytest.fixture
 def staff_user(db):
     """Create a staff user with a personal org (SaaS mode)."""
@@ -146,102 +183,64 @@ def staff_org(db, staff_user):
     return Organization.objects.get_system_org()
 
 
-def counter_rows() -> dict[str, int]:
-    """Return the blog API throttle counter rows keyed by counter key."""
-    from django.db import connection
-
-    from quickscale_modules_blog.views import BLOG_API_THROTTLE_COUNTER_TABLE
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            f"SELECT counter_key, request_count FROM {BLOG_API_THROTTLE_COUNTER_TABLE}"
-        )
-        return {str(key): int(count) for key, count in cursor.fetchall()}
-
-
 @pytest.fixture(autouse=True)
-def clear_blog_api_rate_limit_cache():
-    """Keep blog cache state isolated across tests.
-
-    The limiter's counter lives in its own table, which the per-test database
-    transaction rolls back like any other row.
-    """
+def clear_blog_api_throttle_cache():
+    """Keep DRF throttle history isolated across tests."""
     cache.clear()
     yield
     cache.clear()
 
 
+def _assert_org_context_restored_to_none(system_org) -> None:
+    """Assert the org ContextVar and GUC are restored and re-prime freshly."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        set_current_org_id,
+    )
+
+    assert get_current_org_id() is None, (
+        "ContextVar should be restored after the request completes"
+    )
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_setting('app.current_org_id', true)")
+        (raw_guc,) = cursor.fetchone()
+    assert raw_guc == "" or raw_guc is None, (
+        f"GUC should be empty after restore, got {raw_guc!r}"
+    )
+
+    with CaptureQueriesContext(connection) as captured:
+        set_current_org_id(system_org.pk)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('app.current_org_id', true)")
+        finally:
+            set_current_org_id(None)
+
+    set_local_count = sum(
+        1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+    )
+    assert set_local_count == 1, (
+        f"Expected 1 SET LOCAL after memo-clear re-prime, got {set_local_count}"
+    )
+
+
 @pytest.mark.django_db
 class TestPublishPostApi:
-    """Tests for publish post API"""
+    """Tests for the publish post API"""
 
-    def test_get_blog_api_tokens_ignores_invalid_entries(self, settings):
-        """Runtime helper silently skips malformed entries (startup
-        validation covers the fail-hard check — see test_apps.py)."""
-        settings.BLOG_API_TOKENS = [
-            {"token": " valid-token ", "username": " author "},
-            {"token": "", "username": "missing-token"},
-            {"token": "missing-user", "username": ""},
-            "invalid-entry",
-        ]
-
-        assert _get_blog_api_tokens() == [("valid-token", "author")]
-
-    def test_get_authorization_token_rejects_malformed_headers(self, rf):
-        """Authorization parsing should reject malformed or unsupported headers."""
-        assert _get_authorization_token(rf.get("/blog/api")) is None
-        assert (
-            _get_authorization_token(rf.get("/blog/api", HTTP_AUTHORIZATION="Bearer"))
-            == ""
-        )
-        assert (
-            _get_authorization_token(
-                rf.get("/blog/api", HTTP_AUTHORIZATION="Basic abc123")
-            )
-            == ""
-        )
-
-    def test_authenticate_blog_api_request_rejects_missing_token_user(
-        self,
-        rf,
-        settings,
+    def test_publish_post_api_get_method_not_allowed_returns_405(
+        self, client, staff_user
     ):
-        """Token auth should fail when the configured username does not exist."""
-        settings.BLOG_API_TOKENS = [{"token": "publish-token", "username": "ghost"}]
+        """Test API rejects non-POST methods for an authenticated caller"""
+        _login_with_org(client, staff_user)
 
-        _, response = authenticate_blog_api_request(
-            rf.post("/blog/api", HTTP_AUTHORIZATION="Bearer publish-token")
-        )
-
-        assert response is not None
-        assert response.status_code == 401
-        assert response.content == b'{"error": "Invalid API token"}'
-
-    def test_authenticate_blog_api_request_rejects_non_staff_token_user(
-        self,
-        rf,
-        settings,
-        user,
-    ):
-        """Token auth should still require staff access for machine users."""
-        settings.BLOG_API_TOKENS = [
-            {"token": "publish-token", "username": user.username}
-        ]
-
-        _, response = authenticate_blog_api_request(
-            rf.post("/blog/api", HTTP_AUTHORIZATION="Token publish-token")
-        )
-
-        assert response is not None
-        assert response.status_code == 403
-        assert response.content == b'{"error": "Staff access required"}'
-
-    def test_publish_post_api_get_method_not_allowed_returns_405(self, client):
-        """Test API rejects non-POST methods"""
         response = client.get(reverse("quickscale_blog:api_publish_post"))
 
         assert response.status_code == 405
-        assert response.json()["error"] == "Method not allowed"
+        assert _error(response)["code"] == "method_not_allowed"
 
     def test_publish_post_api_unauthenticated_returns_401(self, client):
         """Test API requires authentication"""
@@ -252,21 +251,7 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 401
-        assert response.json()["error"] == "Authentication required"
-
-    def test_publish_post_api_non_ascii_token_returns_401(self, client, settings):
-        """Non-ASCII bearer tokens should fail authentication without raising."""
-        settings.BLOG_API_TOKENS = [{"token": "publish-token", "username": "unused"}]
-
-        response = client.post(
-            reverse("quickscale_blog:api_publish_post"),
-            data=json.dumps({"title": "Post", "content": "Content"}),
-            content_type="application/json",
-            HTTP_AUTHORIZATION="Bearer tokén",
-        )
-
-        assert response.status_code == 401
-        assert response.json()["error"] == "Invalid API token"
+        assert _error(response)["code"] == "not_authenticated"
 
     def test_publish_post_api_non_staff_returns_403(self, client, user):
         """Test API requires staff permissions"""
@@ -279,7 +264,9 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 403
-        assert response.json()["error"] == "Staff access required"
+        error = _error(response)
+        assert error["code"] == "permission_denied"
+        assert error["message"] == "Staff access required"
 
     def test_publish_post_api_missing_csrf_returns_403(self, staff_user):
         """Test API enforces CSRF protection for session-authenticated requests"""
@@ -293,277 +280,7 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 403
-
-    def test_publish_post_api_token_auth_bypasses_csrf(
-        self,
-        settings,
-        staff_user,
-        staff_org,
-        blog_org_scope,
-    ):
-        """Test machine-authenticated publish requests can use bearer tokens."""
-        settings.BLOG_API_TOKENS = [
-            {"token": "publish-token", "username": staff_user.username}
-        ]
-        csrf_client = Client(enforce_csrf_checks=True)
-
-        response = csrf_client.post(
-            reverse("quickscale_blog:api_publish_post"),
-            data=json.dumps({"title": "Token Post", "content": "Body"}),
-            content_type="application/json",
-            HTTP_AUTHORIZATION="Bearer publish-token",
-        )
-
-        assert response.status_code == 201
-        with blog_org_scope(staff_org):
-            post = Post.all_objects.get(slug="token-post")
-            assert post.author == staff_user
-            # Token auth resolves user's personal org
-            assert post.organization is not None
-
-    def test_publish_post_api_token_auth_ignores_spoofed_forwarded_for_for_rate_limit(
-        self,
-        settings,
-        staff_user,
-        staff_org,
-        blog_org_scope,
-    ):
-        """Token-authenticated publish requests should throttle by REMOTE_ADDR by default."""
-        settings.BLOG_API_RATE_LIMIT = "1/hour"
-        settings.BLOG_API_TOKENS = [
-            {"token": "publish-token", "username": staff_user.username}
-        ]
-        csrf_client = Client(enforce_csrf_checks=True)
-
-        first_response = csrf_client.post(
-            reverse("quickscale_blog:api_publish_post"),
-            data=json.dumps({"title": "Token Post One", "content": "Body"}),
-            content_type="application/json",
-            HTTP_AUTHORIZATION="Bearer publish-token",
-            HTTP_X_FORWARDED_FOR="198.51.100.10",
-            REMOTE_ADDR="10.0.0.8",
-        )
-        second_response = csrf_client.post(
-            reverse("quickscale_blog:api_publish_post"),
-            data=json.dumps({"title": "Token Post Two", "content": "Body"}),
-            content_type="application/json",
-            HTTP_AUTHORIZATION="Bearer publish-token",
-            HTTP_X_FORWARDED_FOR="198.51.100.11",
-            REMOTE_ADDR="10.0.0.8",
-        )
-
-        assert first_response.status_code == 201
-        assert second_response.status_code == 429
-        assert second_response.json() == {"error": "Rate limit exceeded"}
-        assert int(second_response["Retry-After"]) > 0
-        with blog_org_scope(staff_org):
-            assert Post.objects.filter(slug="token-post-two").count() == 0
-
-    def test_publish_post_api_token_auth_uses_xff_when_configured(
-        self,
-        settings,
-        staff_user,
-    ):
-        """When USE_X_FORWARDED_FOR and TRUSTED_PROXY_COUNT are configured,
-        the blog rate limiter uses the X-Forwarded-For client IP for buckets."""
-        from django.test import override_settings
-
-        settings.BLOG_API_RATE_LIMIT = "1/hour"
-        settings.BLOG_API_TOKENS = [
-            {"token": "publish-token", "username": staff_user.username}
-        ]
-        csrf_client = Client(enforce_csrf_checks=True)
-
-        with override_settings(
-            USE_X_FORWARDED_FOR=True,
-            TRUSTED_PROXY_COUNT=1,
-        ):
-            first_response = csrf_client.post(
-                reverse("quickscale_blog:api_publish_post"),
-                data=json.dumps({"title": "Xff Post One", "content": "Body"}),
-                content_type="application/json",
-                HTTP_AUTHORIZATION="Bearer publish-token",
-                HTTP_X_FORWARDED_FOR="198.51.100.10",
-                REMOTE_ADDR="10.0.0.8",
-            )
-            second_response = csrf_client.post(
-                reverse("quickscale_blog:api_publish_post"),
-                data=json.dumps({"title": "Xff Post Two", "content": "Body"}),
-                content_type="application/json",
-                HTTP_AUTHORIZATION="Bearer publish-token",
-                HTTP_X_FORWARDED_FOR="198.51.100.11",
-                REMOTE_ADDR="10.0.0.9",
-            )
-
-        # Different XFF values should NOT share a bucket (canonical IP differs)
-        assert first_response.status_code == 201
-        assert second_response.status_code == 201, (
-            "Different X-Forwarded-For values should get independent buckets "
-            "when USE_X_FORWARDED_FOR is enabled"
-        )
-
-        # Third request with SAME XFF as first should be rate-limited
-        with override_settings(
-            USE_X_FORWARDED_FOR=True,
-            TRUSTED_PROXY_COUNT=1,
-        ):
-            third_response = csrf_client.post(
-                reverse("quickscale_blog:api_publish_post"),
-                data=json.dumps({"title": "Xff Post Three", "content": "Body"}),
-                content_type="application/json",
-                HTTP_AUTHORIZATION="Bearer publish-token",
-                HTTP_X_FORWARDED_FOR="198.51.100.10",
-                REMOTE_ADDR="10.0.0.8",
-            )
-
-        assert third_response.status_code == 429
-
-    @pytest.mark.parametrize("use_xff,proxy_count,xff", BLOG_CLIENT_IP_CASES)
-    def test_blog_rate_limiter_chain_matches_direct_resolver(
-        self,
-        rf,
-        use_xff: bool,
-        proxy_count: int,
-        xff: str | None,
-    ) -> None:
-        """Identifier, counter key, and enforcement share resolver value parity."""
-        request_kwargs: dict[str, str] = {"REMOTE_ADDR": "10.0.0.1"}
-        if xff is not None:
-            request_kwargs["HTTP_X_FORWARDED_FOR"] = xff
-        request = rf.post("/blog/api/publish/", **request_kwargs)
-
-        with override_settings(
-            USE_X_FORWARDED_FOR=use_xff,
-            TRUSTED_PROXY_COUNT=proxy_count,
-        ):
-            expected_ip = get_client_ip(request)
-            expected_ident = expected_ip.strip() or "unknown"
-            assert _get_blog_api_rate_limit_ident(request) == expected_ident
-            expected_key = _get_blog_api_rate_limit_counter_key(request, 1)
-
-            with patch("quickscale_modules_blog.views.time", return_value=3600):
-                assert _enforce_blog_api_rate_limit(request) is None
-
-        assert counter_rows() == {expected_key: 1}
-
-    def test_blog_rate_limiter_empty_identity_uses_unknown_bucket(self, rf):
-        """An empty resolved value keeps the limiter's existing safe fallback."""
-        request = rf.post("/blog/api/publish/", REMOTE_ADDR="")
-
-        with override_settings(USE_X_FORWARDED_FOR=False, TRUSTED_PROXY_COUNT=0):
-            expected_ip = get_client_ip(request)
-            assert expected_ip == ""
-            assert _get_blog_api_rate_limit_ident(request) == "unknown"
-            expected_key = _get_blog_api_rate_limit_counter_key(request, 1)
-
-            with patch("quickscale_modules_blog.views.time", return_value=3600):
-                assert _enforce_blog_api_rate_limit(request) is None
-
-        assert counter_rows() == {expected_key: 1}
-
-    def test_blog_rate_limiter_hashed_identity_keeps_former_collision_apart(self, rf):
-        """Hashing keeps an IPv4 address and an IPv6 fragment in separate buckets."""
-        ipv4_request = rf.post("/blog/api/publish/", REMOTE_ADDR="1.2")
-        ipv6_request = rf.post("/blog/api/publish/", REMOTE_ADDR="1:2")
-
-        with override_settings(USE_X_FORWARDED_FOR=False, TRUSTED_PROXY_COUNT=0):
-            ipv4_key = _get_blog_api_rate_limit_counter_key(ipv4_request, 1)
-            ipv6_key = _get_blog_api_rate_limit_counter_key(ipv6_request, 1)
-
-        assert ipv4_key != ipv6_key
-        assert "1.2" not in ipv4_key
-        assert "1:2" not in ipv6_key
-
-    @pytest.mark.parametrize("setting_name,setting_value", BLOG_INVALID_PROXY_SETTINGS)
-    def test_publish_post_api_invalid_proxy_settings_fail_loud_without_mutation(
-        self,
-        rf,
-        settings,
-        staff_user,
-        staff_org,
-        blog_org_scope,
-        setting_name: str,
-        setting_value: object,
-    ) -> None:
-        """The published-post limiter raises before counter or post mutation."""
-        settings.BLOG_API_RATE_LIMIT = "1/hour"
-        settings.BLOG_API_TOKENS = [
-            {"token": "invalid-proxy-token", "username": staff_user.username}
-        ]
-        request_kwargs = {
-            "REMOTE_ADDR": "10.0.0.1",
-            "HTTP_X_FORWARDED_FOR": "198.51.100.1",
-        }
-        url = reverse("quickscale_blog:api_publish_post")
-        direct_request = rf.post(url, **request_kwargs)
-        settings_values: dict[str, object] = {
-            "USE_X_FORWARDED_FOR": False,
-            "TRUSTED_PROXY_COUNT": 1,
-        }
-        missing_setting: str | None = None
-        if setting_value is _MISSING:
-            missing_setting = setting_name
-        else:
-            settings_values[setting_name] = setting_value
-
-        with blog_org_scope(staff_org):
-            initial_count = Post.all_objects.filter(slug="invalid-proxy-post").count()
-
-        with override_settings(**settings_values):
-            if missing_setting is not None:
-                delattr(settings, missing_setting)
-            with pytest.raises(ImproperlyConfigured) as direct_error:
-                get_client_ip(direct_request)
-
-            client = Client(enforce_csrf_checks=True)
-            with pytest.raises(ImproperlyConfigured) as endpoint_error:
-                client.post(
-                    url,
-                    data=json.dumps({"title": "Invalid Proxy Post", "content": "Body"}),
-                    content_type="application/json",
-                    HTTP_AUTHORIZATION="Bearer invalid-proxy-token",
-                    **request_kwargs,
-                )
-
-            assert type(endpoint_error.value) is type(direct_error.value)
-            assert str(endpoint_error.value) == str(direct_error.value)
-            assert setting_name in str(endpoint_error.value)
-            assert counter_rows() == {}
-
-        with blog_org_scope(staff_org):
-            assert Post.all_objects.filter(slug="invalid-proxy-post").count() == (
-                initial_count
-            )
-
-    def test_publish_post_api_missing_csrf_still_returns_403_when_rate_limited(
-        self,
-        settings,
-        staff_user,
-    ):
-        """Session-authenticated requests should keep CSRF enforcement ahead of throttling."""
-        settings.BLOG_API_RATE_LIMIT = "1/hour"
-        settings.BLOG_API_TOKENS = [
-            {"token": "publish-token", "username": staff_user.username}
-        ]
-
-        token_client = Client(enforce_csrf_checks=True)
-        session_client = Client(enforce_csrf_checks=True)
-        _login_with_org(session_client, staff_user)
-
-        warm_response = token_client.post(
-            reverse("quickscale_blog:api_publish_post"),
-            data=json.dumps({"title": "Warm Post", "content": "Body"}),
-            content_type="application/json",
-            HTTP_AUTHORIZATION="Bearer publish-token",
-        )
-        csrf_response = session_client.post(
-            reverse("quickscale_blog:api_publish_post"),
-            data=json.dumps({"title": "Blocked Post", "content": "Body"}),
-            content_type="application/json",
-        )
-
-        assert warm_response.status_code == 201
-        assert csrf_response.status_code == 403
+        assert _error(response)["code"] == "permission_denied"
 
     def test_publish_post_api_invalid_json_returns_400(self, client, staff_user):
         """Test API validates JSON format"""
@@ -576,7 +293,7 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["error"] == "Invalid JSON payload"
+        assert _error(response)["code"] == "parse_error"
 
     def test_publish_post_api_non_object_payload_returns_400(self, client, staff_user):
         """Test API requires JSON object payload"""
@@ -589,7 +306,9 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["error"] == "JSON object payload expected"
+        error = _error(response)
+        assert error["code"] == "validation_error"
+        assert error["fields"] == {"non_field_errors": ["JSON object payload expected"]}
 
     def test_publish_post_api_invalid_utf8_payload_returns_400(
         self, client, staff_user
@@ -604,7 +323,7 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["error"] == "Invalid JSON payload"
+        assert _error(response)["code"] == "parse_error"
 
     def test_publish_post_api_missing_required_fields_returns_400(
         self,
@@ -621,9 +340,12 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "title": "This field is required",
-            "content": "This field is required",
+        error = _error(response)
+        assert error["code"] == "validation_error"
+        assert error["message"] == "Invalid input."
+        assert error["fields"] == {
+            "title": ["This field is required"],
+            "content": ["This field is required"],
         }
 
     def test_publish_post_api_non_sluggable_title_returns_400(
@@ -641,8 +363,8 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "title": "Must include at least one letter or number"
+        assert _error(response)["fields"] == {
+            "title": ["Must include at least one letter or number"]
         }
 
     def test_publish_post_api_unknown_category_returns_400(
@@ -674,7 +396,7 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {"category_slug": "Category not found"}
+        assert _error(response)["fields"] == {"category_slug": ["Category not found"]}
 
     def test_publish_post_api_non_string_excerpt_returns_400(
         self,
@@ -697,7 +419,7 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {"excerpt": "Must be a string"}
+        assert _error(response)["fields"] == {"excerpt": ["Must be a string"]}
 
     def test_publish_post_api_non_string_category_slug_returns_400(
         self,
@@ -720,8 +442,8 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "category_slug": "Must be a non-empty string"
+        assert _error(response)["fields"] == {
+            "category_slug": ["Must be a non-empty string"]
         }
 
     def test_publish_post_api_valid_payload_creates_published_post(
@@ -833,8 +555,8 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "featured_image_id": "Media asset not found"
+        assert _error(response)["fields"] == {
+            "featured_image_id": ["Media asset not found"]
         }
 
     def test_publish_post_api_featured_image_alt_requires_image(
@@ -858,8 +580,8 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "featured_image_alt": "featured_image_alt requires featured_image_id"
+        assert _error(response)["fields"] == {
+            "featured_image_alt": ["featured_image_alt requires featured_image_id"]
         }
 
     def test_publish_post_api_duplicate_slug_returns_409(
@@ -883,7 +605,9 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 409
-        assert response.json()["error"] == "Post already exists for generated slug"
+        error = _error(response)
+        assert error["code"] == "post_conflict"
+        assert error["message"] == "Post already exists for generated slug"
 
     def test_publish_post_api_invalid_tags_returns_400(self, client, staff_user):
         """Test API validates tags payload type"""
@@ -896,7 +620,7 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {"tags": "Must be a list of strings"}
+        assert _error(response)["fields"] == {"tags": ["Must be a list of strings"]}
 
     def test_publish_post_api_non_sluggable_tag_returns_400(self, client, staff_user):
         """Test API validates tags can generate usable slugs"""
@@ -909,8 +633,8 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "tags": "Each tag must include at least one letter or number"
+        assert _error(response)["fields"] == {
+            "tags": ["Each tag must include at least one letter or number"]
         }
 
     def test_publish_post_api_non_string_tag_value_returns_400(
@@ -926,8 +650,8 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "tags": "Must be a list of non-empty strings"
+        assert _error(response)["fields"] == {
+            "tags": ["Must be a list of non-empty strings"]
         }
 
     def test_publish_post_api_unexpected_integrity_error_returns_500(
@@ -949,7 +673,9 @@ class TestPublishPostApi:
             )
 
         assert response.status_code == 500
-        assert response.json()["error"] == "Unable to publish post"
+        error = _error(response)
+        assert error["code"] == "publish_failed"
+        assert error["message"] == "Unable to publish post"
 
     def test_publish_post_api_conflict_detected_after_race_returns_409(
         self,
@@ -981,7 +707,7 @@ class TestPublishPostApi:
             )
 
         assert response.status_code == 409
-        assert response.json()["error"] == "Post already exists for generated slug"
+        assert _error(response)["code"] == "post_conflict"
 
     def test_publish_post_api_creates_missing_tags(
         self, client, staff_user, staff_org, blog_org_scope
@@ -1011,31 +737,224 @@ class TestPublishPostApi:
             assert tag.organization is not None
 
     # ------------------------------------------------------------------
+    # Throttling (Module Conventions rule 32)
+    # ------------------------------------------------------------------
+
+    def test_blog_api_throttle_scope_carries_the_module_stem(self):
+        """The scope is the stemmed DRF scope rule 32 requires."""
+        assert BlogApiThrottle.scope == BLOG_API_SCOPE
+
+    def test_blog_api_rate_limit_comes_from_the_setting(
+        self,
+        client,
+        staff_user,
+    ):
+        """The configured rate bounds authenticated writes through DRF."""
+        _login_with_org(client, staff_user)
+
+        with blog_api_rate("1/hour"):
+            first_response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Rate Post One", "content": "Body"}),
+                content_type="application/json",
+            )
+            second_response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Rate Post Two", "content": "Body"}),
+                content_type="application/json",
+            )
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 429
+        error = _error(second_response)
+        assert error["code"] == "throttled"
+        assert int(second_response["Retry-After"]) > 0
+
+    def test_blog_api_throttle_uses_remote_addr_by_default(
+        self,
+        client,
+        staff_user,
+        staff_org,
+        blog_org_scope,
+    ):
+        """A spoofed X-Forwarded-For cannot split the throttle bucket by default."""
+        _login_with_org(client, staff_user)
+
+        with blog_api_rate("1/hour"):
+            first_response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Rate Post One", "content": "Body"}),
+                content_type="application/json",
+                HTTP_X_FORWARDED_FOR="198.51.100.10",
+                REMOTE_ADDR="10.0.0.8",
+            )
+            second_response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Rate Post Two", "content": "Body"}),
+                content_type="application/json",
+                HTTP_X_FORWARDED_FOR="198.51.100.11",
+                REMOTE_ADDR="10.0.0.8",
+            )
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 429
+        with blog_org_scope(staff_org):
+            assert Post.objects.filter(slug="rate-post-two").count() == 0
+
+    def test_blog_api_throttle_uses_xff_when_configured(
+        self,
+        client,
+        staff_user,
+    ):
+        """Configured proxy trust gives each forwarded client its own bucket."""
+        _login_with_org(client, staff_user)
+
+        with blog_api_rate("1/hour"):
+            with override_settings(
+                USE_X_FORWARDED_FOR=True,
+                TRUSTED_PROXY_COUNT=1,
+            ):
+                first_response = client.post(
+                    reverse("quickscale_blog:api_publish_post"),
+                    data=json.dumps({"title": "Xff Post One", "content": "Body"}),
+                    content_type="application/json",
+                    HTTP_X_FORWARDED_FOR="198.51.100.10",
+                    REMOTE_ADDR="10.0.0.8",
+                )
+                second_response = client.post(
+                    reverse("quickscale_blog:api_publish_post"),
+                    data=json.dumps({"title": "Xff Post Two", "content": "Body"}),
+                    content_type="application/json",
+                    HTTP_X_FORWARDED_FOR="198.51.100.11",
+                    REMOTE_ADDR="10.0.0.9",
+                )
+                third_response = client.post(
+                    reverse("quickscale_blog:api_publish_post"),
+                    data=json.dumps({"title": "Xff Post Three", "content": "Body"}),
+                    content_type="application/json",
+                    HTTP_X_FORWARDED_FOR="198.51.100.10",
+                    REMOTE_ADDR="10.0.0.8",
+                )
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 201, (
+            "Different X-Forwarded-For values should get independent buckets "
+            "when USE_X_FORWARDED_FOR is enabled"
+        )
+        assert third_response.status_code == 429
+
+    @pytest.mark.parametrize("use_xff,proxy_count,xff", BLOG_CLIENT_IP_CASES)
+    def test_blog_throttle_ident_matches_direct_resolver(
+        self,
+        rf,
+        use_xff: bool,
+        proxy_count: int,
+        xff: str | None,
+    ) -> None:
+        """The throttle client identity is the shared proxy-aware resolver value."""
+        request_kwargs: dict[str, str] = {"REMOTE_ADDR": "10.0.0.1"}
+        if xff is not None:
+            request_kwargs["HTTP_X_FORWARDED_FOR"] = xff
+        request = rf.post("/blog/api/publish/", **request_kwargs)
+
+        with override_settings(
+            USE_X_FORWARDED_FOR=use_xff,
+            TRUSTED_PROXY_COUNT=proxy_count,
+        ):
+            assert BlogApiThrottle().get_ident(request) == get_client_ip(request)
+
+    @pytest.mark.parametrize("setting_name,setting_value", BLOG_INVALID_PROXY_SETTINGS)
+    def test_publish_post_api_invalid_proxy_settings_fail_loud_without_mutation(
+        self,
+        client,
+        settings,
+        staff_user,
+        staff_org,
+        blog_org_scope,
+        setting_name: str,
+        setting_value: object,
+    ) -> None:
+        """Invalid proxy trust settings raise before any post is written."""
+        _login_with_org(client, staff_user)
+        settings_values: dict[str, object] = {
+            "USE_X_FORWARDED_FOR": False,
+            "TRUSTED_PROXY_COUNT": 1,
+        }
+        missing_setting: str | None = None
+        if setting_value is _MISSING:
+            missing_setting = setting_name
+        else:
+            settings_values[setting_name] = setting_value
+
+        with blog_org_scope(staff_org):
+            initial_count = Post.all_objects.filter(slug="invalid-proxy-post").count()
+
+        with override_settings(**settings_values):
+            if missing_setting is not None:
+                delattr(settings, missing_setting)
+            with pytest.raises(ImproperlyConfigured) as endpoint_error:
+                client.post(
+                    reverse("quickscale_blog:api_publish_post"),
+                    data=json.dumps({"title": "Invalid Proxy Post", "content": "Body"}),
+                    content_type="application/json",
+                    REMOTE_ADDR="10.0.0.1",
+                    HTTP_X_FORWARDED_FOR="198.51.100.1",
+                )
+
+            assert setting_name in str(endpoint_error.value)
+
+        with blog_org_scope(staff_org):
+            assert Post.all_objects.filter(slug="invalid-proxy-post").count() == (
+                initial_count
+            )
+
+    def test_publish_post_api_missing_csrf_still_returns_403_when_rate_limited(
+        self,
+        staff_user,
+    ):
+        """CSRF enforcement runs ahead of throttling for session requests."""
+        warm_client = Client()
+        csrf_client = Client(enforce_csrf_checks=True)
+        _login_with_org(warm_client, staff_user)
+        _login_with_org(csrf_client, staff_user)
+
+        with blog_api_rate("1/hour"):
+            warm_response = warm_client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Warm Post", "content": "Body"}),
+                content_type="application/json",
+            )
+            csrf_response = csrf_client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Blocked Post", "content": "Body"}),
+                content_type="application/json",
+            )
+
+        assert warm_response.status_code == 201
+        assert csrf_response.status_code == 403
+
+    # ------------------------------------------------------------------
     # ContextVar lifecycle restoration tests
     # ------------------------------------------------------------------
 
-    def test_publish_post_api_token_system_fallback_restores_prior_context(
+    def test_publish_post_api_system_fallback_restores_prior_context(
         self,
-        settings,
+        rf,
+        staff_org,
         system_org,
         blog_org_scope,
     ):
-        """Publish token for a user without personal org falls back to
-        the System org and restores the prior ContextVar via finally.
+        """A user without a personal org falls back to the System org and
+        restores the prior ContextVar through the shared org scope.
 
-        Strengthened: runs under explicit outer
-        ``transaction.atomic()``, asserts both Python ContextVar and
-        PostgreSQL GUC are restored to the exact prior (None), and
-        proves the next wrapped tenant query re-primes with a fresh
-        ``SET LOCAL`` (memo was invalidated).
+        Runs under an explicit outer ``transaction.atomic()``, asserts both
+        the Python ContextVar and the PostgreSQL GUC return to the exact
+        prior (None), and proves the next wrapped tenant query re-primes
+        with a fresh ``SET LOCAL`` (memo was invalidated).
         """
-        from django.db import connection, transaction
-        from django.test.utils import CaptureQueriesContext
+        from django.db import transaction
 
-        from quickscale_modules_orgs.current_org import (
-            get_current_org_id,
-            set_current_org_id,
-        )
+        from quickscale_modules_orgs.current_org import get_current_org_id
 
         User = get_user_model()
         fallback_user = User.objects.create_user(
@@ -1045,49 +964,20 @@ class TestPublishPostApi:
             is_staff=True,
         )
         # No personal org → System org fallback in _resolve_api_org.
-        settings.BLOG_API_TOKENS = [
-            {"token": "sysfallback-token", "username": fallback_user.username}
-        ]
-
-        csrf_client = Client(enforce_csrf_checks=True)
+        request = APIRequestFactory().post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "System Fallback", "content": "Body"}),
+            content_type="application/json",
+        )
+        force_authenticate(request, user=fallback_user)
 
         with transaction.atomic():
-            response = csrf_client.post(
-                reverse("quickscale_blog:api_publish_post"),
-                data=json.dumps({"title": "System Fallback", "content": "Body"}),
-                content_type="application/json",
-                HTTP_AUTHORIZATION="Bearer sysfallback-token",
-            )
+            response = PostPublishAPIView.as_view()(request)
 
-            # ContextVar restored to prior (captured after middleware reset).
             assert get_current_org_id() is None, (
                 "ContextVar should be restored after the request completes"
             )
-            # GUC restored to fail-closed default.
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT current_setting('app.current_org_id', true)")
-                (raw_guc,) = cursor.fetchone()
-            assert raw_guc == "" or raw_guc is None, (
-                f"GUC should be empty after restore, got {raw_guc!r}"
-            )
-
-            # Prove next wrapped query re-primes (memo was cleared).
-            with CaptureQueriesContext(connection) as captured:
-                set_current_org_id(system_org.pk)
-                try:
-                    with connection.cursor() as cursor:
-                        cursor.execute(
-                            "SELECT current_setting('app.current_org_id', true)"
-                        )
-                finally:
-                    set_current_org_id(None)
-
-            set_local_count = sum(
-                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
-            )
-            assert set_local_count == 1, (
-                f"Expected 1 SET LOCAL after memo-clear re-prime, got {set_local_count}"
-            )
+            _assert_org_context_restored_to_none(system_org)
 
         assert response.status_code == 201
 
@@ -1096,73 +986,37 @@ class TestPublishPostApi:
             post = Post.all_objects.get(slug="system-fallback")
             assert post.organization == system_org
 
-    def test_publish_post_api_token_handled_error_restores_prior_context(
+    def test_publish_post_api_handled_error_restores_prior_context(
         self,
-        settings,
         staff_user,
         system_org,
     ):
-        """Publish token handled error (400) restores the prior ContextVar.
+        """A handled publish error (400) restores the prior org context.
 
-        Strengthened: runs under explicit outer
-        ``transaction.atomic()``, asserts both Python ContextVar and
-        PostgreSQL GUC are restored to the exact prior (None), and
-        proves the next wrapped tenant query re-primes with a fresh
-        ``SET LOCAL`` (memo was invalidated).
+        Uses a direct ``APIRequestFactory`` call so there is no middleware
+        org context to reset the prior: the view resolves and primes the org
+        for the write, and on a handled validation error restores the
+        ContextVar and GUC to the fail-closed default and clears the priming
+        memo.
         """
-        from django.db import connection, transaction
-        from django.test.utils import CaptureQueriesContext
+        from django.db import transaction
 
-        from quickscale_modules_orgs.current_org import (
-            get_current_org_id,
-            set_current_org_id,
+        from quickscale_modules_orgs.current_org import get_current_org_id
+
+        request = APIRequestFactory().post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "!!!", "content": "Body"}),
+            content_type="application/json",
         )
-
-        settings.BLOG_API_TOKENS = [
-            {"token": "error-test-token", "username": staff_user.username}
-        ]
-
-        csrf_client = Client(enforce_csrf_checks=True)
+        force_authenticate(request, user=staff_user)
 
         with transaction.atomic():
-            # Non-sluggable title triggers BlogPublishValidationError (handled 400)
-            response = csrf_client.post(
-                reverse("quickscale_blog:api_publish_post"),
-                data=json.dumps({"title": "!!!", "content": "Body"}),
-                content_type="application/json",
-                HTTP_AUTHORIZATION="Bearer error-test-token",
-            )
+            response = PostPublishAPIView.as_view()(request)
 
-            # ContextVar restored to prior (captured after middleware reset).
             assert get_current_org_id() is None, (
                 "ContextVar should be restored after a handled error"
             )
-            # GUC restored to fail-closed default.
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT current_setting('app.current_org_id', true)")
-                (raw_guc,) = cursor.fetchone()
-            assert raw_guc == "" or raw_guc is None, (
-                f"GUC should be empty after restore, got {raw_guc!r}"
-            )
-
-            # Prove next wrapped query re-primes (memo was cleared).
-            with CaptureQueriesContext(connection) as captured:
-                set_current_org_id(system_org.pk)
-                try:
-                    with connection.cursor() as cursor:
-                        cursor.execute(
-                            "SELECT current_setting('app.current_org_id', true)"
-                        )
-                finally:
-                    set_current_org_id(None)
-
-            set_local_count = sum(
-                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
-            )
-            assert set_local_count == 1, (
-                f"Expected 1 SET LOCAL after handled-error memo-clear, "
-                f"got {set_local_count}"
-            )
+            _assert_org_context_restored_to_none(system_org)
 
         assert response.status_code == 400
 
@@ -1250,7 +1104,7 @@ class TestUploadMediaApi:
         response = client.post(reverse("quickscale_blog:api_upload_media"))
 
         assert response.status_code == 401
-        assert response.json()["error"] == "Authentication required"
+        assert _error(response)["code"] == "not_authenticated"
 
     def test_upload_media_api_non_staff_returns_403(self, client, user):
         """Test media uploads require staff access."""
@@ -1262,7 +1116,7 @@ class TestUploadMediaApi:
         )
 
         assert response.status_code == 403
-        assert response.json()["error"] == "Staff access required"
+        assert _error(response)["message"] == "Staff access required"
 
     def test_upload_media_api_missing_csrf_returns_403(self, staff_user):
         """Test session-authenticated media uploads enforce CSRF protection."""
@@ -1341,8 +1195,8 @@ class TestUploadMediaApi:
             )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "file": "Image width exceeds maximum of 1600 pixels"
+        assert _error(response)["fields"] == {
+            "file": ["Image width exceeds maximum of 1600 pixels"]
         }
 
     @pytest.mark.parametrize("storage_validator", UPLOAD_VALIDATION_PATHS)
@@ -1368,8 +1222,8 @@ class TestUploadMediaApi:
             )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "file": "Image height exceeds maximum of 900 pixels"
+        assert _error(response)["fields"] == {
+            "file": ["Image height exceeds maximum of 900 pixels"]
         }
 
     def test_upload_media_api_uses_public_base_url_when_configured(
@@ -1514,8 +1368,8 @@ class TestUploadMediaApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "file": "Unsupported or invalid image file"
+        assert _error(response)["fields"] == {
+            "file": ["Unsupported or invalid image file"]
         }
 
     @pytest.mark.parametrize(
@@ -1549,92 +1403,30 @@ class TestUploadMediaApi:
             )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {"file": "Image exceeds safe pixel limit"}
-
-    def test_upload_media_api_token_auth_bypasses_csrf(
-        self,
-        settings,
-        staff_user,
-        tmp_path,
-    ):
-        """Test machine-authenticated media uploads can use bearer tokens."""
-        settings.MEDIA_ROOT = str(tmp_path)
-        settings.BLOG_API_TOKENS = [
-            {"token": "upload-token", "username": staff_user.username}
-        ]
-        csrf_client = Client(enforce_csrf_checks=True)
-
-        response = csrf_client.post(
-            reverse("quickscale_blog:api_upload_media"),
-            data={"file": make_uploaded_test_image()},
-            HTTP_AUTHORIZATION="Bearer upload-token",
-        )
-
-        assert response.status_code == 201
-
-    def test_upload_media_api_token_auth_ignores_spoofed_forwarded_for_for_rate_limit(
-        self,
-        settings,
-        staff_user,
-        tmp_path,
-    ):
-        """Token-authenticated uploads should throttle by REMOTE_ADDR by default."""
-        settings.MEDIA_ROOT = str(tmp_path)
-        settings.BLOG_API_RATE_LIMIT = "1/hour"
-        settings.BLOG_API_TOKENS = [
-            {"token": "upload-token", "username": staff_user.username}
-        ]
-        csrf_client = Client(enforce_csrf_checks=True)
-
-        first_response = csrf_client.post(
-            reverse("quickscale_blog:api_upload_media"),
-            data={"file": make_uploaded_test_image()},
-            HTTP_AUTHORIZATION="Bearer upload-token",
-            HTTP_X_FORWARDED_FOR="198.51.100.20",
-            REMOTE_ADDR="10.0.0.9",
-        )
-        second_response = csrf_client.post(
-            reverse("quickscale_blog:api_upload_media"),
-            data={"file": make_uploaded_test_image(filename="upload-2.png")},
-            HTTP_AUTHORIZATION="Bearer upload-token",
-            HTTP_X_FORWARDED_FOR="198.51.100.21",
-            REMOTE_ADDR="10.0.0.9",
-        )
-
-        assert first_response.status_code == 201
-        assert second_response.status_code == 429
-        assert second_response.json() == {"error": "Rate limit exceeded"}
-        assert int(second_response["Retry-After"]) > 0
+        assert _error(response)["fields"] == {
+            "file": ["Image exceeds safe pixel limit"]
+        }
 
     # ------------------------------------------------------------------
     # ContextVar lifecycle restoration tests
     # ------------------------------------------------------------------
 
-    def test_upload_media_api_token_success_restores_prior_context(
+    def test_upload_media_api_success_restores_prior_context(
         self,
-        rf,
-        settings,
         staff_user,
         staff_org,
         tmp_path,
         system_org,
+        settings,
         blog_org_scope,
     ):
         """Upload success restores the exact non-None prior ContextVar and GUC.
 
-        Strengthened: uses a direct unwrapped
-        RequestFactory call with bearer-token auth so there is no middleware
-        to reset the prior.  The API caller itself captures a distinct
-        non-None ``prior_org`` before resolving the token user's org, then
-        restores the exact prior in the ``finally`` block.  Inside an
-        explicit outer ``transaction.atomic()``, pre-primes ContextVar and
-        GUC to ``prior_org.pk`` (a distinct org, not the token user's
-        personal org), invokes the unwrapped upload endpoint, then asserts
-        both Python ContextVar and PostgreSQL GUC equal the exact prior
-        (``prior_org.pk``) — proving the ``finally`` block restores the
-        pre-invocation non-None value.  Afterwards switches to a different
-        intended org (``system_org``) and proves a fresh ``SET LOCAL`` with
-        the expected switched GUC.
+        Uses a direct ``APIRequestFactory`` call so there is no middleware to
+        reset the prior: the test pre-primes the ContextVar and GUC to a
+        distinct org, invokes the view, then asserts both equal that exact
+        prior (proving the shared org scope restores a non-None value), and
+        finally proves the next wrapped tenant query re-primes freshly.
         """
         from django.db import connection, transaction
         from django.test.utils import CaptureQueriesContext
@@ -1645,41 +1437,33 @@ class TestUploadMediaApi:
         )
         from quickscale_modules_orgs.models import Organization
 
-        from quickscale_modules_blog.views import upload_media_api
-
         prior_org = Organization.objects.create(name="Prior Org", slug="prior-org")
         distinct_prior = prior_org.pk
 
         settings.MEDIA_ROOT = str(tmp_path)
-        settings.BLOG_API_TOKENS = [
-            {"token": "upload-token", "username": staff_user.username}
-        ]
+
+        request = APIRequestFactory().post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image()},
+            format="multipart",
+        )
+        force_authenticate(request, user=staff_user)
 
         with transaction.atomic():
-            # Pre-prime ContextVar and GUC to a distinct non-None UUID
-            # that is NOT staff_org.pk (the token user's personal org).
             set_current_org_id(distinct_prior)
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
 
-            # Build a direct token-auth request (no middleware, no session).
-            request = rf.post(
-                reverse("quickscale_blog:api_upload_media"),
-                data={"file": make_uploaded_test_image()},
-                HTTP_AUTHORIZATION="Bearer upload-token",
-            )
-
-            # Call the view directly — no middleware, no client.
-            response = upload_media_api(request)
+            response = MediaUploadAPIView.as_view()(request)
 
             # ContextVar restored to the pre-primed distinct prior.
             assert get_current_org_id() == distinct_prior, (
                 f"Expected ContextVar = {distinct_prior} (pre-primed prior), "
                 f"got {get_current_org_id()!r}"
             )
-            # GUC restored to match the pre-primed prior.
-            # Temporarily set ContextVar to None so the execute wrapper does not re-prime
-            # (masking the actual GUC value) before the raw SELECT.
+            # GUC restored to match the pre-primed prior.  Temporarily clear
+            # the ContextVar so the execute wrapper cannot re-prime the GUC
+            # (masking its actual value) before the raw read.
             prior_var = get_current_org_id()
             set_current_org_id(None)
             try:
@@ -1720,79 +1504,45 @@ class TestUploadMediaApi:
 
         # Readback: media asset should be stored with the user's org
         with blog_org_scope(staff_org):
-            payload = json.loads(response.content)
+            payload = response.data
             asset = BlogMediaAsset.all_objects.get(pk=payload["id"])
             assert asset.organization is not None
 
-    def test_upload_media_api_token_handled_error_restores_prior_context(
+    def test_upload_media_api_handled_error_restores_prior_context(
         self,
-        settings,
         staff_user,
         system_org,
     ):
-        """Upload token handled error (400) restores the prior ContextVar.
+        """Upload handled error (400) restores the prior org context.
 
-        Strengthened: runs under explicit outer
-        ``transaction.atomic()``, asserts both Python ContextVar and
-        PostgreSQL GUC are restored to the exact prior (None), and
-        proves the next wrapped tenant query re-primes with a fresh
+        Uses a direct ``APIRequestFactory`` call so there is no middleware
+        org context to reset the prior, then asserts both the Python
+        ContextVar and the PostgreSQL GUC return to the fail-closed default
+        and the next wrapped tenant query re-primes with a fresh
         ``SET LOCAL`` (memo was invalidated).
         """
-        from django.db import connection, transaction
-        from django.test.utils import CaptureQueriesContext
+        from django.db import transaction
 
-        from quickscale_modules_orgs.current_org import (
-            get_current_org_id,
-            set_current_org_id,
-        )
+        from quickscale_modules_orgs.current_org import get_current_org_id
 
-        settings.BLOG_API_TOKENS = [
-            {"token": "upload-error-test", "username": staff_user.username}
-        ]
-
-        csrf_client = Client(enforce_csrf_checks=True)
         bad_file = SimpleUploadedFile(
             "notes.txt",
             b"not an image",
             content_type="text/plain",
         )
+        request = APIRequestFactory().post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": bad_file},
+            format="multipart",
+        )
+        force_authenticate(request, user=staff_user)
 
         with transaction.atomic():
-            response = csrf_client.post(
-                reverse("quickscale_blog:api_upload_media"),
-                data={"file": bad_file},
-                HTTP_AUTHORIZATION="Bearer upload-error-test",
-            )
+            response = MediaUploadAPIView.as_view()(request)
 
-            # ContextVar restored to prior (captured after middleware reset).
             assert get_current_org_id() is None, (
                 "ContextVar should be restored after upload handled error"
             )
-            # GUC restored to fail-closed default.
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT current_setting('app.current_org_id', true)")
-                (raw_guc,) = cursor.fetchone()
-            assert raw_guc == "" or raw_guc is None, (
-                f"GUC should be empty after restore, got {raw_guc!r}"
-            )
-
-            # Prove next wrapped query re-primes (memo was cleared).
-            with CaptureQueriesContext(connection) as captured:
-                set_current_org_id(system_org.pk)
-                try:
-                    with connection.cursor() as cursor:
-                        cursor.execute(
-                            "SELECT current_setting('app.current_org_id', true)"
-                        )
-                finally:
-                    set_current_org_id(None)
-
-            set_local_count = sum(
-                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
-            )
-            assert set_local_count == 1, (
-                f"Expected 1 SET LOCAL after upload handled-error memo-clear, "
-                f"got {set_local_count}"
-            )
+            _assert_org_context_restored_to_none(system_org)
 
         assert response.status_code == 400

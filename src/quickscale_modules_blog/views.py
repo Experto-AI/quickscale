@@ -1,41 +1,42 @@
 """Views for QuickScale blog module."""
 
-import hashlib
-import json
 import logging
-import secrets
-from collections.abc import Callable, Mapping
-from datetime import timedelta
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from importlib import import_module
-from time import time
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError, connection
-from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.middleware.csrf import CsrfViewMiddleware
+from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from django.utils.html import escape
 from django.utils.text import slugify
-from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
 from PIL import Image, UnidentifiedImageError
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from quickscale_modules_orgs.current_org import get_client_ip
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 from quickscale_modules_orgs.sanitization import sanitize_rendered_html
 
 from .exceptions import (
     BlogMediaUploadValidationError,
     BlogPublishConflictError,
+    BlogPublishError,
     BlogPublishValidationError,
 )
 from .models import BlogMediaAsset, Category, Post, Tag
+from .permissions import IsStaffUser
+from .throttles import BlogApiThrottle
 
 storage_build_public_media_url: Callable[..., str] | None = None
 storage_validate_file_upload: Callable[..., Any] | None = None
@@ -57,31 +58,23 @@ if storage_helpers is not None:
 logger = logging.getLogger(__name__)
 
 DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
-DEFAULT_BLOG_API_RATE_LIMIT = "5/hour"
 DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH = 4096
 DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
 IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
 DEFAULT_BLOG_POSTS_PER_PAGE = 10
-RATE_LIMIT_VALUE_PARSE_ERRORS = (TypeError, ValueError)
-# Dedicated counter table for the blog API limiter, created by the module's
-# initial migration.  The counter is deliberately not a Django model: it holds
-# no tenant-owned data, so it stays out of the model-based tenant
-# classification and purge contract and is only ever touched by the limiter's
-# atomic upsert below.
-BLOG_API_THROTTLE_COUNTER_TABLE = "quickscale_blog_api_throttle_counter"
 
 # ---------------------------------------------------------------------------
 # Org-resolution helpers for the single-URL contract (T1.6)
 # ---------------------------------------------------------------------------
 
 
-def _resolve_api_org(request: HttpRequest, author: Any) -> Any:
+def _resolve_api_org(request: Request | HttpRequest, author: Any) -> Any:
     """Return the organization for staff API write operations.
 
-    Session-authenticated requests use ``request.org`` from middleware.
-    Token-authenticated requests resolve the user's personal org, falling
-    back to the System org.
+    Requests authenticated by the session use ``request.org`` from
+    middleware.  A request without a middleware org context resolves the
+    user's personal org, falling back to the System org.
 
     .. caution::
        As a side effect this function calls
@@ -101,7 +94,7 @@ def _resolve_api_org(request: HttpRequest, author: Any) -> Any:
 
     org = getattr(request, "org", None)
     if org is None:
-        # Token auth path — resolve user's personal org.
+        # No middleware org context — resolve the user's personal org.
         from quickscale_modules_orgs.models import (
             Organization,
             OrganizationMembership,
@@ -120,14 +113,6 @@ def _resolve_api_org(request: HttpRequest, author: Any) -> Any:
     return org
 
 
-ViewFunc = TypeVar("ViewFunc", bound=Callable[..., Any])
-
-
-def _typed_csrf_exempt(view_func: ViewFunc) -> ViewFunc:
-    """Preserve view typing when applying Django's `csrf_exempt` decorator."""
-    return csrf_exempt(view_func)
-
-
 def _get_positive_int_setting(setting_name: str, default: int) -> int:
     """Return a positive integer setting value or the provided default."""
     value = getattr(settings, setting_name, default)
@@ -144,7 +129,9 @@ def _get_positive_int_setting(setting_name: str, default: int) -> int:
     return parsed_value if parsed_value > 0 else default
 
 
-def _build_media_response_url(request: HttpRequest, stored_reference: str) -> str:
+def _build_media_response_url(
+    request: Request | HttpRequest, stored_reference: str
+) -> str:
     """Build a public media URL using storage helper when available, with local fallback."""
     public_base_url = str(
         getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
@@ -184,229 +171,32 @@ def _build_media_response_url(request: HttpRequest, stored_reference: str) -> st
     return request.build_absolute_uri(f"{normalized_media_url}{reference.lstrip('/')}")
 
 
-def _get_blog_api_tokens() -> list[tuple[str, str]]:
-    """Return configured token-to-username mappings for machine authentication."""
-    configured_tokens = getattr(settings, "BLOG_API_TOKENS", [])
-    if not isinstance(configured_tokens, list):
-        logger.warning("BLOG_API_TOKENS must be configured as a list")
-        return []
+@contextmanager
+def _blog_org_scope(request: Request | HttpRequest, author: Any) -> Iterator[Any]:
+    """Resolve the API org for one write and restore the prior org afterwards.
 
-    valid_tokens: list[tuple[str, str]] = []
-    for entry in configured_tokens:
-        if not isinstance(entry, Mapping):
-            continue
-        raw_token = entry.get("token")
-        username = entry.get("username")
-        if not isinstance(raw_token, str) or not raw_token.strip():
-            continue
-        if not isinstance(username, str) or not username.strip():
-            continue
-        valid_tokens.append((raw_token.strip(), username.strip()))
-    return valid_tokens
-
-
-def _get_authorization_token(request: HttpRequest) -> str | None:
-    """Extract a Bearer or Token authorization token from the request."""
-    header_value = request.META.get("HTTP_AUTHORIZATION", "").strip()
-    if not header_value:
-        return None
-
-    parts = header_value.split(None, 1)
-    if len(parts) != 2:
-        return ""
-
-    scheme, token = parts
-    if scheme.lower() not in {"bearer", "token"}:
-        return ""
-
-    return token.strip()
-
-
-def _enforce_csrf(request: HttpRequest) -> HttpResponse | None:
-    """Apply Django's CSRF validation for session-authenticated API requests."""
-    middleware = CsrfViewMiddleware(lambda req: JsonResponse({"error": "Forbidden"}))
-    return middleware.process_view(request, lambda req: JsonResponse({}), (), {})
-
-
-def _parse_blog_api_rate_limit(rate_value: Any) -> tuple[int, int]:
-    """Return the configured request count and window size for blog API throttling."""
-    normalized_rate = (
-        str(rate_value).strip()
-        if isinstance(rate_value, str) and rate_value.strip()
-        else DEFAULT_BLOG_API_RATE_LIMIT
+    Resolution stamps ``set_current_org_id(org.pk)`` so tenant-scoped
+    managers and the GUC priming wrapper see the correct org for the
+    request's ORM operations.  On exit the Python ContextVar is always
+    restored; when PostgreSQL is the backend and the caller sits inside an
+    active ``transaction.atomic()`` block, the ``app.current_org_id`` GUC
+    and the per-transaction priming memo are restored too (Python ContextVar
+    first, then DB GUC).
+    """
+    from quickscale_modules_orgs.current_org import (
+        _restore_current_org_id,
+        get_current_org_id,
+        set_current_org_id,
     )
-    count_text, _, period_text = normalized_rate.partition("/")
 
+    prior = get_current_org_id()
+    organization = _resolve_api_org(request, author)
     try:
-        request_count = int(count_text.strip())
-    except RATE_LIMIT_VALUE_PARSE_ERRORS:
-        if normalized_rate == DEFAULT_BLOG_API_RATE_LIMIT:
-            return 5, 3600
-        return _parse_blog_api_rate_limit(DEFAULT_BLOG_API_RATE_LIMIT)
-
-    period = period_text.strip().lower()
-    period_seconds_by_name = {
-        "s": 1,
-        "sec": 1,
-        "second": 1,
-        "seconds": 1,
-        "m": 60,
-        "min": 60,
-        "minute": 60,
-        "minutes": 60,
-        "h": 3600,
-        "hr": 3600,
-        "hour": 3600,
-        "hours": 3600,
-        "d": 86400,
-        "day": 86400,
-        "days": 86400,
-    }
-    window_seconds = period_seconds_by_name.get(period)
-
-    if request_count <= 0 or window_seconds is None:
-        if normalized_rate == DEFAULT_BLOG_API_RATE_LIMIT:
-            return 5, 3600
-        return _parse_blog_api_rate_limit(DEFAULT_BLOG_API_RATE_LIMIT)
-
-    return request_count, window_seconds
-
-
-def _get_blog_api_rate_limit_ident(request: HttpRequest) -> str:
-    """Return the client identifier used for blog API throttling.
-
-    Uses the shared :func:`get_client_ip` helper so that when
-    ``USE_X_FORWARDED_FOR`` and ``TRUSTED_PROXY_COUNT`` are configured,
-    the real client IP (not the proxy's) is used for throttle buckets.
-    """
-    client_ip = get_client_ip(request)
-    if client_ip.strip():
-        return client_ip.strip()
-    return "unknown"
-
-
-def _get_blog_api_rate_limit_counter_key(request: HttpRequest, bucket: int) -> str:
-    """Build a stable counter key for the current blog API throttle bucket.
-
-    The client identity is hashed, so two distinct identifiers can never
-    normalize into the same bucket the way character substitution allowed.
-    """
-    ident = _get_blog_api_rate_limit_ident(request)
-    ident_digest = hashlib.blake2s(ident.encode("utf-8"), digest_size=16).hexdigest()
-    return f"throttle_blog_api_{ident_digest}_{bucket}"
-
-
-def _increment_blog_api_rate_limit_counter(
-    counter_key: str,
-    window_seconds: int,
-) -> int:
-    """Atomically increment the fixed-window counter and return its new value.
-
-    A single ``INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING`` statement
-    keeps the count exact under concurrent requests on every backend,
-    including Django's database cache, whose ``incr`` is a read-modify-write
-    that loses increments.  Expired rows are removed in the same call so the
-    table cannot grow without bound.
-    """
-    now = timezone.now()
-    expires_at = now + timedelta(seconds=window_seconds)
-    table = connection.ops.quote_name(BLOG_API_THROTTLE_COUNTER_TABLE)
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            f"DELETE FROM {table} WHERE expires_at < %s",  # noqa: S608 - quoted constant table name, all values parameterized
-            [now],
-        )
-        cursor.execute(
-            f"INSERT INTO {table} (counter_key, request_count, expires_at) "  # noqa: S608 - quoted constant table name, all values parameterized
-            "VALUES (%s, 1, %s) "
-            "ON CONFLICT (counter_key) DO UPDATE SET "
-            f"request_count = {table}.request_count + 1, "
-            "expires_at = EXCLUDED.expires_at "
-            "RETURNING request_count",
-            [counter_key, expires_at],
-        )
-        row = cursor.fetchone()
-
-    if row is None:  # pragma: no cover - RETURNING always yields the row
-        raise RuntimeError("Blog API throttle counter increment returned no row")
-    return int(row[0])
-
-
-def _enforce_blog_api_rate_limit(request: HttpRequest) -> HttpResponse | None:
-    """Apply additive per-IP throttling for authenticated blog API requests."""
-    allowed_requests, window_seconds = _parse_blog_api_rate_limit(
-        getattr(settings, "BLOG_API_RATE_LIMIT", DEFAULT_BLOG_API_RATE_LIMIT)
-    )
-    current_time = int(time())
-    bucket = current_time // window_seconds
-    counter_key = _get_blog_api_rate_limit_counter_key(request, bucket)
-
-    request_count = _increment_blog_api_rate_limit_counter(
-        counter_key,
-        window_seconds,
-    )
-
-    if request_count <= allowed_requests:
-        return None
-
-    response = JsonResponse({"error": "Rate limit exceeded"}, status=429)
-    response["Retry-After"] = str(
-        max(window_seconds - (current_time % window_seconds), 1)
-    )
-    return response
-
-
-def authenticate_blog_api_request(
-    request: HttpRequest,
-) -> tuple[Any | None, HttpResponse | None]:
-    """Authenticate session or token-based blog API access.
-
-    Session-authenticated requests keep Django CSRF protection.
-    Token-authenticated requests bypass CSRF and are intended for automation.
-    """
-    token = _get_authorization_token(request)
-    if token is not None:
-        if not token:
-            return None, JsonResponse(
-                {"error": "Invalid Authorization header"},
-                status=401,
-            )
-
-        user_model = get_user_model()
-        for configured_token, username in _get_blog_api_tokens():
-            if not secrets.compare_digest(
-                token.encode("utf-8"), configured_token.encode("utf-8")
-            ):
-                continue
-
-            user = user_model.objects.filter(username=username, is_active=True).first()
-            if user is None:
-                logger.warning(
-                    "BLOG_API_TOKENS references missing user '%s'",
-                    username,
-                )
-                return None, JsonResponse({"error": "Invalid API token"}, status=401)
-            if not getattr(user, "is_staff", False):
-                return None, JsonResponse(
-                    {"error": "Staff access required"},
-                    status=403,
-                )
-            return user, None
-
-        return None, JsonResponse({"error": "Invalid API token"}, status=401)
-
-    if not request.user.is_authenticated:
-        return None, JsonResponse({"error": "Authentication required"}, status=401)
-
-    if not getattr(request.user, "is_staff", False):
-        return None, JsonResponse({"error": "Staff access required"}, status=403)
-
-    csrf_response = _enforce_csrf(request)
-    if csrf_response is not None:
-        return None, csrf_response
-
-    return request.user, None
+        yield organization
+    finally:
+        set_current_org_id(prior)
+        if connection.vendor == "postgresql" and connection.in_atomic_block:
+            _restore_current_org_id(prior)
 
 
 def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
@@ -494,7 +284,7 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
 
 
 def create_blog_media_asset_from_request(
-    request: HttpRequest,
+    request: Request | HttpRequest,
     author: Any,
     organization: Any,
 ) -> BlogMediaAsset:
@@ -663,47 +453,58 @@ def create_published_post_from_payload(
     return post
 
 
-@_typed_csrf_exempt
-def upload_media_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
+class BlogSessionAuthentication(SessionAuthentication):
+    """Session authentication that keeps a 401 challenge for anonymous callers.
+
+    DRF answers an unauthenticated request 403 when the authentication scheme
+    declares no challenge header; the blog API has always answered 401, so the
+    scheme names its challenge.
+    """
+
+    def authenticate_header(self, request: Request) -> str:
+        del request
+        return "Session"
+
+
+class BlogApiBaseView(APIView):
+    """Shared contract for the blog module's DRF automation API views.
+
+    Session authentication only (Module Conventions rule 9): DRF's
+    ``SessionAuthentication`` enforces CSRF on unsafe methods.  The staff
+    role is the module's platform-level write gate (Module Conventions rule
+    19's operator path), and every error goes through the one QuickScale
+    exception handler the generated settings install.
+    """
+
+    authentication_classes = [BlogSessionAuthentication]
+    permission_classes = [IsAuthenticated, IsStaffUser]
+    throttle_classes = [BlogApiThrottle]
+    throttle_scope = "quickscale_blog_api"
+    http_method_names = ["post"]
+
+
+class MediaUploadAPIView(BlogApiBaseView):
     """Upload a blog image for later use in Markdown or as a featured image.
 
     The media asset is stamped with the active organization from
-    ``request.org`` (session auth) or the user's personal org (token auth).
-
-    On exit the Python ContextVar is always restored to the prior value.
-    The PostgreSQL ``app.current_org_id`` GUC is restored via
-    ``_restore_current_org_id(prior)`` inside an active
-    ``transaction.atomic()`` block, which also clears the AF9
-    per-transaction priming memo.  Outside an atomic block the DB GUC
-    is automatically cleaned up at transaction end.
+    ``request.org``, resolved through :func:`_blog_org_scope`, which also
+    restores the prior org context on exit.
     """
-    if request.method != "POST":
-        return JsonResponse(
-            {"error": "Method not allowed", "allowed_methods": ["POST"]},
-            status=405,
-        )
 
-    author, auth_error = authenticate_blog_api_request(request)
-    if auth_error is not None:
-        return auth_error
+    parser_classes = [MultiPartParser, FormParser]
 
-    throttle_error = _enforce_blog_api_rate_limit(request)
-    if throttle_error is not None:
-        return throttle_error
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        del args, kwargs
+        author = request.user
+        try:
+            with _blog_org_scope(request, author) as organization:
+                asset = create_blog_media_asset_from_request(
+                    request, author, organization=organization
+                )
+        except BlogMediaUploadValidationError as exc:
+            raise ValidationError(exc.errors) from exc
 
-    from quickscale_modules_orgs.current_org import (
-        _restore_current_org_id,
-        get_current_org_id,
-        set_current_org_id,
-    )
-
-    prior = get_current_org_id()
-    organization = _resolve_api_org(request, author)
-    try:
-        asset = create_blog_media_asset_from_request(
-            request, author, organization=organization
-        )
-        return JsonResponse(
+        return Response(
             {
                 "id": asset.pk,
                 "url": _build_media_response_url(request, asset.file.name or ""),
@@ -714,73 +515,38 @@ def upload_media_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
             },
             status=201,
         )
-    except BlogMediaUploadValidationError as exc:
-        return JsonResponse({"errors": exc.errors}, status=400)
-    finally:
-        set_current_org_id(prior)
-        # SA83/CR-SA74-001: GUC restoration is guarded by
-        # connection.vendor + in_atomic_block because SET LOCAL
-        # requires an active transaction.  Outside an atomic block
-        # the GUC is automatically cleaned up at transaction end.
-        from django.db import connection
-
-        if connection.vendor == "postgresql" and connection.in_atomic_block:
-            _restore_current_org_id(prior)
 
 
-@_typed_csrf_exempt
-def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
-    """Create and publish a blog post from JSON payload for authenticated staff users.
+class PostPublishAPIView(BlogApiBaseView):
+    """Create and publish a blog post from a JSON payload.
 
-    The post is stamped with the active organization from ``request.org``
-    (session auth) or the user's personal org (token auth). Referenced
-    resources (category, tags, media asset) are validated to belong to
-    the same organization.
-
-    On exit the Python ContextVar is always restored to the prior value.
-    The PostgreSQL ``app.current_org_id`` GUC is restored via
-    ``_restore_current_org_id(prior)`` inside an active
-    ``transaction.atomic()`` block, which also clears the AF9
-    per-transaction priming memo.  Outside an atomic block the DB GUC
-    is automatically cleaned up at transaction end.
+    The post is stamped with the active organization from ``request.org``.
+    Referenced resources (category, tags, media asset) are validated to
+    belong to the same organization.  The prior org context is restored on
+    exit through :func:`_blog_org_scope`.
     """
-    if request.method != "POST":
-        return JsonResponse(
-            {"error": "Method not allowed", "allowed_methods": ["POST"]},
-            status=405,
-        )
 
-    author, auth_error = authenticate_blog_api_request(request)
-    if auth_error is not None:
-        return auth_error
+    parser_classes = [JSONParser]
 
-    throttle_error = _enforce_blog_api_rate_limit(request)
-    if throttle_error is not None:
-        return throttle_error
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        del args, kwargs
+        payload = request.data
+        if not isinstance(payload, Mapping):
+            raise ValidationError("JSON object payload expected")
 
-    try:
-        payload = json.loads(request.body.decode("utf-8") or "{}")
-    except UnicodeDecodeError:
-        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+        author = request.user
+        try:
+            with _blog_org_scope(request, author) as organization:
+                post = create_published_post_from_payload(
+                    payload, author, organization=organization
+                )
+        except BlogPublishValidationError as exc:
+            raise ValidationError(exc.errors) from exc
+        except IntegrityError as exc:
+            logger.exception("Unexpected integrity error while publishing post")
+            raise BlogPublishError("Unable to publish post") from exc
 
-    if not isinstance(payload, dict):
-        return JsonResponse({"error": "JSON object payload expected"}, status=400)
-
-    from quickscale_modules_orgs.current_org import (
-        _restore_current_org_id,
-        get_current_org_id,
-        set_current_org_id,
-    )
-
-    prior = get_current_org_id()
-    organization = _resolve_api_org(request, author)
-    try:
-        post = create_published_post_from_payload(
-            payload, author, organization=organization
-        )
-        return JsonResponse(
+        return Response(
             {
                 "id": post.pk,
                 "slug": post.slug,
@@ -789,26 +555,6 @@ def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
             },
             status=201,
         )
-    except BlogPublishValidationError as exc:
-        return JsonResponse({"errors": exc.errors}, status=400)
-    except BlogPublishConflictError as exc:
-        return JsonResponse({"error": str(exc)}, status=409)
-    except IntegrityError:
-        logger.exception("Unexpected integrity error while publishing post")
-        return JsonResponse(
-            {"error": "Unable to publish post"},
-            status=500,
-        )
-    finally:
-        set_current_org_id(prior)
-        # SA83/CR-SA74-001: GUC restoration is guarded by
-        # connection.vendor + in_atomic_block because SET LOCAL
-        # requires an active transaction.  Outside an atomic block
-        # the GUC is automatically cleaned up at transaction end.
-        from django.db import connection
-
-        if connection.vendor == "postgresql" and connection.in_atomic_block:
-            _restore_current_org_id(prior)
 
 
 class BlogPublicReadMixin(PublicSystemOrgReadMixin):
