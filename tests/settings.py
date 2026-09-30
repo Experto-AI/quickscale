@@ -4,6 +4,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from quickscale_core.manifest.settings_schema import load_settings_schema
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SHARED_TEST_TEMPLATES = (
     Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
@@ -94,6 +96,15 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Blog module required settings (fail-hard defaults)
 BLOG_ENABLE_RSS = True
 BLOG_API_RATE_LIMIT = "5/hour"
+BLOG_POSTS_PER_PAGE = 10
+
+# Rule 3: the compiled option schema the generic startup check reads, derived
+# from the module's own manifest so it can never drift from the declarations.
+_MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
+MODULE_SETTINGS_SCHEMA = {
+    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
+    for name in ("blog", "orgs")
+}
 
 # DRF configuration mirroring the generated settings: session authentication
 # only, the one QuickScale error shape, and the blog API throttle rate the
