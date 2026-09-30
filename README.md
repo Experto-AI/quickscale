@@ -89,16 +89,18 @@ runtime-owned and never hardcode the publishable key in the frontend source tree
 
 All billing API routes are flat (`api/billing/...`) and used in both Solo and SaaS modes. The
 organization is resolved from the session / `request.org` contract established by middleware,
-not from a URL slug.
+not from a URL slug. Every error answers the shared
+`{"error": {"code", "message", "fields"}}` shape (`fields` only for validation errors), and a
+disabled billing runtime answers `404`.
 
 | Route | Method | Auth | Request | Success contract | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `api/billing/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": "Stripe publishable key is not configured in the runtime environment."}` when missing. |
+| `api/billing/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": {"code": "configuration_error", "message": "Stripe publishable key is not configured in the runtime environment."}}` when missing. |
 | `api/billing/plans/` | `GET` | Public | None | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. |
 | `api/billing/balance/` | `GET` | Session auth | None | `{"balance": 0, "updated_at": null}` | A missing balance is returned as a read-only zero snapshot without creating a row. Persisted balances include their `updated_at` timestamp. |
 | `api/billing/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Fixed page size of `25`; client `page_size` overrides are ignored. |
 | `api/billing/purchase/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "credits-pack"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. |
-| `api/billing/subscription/` | `GET` | Session auth | None | `{"plan": {...}, "status": "active", "checkout_expires_at": null, "current_period_start": "...", "current_period_end": "..."}` | Returns `404` with `{"error": "Current subscription not found."}` when no current recurring row exists. |
+| `api/billing/subscription/` | `GET` | Session auth | None | `{"plan": {...}, "status": "active", "checkout_expires_at": null, "current_period_start": "...", "current_period_end": "..."}` | Returns `404` with `{"error": {"code": "not_found", "message": "Current subscription not found."}}` when no current recurring row exists. |
 | `api/billing/subscription/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "starter-monthly"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. Blocks if a current recurring subscription already exists. |
 | `api/billing/subscription/cancel/` | `POST` | Session auth + CSRF | `{}` | `204 No Content` | Rejects caller-supplied `return_url`. Schedules `cancel_at_period_end=True`. |
 | `api/billing/portal/` | `POST` | Session auth + CSRF | `{}` | `{"portal_url": "https://billing.stripe.com/..."}` | Rejects caller-supplied `return_url`. Uses the module-owned `billing/portal/return/` route. |
@@ -199,12 +201,18 @@ async function billingFetch<T>(input: string, init: RequestInit = {}): Promise<T
   }
 
   const payload = (await response.json()) as
-    | { error?: string; errors?: Record<string, string[]> }
+    | {
+        error?: {
+          code: string;
+          message: string;
+          fields?: Record<string, string[]>;
+        };
+      }
     | T;
 
   if (!response.ok) {
-    if (typeof payload === "object" && payload !== null && "error" in payload) {
-      throw new Error(payload.error || "Billing request failed.");
+    if (typeof payload === "object" && payload !== null && "error" in payload && payload.error) {
+      throw new Error(payload.error.message || "Billing request failed.");
     }
     throw new Error(JSON.stringify(payload));
   }
