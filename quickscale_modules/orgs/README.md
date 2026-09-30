@@ -32,8 +32,8 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 In `solo` mode the module creates and serves each user's personal organization; the
 organization API and the leaf organization pages answer `404`. In `saas` mode organizations are
 explicit, the middleware resolves the active organization from the session, and the API and
-organization pages are served. The generated project mounts the module at the root: in solo
-mode before the home route, in saas mode after it.
+organization pages are served. The module's manifest mounts it at `orgs/`: in solo mode before the
+project's home route, in saas mode after it.
 
 ## Public surface
 
@@ -93,33 +93,38 @@ always-on RLS boot guard through its `checks.py`.
 - `removal.py` publishes the removal contract: `RemovalAction`, `RemovalBoundary`,
   `RemovalCoordinator`, `OrganizationRemovalObligation`, and `ExternalProviderField`, with the
   declaration helpers each owning app uses.
+- `apps.py` declares orgs' own capabilities (Module Conventions rule 4): the organization-aware
+  post-login and post-signup redirect hooks auth's allauth adapter collects, and the
+  `social-cache-state` obligation executor, which clears the organization-scoped cache keys
+  installed modules declare through `organization_cache_keys`.
 
 ## URLs
 
-The module has no `app_name`; its route names are global and it is mounted at the project root.
+The module's mount (`orgs/`) lives only in the manifest's `url_includes` wiring projection, and
+every route name is snake_case under the `quickscale_orgs` namespace. The `api` slug is reserved
+for the module's API: creating or renaming an organization to it is refused.
 
 | Route name | Path | Purpose |
 |------------|------|---------|
-| `org-home` | `` (root) | Organization dashboard; served in both modes |
-| `org-index` | `orgs/` | Organization list (saas only) |
-| `org-new` | `orgs/new/` | Create an organization (saas only) |
-| `org-invitation-accept` | `orgs/invitations/<uuid:token>/accept/` | Accept an invitation |
-| `org-detail` | `orgs/<slug>/` | Organization dashboard (saas only) |
-| `org-members` | `orgs/<slug>/members/` | Member list (saas only) |
-| `org-members-invite` | `orgs/<slug>/members/invite/` | Invite a member (saas only) |
-| `org-members-invitation-revoke` | `orgs/<slug>/members/invitations/<uuid>/revoke/` | Revoke an invitation (saas only) |
-| `org-settings` | `orgs/<slug>/settings/` | Organization settings (saas only) |
-| `org-debug-view-as` | `orgs/<slug>/debug/view-as/` | Superuser VIEW-AS entry |
-| `org-debug-exit` | `orgs/<slug>/debug/exit/` | Exit VIEW-AS |
-| `org-debug-exit-root` | `debug/exit/` | Exit VIEW-AS from the root |
-| `org-api-list-create` | `api/orgs/` | Organization list/create API (saas only) |
-| `org-api-detail` | `api/orgs/<slug>/` | Organization detail API (saas only) |
-| `org-api-members` | `api/orgs/<slug>/members/` | Member list API (saas only) |
-| `org-api-members-invite` | `api/orgs/<slug>/members/invite/` | Invite API (saas only) |
-| `org-api-members-role` | `api/orgs/<slug>/members/<int>/role/` | Change a member role (saas only) |
-| `org-api-members-remove` | `api/orgs/<slug>/members/<int>/remove/` | Remove a member (saas only) |
-| `org-api-members-invitation-revoke` | `api/orgs/<slug>/members/invitations/<uuid>/revoke/` | Revoke an invitation (saas only) |
-| `org-api-settings` | `api/orgs/<slug>/settings/` | Organization settings API (saas only) |
+| `quickscale_orgs:index` | `orgs/` | Organization list (saas only) |
+| `quickscale_orgs:new` | `orgs/new/` | Create an organization (saas only) |
+| `quickscale_orgs:invitation_accept` | `orgs/invitations/<uuid:token>/accept/` | Accept an invitation |
+| `quickscale_orgs:detail` | `orgs/<slug>/` | Organization dashboard (saas only) |
+| `quickscale_orgs:members` | `orgs/<slug>/members/` | Member list (saas only) |
+| `quickscale_orgs:members_invite` | `orgs/<slug>/members/invite/` | Invite a member (saas only) |
+| `quickscale_orgs:members_invitation_revoke` | `orgs/<slug>/members/invitations/<uuid>/revoke/` | Revoke an invitation (saas only) |
+| `quickscale_orgs:settings` | `orgs/<slug>/settings/` | Organization settings (saas only) |
+| `quickscale_orgs:debug_view_as` | `orgs/<slug>/debug/view-as/` | Superuser VIEW-AS entry |
+| `quickscale_orgs:debug_exit` | `orgs/<slug>/debug/exit/` | Exit VIEW-AS |
+| `quickscale_orgs:debug_exit_root` | `orgs/debug/exit/` | Exit VIEW-AS from the root |
+| `quickscale_orgs:api_list_create` | `orgs/api/` | Organization list/create API (saas only) |
+| `quickscale_orgs:api_detail` | `orgs/api/<slug>/` | Organization detail API (saas only) |
+| `quickscale_orgs:api_members` | `orgs/api/<slug>/members/` | Member list API (saas only) |
+| `quickscale_orgs:api_members_invite` | `orgs/api/<slug>/members/invite/` | Invite API (saas only) |
+| `quickscale_orgs:api_members_role` | `orgs/api/<slug>/members/<int>/role/` | Change a member role (saas only) |
+| `quickscale_orgs:api_members_remove` | `orgs/api/<slug>/members/<int>/remove/` | Remove a member (saas only) |
+| `quickscale_orgs:api_members_invitation_revoke` | `orgs/api/<slug>/members/invitations/<uuid>/revoke/` | Revoke an invitation (saas only) |
+| `quickscale_orgs:api_settings` | `orgs/api/<slug>/settings/` | Organization settings API (saas only) |
 
 ## Management commands
 
@@ -186,4 +191,7 @@ supported removal path; organization data cannot be silently dropped.
   field that neither a declared obligation nor its model classifies. See
   [module-extension.md](../../docs/technical/module-extension.md#project-owned-tenant-models).
 - An app that owns organization-scoped data declares its removal obligations on its
-  `AppConfig` so purge and account deletion discharge them without orgs knowing the app.
+  `AppConfig` so purge and account deletion discharge them without orgs knowing the app. A
+  module that owns organization-scoped cache state also declares its keys through the
+  `organization_cache_keys` capability, so the purge clears them without orgs knowing the key
+  shapes.

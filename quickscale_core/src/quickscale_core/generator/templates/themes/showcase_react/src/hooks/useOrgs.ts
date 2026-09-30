@@ -97,7 +97,7 @@ export interface OrgSubscriptionResponse {
 
 function buildOrgApiPath(orgSlug: string, path = ''): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `/api/orgs/${orgSlug}${path ? normalizedPath : '/'}`
+  return `/orgs/api/${orgSlug}${path ? normalizedPath : '/'}`
 }
 
 function buildOrgBillingApiPath(orgSlug: string, path: string): string {
@@ -122,7 +122,7 @@ export function isOrgAdminLike(actor: OrgActor | null | undefined): boolean {
 }
 
 export function useOrgs() {
-  return useApiData<OrgListResponse>('/api/orgs/', ['orgs'])
+  return useApiData<OrgListResponse>('/orgs/api/', ['orgs'])
 }
 
 export function useOrg(orgSlug: string) {
@@ -136,7 +136,7 @@ export function useCreateOrg() {
 
   return useMutation({
     mutationFn: (payload: { name: string }) =>
-      apiRequest<OrgCreateResponse>('/api/orgs/', {
+      apiRequest<OrgCreateResponse>('/orgs/api/', {
         method: 'POST',
         body: JSON.stringify(payload),
       }),

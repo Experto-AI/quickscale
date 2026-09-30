@@ -454,12 +454,15 @@ class TestReactThemeGeneration:
         assert 'path("", react_shell_view, name="home")' in react_shell_prelude
         assert 're_path(r"^orgs/?$", orgs_react_shell_view)' in react_shell_prelude
         assert 're_path(r"^orgs/new/?$", orgs_react_shell_view)' in react_shell_prelude
+        # The org JSON API at /orgs/api/ must bypass the shell and reach Django.
         assert (
-            're_path(r"^orgs/[^/]+/?$", orgs_react_shell_view)' in react_shell_prelude
+            're_path(r"^orgs/(?!api(?:/|$))[^/]+/?$", orgs_react_shell_view)'
+            in react_shell_prelude
         )
         # T1.20: CRM is flat-only — not in org-scoped shell routes.
         assert (
-            'r"^orgs/[^/]+/(blog|listings|members|settings)/?$"' in react_shell_prelude
+            'r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$"'
+            in react_shell_prelude
         )
         assert (
             'r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$"'
@@ -476,6 +479,38 @@ class TestReactThemeGeneration:
         assert urls_py.index("urlpatterns += react_shell_urlpatterns") < urls_py.index(
             "urlpatterns += PRE_HOME_MODULE_URLPATTERNS"
         )
+
+    def test_orgs_api_paths_bypass_the_react_shell(self, tmp_path):
+        """Every /orgs/api/... path falls through the shell to the module include."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_orgs_api_bypass"
+        output_path = tmp_path / project_name
+        generator.generate(project_name, output_path)
+
+        urls_py = (output_path / project_name / "urls.py").read_text()
+        shell_patterns = [
+            re.compile(pattern) for pattern in re.findall(r'r"(\^orgs[^"]*)"', urls_py)
+        ]
+        assert len(shell_patterns) >= 4
+
+        # Django matches re_path patterns against the path without its leading
+        # slash, so the probe paths below use the same form.
+        api_paths = [
+            "orgs/api/",
+            "orgs/api",
+            "orgs/api/acme/",
+            "orgs/api/acme/settings/",
+            "orgs/api/blog/",
+            "orgs/api/listings/",
+            "orgs/api/members/",
+            "orgs/api/settings/",
+        ]
+        for path in api_paths:
+            assert not any(pattern.match(path) for pattern in shell_patterns), path
+
+        shell_paths = ["orgs/acme/", "orgs/acme/members/", "orgs/acme/settings/"]
+        for path in shell_paths:
+            assert any(pattern.match(path) for pattern in shell_patterns), path
 
     def test_react_theme_analytics_support_stays_dormant_and_frontend_only(
         self, tmp_path

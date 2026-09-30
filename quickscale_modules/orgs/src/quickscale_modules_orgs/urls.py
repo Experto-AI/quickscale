@@ -1,4 +1,10 @@
-"""Django URL surface for the QuickScale organizations module."""
+"""Django URL surface for the QuickScale organizations module.
+
+The module's mount (``orgs/``) is declared only in the manifest's
+``url_includes`` wiring projection; every pattern here is module-relative and
+every route name is snake_case without the module name, under the
+``quickscale_orgs`` application namespace (Module Conventions rule 7).
+"""
 
 from django.urls import path
 
@@ -22,86 +28,85 @@ from .views import (
     RevokeInvitationView,
 )
 
+app_name = "quickscale_orgs"
+
 urlpatterns = [
-    path("", OrgDashboardView.as_view(), name="org-home"),
-    # Root-level debug exit (accessible without an org slug).
+    path("", OrgListView.as_view(), name="index"),
+    path("new/", OrgCreateView.as_view(), name="new"),
+    path(
+        "invitations/<uuid:token>/accept/",
+        OrgInvitationAcceptView.as_view(),
+        name="invitation_accept",
+    ),
+    # Root-level debug exit (reachable without an org slug).
     path(
         "debug/exit/",
         ExitDebugModeView.as_view(),
-        name="org-debug-exit-root",
+        name="debug_exit_root",
     ),
-    path("api/orgs/", OrgApiListCreateView.as_view(), name="org-api-list-create"),
+    path("api/", OrgApiListCreateView.as_view(), name="api_list_create"),
+    path("api/<slug:org_slug>/", OrgApiDetailView.as_view(), name="api_detail"),
     path(
-        "api/orgs/<slug:org_slug>/", OrgApiDetailView.as_view(), name="org-api-detail"
-    ),
-    path(
-        "api/orgs/<slug:org_slug>/members/",
+        "api/<slug:org_slug>/members/",
         OrgApiMembersView.as_view(),
-        name="org-api-members",
+        name="api_members",
     ),
     path(
-        "api/orgs/<slug:org_slug>/members/invite/",
+        "api/<slug:org_slug>/members/invite/",
         OrgApiInviteView.as_view(),
-        name="org-api-members-invite",
+        name="api_members_invite",
     ),
     path(
-        "api/orgs/<slug:org_slug>/members/<int:membership_id>/role/",
+        "api/<slug:org_slug>/members/<int:membership_id>/role/",
         OrgApiMemberRoleView.as_view(),
-        name="org-api-members-role",
+        name="api_members_role",
     ),
     path(
-        "api/orgs/<slug:org_slug>/members/<int:membership_id>/remove/",
+        "api/<slug:org_slug>/members/<int:membership_id>/remove/",
         OrgApiMemberRemoveView.as_view(),
-        name="org-api-members-remove",
+        name="api_members_remove",
     ),
     path(
-        "api/orgs/<slug:org_slug>/members/invitations/<uuid:invitation_id>/revoke/",
+        "api/<slug:org_slug>/members/invitations/<uuid:invitation_id>/revoke/",
         OrgApiRevokeInvitationView.as_view(),
-        name="org-api-members-invitation-revoke",
+        name="api_members_invitation_revoke",
     ),
     path(
-        "api/orgs/<slug:org_slug>/settings/",
+        "api/<slug:org_slug>/settings/",
         OrgApiSettingsView.as_view(),
-        name="org-api-settings",
-    ),
-    path("orgs/", OrgListView.as_view(), name="org-index"),
-    path("orgs/new/", OrgCreateView.as_view(), name="org-new"),
-    path(
-        "orgs/invitations/<uuid:token>/accept/",
-        OrgInvitationAcceptView.as_view(),
-        name="org-invitation-accept",
+        name="api_settings",
     ),
     # VIEW-AS debug routes — placed before the catch-all slug route
     # so they are matched before /orgs/<slug:org_slug>/ captures them.
     path(
-        "orgs/<slug:org_slug>/debug/view-as/",
+        "<slug:org_slug>/debug/view-as/",
         DebugAsOrgView.as_view(),
-        name="org-debug-view-as",
+        name="debug_view_as",
     ),
     path(
-        "orgs/<slug:org_slug>/debug/exit/",
+        "<slug:org_slug>/debug/exit/",
         ExitDebugModeView.as_view(),
-        name="org-debug-exit",
+        name="debug_exit",
     ),
-    path("orgs/<slug:org_slug>/", OrgDashboardView.as_view(), name="org-detail"),
+    path("<slug:org_slug>/", OrgDashboardView.as_view(), name="detail"),
     path(
-        "orgs/<slug:org_slug>/members/",
+        "<slug:org_slug>/members/",
         MemberListView.as_view(),
-        name="org-members",
+        name="members",
     ),
     path(
-        "orgs/<slug:org_slug>/members/invite/",
+        "<slug:org_slug>/members/invite/",
         InviteView.as_view(),
-        name="org-members-invite",
+        name="members_invite",
     ),
     path(
-        "orgs/<slug:org_slug>/members/invitations/<uuid:invitation_id>/revoke/",
+        "<slug:org_slug>/members/invitations/<uuid:invitation_id>/revoke/",
         RevokeInvitationView.as_view(),
-        name="org-members-invitation-revoke",
+        name="members_invitation_revoke",
     ),
     path(
-        "orgs/<slug:org_slug>/settings/",
+        "<slug:org_slug>/settings/",
         OrgSettingsView.as_view(),
-        name="org-settings",
+        name="settings",
     ),
 ]

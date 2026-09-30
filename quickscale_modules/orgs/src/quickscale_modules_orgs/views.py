@@ -93,7 +93,7 @@ def _load_invitation_notification_sender() -> Any | None:
 def _canonical_org_detail_path(organization: Organization) -> str:
     try:
         return reverse(
-            "org-detail",
+            "quickscale_orgs:detail",
             kwargs={"org_slug": organization.slug},
         )
     except NoReverseMatch:
@@ -490,7 +490,7 @@ class OrgInvitationAcceptView(SaasModeRequiredMixin, TemplateView):
 
         return redirect(
             reverse(
-                "org-detail",
+                "quickscale_orgs:detail",
                 kwargs={"org_slug": invitation.organization.slug},
             )
         )
@@ -673,7 +673,7 @@ class MemberManagementContextMixin(OrganizationContextMixin):
     def get_members_redirect(self) -> HttpResponse:
         return redirect(
             reverse(
-                "org-members",
+                "quickscale_orgs:members",
                 kwargs={"org_slug": self.get_organization().slug},
             )
         )
@@ -941,7 +941,7 @@ class OrgSettingsView(
         organization = form.save()
         return redirect(
             reverse(
-                "org-settings",
+                "quickscale_orgs:settings",
                 kwargs={"org_slug": organization.slug},
             )
         )

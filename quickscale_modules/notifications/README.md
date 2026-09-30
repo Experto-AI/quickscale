@@ -76,11 +76,12 @@ while the live Resend backend is active — fails startup when empty.
 
 ## URLs
 
-`quickscale apply` mounts the module at the project root; the single route is:
+`quickscale apply` mounts the module at `notifications/` (its manifest `url_includes` entry);
+the single route is:
 
 | URL name | Path | View |
 |----------|------|------|
-| `quickscale_notifications:resend-webhook` | `notifications/webhooks/resend/` | Signed, replay-safe delivery-event ingestion |
+| `quickscale_notifications:resend_webhook` | `notifications/webhooks/resend/` | Signed, replay-safe delivery-event ingestion |
 
 ## Management commands
 

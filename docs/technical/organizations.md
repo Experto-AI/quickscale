@@ -55,10 +55,10 @@ QUICKSCALE_MODE = "solo"  # or 'saas'
 - **URL resolution**: In solo mode, middleware auto-resolves the org from the user's personal org. In SaaS mode, the org is resolved from the **session** (`ACTIVE_ORG_SESSION_KEY`), set at signup/org-creation and stable for the session lifetime. The org-management pages live under `/orgs/...`; the shipped module content routes are flat and rely on `request.org` / the current-org ContextVar rather than URL kwargs.
 - **Guard behaviour**: In solo mode, the post-signup guard auto-creates a personal org silently. In SaaS mode, it redirects the user to `/orgs/new/` to name their organization.
 
-The orgs module now ships a single URL module. The deployment mode changes request behavior, not which Django URL module is imported:
+The orgs module now ships a single URL module mounted at `orgs/`. The deployment mode changes request behavior and the mount's placement (solo: before the project's home route; saas: after it), not which Django URL module is imported:
 
 ```python
-urlpatterns += [path("", include("quickscale_modules_orgs.urls"))]
+urlpatterns += [path("orgs/", include("quickscale_modules_orgs.urls"))]
 ```
 
 The same org views serve both modes. Org-management pages keep `org_slug` where needed (`/orgs/<slug>/...`), while tenant content routes do not use org-scoped URL kwargs. The active org is resolved from middleware-established context.
@@ -446,20 +446,30 @@ Customers self-provision without platform owner intervention:
 3. Redirect → /       → dashboard, ready to use (no org creation step shown)
 ```
 
-The allauth adapter handles both modes:
+The redirects live in `orgs` as post-login and post-signup hooks the module declares on its
+`AppConfig`; `auth`'s single allauth adapter collects every installed module's declared hooks
+and uses the first one that answers, so `orgs` never subclasses or imports the adapter:
 
 ```python
-class OrgsAccountAdapter(DefaultAccountAdapter):
-    def get_login_redirect_url(self, request):
-        if not OrganizationMembership.objects.filter(user=request.user).exists():
-            if settings.QUICKSCALE_MODE == "solo":
-                Organization.objects.create_personal_for(request.user)
-                return "/"
+# quickscale_modules_orgs._redirects — declared by QuickscaleOrgsConfig
+def post_login_redirect(request) -> str | None:
+    if not request.user.is_authenticated:
+        return None
+    saas = settings.QUICKSCALE_MODE == "saas"
+    has_membership = OrganizationMembership.objects.filter(user=request.user).exists()
+    if not saas and not has_membership:
+        Organization.objects.create_personal_for(request.user)
+        return None  # the adapter's LOGIN_REDIRECT_URL applies
+    if saas:
+        pending = _pending_invitation_redirect_url(request)
+        if pending is not None:
+            return pending
+        if not has_membership:
             return "/orgs/new/"
-        return super().get_login_redirect_url(request)
+    return None
 ```
 
-Wired via `ACCOUNT_ADAPTER = 'quickscale_modules_orgs.adapters.OrgsAccountAdapter'` in module settings.
+Wired via `ACCOUNT_ADAPTER = 'quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter'` in auth's module settings.
 
 ---
 
@@ -518,7 +528,7 @@ Path routing (not subdomain). The org slug is part of the org-management surface
 ### Solo Mode
 
 ```
-/                      # Dashboard (org resolved silently from user's personal org)
+/                      # Project home (the site root belongs to the project)
 /blog/                 # Blog
 /crm/                  # CRM
 /forms/                # Forms
@@ -528,7 +538,8 @@ Path routing (not subdomain). The org slug is part of the org-management surface
 /account/settings/     # User settings
 ```
 
-No org management pages are exposed in solo mode.
+No org management pages are exposed in solo mode; the module's routes live under `/orgs/` and
+answer 404 there, apart from the superuser VIEW-AS debug routes.
 
 ### React Frontend Routes
 
@@ -589,14 +600,14 @@ Everything downstream (`request.org`, the current-org ContextVar, permission che
 
 The middleware uses **session-based org resolution** for SaaS mode and personal-org resolution for Solo mode. It populates `request.org` plus the current-org ContextVar, but it does **not** hold a request-long transaction or issue `SET LOCAL` directly.
 
-The middleware carries no slug/fallback resolution paths for content routes: org-management URLs (`/orgs/...` and `/api/orgs/...`) bypass tenant resolution so the orgs views can own access control, while all other SaaS requests either resolve an active session org or fail closed.
+The middleware carries no slug/fallback resolution paths for content routes: org-management URLs (`/orgs/...` and `/orgs/api/...`) bypass tenant resolution so the orgs views can own access control, while all other SaaS requests either resolve an active session org or fail closed.
 
 Key behaviours (current):
 - **SaaS mode + active session org** → resolves the org from the session key, validates membership, and sets `request.org` + the current-org ContextVar.
 - **SaaS mode + no active session org** → redirects to `/orgs/` for non-exempt, non-org-management paths.
 - **Solo mode** → resolves the personal org from the authenticated user's membership.
 - **VIEW-AS debug override** → a superuser debug session org takes priority over the normal Solo/SaaS branch.
-- **Org-management path bypass** → `/orgs/...` and `/api/orgs/...` requests owned by the orgs module bypass middleware tenant resolution so the views can own access control.
+- **Org-management path bypass** → `/orgs/...` and `/orgs/api/...` requests owned by the orgs module bypass middleware tenant resolution so the views can own access control.
 
 **Connection/RLS note**: DB-level `app.current_org_id` priming is now caller-managed (`tenant_context(...)`, `org_scope(...)`, or the execute-wrapper path where applicable). When deployment topology requires session-level `SET` instead of transaction-local `SET LOCAL`, document that explicitly in `docs/deployment/railway.md`.
 

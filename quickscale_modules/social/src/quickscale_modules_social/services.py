@@ -509,6 +509,21 @@ def build_social_embeds_payload() -> dict[str, object]:
     )
 
 
+def organization_cache_keys(organization_id: object) -> tuple[str, ...]:
+    """Return social's organization-scoped cache keys for *organization_id*.
+
+    This is the rule 4 ``organization_cache_keys`` capability social declares:
+    a removal boundary collects it and clears every returned key, so the
+    boundary holds no knowledge of social's cache-key shapes.
+    """
+    return (
+        SOCIAL_LINKS_CACHE_KEY,
+        f"{SOCIAL_LINKS_CACHE_KEY}:org:{organization_id}",
+        SOCIAL_EMBEDS_CACHE_KEY,
+        f"{SOCIAL_EMBEDS_CACHE_KEY}:org:{organization_id}",
+    )
+
+
 # ``invalidate_social_cache()`` intentionally stays out of ``__all__``: it only
 # clears bare keys and is unsafe to advertise as a tenant-aware bulk
 # invalidation API.
@@ -521,4 +536,5 @@ __all__ = [
     "build_social_link_tree_payload",
     "list_published_social_embeds",
     "list_published_social_links",
+    "organization_cache_keys",
 ]

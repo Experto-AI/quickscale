@@ -75,6 +75,9 @@ Services (`quickscale_modules_social.services`):
   embed-capability-filtered and capped.
 - `build_social_link_tree_payload()` and `build_social_embeds_payload()` build the JSON payloads
   the public pages and integration endpoints serve.
+- `organization_cache_keys(organization_id)` returns the module's organization-scoped cache keys;
+  the orgs purge collects it through the `organization_cache_keys` AppConfig capability and clears
+  every key without knowing their shapes.
 - Payloads are cached under `quickscale_social:` keys, partitioned per organization, with the
   configured TTL; save and delete invalidate the bare and affected organization keys.
 

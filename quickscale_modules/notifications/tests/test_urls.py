@@ -6,7 +6,7 @@ from quickscale_modules_notifications.views import NotificationWebhookView
 
 
 def test_resend_webhook_url_resolves() -> None:
-    url = reverse("quickscale_notifications:resend-webhook")
+    url = reverse("quickscale_notifications:resend_webhook")
     match = resolve(url)
 
     assert url == "/notifications/webhooks/resend/"

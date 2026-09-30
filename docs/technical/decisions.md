@@ -2315,7 +2315,7 @@ gate exit-status inputs. The retained baseline sections are `dead_code`,
 - ❌ App-layer-only filtering without a PostgreSQL RLS backstop (no defence-in-depth; one missed filter leaks cross-tenant data)
 - ❌ PostgreSQL schema-per-tenant isolation (schema metadata bloat, migration complexity)
 - ❌ Connecting generated apps in saas/prod mode under a BYPASSRLS or SUPERUSER role (silently disables all RLS policies across all modules)
-- ❌ Route-slug-based org resolution for content routes (`/orgs/<slug>/crm/...`) — use flat routes + session active-org; org-admin API may keep `/api/orgs/<slug>/`
+- ❌ Route-slug-based org resolution for content routes (`/orgs/<slug>/crm/...`) — use flat routes + session active-org; org-admin API may keep `/orgs/api/<slug>/`
 
 **Package Structure:**
 - ❌ Nested package names (NO `quickscale/quickscale_core`)

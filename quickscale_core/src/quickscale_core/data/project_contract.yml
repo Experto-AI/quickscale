@@ -128,3 +128,10 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current frontend/src/components/forms/FormRenderer.tsx and frontend/src/hooks/useFormSchema.ts: the form client submits through the shared apiRequest client and renders the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}} — validation field errors under their fields, a field with no visible error outlet (hidden fields included, which never block submission locally) and non-field errors as a global message, and the shape's message for every other failure — and the schema hook surfaces the shape's message when the form schema cannot be fetched."
       - "Optionally copy the current frontend/src/test/FormRenderer.test.tsx cases to pin the field-error, non-field-error, shaped-message, and network-failure behavior."
+  - id: sa223-orgs-url-mount
+    minimum: "0.89.0"
+    title: "Adopt the orgs module's /orgs/ mount and /orgs/api/ JSON API"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/src/hooks/useOrgs.ts org API paths: the org JSON API moved from /api/orgs/... to /orgs/api/... — the org list/create endpoint is /orgs/api/ and org-scoped endpoints are /orgs/api/<slug>/... — so custom frontend code that calls /api/orgs/... updates its paths."
+      - "Compare and manually adopt the current <package>/urls.py org React-shell routes: the /orgs/<slug>/ shell route excludes /orgs/api/ so the module's JSON API reaches Django instead of the shell, and the module's HTML routes (org dashboard, members, settings, invitation accept) stay at their existing /orgs/... URLs."
+      - "Audit project-owned template overrides of the orgs templates (for example a copied templates/quickscale_orgs/members.html) for the retired global route names org-members-invite, org-members-invitation-revoke, and org-debug-exit, and rename them to their quickscale_orgs snake_case forms (quickscale_orgs:members_invite, quickscale_orgs:members_invitation_revoke, quickscale_orgs:debug_exit); the module's own templates already use the namespaced names."

@@ -102,6 +102,24 @@ def test_saas_org_create_uses_suffixed_slug_when_name_is_taken(
 
 
 @pytest.mark.django_db
+def test_saas_org_create_skips_the_reserved_api_slug(client, settings) -> None:
+    """An organization named "API" must not take the slug the module's API owns."""
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="api-builder",
+        email="api-builder@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.post("/orgs/new/", {"name": "API"})
+
+    assert response.status_code == 302
+    assert Organization.objects.filter(slug="api-2").exists()
+    assert not Organization.objects.filter(slug="api").exists()
+
+
+@pytest.mark.django_db
 def test_saas_org_create_truncates_overlong_slug_and_reserves_suffix_room(
     client, settings
 ) -> None:
@@ -1231,7 +1249,7 @@ def test_member_role_updates_translate_save_time_validation_errors(
 
     if json_request:
         response = client.post(
-            f"/api/orgs/{organization.slug}/members/{target_membership.pk}/role/",
+            f"/orgs/api/{organization.slug}/members/{target_membership.pk}/role/",
             data=json.dumps({"role": OrgRole.ADMIN}),
             content_type="application/json",
         )
@@ -1585,6 +1603,34 @@ def test_org_settings_requires_admin_and_updates_slug(client, settings) -> None:
 
 
 @pytest.mark.django_db
+def test_org_settings_rejects_the_reserved_api_slug(client, settings) -> None:
+    """Renaming an organization to the module's API slug is refused."""
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Beacon", slug="beacon")
+    admin_user = get_user_model().objects.create_user(
+        username="beacon-api-admin",
+        email="beacon-api-admin@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/orgs/{organization.slug}/settings/",
+        {"name": "Beacon", "slug": "api"},
+    )
+
+    organization.refresh_from_db()
+    assert response.status_code == 200
+    assert "reserved for the module" in response.content.decode()
+    assert organization.slug == "beacon"
+
+
+@pytest.mark.django_db
 @override_settings(ROOT_URLCONF="tests.urls_pre_home")
 def test_saas_pre_home_root_redirects_to_org_index(client, settings) -> None:
     settings.QUICKSCALE_MODE = "saas"
@@ -1609,7 +1655,7 @@ def test_saas_pre_home_root_redirects_to_org_index(client, settings) -> None:
 
 @pytest.mark.django_db
 @override_settings(ROOT_URLCONF="tests.urls_pre_home")
-def test_solo_pre_home_root_route_renders_org_dashboard(client, settings) -> None:
+def test_solo_pre_home_mount_keeps_project_root(client, settings) -> None:
     settings.QUICKSCALE_MODE = "solo"
     user = get_user_model().objects.create_user(
         username="solo-owner",
@@ -1621,7 +1667,9 @@ def test_solo_pre_home_root_route_renders_org_dashboard(client, settings) -> Non
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Organization dashboard" in response.content.decode()
+    assert "Organization dashboard" not in response.content.decode()
+    assert resolve_url("quickscale_orgs:index") == "/orgs/"
+    assert resolve_url("quickscale_orgs:detail", org_slug="acme") == "/orgs/acme/"
     assert Organization.objects.filter(
         is_personal=True,
         quickscale_orgs_memberships__user=user,
@@ -1633,7 +1681,7 @@ def test_saas_org_api_create_requires_authentication(client, settings) -> None:
     settings.QUICKSCALE_MODE = "saas"
 
     response = client.post(
-        "/api/orgs/",
+        "/orgs/api/",
         data=json.dumps({"name": "Acme Labs"}),
         content_type="application/json",
     )
@@ -1665,7 +1713,7 @@ def test_saas_org_api_create_post_creates_org_and_returns_json(
     )
 
     response = client.post(
-        "/api/orgs/",
+        "/orgs/api/",
         data=json.dumps({"name": "Acme Labs"}),
         content_type="application/json",
     )
@@ -1706,7 +1754,7 @@ def test_saas_org_api_create_falls_back_to_org_dashboard_without_billing(
     monkeypatch.setattr(org_views, "_billing_pricing_path", lambda organization: None)
 
     response = client.post(
-        "/api/orgs/",
+        "/orgs/api/",
         data=json.dumps({"name": "Fallback Labs"}),
         content_type="application/json",
     )
@@ -1733,7 +1781,7 @@ def test_saas_org_api_list_returns_memberships(client, settings) -> None:
     )
     client.force_login(user)
 
-    response = client.get("/api/orgs/")
+    response = client.get("/orgs/api/")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -1762,7 +1810,7 @@ def test_saas_org_api_list_returns_empty_state_without_memberships(
     )
     client.force_login(user)
 
-    response = client.get("/api/orgs/")
+    response = client.get("/orgs/api/")
 
     assert response.status_code == 200
     assert response.json() == {"organizations": []}
@@ -1784,7 +1832,7 @@ def test_saas_org_api_detail_returns_org_payload(client, settings) -> None:
     )
     client.force_login(user)
 
-    response = client.get(f"/api/orgs/{organization.slug}/")
+    response = client.get(f"/orgs/api/{organization.slug}/")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -1815,7 +1863,7 @@ def test_saas_org_api_detail_returns_403_for_non_member(client, settings) -> Non
     organization = Organization.objects.create(name="Harbor", slug="harbor")
     client.force_login(user)
 
-    response = client.get(f"/api/orgs/{organization.slug}/")
+    response = client.get(f"/orgs/api/{organization.slug}/")
 
     assert response.status_code == 403
 
@@ -1855,7 +1903,7 @@ def test_org_api_members_returns_members_and_pending_invitations(
     )
     client.force_login(admin_user)
 
-    response = client.get(f"/api/orgs/{organization.slug}/members/")
+    response = client.get(f"/orgs/api/{organization.slug}/members/")
 
     payload = response.json()
     member_payloads = {member["user"]["email"]: member for member in payload["members"]}
@@ -1923,7 +1971,7 @@ def test_org_api_invite_creates_invitation_and_dispatches_notification(
     client.force_login(admin_user)
 
     response = client.post(
-        f"/api/orgs/{organization.slug}/members/invite/",
+        f"/orgs/api/{organization.slug}/members/invite/",
         data=json.dumps({"email": "Invitee@Example.com", "role": OrgRole.ADMIN}),
         content_type="application/json",
     )
@@ -1971,7 +2019,7 @@ def test_org_api_member_role_update_returns_json(client, settings) -> None:
     client.force_login(owner)
 
     response = client.post(
-        f"/api/orgs/{organization.slug}/members/{member_membership.pk}/role/",
+        f"/orgs/api/{organization.slug}/members/{member_membership.pk}/role/",
         data=json.dumps({"role": OrgRole.ADMIN}),
         content_type="application/json",
     )
@@ -2010,7 +2058,7 @@ def test_org_api_member_remove_returns_json(client, settings) -> None:
     client.force_login(admin_user)
 
     response = client.post(
-        f"/api/orgs/{organization.slug}/members/{membership.pk}/remove/",
+        f"/orgs/api/{organization.slug}/members/{membership.pk}/remove/",
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -2064,7 +2112,7 @@ def test_member_removals_translate_delete_time_validation_errors(
 
     if json_request:
         response = client.post(
-            f"/api/orgs/{organization.slug}/members/{target_membership.pk}/remove/",
+            f"/orgs/api/{organization.slug}/members/{target_membership.pk}/remove/",
             data=json.dumps({}),
             content_type="application/json",
         )
@@ -2121,7 +2169,7 @@ def test_org_api_revoke_invitation_returns_json(client, settings) -> None:
     client.force_login(admin_user)
 
     response = client.post(
-        f"/api/orgs/{organization.slug}/members/invitations/{invitation.pk}/revoke/",
+        f"/orgs/api/{organization.slug}/members/invitations/{invitation.pk}/revoke/",
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -2151,7 +2199,7 @@ def test_org_api_settings_updates_slug_and_returns_json(client, settings) -> Non
     client.force_login(admin_user)
 
     response = client.post(
-        f"/api/orgs/{organization.slug}/settings/",
+        f"/orgs/api/{organization.slug}/settings/",
         data=json.dumps({"name": "Beacon Labs", "slug": "beacon-labs"}),
         content_type="application/json",
     )
@@ -2184,12 +2232,12 @@ _MISSING_SLUG_403_RESPONSE = {
 @pytest.mark.parametrize(
     "path",
     [
-        # OrgApiDetailView (VIEWER): GET /api/orgs/<slug>/
-        "/api/orgs/nonexistent-slug/",
-        # OrgApiMembersView (ADMIN): GET /api/orgs/<slug>/members/
-        "/api/orgs/nonexistent-slug/members/",
-        # OrgApiSettingsView (ADMIN): POST /api/orgs/<slug>/settings/
-        "/api/orgs/nonexistent-slug/settings/",
+        # OrgApiDetailView (VIEWER): GET /orgs/api/<slug>/
+        "/orgs/api/nonexistent-slug/",
+        # OrgApiMembersView (ADMIN): GET /orgs/api/<slug>/members/
+        "/orgs/api/nonexistent-slug/members/",
+        # OrgApiSettingsView (ADMIN): POST /orgs/api/<slug>/settings/
+        "/orgs/api/nonexistent-slug/settings/",
     ],
 )
 def test_org_api_missing_slug_returns_403_not_404(client, settings, path) -> None:
@@ -2223,11 +2271,11 @@ def test_org_api_missing_slug_returns_403_not_404(client, settings, path) -> Non
     ("org_slug", "path_pattern"),
     [
         # OrgApiDetailView (VIEWER)
-        ("parity-org", "/api/orgs/{slug}/"),
+        ("parity-org", "/orgs/api/{slug}/"),
         # OrgApiMembersView (ADMIN)
-        ("parity-org", "/api/orgs/{slug}/members/"),
+        ("parity-org", "/orgs/api/{slug}/members/"),
         # OrgApiSettingsView (ADMIN) — POST
-        ("parity-org", "/api/orgs/{slug}/settings/"),
+        ("parity-org", "/orgs/api/{slug}/settings/"),
     ],
 )
 def test_org_api_unauthorized_slug_and_missing_slug_return_same_403(

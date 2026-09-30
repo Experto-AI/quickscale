@@ -210,8 +210,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Module wiring refuses conflicting settings.** `apply` fails and names both modules and the
     setting when two modules contribute one wiring key with different values, while
     `REST_FRAMEWORK` contributions merge key by key so one module's throttle rates cannot replace
-    another's. Auth no longer contributes `ACCOUNT_ADAPTER`; the orgs adapter, which extends
-    auth's, is its single writer.
+    another's. The account adapter has one writer: auth owns `ACCOUNT_ADAPTER`, and modules
+    contribute their post-auth redirects as hooks it collects.
   - **Shipped-module lists derive from module manifests.** Core's catalog descriptions, the Bandit
     scan roots, the theme lint's module set, and the PostgreSQL isolation profile and runner read
     the shipped set from `quickscale_modules/*/module.yml`, so a module that ships an RLS boundary
@@ -253,6 +253,18 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Auth's mount is manifest-owned and its routes are snake_case.** The auth module declares
     `accounts/` in its manifest's `url_includes` entry instead of its adapter, and its profile
     routes are named `profile_edit` and `account_delete`; every public URL is unchanged.
+  - **Organizations serve every URL under `/orgs/`.** The orgs module declares its `orgs/` mount
+    in its manifest and namespaces its snake_case routes as `quickscale_orgs`, its JSON API
+    answers at `/orgs/api/...` (was `/api/orgs/...`), and the root dashboard route is gone so the
+    site root belongs to the project.
+  - **Notifications' mount is manifest-owned and its webhook route is snake_case.** The
+    notifications module declares `notifications/` in its manifest's `url_includes` entry instead
+    of its adapter, and its route is named `resend_webhook`; the Resend endpoint stays at
+    `/notifications/webhooks/resend/`.
+  - **Post-auth redirects and organization cache keys are declared capabilities.** Auth's single
+    allauth adapter collects installed modules' declared post-login and post-signup redirect
+    hooks, orgs declares the organization-aware ones instead of subclassing that adapter, and
+    the organization purge clears the organization-scoped cache keys social declares.
   - **Module dependencies are bare names that select their closure.** A manifest's
     `required_modules` lists bare module names with no version floors and no `implies` key;
     `quickscale plan` and `quickscale apply` now select every required module transitively, so
