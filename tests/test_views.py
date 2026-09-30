@@ -28,6 +28,20 @@ def clear_forms_test_cache():
 
 
 @pytest.mark.django_db
+def test_form_page_renders_inside_the_module_base(client):
+    """The public form page extends the flat forms module base and shell."""
+    response = client.get(
+        reverse("quickscale_forms:form-page", kwargs={"slug": "test-contact"})
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'data-form-slug="test-contact"' in content
+    assert 'class="forms-content"' in content
+    assert "<style" not in content.lower()
+
+
+@pytest.mark.django_db
 class TestFormSchemaAPIView:
     """Tests for the public GET /api/forms/{slug}/ endpoint"""
 

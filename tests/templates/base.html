@@ -1,0 +1,29 @@
+{# Test stub mirroring the project base.html emitted by the showcase_react theme.
+   Only the block contract matters here: title, extra_css, content, extra_js.
+
+   The forms suite renders its public form page through this stub. It stays
+   local rather than pointing at tests_shared/templates because `git subtree
+   split` carries each module's own tests/ but not the repo-root commons. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Test Project{% endblock %}</title>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="qs-topbar">
+        <a href="/" class="qs-topbar-brand">Test Project</a>
+    </nav>
+
+    <main class="qs-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="qs-footer">
+        <p>&copy; {% now "Y" %} Test Project. Built with QuickScale.</p>
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

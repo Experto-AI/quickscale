@@ -166,7 +166,7 @@ def _build_submission_notification_content(
     ]
 
     html_body = render_to_string(
-        "quickscale_forms/forms/form_email.html",
+        "quickscale_forms/email/form_email.html",
         template_context,
     )
 
