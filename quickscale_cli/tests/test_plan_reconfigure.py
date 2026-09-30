@@ -373,7 +373,7 @@ class TestPlanReconfigureAddModules:
     def test_plan_reconfigure_auto_adds_default_notifications_when_orgs_selected(
         self,
     ) -> None:
-        """Adding orgs during reconfigure should materialize the implied notifications module."""
+        """Adding orgs during reconfigure should materialize the required notifications module."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             os.makedirs(".quickscale", exist_ok=True)

@@ -570,7 +570,7 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
     assert apply_result.exit_code == 0
     assert mock_embed_modules_step.call_count == 1
     called_modules = mock_embed_modules_step.call_args.args[1]
-    # auth now implies orgs→notifications, so all three are embedded
+    # auth now requires orgs→notifications, so all three are embedded
     assert sorted(called_modules) == ["auth", "notifications", "orgs"]
 
     assert (project_path / "modules" / "auth").exists()
@@ -882,7 +882,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         _assert_physical_module_manifest_names(project_path, inventory)
 
         # quickscale.yml: blog with enable_rss=False; auth and orgs are
-        # installed.  Orgs implies notifications which is materialized
+        # installed.  Orgs requires notifications which is materialized
         # by _load_and_validate_config.
         config_data = {
             "version": "1",
@@ -902,7 +902,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
             yaml.safe_dump(config_data, sort_keys=False)
         )
 
-        # State: auth, orgs, notifications (implied by orgs), and blog with
+        # State: auth, orgs, notifications (required by orgs), and blog with
         # enable_rss=True so the delta shows one mutable change.
         state_data = {
             "version": "1",

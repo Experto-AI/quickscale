@@ -174,7 +174,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
     notifications' `os.getenv` reads and in-code default variable names go (rule 35).
   - *Dependencies.* `required_modules` holds bare names and `plan`/`apply` select them; version
     floors, their parser, and `implies` go from the seven manifests, their core copies, and the
-    implication resolver (rule 39).
+    implication resolver (rule 39). **Landed:** the manifest loader refuses a version specifier
+    or an `implies` key, `plan`/`apply` materialize the transitive required closure (orgs now
+    requires `auth` and `notifications`), and no manifest or bundled copy carries a floor or
+    `implies`; the settings-names, no-legacy, secrets, off-surface, and theme items remain open.
 
   Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)
   disabled, admin kept; `apply` refuses to switch off a module another installed module lists in
@@ -191,7 +194,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** every manifest and module settings read; `quickscale_cli` plan and apply;
   `.env.example`; the generated settings templates (Track 3); the theme's `index.html.j2`;
-  core's manifest loader and implication resolver; railway.md and user docs.
+  core's manifest loader and required-module resolver; railway.md and user docs.
 
 - [ ] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
 
@@ -245,11 +248,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
   **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
-  URL prefixes still live in two places.
+  URL prefixes still live in `urls.py` for billing, crm, and forms.
 
   **Scope:** mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; APIs to
   `<mount>api/`, webhooks to `<mount>webhooks/`; route names become snake_case without the module
-  name, in social, billing, crm, and forms.
+  name, in billing, crm, and forms.
 
   **Acceptance:** a list of every moved public URL, with its operator step, is ready for SA215's
   release notes; every throttle scope has the stem and its rate from a setting.

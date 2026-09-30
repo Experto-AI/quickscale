@@ -25,7 +25,6 @@ from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
     ContractVintage,
-    ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
     ProjectContractStep,
@@ -1411,55 +1410,46 @@ def _parse_derivation_section(
 
 
 # ---------------------------------------------------------------------------
-# Implies section parsing
+# required_modules section parsing
 # ---------------------------------------------------------------------------
 
 
-def _parse_implies(data: dict[str, Any], module_name: str | None) -> list[ImpliesEntry]:
-    """Parse and validate the top-level ``implies`` section.
+def _parse_required_modules(data: dict[str, Any], module_name: str | None) -> list[str]:
+    """Validate the optional list of bare required-module names.
 
-    Each entry must be a mapping with at least ``name`` (non-empty string).
-    An optional ``default_config`` mapping provides configuration defaults
-    for the implied module.  Returns an empty list when the section is absent.
+    Every entry must be a bare first-party module name (Module Conventions
+    rule 39): the ``name>=version`` form and the ``implies`` key are
+    retired, and both are refused here by name.  The parser lives in
+    :mod:`quickscale_core.manifest.required_modules` (which imports this
+    module, so the reference is function-local to avoid a cycle).
 
     Args:
         data: The full parsed YAML data dictionary.
         module_name: Optional module name for error messages.
 
     Returns:
-        A list of :class:`ImpliesEntry` instances.  Returns an empty list
-        when the section is absent.
+        The declared bare module names, in declaration order.
 
     Raises:
-        ManifestError: If the section is malformed.
+        ManifestError: If the entry list or any entry is malformed, or if
+            the retired ``implies`` key is present.
     """
-    raw_section = data.get("implies")
-    if raw_section is None:
-        return []
+    from quickscale_core.manifest.required_modules import (  # noqa: PLC0415
+        parse_required_module_entry,
+    )
 
-    if not isinstance(raw_section, list):
-        raise ManifestError("'implies' must be a list", module_name)
+    if "implies" in data:
+        raise ManifestError(
+            "'implies' is retired: declare the dependency in "
+            "'required_modules' as a bare module name "
+            "(Module Conventions rule 39).",
+            module_name,
+        )
 
-    entries: list[ImpliesEntry] = []
-    for i, entry in enumerate(raw_section):
-        if not isinstance(entry, dict):
-            raise ManifestError(f"implies[{i}] must be a mapping", module_name)
-
-        name = entry.get("name")
-        if not isinstance(name, str) or not name:
-            raise ManifestError(
-                f"implies[{i}].name must be a non-empty string", module_name
-            )
-
-        default_config = entry.get("default_config", {})
-        if not isinstance(default_config, dict):
-            raise ManifestError(
-                f"implies[{i}].default_config must be a mapping", module_name
-            )
-
-        entries.append(ImpliesEntry(name=name, default_config=dict(default_config)))
-
-    return entries
+    value = data.get("required_modules", [])
+    if not isinstance(value, list):
+        raise ManifestError("'required_modules' must be a list", module_name)
+    return [parse_required_module_entry(entry, module_name) for entry in value]
 
 
 # ---------------------------------------------------------------------------
@@ -1687,14 +1677,11 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     )
 
     # Parse list fields
-    required_modules = _validate_list_field(data, "required_modules", module_name)
+    required_modules = _parse_required_modules(data, module_name)
     dependencies = _validate_list_field(data, "dependencies", module_name)
 
     # Parse managed-files declarations (additive; empty when absent)
     managed_files = _parse_managed_files(data, module_name)
-
-    # Parse implies declarations (additive; empty when absent)
-    implies = _parse_implies(data, module_name)
 
     # Parse derivation section (T2.3+; additive; every field defaults to [])
     derivation = _parse_derivation_section(
@@ -1713,7 +1700,6 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         required_modules=required_modules,
         dependencies=dependencies,
         managed_files=managed_files,
-        implies=implies,
         derivation_rules=derivation.get("normalization_rules", []),
         validation_rules=derivation.get("validation_rules", []),
         legacy_aliases=derivation.get("legacy_aliases", []),

@@ -15,6 +15,7 @@ config:
 
 required_modules:
   - auth
+  - notifications
 
 dependencies:
   - djangorestframework>=3.17.2
@@ -25,9 +26,6 @@ contract_vintage:
   minimum: "0.89.0"
   manual_adoption_steps:
     - "Declare `provider_id_classification` on every project-owned tenant model that carries a non-relational `*_id` field: map each field to 'provider-backed' when it identifies provider-held state (purge refuses while a row carries a value), or to 'not-provider-backed' when it is project-internal. The orgs system check fails `manage.py check` and `migrate` with `quickscale_orgs.E001` until every such field is classified, so declare the mapping before the next deploy."
-
-implies:
-  - name: notifications
 
 middleware:
   - quickscale_modules_orgs.middleware.TenantMiddleware

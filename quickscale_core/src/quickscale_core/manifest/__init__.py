@@ -47,9 +47,6 @@ from quickscale_core.manifest.entry_point import (
     load_module_manifest,
     refresh_managed_adapters,
 )
-from quickscale_core.manifest.implications import (
-    resolve_module_implications,
-)
 from quickscale_core.manifest.loader import (
     PROJECT_CONTRACT_DECLARATION_PATH,
     ManifestError,
@@ -58,8 +55,8 @@ from quickscale_core.manifest.loader import (
     load_project_contract_vintage,
 )
 from quickscale_core.manifest.required_modules import (
-    check_required_module_versions,
     parse_required_module_entry,
+    resolve_required_modules,
 )
 from quickscale_core.manifest.resolver import (
     ResolverResult,
@@ -94,7 +91,6 @@ from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
     ContractVintage,
-    ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
     ProjectContractStep,
@@ -103,13 +99,11 @@ from quickscale_core.manifest.schema import (
 )
 
 __all__ = [
-    "check_required_module_versions",
     "ConfigOption",
     "ContractVintage",
     "DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST",
     "DEFAULT_SOCIAL_PROVIDER_ALLOWLIST",
     "DerivedSetting",
-    "ImpliesEntry",
     "LegacyKeyAlias",
     "MANIFEST_ADAPTER_REGISTRY",
     "MANAGED_ADAPTER_ORIGINS",
@@ -158,7 +152,7 @@ __all__ = [
     "render_social_managed_views_module",
     "refresh_managed_adapters",
     "resolve_module_config",
-    "resolve_module_implications",
+    "resolve_required_modules",
     "resolve_social_target",
     "social_payload_status_code",
     "social_provider_supports_embeds",

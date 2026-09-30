@@ -39,7 +39,7 @@ from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
 )
-from quickscale_core.manifest.implications import resolve_module_implications
+from quickscale_core.manifest.required_modules import resolve_required_modules
 
 from quickscale_cli.commands.apply_support import (
     _build_quickscale_env,
@@ -131,9 +131,6 @@ from quickscale_core.utils.git_utils import (
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
-from quickscale_core.manifest.required_modules import (
-    check_required_module_versions,
-)
 
 # AF6 Phase 2 — core step bodies
 from quickscale_core.apply.steps import (
@@ -867,24 +864,6 @@ def _abort_for_manifest_error(error: ManifestError, *, command_name: str) -> Non
     raise click.Abort()
 
 
-def _validate_required_module_versions(
-    manifests: dict[str, ModuleManifest],
-) -> None:
-    """Validate required-module version constraints and abort on violation.
-
-    Delegates to :func:`check_required_module_versions` and maps
-    the raised :class:`ManifestError` to the existing abort pattern.
-    """
-    # SA7.4: version-floor check applies only when we have manifests
-    # for installed modules to cross-reference.
-    if not manifests:
-        return
-    try:
-        check_required_module_versions(manifests)
-    except ManifestError as error:
-        _abort_for_manifest_error(error, command_name="apply")
-
-
 def _load_module_manifests(
     project_path: Path,
     module_names: list[str],
@@ -1127,19 +1106,19 @@ def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
     return sanitized_modules
 
 
-def _materialize_implied_module_configs(qs_config: QuickScaleConfig) -> list[str]:
+def _materialize_required_module_configs(qs_config: QuickScaleConfig) -> list[str]:
     """Add explicit module config blocks required by selected modules."""
-    implied_configs = resolve_module_implications(qs_config.modules.keys())
-    if not implied_configs:
+    required_configs = resolve_required_modules(qs_config.modules.keys())
+    if not required_configs:
         return []
 
-    for module_name, options in implied_configs.items():
+    for module_name, options in required_configs.items():
         qs_config.modules[module_name] = ModuleConfig(
             name=module_name,
             options=sanitize_module_options(module_name, options),
         )
 
-    return list(implied_configs.keys())
+    return list(required_configs.keys())
 
 
 def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
@@ -1161,7 +1140,7 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
         original_data = yaml.safe_load(yaml_content) or {}
         original_modules = original_data.get("modules") or {}
         sanitized_modules = _sanitize_loaded_module_configs(qs_config)
-        implied_modules = _materialize_implied_module_configs(qs_config)
+        required_modules = _materialize_required_module_configs(qs_config)
         normalized_yaml = generate_yaml(qs_config)
         normalized_data = yaml.safe_load(normalized_yaml) or {}
         normalized_modules = normalized_data.get("modules") or {}
@@ -1172,10 +1151,10 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
                     "✅ Sanitized legacy module config keys in quickscale.yml",
                     fg="green",
                 )
-            if implied_modules:
+            if required_modules:
                 click.secho(
-                    "✅ Added implied module config to quickscale.yml: "
-                    + ", ".join(implied_modules),
+                    "✅ Added required module config to quickscale.yml: "
+                    + ", ".join(required_modules),
                     fg="green",
                 )
         _validate_module_prerequisites(qs_config)
@@ -1189,26 +1168,12 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
 
 
 def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
-    """Validate actionable module-specific prerequisites before apply proceeds."""
-    if "orgs" in qs_config.modules and "auth" not in qs_config.modules:
-        click.secho(
-            "\n❌ Organizations requires the auth module before apply can continue:",
-            fg="red",
-            err=True,
-        )
-        click.echo(
-            "  • Add 'auth' under modules in quickscale.yml before applying orgs.",
-            err=True,
-        )
-        click.echo(
-            "\n💡 Organizations relies on the QuickScale auth login flow and "
-            "django-allauth account adapter hooks. Re-run 'quickscale plan "
-            "--reconfigure --configure-modules' or edit quickscale.yml to add "
-            "auth, then re-run 'quickscale apply'.",
-            err=True,
-        )
-        raise click.Abort()
+    """Validate actionable module-specific prerequisites before apply proceeds.
 
+    A module's required modules were already materialized into the config,
+    so the prerequisite checks here cover option values and module readiness,
+    not dependency selection.
+    """
     if "orgs" in qs_config.modules:
         orgs_issues = validate_module_options(
             load_module_manifest_with_fallback("orgs"),
@@ -1225,27 +1190,6 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
             click.echo(
                 "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
                 "quickscale.yml to correct the orgs option values.",
-                err=True,
-            )
-            raise click.Abort()
-
-    billing_config = qs_config.modules.get("billing")
-    if billing_config is not None:
-        if "auth" not in qs_config.modules:
-            click.secho(
-                "\n❌ Billing requires the auth module before apply can continue:",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                "  • Add 'auth' under modules in quickscale.yml before applying billing.",
-                err=True,
-            )
-            click.echo(
-                "\n💡 Billing relies on the QuickScale auth login flow and "
-                "AUTH_USER_MODEL. Re-run 'quickscale plan --reconfigure "
-                "--configure-modules' or edit quickscale.yml to add auth, then "
-                "re-run 'quickscale apply'.",
                 err=True,
             )
             raise click.Abort()
@@ -2688,9 +2632,6 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
         except ManifestError as error:
             _abort_for_manifest_error(error, command_name="apply")
 
-        # SA7.4: validate required-module version constraints
-        _validate_required_module_versions(manifests)
-
     # Compute delta
     delta = compute_delta(qs_config, existing_state, manifests)
 
@@ -2921,13 +2862,6 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
                 list(merged_state.modules.keys()),
                 strict=True,
             )
-        except ManifestError as error:
-            _abort_for_manifest_error(error, command_name="apply")
-
-        # SA7.4: re-validate required-module version constraints with
-        # fresh manifests so a concurrent module update is not missed.
-        try:
-            check_required_module_versions(manifests)
         except ManifestError as error:
             _abort_for_manifest_error(error, command_name="apply")
 
@@ -3349,49 +3283,6 @@ def _execute_apply_steps_locked(
         raise click.Abort()
 
     # ------------------------------------------------------------------
-    # Step 2a: Post-embed required-module version floor re-validation
-    # ------------------------------------------------------------------
-    # The pre-embed check in _prepare_apply_context and
-    # _refresh_context_after_lock only examines already-installed manifests.
-    # After embedding a new module, its manifest may carry version floors
-    # that were not visible before embed (e.g. newly added billing requires
-    # orgs>=0.86.0 but orgs was already installed at 0.85.0).  Re-validate
-    # the full post-embed module set before continuing to wiring, dependency
-    # sync, or migration steps.
-    if embedded_modules:
-        try:
-            post_embed_manifests = _load_module_manifests(
-                ctx.output_path,
-                list(ctx.qs_config.modules.keys()),
-                strict=True,
-            )
-        except ManifestError as error:
-            _abort_for_manifest_error(error, command_name="apply")
-        try:
-            check_required_module_versions(post_embed_manifests)
-        except ManifestError as error:
-            # Modules were already embedded — persist partial state
-            # before aborting so the operator can inspect or repair.
-            if not _save_project_state(
-                ctx.output_path,
-                ctx.qs_config,
-                ctx.existing_state,
-                embedded_modules,
-                ctx.delta,
-                provenance_payloads=provenance_payloads,
-            ):
-                _print_apply_failure_summary(
-                    failed_step=_FAILED_STEP["authoritative state persistence"],
-                    reason=(
-                        f"Required-module version floor violated after embed: {error}, "
-                        "and QuickScale could not save partial authoritative state to "
-                        ".quickscale/state.yml."
-                    ),
-                )
-            _clear_apply_recovery_state(ctx.output_path)
-            _abort_for_manifest_error(error, command_name="apply")
-
-    # ------------------------------------------------------------------
     # Step 2: Post-embed state snapshot
     # ------------------------------------------------------------------
     # When recovering past step 1, use the recovery ledger's applied_state
@@ -3751,7 +3642,7 @@ def _enforce_apply_contract_vintage_preflight(
         return
     configured_modules = set(preflight_config.modules)
     module_names.update(configured_modules)
-    module_names.update(resolve_module_implications(configured_modules))
+    module_names.update(resolve_required_modules(configured_modules))
 
     enforce_shipped_contract_vintage(
         existing_state,

@@ -362,7 +362,7 @@ docker:
             assert "analytics:" in content
 
     def test_plan_add_auto_adds_default_notifications_when_orgs_selected(self) -> None:
-        """Selecting orgs should also materialize the implied notifications module."""
+        """Selecting orgs should also materialize the required notifications module."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             with open("quickscale.yml", "w") as f:
@@ -562,7 +562,7 @@ class TestPlanNewProjectConfigureModules:
             assert "public_base_url: https://cdn.example.com/media" in content
 
     def test_plan_new_project_auto_adds_default_notifications_for_orgs(self) -> None:
-        """New-project planning should make implied notifications explicit for orgs."""
+        """New-project planning should make required notifications explicit for orgs."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -598,13 +598,13 @@ class TestPlanNewProjectConfigureModules:
             assert "orgs" in modules
             assert modules["notifications"] in (None, {})
 
-    def test_plan_new_project_configure_modules_configures_implied_notifications(
+    def test_plan_new_project_configure_modules_configures_required_notifications(
         self,
     ) -> None:
         """--configure-modules with billing should invoke notifications configurator.
 
         When billing is selected with --configure-modules, orgs and notifications
-        are implied. All three modules with registry-backed configurators (auth,
+        are required. All three modules with registry-backed configurators (auth,
         billing, notifications) must receive input in the same planning pass.
         """
         runner = CliRunner()
@@ -612,7 +612,7 @@ class TestPlanNewProjectConfigureModules:
             # Input sequence:
             # - \n: default package name (myapp)
             # - \n: default theme (showcase_react)
-            # - auth,billing: select auth + billing (implies orgs → notifications)
+            # - auth,billing: select auth + billing (requires orgs → notifications)
             # - n: don't start Docker
             # Auth configurator (4 prompts, manifest order):
             # - y: enable registration
@@ -626,9 +626,9 @@ class TestPlanNewProjectConfigureModules:
             # - \n: webhook secret env var
             # - \n: billing currency
             # - \n: api rate limit default
-            # Orgs configurator (1 prompt, implied):
+            # Orgs configurator (1 prompt, required):
             # - \n: orgs mode default (solo)
-            # Notifications configurator (implied, 10 prompts, manifest order):
+            # Notifications configurator (required, 10 prompts, manifest order):
             # - \n: enable notifications runtime (default yes)
             # - \n: sender name default
             # - \n: sender email default
@@ -653,7 +653,7 @@ class TestPlanNewProjectConfigureModules:
             modules = (config or {}).get("modules") or {}
             assert "billing" in modules
             assert "orgs" in modules
-            # Notifications should be present (implied by orgs)
+            # Notifications should be present (required by orgs)
             assert "notifications" in modules
             # The configurator should have been invoked, so notifications
             # should have been configured (not just default empty dict)

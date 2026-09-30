@@ -1148,8 +1148,8 @@ class TestLoadAndValidateConfig:
         with pytest.raises(click.Abort):
             _load_and_validate_config(config)
 
-    def test_billing_module_requires_auth_on_load(self, tmp_path, capsys):
-        """Apply load should reject billing until auth is present for implied orgs."""
+    def test_billing_module_materializes_its_closure_on_load(self, tmp_path):
+        """Selecting billing alone materializes orgs → auth, notifications."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -1163,14 +1163,18 @@ class TestLoadAndValidateConfig:
             "  start: false\n"
         )
 
-        with pytest.raises(click.Abort):
-            _load_and_validate_config(config)
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
 
-        error_output = capsys.readouterr().err
-        assert (
-            "Organizations requires the auth module before apply can continue"
-            in error_output
-        )
+        assert set(result.modules.keys()) == {
+            "billing",
+            "orgs",
+            "auth",
+            "notifications",
+        }
+        assert "auth:" in rewritten
+        assert "orgs:" in rewritten
+        assert "notifications:" in rewritten
 
     def test_billing_module_loads_with_auth_on_load(self, tmp_path):
         """Apply load should materialize orgs and notifications for billing."""
@@ -1202,8 +1206,8 @@ class TestLoadAndValidateConfig:
         assert "orgs:" in rewritten
         assert "notifications:" in rewritten
 
-    def test_orgs_module_requires_auth_on_load(self, tmp_path, capsys):
-        """Apply load should reject orgs until auth is present in the desired config."""
+    def test_orgs_module_materializes_auth_and_notifications_on_load(self, tmp_path):
+        """Selecting orgs alone materializes auth and notifications."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -1217,14 +1221,12 @@ class TestLoadAndValidateConfig:
             "  start: false\n"
         )
 
-        with pytest.raises(click.Abort):
-            _load_and_validate_config(config)
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
 
-        error_output = capsys.readouterr().err
-        assert (
-            "Organizations requires the auth module before apply can continue"
-            in error_output
-        )
+        assert set(result.modules.keys()) == {"orgs", "auth", "notifications"}
+        assert "auth:" in rewritten
+        assert "notifications:" in rewritten
 
     def test_orgs_module_loads_with_auth_on_load(self, tmp_path):
         """Apply load should materialize notifications once auth and orgs are configured."""
@@ -1279,8 +1281,10 @@ class TestLoadAndValidateConfig:
         assert "orgs:" in rewritten
         assert "notifications:" in rewritten
 
-    def test_crm_module_requires_auth_on_load_via_implied_orgs(self, tmp_path, capsys):
-        """Apply load should reject crm until auth is present because crm implies orgs."""
+    def test_crm_module_materializes_orgs_auth_and_notifications_on_load(
+        self, tmp_path
+    ):
+        """Selecting crm alone materializes orgs → auth, notifications."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -1294,14 +1298,18 @@ class TestLoadAndValidateConfig:
             "  start: false\n"
         )
 
-        with pytest.raises(click.Abort):
-            _load_and_validate_config(config)
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
 
-        error_output = capsys.readouterr().err
-        assert (
-            "Organizations requires the auth module before apply can continue"
-            in error_output
-        )
+        assert set(result.modules.keys()) == {
+            "crm",
+            "orgs",
+            "auth",
+            "notifications",
+        }
+        assert "auth:" in rewritten
+        assert "orgs:" in rewritten
+        assert "notifications:" in rewritten
 
     def test_legacy_backups_secrets_are_refused_on_load(self, tmp_path):
         """Legacy raw backup secrets fail load, naming their replacements."""
@@ -1525,7 +1533,7 @@ class TestLoadAndValidateConfig:
     def test_social_module_options_are_normalized_on_load(self, tmp_path):
         """Social aliases and casing should be canonicalized during apply load.
 
-        Social implies orgs, and orgs requires auth, so auth must be present
+        Social requires orgs, and orgs requires auth, so auth must be present
         for social config to pass the prerequisite check.
         """
         config = tmp_path / "quickscale.yml"
@@ -1698,8 +1706,8 @@ class TestPrepareApplyContext:
         assert ctx.had_existing_state is False
         assert ctx.existing_state is not None
         assert list(ctx.existing_state.modules) == ["auth"]
-        # auth now implies orgs→notifications, so the delta includes
-        # these implied modules as new modules to add during recovery.
+        # auth now requires orgs→notifications, so the delta includes
+        # these required modules as new modules to add during recovery.
         assert ctx.delta.has_changes is True
         assert sorted(ctx.delta.modules_to_add) == ["notifications", "orgs"]
 

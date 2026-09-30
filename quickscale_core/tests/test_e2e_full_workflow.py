@@ -2011,8 +2011,8 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
 
         Sources both modules from ``quickscale_modules/`` into
         ``modules/`` so the layout matches generated-project expectations.
-        Org is embedded alongside auth because the auth manifest declares
-        ``implies: [{name: orgs}]`` — the auth module's views import
+        Org is embedded alongside auth because the auth manifest requires
+        ``orgs`` — the auth module's views import
         ``quickscale_modules_orgs.models`` at import time.
 
         Returns the local repo branch name for logging continuity with callers
@@ -2050,7 +2050,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         """Write a minimal quickscale.yml that declares auth + orgs modules.
 
         Org is included because the auth manifest declares
-        ``implies: [{name: orgs}]`` — the auth module's views import
+        ``required_modules: [orgs]`` — the auth module's views import
         ``quickscale_modules_orgs.models`` at import time.
         """
         import yaml
@@ -2091,7 +2091,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         Python packages are not importable from the generated project venv.
 
         Org is synced alongside auth because the auth manifest declares
-        ``implies: [{name: orgs}]`` — the auth module's views import
+        ``required_modules: [orgs]`` — the auth module's views import
         ``quickscale_modules_orgs.models`` at import time.
         """
         from quickscale_cli.utils.module_dependency_sync import (
@@ -2191,7 +2191,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
 
         # Declarative config + managed wiring + path-dependency registration.
         # Org is handled alongside auth because the auth manifest declares
-        # ``implies: [{name: orgs}]`` — the auth module's views import
+        # ``required_modules: [orgs]`` — the auth module's views import
         # ``quickscale_modules_orgs.models`` at import time.
         self._write_quickscale_yml_with_auth(
             project_path, project_name, theme, auth_options
@@ -2244,7 +2244,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
     def test_auth_module_embed_backend_only(self, tmp_path, e2e_postgres_url):
         """Validate the full auth embed workflow for the React theme (backend-only).
 
-        Auth implies orgs per its manifest, so both modules are embedded.
+        Auth requires orgs per its manifest, so both modules are embedded.
         Frontend build is skipped for this variant.
         """
         from quickscale_core.generator import ProjectGenerator
@@ -2268,7 +2268,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
     def test_auth_module_embed_react_theme(self, tmp_path, e2e_postgres_url):
         """Validate the full auth embed workflow for the showcase_react theme.
 
-        Auth implies orgs per its manifest, so both modules are embedded.
+        Auth requires orgs per its manifest, so both modules are embedded.
         """
         from quickscale_core.generator import ProjectGenerator
 
