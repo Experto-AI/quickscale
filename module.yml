@@ -33,7 +33,7 @@ config:
   immutable: {}
 
 required_modules:
-  - orgs>=0.86.0
+  - orgs
 
 dependencies:
   - djangorestframework>=3.17.2
