@@ -210,8 +210,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Module wiring refuses conflicting settings.** `apply` fails and names both modules and the
     setting when two modules contribute one wiring key with different values, while
     `REST_FRAMEWORK` contributions merge key by key so one module's throttle rates cannot replace
-    another's. Auth no longer contributes `ACCOUNT_ADAPTER`; the orgs adapter, which extends
-    auth's, is its single writer.
+    another's. The account adapter has one writer: auth owns `ACCOUNT_ADAPTER`, and modules
+    contribute their post-auth redirects as hooks it collects.
   - **Shipped-module lists derive from module manifests.** Core's catalog descriptions, the Bandit
     scan roots, the theme lint's module set, and the PostgreSQL isolation profile and runner read
     the shipped set from `quickscale_modules/*/module.yml`, so a module that ships an RLS boundary

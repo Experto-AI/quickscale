@@ -453,11 +453,19 @@ and uses the first one that answers, so `orgs` never subclasses or imports the a
 ```python
 # quickscale_modules_orgs._redirects — declared by QuickscaleOrgsConfig
 def post_login_redirect(request) -> str | None:
-    if not OrganizationMembership.objects.filter(user=request.user).exists():
-        if settings.QUICKSCALE_MODE == "solo":
-            Organization.objects.create_personal_for(request.user)
-            return None  # the adapter's LOGIN_REDIRECT_URL applies
-        return "/orgs/new/"
+    if not request.user.is_authenticated:
+        return None
+    saas = settings.QUICKSCALE_MODE == "saas"
+    has_membership = OrganizationMembership.objects.filter(user=request.user).exists()
+    if not saas and not has_membership:
+        Organization.objects.create_personal_for(request.user)
+        return None  # the adapter's LOGIN_REDIRECT_URL applies
+    if saas:
+        pending = _pending_invitation_redirect_url(request)
+        if pending is not None:
+            return pending
+        if not has_membership:
+            return "/orgs/new/"
     return None
 ```
 
