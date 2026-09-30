@@ -17,9 +17,6 @@ class QuickscaleBlogConfig(AppConfig):
         """Run the blog module startup checks through the shared helper."""
         # Late import: keep the app config importable while Django is still
         # populating the app registry.
-        from quickscale_modules_blog.checks import (
-            check_api_tokens,
-            check_required_settings,
-        )
+        from quickscale_modules_blog.checks import check_required_settings
 
-        register_module_checks(self, [check_required_settings, check_api_tokens])
+        register_module_checks(self, [check_required_settings])

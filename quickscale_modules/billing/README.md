@@ -1,92 +1,138 @@
 # QuickScale Billing Module
 
-**Status**: Billing ships in v0.85.0 through the standard QuickScale module workflow. `quickscale.yml` plus env-var-backed runtime settings are authoritative, Stripe keys plus webhook secrets stay environment-only, and billing now depends on the `orgs` module for its org-authoritative ledger/runtime contract.
+Credits-first, organization-backed billing for QuickScale projects. Django owns plans,
+balances, transactions, purchase Checkout lifecycle reservations, subscription snapshots, and
+webhook idempotency records. Stripe is the payment trigger through the direct `stripe` Python
+SDK; the Django ledger remains the source of truth for credit accounting. Billing requires the
+`orgs` and `auth` modules at plan/apply/runtime.
 
-QuickScale billing is a credits-first org-backed module. Django owns plans, balances, transactions, purchase Checkout lifecycle reservations, subscription snapshots, and webhook idempotency records. Stripe is the payment trigger through the direct `stripe` Python SDK; the Django ledger remains the source of truth for credit accounting, and billing requires the `orgs` plus `auth` modules at plan/apply/runtime.
+## Overview
 
-## Current Shipped Surface
+- Independently packaged Django module metadata under `quickscale_modules/billing/`.
+- Six core models: `Plan`, `CreditBalance`, `CreditTransaction`, `PurchaseCheckout`,
+  `Subscription`, and `WebhookEvent`.
+- Django admin registration for plans, balances, transactions, purchase Checkout reservations,
+  subscriptions, and webhook events.
+- Stripe webhook handling for purchases and recurring subscription lifecycle events.
+- Authenticated JSON APIs for balance, transactions, purchase checkout, subscription checkout,
+  subscription status, subscription cancel, billing portal, and publishable-key discovery.
+- Module-owned Django pages for flat dashboard and pricing routes in both Solo and SaaS modes,
+  purchase return routes, subscription return routes, and the billing portal return route.
+- Manual React adoption guidance, so generated frontend files remain user-owned.
 
-- Independently packaged Django module metadata under `quickscale_modules/billing/`
-- Six core models: `Plan`, `CreditBalance`, `CreditTransaction`, `PurchaseCheckout`, `Subscription`, and `WebhookEvent`
-- Django admin registration for plans, balances, transactions, purchase Checkout reservations, subscriptions, and webhook events
-- Stripe webhook handling for purchases and recurring subscription lifecycle events
-- Authenticated JSON APIs for balance, transactions, purchase checkout, subscription checkout, subscription status, subscription cancel, billing portal, and publishable-key discovery
-- Module-owned Django pages for flat dashboard/pricing routes in both Solo and SaaS modes, purchase return routes, subscription return routes, and the billing portal return route
-- Manual React adoption guidance so generated frontend files remain user-owned
+Boundaries:
 
-## Current Boundaries
+- Billing requires the `orgs` and `auth` modules at plan/apply/runtime; there is no standalone
+  billing install without those foundations.
+- Planner/apply auto-materializes `orgs` when billing is selected, and `orgs` auto-materializes
+  `notifications`; auth remains an explicit prerequisite.
+- All billing pages and APIs use flat routes (`billing/...`, `api/billing/...`) in both Solo and
+  SaaS modes; no org-scoped billing URL tree exists.
+- `GET /api/billing/plans/` is intentionally recurring-only; one-time credit packs are
+  purchaseable but do not ship through a public catalog endpoint.
+- Checkout success, cancel, and portal return URLs are server-owned; callers may not supply
+  them in API requests.
+- Stripe keys are resolved from environment variables at runtime and are never stored in the
+  database.
 
-- Billing requires the `orgs` and `auth` modules at plan/apply/runtime; QuickScale does not support a standalone billing install without those foundations
-- Planner/apply now auto-materialize the `orgs` module when billing is selected, and `orgs` continues to auto-materialize the `notifications` module; notifications' declared defaults resolve from its manifest at apply time, and auth remains an explicit prerequisite
-- All billing pages and APIs use flat routes (`/billing/...`, `/api/billing/...`) in both Solo and SaaS modes; no org-scoped billing URL tree exists after T1.10
-- `GET /api/billing/plans/` is intentionally recurring-only; one-time credit packs are purchaseable but do not currently ship through a public catalog endpoint
-- Checkout success, cancel, and portal return URLs are server-owned; callers may not supply them in API requests
-- Stripe keys are resolved from environment variables at runtime and are never stored in the database
+## Configuration
 
-## Stripe API Version Contract
+The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
+write them to the generated settings, and `quickscale.yml` carries the desired values.
 
-Billing targets the Stripe API version `2026-06-24.dahlia` — the version the pinned `stripe` SDK (`>=15.3.1,<16.0.0`) ships. The runtime sets that version on the SDK before every call, and every webhook event must report the same named release: `handle_stripe_event` rejects an event from a different named release with `BillingConfigurationError`, which the webhook view answers with `500` so Stripe retries, and it logs each event's reported version.
+| Option | Type | Default | Django setting | Description |
+|--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_BILLING_ENABLED` | Enable the billing runtime and Stripe-backed services. |
+| `publishable_key_env_var` | string | `STRIPE_PUBLISHABLE_KEY` | `QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR` | Environment-variable name containing the Stripe publishable key used by billing checkout flows. |
+| `secret_key_env_var` | string | `STRIPE_SECRET_KEY` | `QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR` | Environment-variable name containing the Stripe secret key for server-side API calls. |
+| `webhook_secret_env_var` | string | `QUICKSCALE_BILLING_WEBHOOK_SECRET` | `QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR` | Environment-variable name containing the Stripe webhook signing secret. |
+| `billing_currency` | string | `usd` | `QUICKSCALE_BILLING_CURRENCY` | ISO 4217 billing currency code used for plan metadata and Checkout validation. |
+| `api_rate_limit` | string | `30/hour` | `QUICKSCALE_BILLING_API_RATE_LIMIT` | Throttle rate per client for billing's Stripe-calling checkout and portal endpoints. Format: `<count>/<period>`. |
 
-The Stripe webhook endpoint for this module **must** use API version `2026-06-24.dahlia` and point at `/billing/webhooks/stripe/`.
+Backend environment variables:
 
-**Upgrade note:** a deployment whose webhook endpoint is on an older API version stops processing all billing webhooks (`500`s) until the endpoint is recreated at `2026-06-24.dahlia`. Events refused under the old version are not credited automatically, so reconcile them once the endpoint is on `2026-06-24.dahlia`: resend the event to that endpoint (Stripe Dashboard **Resend**, or `stripe events resend <event_id> --webhook-endpoint=<new_endpoint_id>`, up to 30 days) and confirm it is accepted; when an event is still refused or is outside the resend window, credit the affected invoice once through the module's `credit_user` service from a Django shell so the balance and ledger stay consistent.
+```bash
+export QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR=STRIPE_PUBLISHABLE_KEY
+export QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR=STRIPE_SECRET_KEY
+export QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR=QUICKSCALE_BILLING_WEBHOOK_SECRET
 
-## Credits-First Domain Contract
+export STRIPE_PUBLISHABLE_KEY=pk_live_or_test_...
+export STRIPE_SECRET_KEY=sk_live_or_test_...
+export QUICKSCALE_BILLING_WEBHOOK_SECRET=whsec_...
+```
 
-- `Plan` stores QuickScale-owned display metadata plus the authoritative Stripe Price reference used for checkout validation
-- `CreditBalance` tracks the current authoritative per-organization credit balance; nullable user links remain provenance / compatibility only
-- `CreditTransaction` records each credit mutation with balance snapshots and optional Stripe reference metadata
-- `PurchaseCheckout` records one-time Checkout lifecycle state so account deletion and organization purge can reconcile or refuse live provider sessions; Stripe metadata and idempotency keys correlate completed or expired sessions even when the provider-create response is lost
-- `Subscription` stores the local snapshot of recurring billing state keyed authoritatively to the organization; recurring Checkout uses the same reservation-reference and response-loss recovery contract, while nullable user links remain provenance / compatibility only
-- `WebhookEvent` is the transport-level idempotency gate for Stripe webhook processing
-- `debit_user` is the approved service API for credit consumption
+The `*_env_var` options name the environment variables that carry the real credentials; only
+the credential values themselves are deploy-time environment variables. Keep Stripe key wiring
+runtime-owned and never hardcode the publishable key in the frontend source tree.
 
-## Explicit Non-Goals For The Current Contract
+## Public surface
 
-- No Stripe catalog authoring from Django admin
-- No coupons, tax/VAT workflows, metered billing, or custom invoice-history UI
-- No seat billing, seat-limit fields, or seat-based enforcement yet
-- No rewrites of user-owned frontend files
+### Credits-first domain contract
 
-## React Integration Guide
+- `Plan` stores QuickScale-owned display metadata plus the authoritative Stripe Price reference
+  used for checkout validation.
+- `CreditBalance` tracks the current authoritative per-organization credit balance; nullable
+  user links remain provenance / compatibility only.
+- `CreditTransaction` records each credit mutation with balance snapshots and optional Stripe
+  reference metadata.
+- `PurchaseCheckout` records one-time Checkout lifecycle state so account deletion and
+  organization purge can reconcile or refuse live provider sessions; Stripe metadata and
+  idempotency keys correlate completed or expired sessions even when the provider-create
+  response is lost.
+- `Subscription` stores the local snapshot of recurring billing state keyed authoritatively to
+  the organization; recurring Checkout uses the same reservation-reference and response-loss
+  recovery contract, while nullable user links remain provenance / compatibility only.
+- `WebhookEvent` is the transport-level idempotency gate for Stripe webhook processing.
+- `debit_user` is the approved service API for credit consumption.
 
-This phase documents how to wire the billing module into a generated React frontend without asking QuickScale to mutate user-owned frontend files. The module already ships Django mount points and JSON APIs; your React app owns how those APIs are consumed.
+### API contract
 
-### Integration Assumptions
-
-- Use Django session authentication for authenticated billing routes.
-- Send CSRF tokens on all authenticated `POST` requests.
-- Treat the backend as the source of truth for redirect targets. Only send `plan_slug` for checkout creation and an empty JSON body for cancel and portal creation.
-- Keep one-time purchase catalog data project-owned for now. The shipped `plans` endpoint only exposes active recurring plans.
-- Treat transaction pagination as fixed-size, page-number based pagination. The API always uses 25 rows per page and ignores client-supplied `page_size` values.
-
-### API Contract
-
-All billing API routes are flat (`/api/billing/...`) and used in both Solo and SaaS modes. The org is resolved from the session / `request.org` contract established by middleware, not from a URL slug.
+All billing API routes are flat (`api/billing/...`) and used in both Solo and SaaS modes. The
+organization is resolved from the session / `request.org` contract established by middleware,
+not from a URL slug.
 
 | Route | Method | Auth | Request | Success contract | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `/api/billing/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": "Stripe publishable key is not configured in the runtime environment."}` when missing. |
-| `/api/billing/plans/` | `GET` | Public | None | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. |
-| `/api/billing/balance/` | `GET` | Session auth | None | `{"balance": 0, "updated_at": null}` | A missing balance is returned as a read-only zero snapshot without creating a row. Persisted balances include their `updated_at` timestamp. |
-| `/api/billing/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Fixed page size of `25`; client `page_size` overrides are ignored. |
-| `/api/billing/purchase/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "credits-pack"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. |
-| `/api/billing/subscription/` | `GET` | Session auth | None | `{"plan": {"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}, "status": "active", "checkout_expires_at": null, "current_period_start": "2026-05-16T12:00:00Z", "current_period_end": "2026-06-15T12:00:00Z"}` | Returns `404` with `{"error": "Current subscription not found."}` when no current recurring row exists. |
-| `/api/billing/subscription/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "starter-monthly"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. Blocks if a current recurring subscription already exists. |
-| `/api/billing/subscription/cancel/` | `POST` | Session auth + CSRF | `{}` | `204 No Content` | Rejects caller-supplied `return_url`. Schedules `cancel_at_period_end=True`. |
-| `/api/billing/portal/` | `POST` | Session auth + CSRF | `{}` | `{"portal_url": "https://billing.stripe.com/..."}` | Rejects caller-supplied `return_url`. Uses the module-owned `billing/portal/return/` route. |
+| `api/billing/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": "Stripe publishable key is not configured in the runtime environment."}` when missing. |
+| `api/billing/plans/` | `GET` | Public | None | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. |
+| `api/billing/balance/` | `GET` | Session auth | None | `{"balance": 0, "updated_at": null}` | A missing balance is returned as a read-only zero snapshot without creating a row. Persisted balances include their `updated_at` timestamp. |
+| `api/billing/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Fixed page size of `25`; client `page_size` overrides are ignored. |
+| `api/billing/purchase/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "credits-pack"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. |
+| `api/billing/subscription/` | `GET` | Session auth | None | `{"plan": {...}, "status": "active", "checkout_expires_at": null, "current_period_start": "...", "current_period_end": "..."}` | Returns `404` with `{"error": "Current subscription not found."}` when no current recurring row exists. |
+| `api/billing/subscription/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "starter-monthly"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. Blocks if a current recurring subscription already exists. |
+| `api/billing/subscription/cancel/` | `POST` | Session auth + CSRF | `{}` | `204 No Content` | Rejects caller-supplied `return_url`. Schedules `cancel_at_period_end=True`. |
+| `api/billing/portal/` | `POST` | Session auth + CSRF | `{}` | `{"portal_url": "https://billing.stripe.com/..."}` | Rejects caller-supplied `return_url`. Uses the module-owned `billing/portal/return/` route. |
 
-### Module-Owned Billing Pages
+### Module-owned billing pages
 
-The module ships Django pages that you can either use directly or treat as mount points for your React frontend. All billing routes are flat in both Solo and SaaS modes (no org-scoped billing URL tree exists after T1.10):
+The module ships Django pages that you can either use directly or treat as mount points for
+your React frontend. All billing routes are flat in both Solo and SaaS modes:
 
-- `GET /billing/dashboard/` renders the authenticated billing page with `<div id="billing-root" data-view="dashboard">`
-- `GET /billing/pricing/` renders the pricing page with `<div id="billing-root" data-view="pricing">`
-- `GET /billing/purchase/success/` and `GET /billing/purchase/cancel/` render purchase return pages
-- `GET /billing/subscription/success/` and `GET /billing/subscription/cancel/` render subscription return pages
-- `GET /billing/portal/return/` renders the Stripe billing-portal return page
+- `GET billing/dashboard/` renders the authenticated billing page with
+  `<div id="billing-root" data-view="dashboard">`.
+- `GET billing/pricing/` renders the pricing page with `<div id="billing-root" data-view="pricing">`.
+- `GET billing/purchase/success/` and `GET billing/purchase/cancel/` render purchase return
+  pages.
+- `GET billing/subscription/success/` and `GET billing/subscription/cancel/` render subscription
+  return pages.
+- `GET billing/portal/return/` renders the Stripe billing-portal return page.
 
-### Shared React Helpers
+### React integration guide
+
+This module documents how to wire billing into a generated React frontend without asking
+QuickScale to mutate user-owned frontend files. The module ships Django mount points and JSON
+APIs; your React app owns how those APIs are consumed.
+
+Integration assumptions:
+
+- Use Django session authentication for authenticated billing routes.
+- Send CSRF tokens on all authenticated `POST` requests.
+- Treat the backend as the source of truth for redirect targets. Only send `plan_slug` for
+  checkout creation and an empty JSON body for cancel and portal creation.
+- Keep one-time purchase catalog data project-owned for now. The shipped `plans` endpoint only
+  exposes active recurring plans.
+- Treat transaction pagination as fixed-size, page-number based pagination. The API always uses
+  25 rows per page and ignores client-supplied `page_size` values.
 
 Start with one typed fetch wrapper, one CSRF helper, and one runtime Stripe bootstrap.
 
@@ -97,237 +143,250 @@ import { getCsrfToken } from "@/lib/csrf";
 type BillingConfig = { publishable_key: string };
 type BillingBalance = { balance: number; updated_at: string | null };
 type BillingPlan = {
-	name: string;
-	slug: string;
-	credits_per_period: number;
-	price_cents: number;
-	currency: string;
-	billing_interval: "monthly" | "yearly";
+  name: string;
+  slug: string;
+  credits_per_period: number;
+  price_cents: number;
+  currency: string;
+  billing_interval: "monthly" | "yearly";
 };
 type BillingSubscription = {
-	plan: BillingPlan;
-	status:
-		| "incomplete"
-		| "incomplete_expired"
-		| "trialing"
-		| "active"
-		| "past_due"
-		| "canceled"
-		| "unpaid"
-		| "paused";
-	checkout_expires_at: string | null;
-	current_period_start: string | null;
-	current_period_end: string | null;
+  plan: BillingPlan;
+  status:
+    | "incomplete"
+    | "incomplete_expired"
+    | "trialing"
+    | "active"
+    | "past_due"
+    | "canceled"
+    | "unpaid"
+    | "paused";
+  checkout_expires_at: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
 };
 type CreditTransaction = {
-	id: number;
-	amount: number;
-	transaction_type: string;
-	description: string;
-	balance_after: number;
-	created_at: string;
+  id: number;
+  amount: number;
+  transaction_type: string;
+  description: string;
+  balance_after: number;
+  created_at: string;
 };
 
 async function billingFetch<T>(input: string, init: RequestInit = {}): Promise<T> {
-	const headers = new Headers(init.headers ?? {});
-	if (!headers.has("Content-Type")) {
-		headers.set("Content-Type", "application/json");
-	}
+  const headers = new Headers(init.headers ?? {});
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
 
-	const method = init.method?.toUpperCase() ?? "GET";
-	if (method !== "GET" && method !== "HEAD" && !headers.has("X-CSRFToken")) {
-		const csrfToken = getCsrfToken();
-		if (csrfToken) {
-			headers.set("X-CSRFToken", csrfToken);
-		}
-	}
+  const method = init.method?.toUpperCase() ?? "GET";
+  if (method !== "GET" && method !== "HEAD" && !headers.has("X-CSRFToken")) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      headers.set("X-CSRFToken", csrfToken);
+    }
+  }
 
-	const response = await fetch(input, {
-		credentials: "include",
-		...init,
-		headers,
-	});
+  const response = await fetch(input, {
+    credentials: "include",
+    ...init,
+    headers,
+  });
 
-	if (response.status === 204) {
-		return undefined as T;
-	}
+  if (response.status === 204) {
+    return undefined as T;
+  }
 
-	const payload = (await response.json()) as
-		| { error?: string; errors?: Record<string, string[]> }
-		| T;
+  const payload = (await response.json()) as
+    | { error?: string; errors?: Record<string, string[]> }
+    | T;
 
-	if (!response.ok) {
-		if (typeof payload === "object" && payload !== null && "error" in payload) {
-			throw new Error(payload.error || "Billing request failed.");
-		}
-		throw new Error(JSON.stringify(payload));
-	}
+  if (!response.ok) {
+    if (typeof payload === "object" && payload !== null && "error" in payload) {
+      throw new Error(payload.error || "Billing request failed.");
+    }
+    throw new Error(JSON.stringify(payload));
+  }
 
-	return payload as T;
+  return payload as T;
 }
 
 export async function loadBillingRuntimeConfig(): Promise<{
-	VITE_STRIPE_PUBLISHABLE_KEY: string;
+  VITE_STRIPE_PUBLISHABLE_KEY: string;
 }> {
-	const { publishable_key } = await billingFetch<BillingConfig>(
-		"/api/billing/config/",
-	);
-	return { VITE_STRIPE_PUBLISHABLE_KEY: publishable_key };
+  const { publishable_key } = await billingFetch<BillingConfig>(
+    "/api/billing/config/",
+  );
+  return { VITE_STRIPE_PUBLISHABLE_KEY: publishable_key };
 }
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
 export async function getStripe(): Promise<Stripe | null> {
-	if (!stripePromise) {
-		stripePromise = loadBillingRuntimeConfig().then((config) =>
-			loadStripe(config.VITE_STRIPE_PUBLISHABLE_KEY),
-		);
-	}
-	return stripePromise;
+  if (!stripePromise) {
+    stripePromise = loadBillingRuntimeConfig().then((config) =>
+      loadStripe(config.VITE_STRIPE_PUBLISHABLE_KEY),
+    );
+  }
+  return stripePromise;
 }
 
 export function fetchBalance() {
-	return billingFetch<BillingBalance>("/api/billing/balance/");
+  return billingFetch<BillingBalance>("/api/billing/balance/");
 }
 
 export function fetchRecurringPlans() {
-	return billingFetch<BillingPlan[]>("/api/billing/plans/");
+  return billingFetch<BillingPlan[]>("/api/billing/plans/");
 }
 
 export function fetchTransactions(page = 1) {
-	return billingFetch<CreditTransaction[]>(`/api/billing/transactions/?page=${page}`);
+  return billingFetch<CreditTransaction[]>(`/api/billing/transactions/?page=${page}`);
 }
 
 export async function fetchCurrentSubscription() {
-	try {
-		return await billingFetch<BillingSubscription>("/api/billing/subscription/");
-	} catch (error) {
-		if (error instanceof Error && error.message === "Current subscription not found.") {
-			return null;
-		}
-		throw error;
-	}
+  try {
+    return await billingFetch<BillingSubscription>("/api/billing/subscription/");
+  } catch (error) {
+    if (error instanceof Error && error.message === "Current subscription not found.") {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function createPurchaseCheckout(planSlug: string) {
-	return billingFetch<{ checkout_url: string }>("/api/billing/purchase/checkout/", {
-		method: "POST",
-		body: JSON.stringify({ plan_slug: planSlug }),
-	});
+  return billingFetch<{ checkout_url: string }>("/api/billing/purchase/checkout/", {
+    method: "POST",
+    body: JSON.stringify({ plan_slug: planSlug }),
+  });
 }
 
 export async function createSubscriptionCheckout(planSlug: string) {
-	return billingFetch<{ checkout_url: string }>(
-		"/api/billing/subscription/checkout/",
-		{
-			method: "POST",
-			body: JSON.stringify({ plan_slug: planSlug }),
-		},
-	);
+  return billingFetch<{ checkout_url: string }>(
+    "/api/billing/subscription/checkout/",
+    {
+      method: "POST",
+      body: JSON.stringify({ plan_slug: planSlug }),
+    },
+  );
 }
 
 export async function cancelCurrentSubscription() {
-	return billingFetch<void>("/api/billing/subscription/cancel/", {
-		method: "POST",
-		body: JSON.stringify({}),
-	});
+  return billingFetch<void>("/api/billing/subscription/cancel/", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 export async function createBillingPortalSession() {
-	return billingFetch<{ portal_url: string }>("/api/billing/portal/", {
-		method: "POST",
-		body: JSON.stringify({}),
-	});
+  return billingFetch<{ portal_url: string }>("/api/billing/portal/", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 ```
 
-### `loadStripe()` Redirect Pattern
-
-QuickScale returns Stripe-hosted URLs instead of a client-created Checkout Session ID. Keep `loadStripe()` in your React app as the one place where publishable-key configuration is validated, then redirect to the server-issued URL.
+QuickScale returns Stripe-hosted URLs instead of a client-created Checkout Session ID. Keep
+`loadStripe()` in your React app as the one place where publishable-key configuration is
+validated, then redirect to the server-issued URL:
 
 ```ts
 async function redirectToStripeHostedUrl(
-	getUrl: () => Promise<{ checkout_url?: string; portal_url?: string }>,
+  getUrl: () => Promise<{ checkout_url?: string; portal_url?: string }>,
 ) {
-	await getStripe();
-	const payload = await getUrl();
-	const targetUrl = payload.checkout_url ?? payload.portal_url;
+  await getStripe();
+  const payload = await getUrl();
+  const targetUrl = payload.checkout_url ?? payload.portal_url;
 
-	if (!targetUrl) {
-		throw new Error("Billing endpoint did not return a redirect URL.");
-	}
+  if (!targetUrl) {
+    throw new Error("Billing endpoint did not return a redirect URL.");
+  }
 
-	window.location.assign(targetUrl);
+  window.location.assign(targetUrl);
 }
 
 export function startPurchaseRedirect(planSlug: string) {
-	return redirectToStripeHostedUrl(() => createPurchaseCheckout(planSlug));
+  return redirectToStripeHostedUrl(() => createPurchaseCheckout(planSlug));
 }
 
 export function startSubscriptionRedirect(planSlug: string) {
-	return redirectToStripeHostedUrl(() => createSubscriptionCheckout(planSlug));
+  return redirectToStripeHostedUrl(() => createSubscriptionCheckout(planSlug));
 }
 
 export function startBillingPortalRedirect() {
-	return redirectToStripeHostedUrl(() => createBillingPortalSession());
+  return redirectToStripeHostedUrl(() => createBillingPortalSession());
 }
 ```
 
-This keeps Stripe bootstrap logic in one place while preserving the module's server-owned redirect contract.
-
-### TanStack Query Patterns
-
-Use polling for balance, page-number query keys for transactions, and regular invalidation after subscription changes or return-page refreshes.
+Use TanStack Query with polling for balance, page-number query keys for transactions, and
+regular invalidation after subscription changes or return-page refreshes:
 
 ```ts
 import {
-	keepPreviousData,
-	useMutation,
-	useQuery,
-	useQueryClient,
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 
 export function useBillingBalance() {
-	return useQuery({
-		queryKey: ["billing", "balance"],
-		queryFn: fetchBalance,
-		staleTime: 15_000,
-		refetchInterval: 30_000,
-	});
+  return useQuery({
+    queryKey: ["billing", "balance"],
+    queryFn: fetchBalance,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
 }
 
 export function useBillingTransactions(page: number) {
-	return useQuery({
-		queryKey: ["billing", "transactions", page],
-		queryFn: () => fetchTransactions(page),
-		placeholderData: keepPreviousData,
-	});
+  return useQuery({
+    queryKey: ["billing", "transactions", page],
+    queryFn: () => fetchTransactions(page),
+    placeholderData: keepPreviousData,
+  });
 }
 
 export function useCurrentSubscription() {
-	return useQuery({
-		queryKey: ["billing", "subscription"],
-		queryFn: fetchCurrentSubscription,
-	});
+  return useQuery({
+    queryKey: ["billing", "subscription"],
+    queryFn: fetchCurrentSubscription,
+  });
 }
 
 export function useSubscriptionCancel() {
-	const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
-	return useMutation({
-		mutationFn: cancelCurrentSubscription,
-		onSuccess: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["billing", "subscription"] }),
-				queryClient.invalidateQueries({ queryKey: ["billing", "balance"] }),
-				queryClient.invalidateQueries({ queryKey: ["billing", "transactions"] }),
-			]);
-		},
-	});
+  return useMutation({
+    mutationFn: cancelCurrentSubscription,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["billing", "subscription"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing", "balance"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing", "transactions"] }),
+      ]);
+    },
+  });
 }
 ```
 
-### Component Patterns
+Component patterns and the recommended shadcn/ui surfaces:
+
+- **Credit balance widget**: a `Card` with a `Skeleton` fallback; poll the balance query because
+  webhook-driven credit changes can happen outside the current tab.
+- **Pricing page**: `Tabs`, `Card`, `Badge`, and `Button`; fetch recurring plans from
+  `api/billing/plans/` and optionally merge project-owned one-time pack metadata on the same
+  screen.
+- **Purchase button**: a `Button` with spinner state; it only needs a `planSlug` because the
+  backend owns both redirect URLs.
+- **Subscription status**: `Card`, `Badge`, `Alert`, and `Button`; render `null` when there is
+  no active recurring row, use `api/billing/portal/` for billing management, and
+  `api/billing/subscription/cancel/` to schedule period-end cancellation.
+- **Transaction history**: `Table`, `ScrollArea`, and `Button`; the API returns a plain list
+  without total-count metadata, so use page-number state and infer whether another page exists
+  from the fixed page size.
+
+Examples:
 
 #### 1. CreditBalance widget
 
@@ -603,38 +662,75 @@ export function TransactionHistory() {
 }
 ```
 
-### Environment Variable Wiring
+Frontend runtime wiring: load `api/billing/config/` after the user is authenticated, map the
+returned `publishable_key` into your runtime config shape as `VITE_STRIPE_PUBLISHABLE_KEY` if
+you want one consistent frontend config name, and feed that runtime value into `loadStripe()`
+rather than storing a checked-in `.env` value.
 
-Keep Stripe key wiring runtime-owned. Do not hardcode the publishable key in the React source tree.
+## URLs
 
-Backend environment variables:
+`quickscale apply` mounts the module at the project root; the module's paths are:
 
-```bash
-export QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR=STRIPE_PUBLISHABLE_KEY
-export QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR=STRIPE_SECRET_KEY
-export QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR=QUICKSCALE_BILLING_WEBHOOK_SECRET
+| URL name | Path | Purpose |
+|----------|------|---------|
+| `quickscale_billing:billing-config` | `api/billing/config/` | Publishable-key discovery |
+| `quickscale_billing:subscription-plans` | `api/billing/plans/` | Active recurring plan catalog |
+| `quickscale_billing:credit-balance` | `api/billing/balance/` | Credit balance |
+| `quickscale_billing:credit-transactions` | `api/billing/transactions/` | Credit transactions (paged) |
+| `quickscale_billing:purchase-checkout` | `api/billing/purchase/checkout/` | One-time purchase Checkout |
+| `quickscale_billing:subscription-detail` | `api/billing/subscription/` | Current subscription |
+| `quickscale_billing:subscription-checkout` | `api/billing/subscription/checkout/` | Recurring Checkout |
+| `quickscale_billing:subscription-cancel-current` | `api/billing/subscription/cancel/` | Schedule period-end cancellation |
+| `quickscale_billing:billing-portal-session` | `api/billing/portal/` | Stripe billing portal session |
+| `quickscale_billing:billing-dashboard` | `billing/dashboard/` | Billing dashboard page |
+| `quickscale_billing:pricing-page` | `billing/pricing/` | Pricing page |
+| `quickscale_billing:purchase-success` | `billing/purchase/success/` | Purchase return (success) |
+| `quickscale_billing:purchase-cancel` | `billing/purchase/cancel/` | Purchase return (cancel) |
+| `quickscale_billing:subscription-success` | `billing/subscription/success/` | Subscription return (success) |
+| `quickscale_billing:subscription-cancel` | `billing/subscription/cancel/` | Subscription return (cancel) |
+| `quickscale_billing:portal-return` | `billing/portal/return/` | Billing portal return |
+| `quickscale_billing:stripe-webhook` | `billing/webhooks/stripe/` | Stripe webhook endpoint |
 
-export STRIPE_PUBLISHABLE_KEY=pk_live_or_test_...
-export STRIPE_SECRET_KEY=sk_live_or_test_...
-export QUICKSCALE_BILLING_WEBHOOK_SECRET=whsec_...
-```
+## Management commands
 
-Frontend runtime wiring:
+This module ships no management commands.
 
-- Load `/api/billing/config/` after the user is authenticated.
-- Map the returned `publishable_key` into your app's runtime config shape as `VITE_STRIPE_PUBLISHABLE_KEY` if you want one consistent frontend config name.
-- Feed that runtime value into `loadStripe()` through `loadBillingRuntimeConfig()` rather than storing a checked-in `.env` value.
+## Operations
 
-### Recommended shadcn/ui Surfaces
+### Stripe API version contract
 
-- `CreditBalanceCard`: `Card`, `Skeleton`
-- `PricingPage`: `Tabs`, `Card`, `Badge`, `Button`
-- `PurchaseButton`: `Button`, spinner icon such as `Loader2`
-- `SubscriptionStatusCard`: `Card`, `Badge`, `Alert`, `Button`
-- `TransactionHistory`: `Table`, `ScrollArea`, `Button`
+Billing targets the Stripe API version `2026-06-24.dahlia` — the version the pinned `stripe`
+SDK (`>=15.3.1,<16.0.0`) ships. The runtime sets that version on the SDK before every call,
+and every webhook event must report the same named release: `handle_stripe_event` rejects an
+event from a different named release with `BillingConfigurationError`, which the webhook view
+answers with `500` so Stripe retries, and it logs each event's reported version.
 
-## Distribution Notes
+The Stripe webhook endpoint for this module **must** use API version `2026-06-24.dahlia` and
+point at `/billing/webhooks/stripe/`.
 
-Billing ships through the standard QuickScale module packaging and split-branch workflow. The module manifest declares `required_modules: [orgs]` for planner/apply dependency enforcement; sibling-module package version constraints were removed in SA81 since modules never resolve standalone outside the monorepo. Follow-on roadmap work may tighten release evidence or adjacent docs, but this README describes the current shipped module contract.
+**Upgrade note:** a deployment whose webhook endpoint is on an older API version stops
+processing all billing webhooks (`500`s) until the endpoint is recreated at
+`2026-06-24.dahlia`. Events refused under the old version are not credited automatically, so
+reconcile them once the endpoint is on `2026-06-24.dahlia`: resend the event to that endpoint
+(Stripe Dashboard **Resend**, or `stripe events resend <event_id> --webhook-endpoint=<new_endpoint_id>`,
+up to 30 days) and confirm it is accepted; when an event is still refused or is outside the
+resend window, credit the affected invoice once through the module's `credit_user` service from
+a Django shell so the balance and ledger stay consistent.
 
-See [Technical Roadmap](../../docs/technical/roadmap.md) for the full v0.85.0 implementation plan.
+### Deployment notes
+
+Billing ships through the standard QuickScale module packaging and split-branch workflow. The
+module manifest declares `required_modules: [orgs]` for planner/apply dependency enforcement.
+Follow-on roadmap work may tighten release evidence or adjacent docs; the module contract above
+is the current shipped surface.
+
+## Extending
+
+- **Service API**: `debit_user` is the approved service API for credit consumption; the module
+  also exposes `credit_user`, `handle_stripe_event`, and the reconciliation helpers in
+  `services.py` for project-owned integration code.
+- **Explicit non-goals** for the current contract: no Stripe catalog authoring from the Django
+  admin, no coupons, tax/VAT workflows, metered billing, or custom invoice-history UI, no seat
+  billing or seat-based enforcement, and no rewrites of user-owned frontend files.
+- **Roadmap**: see the [technical roadmap](../../docs/technical/roadmap.md) for active
+  billing work.

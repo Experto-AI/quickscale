@@ -61,16 +61,27 @@ def _login_with_org(client, user):
         session.save()
 
 
+def _error(response) -> dict:
+    """Return the one QuickScale error body from *response*."""
+    body = response.json()
+    assert "error" in body, body
+    return body["error"]
+
+
 @pytest.mark.django_db
 class TestPublishListingApi:
     """Tests for publish listing API (single flat route contract)"""
 
-    def test_publish_listing_api_get_method_not_allowed_returns_405(self, client):
-        """Test API rejects non-POST methods"""
+    def test_publish_listing_api_get_method_not_allowed_returns_405(
+        self, client, staff_user
+    ):
+        """Test API rejects non-POST methods for an authenticated caller"""
+        _login_with_org(client, staff_user)
+
         response = client.get(reverse("quickscale_listings:api_publish_listing"))
 
         assert response.status_code == 405
-        assert response.json()["error"] == "Method not allowed"
+        assert _error(response)["code"] == "method_not_allowed"
 
     def test_publish_listing_api_unauthenticated_returns_401(self, client):
         """Test API requires authentication"""
@@ -81,7 +92,7 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 401
-        assert response.json()["error"] == "Authentication required"
+        assert _error(response)["code"] == "not_authenticated"
 
     def test_publish_listing_api_non_staff_returns_403(self, client, regular_user):
         """Test API requires staff permissions"""
@@ -94,7 +105,38 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 403
-        assert response.json()["error"] == "Staff access required"
+        error = _error(response)
+        assert error["code"] == "permission_denied"
+        assert error["message"] == "Staff access required"
+
+    def test_publish_listing_api_foreign_session_org_is_refused_before_the_view(
+        self, client, staff_user, regular_user
+    ):
+        """Record the API's error-surface boundary: orgs' middleware runs first.
+
+        A session naming an organization the user no longer belongs to is
+        refused by ``TenantMiddleware`` before any view runs, so the answer is
+        the middleware's empty ``403`` rather than the one QuickScale shape.
+        This pre-dates the DRF conversion and belongs to the orgs surface.
+        """
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+
+        _login_with_org(client, staff_user)
+        foreign_org = Organization.objects.get(
+            quickscale_orgs_memberships__user=regular_user, is_personal=True
+        )
+        session = client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(foreign_org.pk)
+        session.save()
+
+        response = client.post(
+            reverse("quickscale_listings:api_publish_listing"),
+            data=json.dumps({"title": "Listing", "description": "Description"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 403
+        assert response.content == b""
 
     def test_publish_listing_api_missing_csrf_returns_403(self, staff_user):
         """Test API enforces CSRF protection for session-authenticated requests"""
@@ -108,6 +150,23 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 403
+        assert _error(response)["code"] == "permission_denied"
+
+    def test_publish_listing_api_html_preference_still_answers_the_one_shape(
+        self, client, staff_user
+    ):
+        """An HTML-preferring client gets the QuickScale body, not an HTML page."""
+        _login_with_org(client, staff_user)
+
+        response = client.post(
+            reverse("quickscale_listings:api_publish_listing"),
+            data=json.dumps({"title": "Listing", "description": "Description"}),
+            content_type="application/json",
+            HTTP_ACCEPT="text/html",
+        )
+
+        assert response.status_code == 406
+        assert _error(response)["code"] == "not_acceptable"
 
     def test_publish_listing_api_invalid_json_returns_400(self, client, staff_user):
         """Test API validates JSON format"""
@@ -120,7 +179,7 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["error"] == "Invalid JSON payload"
+        assert _error(response)["code"] == "parse_error"
 
     def test_publish_listing_api_non_object_payload_returns_400(
         self, client, staff_user
@@ -135,7 +194,9 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["error"] == "JSON object payload expected"
+        error = _error(response)
+        assert error["code"] == "validation_error"
+        assert error["fields"] == {"non_field_errors": ["JSON object payload expected"]}
 
     def test_publish_listing_api_invalid_utf8_payload_returns_400(
         self, client, staff_user
@@ -150,7 +211,7 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["error"] == "Invalid JSON payload"
+        assert _error(response)["code"] == "parse_error"
 
     def test_publish_listing_api_missing_required_fields_returns_400(
         self,
@@ -167,9 +228,12 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "title": "This field is required",
-            "description": "This field is required",
+        error = _error(response)
+        assert error["code"] == "validation_error"
+        assert error["message"] == "Invalid input."
+        assert error["fields"] == {
+            "title": ["This field is required"],
+            "description": ["This field is required"],
         }
 
     def test_publish_listing_api_non_sluggable_title_returns_400(
@@ -187,8 +251,8 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "title": "Must include at least one letter or number"
+        assert _error(response)["fields"] == {
+            "title": ["Must include at least one letter or number"]
         }
 
     def test_publish_listing_api_non_string_location_returns_400(
@@ -212,7 +276,7 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {"location": "Must be a string"}
+        assert _error(response)["fields"] == {"location": ["Must be a string"]}
 
     def test_publish_listing_api_invalid_price_returns_400(
         self,
@@ -235,8 +299,8 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 400
-        assert response.json()["errors"] == {
-            "price": "Must be a number or numeric string"
+        assert _error(response)["fields"] == {
+            "price": ["Must be a number or numeric string"]
         }
 
     def test_publish_listing_api_valid_payload_creates_published_listing(
@@ -301,7 +365,9 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 409
-        assert response.json()["error"] == "Listing already exists for generated slug"
+        error = _error(response)
+        assert error["code"] == "listing_conflict"
+        assert error["message"] == "Listing already exists for generated slug"
 
     def test_publish_listing_api_unexpected_integrity_error_returns_500(
         self,
@@ -322,7 +388,9 @@ class TestPublishListingApi:
             )
 
         assert response.status_code == 500
-        assert response.json()["error"] == "Unable to publish listing"
+        error = _error(response)
+        assert error["code"] == "publish_failed"
+        assert error["message"] == "Unable to publish listing"
 
     def test_publish_listing_api_conflict_detected_after_race_returns_409(
         self,
@@ -356,4 +424,4 @@ class TestPublishListingApi:
             )
 
         assert response.status_code == 409
-        assert response.json()["error"] == "Listing already exists for generated slug"
+        assert _error(response)["code"] == "listing_conflict"

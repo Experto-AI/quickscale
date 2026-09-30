@@ -143,7 +143,7 @@ class TestNodeWalksHelperCall:
             "    def a():\n"
             "        _enforce_csrf(request)\n"
             "    def b():\n"
-            "        authenticate_blog_api_request(request)\n"
+            "        _enforce_csrf(request)\n"
             "    return\n"
         )
         assert not _body_contains_helper_call(body)
@@ -1630,7 +1630,7 @@ class TestCsrfExemptVisitorFunctionLevel:
 
     FAIL_FUNC_NO_HELPER = "@csrf_exempt\ndef my_view(request):\n    return JsonResponse({})\n"
 
-    PASS_FUNC_TYPED_CSRF_EXEMPT = (
+    FAIL_FUNC_TYPED_CSRF_EXEMPT_RETIRED_HELPER = (
         "@_typed_csrf_exempt\n"
         "def upload_media_api(request):\n"
         "    author, auth_error = authenticate_blog_api_request(request)\n"
@@ -1648,9 +1648,9 @@ class TestCsrfExemptVisitorFunctionLevel:
     def test_no_helper_fails(self) -> None:
         assert _get_violation_count(self.FAIL_FUNC_NO_HELPER) == 1
 
-    def test_typed_csrf_exempt_with_auth_helper_passes(self) -> None:
-        """Blog-style ``@_typed_csrf_exempt`` with ``authenticate_blog_api_request``."""
-        assert _get_violation_count(self.PASS_FUNC_TYPED_CSRF_EXEMPT) == 0
+    def test_typed_csrf_exempt_with_retired_auth_helper_fails(self) -> None:
+        """The retired blog session-or-token helper is no longer approved."""
+        assert _get_violation_count(self.FAIL_FUNC_TYPED_CSRF_EXEMPT_RETIRED_HELPER) == 1
 
     def test_nested_async_def_helper_fails(self) -> None:
         """Helper only in async nested def is rejected."""
@@ -2520,8 +2520,8 @@ class TestCurrentCallSites:
         )
         assert _get_violation_count(source) == 0
 
-    def test_blog_upload_media_pattern(self) -> None:
-        """Blog upload-media: function with @_typed_csrf_exempt + authenticate_blog_api_request."""
+    def test_blog_upload_media_pattern_is_retired(self) -> None:
+        """The pre-DRF blog upload-media pattern no longer passes the gate."""
         source = (
             "@_typed_csrf_exempt\n"
             "def upload_media_api(request):\n"
@@ -2530,10 +2530,10 @@ class TestCurrentCallSites:
             "        return auth_error\n"
             "    return JsonResponse({}, status=201)\n"
         )
-        assert _get_violation_count(source) == 0
+        assert _get_violation_count(source) == 1
 
-    def test_blog_publish_post_pattern(self) -> None:
-        """Blog publish-post: function with @_typed_csrf_exempt + authenticate_blog_api_request."""
+    def test_blog_publish_post_pattern_is_retired(self) -> None:
+        """The pre-DRF blog publish-post pattern no longer passes the gate."""
         source = (
             "@_typed_csrf_exempt\n"
             "def publish_post_api(request):\n"
@@ -2543,7 +2543,7 @@ class TestCurrentCallSites:
             "    post = _create_post_from_payload(author, payload)\n"
             "    return JsonResponse({}, status=201)\n"
         )
-        assert _get_violation_count(source) == 0
+        assert _get_violation_count(source) == 1
 
 
 # ---------------------------------------------------------------------------

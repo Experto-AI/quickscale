@@ -236,9 +236,13 @@ If that transition cannot happen immediately, the documentation should still sta
 
 ## Standard Documentation Contract for Every Module
 
-Every module README should include a required section using this taxonomy:
+[Module Conventions rule 11](decisions.md#module-conventions) owns the README outline:
+Overview, Configuration (every manifest option), Public surface, URLs, Management commands,
+Operations, Extending — in that order, with no versions in headings. Rule 38 adds that the
+Configuration heading names every manifest option key and the Management commands heading
+names every command the module ships.
 
-### Required Subsections
+The extension contract belongs inside the README's Extending section, covering:
 
 1. **What QuickScale owns**
 2. **What the project owns**
@@ -246,7 +250,7 @@ Every module README should include a required section using this taxonomy:
 4. **Structured extension points**
 5. **Upgrade expectations**
 
-### Suggested README Template
+Suggested material for that section:
 
 | Section | Purpose |
 | --- | --- |
@@ -307,8 +311,9 @@ Every module README should include a required section using this taxonomy:
 
 > **Conventions.** Names, file set, URLs, templates, APIs, checks, and tests follow
 > [decisions.md § Module Conventions](decisions.md#module-conventions), enforced by its conformance
-> test. Names below that use the `quickscale_modules_<name>` app label or template folder describe
-> the shipped state until SA215 renames them to `quickscale_<name>`.
+> test. Names below that use the `quickscale_modules_<name>` app label describe the shipped state
+> until SA215 renames them to `quickscale_<name>` (templates and static files already use
+> `quickscale_<name>`).
 
 Mechanics for creating a new `quickscale_modules/<name>` package. The *rules* this
 checklist serves are authoritative elsewhere and this document does not restate them:
@@ -444,7 +449,7 @@ derivation:
 ```
 
 **3. Templates (if applicable):**
-- [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates, with one `base.html` that the pages extend (emails under `email/`)
+- [ ] `templates/quickscale_<name>/` — Zero-style semantic HTML templates, with one flat `base.html` that the pages extend (emails under `email/`)
 - [ ] Static files under `static/quickscale_<name>/{css,js,img}/`; template-tag library named `quickscale_<name>`
 - [ ] Templates must work immediately after embed (no user customization required)
 

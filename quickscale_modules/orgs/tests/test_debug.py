@@ -812,9 +812,9 @@ class TestDebugBanner:
         # Navigate from this test file up to the workspace root.
         repo_root = Path(__file__).resolve().parent.parent.parent.parent
         template_paths = [
-            "quickscale_modules/crm/src/quickscale_modules_crm/templates/quickscale_crm/crm/base.html",
-            "quickscale_modules/blog/src/quickscale_modules_blog/templates/quickscale_blog/blog/base.html",
-            "quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_listings/listings/base.html",
+            "quickscale_modules/crm/src/quickscale_modules_crm/templates/quickscale_crm/base.html",
+            "quickscale_modules/blog/src/quickscale_modules_blog/templates/quickscale_blog/base.html",
+            "quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_listings/base.html",
         ]
         for rel_path in template_paths:
             tmpl_path = repo_root / rel_path

@@ -1574,10 +1574,15 @@ alias.
 
 **SA215 changes this section** (§[Module Conventions](#module-conventions) rule 9): `OrgApiBaseView`
 is rebased on DRF's `APIView`, so both bases are DRF views; the plain-`View` idiom is gone from
-modules, and the blog exception below is retired with `BLOG_API_TOKENS`. The text below describes
-the shipped state until SA215 lands.
+modules. The blog module's function-view exception below is already retired: both blog API
+endpoints are DRF views with session authentication only, and `BLOG_API_TOKENS` is removed.
 
-**Narrow documented exception — blog dual-auth function views:** The blog module ships two function views (`upload_media_api` and `publish_post_api` in `quickscale_modules_blog.views`) that use `@_typed_csrf_exempt` (a type-preserving wrapper around `csrf_exempt`) paired with `authenticate_blog_api_request()` for session-or-Bearer-token authentication. This path is not a class-based view and does not subclass either sanctioned base; it is a deliberately narrow exception justified by the function-view architecture and the dual auth model (session + token). The CSRF CI gate (`scripts/check_csrf_exempt_gate.py`) explicitly recognizes `authenticate_blog_api_request` as an approved verification helper, so this exception is enforced rather than silent. No new function-view endpoints may use this exception without explicit approval.
+**Retired exception — blog dual-auth function views:** the blog module's `upload_media_api` and
+`publish_post_api` were function views paired with `authenticate_blog_api_request()` for
+session-or-Bearer-token authentication. Both are now DRF views with session authentication only,
+and `BLOG_API_TOKENS` is removed; the CSRF CI gate (`scripts/check_csrf_exempt_gate.py`) no longer
+recognizes the retired helper. No new function-view endpoints may use this exception without
+explicit approval.
 
 The CSRF CI gate continues to enforce the pairing requirement across all `csrf_exempt` callsites.
 

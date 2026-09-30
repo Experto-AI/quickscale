@@ -1,7 +1,7 @@
 """URL configuration for QuickScale blog module (single flat URL tree).
 
-All blog routes live under ``/blog/...``.  No org-scoped paths
-(``/orgs/<slug>/blog/...``) exist — D1/D5.
+The module's mount lives in its manifest's ``url_includes`` entry
+(``blog/``); this URLconf holds no prefix (Module Conventions rule 7).
 """
 
 from django.conf import settings
@@ -33,17 +33,17 @@ def _blog_enable_rss() -> bool:
 
 
 urlpatterns = [
-    path("blog/", views.PostListView.as_view(), name="post_list"),
-    path("blog/post/<slug:slug>/", views.PostDetailView.as_view(), name="post_detail"),
-    path("blog/api/media/", views.upload_media_api, name="api_upload_media"),
-    path("blog/api/publish/", views.publish_post_api, name="api_publish_post"),
+    path("", views.PostListView.as_view(), name="post_list"),
+    path("post/<slug:slug>/", views.PostDetailView.as_view(), name="post_detail"),
+    path("api/media/", views.MediaUploadAPIView.as_view(), name="api_upload_media"),
+    path("api/publish/", views.PostPublishAPIView.as_view(), name="api_publish_post"),
     path(
-        "blog/category/<slug:slug>/",
+        "category/<slug:slug>/",
         views.CategoryListView.as_view(),
         name="category_list",
     ),
-    path("blog/tag/<slug:slug>/", views.TagListView.as_view(), name="tag_list"),
+    path("tag/<slug:slug>/", views.TagListView.as_view(), name="tag_list"),
 ]
 
 if _blog_enable_rss():
-    urlpatterns.append(path("blog/feed/", LatestPostsFeed(), name="feed"))
+    urlpatterns.append(path("feed/", LatestPostsFeed(), name="feed"))

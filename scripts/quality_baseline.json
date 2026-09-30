@@ -737,12 +737,6 @@
         "symbol": "create_published_listing_from_payload",
         "type": "function"
       },
-      "quickscale_modules/listings/src/quickscale_modules_listings/views.py::publish_listing_api": {
-        "file": "quickscale_modules/listings/src/quickscale_modules_listings/views.py",
-        "max_complexity": 11,
-        "symbol": "publish_listing_api",
-        "type": "function"
-      },
       "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py::_refresh_message_status": {
         "file": "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py",
         "max_complexity": 15,

@@ -934,7 +934,7 @@ class TestModuleWiringSpecs:
 
         assert settings["BLOG_ENABLE_RSS"] is False
         assert settings["BLOG_API_RATE_LIMIT"] == "15/minute"
-        assert ("", "quickscale_modules_blog.urls") in urls
+        assert ("blog/", "quickscale_modules_blog.urls") in urls
         assert ("markdownx/", "markdownx.urls") in urls
 
     def test_storage_wiring_local_keeps_filesystem_defaults(self):

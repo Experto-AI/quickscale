@@ -31,7 +31,7 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Reverse accessors and model choices follow one convention.** Relations to another module's models use `quickscale_<module>_<name>` reverse names, `FormFieldValue` orders deterministically, and model choice lists use `TextChoices` members instead of tuple constants.
   - **Organization removal follows installed tenant metadata.** `purge_organization` discovers project-owned tenant models and child-before-parent order automatically, refuses destructive execution and dry runs while a live Stripe subscription or active checkout reservation exists, and reconciles elapsed checkout sessions with Stripe before deletion under the organization-keyed provider advisory mutex; local mutations use organization-row locks. Purge and account deletion share explicit billing, row-deletion, cache, and tombstone obligations declared by each owning app and discharged through one coordinator that fails closed when a boundary skips a declared obligation, with declared provider fields refusing the purge until they are cleared or reconciled and app-owned stages running the declaring app's own hook, without weakening last-owner safeguards, while terminal or provider-confirmed expired billing rows remain purgeable.
   - **Server-rendered module pages share the project shell.** The blog, listings, and CRM base templates extend the project's `base.html` instead of emitting their own `<html>` document, so those pages inherit the site topbar, messages, and footer. Their child templates now fill `blog_content`, `listings_content`, and `crm_content`; a project that overrode one of these templates must rename its content block to match.
-  - **CRM styling moved into a stylesheet.** CRM page styles live in `quickscale_modules_crm/crm.css` rather than an inline `<style>` block, and cover CRM content only — the page shell comes from `base.html`.
+  - **CRM styling moved into a stylesheet.** CRM page styles live in `quickscale_crm/css/crm.css` rather than an inline `<style>` block, and cover CRM content only — the page shell comes from `base.html`.
   - **Module page content keeps its spacing under the shared shell.** Each module base wraps its page content in a `<div class="<module>-content">` and its stylesheet sets the vertical rhythm there, because the project `base.html` reset zeroes default margins.
   - **Frontend architecture is documented.** [docs/technical/frontend.md](docs/technical/frontend.md) defines the `window.__QUICKSCALE__` seam, URL ownership between the React shell and module routes, the Vite/`collectstatic` pipeline, and the template-inheritance rule for server-rendered module surfaces.
   - **Railway re-deploys preserve live configuration.** `quickscale deploy railway` reuses the service's `SECRET_KEY` and runtime-role password, and aborts rather than guessing when Railway variables are unreadable or the PostgreSQL service is ambiguous.
@@ -40,7 +40,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **RLS policy predicates are verified.** The isolation-conformance suite compares every marker-enrolled table's live `qual` and `with_check` expressions with the exact tenant-write and operator-read contract, so weakened policies fail instead of passing on presence alone.
   - **Split publication refuses non-fast-forward overwrites.** Before each split-branch push, `make publish-modules` and single-module publication require the observed remote tip to be an ancestor of the local split, stopping the batch and naming the module on divergence.
   - **Privileged commands stay on a fixed two-command contract.** Only `migrate` and `createcachetable` receive the automatic superuser connection; the retired `migrate_billing_to_orgs` command and its recovery documentation are removed, unsupported launcher argv fails closed, and declaration drift is checked across every enforcing station.
-  - **Malformed authentication headers fail closed.** Non-ASCII blog API tokens and notifications webhook signatures now return their normal authentication failure instead of raising a server error.
+  - **Malformed authentication headers fail closed.** Non-ASCII notifications webhook signatures
+    now return their normal authentication failure instead of raising a server error.
   - **Webhook endpoints answer the one error shape.** The Stripe and notifications webhooks are DRF views that answer `200` with `{"status": "accepted", "duplicate": <bool>}`, `400` with a stable `webhook_signature_invalid` or `webhook_payload_invalid` code, or `404` when the module is off; a bad signature is no longer answered `403`, and notifications verifies its signature before parsing the body.
   - **Beta migration is single-mode.** `make beta-migrate-fresh` reports effective runtime provenance, rejects dynamic command settings and launcher/package skew before mutation, reconciles the complete generated slug/package seam, and runs isolated generated-project coverage through `make check-beta-migration-smoke`; the in-place migration path and its continuation are removed.
   - **Beta migration hands off through one prompt.** A `make beta-migrate-fresh` run that
@@ -92,9 +93,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     conservative `anon` and `user` DRF throttle rates that module-supplied scopes extend, and each
     module scope carries the `quickscale_<module>_<purpose>` stem with its rate read from that
     module's `_RATE_LIMIT` setting — checkout and billing-portal POSTs keep their tighter billing
-    scope and form submissions their `quickscale_forms_submit` scope. The blog limiter counts in a
-    dedicated table with hashed client identities, so the limit holds under concurrent requests on
-    the database-backed cache production uses without Redis.
+    scope, form submissions their `quickscale_forms_submit` scope, and the blog automation API its
+    `quickscale_blog_api` scope.
   - **Module updates regenerate the managed wiring.** `quickscale update` regenerates
     `<package>/settings/modules.py` and `<package>/urls_modules.py` from the pulled manifests and
     commits them with the module update, so module-contributed settings such as the DRF throttle
@@ -212,6 +212,25 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     the shipped set from `quickscale_modules/*/module.yml`, so a module that ships an RLS boundary
     suite joins the isolation gate automatically, and an incomplete module directory fails those
     gates closed instead of dropping out of them.
+  - **Module READMEs share one outline.** Every module README uses the same seven sections —
+    Overview, Configuration, Public surface, URLs, Management commands, Operations, Extending —
+    and names every manifest option key under Configuration and every shipped management command
+    under Management commands.
+  - **Blog automation API is a DRF surface.** The blog publish and media endpoints are DRF views
+    with session authentication, answer the shared `{"error": {"code", "message", "fields"}}`
+    shape, and throttle by client IP under the `quickscale_blog_api` scope at the module's
+    `api_rate_limit` option; `BLOG_API_TOKENS` bearer access and the blog throttle counter table
+    are removed.
+  - **Module templates and assets share one layout.** Every module page extends one flat
+    `templates/quickscale_<module>/base.html` that extends the project shell and owns that module's
+    `<module>_content` block; module emails live under `email/`, static files under
+    `static/quickscale_<module>/{css,js,img}/`, and the analytics template-tag library is
+    `quickscale_analytics`. An existing project that overrode a module base or page template must
+    move its override to the new path or it silently stops applying.
+  - **Listings publish API is a DRF surface.** `POST listings/api/publish/` is a DRF view with
+    session authentication (CSRF enforced) behind the same staff gate, and it answers the shared
+    `{"error": {"code", "message", "fields"}}` shape with stable codes for validation, parse,
+    conflict, and server failures; the module's last plain-`JsonResponse` endpoint is gone.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -22,8 +22,8 @@ finding names one:
 - **R3 — the release pipeline** (`.github/workflows/publish.yml`), OIDC trusted publishing to PyPI.
 
 **Entry points.** R2: per-module URLconfs — DRF `APIView`s in billing/forms/crm, two `csrf_exempt`
-webhooks (Stripe, notifications), blog/listings staff publishing APIs with a custom token path,
-class-based auth/org views, and the operator commands `purge_organization`,
+webhooks (Stripe, notifications), the blog and listings staff publishing APIs as DRF session
+views, class-based auth/org views, and the operator commands `purge_organization`,
 `migrate_billing_to_orgs`, and the DR backup/restore surface. R1: the Click command tree plus the
 generated `start.sh`/`Dockerfile` launchers. R3: tag-triggered workflow dispatch.
 
@@ -217,7 +217,8 @@ fails. `n/a` means the safeguard does not apply to that entry point.
 | Checkout / subscription-checkout / portal / cancel views | `SessionAuthentication` + explicit `is_authenticated` | `require_owner=True`, re-validated under the provider mutex (`_require_owner_provider_mutation_authorization`) | DRF serializer; provider responses converted before parsing | DRF JSON | `billing_checkout` / `billing_portal` 30/hour | implicit SDK timeout — Notes | reservation-derived Stripe idempotency keys | DRF | reservation rows |
 | Credit balance / transactions / subscription detail | session + explicit check | `require_owner=True` | n/a (GET) | DRF | `user` default | n/a | n/a | DRF | n/a |
 | `PlanListView`, `PricingPageView` | `AllowAny` — public catalog | n/a | n/a | DRF / autoescape | `anon`/`user` defaults | n/a | n/a | DRF | n/a |
-| Blog / listings publishing APIs | session (CSRF enforced) or constant-time token | staff + `_resolve_api_org` | request parsing | JSON | DB-atomic fixed-window counter after auth — Notes | n/a | slug conflict → 409 | JSON | n/a |
+| Blog automation API (`publish`, `media`) | session (CSRF enforced) | staff permission | DRF parsing + module validation | DRF JSON | `quickscale_blog_api` at `BLOG_API_RATE_LIMIT` — Notes | n/a | slug conflict → 409 | `{"error": {"code", …}}` | n/a |
+| Listings publishing API | session (CSRF enforced) | staff permission | DRF parsing + module validation | DRF JSON | none — Notes | n/a | slug conflict → 409 | `{"error": {"code", …}}` | n/a |
 | Forms public submit | `AllowAny` — public form | n/a | DRF serializer | DRF | `FormSubmitThrottle` + required rate | n/a | n/a | DRF | submission row |
 | `AccountDeleteView` | `LoginRequiredMixin` | self only; last-owner check under row locks | confirmation form | autoescape | out of scope (self-service) | provider I/O outside transactions | locked re-validation + compensating resume | Django messages | removal-obligation skip log |
 | Org views + `TenantMiddleware` | `LoginRequiredMixin` | membership check on the session org, 403 on mismatch | Django forms | autoescape | out of scope | n/a | n/a | Django | n/a |
@@ -240,8 +241,9 @@ Every empty cell is resolved with a finding ID or a stated reason.
 - **auth** — clean. `AccountDeleteView` read in full after the provider-I/O restructuring.
 - **orgs** — clean. `removal.py` and `purge_organization.py` read in full; middleware, the
   `current_org` delta, and the SA203 wiring read in full.
-- **blog** — clean. The limiter now uses one atomic upsert on a hashed identity against a counter
-  table covered by the runtime role's default privileges.
+- **blog** — clean. The automation API is DRF session-only with the shared error shape and the
+  `quickscale_blog_api` cache throttle; the hand-written limiter, its counter table, and
+  `BLOG_API_TOKENS` are removed.
 - **dr_engine / backups** — clean. The SA198 translation is complete and the runner merges rather
   than replaces the environment (`primitives.py:153–155`).
 - **runtime settings facade (SA206)** — clean. A verbatim move of the proxy, correlation,
@@ -281,8 +283,9 @@ Every empty cell is resolved with a finding ID or a stated reason.
 - **Advisory locks are re-entrant where nested.** `AccountDeleteView` holds the per-org mutex
   while `cancel_current_subscription` re-acquires the same key. PostgreSQL session advisory locks
   stack, so this cannot self-deadlock.
-- **Blog counter table is reachable by the runtime role.** `ALTER DEFAULT PRIVILEGES` runs as the
-  same superuser that runs `migrate` (`runtime_database.py:14–21`).
+- **Blog counter table is gone with the hand-written limiter.** The blog API throttles through
+  DRF's configured cache (`quickscale_blog_api`), so no module-owned table needs runtime-role
+  grants.
 - **React CSRF is compatible with `CSRF_COOKIE_HTTPONLY=True`.** `getCsrfToken()` reads the
   injected `<meta name="csrf-token">` first (`lib/csrf.ts:5–8`).
 - **No XSS sink entered with the side-channel template rewrites.** The delta adds no `|safe`,
@@ -364,9 +367,14 @@ Every empty cell is resolved with a finding ID or a stated reason.
   `InternalError: current transaction is aborted`. No live trigger exists today: every
   `IntegrityError` handler wraps its own savepoint. Re-check when adding a handler that catches a
   DB exception across an `org_scope`.
-- **Blog/listings API limiter counts only authenticated requests** (`blog/views.py:701–707`).
-  Invalid-token attempts return 401 before the counter, so token guessing is unthrottled. That is
-  acceptable while operators configure high-entropy `BLOG_API_TOKENS`, which nothing enforces.
+- **Blog/listings API limiter counts only authenticated requests** — resolved: the blog endpoints
+  are DRF session-only views with no token scheme, so unauthenticated requests answer 401 before
+  the throttle (DRF orders authentication, permissions, and throttling).
+- **DRF throttle history is not atomic on the database cache.** Generated production settings
+  without `REDIS_URL` select `DatabaseCache`, whose DRF throttle history update is a read followed
+  by a write, so a simultaneous burst from one client can exceed a module's `_RATE_LIMIT` (blog,
+  billing, forms). Throttle counters are disposable (Module Conventions rule 32); re-check when
+  Redis stops being optional or a module's limit becomes security-load-bearing.
 - **`_find_existing_credit_transaction` scans every same-type credit row for the organization under
   `FOR UPDATE` when the fast lookups miss** (`services.py:4110–4115`). That is O(n) per new credit
   with n = the org's purchase or plan history. Negligible at current scale.
