@@ -25,7 +25,7 @@ for path in (SRC_ROOT, MODULE_ROOT):
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
 
-# SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
 # The collection hook below deselects bypass_rls-marked tests unless the env var
 # is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
@@ -35,7 +35,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.settings")
 django.setup()
 
 
-# SA97: shared per-test state reset fixture replaces the private
+# shared per-test state reset fixture replaces the private
 # ``_reset_test_state`` copy.  See ``tests_shared/reset_state.py``.
 from tests_shared.reset_state import reset_test_state  # noqa: E402, F401
 
@@ -224,7 +224,7 @@ def org_b_context(request: Any, db: None) -> Generator[Organization, None, None]
 
 
 # ---------------------------------------------------------------------------
-# SA14.4 — bypass_rls marker registration and collection-time opt-in
+# bypass_rls marker registration and collection-time opt-in
 # ---------------------------------------------------------------------------
 
 

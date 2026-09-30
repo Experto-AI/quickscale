@@ -44,7 +44,7 @@ steps:
     minimum: "0.89.0"
     title: "Adopt the composed DRF throttling contract"
     adoption_steps:
-      - "Compare and manually adopt the current settings/base.py REST_FRAMEWORK block: it composes module-supplied DRF configuration instead of replacing it, installs AnonRateThrottle, UserRateThrottle, and ScopedRateThrottle as the default throttle classes, and merges the conservative anon/user defaults with module-contributed scopes such as billing's billing_checkout and billing_portal rates. A wholesale REST_FRAMEWORK assignment with no throttle classes silently drops the checkout-loop bound."
+      - "Compare and manually adopt the current settings/base.py REST_FRAMEWORK block: it composes module-supplied DRF configuration instead of replacing it, installs AnonRateThrottle, UserRateThrottle, and ScopedRateThrottle as the default throttle classes, and merges the conservative anon/user defaults with module-contributed scopes such as billing's quickscale_billing_checkout and quickscale_billing_portal rates. A wholesale REST_FRAMEWORK assignment with no throttle classes silently drops the checkout-loop bound."
 
   - id: sa206-runtime-settings-facade
     minimum: "0.89.0"

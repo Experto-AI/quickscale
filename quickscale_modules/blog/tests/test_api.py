@@ -1011,7 +1011,7 @@ class TestPublishPostApi:
             assert tag.organization is not None
 
     # ------------------------------------------------------------------
-    # SA83 — ContextVar lifecycle restoration tests
+    # ContextVar lifecycle restoration tests
     # ------------------------------------------------------------------
 
     def test_publish_post_api_token_system_fallback_restores_prior_context(
@@ -1023,7 +1023,7 @@ class TestPublishPostApi:
         """Publish token for a user without personal org falls back to
         the System org and restores the prior ContextVar via finally.
 
-        Strengthened (CR-SA83-REV-002): runs under explicit outer
+        Strengthened: runs under explicit outer
         ``transaction.atomic()``, asserts both Python ContextVar and
         PostgreSQL GUC are restored to the exact prior (None), and
         proves the next wrapped tenant query re-primes with a fresh
@@ -1104,7 +1104,7 @@ class TestPublishPostApi:
     ):
         """Publish token handled error (400) restores the prior ContextVar.
 
-        Strengthened (CR-SA83-REV-002): runs under explicit outer
+        Strengthened: runs under explicit outer
         ``transaction.atomic()``, asserts both Python ContextVar and
         PostgreSQL GUC are restored to the exact prior (None), and
         proves the next wrapped tenant query re-primes with a fresh
@@ -1607,7 +1607,7 @@ class TestUploadMediaApi:
         assert int(second_response["Retry-After"]) > 0
 
     # ------------------------------------------------------------------
-    # SA83 — ContextVar lifecycle restoration tests
+    # ContextVar lifecycle restoration tests
     # ------------------------------------------------------------------
 
     def test_upload_media_api_token_success_restores_prior_context(
@@ -1622,7 +1622,7 @@ class TestUploadMediaApi:
     ):
         """Upload success restores the exact non-None prior ContextVar and GUC.
 
-        Strengthened (CR-SA83-REV-002): uses a direct unwrapped
+        Strengthened: uses a direct unwrapped
         RequestFactory call with bearer-token auth so there is no middleware
         to reset the prior.  The API caller itself captures a distinct
         non-None ``prior_org`` before resolving the token user's org, then
@@ -1678,7 +1678,7 @@ class TestUploadMediaApi:
                 f"got {get_current_org_id()!r}"
             )
             # GUC restored to match the pre-primed prior.
-            # Temporarily set ContextVar to None so AF9 does not re-prime
+            # Temporarily set ContextVar to None so the execute wrapper does not re-prime
             # (masking the actual GUC value) before the raw SELECT.
             prior_var = get_current_org_id()
             set_current_org_id(None)
@@ -1732,7 +1732,7 @@ class TestUploadMediaApi:
     ):
         """Upload token handled error (400) restores the prior ContextVar.
 
-        Strengthened (CR-SA83-REV-002): runs under explicit outer
+        Strengthened: runs under explicit outer
         ``transaction.atomic()``, asserts both Python ContextVar and
         PostgreSQL GUC are restored to the exact prior (None), and
         proves the next wrapped tenant query re-primes with a fresh

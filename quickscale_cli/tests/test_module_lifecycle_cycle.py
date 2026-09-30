@@ -1108,6 +1108,13 @@ def test_update_after_removal_only_targets_remaining_modules(
             return_value=True,
         ),
         patch(
+            "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+            return_value=(True, "regenerated"),
+        ),
+        patch(
+            "quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring",
+        ),
+        patch(
             "quickscale_cli.commands.module_commands._update_single_module",
             return_value=True,
         ) as mock_update_single_module,
@@ -1337,6 +1344,13 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
             return_value=True,
         ),
         patch(
+            "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+            return_value=(True, "regenerated"),
+        ),
+        patch(
+            "quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring",
+        ),
+        patch(
             "quickscale_cli.commands.module_commands._update_single_module",
             return_value=True,
         ) as mock_update_single_module,
@@ -1378,6 +1392,25 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
     project_path = tmp_path / "update-e2e"
     project_path.mkdir()
 
+    # A valid generated-project layout: the package directory and the
+    # desired-state file must exist for the update's managed-wiring
+    # regeneration step to resolve and write the package files.
+    package_dir = project_path / "testproject"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("")
+    (project_path / "quickscale.yml").write_text(
+        "version: '1'\n"
+        "project:\n"
+        "  slug: testproject\n"
+        "  package: testproject\n"
+        "  theme: showcase_react\n"
+        "modules:\n"
+        "  auth: {}\n"
+        "  listings: {}\n"
+        "docker:\n"
+        "  start: false\n"
+    )
+
     subprocess.run(["git", "init"], cwd=project_path, check=True)
     subprocess.run(
         ["git", "config", "user.name", "QuickScale Test"],
@@ -1391,12 +1424,13 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
     )
 
     module_names = ["auth", "listings"]
+    manifest_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
     for module_name in module_names:
         module_dir = project_path / "modules" / module_name
         module_dir.mkdir(parents=True, exist_ok=True)
         (module_dir / "README.md").write_text(f"{module_name} baseline\n")
         (module_dir / "module.yml").write_text(
-            f'name: {module_name}\nversion: "{_core_version}"\n'
+            (manifest_root / module_name / "module.yml").read_text()
         )
 
     # AF5: the update command now reads module state from .quickscale/state.yml
@@ -1469,7 +1503,7 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         touched_file.write_text(current + "updated\n")
         module_name = prefix.rsplit("/", 1)[-1]
         module_yml = project_path / prefix / "module.yml"
-        module_yml.write_text(f'name: {module_name}\nversion: "{_core_version}"\n')
+        module_yml.write_text((manifest_root / module_name / "module.yml").read_text())
         return "updated"
 
     runner = CliRunner()
@@ -1525,4 +1559,5 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
     commit_messages = log_result.stdout.splitlines()
     assert "chore(modules): update auth module" in commit_messages
     assert "chore(modules): update listings module" in commit_messages
-    assert int(final_count.stdout.strip()) == int(baseline_count.stdout.strip()) + 2
+    assert "chore: regenerate managed module wiring" in commit_messages
+    assert int(final_count.stdout.strip()) == int(baseline_count.stdout.strip()) + 3

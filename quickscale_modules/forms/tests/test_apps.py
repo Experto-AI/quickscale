@@ -1,6 +1,6 @@
 """Tests for Forms AppConfig startup behavior.
 
-SA17.4 — fail-hard forms settings: ``AppConfig.ready()`` must raise
+Fail-hard forms settings: ``AppConfig.ready()`` must raise
 ``ImproperlyConfigured`` when any of ``FORMS_SUBMISSIONS_API``,
 ``FORMS_RATE_LIMIT``, or ``FORMS_SPAM_PROTECTION`` is missing from
 Django settings.

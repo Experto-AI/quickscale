@@ -389,7 +389,7 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
             call_command("quickscale_forms_anonymize_submissions", verbosity=0)
             mock_mgr.all.assert_called_once()
 
-    # CR-SA85-REV-006: two-org repeated anonymization test.
+    # two-org repeated anonymization test.
     def test_two_org_repeated_anonymization(self):
         """Repeated anonymization across two orgs is idempotent and
         correctly clears IP/user_agent for both orgs' old submissions

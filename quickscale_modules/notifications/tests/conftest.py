@@ -16,7 +16,7 @@ from quickscale_modules_notifications.models import (
 )
 from quickscale_modules_notifications.services import ensure_default_settings
 
-# SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
 # The collection hook below deselects bypass_rls-marked tests unless the env var
 # is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
@@ -112,7 +112,7 @@ def delivery_for_webhook(db, notification_settings_row):
 
 
 # ---------------------------------------------------------------------------
-# SA14.4 — bypass_rls marker registration and collection-time opt-in
+# bypass_rls marker registration and collection-time opt-in
 # ---------------------------------------------------------------------------
 
 
@@ -124,7 +124,7 @@ def pytest_configure(config: pytest.Config) -> None:
         "(superuser / migration DDL). Deselected unless QUICKSCALE_ALLOW_BYPASSRLS "
         "is exactly '1'.",
     )
-    # SA78: Enable reuse-db so the test database persists between
+    # Enable reuse-db so the test database persists between
     # runs instead of being dropped and recreated.  Under a restricted
     # role (quickscale_test_role) a leftover test database may be
     # owned by postgres and cannot be dropped — with reuse_db enabled

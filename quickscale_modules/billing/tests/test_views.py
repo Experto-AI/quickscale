@@ -1579,7 +1579,7 @@ _DRF_AUTH_ONLY_SETTINGS = {
 class TestBillingDrfDefaultCallerParity:
     """Caller-parity coverage for billing routes under the generated-project DRF baseline.
 
-    CR-SA11.5-002: Verify billing views preserve their intended behavior
+    Verify billing views preserve their intended behavior
     when ``REST_FRAMEWORK.DEFAULT_PERMISSION_CLASSES`` is set to
     ``IsAuthenticated`` (matching the generated-project template).
 

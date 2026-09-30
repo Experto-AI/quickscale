@@ -56,7 +56,7 @@ SA217's startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA22
 authorization needs SA220's capabilities and SA223's DRF views. SA204 freezes migration history
 before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** Track 1's SA227 has slack until SA215. Track 3's SA223 fills the wait
+**Off the critical path.** Track 1's SA227 (READMEs only) has slack until SA215. Track 3's SA223 fills the wait
 for SA219; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
 user-referencing models.
 
@@ -77,7 +77,7 @@ A track is **truly green** only when all three states are yes.
   migration-history freeze gate and `decisions.md` § Clean-Break Migration History, the `bap-web`
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation, and, for the conventions, module identities, models and their
-  `0001_initial`, and module package files, commands, tests, and READMEs (SA227).
+  `0001_initial`, and module READMEs (SA227).
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
   every package, `ruff.toml`, the module page templates
   and test-settings stubs, the generated `base.html`, the CLI apply/deploy/update commands and
@@ -140,33 +140,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA217 — Read the manifest option schema in core and check settings at startup.**
 
-  **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. `plan`/`apply`
-  enforce each manifest option's `validation` block; every module is fully manifest-owned (its
-  per-module option functions are gone and its CLI configurator reads the manifest), a manifest's
-  `retired_options` block is the one home of a retired key's refusal, and config load refuses a
-  key no manifest declares. The rule 12 decision edit landed: the validation vocabulary is
-  `choices`, `min`/`max`, `pattern`, `not_empty`, `required_when`, `any_of`, `subset_of`,
-  `excludes`, and `intersects` over one condition grammar, with `slug`/`list` normalization;
-  notifications' runtime backend predicates live in its adapter. Every module still carries
-  per-module settings readers, which the settings-reading half removes.
+  **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. Option
+configuration is manifest-owned; every module still carries its own settings reader and code
+defaults.
 
-  **Scope:**
-  - *Option code (done).* Core's and the CLI's per-module option code went: the
-    `validate_/resolve_/normalize_/default_<module>_module_options` functions and `DEFAULT_*` /
-    `LEGACY_*` constants in `quickscale_core.contracts.resolvers`, `contracts.module_options`,
-    `schema.config_schema`, and the CLI's `module_config`, with `contracts.imperative_inventory`.
-    Notifications and social converted to the generic manifest-driven CLI configurator.
-  - *Settings reading (last).* `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`;
-    one generic startup check in `quickscale_core.runtime`, run through the shared checks helper
-    and registered by each module, validates every declared setting; per-module readers and code
-    defaults go.
+  **Scope:** `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`; one generic
+  startup check in `quickscale_core.runtime`, run through the shared checks helper and registered
+  by each module, validates every declared setting; per-module readers and code defaults go.
 
   **Acceptance:** a setting of the wrong type or a violated `required_when` fails startup with the
-  setting's name; no module keeps its own settings reader or code default; no per-module option
-  function remains in core or the CLI; CLI prompts read the manifest.
+  setting's name; no module keeps its own settings reader or code default.
 
-  **Surfaces:** every manifest and core manifest copy; `quickscale_core` `contracts`, `schema`,
-  `runtime`; `quickscale_cli` apply and `module_config`; module settings reads. Track 2 surfaces
+  **Surfaces:** `quickscale_core` `runtime`; `quickscale_cli` apply; module settings reads. Track 2 surfaces
   plus the `runtime` facade (Track 3), through the serialized queue.
 
 - [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
@@ -238,8 +223,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
   **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
-  URL prefixes set in three places, two API frameworks and error shapes, hand-built webhook error
-  bodies, three throttle mechanisms, and module settings merged last-writer-wins.
+  URL prefixes set in three places, two API frameworks and error shapes, and blog's hand-written
+  throttle.
 
   **Scope:**
   - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
@@ -249,11 +234,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
     on DRF's `APIView`; errors take the shared error shape (DRF dependency in every module with an
     API, the theme's `useApi.ts` and orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception
     in the JSON API Endpoint Base Contract, and its hand-written rate parser go, with the raw-SQL
-    counter table `quickscale_modules_blog_api_throttle_counter` it writes.
-  - *Throttles and shared settings.* Throttle scopes become `quickscale_<module>_<purpose>`, each
-    rate a `_RATE_LIMIT` option (billing's hard-coded `"30/hour"` included; rule 32), and
-    billing's advisory-lock key strings become `quickscale_billing:…` (rule 33; locks are
-    transient, so nothing migrates).
+    counter table `quickscale_modules_blog_api_throttle_counter` it writes; blog's throttle scope
+    takes the stem and its rate from a setting (rules 9 and 32).
 
   **Acceptance:** every API error body matches the one shape; a list of every moved
   public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and
@@ -299,30 +281,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
 
-  **Context:** inventory §§ 13, 17–20, 26, 30, 31, 38–40; D14, D18–D21, D27, D31, D32, D39–D41;
-  rules 11, 15–18, 24, 28, 29, and 36–38. Package roots, receivers, and file names already follow
-  rule 28; `teams/` and its core placeholder handling are deleted, orgs' eight ticket-numbered
-  test files are renamed by subject, every module's `mypy.ini` section is capped at
-  module-extension.md's standard override and clean (rule 36), and core's catalog (descriptions
-  from `module.yml`) plus `check_security_gates.py`, `render_j2_template.py`, `lint_frontend.sh`,
-  `provision_ci_postgres.sh`, and `test_isolation_conformance.sh` derive the shipped set from
-  `quickscale_modules/*/module.yml`, so social's tenant tables join the isolation gates (rule 37).
+  **Context:** inventory § 38; rules 11 and 38. Module READMEs follow no common heading set, and
+  most omit option keys and commands.
 
-  **Scope:**
-  - *Tests.* orgs' two ticket-numbered test apps (`sa182_project_app`,
-    `sa208_project_app`) are renamed by subject (D32); the remaining ticket mentions in the
-    docstrings and comments of module test files go, reworded to say what each test protects where
-    the number was the only explanation.
-  - *READMEs* follow the rule 11 headings and name every option key and command (rule 38).
+  **Scope:** every module README follows the rule 11 headings and names every option key and
+  command (rule 38).
 
-  **Acceptance:** every module package holds only rule 28's file names; no test file or test
-  docstring names a ticket; each destructive command's `--dry-run` has a test that nothing is
-  written; `make typecheck` passes with the capped sections; no literal module list remains outside
-  the modules beyond rule 37's listed exceptions; every README names its options and commands.
+  **Acceptance:** every README has the rule 11 headings and names its manifest options and
+  management commands.
 
-  **Surfaces:** every module's package root, commands, `pyproject.toml`, tests, README;
-  core's module discovery and catalog (descriptions from manifests); the root
-  `mypy.ini`; the listed `scripts/`; decisions; the billing recovery section of organizations.md.
+  **Surfaces:** every module's README.
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 

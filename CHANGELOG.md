@@ -89,10 +89,16 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     missing permissions block, or a committed secret. Every package's `[build-system]` bounds
     `poetry-core`, and Ruff's security rules now govern maintained source.
   - **Generated projects share one throttling contract.** The generated settings declare
-    conservative `anon` and `user` DRF throttle rates that module-supplied scopes extend, checkout
-    and billing-portal POSTs carry tighter billing scopes, and the blog limiter counts in a
+    conservative `anon` and `user` DRF throttle rates that module-supplied scopes extend, and each
+    module scope carries the `quickscale_<module>_<purpose>` stem with its rate read from that
+    module's `_RATE_LIMIT` setting — checkout and billing-portal POSTs keep their tighter billing
+    scope and form submissions their `quickscale_forms_submit` scope. The blog limiter counts in a
     dedicated table with hashed client identities, so the limit holds under concurrent requests on
     the database-backed cache production uses without Redis.
+  - **Module updates regenerate the managed wiring.** `quickscale update` regenerates
+    `<package>/settings/modules.py` and `<package>/urls_modules.py` from the pulled manifests and
+    commits them with the module update, so module-contributed settings such as the DRF throttle
+    scopes and rates never lag behind the module code; a failed regeneration rolls the update back.
   - **The orgs boot path installs its guards under privileged commands.** A sanctioned privileged
     database command now skips only the BYPASSRLS role check; the GUC priming wrapper, the
     last-owner deletion backstop, and the tenant-isolation system check install on every startup

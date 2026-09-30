@@ -38,7 +38,7 @@ def _assert_canonical_stage_set(organization: Organization) -> list[Stage]:
 @pytest.mark.django_db
 @override_settings(QUICKSCALE_MODE="solo")
 def test_solo_personal_org_has_stages_at_creation(client, staff_user) -> None:
-    """Personal org stages are seeded at creation time (SA11.6), not on first CRM access.
+    """Personal org stages are seeded at creation time, not on first CRM access.
 
     ``create_personal_for`` now dispatches ``organization_created``, which
     triggers CRM's ``seed_crm_default_stages_on_org_created`` receiver.
@@ -196,7 +196,7 @@ def test_new_org_form_flow_seeds_stages_without_crm_endpoint(
     # Direct DB check — no CRM API access. If the signal/receiver wiring
     # is working through normal app startup, stages are seeded at creation.
     # Prime the org context so FORCE RLS allows the read-back
-    # (CR-SA74-001: GUC no longer leaks from ensure_org_default_stages).
+    # (GUC no longer leaks from ensure_org_default_stages).
     from quickscale_modules_orgs.current_org import (
         set_current_org_id,
         reset_current_org_id,
@@ -221,7 +221,7 @@ def test_new_org_form_flow_seeds_stages_without_crm_endpoint(
 def test_migrated_org_needs_explicit_seeding_for_crm_access(client, staff_user) -> None:
     """A migrated org with zero local stages must be explicitly seeded.
 
-    SA11.6 removes the warm-on-read bootstrap — stages are only seeded at
+    Removes the warm-on-read bootstrap — stages are only seeded at
     org-creation time via the ``organization_created`` signal.  Migrated
     orgs (created before CRM was installed) need a one-time data migration
     or explicit ``ensure_org_default_stages`` call.  This test proves a

@@ -3,14 +3,14 @@
 Measures statements-per-request and ``BEGIN``/``COMMIT`` counts for
 representative tenant traffic through the orgs module, providing a
 reproducible documented baseline for the per-statement priming overhead
-introduced by the AF9 connection-layer execute wrapper.
+introduced by the connection-layer execute wrapper.
 
 Scenarios
 ---------
-1. **No org context (baseline)** — queries execute without AF9 priming.
+1. **No org context (baseline)** — queries execute without priming.
    Establishes the minimum statement count for a given query pattern.
 
-2. **Org context, autocommit** — queries execute with the AF9 wrapper
+2. **Org context, autocommit** — queries execute with the wrapper
    active in autocommit mode, exercised through the real
    ``OrgDashboardView`` dispatch chain via ``TenantMiddleware``
    (session-org resolution, not manual ``set_current_org_id``).
@@ -21,9 +21,9 @@ Scenarios
 3. **Org context, explicit transaction** — queries execute inside a
    caller-managed ``transaction.atomic()``, exercised through the real
    ``OrgDashboardView`` dispatch chain via ``TenantMiddleware``.
-   AF9 issues ``SET LOCAL`` before every statement (idempotent but
-   additive — the redundant-SET overhead that SA4.2 aims to eliminate
-   via per-transaction memo).
+   Issues ``SET LOCAL`` before every statement (idempotent but
+   additive — the redundant-SET overhead that the per-transaction
+   memo eliminates).
 
 The multi-query pattern exercises the ``OrgDashboardView`` data-access
 sequence through the real view dispatch: ``OrgRoleMixin.dispatch()``
@@ -65,7 +65,7 @@ from quickscale_modules_orgs.models import (
 from quickscale_modules_orgs.views import OrgDashboardView
 
 # ---------------------------------------------------------------------------
-# Documented baseline  (SA4.1 acceptance criteria — measured on 2026-07-01
+# Documented baseline (acceptance criteria — measured on 2026-07-01
 # against v0.87.0-unreleased, PostgreSQL 18, NOBYPASSRLS restricted role)
 #
 # All values are for the ``OrgDashboardView`` endpoint exercised through
@@ -74,58 +74,58 @@ from quickscale_modules_orgs.views import OrgDashboardView
 # pre-sets ``request.org`` so ``OrgRoleMixin.dispatch()`` skips the slug
 # lookup, leaving 2 data SELECTs (membership role check → member count).
 # The no-org scenario establishes the theoretical minimum via direct ORM
-# calls (AF9 pass-through adds zero cost, so the counts are endpoint
+# calls (pass-through adds zero cost, so the counts are endpoint
 # equivalent for the unprimed case).
 #
 # B = BEGIN, C = COMMIT, SL = SET LOCAL, D = data SELECT
 # ---------------------------------------------------------------------------
 
-# --- Scenario 1: no org context (AF9 pass-through) -------------------------
+# --- Scenario 1: no org context (pass-through) -------------------------
 # Pattern:  3 × D
 # Total:    3  (D D D)
 
 BASELINE_NO_ORG_TOTAL = 3
-"""Total SQL statements for a 3-query pattern without AF9 priming."""
+"""Total SQL statements for a 3-query pattern without priming."""
 
 BASELINE_NO_ORG_DATA = 3
-"""Data (SELECT) statements without AF9 priming."""
+"""Data (SELECT) statements without priming."""
 
 BASELINE_NO_ORG_BEGIN = 0
-"""BEGIN count without AF9 priming."""
+"""BEGIN count without priming."""
 
 BASELINE_NO_ORG_COMMIT = 0
-"""COMMIT count without AF9 priming."""
+"""COMMIT count without priming."""
 
 BASELINE_NO_ORG_SET_LOCAL = 0
-"""SET LOCAL count without AF9 priming."""
+"""SET LOCAL count without priming."""
 
-# --- Scenario 2: org context, autocommit (AF9 per-statement wrapping) -------
+# --- Scenario 2: org context, autocommit (per-statement wrapping) -------
 # Each data query: BEGIN + SET LOCAL + data + COMMIT
 # Pattern:  2 × (B SL D C)  =  2B 2SL 2D 2C
 # Total:    8
 
 BASELINE_AUTOCOMMIT_TOTAL = 8
-"""Total SQL statements with AF9 active in autocommit mode."""
+"""Total SQL statements with priming active in autocommit mode."""
 
 BASELINE_AUTOCOMMIT_DATA = 2
-"""Data (SELECT) statements with AF9 active in autocommit mode."""
+"""Data (SELECT) statements with priming active in autocommit mode."""
 
 BASELINE_AUTOCOMMIT_BEGIN = 2
-"""BEGIN count with AF9 active in autocommit mode (one per wrapped query)."""
+"""BEGIN count with priming active in autocommit mode (one per wrapped query)."""
 
 BASELINE_AUTOCOMMIT_COMMIT = 2
-"""COMMIT count with AF9 active in autocommit mode."""
+"""COMMIT count with priming active in autocommit mode."""
 
 BASELINE_AUTOCOMMIT_SET_LOCAL = 2
-"""SET LOCAL count with AF9 active in autocommit mode (one per query)."""
+"""SET LOCAL count with priming active in autocommit mode (one per query)."""
 
 BASELINE_AUTOCOMMIT_AMPLIFICATION = 4.0
 """Amplification factor: total / data = 8 / 2."""
 
 # --- Scenario 3: org context, explicit transaction -------------------------
-# The caller wraps the dispatch in ``transaction.atomic()``.  AF9's
+# The caller wraps the dispatch in ``transaction.atomic()``. The
 # explicit-transaction path fires ``SET LOCAL`` only on the first wrapper
-# call inside the atomic (SA4.2 per-transaction memo eliminates redundant
+# call inside the atomic (per-transaction memo eliminates redundant
 # SET LOCALs on subsequent statements).  ``CaptureQueriesContext`` is
 # nested inside the outer atomic, so the outer atomic's BEGIN/COMMIT are
 # not captured (in ``transaction=True`` mode the outer atomic creates a
@@ -134,17 +134,17 @@ BASELINE_AUTOCOMMIT_AMPLIFICATION = 4.0
 # Total:    3
 
 BASELINE_EXPLICIT_TXN_TOTAL = 3
-"""Total captured SQL statements with AF9 active inside an explicit transaction.
+"""Total captured SQL statements with priming active inside an explicit transaction.
 
 Note: ``CaptureQueriesContext`` is nested inside the outer
 ``db_transaction.atomic()``, so the outer atomic's BEGIN/COMMIT are not
 captured.  In ``transaction=True`` test mode the outer atomic creates a
-savepoint before the capture window opens.  SA4.2 eliminates the redundant
-SET LOCAL, reducing the total from 4 → 3.
+savepoint before the capture window opens.  The per-transaction memo
+eliminates the redundant SET LOCAL, reducing the total from 4 → 3.
 """
 
 BASELINE_EXPLICIT_TXN_DATA = 2
-"""Data (SELECT) statements with AF9 active inside an explicit transaction."""
+"""Data (SELECT) statements with priming active inside an explicit transaction."""
 
 BASELINE_EXPLICIT_TXN_BEGIN = 0
 """BEGIN count — not captured (outer atomic is a savepoint in ``transaction=True``)."""
@@ -153,16 +153,16 @@ BASELINE_EXPLICIT_TXN_COMMIT = 0
 """COMMIT count — not captured (outer atomic is a savepoint in ``transaction=True``)."""
 
 BASELINE_EXPLICIT_TXN_SET_LOCAL = 1
-"""SET LOCAL count — SA4.2 eliminates redundant SET LOCALs inside the
-same transaction.  Only the first statement primes; subsequent statements
+"""SET LOCAL count — the per-transaction memo eliminates redundant SET
+LOCALs inside the same transaction.  Only the first statement primes; subsequent statements
 reuse the per-transaction memo.
 """
 
 BASELINE_EXPLICIT_TXN_AMPLIFICATION = 1.5  # 3 / 2
 """Amplification factor: total / data = 3 / 2.
 
-    SA4.2 eliminates the redundant SET LOCAL inside the same transaction
-    via a per-transaction memo (the first statement primes, subsequent
+    The per-transaction memo eliminates the redundant SET LOCAL inside the
+    same transaction (the first statement primes, subsequent
     statements reuse the memo).  Reducing from 4→3 statements
     (1 SET LOCAL saved) lowers amplification from 2.0x → 1.5x.
 """
@@ -280,7 +280,7 @@ def _call_org_dashboard(
     (``_handle_saas_request`` → ``_call_with_org``).
 
     Returns ``(response, metrics)`` where *metrics* captures only the
-    AF9-primed view queries (the middleware's own session-resolving
+    primed view queries (the middleware's own session-resolving
     queries happen before the ContextVar is set and are excluded).
     """
     request = _make_authenticated_request(f"/sa41-bench/{org.slug}/", user)
@@ -305,8 +305,8 @@ def _call_org_dashboard(
 
 def _unprimed_query_pattern(org: Organization, user) -> None:
     """Execute the same 3 ORM calls as ``OrgDashboardView.get_context_data()``
-    without any org context (AF9 pass-through).  This establishes the
-    theoretical minimum — the AF9 wrapper issues zero priming overhead
+    without any org context (pass-through). This establishes the
+    theoretical minimum — the wrapper issues zero priming overhead
     when ``get_current_org_id()`` is ``None``, so the raw ORM counts
     are endpoint-equivalent for the unprimed case.
     """
@@ -352,7 +352,7 @@ def _seeded_org() -> tuple[Organization, object]:
 # ---------------------------------------------------------------------------
 # Test class — reproducible measurement scenarios
 # ---------------------------------------------------------------------------
-# All tests use ``transaction=True`` so that the AF9 wrapper's internal
+# All tests use ``transaction=True`` so that the wrapper's internal
 # ``transaction.atomic()`` calls issue real ``BEGIN``/``COMMIT`` (instead
 # of nested savepoints), giving us accurate transaction-boundary counts.
 #
@@ -362,13 +362,13 @@ def _seeded_org() -> tuple[Organization, object]:
 
 
 class TestSa41StatementAmplification:
-    """SA4.1 — reproducible statement-amplification measurement harness.
+    """Reproducible statement-amplification measurement harness.
 
     Scenarios 2 and 3 exercise the real ``OrgDashboardView`` endpoint
     through ``TenantMiddleware`` via a test-only non-management URL
     (``/sa41-bench/<slug>/``) — the same session-org resolution path
     that production content routes use.  Scenario 1 establishes the
-    theoretical unprimed minimum via direct ORM calls (AF9 pass-through
+    theoretical unprimed minimum via direct ORM calls (pass-through
     adds zero overhead, so the counts are endpoint-equivalent).
 
     The documented baselines below are verified as assertions so they
@@ -376,10 +376,10 @@ class TestSa41StatementAmplification:
     """
 
     # ------------------------------------------------------------------
-    # Scenario 1: No org context (AF9 pass-through, zero priming cost)
+    # Scenario 1: No org context (pass-through, zero priming cost)
     # ------------------------------------------------------------------
     # The query pattern runs while ``get_current_org_id() is None``.
-    # The AF9 wrapper sees ``None`` and passes through without issuing
+    # The wrapper sees ``None`` and passes through without issuing
     # SET LOCAL or wrapping in a short atomic.  Measured via direct ORM
     # calls rather than the full endpoint (no org context present in the
     # dispatch for management paths, and the unprimed case is
@@ -422,9 +422,9 @@ class TestSa41StatementAmplification:
         )
 
     # ------------------------------------------------------------------
-    # Scenario 2: Org context, autocommit (AF9 per-statement wrapping)
+    # Scenario 2: Org context, autocommit (per-statement wrapping)
     # ------------------------------------------------------------------
-    # Each data query triggers the AF9 wrapper's autocommit path:
+    # Each data query triggers the wrapper's autocommit path:
     # ``transaction.atomic()`` → BEGIN + SET LOCAL + data + COMMIT.
     # The queries are exercised through the real ``OrgDashboardView``
     # endpoint via ``TenantMiddleware`` (session-org resolution through
@@ -481,7 +481,7 @@ class TestSa41StatementAmplification:
     # Scenario 3: Org context, explicit transaction
     # ------------------------------------------------------------------
     # The caller wraps the query pattern in ``transaction.atomic()``.
-    # AF9's explicit-transaction path fires on each statement inside the
+    # The explicit-transaction path fires on each statement inside the
     # atomic: just ``SET LOCAL`` (no short atomic wrapping).  The queries
     # are exercised through the real ``OrgDashboardView`` endpoint via
     # ``TenantMiddleware``, with the entire dispatch chain inside the
@@ -497,8 +497,8 @@ class TestSa41StatementAmplification:
     # Expected: 3 SQL statements = 1 × SET LOCAL + 2 × SELECT.
     # Amplification: 1.5× over the unprimed data baseline.
     #
-    # SA4.2 eliminates the redundant SET LOCAL inside the same transaction
-    # via a per-transaction memo.  Saving 1 SET LOCAL reduces the captured
+    # The per-transaction memo eliminates the redundant SET LOCAL inside
+    # the same transaction.  Saving 1 SET LOCAL reduces the captured
     # total from 4 → 3 (amplification 2.0x → 1.5x).
 
     @pytest.mark.django_db(transaction=True)
@@ -555,15 +555,15 @@ class TestSa41StatementAmplification:
     # report when run with ``pytest -s -k TestSa41StatementAmplification``.
     # Example:
     #
-    #   [SA4.1]  No-org autocommit:        total=3, data=3, txn=(0B+0C+0R),
+    #   No-org autocommit:        total=3, data=3, txn=(0B+0C+0R),
     #       set_local=0, savepoint=(0SP+0RL)
-    #   [SA4.1]    → Amplification factor:   1.0x
-    #   [SA4.1]  With-org autocommit:      total=8, data=2, txn=(2B+2C+0R),
+    #     → Amplification factor:   1.0x
+    #   With-org autocommit:      total=8, data=2, txn=(2B+2C+0R),
     #       set_local=2, savepoint=(0SP+0RL)
-    #   [SA4.1]    → Amplification factor:   4.0x  (baseline 4.0x)
-    #   [SA4.1]  With-org explicit txn:    total=3, data=2, txn=(0B+0C+0R),
+    #     → Amplification factor:   4.0x  (baseline 4.0x)
+    #   With-org explicit txn:    total=3, data=2, txn=(0B+0C+0R),
     #       set_local=1, savepoint=(0SP+0RL)
-    #   [SA4.1]    → Amplification factor:   1.5x  (baseline 1.50x)
+    #     → Amplification factor:   1.5x  (baseline 1.50x)
     #
     # Baselines are request-bound — measured through the real
     # ``TenantMiddleware`` session-org resolution path (via the
@@ -571,5 +571,5 @@ class TestSa41StatementAmplification:
     # the exact amplification that production content routes see.
     # The explicit-transaction capture starts inside the outer atomic
     # (``CaptureQueriesContext`` is nested), so no BEGIN/COMMIT appear
-    # in the measured totals.  SA4.2 reduces the explicit-transaction
-    # total from 4→3 (one redundant SET LOCAL eliminated).
+    # in the measured totals.  The per-transaction memo reduces the
+    # explicit-transaction total from 4→3 (one redundant SET LOCAL eliminated).

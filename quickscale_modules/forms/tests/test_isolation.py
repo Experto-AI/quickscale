@@ -18,7 +18,7 @@ def test_superuser_can_see_cross_tenant_submissions(
 ):
     """Superuser must be able to see form submissions from all orgs via the operator path.
 
-    SA85 Phase 4 retained-role: Only superusers may perform cross-tenant
+    Retained-role: Only superusers may perform cross-tenant
     SELECT (audited via ``operator_access``).  Regular staff without an org
     context now fail-closed (empty).
 
@@ -80,7 +80,7 @@ def test_staff_without_org_fails_closed_on_admin_list(
 ):
     """Regular staff without org context must fail-closed on admin endpoints.
 
-    SA85 Phase 4: staff with no active org context see no data.  This is the
+    Staff with no active org context see no data. This is the
     retained-role fail-closed behavior — the previous behavior returned all
     data via the operator path.
     """

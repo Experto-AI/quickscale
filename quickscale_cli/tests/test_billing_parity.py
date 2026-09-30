@@ -30,6 +30,7 @@ _EXPECTED_DEFAULTS: dict[str, object] = {
     "secret_key_env_var": "STRIPE_SECRET_KEY",
     "webhook_secret_env_var": "QUICKSCALE_BILLING_WEBHOOK_SECRET",
     "billing_currency": "usd",
+    "api_rate_limit": "30/hour",
 }
 
 _SUPPORTED_CURRENCIES = (
@@ -155,6 +156,20 @@ class TestBillingValidation:
             for issue in issues
         )
 
+    @pytest.mark.parametrize("bad_value", ["hourly", "30", "30/fortnight", ""])
+    def test_malformed_api_rate_limit_is_refused(self, bad_value: str) -> None:
+        issues = collect_option_validation_issues(
+            _manifest(), {"api_rate_limit": bad_value}
+        )
+        assert any(
+            issue.option_name == "api_rate_limit"
+            and "must match pattern" in issue.message
+            for issue in issues
+        )
+
+    def test_api_rate_limit_accepts_the_shared_rate_shape(self) -> None:
+        assert validate_module_options(_manifest(), {"api_rate_limit": "5/hour"}) == []
+
     def test_multiple_issues_are_collected(self) -> None:
         issues = collect_option_validation_issues(
             _manifest(),
@@ -199,6 +214,7 @@ class TestBillingResolution:
             "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
             "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
             "billing_currency": "eur",
+            "api_rate_limit": "30/hour",
         }
 
     def test_resolution_is_idempotent(self) -> None:
@@ -266,7 +282,13 @@ class TestBillingConfigurator:
     ) -> None:
         """Padded interactive answers are stored in their canonical forms."""
         mock_confirm.side_effect = [True]
-        mock_prompt.side_effect = ["  OPS_KEY  ", "OPS_SECRET", "OPS_HOOK", " EUR "]
+        mock_prompt.side_effect = [
+            "  OPS_KEY  ",
+            "OPS_SECRET",
+            "OPS_HOOK",
+            " EUR ",
+            " 10/hour ",
+        ]
 
         entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
         config = entry.configure(non_interactive=False)
@@ -275,3 +297,4 @@ class TestBillingConfigurator:
         assert config["secret_key_env_var"] == "OPS_SECRET"
         assert config["webhook_secret_env_var"] == "OPS_HOOK"
         assert config["billing_currency"] == "eur"
+        assert config["api_rate_limit"] == "10/hour"
