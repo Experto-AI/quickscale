@@ -242,3 +242,112 @@ def test_account_deletion_adapter_delegates_user_reference_discovery() -> None:
 
     assert result == ["org-1", "org-2"]
     discover.assert_called_once_with("user-1")
+
+
+def test_app_config_declares_account_deletion_handler_capability() -> None:
+    """Rule 4: billing declares its account-deletion handler on its config."""
+    from quickscale_modules_billing.apps import QuickscaleBillingConfig
+
+    config = QuickscaleBillingConfig(
+        "quickscale_modules_billing",
+        import_module("quickscale_modules_billing"),
+    )
+
+    assert config.account_deletion_handlers() == (config,)
+    assert config.account_deletion_handled_app_labels() == ("quickscale_billing",)
+
+
+def test_app_config_declares_account_deletion_fail_closed_errors() -> None:
+    """Account deletion sees BillingError as the blocking error surface."""
+    from quickscale_modules_billing.apps import QuickscaleBillingConfig
+    from quickscale_modules_billing.exceptions import BillingError
+
+    config = QuickscaleBillingConfig(
+        "quickscale_modules_billing",
+        import_module("quickscale_modules_billing"),
+    )
+
+    assert config.account_deletion_fail_closed_errors() == (BillingError,)
+
+
+def test_account_deletion_handler_is_collected_by_the_capability_reader() -> None:
+    """The declared handler is what account deletion collects and drives."""
+    from django.apps import apps
+
+    from quickscale_core.runtime import collect_capabilities
+
+    config = apps.get_app_config("quickscale_billing")
+
+    assert config in collect_capabilities("account_deletion_handlers")
+
+
+def test_account_deletion_adapter_delegates_mutation_lock() -> None:
+    from unittest.mock import patch
+
+    from quickscale_modules_billing.apps import QuickscaleBillingConfig
+
+    config = QuickscaleBillingConfig(
+        "quickscale_modules_billing",
+        import_module("quickscale_modules_billing"),
+    )
+
+    with patch(
+        "quickscale_modules_billing.services.subscription_provider_mutation_lock",
+        return_value="lock",
+    ) as lock:
+        result = config.account_deletion_subscription_mutation_lock("org-1")
+
+    assert result == "lock"
+    lock.assert_called_once_with("org-1")
+
+
+def test_account_deletion_adapter_delegates_cancellation() -> None:
+    from unittest.mock import patch
+
+    from quickscale_modules_billing.apps import QuickscaleBillingConfig
+
+    config = QuickscaleBillingConfig(
+        "quickscale_modules_billing",
+        import_module("quickscale_modules_billing"),
+    )
+
+    with patch(
+        "quickscale_modules_billing.services.cancel_current_subscription",
+        return_value="transition",
+    ) as cancel:
+        result = config.cancel_account_deletion_subscription("user-1", "org-1")
+
+    assert result == "transition"
+    cancel.assert_called_once_with(
+        "user-1",
+        organization="org-1",
+        capture_transition=True,
+    )
+
+
+def test_account_deletion_adapter_delegates_resumption() -> None:
+    from unittest.mock import patch
+
+    from quickscale_modules_billing.apps import QuickscaleBillingConfig
+
+    config = QuickscaleBillingConfig(
+        "quickscale_modules_billing",
+        import_module("quickscale_modules_billing"),
+    )
+
+    with patch(
+        "quickscale_modules_billing.services.resume_current_subscription",
+        return_value="subscription",
+    ) as resume:
+        result = config.resume_account_deletion_subscription(
+            "user-1",
+            "org-1",
+            "transition",
+        )
+
+    assert result == "subscription"
+    resume.assert_called_once_with(
+        "user-1",
+        organization="org-1",
+        transition="transition",
+    )

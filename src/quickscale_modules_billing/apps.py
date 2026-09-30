@@ -184,6 +184,72 @@ class QuickscaleBillingConfig(AppConfig):
 
         return account_deletion_user_reference_organization_ids(user_id)
 
+    def account_deletion_handlers(self) -> tuple[Any, ...]:
+        """Declare billing's account-deletion handler (Module Conventions rule 4).
+
+        Account deletion collects every installed app's declared handler and
+        drives billing's provider reconciliation, subscription cancellation
+        with compensation, and provenance detachment through it, so no consumer
+        needs billing's label or service imports.  Billing declares its own app
+        config as the handler: the methods below are the handler surface.
+        """
+        return (self,)
+
+    def account_deletion_handled_app_labels(self) -> tuple[str, ...]:
+        """Return the app labels whose account-deletion state this handler owns."""
+        return (self.label,)
+
+    def account_deletion_fail_closed_errors(self) -> tuple[type[BaseException], ...]:
+        """Return the error types that must fail account deletion closed.
+
+        A handler raises these for provider states that block account
+        deletion; any other exception is unexpected and propagates instead of
+        being masked as a user-facing block.
+        """
+        from quickscale_modules_billing.exceptions import BillingError
+
+        return (BillingError,)
+
+    def account_deletion_subscription_mutation_lock(
+        self,
+        organization_id: Any,
+    ) -> Any:
+        """Return the provider mutex held while account deletion mutates state."""
+        from quickscale_modules_billing.services import (
+            subscription_provider_mutation_lock,
+        )
+
+        return subscription_provider_mutation_lock(organization_id)
+
+    def cancel_account_deletion_subscription(
+        self,
+        user: Any,
+        organization: Any,
+    ) -> Any:
+        """Cancel one organization's subscription, capturing the transition."""
+        from quickscale_modules_billing.services import cancel_current_subscription
+
+        return cancel_current_subscription(
+            user,
+            organization=organization,
+            capture_transition=True,
+        )
+
+    def resume_account_deletion_subscription(
+        self,
+        user: Any,
+        organization: Any,
+        transition: Any,
+    ) -> Any:
+        """Restore a captured cancellation when account deletion is rejected."""
+        from quickscale_modules_billing.services import resume_current_subscription
+
+        return resume_current_subscription(
+            user,
+            organization=organization,
+            transition=transition,
+        )
+
     def ready(self) -> None:
         # Late import: checks.py reads the billing settings snapshot, which
         # touches models, so it must load after the app registry is ready.
