@@ -1237,7 +1237,13 @@ def test_member_role_updates_translate_save_time_validation_errors(
         )
         assert response.status_code == 400
         assert response.json() == {
-            "errors": {"role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]}
+            "error": {
+                "code": "validation_error",
+                "message": "Invalid input.",
+                "fields": {
+                    "role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]
+                },
+            }
         }
     else:
         response = client.post(
@@ -1633,7 +1639,12 @@ def test_saas_org_api_create_requires_authentication(client, settings) -> None:
     )
 
     assert response.status_code == 401
-    assert response.json() == {"error": "Authentication required"}
+    assert response.json() == {
+        "error": {
+            "code": "not_authenticated",
+            "message": "Authentication required",
+        }
+    }
 
 
 @pytest.mark.django_db
@@ -2059,8 +2070,14 @@ def test_member_removals_translate_delete_time_validation_errors(
         )
         assert response.status_code == 400
         assert response.json() == {
-            "errors": {
-                "non_field_errors": [OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE]
+            "error": {
+                "code": "validation_error",
+                "message": "Invalid input.",
+                "fields": {
+                    "non_field_errors": [
+                        OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+                    ]
+                },
             }
         }
     else:
@@ -2158,7 +2175,9 @@ def test_org_api_settings_updates_slug_and_returns_json(client, settings) -> Non
 # ---------------------------------------------------------------------------
 
 
-_MISSING_SLUG_403_RESPONSE = {"error": "Forbidden"}
+_MISSING_SLUG_403_RESPONSE = {
+    "error": {"code": "permission_denied", "message": "Forbidden"}
+}
 
 
 @pytest.mark.django_db

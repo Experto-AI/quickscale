@@ -2315,7 +2315,7 @@ _SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {
         "rest_framework",
         "quickscale_modules_notifications",
     ),
-    "orgs": ("quickscale_modules_orgs",),
+    "orgs": ("rest_framework", "quickscale_modules_orgs"),
     "storage": ("quickscale_modules_storage",),
 }
 

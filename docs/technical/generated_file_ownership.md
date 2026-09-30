@@ -113,6 +113,7 @@ classified through ``FRESH_FIRST_IDENTITY_ROOT_FILES`` instead.
  ``frontend/src/test/csrf.test.tsx``,
  ``frontend/src/test/RootDispatch.test.tsx``,
  ``frontend/src/test/PublicSocialPages.test.tsx``,
+ ``frontend/src/test/useApiErrors.test.ts``,
  ``frontend/src/test/validateQuickScaleSeam.test.ts``,
  ``frontend/src/test/viteAssetRouting.test.ts``,
  ``frontend/e2e/home.spec.ts``.

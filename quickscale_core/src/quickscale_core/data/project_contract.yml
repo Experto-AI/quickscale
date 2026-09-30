@@ -104,3 +104,9 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current .github/workflows/ci.yml job environment: when analytics, billing, or notifications is selected it defines non-live placeholder credentials (POSTHOG_API_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY, QUICKSCALE_BILLING_WEBHOOK_SECRET, RESEND_API_KEY, QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET) so an enabled module's startup check passes in CI, which never calls the live vendors."
       - "A project that configured a custom *_env_var name adds that variable to the same job environment; the placeholders are test values only and do not belong in a serving environment."
+  - id: sa223-theme-error-shape
+    minimum: "0.89.0"
+    title: "Adopt the one-shape API error parsing in the React theme client"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/src/hooks/useApi.ts: getApiErrorMessage and getApiFieldErrors read the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}}, prefer the first field message as the actionable message, and still tolerate the pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes until every module API conversion lands; without the update, a converted module API shows only a generic message or no field errors in an existing project."
+      - "Optionally copy the new frontend/src/test/useApiErrors.test.ts to pin the parser behavior."
