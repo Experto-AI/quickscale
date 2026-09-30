@@ -6,8 +6,8 @@
 ## Goal and finish line
 
 The immediate goal is one convention across all modules, as recorded in
-[decisions.md § Module Conventions](decisions.md#module-conventions): SA217–SA227 deliver it across
-all three tracks and SA215's conformance test closes it. `bap-web` is then ported once, onto the
+[decisions.md § Module Conventions](decisions.md#module-conventions): the convention tickets deliver
+it across all three tracks and SA215's conformance test closes it. `bap-web` is then ported once, onto the
 standardized names (SA191), and carries the first property portal in a project-owned extension
 (SA153). Capabilities are generalized only after that project proves their value.
 
@@ -28,7 +28,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
 | SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA219 | Deferred |
 | SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 3 | — | Deferred |
-| SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | — | Deferred |
+| SA224 | Standardize module templates, static files, and template tags | post-v88 | 1 | — | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
 | SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA224, SA226 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
@@ -41,8 +41,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA217 ──► SA219 ──► SA224
+Track 1: SA224 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 2: SA217 ──► SA219
 Track 3: SA223 ──► SA220 ──► SA226 ──► SA216 (after SA215)
      critical path: SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
@@ -55,8 +55,8 @@ SA217's startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA22
 authorization needs SA220's capabilities and SA223's DRF views. SA204 freezes migration history
 before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** Track 3's SA223 fills the wait
-for SA219; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
+**Off the critical path.** SA224 fills Track 1's wait for SA215, and Track 3's SA223 fills the
+wait for SA219; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
 user-referencing models.
 
 ### Track states
@@ -65,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA215 | no | no | no | no | **yes** |
+| 1 | SA224 | yes | yes | yes | **yes** | no |
 | 2 | SA217 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA223 | yes | yes | yes | **yes** | **yes** |
 
@@ -76,15 +76,15 @@ A track is **truly green** only when all three states are yes.
   migration-history freeze gate and `decisions.md` § Clean-Break Migration History, the `bap-web`
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation, and, for the conventions, module identities, models and their
-  `0001_initial`, and module READMEs (SA227).
+  `0001_initial`, module READMEs, and module templates, static files, and template tags, with the
+  module page templates and the generated `base.html` (SA224).
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
-  every package, `ruff.toml`, the module page templates
-  and test-settings stubs, the generated `base.html`, the CLI apply/deploy/update commands and
+  every package, `ruff.toml`, the test-settings stubs, the CLI apply/deploy/update commands and
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
   docs), and, for the conventions, the manifest option schema and the CLI's `module_config`,
-  module settings names, and module templates and static files (SA217, SA219, SA224).
+  and module settings names (SA217, SA219).
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
@@ -95,7 +95,7 @@ A track is **truly green** only when all three states are yes.
   API client (SA223, SA220, SA226).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
-  SA217, SA219, SA220, SA223–SA227) touch every module and cross every track, so each lands in
+  SA217, SA219, SA220, SA223, SA224, SA226) touch every module and cross every track, so each lands in
   module-sized slices through that queue, merging `v89` before each slice; a slice edits another
   convention ticket's surface only where its own rule forces it (a rename's callers, for example).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
@@ -120,12 +120,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Context:** the twelve modules grew one at a time and follow different conventions. The drift
   items (D1–D42) are in
   [module-conventions-inventory.md](../planning/module-conventions-inventory.md), the rules in
-  [decisions.md § Module Conventions](decisions.md#module-conventions); SA217–SA227 are the code,
+  [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them. Where other documents say "SA215 renames…", they mean the whole
   change, which SA215 lands last.
 
   **Scope:** the rule 40 conformance test, covering rules 1–39, with a control case per rule; the
-  release notes; the inventory's closing pass. Code changes are in SA217–SA227 (SA219 owns
+  release notes; the inventory's closing pass. Code changes are in the convention tickets (SA219 owns
   refusing retired names); a drift item none of them fixed is fixed here or recorded as an accepted
   exception.
 
@@ -150,8 +150,8 @@ defaults.
   **Acceptance:** a setting of the wrong type or a violated `required_when` fails startup with the
   setting's name; no module keeps its own settings reader or code default.
 
-  **Surfaces:** `quickscale_core` `runtime`; `quickscale_cli` apply; module settings reads. Track 2 surfaces
-  plus the `runtime` facade (Track 3), through the serialized queue.
+  **Surfaces:** `quickscale_core` `runtime`; `quickscale_cli` apply; module settings reads. Track 2
+  surfaces plus the `runtime` facade (Track 3), through the serialized queue.
 
 - [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
@@ -223,19 +223,16 @@ defaults.
 
   **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
   URL prefixes still live in three places, and listings and orgs carry the last plain-`JsonResponse`
-  API surfaces; the error shape, the wiring merge, the webhooks, and the billing, forms, and blog
-  throttles have landed.
+  API surfaces.
 
   **Scope:**
   - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
     `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
-    route names become snake_case without the module name. Blog's mount and route names have
-    landed; auth, orgs, notifications, social, billing, crm, and forms remain.
+    route names become snake_case without the module name, in auth, orgs, notifications, social,
+    billing, crm, and forms.
   - *APIs.* listings' function-view API becomes a DRF view; `OrgApiBaseView` is rebased on DRF's
     `APIView`; errors take the shared error shape (DRF dependency in every module with an API, the
-    theme's `useApi.ts` and orgs/social pages). Blog's conversion has landed: both endpoints are
-    DRF views, `BLOG_API_TOKENS` and its dual-auth exception are gone, and its throttle scope
-    carries the stem with the rate from a setting.
+    theme's `useApi.ts` and orgs/social pages).
 
   **Acceptance:** every API error body matches the one shape; a list of every moved
   public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and
@@ -278,8 +275,6 @@ defaults.
   rolled-back write sends no email and fires no effect; only notifications sends email.
 
   **Surfaces:** orgs `permissions`; blog, listings, crm, forms, orgs, social, analytics.
-
-- [x] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
