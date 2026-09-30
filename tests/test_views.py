@@ -329,7 +329,7 @@ class TestListingDetailView:
         assert response.status_code == 200
         html = response.content.decode()
         assert 'class="listing-markdown-content"' in html
-        assert "quickscale_modules_listings/listings.css" in html
+        assert "quickscale_listings/css/listings.css" in html
 
     def test_anonymous_detail_shows_system_org_listing(self, client, published_listing):
         """Anonymous detail must show System-org published listings."""

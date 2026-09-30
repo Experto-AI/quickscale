@@ -97,8 +97,8 @@ A manual installation embeds the orgs baseline first (the models need `quickscal
 `INSTALLED_APPS`, mounts the module URLs under `listings/`, and runs
 `python manage.py migrate`.
 
-Template customization: all templates extend `quickscale_listings/listings/base.html`.
-Override the base at `templates/quickscale_listings/listings/base.html` or individual pages at
+Template customization: all templates extend `quickscale_listings/base.html`.
+Override the base at `templates/quickscale_listings/base.html` or individual pages at
 `templates/quickscale_listings/listings/<page>.html`. The module ships zero-style semantic
 templates; add your own CSS in the project.
 
