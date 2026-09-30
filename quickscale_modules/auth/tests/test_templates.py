@@ -39,13 +39,13 @@ class TestTemplateCSSLoading:
 
     def test_profile_edit_page_includes_auth_css(self, authenticated_client):
         """Test profile edit page includes auth module CSS"""
-        response = authenticated_client.get(reverse("quickscale_auth:profile-edit"))
+        response = authenticated_client.get(reverse("quickscale_auth:profile_edit"))
         assert response.status_code == 200
         assert b"quickscale_auth/css/auth.css" in response.content
 
     def test_account_delete_page_includes_auth_css(self, authenticated_client):
         """Test account delete page includes auth module CSS"""
-        response = authenticated_client.get(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.get(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 200
         assert b"quickscale_auth/css/auth.css" in response.content
 

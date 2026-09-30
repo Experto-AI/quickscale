@@ -26,18 +26,18 @@ class TestProfileUpdateView:
 
     def test_profile_update_requires_authentication(self, anonymous_client):
         """Test profile update redirects anonymous users"""
-        response = anonymous_client.get(reverse("quickscale_auth:profile-edit"))
+        response = anonymous_client.get(reverse("quickscale_auth:profile_edit"))
         assert response.status_code == 302
 
     def test_profile_update_get(self, authenticated_client):
         """Test profile update GET displays form"""
-        response = authenticated_client.get(reverse("quickscale_auth:profile-edit"))
+        response = authenticated_client.get(reverse("quickscale_auth:profile_edit"))
         assert response.status_code == 200
 
     def test_profile_update_post_valid(self, authenticated_client, user):
         """Test profile update with valid data"""
         response = authenticated_client.post(
-            reverse("quickscale_auth:profile-edit"),
+            reverse("quickscale_auth:profile_edit"),
             {
                 "first_name": "Updated",
                 "last_name": "Name",
@@ -55,12 +55,12 @@ class TestAccountDeleteView:
 
     def test_account_delete_requires_authentication(self, anonymous_client):
         """Test account delete redirects anonymous users"""
-        response = anonymous_client.get(reverse("quickscale_auth:account-delete"))
+        response = anonymous_client.get(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 302
 
     def test_account_delete_get(self, authenticated_client):
         """Test account delete GET displays confirmation"""
-        response = authenticated_client.get(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.get(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 200
 
     def test_account_delete_post(self, authenticated_client, user):
@@ -69,7 +69,7 @@ class TestAccountDeleteView:
 
         user_model = get_user_model()
         user_id = user.id
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 302
         assert not user_model.objects.filter(id=user_id).exists()
 
@@ -114,7 +114,7 @@ class TestAccountDeleteView:
             role=OrgRole.MEMBER,
         )
 
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 200  # re-renders confirmation with error
         from django.contrib import messages as messages_framework
 
@@ -159,7 +159,7 @@ class TestAccountDeleteView:
             role=OrgRole.OWNER,
         )
 
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 302
         from django.contrib.auth import get_user_model as g_user_model
 
@@ -188,7 +188,7 @@ class TestAccountDeleteView:
         )
         # No other members — user can leave without stranding anyone.
 
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 302
 
     def test_account_delete_allowed_when_personal_org_only(
@@ -212,7 +212,7 @@ class TestAccountDeleteView:
             role=OrgRole.OWNER,
         )
 
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 302
 
     def test_account_delete_blocked_when_sole_owner_of_memberful_personal_org(
@@ -253,7 +253,7 @@ class TestAccountDeleteView:
             role=OrgRole.MEMBER,
         )
 
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 200  # re-renders confirmation with error
         from django.contrib import messages as messages_framework
 
@@ -307,7 +307,7 @@ class TestAccountDeleteView:
             "quickscale_modules_billing.services.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
         assert response.status_code == 302
         # The cancel function must NOT be called — user is not an owner
@@ -346,7 +346,7 @@ class TestAccountDeleteView:
             "quickscale_modules_billing.services.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
         assert response.status_code == 302
         # The ``user`` argument arrives as a SimpleLazyObject wrapper
@@ -394,7 +394,7 @@ class TestAccountDeleteView:
             side_effect=record_atomic_state,
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 302
@@ -462,7 +462,7 @@ class TestAccountDeleteView:
             ) as mock_cancel,
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -550,7 +550,7 @@ class TestAccountDeleteView:
             "quickscale_modules_billing.services.get_stripe_client",
             return_value=stripe_client,
         ):
-            authenticated_client.post(reverse("quickscale_auth:account-delete"))
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
         assert not get_user_model().objects.filter(pk=user.pk).exists()
         stripe_client.retrieve_checkout_session.assert_not_called()
@@ -615,7 +615,7 @@ class TestAccountDeleteView:
             ) as mock_cancel,
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -690,7 +690,7 @@ class TestAccountDeleteView:
             return_value=stripe_client,
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 302
@@ -748,7 +748,7 @@ class TestAccountDeleteView:
 
         with override_settings(QUICKSCALE_BILLING_ENABLED=False):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -783,7 +783,7 @@ class TestAccountDeleteView:
 
         with override_settings(QUICKSCALE_BILLING_ENABLED=False):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 302
@@ -837,7 +837,7 @@ class TestAccountDeleteView:
             side_effect=record_provider_lock,
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 302
@@ -918,7 +918,7 @@ class TestAccountDeleteView:
             ) as mock_resume,
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -990,7 +990,7 @@ class TestAccountDeleteView:
             ) as mock_resume,
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -1044,7 +1044,7 @@ class TestAccountDeleteView:
             ) as mock_resume,
             pytest.raises(RuntimeError, match="provider response lost"),
         ):
-            authenticated_client.post(reverse("quickscale_auth:account-delete"))
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
         assert [call.kwargs["organization"] for call in mock_resume.call_args_list] == [
             cancellation_calls[0]
@@ -1089,7 +1089,7 @@ class TestAccountDeleteView:
             ),
             pytest.raises(RuntimeError, match="delete failed"),
         ):
-            authenticated_client.post(reverse("quickscale_auth:account-delete"))
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
         assert type(user).objects.filter(pk=user.pk).exists()
         mock_resume.assert_called_once_with(
@@ -1157,7 +1157,7 @@ class TestAccountDeleteView:
             ) as mock_resume,
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -1198,7 +1198,7 @@ class TestAccountDeleteView:
         caplog.set_level(logging.INFO, logger="quickscale_modules_auth.views")
         with patch("quickscale_modules_billing.services.cancel_current_subscription"):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 302
@@ -1252,7 +1252,7 @@ class TestAccountDeleteView:
         caplog.set_level(logging.INFO, logger="quickscale_modules_auth.views")
         with patch("quickscale_modules_billing.services.cancel_current_subscription"):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 302
@@ -1299,7 +1299,7 @@ class TestAccountDeleteView:
             [app for app in settings.INSTALLED_APPS if app != "quickscale_billing"],
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
         # Deletion proceeds even though billing is not installed.
         assert response.status_code == 302
@@ -1359,7 +1359,7 @@ class TestAccountDeleteView:
             "quickscale_modules_billing.services.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
         assert response.status_code == 302
         # cancel_current_subscription must be called exactly once, for
@@ -1416,7 +1416,7 @@ class TestAccountDeleteView:
             "quickscale_modules_billing.services.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
         assert response.status_code == 302
         # Both orgs must be cancelled.
@@ -1500,7 +1500,7 @@ class TestAccountDeleteView:
             "quickscale_modules_billing.services.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
         assert response.status_code == 302
         # Only the sole-member org must be cancelled.
@@ -1551,7 +1551,7 @@ class TestAccountDeleteView:
             ),
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -1596,7 +1596,7 @@ class TestAccountDeleteView:
             ),
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -1656,7 +1656,7 @@ class TestAccountDeleteView:
             side_effect=BillingConfigurationError("Stripe secret key is missing."),
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -1748,7 +1748,7 @@ class TestAccountDeleteView:
         former_membership.delete()
 
         caplog.set_level(logging.INFO, logger="quickscale_modules_auth.views")
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
         assert response.status_code == 302
         assert not get_user_model().objects.filter(pk=user.pk).exists()
@@ -1787,7 +1787,7 @@ class TestAccountDeleteView:
             side_effect=IntegrityError("late billing reference"),
         ):
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
 
         assert response.status_code == 200
@@ -1813,7 +1813,7 @@ class TestAccountDeleteView:
 
         with patch("django.contrib.messages.success") as mock_success:
             response = authenticated_client.post(
-                reverse("quickscale_auth:account-delete")
+                reverse("quickscale_auth:account_delete")
             )
         assert response.status_code == 302
         mock_success.assert_called_once_with(
@@ -1869,7 +1869,7 @@ class TestAccountDeleteViewSA35:
             role=OrgRole.OWNER,
         )
 
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         # Deletion must succeed — no last-owner or other guard blocks it.
         assert response.status_code == 302
         assert not get_user_model().objects.filter(id=user.id).exists()
@@ -1914,7 +1914,7 @@ class TestAccountDeleteViewSA35:
         org_id = org.id
         other_user_id = other_user.id
 
-        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 302
         # User is gone.
         assert not get_user_model().objects.filter(id=user_id).exists()

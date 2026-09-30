@@ -74,3 +74,12 @@ derivation:
           - allauth
           - allauth.account
       description: "Auth Django app labels"
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - - accounts/
+            - allauth.urls
+          - - accounts/
+            - quickscale_modules_auth.urls
+      description: "Auth URL includes"
