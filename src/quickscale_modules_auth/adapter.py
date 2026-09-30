@@ -56,9 +56,12 @@ def _auth_post_hook(
             "ACCOUNT_SIGNUP_FIELDS": signup_fields,
             "ACCOUNT_EMAIL_VERIFICATION": resolved["email_verification"],
             "ACCOUNT_ALLOW_REGISTRATION": bool(resolved["registration_enabled"]),
-            # ACCOUNT_ADAPTER belongs to orgs' wiring: orgs' adapter extends
-            # this module's adapter and auth always installs orgs, so wiring
-            # the key here would duplicate a key another module owns.
+            # ACCOUNT_ADAPTER belongs to this module: auth owns the single
+            # allauth adapter, which collects installed modules' declared
+            # post-auth redirect hooks as AppConfig capabilities.
+            "ACCOUNT_ADAPTER": (
+                "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
+            ),
             "ACCOUNT_SIGNUP_FORM_CLASS": "quickscale_modules_auth.forms.SignupForm",
             "LOGIN_REDIRECT_URL": "/accounts/profile/",
             "LOGOUT_REDIRECT_URL": "/",
