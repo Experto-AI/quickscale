@@ -223,7 +223,7 @@ defaults.
 
   **Scope:** mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains
   an `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
-  route names become snake_case without the module name, in auth, orgs, notifications, social,
+  route names become snake_case without the module name, in orgs, notifications, social,
   billing, crm, and forms.
 
   **Acceptance:** a list of every moved public URL, with its operator step, is ready for SA215's
