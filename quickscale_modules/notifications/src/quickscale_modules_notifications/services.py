@@ -153,12 +153,8 @@ class NotificationSettingsSnapshot:
             webhook_secret_env_var=str(
                 settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
             ),
-            default_tags=_normalize_tag_sequence(
-                settings.QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS
-            ),
-            allowed_tags=_normalize_tag_sequence(
-                settings.QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS
-            ),
+            default_tags=tuple(settings.QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS),
+            allowed_tags=tuple(settings.QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS),
             webhook_ttl_seconds=int(
                 settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS
             ),
@@ -182,17 +178,22 @@ class NotificationSettingsSnapshot:
         }
 
     def resolve_resend_api_key(self) -> str:
-        """Resolve the live Resend API key from the configured environment variable."""
-        env_var_name = self.resend_api_key_env_var.strip() or "RESEND_API_KEY"
-        return os.getenv(env_var_name, "").strip()
+        """Resolve the live Resend API key from the configured environment variable.
+
+        Rule 3: the configured name is the only name.  A blank name resolves
+        to no key, and the startup check refuses the enabled module rather
+        than this method substituting a runtime fallback.
+        """
+        return os.getenv(self.resend_api_key_env_var.strip(), "").strip()
 
     def resolve_webhook_secret(self) -> str:
-        """Resolve the shared webhook signing secret from the configured environment variable."""
-        env_var_name = (
-            self.webhook_secret_env_var.strip()
-            or "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
-        )
-        return os.getenv(env_var_name, "").strip()
+        """Resolve the shared webhook signing secret from the configured environment variable.
+
+        Rule 3: the configured name is the only name.  A blank name resolves
+        to no secret, and the startup check refuses the enabled module rather
+        than this method substituting a runtime fallback.
+        """
+        return os.getenv(self.webhook_secret_env_var.strip(), "").strip()
 
     def live_delivery_enabled(self) -> bool:
         """Return whether the active email backend is the Anymail Resend backend."""

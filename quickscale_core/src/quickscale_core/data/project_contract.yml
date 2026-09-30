@@ -108,7 +108,7 @@ steps:
     minimum: "0.89.0"
     title: "Adopt the managed settings schema import"
     adoption_steps:
-      - "Add MODULE_SETTINGS_SCHEMA to the `from .modules import ...` statement in <package>/settings/base.py (or otherwise expose the managed schema to Django settings), then run `quickscale apply` or `quickscale update` so settings/modules.py carries the compiled schema every installed module's startup check validates against. Until both are in place a module refuses startup with quickscale_settings.E001."
+      - "Add MODULE_SETTINGS_SCHEMA to the `from .modules import ...` statement in <package>/settings/base.py (or otherwise expose the managed schema to Django settings). Then, in this order, run `quickscale update` to bring the embedded modules to this release and run `quickscale apply --confirm-contract-adoption` so settings/modules.py carries the compiled schema every installed module's startup check validates against; regeneration refuses embedded modules still on an older version, and an unflagged apply leaves the no-op path without regeneration. Until both are in place a module refuses startup with quickscale_settings.E001."
       - "A project generated at this version or later already imports the schema; only an earlier project needs the manual edit."
   - id: sa223-theme-error-shape
     minimum: "0.89.0"
