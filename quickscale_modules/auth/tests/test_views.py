@@ -2395,8 +2395,9 @@ class TestAccountDeleteViewDeclaredHandlers:
             for message in messages_framework.get_messages(response.wsgi_request)
         )
 
+    @pytest.mark.parametrize("lock_error_type", [ValueError, KeyboardInterrupt])
     def test_account_delete_releases_acquired_locks_on_an_undeclared_lock_error(
-        self, authenticated_client, user
+        self, authenticated_client, user, lock_error_type
     ):
         """An unexpected acquisition failure releases every acquired lock."""
         from contextlib import contextmanager
@@ -2436,7 +2437,7 @@ class TestAccountDeleteViewDeclaredHandlers:
         def fail_second_lock(organization_id):
             acquisitions["count"] += 1
             if acquisitions["count"] == 2:
-                raise ValueError("unexpected lock defect")
+                raise lock_error_type("unexpected lock defect")
             return recording_lock(organization_id)
 
         handler.account_deletion_subscription_mutation_lock = fail_second_lock
@@ -2446,7 +2447,7 @@ class TestAccountDeleteViewDeclaredHandlers:
 
         with (
             _declared_handlers(handler),
-            pytest.raises(ValueError, match="unexpected lock defect"),
+            pytest.raises(lock_error_type, match="unexpected lock defect"),
         ):
             authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
