@@ -65,9 +65,9 @@ function normalizeFieldErrors(source: Record<string, unknown>): Record<string, s
 }
 
 // QuickScale answers every API error in one shape:
-// `{"error": {"code", "message", "fields"}}`. Module APIs that have not moved
-// onto it yet still answer `{"error": "<message>"}` or `{"errors": {...}}`,
-// so both are read until the last module conversion lands.
+// `{"error": {"code", "message", "fields"}}`. Older module releases still
+// answer `{"error": "<message>"}` or `{"errors": {...}}`, so both are read
+// for compatibility with projects that have not updated every module yet.
 function getErrorFields(payload: unknown): Record<string, string[]> | null {
   if (!isRecord(payload)) {
     return null
@@ -82,33 +82,37 @@ function getErrorFields(payload: unknown): Record<string, string[]> | null {
   return isRecord(errors) ? normalizeFieldErrors(errors) : null
 }
 
-function getApiMessage(payload: unknown, status: number): string {
-  if (isRecord(payload)) {
-    const error = payload.error
-    if (isRecord(error)) {
-      // The shared handler's validation message is generic ("Invalid input."),
-      // so the first field message is the actionable one for callers that
-      // display only a message (the org member actions, for example).
-      const fieldMessage = isRecord(error.fields)
-        ? getFirstFieldMessage(error.fields)
-        : null
-      if (fieldMessage) {
-        return fieldMessage
-      }
-      if (typeof error.message === 'string' && error.message) {
-        return error.message
-      }
-    } else if (typeof error === 'string' && error) {
-      return error
-    }
-
-    const validationMessage = getFirstValidationMessage(payload)
-    if (validationMessage) {
-      return validationMessage
-    }
+// Reads the one QuickScale shape from a raw payload: the first field message
+// when the error carries fields, otherwise its message. Returns null when the
+// payload is not an error shape.
+export function getApiPayloadMessage(payload: unknown): string | null {
+  if (!isRecord(payload)) {
+    return null
   }
 
-  return `API Error: ${status}`
+  const error = payload.error
+  if (isRecord(error)) {
+    // The shared handler's validation message is generic ("Invalid input."),
+    // so the first field message is the actionable one for callers that
+    // display only a message (the org member actions, for example).
+    const fieldMessage = isRecord(error.fields)
+      ? getFirstFieldMessage(error.fields)
+      : null
+    if (fieldMessage) {
+      return fieldMessage
+    }
+    if (typeof error.message === 'string' && error.message) {
+      return error.message
+    }
+  } else if (typeof error === 'string' && error) {
+    return error
+  }
+
+  return getFirstValidationMessage(payload)
+}
+
+function getApiMessage(payload: unknown, status: number): string {
+  return getApiPayloadMessage(payload) ?? `API Error: ${status}`
 }
 
 function buildRequestHeaders(options: RequestInit): Headers {
