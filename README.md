@@ -1,113 +1,50 @@
-# quickscale-module-forms
+# QuickScale Forms Module
 
-Generic, customizable form builder module for QuickScale Django projects. Enables developers to define, render, and manage any kind of form (contact, feedback, support, newsletter) through a data-driven admin interface — no code changes required to add or modify forms.
+Generic, customizable form builder module for QuickScale Django projects. It lets you define,
+render, and manage any kind of form (contact, feedback, support, newsletter) through a
+data-driven admin interface — no code changes required to add or modify forms.
 
-## Quick Start
+## Overview
 
-### 1. Add to INSTALLED_APPS
-
-```python
-INSTALLED_APPS = [
-    # ...
-    "rest_framework",
-    "django_filters",
-    "quickscale_modules_forms",
-]
-```
-
-### 2. Include URLs
-
-```python
-# urls.py
-from django.urls import include, path
-
-urlpatterns = [
-    # ...
-    path("", include("quickscale_modules_forms.urls")),
-]
-```
-
-### 3. Run migrations
-
-```bash
-python manage.py migrate
-```
-
-A fresh `migrate` on a clean database automatically creates the four built-in form
-presets (`contact`, `newsletter`, `feedback`, and `support`) as part of the initial
-data migration — no separate seed step needed on first install.
-
-### 4. Seed presets (idempotent recovery)
-
-```bash
-python manage.py quickscale_forms_seed_presets
-```
-
-The `quickscale_forms_seed_presets` management command remains available as a safe,
-idempotent recovery tool. Running it after a fresh migrate is harmless — it
-detects existing presets and skips duplicates. Use it to re-create any preset
-that was manually deleted or to recover presets in an older database that was
-not created by the current squashed migration.
+- Data-driven forms: forms, fields, and validation live in the database and are managed in the
+  Django admin.
+- Four built-in presets (`contact`, `newsletter`, `feedback`, `support`) are created by the
+  initial migration.
+- A public schema and submit API, and a staff-only submission-management API.
+- Honeypot spam protection and per-IP rate limiting.
+- Tenant-scoped: submissions belong to an organization through orgs' `TenantModel`.
 
 ## Configuration
 
-The following settings configure form behavior. `FORMS_SPAM_PROTECTION`, `FORMS_RATE_LIMIT`, and `FORMS_SUBMISSIONS_API` are required and must be set explicitly in your Django settings.
+The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
+write them to the generated settings, and `quickscale.yml` carries the desired values.
 
-### Required Settings
+| Option | Type | Default | Django setting | Description |
+|--------|------|---------|----------------|-------------|
+| `forms_per_page` | integer | `25` | `FORMS_PER_PAGE` | Number of submissions shown per page in the staff submissions API. |
+| `spam_protection_enabled` | boolean | `true` | `FORMS_SPAM_PROTECTION` | Enable honeypot spam protection globally for forms that also keep their per-form flag enabled. |
+| `rate_limit` | string | `5/hour` | `FORMS_RATE_LIMIT` | Throttle rate for form submissions, per IP. Format: `<count>/<period>`. |
+| `data_retention_days` | integer | `365` | `FORMS_DATA_RETENTION_DAYS` | Default days assigned to newly created forms before anonymization (`0` = keep forever); existing forms keep their stored value. |
+| `submissions_api_enabled` | boolean | `true` | `FORMS_SUBMISSIONS_API` | Enable REST API endpoints for staff submission management. |
 
-| Setting | Description |
-|---------|-------------|
-| `FORMS_SPAM_PROTECTION` | Enable honeypot spam protection |
-| `FORMS_RATE_LIMIT` | Throttle rate per IP (format: `count/period`) |
-| `FORMS_SUBMISSIONS_API` | Enable the staff admin REST endpoints under `/api/admin/forms/`; when disabled they return `404` |
+A manual installation must set these settings explicitly; generated projects have them rendered
+by `quickscale apply`. The public schema and submit endpoints stay available regardless of
+`FORMS_SUBMISSIONS_API`.
 
-### Optional Settings
+## Public surface
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `FORMS_PER_PAGE` | `25` | Submission page size for the staff `/api/admin/forms/{id}/submissions/` endpoint |
-| `FORMS_DATA_RETENTION_DAYS` | `365` | Days before submission anonymization |
-
-> **Note:** When using QuickScale project generation, these settings are wired automatically with explicit values in the generated project's settings.
-
-New `Form` rows created at runtime after migrations complete — including those from the `quickscale_forms_seed_presets` management command when run manually — inherit `FORMS_DATA_RETENTION_DAYS` when `data_retention_days` is omitted. Fresh-install preset rows created by the initial seed migration are an exception: they hardcode the historical 365-day default and do not inherit the runtime setting. Existing forms always keep their stored per-row retention window regardless of how they were created.
-
-## REST API Endpoints
+### API
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/forms/{slug}/` | Public | Fetch form schema |
-| `POST` | `/api/forms/{slug}/submit/` | Public | Submit form data |
-| `GET` | `/api/admin/forms/` | Staff+ | List forms with submission counts |
-| `GET` | `/api/admin/forms/{id}/submissions/` | Staff+ | List submissions |
-| `GET/PATCH` | `/api/admin/forms/{id}/submissions/{sub_id}/` | Staff+ | Submission detail/update |
-| `GET` | `/api/admin/forms/{id}/submissions/export/` | Staff+ | Download CSV |
+| `GET` | `api/forms/{slug}/` | Public | Fetch form schema |
+| `POST` | `api/forms/{slug}/submit/` | Public | Submit form data |
+| `GET` | `api/admin/forms/` | Staff+ | List forms with submission counts |
+| `GET` | `api/admin/forms/{id}/submissions/` | Staff+ | List submissions |
+| `GET/PATCH` | `api/admin/forms/{id}/submissions/{sub_id}/` | Staff+ | Submission detail/update |
+| `GET` | `api/admin/forms/{id}/submissions/export/` | Staff+ | Download CSV |
 
-The staff endpoints above are controlled by `FORMS_SUBMISSIONS_API`. The public schema and submit endpoints remain available regardless of that setting.
-
-### Retained-Role Contract (SA85 Phase 4)
-
-Staff-level access (`/api/admin/forms/*`) follows a retained-role model.
-**Active-org selection is required** for regular staff to see any data.
-
-| Role | Org Context | Behavior |
-|------|-------------|----------|
-| **Superuser** | After org selection | Cross-tenant SELECT via `operator_access` (audited). All `GET`/list operations are wrapped in `operator_access` which is gated to superusers and logged at `INFO` level. `PATCH` saves inside the target submission's `org_scope`. Without an active org selected, the middleware redirects to `/orgs/` — same as regular staff. |
-| **Regular staff** | Active org selected | Data is scoped via RLS to the request's active organization. Only records belonging to that org are visible. |
-| **Regular staff** | None (no org selected) | **Fail-closed**: TenantMiddleware redirects to `/orgs/` before view execution (302). View-unit tests without middleware show empty list / 404 (fail-closed). No data is leaked. |
-| **Anonymous** | N/A | Denied (`403 Forbidden`) by `IsAdminUser`. |
-
-**Active-org selection**: Regular staff must have an active organization selected (set in the session via `ACTIVE_ORG_SESSION_KEY`) for data to be visible. Without one, the TenantMiddleware redirects to `/orgs/` (302) before the view executes — the path is non-exempt. View-unit tests that bypass the middleware (force_authenticate) show empty list / 404 as a defense-in-depth fallback.
-
-**No-org redirect before view**: When a regular-staff or superuser has no active org selected, the TenantMiddleware redirects to `/orgs/` (HTTP 302) before any view code executes. This redirect applies to the Forms admin API at `/api/admin/forms/*` — it is **not** middleware-exempt (the path starts with `/api/`, not `/admin/`), so TenantMiddleware runs and redirects unauthenticated-org users before the view executes.
-
-**Superuser after org selection**: A superuser who selects an active org still sees all data across tenants via the `operator_access` bypass. The active org's primary effect on superusers is write-scoping (`PATCH` saves inside the target record's `org_scope`). Before org selection, the middleware redirects to `/orgs/` — superusers must also select an active org to reach `/api/admin/forms/`, which is non-exempt and org-dependent.
-
-Superuser access is the only path that returns data across organizations, and it is always audit-logged (`operator_access`). All writes (PATCH) save inside the target record's `org_scope` regardless of how the record was read. The `FORMS_SUBMISSIONS_API=False` setting is checked on every admin request before any role-specific logic — a disabled API returns 404 for both superuser and regular staff.
-
-## Built-in Form Presets
-
-Run `python manage.py quickscale_forms_seed_presets` to create:
+### Built-in form presets
 
 | Slug | Fields |
 |------|--------|
@@ -116,39 +53,91 @@ Run `python manage.py quickscale_forms_seed_presets` to create:
 | `feedback` | full_name (optional), email (optional), rating (1–5), message |
 | `support` | full_name, email, subject, priority (low/medium/high), description |
 
-## Management Commands
+### Spam protection
 
-### `quickscale_forms_seed_presets`
+When both the global `FORMS_SPAM_PROTECTION` setting and a form's `spam_protection_enabled`
+flag are true, the public schema includes a honeypot field (`_hp_name`) and submission
+handling treats a populated value as spam while still returning success — preventing bot
+enumeration. If either switch is off, `_hp_name` is ignored. Rate limiting
+(`ScopedRateThrottle` with `FORMS_RATE_LIMIT`) adds a second layer of protection.
 
-Creates all four built-in form presets. Idempotent — safe to run multiple times.
+### Email notifications
+
+Set `notify_emails` on a `Form` to receive an email on every legitimate (non-spam) submission.
+When the notifications module is installed and enabled, the message is dispatched through its
+`send_notification` service (tagged `forms`, workflow `form-submission`) so delivery is
+tracked; otherwise the module sends an `EmailMultiAlternatives` message through the configured
+email backend. Delivery failures are logged and never block submission processing.
+
+### Staff access model
+
+Staff-level access (`api/admin/forms/*`) follows a retained-role model; an active organization
+selection is required for regular staff to see any data.
+
+| Role | Org context | Behavior |
+|------|-------------|----------|
+| Superuser | After org selection | Cross-tenant SELECT via `operator_access` (audited). All `GET`/list operations run inside `operator_access`, which is gated to superusers and logged at `INFO` level. `PATCH` saves inside the target submission's `org_scope`. Without an active org selected, the middleware redirects to `/orgs/` — same as regular staff. |
+| Regular staff | Active org selected | Data is scoped via RLS to the request's active organization; only records belonging to that org are visible. |
+| Regular staff | None | Fail-closed: `TenantMiddleware` redirects to `/orgs/` before view execution (302). View-unit tests without middleware show an empty list or 404. No data is leaked. |
+| Anonymous | N/A | Denied (`403 Forbidden`). |
+
+The `FORMS_SUBMISSIONS_API` setting is checked on every admin request before any role-specific
+logic — a disabled API returns 404 for both superuser and regular staff.
+
+## URLs
+
+`quickscale apply` mounts the module at the project root; the module's own paths are:
+
+| URL name | Path | View |
+|----------|------|------|
+| `quickscale_forms:form-list` | `forms/` | Public form index (React mount point) |
+| `quickscale_forms:form-page` | `forms/<slug>/` | Public form page (React mount point) |
+| `quickscale_forms:form-schema` | `api/forms/<slug>/` | Public form schema |
+| `quickscale_forms:form-submit` | `api/forms/<slug>/submit/` | Public submission endpoint |
+| `quickscale_forms:admin-form-list` | `api/admin/forms/` | Staff form list |
+| `quickscale_forms:admin-submission-list` | `api/admin/forms/<pk>/submissions/` | Staff submission list |
+| `quickscale_forms:admin-submission-detail` | `api/admin/forms/<pk>/submissions/<sub_pk>/` | Staff submission detail |
+| `quickscale_forms:admin-submission-export` | `api/admin/forms/<pk>/submissions/export/` | Staff CSV export |
+
+## Management commands
+
+- `quickscale_forms_seed_presets` — creates the four built-in form presets. Idempotent and safe
+  to run multiple times.
+- `quickscale_forms_anonymize_submissions` — nulls `ip_address` and clears `user_agent` for
+  submissions older than each form's `data_retention_days`; a GDPR compliance helper.
+
+## Operations
+
+Add the module through QuickScale:
 
 ```bash
-python manage.py quickscale_forms_seed_presets
+quickscale plan --add forms
+quickscale apply
 ```
 
-### `quickscale_forms_anonymize_submissions`
+A manual installation adds `rest_framework`, `django_filters`, and `quickscale_modules_forms`
+to `INSTALLED_APPS`, mounts the module's URLs, and runs `python manage.py migrate`. A fresh
+`migrate` on a clean database creates the four built-in presets as part of the initial data
+migration — no separate seed step is needed on first install. Run
+`python manage.py quickscale_forms_seed_presets` to re-create a preset that was manually
+deleted or to recover presets in an older database that was not created by the current squashed
+migration.
 
-Anonymizes (nulls `ip_address`, clears `user_agent`) for submissions older than each form's `data_retention_days`. GDPR compliance helper.
+New `Form` rows created after migrations complete — including those created by a manual
+`quickscale_forms_seed_presets` run — inherit `FORMS_DATA_RETENTION_DAYS` when
+`data_retention_days` is omitted. Fresh-install preset rows created by the initial seed
+migration hardcode the historical 365-day default and do not inherit the runtime setting.
+Existing forms always keep their stored per-row retention window regardless of how they were
+created.
 
-```bash
-python manage.py quickscale_forms_anonymize_submissions
-```
+Schedule `python manage.py quickscale_forms_anonymize_submissions` periodically — daily is a
+reasonable interval — through your cron or platform scheduler; the module ships no scheduler,
+and anonymization runs only when the command is invoked.
 
-## React Integration
+## Extending
 
-The module provides a React mount point template. In your React frontend, use the `FormRenderer` component pointing at the API endpoint:
-
-```tsx
-// The Django template renders: <div id="form-root" data-form-slug="contact"></div>
-// Your React entry point mounts FormRenderer into this element, reading the slug from data-*
-```
-
-See the generated project's `src/components/forms/` directory for the React `FormRenderer`, `FormFieldRenderer`, and `useFormSchema` hook.
-
-## Spam Protection
-
-When both the global `FORMS_SPAM_PROTECTION` setting and a form's `spam_protection_enabled` flag are true, the public schema includes a **honeypot field** (`_hp_name`) and submission handling treats a populated value as spam while still returning success — preventing bot enumeration. If either switch is off, `_hp_name` is ignored. Rate limiting (`ScopedRateThrottle`) adds a second layer of protection.
-
-## Email Notifications
-
-Set `notify_emails` on a `Form` to receive an email on every legitimate (non-spam) submission. Uses Django's built-in `send_mail` — configure any email backend. SMTP errors are silently swallowed to avoid blocking form submissions.
+- The module provides a React mount point template: the Django template renders
+  `<div id="form-root" data-form-slug="contact"></div>`, and your React entry point mounts the
+  `FormRenderer` component into it, reading the slug from the `data-*` attributes. The
+  generated project ships `FormRenderer` and `FormFieldRenderer` in `src/components/forms/`
+  and the `useFormSchema` hook in `src/hooks/`.
