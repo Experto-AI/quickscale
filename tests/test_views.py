@@ -1,5 +1,6 @@
 """Tests for auth module views"""
 
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
@@ -2016,6 +2017,35 @@ class _StubAccountDeletionHandler:
         return 0
 
 
+@contextmanager
+def _declared_handlers(*handlers):
+    """Install *handlers* as the declared account-deletion providers for one request.
+
+    The app-config lookup answers with each handler for the labels it claims,
+    mirroring the identity between a provider and its own app config.
+    """
+    from unittest.mock import patch
+
+    def resolve(label):
+        return next(
+            handler
+            for handler in handlers
+            if label in handler.account_deletion_handled_app_labels()
+        )
+
+    with (
+        patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=handlers,
+        ),
+        patch(
+            "quickscale_modules_auth.views._installed_app_config",
+            side_effect=resolve,
+        ),
+    ):
+        yield
+
+
 @pytest.mark.django_db
 class TestAccountDeleteViewDeclaredHandlers:
     """Rule 4: account deletion drives declared handlers, not module names."""
@@ -2024,7 +2054,6 @@ class TestAccountDeleteViewDeclaredHandlers:
         self, authenticated_client, user
     ):
         """Every declared operation runs in order for the user's personal org."""
-        from unittest.mock import patch
 
         from django.contrib.auth import get_user_model
 
@@ -2050,10 +2079,7 @@ class TestAccountDeleteViewDeclaredHandlers:
             reference_organization_ids=(organization.pk,),
         )
 
-        with patch(
-            "quickscale_modules_auth.views.collect_capabilities",
-            return_value=(handler,),
-        ):
+        with _declared_handlers(handler):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
@@ -2074,15 +2100,11 @@ class TestAccountDeleteViewDeclaredHandlers:
         self, authenticated_client, user
     ):
         """A handler missing a protocol operation fails the deletion closed."""
-        from unittest.mock import patch
 
         from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
 
-        with patch(
-            "quickscale_modules_auth.views.collect_capabilities",
-            return_value=(_IncompleteAccountDeletionHandler(),),
-        ):
+        with _declared_handlers(_IncompleteAccountDeletionHandler()):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
@@ -2100,7 +2122,6 @@ class TestAccountDeleteViewDeclaredHandlers:
         self, authenticated_client, user
     ):
         """A fail-closed error declared by the handler renders a blocked response."""
-        from unittest.mock import patch
 
         from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
@@ -2126,10 +2147,7 @@ class TestAccountDeleteViewDeclaredHandlers:
             cancel_error=_StubProviderError("provider state is not terminal"),
         )
 
-        with patch(
-            "quickscale_modules_auth.views.collect_capabilities",
-            return_value=(handler,),
-        ):
+        with _declared_handlers(handler):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
@@ -2145,7 +2163,6 @@ class TestAccountDeleteViewDeclaredHandlers:
         self, authenticated_client, user
     ):
         """An error outside the declared set propagates instead of being masked."""
-        from unittest.mock import patch
 
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -2169,10 +2186,7 @@ class TestAccountDeleteViewDeclaredHandlers:
         )
 
         with (
-            patch(
-                "quickscale_modules_auth.views.collect_capabilities",
-                return_value=(handler,),
-            ),
+            _declared_handlers(handler),
             pytest.raises(ValueError, match="unexpected provider defect"),
         ):
             authenticated_client.post(reverse("quickscale_auth:account_delete"))
@@ -2181,17 +2195,13 @@ class TestAccountDeleteViewDeclaredHandlers:
         self, authenticated_client, user
     ):
         """A handler declaring an unknown reconcile scope fails closed."""
-        from unittest.mock import patch
 
         from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
 
         handler = _StubAccountDeletionHandler([], reconcile_scope="everywhere")
 
-        with patch(
-            "quickscale_modules_auth.views.collect_capabilities",
-            return_value=(handler,),
-        ):
+        with _declared_handlers(handler):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
@@ -2207,7 +2217,6 @@ class TestAccountDeleteViewDeclaredHandlers:
         self, authenticated_client, user
     ):
         """A touched-scope handler reconciles every organization the deletion touches."""
-        from unittest.mock import patch
 
         from django.contrib.auth import get_user_model
 
@@ -2239,10 +2248,7 @@ class TestAccountDeleteViewDeclaredHandlers:
         calls: list[Any] = []
         handler = _StubAccountDeletionHandler(calls, reconcile_scope="touched")
 
-        with patch(
-            "quickscale_modules_auth.views.collect_capabilities",
-            return_value=(handler,),
-        ):
+        with _declared_handlers(handler):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
@@ -2255,7 +2261,6 @@ class TestAccountDeleteViewDeclaredHandlers:
     ):
         """Each declared handler is resumed with the transition it produced."""
         from types import SimpleNamespace
-        from unittest.mock import patch
 
         from django.contrib.auth import get_user_model
 
@@ -2301,11 +2306,9 @@ class TestAccountDeleteViewDeclaredHandlers:
             transition=second_transition,
             on_cancel=reject_deletion,
         )
+        second.label = "stub_provider_second"
 
-        with patch(
-            "quickscale_modules_auth.views.collect_capabilities",
-            return_value=(first, second),
-        ):
+        with _declared_handlers(first, second):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
@@ -2314,3 +2317,30 @@ class TestAccountDeleteViewDeclaredHandlers:
         assert get_user_model().objects.filter(pk=user.pk).exists()
         assert first_calls[-1] == ("resume", first_transition)
         assert second_calls[-1] == ("resume", second_transition)
+
+    def test_account_delete_blocks_a_handler_that_is_not_its_app_config(
+        self, authenticated_client, user
+    ):
+        """A handler claiming an app's label must be that app's own config."""
+        from unittest.mock import patch
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        handler = _StubAccountDeletionHandler([])
+        handler.label = "quickscale_billing"
+
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(handler,),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert any(
+            "not that app's config" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
