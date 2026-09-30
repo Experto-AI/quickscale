@@ -75,7 +75,7 @@ A track is **truly green** only when all three states are yes.
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation, and, for the conventions, module identities, models and their
   `0001_initial`, module READMEs, and module templates, static files, and template tags, with the
-  module page templates and the generated `base.html` (SA224).
+  module page templates and the generated `base.html`.
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
   every package, `ruff.toml`, the test-settings stubs, the CLI apply/deploy/update commands and
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
@@ -93,7 +93,7 @@ A track is **truly green** only when all three states are yes.
   API client (SA223, SA220, SA226).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
-  SA217, SA219, SA220, SA223, SA224, SA226) touch every module and cross every track, so each lands in
+  SA217, SA219, SA220, SA223, SA226) touch every module and cross every track, so each lands in
   module-sized slices through that queue, merging `v89` before each slice; a slice edits another
   convention ticket's surface only where its own rule forces it (a rename's callers, for example).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
@@ -119,8 +119,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   items (D1–D42) are in
   [module-conventions-inventory.md](../planning/module-conventions-inventory.md), the rules in
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
-  and this ticket closes them. Where other documents say "SA215 renames…", they mean the whole
-  change, which SA215 lands last.
+  and this ticket closes them.
 
   **Scope:** the rule 40 conformance test, covering rules 1–39, with a control case per rule; the
   release notes; the inventory's closing pass. Code changes are in the convention tickets (SA219 owns
@@ -220,26 +219,18 @@ defaults.
 - [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
   **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
-  URL prefixes still live in three places; every module API is DRF now.
+  URL prefixes still live in three places.
 
-  **Scope:**
-  - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
-    `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
-    route names become snake_case without the module name, in auth, orgs, notifications, social,
-    billing, crm, and forms.
-  - *APIs.* Blog, listings, orgs, billing, and forms have landed: their endpoints are DRF views
-    with the one error shape (forms' public schema and submit routes stay anonymous; the others
-    use session authentication); the theme's `useApi.ts`, public social pages, and form client
-    read that shape. Remaining: the URL mounts and route names.
+  **Scope:** mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains
+  an `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
+  route names become snake_case without the module name, in auth, orgs, notifications, social,
+  billing, crm, and forms.
 
-  **Acceptance:** every API error body matches the one shape; a list of every moved
-  public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and
-  its rate from a setting.
+  **Acceptance:** a list of every moved public URL, with its operator step, is ready for SA215's
+  release notes; every throttle scope has the stem and its rate from a setting.
 
-  **Surfaces:** every module's `urls.py`, `adapter.py`, manifest; blog, listings, orgs, social
-  APIs; billing and notifications webhooks; the theme's React API client; the CSRF gate script.
-
-- [x] **SA224 — Standardize module templates, static files, and template tags.**
+  **Surfaces:** every module's `urls.py`, `adapter.py`, manifest; billing and notifications
+  webhooks; the theme's React API client; the CSRF gate script.
 
 - [ ] **SA226 — Standardize authorization, email, write effects, and events.**
 
