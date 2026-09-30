@@ -1,13 +1,12 @@
 """Django app configuration for QuickScale CRM module.
 
-Startup configuration is validated by
-:func:`quickscale_modules_crm.checks.check_required_settings`, run through
-``quickscale_core.runtime.register_module_checks`` from ``ready()``.
+Startup configuration is validated by rule 3's generic settings check,
+registered through ``quickscale_core.runtime`` from ``ready()``.
 """
 
 from django.apps import AppConfig
 
-from quickscale_core.runtime import register_module_checks
+from quickscale_core.runtime import register_module_settings_check
 
 
 class QuickscaleCrmConfig(AppConfig):
@@ -25,8 +24,4 @@ class QuickscaleCrmConfig(AppConfig):
         # the module is sufficient.
         import quickscale_modules_crm.receivers  # noqa: F401
 
-        # Late import: keep the app config importable while Django is still
-        # populating the app registry.
-        from quickscale_modules_crm.checks import check_required_settings
-
-        register_module_checks(self, [check_required_settings])
+        register_module_settings_check(self, "crm")
