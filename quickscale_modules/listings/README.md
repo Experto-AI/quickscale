@@ -114,8 +114,8 @@ REST_FRAMEWORK.setdefault(
 )
 ```
 
-Template customization: all templates extend `quickscale_listings/listings/base.html`.
-Override the base at `templates/quickscale_listings/listings/base.html` or individual pages at
+Template customization: all templates extend `quickscale_listings/base.html`.
+Override the base at `templates/quickscale_listings/base.html` or individual pages at
 `templates/quickscale_listings/listings/<page>.html`. The module ships zero-style semantic
 templates; add your own CSS in the project.
 

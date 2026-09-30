@@ -1,4 +1,17 @@
-"""Conformance checks for token-styled module page templates."""
+"""Conformance checks for token-styled module page templates.
+
+The module and page sets derive from discovery (decisions.md rules 8 and 37):
+every module discovered under ``quickscale_modules/*/module.yml`` that ships
+page templates must provide one flat
+``templates/quickscale_<module>/base.html`` owning
+``{% block <module>_content %}``; every page extends that base and emits no
+document shell; module static files live under
+``static/quickscale_<module>/{css,js,img}/``; template-tag libraries carry the
+``quickscale_<module>`` stem.
+
+Templates under ``email/`` and ``admin/`` follow the software that loads them
+(rule 8 folder exceptions) and are outside the page contract.
+"""
 
 from __future__ import annotations
 
@@ -10,68 +23,19 @@ from urllib.parse import urlsplit
 
 import pytest
 
+from quickscale_core.contracts.module_discovery import (
+    authoritative_module_names,
+    discover_shipped_module_paths,
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 
-BASE_CONTRACTS = {
-    "auth": (
-        "quickscale_modules/auth/src/quickscale_modules_auth/templates/"
-        "quickscale_auth/base.html",
-        "quickscale_modules_auth/css/auth.css",
-    ),
-    "billing": (
-        "quickscale_modules/billing/src/quickscale_modules_billing/templates/"
-        "quickscale_billing/base.html",
-        "quickscale_modules_billing/css/billing.css",
-    ),
-    "blog": (
-        "quickscale_modules/blog/src/quickscale_modules_blog/templates/"
-        "quickscale_blog/blog/base.html",
-        "quickscale_modules_blog/blog.css",
-    ),
-    "listings": (
-        "quickscale_modules/listings/src/quickscale_modules_listings/templates/"
-        "quickscale_listings/listings/base.html",
-        "quickscale_modules_listings/listings.css",
-    ),
-    "crm": (
-        "quickscale_modules/crm/src/quickscale_modules_crm/templates/"
-        "quickscale_crm/crm/base.html",
-        "quickscale_modules_crm/crm.css",
-    ),
-}
-
-CHILD_CONTRACTS = {
-    "quickscale_modules/auth/src/quickscale_modules_auth/templates/"
-    "quickscale_auth/account/*.html": "quickscale_auth/base.html",
-    "quickscale_modules/billing/src/quickscale_modules_billing/templates/"
-    "quickscale_billing/*.html": "quickscale_billing/base.html",
-    "quickscale_modules/billing/src/quickscale_modules_billing/templates/"
-    "quickscale_billing/billing/*.html": "quickscale_billing/base.html",
-    "quickscale_modules/blog/src/quickscale_modules_blog/templates/"
-    "quickscale_blog/blog/*.html": "quickscale_blog/blog/base.html",
-    "quickscale_modules/listings/src/quickscale_modules_listings/templates/"
-    "quickscale_listings/listings/*.html": ("quickscale_listings/listings/base.html"),
-    "quickscale_modules/crm/src/quickscale_modules_crm/templates/"
-    "quickscale_crm/crm/*.html": "quickscale_crm/crm/base.html",
-}
-
-MODULE_STYLESHEETS = [
-    "quickscale_modules/auth/src/quickscale_modules_auth/static/"
-    "quickscale_modules_auth/css/auth.css",
-    "quickscale_modules/billing/src/quickscale_modules_billing/static/"
-    "quickscale_modules_billing/css/billing.css",
-    "quickscale_modules/blog/src/quickscale_modules_blog/static/"
-    "quickscale_modules_blog/blog.css",
-    "quickscale_modules/listings/src/quickscale_modules_listings/static/"
-    "quickscale_modules_listings/listings.css",
-    "quickscale_modules/crm/src/quickscale_modules_crm/static/"
-    "quickscale_modules_crm/crm.css",
-]
-
-AFFECTED_PRESENTATION_ROOTS = [
-    ROOT / "quickscale_modules" / module_name / "src"
-    for module_name in ("auth", "billing", "blog", "listings", "crm")
-]
+THEME_ROOT = (
+    "quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react"
+)
+NON_PAGE_TEMPLATE_PREFIXES = ("email/", "admin/")
+NON_PAGE_TEMPLATE_NAMES = ("base.html",)
+SOFTWARE_OWNED_TEMPLATE_FOLDERS = ("account", "admin")
 
 ACCEPTED_FRONTEND_ORIGINS = (
     ("https://vite.example.test", "https://vite.example.test"),
@@ -94,37 +58,186 @@ REJECTED_FRONTEND_ORIGINS = (
 )
 
 
-@pytest.mark.parametrize(("module_name", "contract"), BASE_CONTRACTS.items())
-def test_module_base_extends_project_shell_and_loads_stylesheet(
-    module_name: str,
-    contract: tuple[str, str],
-) -> None:
-    template_path, stylesheet = contract
-    content = (ROOT / template_path).read_text()
-
-    assert '{% extends "base.html" %}' in content, module_name
-    assert "{% block extra_css %}" in content, module_name
-    assert "{{ block.super }}" in content, module_name
-    assert stylesheet in content, module_name
-    assert "<style" not in content.lower(), module_name
+def _module_packages() -> dict[str, Path]:
+    """Map each discovered module to its source package directory (rule 37)."""
+    module_paths = discover_shipped_module_paths()
+    packages: dict[str, Path] = {}
+    for module_name in authoritative_module_names():
+        module_path = module_paths.get(module_name)
+        if module_path is not None:
+            packages[module_name] = (
+                module_path / "src" / f"quickscale_modules_{module_name}"
+            )
+    return packages
 
 
-@pytest.mark.parametrize(("pattern", "parent"), CHILD_CONTRACTS.items())
-def test_every_module_page_inherits_its_styled_base(pattern: str, parent: str) -> None:
-    paths = sorted(ROOT.glob(pattern))
-    assert paths, pattern
+PACKAGES = _module_packages()
+MODULE_NAMES = tuple(PACKAGES)
 
-    for path in paths:
-        if path.name == "base.html":
+
+def _module_template_root(module_name: str) -> Path:
+    return PACKAGES[module_name] / "templates" / f"quickscale_{module_name}"
+
+
+def _page_templates(module_name: str) -> list[Path]:
+    root = _module_template_root(module_name)
+    if not root.is_dir():
+        return []
+    pages: list[Path] = []
+    for path in sorted(root.rglob("*.html")):
+        relative = path.relative_to(root).as_posix()
+        if relative in NON_PAGE_TEMPLATE_NAMES:
             continue
-        content = path.read_text()
-        assert f'{{% extends "{parent}" %}}' in content, path
-        assert "<style" not in content.lower(), path
+        if relative.startswith(NON_PAGE_TEMPLATE_PREFIXES):
+            continue
+        if path.name.startswith("_"):
+            continue
+        pages.append(path)
+    return pages
 
 
-@pytest.mark.parametrize("stylesheet", MODULE_STYLESHEETS)
-def test_module_stylesheets_use_shared_tokens(stylesheet: str) -> None:
-    content = (ROOT / stylesheet).read_text()
+def _stray_page_templates(module_name: str) -> list[Path]:
+    """Return ``.html`` templates outside the module's canonical namespace.
+
+    ``templates/account/`` (django-allauth) and ``templates/admin/`` (Django
+    admin) follow the software that loads them (rule 8 folder exceptions);
+    every other page template must live under
+    ``templates/quickscale_<module>/``.
+    """
+    templates_root = PACKAGES[module_name] / "templates"
+    if not templates_root.is_dir():
+        return []
+    namespace = f"quickscale_{module_name}"
+    stray: list[Path] = []
+    for path in sorted(templates_root.rglob("*.html")):
+        top = path.relative_to(templates_root).parts[0]
+        if top in SOFTWARE_OWNED_TEMPLATE_FOLDERS or top == namespace:
+            continue
+        stray.append(path)
+    return stray
+
+
+def _block_tag_pattern(block_name: str) -> re.Pattern[str]:
+    """Match a Django ``{% block <name> %}`` tag across valid spacing."""
+    return re.compile(r"{%\s*block\s+" + re.escape(block_name) + r"\s*%}")
+
+
+def _module_stylesheets() -> list[Path]:
+    stylesheets: list[Path] = []
+    for module_name in MODULE_NAMES:
+        static_root = PACKAGES[module_name] / "static"
+        if static_root.is_dir():
+            stylesheets.extend(
+                path for path in sorted(static_root.rglob("*.css")) if path.is_file()
+            )
+    return stylesheets
+
+
+@pytest.mark.parametrize("module_name", MODULE_NAMES)
+def test_module_pages_extend_one_flat_module_base(module_name: str) -> None:
+    stray = _stray_page_templates(module_name)
+    assert not stray, (
+        f"page templates must live under templates/quickscale_{module_name}/: {stray}"
+    )
+
+    pages = _page_templates(module_name)
+    if not pages:
+        pytest.skip(f"{module_name} ships no page templates")
+
+    base = _module_template_root(module_name) / "base.html"
+    assert base.is_file(), f"{module_name} pages need {base}"
+
+    base_content = base.read_text()
+    assert '{% extends "base.html" %}' in base_content, base
+    assert _block_tag_pattern("content").search(base_content), base
+    assert _block_tag_pattern(f"{module_name}_content").search(base_content), base
+    assert "<html" not in base_content.lower(), base
+
+    for page in pages:
+        content = page.read_text()
+        assert f'{{% extends "quickscale_{module_name}/base.html" %}}' in content, page
+        assert _block_tag_pattern(f"{module_name}_content").search(content), page
+        assert not _block_tag_pattern("content").search(content), page
+        assert "<html" not in content.lower(), page
+        assert "<!doctype" not in content.lower(), page
+
+
+def test_module_bases_load_stylesheets_through_the_parent_block() -> None:
+    for module_name in MODULE_NAMES:
+        base = _module_template_root(module_name) / "base.html"
+        if not base.is_file():
+            continue
+        content = base.read_text()
+        if "{% static '" not in content:
+            continue
+        assert "{% block extra_css %}" in content, base
+        assert "{{ block.super }}" in content, base
+        assert "<style" not in content.lower(), base
+
+
+@pytest.mark.parametrize("module_name", MODULE_NAMES)
+def test_module_static_files_follow_the_quickscale_stem(module_name: str) -> None:
+    static_root = PACKAGES[module_name] / "static"
+    if not static_root.is_dir():
+        pytest.skip(f"{module_name} ships no static files")
+
+    files = sorted(
+        path
+        for path in static_root.rglob("*")
+        if path.is_file() and not path.name.startswith(".")
+    )
+    assert files, static_root
+    for path in files:
+        relative = path.relative_to(static_root)
+        assert relative.parts[0] == f"quickscale_{module_name}", path
+        assert len(relative.parts) >= 2 and relative.parts[1] in {
+            "css",
+            "js",
+            "img",
+        }, path
+
+
+@pytest.mark.parametrize("module_name", MODULE_NAMES)
+def test_module_template_static_references_resolve(module_name: str) -> None:
+    template_root = _module_template_root(module_name)
+    if not template_root.is_dir():
+        pytest.skip(f"{module_name} ships no templates")
+
+    references: set[str] = set()
+    for path in sorted(template_root.rglob("*")):
+        if not path.is_file() or path.suffix not in {".html", ".txt"}:
+            continue
+        references.update(re.findall(r"{%\s*static\s+'([^']+)'", path.read_text()))
+
+    for reference in sorted(references):
+        assert reference.startswith(f"quickscale_{module_name}/"), reference
+        assert (PACKAGES[module_name] / "static" / reference).is_file(), reference
+
+
+@pytest.mark.parametrize("module_name", MODULE_NAMES)
+def test_module_template_tag_libraries_carry_the_stem(module_name: str) -> None:
+    templatetags = PACKAGES[module_name] / "templatetags"
+    if not templatetags.is_dir():
+        pytest.skip(f"{module_name} ships no template-tag libraries")
+
+    libraries = [
+        path for path in sorted(templatetags.glob("*.py")) if path.name != "__init__.py"
+    ]
+    assert libraries, f"{templatetags} has no library module"
+    for library in libraries:
+        stem = library.stem
+        assert stem == f"quickscale_{module_name}" or stem.startswith(
+            f"quickscale_{module_name}_"
+        ), library
+
+
+@pytest.mark.parametrize(
+    "stylesheet",
+    _module_stylesheets(),
+    ids=lambda path: path.name,
+)
+def test_module_stylesheets_use_shared_tokens(stylesheet: Path) -> None:
+    content = stylesheet.read_text()
 
     assert "hsl(var(--" in content
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b", content)
@@ -133,13 +246,9 @@ def test_module_stylesheets_use_shared_tokens(stylesheet: str) -> None:
 
 def test_billing_primary_cta_foreground_wins_the_anchor_cascade() -> None:
     billing_styles = (
-        ROOT / "quickscale_modules/billing/src/quickscale_modules_billing/static/"
-        "quickscale_modules_billing/css/billing.css"
+        PACKAGES["billing"] / "static" / "quickscale_billing" / "css" / "billing.css"
     ).read_text()
-    token_source = (
-        ROOT / "quickscale_core/src/quickscale_core/generator/templates/themes/"
-        "showcase_react/src/index.css"
-    ).read_text()
+    token_source = (ROOT / THEME_ROOT / "src/index.css").read_text()
 
     assert ".billing-content .billing-pricing__button--primary" in billing_styles
     assert "color: hsl(var(--primary-foreground));" in billing_styles
@@ -151,12 +260,12 @@ def test_billing_primary_cta_foreground_wins_the_anchor_cascade() -> None:
     [
         (
             "quickscale_modules/blog/src/quickscale_modules_blog/static/"
-            "quickscale_modules_blog/blog.css",
+            "quickscale_blog/css/blog.css",
             (".blog-markdown-content ul", "list-style: disc", "list-style: decimal"),
         ),
         (
             "quickscale_modules/listings/src/quickscale_modules_listings/static/"
-            "quickscale_modules_listings/listings.css",
+            "quickscale_listings/css/listings.css",
             (
                 ".listing-markdown-content ul",
                 "list-style: disc",
@@ -165,7 +274,7 @@ def test_billing_primary_cta_foreground_wins_the_anchor_cascade() -> None:
         ),
         (
             "quickscale_modules/crm/src/quickscale_modules_crm/static/"
-            "quickscale_modules_crm/crm.css",
+            "quickscale_crm/css/crm.css",
             (".crm-content .api-list", "list-style: disc"),
         ),
     ],
@@ -181,15 +290,15 @@ def test_semantic_module_lists_restore_markers_after_tailwind_preflight(
 
 
 def test_affected_presentation_references_only_canonical_tokens() -> None:
-    token_source = (
-        ROOT / "quickscale_core/src/quickscale_core/generator/templates/themes/"
-        "showcase_react/src/index.css"
-    ).read_text()
+    token_source = (ROOT / THEME_ROOT / "src/index.css").read_text()
     canonical_tokens = set(re.findall(r"(--[a-z0-9-]+)\s*:", token_source))
 
-    for source_root in AFFECTED_PRESENTATION_ROOTS:
+    for module_name in MODULE_NAMES:
+        package = PACKAGES[module_name]
         for pattern in ("*.css", "*.html", "*.js"):
-            for path in source_root.rglob(pattern):
+            for path in package.rglob(pattern):
+                if "admin" in path.relative_to(package).parts:
+                    continue
                 referenced_tokens = set(
                     re.findall(r"var\((--[a-z0-9-]+)", path.read_text())
                 )
@@ -201,8 +310,7 @@ def test_affected_presentation_references_only_canonical_tokens() -> None:
 
 def test_auth_script_uses_token_backed_strength_classes() -> None:
     auth_script = (
-        ROOT / "quickscale_modules/auth/src/quickscale_modules_auth/static/"
-        "quickscale_modules_auth/js/auth.js"
+        PACKAGES["auth"] / "static" / "quickscale_auth" / "js" / "auth.js"
     ).read_text()
 
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b", auth_script)
@@ -211,10 +319,15 @@ def test_auth_script_uses_token_backed_strength_classes() -> None:
         assert f"password-strength--{strength}" in auth_script
 
 
+def test_generated_shell_defines_the_module_block_contract() -> None:
+    shell = (ROOT / THEME_ROOT / "templates/base.html.j2").read_text()
+
+    for block in ("title", "extra_css", "content", "extra_js"):
+        assert f"{{% block {block} %}}" in shell
+
+
 def test_generated_shell_loads_the_react_token_source() -> None:
-    theme = ROOT / (
-        "quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react"
-    )
+    theme = ROOT / THEME_ROOT
     token_source = (theme / "src/index.css").read_text()
     shell = (theme / "templates/base.html.j2").read_text()
 

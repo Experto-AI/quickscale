@@ -311,8 +311,9 @@ Suggested material for that section:
 
 > **Conventions.** Names, file set, URLs, templates, APIs, checks, and tests follow
 > [decisions.md § Module Conventions](decisions.md#module-conventions), enforced by its conformance
-> test. Names below that use the `quickscale_modules_<name>` app label or template folder describe
-> the shipped state until SA215 renames them to `quickscale_<name>`.
+> test. Names below that use the `quickscale_modules_<name>` app label describe the shipped state
+> until SA215 renames them to `quickscale_<name>` (templates and static files already use
+> `quickscale_<name>`).
 
 Mechanics for creating a new `quickscale_modules/<name>` package. The *rules* this
 checklist serves are authoritative elsewhere and this document does not restate them:
@@ -448,7 +449,7 @@ derivation:
 ```
 
 **3. Templates (if applicable):**
-- [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates, with one `base.html` that the pages extend (emails under `email/`)
+- [ ] `templates/quickscale_<name>/` — Zero-style semantic HTML templates, with one flat `base.html` that the pages extend (emails under `email/`)
 - [ ] Static files under `static/quickscale_<name>/{css,js,img}/`; template-tag library named `quickscale_<name>`
 - [ ] Templates must work immediately after embed (no user customization required)
 

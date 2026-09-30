@@ -1,123 +1,120 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>{{ organization.name }} members</title>
-</head>
-<body>
-    {% include "quickscale_orgs/_debug_banner.html" %}
-    <h1>{{ organization.name }} members</h1>
-    <p>The last owner cannot be removed or demoted.</p>
+{% extends "quickscale_orgs/base.html" %}
 
-    {% if form_error %}
-    <p>{{ form_error }}</p>
-    {% endif %}
+{% block title %}{{ organization.name }} members{% endblock %}
 
-    <h2>Invite a member</h2>
+{% block orgs_content %}
+{% include "quickscale_orgs/_debug_banner.html" %}
+<h1>{{ organization.name }} members</h1>
+<p>The last owner cannot be removed or demoted.</p>
 
-    {% if invite_form.non_field_errors %}
-    {% for error in invite_form.non_field_errors %}
+{% if form_error %}
+<p>{{ form_error }}</p>
+{% endif %}
+
+<h2>Invite a member</h2>
+
+{% if invite_form.non_field_errors %}
+{% for error in invite_form.non_field_errors %}
+<p>{{ error }}</p>
+{% endfor %}
+{% endif %}
+
+<form method="post" action="{% url 'org-members-invite' org_slug=organization.slug %}">
+    {% csrf_token %}
+    <p>
+        <label for="{{ invite_form.email.id_for_label }}">Email</label>
+        {{ invite_form.email }}
+    </p>
+    {% for error in invite_form.email.errors %}
     <p>{{ error }}</p>
     {% endfor %}
-    {% endif %}
 
-    <form method="post" action="{% url 'org-members-invite' org_slug=organization.slug %}">
-        {% csrf_token %}
-        <p>
-            <label for="{{ invite_form.email.id_for_label }}">Email</label>
-            {{ invite_form.email }}
-        </p>
-        {% for error in invite_form.email.errors %}
-        <p>{{ error }}</p>
+    <p>
+        <label for="{{ invite_form.role.id_for_label }}">Role</label>
+        {{ invite_form.role }}
+    </p>
+    {% for error in invite_form.role.errors %}
+    <p>{{ error }}</p>
+    {% endfor %}
+
+    <button type="submit">Send invitation</button>
+</form>
+
+<h2>Pending invitations</h2>
+
+{% if pending_invitations %}
+<table>
+    <thead>
+        <tr>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Invited by</th>
+            <th>Expires</th>
+            <th>Revoke</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invitation in pending_invitations %}
+        <tr>
+            <td>{{ invitation.email }}</td>
+            <td>{{ invitation.get_role_display }}</td>
+            <td>{{ invitation.invited_by.username|default:invitation.invited_by.email }}</td>
+            <td>{{ invitation.expires_at }}</td>
+            <td>
+                <form method="post" action="{% url 'org-members-invitation-revoke' org_slug=organization.slug invitation_id=invitation.pk %}">
+                    {% csrf_token %}
+                    <button type="submit">Revoke invitation</button>
+                </form>
+            </td>
+        </tr>
         {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No pending invitations.</p>
+{% endif %}
 
-        <p>
-            <label for="{{ invite_form.role.id_for_label }}">Role</label>
-            {{ invite_form.role }}
-        </p>
-        {% for error in invite_form.role.errors %}
-        <p>{{ error }}</p>
+<table>
+    <thead>
+        <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Update role</th>
+            <th>Remove</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for membership in memberships %}
+        <tr>
+            <td>{{ membership.user.username|default:membership.user.email }}</td>
+            <td>{{ membership.get_role_display }}</td>
+            <td>
+                {% if actor_is_owner_like or membership.role != owner_role %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="change-role">
+                    <input type="hidden" name="membership_id" value="{{ membership.pk }}">
+                    <select name="role">
+                        {% for value, label in role_choices %}
+                        <option value="{{ value }}"{% if membership.role == value %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">Update role</button>
+                </form>
+                {% else %}
+                Owner transfer required
+                {% endif %}
+            </td>
+            <td>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="remove">
+                    <input type="hidden" name="membership_id" value="{{ membership.pk }}">
+                    <button type="submit">Remove member</button>
+                </form>
+            </td>
+        </tr>
         {% endfor %}
-
-        <button type="submit">Send invitation</button>
-    </form>
-
-    <h2>Pending invitations</h2>
-
-    {% if pending_invitations %}
-    <table>
-        <thead>
-            <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Invited by</th>
-                <th>Expires</th>
-                <th>Revoke</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for invitation in pending_invitations %}
-            <tr>
-                <td>{{ invitation.email }}</td>
-                <td>{{ invitation.get_role_display }}</td>
-                <td>{{ invitation.invited_by.username|default:invitation.invited_by.email }}</td>
-                <td>{{ invitation.expires_at }}</td>
-                <td>
-                    <form method="post" action="{% url 'org-members-invitation-revoke' org_slug=organization.slug invitation_id=invitation.pk %}">
-                        {% csrf_token %}
-                        <button type="submit">Revoke invitation</button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>No pending invitations.</p>
-    {% endif %}
-
-    <table>
-        <thead>
-            <tr>
-                <th>User</th>
-                <th>Role</th>
-                <th>Update role</th>
-                <th>Remove</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for membership in memberships %}
-            <tr>
-                <td>{{ membership.user.username|default:membership.user.email }}</td>
-                <td>{{ membership.get_role_display }}</td>
-                <td>
-                    {% if actor_is_owner_like or membership.role != owner_role %}
-                    <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="change-role">
-                        <input type="hidden" name="membership_id" value="{{ membership.pk }}">
-                        <select name="role">
-                            {% for value, label in role_choices %}
-                            <option value="{{ value }}"{% if membership.role == value %} selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                        <button type="submit">Update role</button>
-                    </form>
-                    {% else %}
-                    Owner transfer required
-                    {% endif %}
-                </td>
-                <td>
-                    <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="remove">
-                        <input type="hidden" name="membership_id" value="{{ membership.pk }}">
-                        <button type="submit">Remove member</button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</body>
-</html>
+    </tbody>
+</table>
+{% endblock %}
