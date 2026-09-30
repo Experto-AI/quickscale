@@ -117,6 +117,13 @@ derivation:
           - rest_framework
           - quickscale_modules_notifications
       description: "Notifications Django app labels"
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - - notifications/
+            - quickscale_modules_notifications.urls
+      description: "Notifications URL includes"
 
   option_derivations:
     sender_name:

@@ -22,7 +22,7 @@ from quickscale_modules_notifications.services import build_webhook_signature_he
 def test_webhook_view_rejects_unsigned_invalid_json_payload(client: Client) -> None:
     """The signature is verified before the body is parsed."""
     response = client.post(
-        reverse("quickscale_notifications:resend-webhook"),
+        reverse("quickscale_notifications:resend_webhook"),
         data="{bad-json",
         content_type="application/json",
         HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE="sha256=invalid",
@@ -48,7 +48,7 @@ def test_webhook_view_rejects_signed_invalid_json_payload(client: Client) -> Non
     )
 
     response = client.post(
-        reverse("quickscale_notifications:resend-webhook"),
+        reverse("quickscale_notifications:resend_webhook"),
         data=body,
         content_type="application/json",
         HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
@@ -84,7 +84,7 @@ def test_webhook_view_rejects_invalid_recipient_email(client: Client) -> None:
     )
 
     response = client.post(
-        reverse("quickscale_notifications:resend-webhook"),
+        reverse("quickscale_notifications:resend_webhook"),
         data=body,
         content_type="application/json",
         HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
@@ -117,7 +117,7 @@ def test_webhook_view_rejects_invalid_signature(
     }
 
     response = client.post(
-        reverse("quickscale_notifications:resend-webhook"),
+        reverse("quickscale_notifications:resend_webhook"),
         data=json.dumps(payload),
         content_type="application/json",
         HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE="sha256=invalid",
@@ -146,7 +146,7 @@ def test_webhook_view_rejects_non_ascii_signature(
     }
 
     response = client.post(
-        reverse("quickscale_notifications:resend-webhook"),
+        reverse("quickscale_notifications:resend_webhook"),
         data=json.dumps(payload),
         content_type="application/json",
         HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE="sha256=inválid",
@@ -182,7 +182,7 @@ def test_webhook_view_rejects_when_runtime_disabled(
 
     with override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False):
         response = client.post(
-            reverse("quickscale_notifications:resend-webhook"),
+            reverse("quickscale_notifications:resend_webhook"),
             data=body,
             content_type="application/json",
             HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
@@ -225,7 +225,7 @@ def test_webhook_view_accepts_valid_signed_event(
     )
 
     response = client.post(
-        reverse("quickscale_notifications:resend-webhook"),
+        reverse("quickscale_notifications:resend_webhook"),
         data=body,
         content_type="application/json",
         HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[

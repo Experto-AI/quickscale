@@ -160,10 +160,7 @@ def _notifications_manifest_adapter(
         middleware=manifest_spec.middleware,
         settings=settings,
         pre_home_url_includes=manifest_spec.pre_home_url_includes,
-        url_includes=(
-            *manifest_spec.url_includes,
-            ("", "quickscale_modules_notifications.urls"),
-        ),
+        url_includes=manifest_spec.url_includes,
         managed_files=manifest_spec.managed_files,
     )
 

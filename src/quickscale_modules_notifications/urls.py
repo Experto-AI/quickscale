@@ -1,4 +1,8 @@
-"""URL configuration for the QuickScale notifications module."""
+"""URL configuration for the QuickScale notifications module.
+
+The module's mount lives in its manifest's ``url_includes`` entry
+(``notifications/``); this URLconf holds no prefix (Module Conventions rule 7).
+"""
 
 from django.urls import path
 
@@ -8,8 +12,8 @@ app_name = "quickscale_notifications"
 
 urlpatterns = [
     path(
-        "notifications/webhooks/resend/",
+        "webhooks/resend/",
         NotificationWebhookView.as_view(),
-        name="resend-webhook",
+        name="resend_webhook",
     ),
 ]
