@@ -36,6 +36,7 @@ required_modules:
   - orgs>=0.86.0
 
 dependencies:
+  - djangorestframework>=3.17.2
   - django-markdownx>=4.0.11
   - Pillow>=12.3.0,<13.0.0
 
@@ -48,6 +49,7 @@ derivation:
       derivation_type: static
       expression:
         value:
+          - rest_framework
           - markdownx
           - quickscale_modules_blog
       description: "Blog Django app labels"
@@ -55,7 +57,7 @@ derivation:
       derivation_type: static
       expression:
         value:
-          - - ""
+          - - blog/
             - quickscale_modules_blog.urls
           - - markdownx/
             - markdownx.urls

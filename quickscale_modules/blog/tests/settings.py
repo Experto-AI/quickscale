@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
     "markdownx",
     "quickscale_modules_orgs",
     "quickscale_modules_blog",
@@ -92,6 +93,27 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Blog module required settings (fail-hard defaults)
 BLOG_ENABLE_RSS = True
+BLOG_API_RATE_LIMIT = "5/hour"
+
+# DRF configuration mirroring the generated settings: session authentication
+# only, the one QuickScale error shape, and the blog API throttle rate the
+# module wiring contributes (Module Conventions rules 9 and 32).
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "quickscale_blog_api": BLOG_API_RATE_LIMIT,
+    },
+    "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
+}
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "quickscale-blog-tests",
+    }
+}
 
 # trusted-proxy settings required by get_client_ip()
 USE_X_FORWARDED_FOR = False

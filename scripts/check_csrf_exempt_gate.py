@@ -9,9 +9,11 @@ callable (or a method of the same class) calls at least one approved
 verification helper.
 
 Approved verification helpers:
-  - ``_enforce_csrf``               — explicit CSRF re-enforcement (blog)
-  - ``authenticate_blog_api_request`` — blog session+token auth (calls
-    ``_enforce_csrf`` for session-authenticated requests)
+  - ``_enforce_csrf`` — explicit CSRF re-enforcement.
+
+The blog module's session-or-token helper ``authenticate_blog_api_request``
+was retired with the blog module's DRF conversion (Module Conventions rule 9),
+so it is no longer approved: a scope calling it fails this gate.
 
 The Stripe and notifications webhooks are DRF ``APIView``s (Module
 Conventions rule 26); DRF does not CSRF-check them, so they carry no helper
@@ -43,8 +45,9 @@ _DEFAULT_REPO_ROOT: Path = Path(os.environ.get(REPO_ROOT_ENV, os.getcwd())).reso
 MODULES_DIR_RELATIVE: Path = Path("quickscale_modules")
 
 # Decorator names that indicate csrf_exempt is applied to the decorated node.
-# This covers both Django's ``csrf_exempt`` and the blog module's
-# ``_typed_csrf_exempt`` wrapper (which preserves view typing).
+# This covers both Django's ``csrf_exempt`` and the historical blog
+# ``_typed_csrf_exempt`` wrapper, kept recognized so a reappearance of the
+# wrapper is caught by this gate rather than silently skipped.
 CSRF_EXEMPT_DECORATOR_NAMES: frozenset[str] = frozenset(
     {
         "csrf_exempt",
@@ -63,7 +66,6 @@ METHOD_DECORATOR_NAME: str = "method_decorator"
 APPROVED_VERIFICATION_HELPERS: frozenset[str] = frozenset(
     {
         "_enforce_csrf",
-        "authenticate_blog_api_request",
     }
 )
 

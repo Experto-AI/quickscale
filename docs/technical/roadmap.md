@@ -223,19 +223,20 @@ defaults.
 - [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
   **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
-  URL prefixes set in three places, two API frameworks and error shapes, and blog's hand-written
-  throttle.
+  URL prefixes still live in three places, and listings and orgs carry the last plain-`JsonResponse`
+  API surfaces; the error shape, the wiring merge, the webhooks, and the billing, forms, and blog
+  throttles have landed.
 
   **Scope:**
   - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
     `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
-    route names become snake_case without the module name.
-  - *APIs.* blog's and listings' function-view APIs become DRF views; `OrgApiBaseView` is rebased
-    on DRF's `APIView`; errors take the shared error shape (DRF dependency in every module with an
-    API, the theme's `useApi.ts` and orgs/social pages); blog's `BLOG_API_TOKENS`, its dual-auth exception
-    in the JSON API Endpoint Base Contract, and its hand-written rate parser go, with the raw-SQL
-    counter table `quickscale_modules_blog_api_throttle_counter` it writes; blog's throttle scope
-    takes the stem and its rate from a setting (rules 9 and 32).
+    route names become snake_case without the module name. Blog's mount and route names have
+    landed; auth, orgs, notifications, social, billing, crm, and forms remain.
+  - *APIs.* listings' function-view API becomes a DRF view; `OrgApiBaseView` is rebased on DRF's
+    `APIView`; errors take the shared error shape (DRF dependency in every module with an API, the
+    theme's `useApi.ts` and orgs/social pages). Blog's conversion has landed: both endpoints are
+    DRF views, `BLOG_API_TOKENS` and its dual-auth exception are gone, and its throttle scope
+    carries the stem with the rate from a setting.
 
   **Acceptance:** every API error body matches the one shape; a list of every moved
   public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and
