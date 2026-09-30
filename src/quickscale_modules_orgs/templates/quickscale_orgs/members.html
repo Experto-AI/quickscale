@@ -19,7 +19,7 @@
 {% endfor %}
 {% endif %}
 
-<form method="post" action="{% url 'org-members-invite' org_slug=organization.slug %}">
+<form method="post" action="{% url 'quickscale_orgs:members_invite' org_slug=organization.slug %}">
     {% csrf_token %}
     <p>
         <label for="{{ invite_form.email.id_for_label }}">Email</label>
@@ -61,7 +61,7 @@
             <td>{{ invitation.invited_by.username|default:invitation.invited_by.email }}</td>
             <td>{{ invitation.expires_at }}</td>
             <td>
-                <form method="post" action="{% url 'org-members-invitation-revoke' org_slug=organization.slug invitation_id=invitation.pk %}">
+                <form method="post" action="{% url 'quickscale_orgs:members_invitation_revoke' org_slug=organization.slug invitation_id=invitation.pk %}">
                     {% csrf_token %}
                     <button type="submit">Revoke invitation</button>
                 </form>

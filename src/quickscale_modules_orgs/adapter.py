@@ -16,12 +16,15 @@ from quickscale_core.runtime.manifest import (
 def _orgs_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Project orgs settings and URL placement from the resolved options.
+    """Project orgs settings from the resolved options.
 
     Every option is validated against the manifest's own declared rules before
-    the mode decides whether the module's URLs mount before the project's home
-    route (``solo``) or after it (``saas``), so an invalid mode fails closed
-    instead of producing contradictory URLs.
+    assembly, so an invalid mode fails closed.  The manifest declares the
+    ``orgs/`` mount and its mode-dependent placement (solo mounts before the
+    project's home route, saas after it) as conditional wiring projections;
+    this hook only projects the settings the declarative resolver cannot, and
+    carries the resolved URL includes through unchanged (Module Conventions
+    rule 7).
     """
     issues = validate_module_options(load_module_manifest("orgs"), resolved)
     if issues:
@@ -39,20 +42,12 @@ def _orgs_post_hook(
         }
     )
 
-    root_include = ("", "quickscale_modules_orgs.urls")
-    if mode == "solo":
-        pre_home_url_includes: tuple[tuple[str, str], ...] = (root_include,)
-        url_includes: tuple[tuple[str, str], ...] = ()
-    else:
-        pre_home_url_includes = ()
-        url_includes = (root_include,)
-
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=("quickscale_modules_orgs.middleware.TenantMiddleware",),
         settings=settings,
-        pre_home_url_includes=pre_home_url_includes,
-        url_includes=url_includes,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
         managed_files=spec.managed_files,
     )
 

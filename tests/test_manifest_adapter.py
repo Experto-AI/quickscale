@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_core.manifest import ManifestError
+from quickscale_core.manifest import ManifestError, build_generic_manifest_spec
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_modules_orgs.adapter import (
     _orgs_manifest_adapter,
@@ -22,7 +22,7 @@ class TestOrgsManifestAdapter:
         assert get_manifest_adapter() is _orgs_manifest_adapter
 
     def test_solo_defaults_use_pre_home_urls(self) -> None:
-        """Solo mode keeps the org URLs before the project's home route."""
+        """Solo mode keeps the org mount before the project's home route."""
         spec = _orgs_manifest_adapter({})
 
         assert isinstance(spec, ModuleWiringSpec)
@@ -34,16 +34,37 @@ class TestOrgsManifestAdapter:
             "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
             "QUICKSCALE_MODE": "solo",
         }
-        assert spec.pre_home_url_includes == (("", "quickscale_modules_orgs.urls"),)
+        assert spec.pre_home_url_includes == (
+            ("orgs/", "quickscale_modules_orgs.urls"),
+        )
         assert spec.url_includes == ()
 
     def test_saas_mode_uses_post_home_urls(self) -> None:
-        """SaaS mode keeps the org URLs after the project's home route."""
+        """SaaS mode keeps the org mount after the project's home route."""
         spec = _orgs_manifest_adapter({"mode": "saas"})
 
         assert spec.settings["QUICKSCALE_MODE"] == "saas"
         assert spec.pre_home_url_includes == ()
-        assert spec.url_includes == (("", "quickscale_modules_orgs.urls"),)
+        assert spec.url_includes == (("orgs/", "quickscale_modules_orgs.urls"),)
+
+    @pytest.mark.parametrize(
+        ("mode", "pre_home", "post_home"),
+        [
+            ("solo", (("orgs/", "quickscale_modules_orgs.urls"),), ()),
+            ("saas", (), (("orgs/", "quickscale_modules_orgs.urls"),)),
+        ],
+    )
+    def test_manifest_owns_the_orgs_mount(
+        self,
+        mode: str,
+        pre_home: tuple[tuple[str, str], ...],
+        post_home: tuple[tuple[str, str], ...],
+    ) -> None:
+        """Rule 7: the manifest's conditional url_includes is the mount's home."""
+        spec = build_generic_manifest_spec("orgs", {"mode": mode})
+
+        assert spec.pre_home_url_includes == pre_home
+        assert spec.url_includes == post_home
 
     @pytest.mark.parametrize("raw_mode", [" SaaS ", "SAAS", " solo ", "SOLO"])
     def test_mode_is_normalized(self, raw_mode: str) -> None:
@@ -71,8 +92,10 @@ class TestOrgsManifestAdapter:
         solo = _orgs_manifest_adapter({})
         saas_again = _orgs_manifest_adapter({"mode": "saas"})
 
-        assert saas.url_includes == (("", "quickscale_modules_orgs.urls"),)
+        assert saas.url_includes == (("orgs/", "quickscale_modules_orgs.urls"),)
         assert saas.pre_home_url_includes == ()
-        assert solo.pre_home_url_includes == (("", "quickscale_modules_orgs.urls"),)
+        assert solo.pre_home_url_includes == (
+            ("orgs/", "quickscale_modules_orgs.urls"),
+        )
         assert solo.url_includes == ()
         assert saas_again == saas

@@ -57,7 +57,9 @@ class DebugAsOrgView(LoginRequiredMixin, View):
         ):
             return redirect(next_url)
 
-        return redirect(reverse("org-detail", kwargs={"org_slug": organization.slug}))
+        return redirect(
+            reverse("quickscale_orgs:detail", kwargs={"org_slug": organization.slug})
+        )
 
 
 class ExitDebugModeView(LoginRequiredMixin, View):
