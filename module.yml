@@ -18,16 +18,13 @@ config:
   immutable: {}
 
 required_modules:
-  - orgs>=0.86.0
+  - orgs
 
 dependencies:
   - djangorestframework>=3.17.2
   - django-filter>=26.1
   - django-markdownx>=4.0.11
   - Pillow>=12.3.0,<13.0.0
-
-implies:
-  - name: orgs
 
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)
