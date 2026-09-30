@@ -28,6 +28,7 @@ from quickscale_modules_notifications.models import (
 )
 from quickscale_modules_notifications.services import (
     NotificationDisabledError,
+    NotificationSettingsSnapshot,
     NotificationTemplateError,
     NotificationWebhookSignatureError,
     build_webhook_signature_headers,
@@ -35,6 +36,7 @@ from quickscale_modules_notifications.services import (
     ensure_default_settings,
     ingest_webhook_event,
     render_notification,
+    sanitize_provider_tags,
     send_notification,
 )
 
@@ -158,6 +160,22 @@ def test_render_notification_renders_org_invitation_template() -> None:
     assert context["expires_at"] in rendered.text_body
     assert "Accept invitation" in rendered.html_body
     assert context["accept_url"] in rendered.html_body
+
+
+def test_sanitize_provider_tags_matches_noncanonical_allowlist_entries() -> None:
+    """An accepted but noncanonical allowlist entry still matches its tag.
+
+    ``apply`` normalizes tag lists, but a value that reached settings by
+    another route passes the generic check unaltered; the comparison set must
+    canonicalize the same way each candidate does, or the tag is silently
+    dropped.
+    """
+    with override_settings(
+        QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS=["VIP"],
+        QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS=["VIP"],
+    ):
+        snapshot = NotificationSettingsSnapshot.from_settings()
+        assert sanitize_provider_tags(["VIP"], settings_snapshot=snapshot) == ["vip"]
 
 
 @pytest.mark.django_db
