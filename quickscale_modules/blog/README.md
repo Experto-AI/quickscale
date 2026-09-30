@@ -147,8 +147,8 @@ Creating posts:
   organization (`Organization.objects.get_system_org()`), while tenant-scoped content uses
   `request.org` set by `TenantMiddleware`.
 
-Template customization: all templates extend `quickscale_blog/blog/base.html`. Override the
-base at `templates/quickscale_blog/blog/base.html` or individual pages at
+Template customization: all templates extend `quickscale_blog/base.html`. Override the
+base at `templates/quickscale_blog/base.html` or individual pages at
 `templates/quickscale_blog/blog/<page>.html`. The module ships zero-style semantic templates;
 add your own CSS in the project.
 

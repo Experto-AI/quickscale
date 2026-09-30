@@ -171,19 +171,21 @@ Current server-rendered surfaces:
 
 | Surface | Styling |
 | --- | --- |
-| `auth` | Extends `base.html`, adds token-based `quickscale_modules_auth/css/auth.css` via `{{ block.super }}` — **the reference pattern** |
-| `billing` | Extends `base.html`; all pricing, dashboard, checkout-return, and portal-return pages use token-based `billing.css` |
-| `blog` | Extends `base.html`; content-only `blog.css`; children fill `{% block blog_content %}` |
-| `listings` | Extends `base.html`; content-only `listings.css`; children fill `{% block listings_content %}` |
-| `crm` | Extends `base.html`; content-only `crm.css`; children fill `{% block crm_content %}` |
-| `orgs` | SaaS mode uses the React shell; solo-mode Django pages remain standalone module documents and are outside SA192 |
-| `backups` | Operator pages use the Django admin shell and are outside SA192 |
-| `notifications` | Email bodies — intentionally self-contained; email clients require inlined styles |
+| `auth` | Extends `base.html` through `quickscale_auth/base.html`, adds token-based `quickscale_auth/css/auth.css` via `{{ block.super }}` — **the reference pattern** |
+| `billing` | Extends `base.html` through `quickscale_billing/base.html`; all pricing, dashboard, checkout-return, and portal-return pages use token-based `quickscale_billing/css/billing.css` |
+| `blog` | Extends `base.html` through `quickscale_blog/base.html`; content-only `quickscale_blog/css/blog.css`; children fill `{% block blog_content %}` |
+| `listings` | Extends `base.html` through `quickscale_listings/base.html`; content-only `quickscale_listings/css/listings.css`; children fill `{% block listings_content %}` |
+| `crm` | Extends `base.html` through `quickscale_crm/base.html`; content-only `quickscale_crm/css/crm.css`; children fill `{% block crm_content %}` |
+| `orgs` | Extends `base.html` through `quickscale_orgs/base.html`; children fill `{% block orgs_content %}` |
+| `analytics` | Extends `base.html` through `quickscale_analytics/base.html`; children fill `{% block analytics_content %}` |
+| `forms` | Extends `base.html` through `quickscale_forms/base.html`; children fill `{% block forms_content %}` |
+| `backups` | Operator pages use the Django admin shell and the `admin/` template exception; outside the module page contract |
+| `notifications` | Email bodies under `templates/quickscale_notifications/email/` — intentionally self-contained; email clients require inlined styles |
 
-**Every SA192 server-rendered surface — auth, billing, blog, listings, and CRM — extends
-`base.html`.** The shell — reset, `body`, topbar, `<main>`, messages, footer, link colour — is
-defined once for those surfaces and never restated by them. The standalone orgs solo-mode pages and
-admin-owned backups pages are separate existing surfaces, not silent adopters of this contract.
+**Every module page — auth, billing, blog, listings, CRM, orgs, analytics, and forms — extends
+`base.html` through one flat module base.** The shell — reset, `body`, topbar, `<main>`, messages,
+footer, link colour — is defined once for those surfaces and never restated by them. Admin-owned
+backups pages follow the Django admin shell and the `admin/` template exception instead.
 
 The pattern, established by `auth` and now used by `billing`, `blog`, `listings`, and `crm`:
 
@@ -193,11 +195,11 @@ The pattern, established by `auth` and now used by `billing`, `blog`, `listings`
 
 {% block extra_css %}
 {{ block.super }}
-<link rel="stylesheet" href="{% static 'quickscale_modules_<name>/<name>.css' %}">
+<link rel="stylesheet" href="{% static 'quickscale_<name>/css/<name>.css' %}">
 {% endblock %}
 
 {% block content %}
-{% include "quickscale_modules_orgs/_debug_banner.html" %}
+{% include "quickscale_orgs/_debug_banner.html" %}
 <nav class="<name>-nav">…</nav>
 
 <div class="<name>-content">
@@ -208,7 +210,7 @@ The pattern, established by `auth` and now used by `billing`, `blog`, `listings`
 
 Two constraints make this work:
 
-1. **The module base occupies `{% block content %}`, so child templates fill a module-specific block** (`auth_content`, `billing_content`, `blog_content`, `listings_content`, `crm_content`) rather than `content`.
+1. **The module base occupies `{% block content %}`, so child templates fill a module-specific block** (`auth_content`, `billing_content`, `blog_content`, `listings_content`, `crm_content`, `orgs_content`, `analytics_content`, `forms_content`) rather than `content`.
 2. **Only blocks that `base.html` already defines may be used** — `title`, `extra_css`, `content`, `extra_js`. `templates/base.html` is user-owned **category U3** ([generated_file_ownership.md](generated_file_ownership.md)) and is never rewritten by `quickscale update` ([user_manual.md](user_manual.md#what-quickscale-update-changes-and-what-stays-yours)), so a module template that depends on a *new* block would silently render nothing on any already-generated project — Django ignores a child block the parent does not define. The generated-file ownership rules therefore require the existing block contract rather than a new frozen project-file dependency.
 3. **The module base wraps the child block in a `<div class="<name>-content">`.** `base.html` applies a `*, *::before, *::after { margin: 0; padding: 0 }` reset, so module content written as plain semantic HTML (`<article>`, `<h1>`, `<p>`) has **no default spacing**. The wrapper gives the module stylesheet a scope to restore its own vertical rhythm without leaking rules into the shell or other modules. `auth` uses `.auth-container` / `.auth-main` for the same purpose.
 
@@ -261,7 +263,7 @@ Each module surface is in one of three states, and **this is the most important 
 1. **Django owns data and authorization. React owns presentation and navigation within the SPA.** No business rule lives only in TypeScript.
 2. **One seam.** New server state reaches React through `window.__QUICKSCALE__`, validated, or through a DRF endpoint. Nothing else.
 3. **A new URL prefix is a four-place change**: the module's URL wiring, the Vite dev proxy, the shell-pattern list if the SPA should own it, and this document.
-4. **A new server-rendered module surface extends `base.html`.** Do not copy the legacy standalone-document shape used by the existing orgs solo-mode pages.
+4. **A new server-rendered module surface extends `base.html` through one flat `templates/quickscale_<module>/base.html`.** Do not emit a standalone document or fill the project's `content` block directly.
 5. **New SPA UI uses `src/components/ui/` primitives and the `index.css` tokens.** Do not add ad-hoc CSS to the SPA.
 6. **Do not hash Vite output filenames** unless the Django templates are switched to the manifest first.
 7. **Module frontend pages live in the theme, not in the module**, and are marked `DORMANT` with a lazy import.

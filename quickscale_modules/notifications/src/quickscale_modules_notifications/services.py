@@ -262,35 +262,25 @@ class WebhookIngestionResult:
 
 _TEMPLATE_REGISTRY = {
     "notifications.generic": NotificationTemplateDefinition(
-        subject_template=("quickscale_notifications/notifications/generic_subject.txt"),
-        text_template=("quickscale_notifications/notifications/generic_body.txt"),
-        html_template=("quickscale_notifications/notifications/generic_body.html"),
+        subject_template=("quickscale_notifications/email/generic_subject.txt"),
+        text_template=("quickscale_notifications/email/generic_body.txt"),
+        html_template=("quickscale_notifications/email/generic_body.html"),
         required_context=frozenset({"headline", "body"}),
     ),
     "notifications.forms_submission": NotificationTemplateDefinition(
         subject_template=(
-            "quickscale_notifications/notifications/forms_submission_subject.txt"
+            "quickscale_notifications/email/forms_submission_subject.txt"
         ),
-        text_template=(
-            "quickscale_notifications/notifications/forms_submission_body.txt"
-        ),
-        html_template=(
-            "quickscale_notifications/notifications/forms_submission_body.html"
-        ),
+        text_template=("quickscale_notifications/email/forms_submission_body.txt"),
+        html_template=("quickscale_notifications/email/forms_submission_body.html"),
         required_context=frozenset(
             {"form_title", "submitted_at", "fields", "ip_address", "status"}
         ),
     ),
     "notifications.org_invitation": NotificationTemplateDefinition(
-        subject_template=(
-            "quickscale_notifications/notifications/org_invitation_subject.txt"
-        ),
-        text_template=(
-            "quickscale_notifications/notifications/org_invitation_body.txt"
-        ),
-        html_template=(
-            "quickscale_notifications/notifications/org_invitation_body.html"
-        ),
+        subject_template=("quickscale_notifications/email/org_invitation_subject.txt"),
+        text_template=("quickscale_notifications/email/org_invitation_body.txt"),
+        html_template=("quickscale_notifications/email/org_invitation_body.html"),
         required_context=frozenset(
             {
                 "organization_name",

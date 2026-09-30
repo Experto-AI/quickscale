@@ -28,9 +28,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
 | SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA219 | Deferred |
 | SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 3 | — | Deferred |
-| SA224 | Standardize module templates, static files, and template tags | post-v88 | 1 | — | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
-| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA224, SA226 | Deferred |
+| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA226 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -41,7 +40,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA224 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA217 ──► SA219
 Track 3: SA223 ──► SA220 ──► SA226 ──► SA216 (after SA215)
      critical path: SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
@@ -55,8 +54,7 @@ SA217's startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA22
 authorization needs SA220's capabilities and SA223's DRF views. SA204 freezes migration history
 before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA224 fills Track 1's wait for SA215, and Track 3's SA223 fills the
-wait for SA219; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
+**Off the critical path.** Track 3's SA223 fills the wait for SA219; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
 user-referencing models.
 
 ### Track states
@@ -65,7 +63,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA224 | yes | yes | yes | **yes** | no |
+| 1 | SA215 | no | no | no | no | **yes** |
 | 2 | SA217 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA223 | yes | yes | yes | **yes** | **yes** |
 
@@ -241,22 +239,7 @@ defaults.
   **Surfaces:** every module's `urls.py`, `adapter.py`, manifest; blog, listings, orgs, social
   APIs; billing and notifications webhooks; the theme's React API client; the CSRF gate script.
 
-- [ ] **SA224 — Standardize module templates, static files, and template tags.**
-
-  **Context:** inventory §§ 10, 39; D11, D40; rules 8 and 37. Templates break the recorded
-  base-template rule.
-
-  **Scope:** one flat module base per module (orgs, analytics, forms gain one; orgs stops emitting
-  `<html>`); emails under `email/`; static under `static/quickscale_<module>/`; template-tag
-  libraries renamed `quickscale_<module>[_<purpose>]`. Core's
-  `test_module_page_style_contract.py` pins today's nested base paths and flat CSS and lists modules
-  by hand; it changes in the same commit, deriving its module set from discovery (rule 37).
-
-  **Acceptance:** every module page extends its module base, which extends the project base; no
-  module template emits `<html>`; the generated project renders every module page.
-
-  **Surfaces:** every module's `templates/`, `static/`, `templatetags/`; the generated `base.html`;
-  core's page-style contract test.
+- [x] **SA224 — Standardize module templates, static files, and template tags.**
 
 - [ ] **SA226 — Standardize authorization, email, write effects, and events.**
 

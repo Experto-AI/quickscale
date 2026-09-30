@@ -65,7 +65,7 @@ The module's own errors live in `exceptions.py` under `NotificationError`, with
 `NotificationValidationError`, `NotificationWebhookError`, and
 `NotificationWebhookSignatureError` for callers to catch.
 
-Templates live under `templates/quickscale_notifications/notifications/` (`base_email.html`
+Templates live under `templates/quickscale_notifications/email/` (`base_email.html`
 plus subject/body pairs for generic messages, form submissions, and organization invitations).
 
 ### Startup checks
@@ -108,5 +108,5 @@ This module ships no management commands.
 
 - Modules and projects send email through notifications' services instead of Django's email
   helpers, so delivery tracking and provider configuration stay in one place.
-- Add a template definition under `templates/quickscale_notifications/notifications/` plus a
+- Add a template definition under `templates/quickscale_notifications/email/` plus a
   `NotificationTemplateDefinition` to expose a new message shape.

@@ -10,7 +10,7 @@ from pathlib import Path
 import quickscale_modules_blog
 
 MODULE_PATH = Path(quickscale_modules_blog.__file__).parent
-BASE_TEMPLATE = MODULE_PATH / "templates" / "quickscale_blog" / "blog" / "base.html"
+BASE_TEMPLATE = MODULE_PATH / "templates" / "quickscale_blog" / "base.html"
 CHILD_DIR = MODULE_PATH / "templates" / "quickscale_blog" / "blog"
 
 
@@ -36,7 +36,7 @@ class TestBaseTemplateInheritance:
         content = BASE_TEMPLATE.read_text()
         assert "{% block extra_css %}" in content
         assert "{{ block.super }}" in content
-        assert "quickscale_modules_blog/blog.css" in content
+        assert "quickscale_blog/css/blog.css" in content
 
     def test_base_has_no_inline_style_block(self):
         """Styling lives in a stylesheet, not inlined in the template."""

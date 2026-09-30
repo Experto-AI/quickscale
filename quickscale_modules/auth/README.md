@@ -110,7 +110,7 @@ SESSION_SAVE_EVERY_REQUEST = True  # Extend session on activity
 - `SignupForm` in `forms.py`, wired through `ACCOUNT_SIGNUP_FORM_CLASS`.
 - Account templates under `templates/quickscale_auth/` (with allauth overrides under
   `templates/account/`) extending `quickscale_auth/base.html`.
-- Static assets under `static/quickscale_modules_auth/{css,js}/`.
+- Static assets under `static/quickscale_auth/{css,js}/`.
 - Account flows: login, logout, signup, password change and reset, profile view/edit, and
   account deletion.
 - `receivers.py` connects a `user_signed_up` receiver from `ready()` as the post-registration
@@ -185,7 +185,7 @@ Optionally create a superuser with `python manage.py createsuperuser`.
 All account templates extend `quickscale_auth/base.html`. Override the base template at
 `templates/quickscale_auth/base.html`, individual pages at
 `templates/quickscale_auth/account/<page>.html`, and add custom assets under
-`static/quickscale_modules_auth/css/` or `js/`.
+`static/quickscale_auth/css/` or `js/`.
 
 ### Troubleshooting
 

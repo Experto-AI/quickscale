@@ -427,9 +427,10 @@ for DEBUG development or rebuild for deployment, and leave each page's own styli
 so updates keep delivering it.
 
 When you override a module *page* template, copy its block structure exactly. A module page fills a
-module-named block — `auth_content`, `billing_content`, `blog_content`, `listings_content`, or
-`crm_content` — not `content`, which the module's own base template occupies. An override left on
-`{% block content %}` parses without error and renders nothing.
+module-named block — `auth_content`, `billing_content`, `blog_content`, `listings_content`,
+`crm_content`, `orgs_content`, `analytics_content`, or `forms_content` — not `content`, which the
+module's own base template occupies. An override left on `{% block content %}` parses without error
+and renders nothing.
 
 **After every update:**
 
