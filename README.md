@@ -2,25 +2,44 @@
 
 Curated social links and embeds for QuickScale-generated projects.
 
-This README documents the current main-branch v0.79.0 social implementation. Repository SSOT still lives in [../../README.md](../../README.md), [../../docs/technical/decisions.md](../../docs/technical/decisions.md), and [../../docs/technical/roadmap.md](../../docs/technical/roadmap.md).
+## Overview
 
-## What Ships In v0.79.0
+- An installable Django app with `SocialLink` and `SocialEmbed` models, migrations, admin
+  registration, and package-local pytest coverage.
+- Theme-agnostic runtime services that expose normalized read-only payloads for curated
+  link-tree and embed surfaces.
+- Backend-owned embed preview metadata for YouTube and TikTok, including persisted resolution
+  status, timestamps, and operator-visible errors.
+- Generated-project-managed JSON endpoints at `/_quickscale/social/` and
+  `/_quickscale/social/embeds/`, backed by module services instead of module-owned HTTP APIs.
+- Fresh `showcase_react` public pages at `/social` and `/social/embeds`; existing generated
+  projects stay backend-only unless the theme files are adopted manually.
 
-- An installable Django app with `SocialLink` and `SocialEmbed` models, migrations, admin registration, and package-local pytest coverage.
-- Theme-agnostic runtime services that expose normalized read-only payloads for curated link-tree and embed surfaces.
-- Backend-owned embed preview metadata for YouTube and TikTok, including persisted resolution status, timestamps, and operator-visible errors.
-- Generated-project-managed JSON endpoints at `/_quickscale/social/` and `/_quickscale/social/embeds/` backed by module services instead of module-owned HTTP APIs.
-- Fresh `showcase_react` public pages at `/social` and `/social/embeds`, with existing generated projects staying backend-only unless the theme files are adopted manually.
+Support matrix:
 
-## Support Matrix
+- **Existing generated projects:** `quickscale apply` adds backend-managed settings,
+  admin/runtime wiring, and the generated-project integration endpoints, but it does not
+  rewrite user-owned `showcase_react` routes, navigation, templates, or page source.
+- **Fresh `showcase_react` generations:** get the full backend plus React public experience,
+  including Django-owned `/social` and `/social/embeds` pages hydrated by the shared React
+  bundle.
+- **Older projects that want the React UX:** manually adopt the `showcase_react` social page
+  templates and frontend files after backend wiring is in place.
 
-- Existing generated projects: `quickscale apply` adds backend-managed settings, admin/runtime wiring, and the generated-project integration endpoints, but it does not rewrite user-owned `showcase_react` routes, navigation, templates, or page source.
-- Fresh `showcase_react` generations: get the full backend plus React public experience, including Django-owned `/social` and `/social/embeds` pages hydrated by the shared React bundle.
-- Older projects that want the React UX: manually adopt the `showcase_react` social page templates and frontend files after backend wiring is in place.
+## Configuration
 
-## Configuration Surface
+The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
+write them to the generated settings, and `quickscale.yml` carries the desired values.
 
-The planner-owned config stays authoritative in generated settings and `quickscale.yml`.
+| Option | Type | Default | Django setting | Description |
+|--------|------|---------|----------------|-------------|
+| `link_tree_enabled` | boolean | `true` | `QUICKSCALE_SOCIAL_LINK_TREE_ENABLED` | Enable the public link-tree surface at the fixed `/social` route. |
+| `layout_variant` | string | `list` | `QUICKSCALE_SOCIAL_LAYOUT_VARIANT` | Default link-tree presentation variant: `list`, `cards`, or `grid`. |
+| `embeds_enabled` | boolean | `true` | `QUICKSCALE_SOCIAL_EMBEDS_ENABLED` | Enable the public embed gallery surface at the fixed `/social/embeds` route. |
+| `provider_allowlist` | list | `["facebook", "instagram", "linkedin", "tiktok", "x", "youtube"]` | `QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST` | Allowlisted social providers for curated links and embeds. Embed-capable providers are TikTok and YouTube. |
+| `cache_ttl_seconds` | integer | `300` | `QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS` | Cache TTL in seconds for normalized social payloads and provider lookups. |
+| `links_per_page` | integer | `24` | `QUICKSCALE_SOCIAL_LINKS_PER_PAGE` | Maximum number of curated links exposed through the fixed `/social` surface. |
+| `embeds_per_page` | integer | `12` | `QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE` | Maximum number of curated embeds exposed through the fixed `/social/embeds` surface. |
 
 ```yaml
 modules:
@@ -37,97 +56,124 @@ modules:
     embeds_per_page: 12
 ```
 
-Supported mutable keys come from [module.yml](./module.yml):
+## Public surface
 
-- `link_tree_enabled`
-- `layout_variant` (`list`, `cards`, `grid`)
-- `embeds_enabled`
-- `provider_allowlist`
-- `cache_ttl_seconds`
-- `links_per_page`
-- `embeds_per_page`
+Models:
 
-## Public Surfaces
+- `SocialLink` and `SocialEmbed` inherit the abstract `BaseSocialItem`, which provides title,
+  description, provider name, URL, normalized URL, display order, publication flag, and
+  timestamps.
+- `SocialEmbed` adds resolution metadata: status, error, attempt and resolution timestamps,
+  resolved embed and thumbnail URLs, and embed/thumbnail dimensions.
+- Both admin classes subclass orgs' `TenantModelAdmin`, so each organization curates its own
+  records.
 
-- Fixed public routes: `/social` and `/social/embeds`
-- Managed JSON endpoints: `/_quickscale/social/` and `/_quickscale/social/embeds/`
-- Module package boundary: the package stays HTTP-free; generated projects own the public URL wiring and JSON views.
+Services (`quickscale_modules_social.services`):
 
-### Link-tree payload shape
+- `list_published_social_links()` returns the published links, allowlist-filtered and capped.
+- `list_published_social_embeds()` returns the published embeds, allowlist- and
+  embed-capability-filtered and capped.
+- `build_social_link_tree_payload()` and `build_social_embeds_payload()` build the JSON payloads
+  the public pages and integration endpoints serve.
+- Payloads are cached under `quickscale_social:` keys, partitioned per organization, with the
+  configured TTL; save and delete invalidate the bare and affected organization keys.
 
-```json
-{
-	"module": "social",
-	"surface": "link_tree",
-	"status": "enabled",
-	"enabled": true,
-	"public_path": "/social",
-	"integration_base_path": "/_quickscale/social/",
-	"integration_embeds_path": "/_quickscale/social/embeds/",
-	"provider_allowlist": ["facebook", "instagram", "linkedin", "tiktok", "x", "youtube"],
-	"embed_provider_allowlist": ["tiktok", "youtube"],
-	"layout_variant": "cards",
-	"links_per_page": 24,
-	"total_links": 1,
-	"links": [
-		{
-			"id": 1,
-			"title": "QuickScale on YouTube",
-			"description": "Launch clips and demos.",
-			"provider_name": "youtube",
-			"provider_display_name": "YouTube",
-			"url": "https://www.youtube.com/watch?v=abc123",
-			"source_url": "https://youtu.be/abc123?si=share",
-			"display_order": 10
-		}
-	],
-	"error": null
-}
-```
-
-### Embed payload additions
-
-Embed records extend the base contract with backend-owned preview metadata:
+Link-tree payload shape:
 
 ```json
 {
-	"id": 2,
-	"title": "QuickScale launch clip",
-	"provider_name": "youtube",
-	"provider_display_name": "YouTube",
-	"url": "https://www.youtube.com/shorts/alpha123",
-	"source_url": "https://www.youtube.com/shorts/alpha123",
-	"display_order": 10,
-	"resolution_status": "resolved",
-	"resolution_error": null,
-	"embed_url": "https://www.youtube.com/embed/alpha123?rel=0",
-	"thumbnail_url": "https://i.ytimg.com/vi/alpha123/hqdefault.jpg",
-	"embed_width": 560,
-	"embed_height": 315,
-	"thumbnail_width": 480,
-	"thumbnail_height": 360,
-	"last_resolution_attempt_at": "2026-04-02T10:00:00+00:00",
-	"last_resolved_at": "2026-04-02T10:00:00+00:00"
+  "module": "social",
+  "surface": "link_tree",
+  "status": "enabled",
+  "enabled": true,
+  "public_path": "/social",
+  "integration_base_path": "/_quickscale/social/",
+  "integration_embeds_path": "/_quickscale/social/embeds/",
+  "provider_allowlist": ["facebook", "instagram", "linkedin", "tiktok", "x", "youtube"],
+  "embed_provider_allowlist": ["tiktok", "youtube"],
+  "layout_variant": "cards",
+  "links_per_page": 24,
+  "total_links": 1,
+  "links": [
+    {
+      "id": 1,
+      "title": "QuickScale on YouTube",
+      "description": "Launch clips and demos.",
+      "provider_name": "youtube",
+      "provider_display_name": "YouTube",
+      "url": "https://www.youtube.com/watch?v=abc123",
+      "source_url": "https://youtu.be/abc123?si=share",
+      "display_order": 10
+    }
+  ],
+  "error": null
 }
 ```
 
-## Supported Providers
+Embed payload additions:
 
-- Link tree: default allowlist is `facebook`, `instagram`, `linkedin`, `tiktok`, `x`, and `youtube`.
-- Embeds: v0.79.0 supports only `youtube` and `tiktok` for inline preview metadata.
-- TikTok note: a canonical `/video/<id>` URL is required for inline preview metadata. Short `vm.tiktok.com` URLs stay stored and operator-visible, but they surface a resolution error until a canonical video URL is saved.
+```json
+{
+  "id": 2,
+  "title": "QuickScale launch clip",
+  "provider_name": "youtube",
+  "provider_display_name": "YouTube",
+  "url": "https://www.youtube.com/shorts/alpha123",
+  "source_url": "https://www.youtube.com/shorts/alpha123",
+  "display_order": 10,
+  "resolution_status": "resolved",
+  "resolution_error": null,
+  "embed_url": "https://www.youtube.com/embed/alpha123?rel=0",
+  "thumbnail_url": "https://i.ytimg.com/vi/alpha123/hqdefault.jpg",
+  "embed_width": 560,
+  "embed_height": 315,
+  "thumbnail_width": 480,
+  "thumbnail_height": 360,
+  "last_resolution_attempt_at": "2026-04-02T10:00:00+00:00",
+  "last_resolved_at": "2026-04-02T10:00:00+00:00"
+}
+```
 
-## Operator Notes
+Supported providers:
 
-- Django admin is the authoritative curation surface in v0.79.0; public CRUD is intentionally out of scope.
-- Runtime configuration remains in generated settings and `quickscale.yml`; the database stores curated records and embed-resolution metadata, not a second mutable config surface.
-- Social payloads are cached with the configured TTL, and unchanged embeds do not blindly re-resolve on every save.
-- Unresolved embeds do not crash page rendering. The public payload exposes explicit resolution state and error details so the React UI can fall back cleanly.
-- The module never ships provider write APIs, OAuth, inbox or reply flows, or arbitrary third-party embed HTML as the primary render contract.
+- Link tree: the default allowlist is `facebook`, `instagram`, `linkedin`, `tiktok`, `x`, and
+  `youtube`.
+- Embeds: only `youtube` and `tiktok` support inline preview metadata.
+- TikTok: a canonical `/video/<id>` URL is required for inline preview metadata. Short
+  `vm.tiktok.com` URLs stay stored and operator-visible, but they surface a resolution error
+  until a canonical video URL is saved.
 
-## Related Docs
+## URLs
 
-- [Roadmap entry](../../docs/technical/roadmap.md)
-- [Changelog](../../CHANGELOG.md)
-- [Official v0.79.0 public release note](../../docs/releases/release-v0.79.0.md)
-- [Maintainer module index](../README.md)
+The module ships no URLconf or views: it stays HTTP-free. The generated project owns the public
+URL wiring:
+
+- Fixed public pages: `/social` and `/social/embeds` (fresh `showcase_react` generations), served
+  by Django template wrappers that hydrate the shared React bundle.
+- Managed JSON endpoints: `/_quickscale/social/` and `/_quickscale/social/embeds/`, rendered
+  into the generated project's managed wiring and backed by the module services.
+
+## Management commands
+
+This module ships no management commands.
+
+## Operations
+
+- Django admin is the authoritative curation surface; public CRUD is intentionally out of
+  scope.
+- Runtime configuration remains in generated settings and `quickscale.yml`; the database stores
+  curated records and embed-resolution metadata, not a second mutable config surface.
+- Social payloads are cached with the configured TTL, and unchanged embeds do not blindly
+  re-resolve on every save.
+- Unresolved embeds do not crash page rendering: the public payload exposes explicit resolution
+  state and error details so the React UI can fall back cleanly.
+- The module never ships provider write APIs, OAuth, inbox or reply flows, or arbitrary
+  third-party embed HTML as the primary render contract.
+
+## Extending
+
+- The public pages consume the payload endpoints through the `window.__QUICKSCALE__` seam; a
+  project that wants to change the presentation adopts the social page templates and frontend
+  files rather than editing module source.
+- Related documentation: [roadmap](../../docs/technical/roadmap.md),
+  [changelog](../../CHANGELOG.md), and the [module workspace README](../README.md).
