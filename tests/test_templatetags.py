@@ -9,7 +9,7 @@ from django.template import Context, Template
 from django.test import RequestFactory, override_settings
 
 from quickscale_modules_analytics import services
-from quickscale_modules_analytics.templatetags import analytics_tags
+from quickscale_modules_analytics.templatetags import quickscale_analytics
 
 
 def _request_with_session(rf: RequestFactory):
@@ -34,7 +34,7 @@ def test_analytics_public_config_tag_returns_runtime_config(
     request = _request_with_session(rf)
 
     template = Template(
-        "{% load analytics_tags %}{% analytics_public_config as config %}"
+        "{% load quickscale_analytics %}{% analytics_public_config as config %}"
         "{{ config.provider }}|{{ config.enabled }}|{{ config.posthog_api_key }}"
     )
 
@@ -54,7 +54,9 @@ def test_analytics_public_config_json_tag_serializes_runtime_config(
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
     request = _request_with_session(rf)
 
-    template = Template("{% load analytics_tags %}{% analytics_public_config_json %}")
+    template = Template(
+        "{% load quickscale_analytics %}{% analytics_public_config_json %}"
+    )
     rendered = template.render(Context({"request": request}))
     payload = json.loads(rendered)
 
@@ -73,12 +75,14 @@ def test_analytics_public_config_json_tag_escapes_html_sensitive_chars(
     }
 
     monkeypatch.setattr(
-        analytics_tags,
+        quickscale_analytics,
         "get_template_analytics_context",
         lambda _request: payload,
     )
 
-    template = Template("{% load analytics_tags %}{% analytics_public_config_json %}")
+    template = Template(
+        "{% load quickscale_analytics %}{% analytics_public_config_json %}"
+    )
     rendered = template.render(Context({}))
 
     assert "</script>" not in rendered
@@ -97,7 +101,7 @@ def test_analytics_public_config_tag_accepts_missing_request_context(
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     template = Template(
-        "{% load analytics_tags %}{% analytics_public_config as config %}"
+        "{% load quickscale_analytics %}{% analytics_public_config as config %}"
         "{{ config.provider }}|{{ config.enabled }}"
     )
     rendered = template.render(Context({}))

@@ -57,7 +57,7 @@ modules:
 - `events.py` holds the stable event vocabulary: `ANALYTICS_EVENT_PAGEVIEW`
   (`$pageview`), `ANALYTICS_EVENT_FORM_SUBMIT` (`form_submit`), and
   `ANALYTICS_EVENT_SOCIAL_LINK_CLICK` (`social_link_click`).
-- Template tags, loaded with `{% load analytics_tags %}`:
+- Template tags, loaded with `{% load quickscale_analytics %}`:
   `analytics_public_config` returns the resolved runtime config dictionary for the current
   request, and `analytics_public_config_json` returns the same payload as JSON for inline
   script or bootstrap patterns.
