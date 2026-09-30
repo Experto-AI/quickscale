@@ -17,6 +17,7 @@ required_modules:
   - auth
 
 dependencies:
+  - djangorestframework>=3.17.2
   - django-allauth>=65.18.0,<66.0.0
 
 contract_vintage:
@@ -41,6 +42,7 @@ derivation:
       derivation_type: static
       expression:
         value:
+          - rest_framework
           - quickscale_modules_orgs
       description: "Orgs Django app label"
 

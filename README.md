@@ -14,7 +14,8 @@ PostgreSQL row-level security, and org-scoped billing.
 - **Tenant scoping**: `TenantManager` filters by the current organization and fails closed when
   no organization context is set; `all_objects` is the operator super-scope.
 - **URL surfaces**: a flat, prefix-less URLconf with organization pages, debug VIEW-AS routes,
-  and a JSON organization/membership API.
+  and a DRF JSON organization/membership API that answers the shared
+  `{"error": {"code", "message", "fields"}}` error shape.
 - **Removal machinery**: organization purge and account deletion discharge declared removal
   obligations through one shared coordinator.
 - `orgs` requires `auth`; QuickScale does not support a standalone orgs install.
@@ -76,6 +77,10 @@ always-on RLS boot guard through its `checks.py`.
   listings render user-authored links through them.
 - `public_context.py` publishes `PublicSystemOrgReadMixin` for public reads that resolve the
   System organization.
+- `views.py` publishes `OrgApiBaseView`, the sanctioned organization-role JSON API base: a DRF
+  `APIView` with session authentication (CSRF enforced), `min_org_role` access gating, and
+  JSON-only rendering, so every org API error answers the one QuickScale shape and anonymous
+  callers keep their `401` challenge.
 - `signals.py` sends `organization_created` when an organization is created.
 - `middleware.py` installs `TenantMiddleware`, which resolves `request.org` per request,
   redirects users without an active organization in saas mode, and skips the org-management
