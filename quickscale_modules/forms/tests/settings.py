@@ -68,6 +68,7 @@ DATABASES = {
 ROOT_URLCONF = "tests.urls"
 
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
     ],

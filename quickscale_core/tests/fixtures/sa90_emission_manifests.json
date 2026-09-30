@@ -52,7 +52,8 @@
       "sa225-skip-guard": "Regenerated 2026-09-28 — docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa223": "Regenerated 2026-09-30 — the React theme's useApi.ts parses the one QuickScale error shape and a new src/test/useApiErrors.test.ts pins it; both emitted paths were re-hashed in all three variants.",
       "sa223-social-page": "Regenerated 2026-09-30 — useApi.ts exports the shared payload-message reader and usePublicSocialSurface.ts uses it to surface the one QuickScale error shape for a non-managed payload; PublicSocialPages.test.tsx pins the message and first-field-message cases. useApi.ts, usePublicSocialSurface.ts, and PublicSocialPages.test.tsx were re-hashed in all three variants.",
-      "sa217": "Regenerated 2026-09-30 — the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644."
+      "sa217": "Regenerated 2026-09-30 — the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644.",
+      "sa223-forms-error-shape": "Regenerated 2026-09-30 — the theme form client (FormRenderer.tsx) submits through the shared apiRequest client and renders the one QuickScale error shape, useFormSchema.ts surfaces that shape's message for a failed schema fetch, and the new src/test/FormRenderer.test.tsx pins the field-error, non-field-error, shaped-message, and network-failure behavior; csrf.test.tsx's FormRenderer mock now answers a JSON content type. FormRenderer.tsx, useFormSchema.ts, csrf.test.tsx, and FormRenderer.test.tsx were re-hashed in all three variants."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -170,7 +171,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "0a2768f033c014ca1ee9591b9e9a40ee3c6356df0ff9962a8b63abe5c50eaea6"
+      "sha256": "75ecb6e3a17a408cd7cc797ade96e886c7ba4fb4719c0d06356d9b9f6d819cc8"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -254,7 +255,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "e1b3c20ca9c738e1adc3b8d5ca833c8d9bbb630693f904561dff67620bb67bcc"
+      "sha256": "3c2a549314412bc79356cc4faafde5ac9892724fb01ba62bcb37d5b9eef994c5"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -376,6 +377,10 @@
       "mode": "664",
       "sha256": "0ea8bca9e90e625443a5cdf8ced4915455746f028dbd293314bccfd681aaff0b"
     },
+    "frontend/src/test/FormRenderer.test.tsx": {
+      "mode": "664",
+      "sha256": "50bf92c42e8c596526576c11abcb866ccca5c2e657a23f369638e3c8dc4cc3e4"
+    },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "664",
       "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
@@ -386,7 +391,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "40d2eb62ea216fd0152c00fd097833fc0045526142805b8cc91505e730d72dc3"
+      "sha256": "3e709780d21c86395f02f7d41aa38658a12d5d468a3ce7452d0befabd841bb30"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -644,7 +649,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "0a2768f033c014ca1ee9591b9e9a40ee3c6356df0ff9962a8b63abe5c50eaea6"
+      "sha256": "75ecb6e3a17a408cd7cc797ade96e886c7ba4fb4719c0d06356d9b9f6d819cc8"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -728,7 +733,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "e1b3c20ca9c738e1adc3b8d5ca833c8d9bbb630693f904561dff67620bb67bcc"
+      "sha256": "3c2a549314412bc79356cc4faafde5ac9892724fb01ba62bcb37d5b9eef994c5"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -850,6 +855,10 @@
       "mode": "664",
       "sha256": "0ea8bca9e90e625443a5cdf8ced4915455746f028dbd293314bccfd681aaff0b"
     },
+    "frontend/src/test/FormRenderer.test.tsx": {
+      "mode": "664",
+      "sha256": "50bf92c42e8c596526576c11abcb866ccca5c2e657a23f369638e3c8dc4cc3e4"
+    },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "664",
       "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
@@ -860,7 +869,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "40d2eb62ea216fd0152c00fd097833fc0045526142805b8cc91505e730d72dc3"
+      "sha256": "3e709780d21c86395f02f7d41aa38658a12d5d468a3ce7452d0befabd841bb30"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -1118,7 +1127,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "0a2768f033c014ca1ee9591b9e9a40ee3c6356df0ff9962a8b63abe5c50eaea6"
+      "sha256": "75ecb6e3a17a408cd7cc797ade96e886c7ba4fb4719c0d06356d9b9f6d819cc8"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -1202,7 +1211,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "e1b3c20ca9c738e1adc3b8d5ca833c8d9bbb630693f904561dff67620bb67bcc"
+      "sha256": "3c2a549314412bc79356cc4faafde5ac9892724fb01ba62bcb37d5b9eef994c5"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -1324,6 +1333,10 @@
       "mode": "664",
       "sha256": "0ea8bca9e90e625443a5cdf8ced4915455746f028dbd293314bccfd681aaff0b"
     },
+    "frontend/src/test/FormRenderer.test.tsx": {
+      "mode": "664",
+      "sha256": "50bf92c42e8c596526576c11abcb866ccca5c2e657a23f369638e3c8dc4cc3e4"
+    },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "664",
       "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
@@ -1334,7 +1347,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "40d2eb62ea216fd0152c00fd097833fc0045526142805b8cc91505e730d72dc3"
+      "sha256": "3e709780d21c86395f02f7d41aa38658a12d5d468a3ce7452d0befabd841bb30"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",

@@ -9,9 +9,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { FormFieldRenderer } from '@/components/forms/FormFieldRenderer'
 import { FormSuccess } from '@/components/forms/FormSuccess'
+import { ApiError, apiRequest, getApiFieldErrors, getApiPayloadMessage } from '@/hooks/useApi'
 import { useFormSchema } from '@/hooks/useFormSchema'
 import type { FormFieldSchema } from '@/hooks/useFormSchema'
-import { getCsrfToken } from '@/lib/csrf'
 
 interface FormRendererProps {
   slug: string
@@ -23,8 +23,10 @@ type FormValues = Record<string, string>
 function buildZodSchema(fields: FormFieldSchema[]): z.ZodObject<Record<string, z.ZodTypeAny>> {
   const shape: Record<string, z.ZodTypeAny> = {}
   for (const field of fields) {
-    // Honeypot: always optional, always empty
-    if (field.name === '_hp_name') {
+    // Honeypot and hidden fields: the visitor cannot fill them, so they
+    // never block submission locally; the server's shaped response is
+    // their visible error path.
+    if (field.name === '_hp_name' || field.field_type === 'hidden') {
       shape[field.name] = z.string().default('')
       continue
     }
@@ -105,40 +107,58 @@ export function FormRenderer({ slug, apiBasePath }: FormRendererProps) {
   async function onSubmit(data: FormValues) {
     setGlobalError(null)
     try {
-      const response = await fetch(`${formsApiBasePath}${slug}/submit/`, {
+      // The shared client parses the one QuickScale error shape
+      // ({"error": {"code", "message", "fields"}}) and throws ApiError.
+      await apiRequest(`${formsApiBasePath}${slug}/submit/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
         body: JSON.stringify(data),
       })
 
-      if (response.status === 201) {
-        if (schema?.redirect_url) {
-          window.location.assign(schema.redirect_url)
-        } else {
-          setSubmitted(true)
-        }
-        return
+      if (schema?.redirect_url) {
+        window.location.assign(schema.redirect_url)
+      } else {
+        setSubmitted(true)
       }
-
-      if (response.status === 400) {
-        const errors = (await response.json()) as Record<string, string[]>
-        for (const [fieldName, messages] of Object.entries(errors)) {
-          if (fieldName === 'non_field_errors' || fieldName === 'detail') {
-            setGlobalError(messages.join(', '))
-          } else {
-            setError(fieldName as keyof FormValues, { message: messages.join(', ') })
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        const fieldErrors = getApiFieldErrors(caught)
+        const entries = Object.entries(fieldErrors)
+        if (entries.length > 0) {
+          // A server field the rendered form cannot show an error on — a
+          // form field added after the schema was cached, or a hidden field
+          // with no message outlet — becomes a global error instead.
+          const renderedFields = new Set(
+            (schema?.fields ?? [])
+              .filter(
+                (field) => field.is_active && field.field_type !== 'hidden',
+              )
+              .map((field) => field.name),
+          )
+          const globalMessages: string[] = []
+          for (const [fieldName, messages] of entries) {
+            if (fieldName !== 'non_field_errors' && renderedFields.has(fieldName)) {
+              setError(fieldName as keyof FormValues, { message: messages.join(', ') })
+              continue
+            }
+            globalMessages.push(
+              ...messages.map((message) =>
+                fieldName === 'non_field_errors' ? message : `${fieldName}: ${message}`,
+              ),
+            )
           }
+          if (globalMessages.length > 0) {
+            setGlobalError(globalMessages.join(', '))
+          }
+          return
         }
+
+        setGlobalError(
+          getApiPayloadMessage(caught.data) ??
+            'An unexpected error occurred. Please try again.',
+        )
         return
       }
 
-      if (response.status === 429) {
-        setGlobalError('Too many submissions. Please try again later.')
-        return
-      }
-
-      setGlobalError('An unexpected error occurred. Please try again.')
-    } catch {
       setGlobalError('Network error. Please check your connection and try again.')
     }
   }

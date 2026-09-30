@@ -157,7 +157,7 @@ urlpatterns = [
     # AccountDeleteView needs auth URL routing in the test harness
     # so view-level survivor regression can reach it.
     # Use the same explicit namespace tuple pattern as the auth test harness
-    # to ensure reverse("quickscale_auth:account-delete") resolves reliably.
+    # to ensure reverse("quickscale_auth:account_delete") resolves reliably.
     path(
         "accounts/",
         include(
