@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_core.manifest import ManifestError
+from quickscale_core.manifest import ManifestError, build_generic_manifest_spec
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_modules_auth.adapter import (
     _auth_manifest_adapter,
@@ -74,6 +74,16 @@ class TestAuthManifestAdapter:
         assert spec.settings["ACCOUNT_SIGNUP_FORM_CLASS"] == (
             "quickscale_modules_auth.forms.SignupForm"
         )
+
+    def test_manifest_owns_the_accounts_mount(self) -> None:
+        """Rule 7: the manifest's url_includes is the mount's only home."""
+        spec = build_generic_manifest_spec("auth", {"authentication_method": "email"})
+
+        assert spec.url_includes == (
+            ("accounts/", "allauth.urls"),
+            ("accounts/", "quickscale_modules_auth.urls"),
+        )
+        assert spec.pre_home_url_includes == ()
 
     def test_account_adapter_stays_single_writer(self) -> None:
         """Auth does not wire ACCOUNT_ADAPTER; the orgs adapter owns the key.

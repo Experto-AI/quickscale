@@ -70,11 +70,8 @@ def _auth_post_hook(
         apps=spec.apps,
         middleware=("allauth.account.middleware.AccountMiddleware",),
         settings=settings,
-        pre_home_url_includes=(),
-        url_includes=(
-            ("accounts/", "allauth.urls"),
-            ("accounts/", "quickscale_modules_auth.urls"),
-        ),
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
         managed_files=spec.managed_files,
     )
 
