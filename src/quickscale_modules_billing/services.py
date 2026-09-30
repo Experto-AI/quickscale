@@ -43,10 +43,6 @@ from quickscale_modules_billing.models import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BILLING_CURRENCY = "usd"
-DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"
-DEFAULT_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"  # noqa: S105 - environment-variable name constant, not a credential
-DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR = "QUICKSCALE_BILLING_WEBHOOK_SECRET"  # noqa: S105 - environment-variable name constant, not a credential
 # The Stripe API version this module is written against: the version
 # stripe-python 15.x ships pinned. It is set on the SDK before every call and
 # every webhook event must report the same named release.
