@@ -110,3 +110,15 @@ steps:
     adoption_steps:
       - "Add MODULE_SETTINGS_SCHEMA to the `from .modules import ...` statement in <package>/settings/base.py (or otherwise expose the managed schema to Django settings), then run `quickscale apply` or `quickscale update` so settings/modules.py carries the compiled schema every installed module's startup check validates against. Until both are in place a module refuses startup with quickscale_settings.E001."
       - "A project generated at this version or later already imports the schema; only an earlier project needs the manual edit."
+  - id: sa223-theme-error-shape
+    minimum: "0.89.0"
+    title: "Adopt the one-shape API error parsing in the React theme client"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/src/hooks/useApi.ts: getApiErrorMessage and getApiFieldErrors read the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}}, prefer the first field message as the actionable message, and still tolerate the pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes until every module API conversion lands; without the update, a converted module API shows only a generic message or no field errors in an existing project."
+      - "Optionally copy the new frontend/src/test/useApiErrors.test.ts to pin the parser behavior."
+  - id: sa223-theme-error-shape-social
+    minimum: "0.89.0"
+    title: "Adopt one-shape error parsing in the theme's public social pages"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/src/hooks/useApi.ts and frontend/src/hooks/usePublicSocialSurface.ts: getApiPayloadMessage reads the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}} from a raw payload, and the public social hook uses it so a non-managed error body shows its message instead of the generic contract-mismatch text."
+      - "Optionally copy the current frontend/src/test/PublicSocialPages.test.tsx cases to pin the message and first-field-message behavior."

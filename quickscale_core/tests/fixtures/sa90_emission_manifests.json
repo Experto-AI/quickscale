@@ -49,7 +49,9 @@
       "sa218": "Regenerated 2026-09-28 — generated settings install quickscale_core.runtime.conventions.exception_handler as REST_FRAMEWORK[EXCEPTION_HANDLER] (SA218). 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa225": "Regenerated 2026-09-28 — docker-compose.yml backend environment forwards the default vendor credential variables (Stripe, Resend, PostHog, AWS, backups remote) from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa225-build-placeholders": "Regenerated 2026-09-28 — the Dockerfile collectstatic step carries command-scoped placeholder credentials for the enabled modules' empty-secret startup checks, so an all-module image build succeeds while runtime still requires the real secrets. 1 fixture hash updated per variant: Dockerfile. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa225-skip-guard": "Regenerated 2026-09-28 — docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative."
+      "sa225-skip-guard": "Regenerated 2026-09-28 — docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa223": "Regenerated 2026-09-30 — the React theme's useApi.ts parses the one QuickScale error shape and a new src/test/useApiErrors.test.ts pins it; both emitted paths were re-hashed in all three variants.",
+      "sa223-social-page": "Regenerated 2026-09-30 — useApi.ts exports the shared payload-message reader and usePublicSocialSurface.ts uses it to surface the one QuickScale error shape for a non-managed payload; PublicSocialPages.test.tsx pins the message and first-field-message cases. useApi.ts, usePublicSocialSurface.ts, and PublicSocialPages.test.tsx were re-hashed in all three variants."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -247,7 +249,7 @@
     },
     "frontend/src/hooks/useApi.ts": {
       "mode": "664",
-      "sha256": "778484bf9dd44c058b8dca5a8dfe38da40be1cf966b40b1528bd8a7480802b1e"
+      "sha256": "048ca404586b1ec6d0e84d3827cd36fce168b7b8cacaf0d7cdadb36e90eae2db"
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
@@ -267,7 +269,7 @@
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",
-      "sha256": "650cbb4f3bede4b18d5e9f2dd1ccbd7ed54dc1810e025366ba3a372e57139eeb"
+      "sha256": "53ad0b23bae007c8c54e0962e6b4a40b8f12021fd851cb1910c5245156df7e43"
     },
     "frontend/src/index.css": {
       "mode": "664",
@@ -375,7 +377,7 @@
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "664",
-      "sha256": "d0079e7c2046b7a0b463fa4db66b37f1e6e72d10fbbbc783de6fc9d6b0983e5a"
+      "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "664",
@@ -388,6 +390,10 @@
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
+    },
+    "frontend/src/test/useApiErrors.test.ts": {
+      "mode": "664",
+      "sha256": "769abb3665de0b1d25c20f8c8e4e7db7ba11e0e4662c23019a93d215d5da5e22"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "664",
@@ -717,7 +723,7 @@
     },
     "frontend/src/hooks/useApi.ts": {
       "mode": "664",
-      "sha256": "778484bf9dd44c058b8dca5a8dfe38da40be1cf966b40b1528bd8a7480802b1e"
+      "sha256": "048ca404586b1ec6d0e84d3827cd36fce168b7b8cacaf0d7cdadb36e90eae2db"
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
@@ -737,7 +743,7 @@
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",
-      "sha256": "650cbb4f3bede4b18d5e9f2dd1ccbd7ed54dc1810e025366ba3a372e57139eeb"
+      "sha256": "53ad0b23bae007c8c54e0962e6b4a40b8f12021fd851cb1910c5245156df7e43"
     },
     "frontend/src/index.css": {
       "mode": "664",
@@ -845,7 +851,7 @@
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "664",
-      "sha256": "d0079e7c2046b7a0b463fa4db66b37f1e6e72d10fbbbc783de6fc9d6b0983e5a"
+      "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "664",
@@ -858,6 +864,10 @@
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
+    },
+    "frontend/src/test/useApiErrors.test.ts": {
+      "mode": "664",
+      "sha256": "769abb3665de0b1d25c20f8c8e4e7db7ba11e0e4662c23019a93d215d5da5e22"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "664",
@@ -1187,7 +1197,7 @@
     },
     "frontend/src/hooks/useApi.ts": {
       "mode": "664",
-      "sha256": "778484bf9dd44c058b8dca5a8dfe38da40be1cf966b40b1528bd8a7480802b1e"
+      "sha256": "048ca404586b1ec6d0e84d3827cd36fce168b7b8cacaf0d7cdadb36e90eae2db"
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
@@ -1207,7 +1217,7 @@
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",
-      "sha256": "650cbb4f3bede4b18d5e9f2dd1ccbd7ed54dc1810e025366ba3a372e57139eeb"
+      "sha256": "53ad0b23bae007c8c54e0962e6b4a40b8f12021fd851cb1910c5245156df7e43"
     },
     "frontend/src/index.css": {
       "mode": "664",
@@ -1315,7 +1325,7 @@
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "664",
-      "sha256": "d0079e7c2046b7a0b463fa4db66b37f1e6e72d10fbbbc783de6fc9d6b0983e5a"
+      "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "664",
@@ -1328,6 +1338,10 @@
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
+    },
+    "frontend/src/test/useApiErrors.test.ts": {
+      "mode": "664",
+      "sha256": "769abb3665de0b1d25c20f8c8e4e7db7ba11e0e4662c23019a93d215d5da5e22"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "664",

@@ -205,18 +205,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
   **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
-  URL prefixes still live in three places, and orgs carries the last plain-`JsonResponse`
-  API surface.
+  URL prefixes still live in three places; every module API is DRF now.
 
   **Scope:**
   - *URLs.* Mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains an
     `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
     route names become snake_case without the module name, in auth, orgs, notifications, social,
     billing, crm, and forms.
-  - *APIs.* `OrgApiBaseView` is rebased on DRF's `APIView`; errors take the shared error shape
-    (DRF dependency in every module with an API, the theme's `useApi.ts` and orgs/social pages).
-    Listings' conversion has landed: its publish endpoint is a DRF view with session
-    authentication and the one error shape.
+  - *APIs.* Blog, listings, orgs, and billing have landed: their endpoints are DRF views with
+    session authentication and the one error shape; the theme's `useApi.ts` and public social pages
+    read that shape. Remaining: forms' submit error body and the theme's form client, as their slice
+    lands.
 
   **Acceptance:** every API error body matches the one shape; a list of every moved
   public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and

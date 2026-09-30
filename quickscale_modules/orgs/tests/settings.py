@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
     "django.contrib.sites",
     "allauth",
     "allauth.account",
@@ -115,6 +116,15 @@ LOGIN_REDIRECT_URL = "/"
 QUICKSCALE_MODE = "solo"
 USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
+
+# DRF configuration mirroring the generated settings: session authentication
+# only and the one QuickScale error shape (Module Conventions rule 9).
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
+}
 
 # Rule 3: every declared setting of the installed modules, so each module's
 # generic startup check runs against a complete stub.

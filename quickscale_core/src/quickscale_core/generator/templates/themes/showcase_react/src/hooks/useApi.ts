@@ -35,13 +35,8 @@ async function parseApiResponse<T>(response: Response): Promise<T | undefined> {
   return (await response.json()) as T
 }
 
-function getFirstValidationMessage(payload: Record<string, unknown>): string | null {
-  const errors = payload.errors
-  if (!isRecord(errors)) {
-    return null
-  }
-
-  for (const value of Object.values(errors)) {
+function getFirstFieldMessage(fields: Record<string, unknown>): string | null {
+  for (const value of Object.values(fields)) {
     if (Array.isArray(value) && value.length > 0) {
       const firstValue = value[0]
       if (typeof firstValue === 'string') {
@@ -53,19 +48,71 @@ function getFirstValidationMessage(payload: Record<string, unknown>): string | n
   return null
 }
 
-function getApiMessage(payload: unknown, status: number): string {
-  if (isRecord(payload)) {
-    if (typeof payload.error === 'string' && payload.error) {
-      return payload.error
-    }
+function getFirstValidationMessage(payload: Record<string, unknown>): string | null {
+  const errors = payload.errors
+  return isRecord(errors) ? getFirstFieldMessage(errors) : null
+}
 
-    const validationMessage = getFirstValidationMessage(payload)
-    if (validationMessage) {
-      return validationMessage
-    }
+function normalizeFieldErrors(source: Record<string, unknown>): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(source).map(([key, value]) => [
+      key,
+      Array.isArray(value)
+        ? value.filter((entry): entry is string => typeof entry === 'string')
+        : [],
+    ]),
+  )
+}
+
+// QuickScale answers every API error in one shape:
+// `{"error": {"code", "message", "fields"}}`. Older module releases still
+// answer `{"error": "<message>"}` or `{"errors": {...}}`, so both are read
+// for compatibility with projects that have not updated every module yet.
+function getErrorFields(payload: unknown): Record<string, string[]> | null {
+  if (!isRecord(payload)) {
+    return null
   }
 
-  return `API Error: ${status}`
+  const error = payload.error
+  if (isRecord(error)) {
+    return isRecord(error.fields) ? normalizeFieldErrors(error.fields) : null
+  }
+
+  const errors = payload.errors
+  return isRecord(errors) ? normalizeFieldErrors(errors) : null
+}
+
+// Reads the one QuickScale shape from a raw payload: the first field message
+// when the error carries fields, otherwise its message. Returns null when the
+// payload is not an error shape.
+export function getApiPayloadMessage(payload: unknown): string | null {
+  if (!isRecord(payload)) {
+    return null
+  }
+
+  const error = payload.error
+  if (isRecord(error)) {
+    // The shared handler's validation message is generic ("Invalid input."),
+    // so the first field message is the actionable one for callers that
+    // display only a message (the org member actions, for example).
+    const fieldMessage = isRecord(error.fields)
+      ? getFirstFieldMessage(error.fields)
+      : null
+    if (fieldMessage) {
+      return fieldMessage
+    }
+    if (typeof error.message === 'string' && error.message) {
+      return error.message
+    }
+  } else if (typeof error === 'string' && error) {
+    return error
+  }
+
+  return getFirstValidationMessage(payload)
+}
+
+function getApiMessage(payload: unknown, status: number): string {
+  return getApiPayloadMessage(payload) ?? `API Error: ${status}`
 }
 
 function buildRequestHeaders(options: RequestInit): Headers {
@@ -102,16 +149,8 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 }
 
 export function getApiFieldErrors(error: unknown): Record<string, string[]> {
-  if (error instanceof ApiError && isRecord(error.data) && isRecord(error.data.errors)) {
-    const fieldErrors = error.data.errors as Record<string, unknown>
-    return Object.fromEntries(
-      Object.entries(fieldErrors).map(([key, value]) => [
-        key,
-        Array.isArray(value)
-          ? value.filter((entry): entry is string => typeof entry === 'string')
-          : [],
-      ]),
-    )
+  if (error instanceof ApiError) {
+    return getErrorFields(error.data) ?? {}
   }
 
   return {}

@@ -62,7 +62,7 @@ def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
         "orgs", {"mode": "solo"}, project_package="myapp"
     )
 
-    assert orgs_spec.apps == ("quickscale_modules_orgs",)
+    assert orgs_spec.apps == ("rest_framework", "quickscale_modules_orgs")
     assert orgs_spec.middleware == (
         "quickscale_modules_orgs.middleware.TenantMiddleware",
     )

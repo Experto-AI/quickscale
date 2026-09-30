@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import json
+from collections.abc import Mapping
 from datetime import UTC
 from importlib import import_module
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from django.apps import apps
 from django.conf import settings
@@ -14,12 +14,25 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ValidationError
 from django.db import connection, transaction
 from django.db.models import QuerySet
-from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.views import View
 from django.views.generic import FormView, ListView, TemplateView
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.exceptions import (
+    NotFound,
+    NotAuthenticated,
+    PermissionDenied,
+    ValidationError as DRFValidationError,
+)
+from rest_framework.parsers import JSONParser
+from rest_framework.permissions import AllowAny
+from rest_framework.renderers import JSONRenderer
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .constants import (
     ACTIVE_ORG_SESSION_KEY,
@@ -266,88 +279,75 @@ class OrganizationContextMixin:
         )
 
 
-class OrgApiBaseView(OrganizationContextMixin, View):
+class OrgsSessionAuthentication(SessionAuthentication):
+    """Session authentication that keeps a 401 challenge for anonymous callers.
+
+    DRF answers an unauthenticated request 403 when the authentication scheme
+    declares no challenge header; the organization API has always answered
+    401, so the scheme names its challenge.
+    """
+
+    def authenticate_header(self, request: Request) -> str:
+        del request
+        return "Session"
+
+
+class OrgApiBaseView(OrganizationContextMixin, APIView):
     """Base view for all OrgApi* JSON endpoints.
 
-    Provides SaaS-mode gating, authentication checking, JSON error helpers,
-    request body parsing, org context resolution (OrganizationContextMixin),
-    and optional org-role-based access control.
+    A DRF ``APIView`` with session authentication only, so DRF enforces CSRF
+    on unsafe methods and every error goes through the one QuickScale
+    exception handler the generated settings install (Module Conventions rule
+    9).  ``AllowAny`` is deliberate: this base performs its own
+    authentication and org-role checks below (the sanctioned pattern for a
+    view that does), so its answers do not depend on the project's default
+    DRF permissions.  SaaS-mode gating, authentication, request parsing, and
+    optional org-role access control keep their behaviour: solo mode hides
+    the routes with a 404, an anonymous caller answers 401, and a caller
+    below ``min_org_role`` answers 403.  The org-role logic stays here, on
+    the sanctioned ``OrgApiBaseView``, not rewritten as a permission class.
 
     Subclasses set ``min_org_role`` to an OrgRole value to enable
     org-scoped access gating. When ``min_org_role`` is None (the default),
     the view handles all orgs the user belongs to without scoping.
     """
 
+    authentication_classes = [OrgsSessionAuthentication]
+    parser_classes = [JSONParser]
+    permission_classes = [AllowAny]
+    renderer_classes = [JSONRenderer]
+
     min_org_role: OrgRole | None = None
 
-    if TYPE_CHECKING:
-        # Provided by django.views.View; django-stubs omits the private name.
-        def _allowed_methods(self) -> list[str]: ...
-
-    def json_error(
-        self,
-        message: str,
-        *,
-        status: int,
-        **payload: Any,
-    ) -> JsonResponse:
-        response_payload: dict[str, Any] = {"error": message}
-        response_payload.update(payload)
-        return JsonResponse(response_payload, status=status)
-
-    def http_method_not_allowed(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> JsonResponse:
-        del request, args, kwargs
-        return self.json_error(
-            "Method not allowed",
-            status=405,
-            allowed_methods=list(self._allowed_methods()),
-        )
-
-    def get_json_payload(
-        self,
-        request: HttpRequest,
-    ) -> tuple[dict[str, Any] | None, JsonResponse | None]:
-        try:
-            payload = json.loads(request.body.decode("utf-8") or "{}")
-        except UnicodeDecodeError:
-            return None, self.json_error("Invalid JSON payload", status=400)
-        except json.JSONDecodeError:
-            return None, self.json_error("Invalid JSON payload", status=400)
-
-        if not isinstance(payload, dict):
-            return None, self.json_error("JSON object payload expected", status=400)
-        return payload, None
-
-    def dispatch(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponse:
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
+        """Run the module's access gates before the HTTP method handler."""
         if not _is_saas_mode():
             raise Http404("Org routes are hidden in solo mode.")
 
+        super().initial(request, *args, **kwargs)
+
         user = getattr(request, "user", None)
         if not bool(user is not None and getattr(user, "is_authenticated", False)):
-            return self.json_error("Authentication required", status=401)
+            raise NotAuthenticated("Authentication required")
 
         if self.min_org_role is not None:
             try:
                 organization = self.get_organization()
-            except Http404:
-                return self.json_error("Forbidden", status=403)
+            except Http404 as error:
+                raise PermissionDenied("Forbidden") from error
 
-            setattr(request, "org", organization)
+            request.org = organization
             if not user_has_org_role(request.user, organization, self.min_org_role):
-                return self.json_error("Forbidden", status=403)
+                raise PermissionDenied("Forbidden")
 
-        next_dispatch = getattr(super(), "dispatch")
-        return cast(HttpResponse, next_dispatch(request, *args, **kwargs))
+    def get_json_payload(self, request: Request) -> Mapping[str, Any]:
+        """Return the request's JSON object payload or fail validation."""
+        payload = request.data
+        if not isinstance(payload, Mapping):
+            raise DRFValidationError(
+                {"non_field_errors": ["JSON object payload expected"]}
+            )
+        return payload
 
 
 class OrgListView(SaasModeRequiredMixin, LoginRequiredMixin, ListView):
@@ -952,17 +952,17 @@ class OrgApiListCreateView(OrgApiBaseView):
 
     def get(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del args, kwargs
         memberships = (
             OrganizationMembership.objects.select_related("organization")
             .filter(user=request.user)
             .order_by("organization__name")
         )
-        return JsonResponse(
+        return Response(
             {
                 "organizations": [
                     _serialize_organization(
@@ -975,22 +975,20 @@ class OrgApiListCreateView(OrgApiBaseView):
 
     def post(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del args, kwargs
-        payload, error_response = self.get_json_payload(request)
-        if error_response is not None:
-            return error_response
+        payload = self.get_json_payload(request)
 
         form = OrgCreateForm(payload)
         if not form.is_valid():
-            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+            raise DRFValidationError(_form_error_data(form))
 
         organization = form.save(user=request.user)
         redirect_urls = _org_creation_redirect_urls(organization)
-        return JsonResponse(
+        return Response(
             {
                 "organization": _serialize_organization(
                     organization, role=OrgRole.OWNER
@@ -1009,14 +1007,14 @@ class OrgApiDetailView(OrgApiBaseView):
 
     def get(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del request, args, kwargs
         organization = self.get_organization()
         acting_membership = self.get_acting_membership()
-        return JsonResponse(
+        return Response(
             {
                 "organization": _serialize_organization(
                     organization,
@@ -1044,14 +1042,14 @@ class OrgApiMembersView(OrgApiBaseView, MemberManagementContextMixin):
 
     def get(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del request, args, kwargs
         owner_like = self.acting_user_is_owner_like()
         acting_membership = self.get_acting_membership()
-        return JsonResponse(
+        return Response(
             {
                 "organization": _serialize_organization(self.get_organization()),
                 "actor": {
@@ -1086,24 +1084,22 @@ class OrgApiInviteView(
 
     def post(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del args, kwargs
-        payload, error_response = self.get_json_payload(request)
-        if error_response is not None:
-            return error_response
+        payload = self.get_json_payload(request)
 
         form = self.get_invite_form(data=payload)
         if not form.is_valid():
-            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+            raise DRFValidationError(_form_error_data(form))
 
         invitation = self.save_invitation_form(form)
         if invitation is None:
-            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+            raise DRFValidationError(_form_error_data(form))
 
-        return JsonResponse(
+        return Response(
             {"invitation": _serialize_invitation(invitation)},
             status=201,
         )
@@ -1116,21 +1112,19 @@ class OrgApiMemberRoleView(OrgApiBaseView, MemberManagementContextMixin):
 
     def post(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del args
-        payload, error_response = self.get_json_payload(request)
-        if error_response is not None:
-            return error_response
+        payload = self.get_json_payload(request)
 
         try:
             membership = self.get_membership_for_action(kwargs["membership_id"])
         except ValidationError as error:
-            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
-        except Http404:
-            return self.json_error("Member not found", status=404)
+            raise DRFValidationError(_validation_error_data(error)) from error
+        except Http404 as error:
+            raise NotFound("Member not found") from error
 
         form = RoleChangeForm(
             payload,
@@ -1139,13 +1133,13 @@ class OrgApiMemberRoleView(OrgApiBaseView, MemberManagementContextMixin):
             acting_user_is_superuser=getattr(request.user, "is_superuser", False),
         )
         if not form.is_valid():
-            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+            raise DRFValidationError(_form_error_data(form))
 
         try:
             updated_membership = form.save()
         except ValidationError as error:
-            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
-        return JsonResponse({"member": _serialize_membership(updated_membership)})
+            raise DRFValidationError(_validation_error_data(error)) from error
+        return Response({"member": _serialize_membership(updated_membership)})
 
 
 class OrgApiMemberRemoveView(OrgApiBaseView, MemberManagementContextMixin):
@@ -1155,33 +1149,32 @@ class OrgApiMemberRemoveView(OrgApiBaseView, MemberManagementContextMixin):
 
     def post(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del request, args
         try:
             membership = self.get_membership_for_action(kwargs["membership_id"])
         except ValidationError as error:
-            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
-        except Http404:
-            return self.json_error("Member not found", status=404)
+            raise DRFValidationError(_validation_error_data(error)) from error
+        except Http404 as error:
+            raise NotFound("Member not found") from error
 
         if OrganizationMembership.is_last_owner_with_members(
             user=membership.user,
             organization=self.get_organization(),
         ):
-            return JsonResponse(
-                {"errors": {"non_field_errors": ["You cannot remove the last owner."]}},
-                status=400,
+            raise DRFValidationError(
+                {"non_field_errors": ["You cannot remove the last owner."]}
             )
 
         removed_member_id = membership.pk
         try:
             membership.delete()
         except ValidationError as error:
-            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
-        return JsonResponse({"status": "removed", "member_id": removed_member_id})
+            raise DRFValidationError(_validation_error_data(error)) from error
+        return Response({"status": "removed", "member_id": removed_member_id})
 
 
 class OrgApiRevokeInvitationView(OrgApiBaseView, MemberManagementContextMixin):
@@ -1191,10 +1184,10 @@ class OrgApiRevokeInvitationView(OrgApiBaseView, MemberManagementContextMixin):
 
     def post(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del request, args
         invitation = get_object_or_404(
             self.get_pending_invitations(),
@@ -1203,7 +1196,7 @@ class OrgApiRevokeInvitationView(OrgApiBaseView, MemberManagementContextMixin):
         )
         invitation_id = str(invitation.pk)
         invitation.delete()
-        return JsonResponse({"status": "revoked", "invitation_id": invitation_id})
+        return Response({"status": "revoked", "invitation_id": invitation_id})
 
 
 class OrgApiSettingsView(OrgApiBaseView):
@@ -1213,21 +1206,19 @@ class OrgApiSettingsView(OrgApiBaseView):
 
     def post(
         self,
-        request: HttpRequest,
+        request: Request,
         *args: Any,
         **kwargs: Any,
-    ) -> JsonResponse:
+    ) -> Response:
         del args, kwargs
-        payload, error_response = self.get_json_payload(request)
-        if error_response is not None:
-            return error_response
+        payload = self.get_json_payload(request)
 
         form = OrgSettingsForm(payload, instance=self.get_organization())
         if not form.is_valid():
-            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+            raise DRFValidationError(_form_error_data(form))
 
         organization = form.save()
-        return JsonResponse({"organization": _serialize_organization(organization)})
+        return Response({"organization": _serialize_organization(organization)})
 
 
 org_index_view = OrgListView.as_view()

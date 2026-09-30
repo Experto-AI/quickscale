@@ -629,54 +629,6 @@
         "symbol": "handle_stripe_event",
         "type": "function"
       },
-      "quickscale_modules/billing/src/quickscale_modules_billing/views.py::CancelSubscriptionView": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
-        "max_complexity": 13,
-        "symbol": "CancelSubscriptionView",
-        "type": "class"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/views.py::CancelSubscriptionView.post": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
-        "max_complexity": 12,
-        "symbol": "CancelSubscriptionView.post",
-        "type": "method"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/views.py::CreateBillingPortalSessionView": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
-        "max_complexity": 12,
-        "symbol": "CreateBillingPortalSessionView",
-        "type": "class"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/views.py::CreateBillingPortalSessionView.post": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
-        "max_complexity": 11,
-        "symbol": "CreateBillingPortalSessionView.post",
-        "type": "method"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/views.py::CreateCheckoutSessionView": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
-        "max_complexity": 12,
-        "symbol": "CreateCheckoutSessionView",
-        "type": "class"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/views.py::CreateCheckoutSessionView.post": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
-        "max_complexity": 11,
-        "symbol": "CreateCheckoutSessionView.post",
-        "type": "method"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/views.py::CreateSubscriptionCheckoutView": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
-        "max_complexity": 12,
-        "symbol": "CreateSubscriptionCheckoutView",
-        "type": "class"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/views.py::CreateSubscriptionCheckoutView.post": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/views.py",
-        "max_complexity": 11,
-        "symbol": "CreateSubscriptionCheckoutView.post",
-        "type": "method"
-      },
       "quickscale_modules/blog/src/quickscale_modules_blog/apps.py::QuickscaleBlogConfig": {
         "file": "quickscale_modules/blog/src/quickscale_modules_blog/apps.py",
         "max_complexity": 13,

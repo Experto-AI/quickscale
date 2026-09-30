@@ -284,4 +284,39 @@ describe('public social pages', () => {
     expect(await screen.findByText('Embed configuration needs attention')).toBeInTheDocument()
     expect(screen.getAllByText(/must include TikTok or YouTube/i).length).toBeGreaterThanOrEqual(1)
   })
+
+  it('surfaces the one QuickScale error shape for a non-managed payload', async () => {
+    mockFetch(
+      {
+        error: {
+          code: 'not_found',
+          message: 'Public social transport is unavailable.',
+        },
+      },
+      404,
+    )
+
+    renderPublicPage('link_tree', <SocialLinkTreePublicPage />)
+
+    expect(
+      await screen.findByText('Public social transport is unavailable.'),
+    ).toBeInTheDocument()
+  })
+
+  it('prefers the first field message from the one QuickScale error shape', async () => {
+    mockFetch(
+      {
+        error: {
+          code: 'validation_error',
+          message: 'Invalid input.',
+          fields: { surface: ['Unsupported public surface.'] },
+        },
+      },
+      400,
+    )
+
+    renderPublicPage('embeds', <SocialEmbedsPublicPage />)
+
+    expect(await screen.findByText('Unsupported public surface.')).toBeInTheDocument()
+  })
 })

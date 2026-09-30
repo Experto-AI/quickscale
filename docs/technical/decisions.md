@@ -1572,9 +1572,9 @@ alias.
 - ❌ A plain-`View` + `@csrf_exempt` + manual `_enforce_csrf()` idiom is not a third sanctioned option and is not grandfathered as legacy — this project removes workarounds rather than permanently tolerating them alongside the sanctioned shape.
 - ✅ **Signature-verified webhooks** (Stripe, etc.) are a different trust class, exempt from this rule's authentication and CSRF requirements — the calling party cannot present a CSRF token. They are DRF `APIView`s without authentication, permission, or throttle classes (Module Conventions rule 26), which DRF does not CSRF-check; the signature is their authentication, rule 9's handler renders their errors, and the pairing gate (`scripts/check_csrf_exempt_gate.py`) carries no webhook helper.
 
-**SA215 changes this section** (§[Module Conventions](#module-conventions) rule 9): `OrgApiBaseView`
-is rebased on DRF's `APIView`, so both bases are DRF views; the plain-`View` idiom is gone from
-modules. The blog module's function-view exception below is already retired: both blog API
+**SA215's change to this section has landed** (§[Module Conventions](#module-conventions) rule 9):
+`OrgApiBaseView` is a DRF `APIView`, so both bases are DRF views and the plain-`View` idiom is
+gone from modules. The blog module's function-view exception below is retired: both blog API
 endpoints are DRF views with session authentication only, and `BLOG_API_TOKENS` is removed.
 
 **Retired exception — blog dual-auth function views:** the blog module's `upload_media_api` and
