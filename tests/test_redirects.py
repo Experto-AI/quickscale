@@ -1,4 +1,9 @@
-"""Adapter contract tests for the QuickScale organizations module."""
+"""Post-auth redirect contract tests for the QuickScale organizations module.
+
+The redirects are declared by orgs as AppConfig hooks and collected by auth's
+single allauth adapter, so these tests exercise the installed pair through
+that adapter — the seam every generated project runs.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +16,7 @@ from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from quickscale_modules_orgs.adapters import OrgsAccountAdapter
+from quickscale_modules_auth.allauth_adapter import QuickscaleAccountAdapter
 from quickscale_modules_orgs.constants import (
     ORG_INVITATION_ACCEPT_URL_NAME,
     PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
@@ -36,7 +41,7 @@ def test_solo_signup_redirect_creates_personal_org(settings) -> None:
     request = RequestFactory().get("/")
     request.user = user
 
-    redirect_url = OrgsAccountAdapter().get_signup_redirect_url(request)
+    redirect_url = QuickscaleAccountAdapter().get_signup_redirect_url(request)
 
     assert redirect_url == "/"
     assert (
@@ -58,7 +63,7 @@ def test_saas_signup_redirect_without_membership_goes_to_org_creation(settings) 
     request = RequestFactory().get("/")
     request.user = user
 
-    redirect_url = OrgsAccountAdapter().get_signup_redirect_url(request)
+    redirect_url = QuickscaleAccountAdapter().get_signup_redirect_url(request)
 
     assert redirect_url == "/orgs/new/"
 
@@ -88,7 +93,7 @@ def test_saas_signup_redirect_prefers_pending_invitation_accept_path(settings) -
     _attach_session(request)
     request.session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
 
-    redirect_url = OrgsAccountAdapter().get_signup_redirect_url(request)
+    redirect_url = QuickscaleAccountAdapter().get_signup_redirect_url(request)
 
     assert redirect_url == reverse(
         ORG_INVITATION_ACCEPT_URL_NAME,
@@ -109,7 +114,7 @@ def test_login_redirect_stays_root_when_membership_exists(settings) -> None:
     request = RequestFactory().get("/")
     request.user = user
 
-    redirect_url = OrgsAccountAdapter().get_login_redirect_url(request)
+    redirect_url = QuickscaleAccountAdapter().get_login_redirect_url(request)
 
     assert redirect_url == "/dashboard/"
 
@@ -128,7 +133,7 @@ def test_login_redirect_sends_saas_users_without_memberships_to_org_creation(
     request = RequestFactory().get("/")
     request.user = user
 
-    redirect_url = OrgsAccountAdapter().get_login_redirect_url(request)
+    redirect_url = QuickscaleAccountAdapter().get_login_redirect_url(request)
 
     assert redirect_url == "/orgs/new/"
 
@@ -159,7 +164,7 @@ def test_login_redirect_prefers_pending_invitation_accept_path(settings) -> None
     _attach_session(request)
     request.session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
 
-    redirect_url = OrgsAccountAdapter().get_login_redirect_url(request)
+    redirect_url = QuickscaleAccountAdapter().get_login_redirect_url(request)
 
     assert redirect_url == reverse(
         ORG_INVITATION_ACCEPT_URL_NAME,
@@ -197,7 +202,7 @@ def test_login_redirect_prefers_pending_invitation_even_when_membership_exists(
     _attach_session(request)
     request.session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
 
-    redirect_url = OrgsAccountAdapter().get_login_redirect_url(request)
+    redirect_url = QuickscaleAccountAdapter().get_login_redirect_url(request)
 
     assert Organization.objects.filter(pk=existing_org.pk).exists()
     assert redirect_url == reverse(
@@ -245,7 +250,7 @@ def test_post_auth_redirect_falls_back_to_org_creation_when_pending_invitation_i
     _attach_session(request)
     request.session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
 
-    redirect_url = getattr(OrgsAccountAdapter(), redirect_method)(request)
+    redirect_url = getattr(QuickscaleAccountAdapter(), redirect_method)(request)
 
     assert redirect_url == "/orgs/new/"
     assert PENDING_ORG_INVITATION_TOKEN_SESSION_KEY not in request.session
@@ -265,7 +270,7 @@ def test_solo_login_redirect_creates_personal_org_and_keeps_base_redirect(
     request = RequestFactory().get("/")
     request.user = user
 
-    redirect_url = OrgsAccountAdapter().get_login_redirect_url(request)
+    redirect_url = QuickscaleAccountAdapter().get_login_redirect_url(request)
 
     assert redirect_url == "/accounts/profile/"
     assert Organization.objects.filter(
