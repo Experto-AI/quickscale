@@ -264,7 +264,12 @@ def _is_drf_throttle_class(record: ClassRecord, classes: list[ClassRecord]) -> b
 
 
 def test_client_ip_throttle_mixin_delegates_without_framework_coupling() -> None:
-    """The reusable mixin delegates identity and does not import DRF."""
+    """The reusable mixin delegates identity and does not import DRF.
+
+    The orgs module itself is a DRF consumer for its JSON API, so this pins
+    the identity seam in ``current_org.py`` only: the mixin the first-party
+    throttle classes build on stays framework-free.
+    """
     current_org_path = (
         MODULE_SOURCE_ROOT
         / "orgs"
@@ -289,11 +294,6 @@ def test_client_ip_throttle_mixin_delegates_without_framework_coupling() -> None
         )
     ]
     assert framework_imports == []
-    assert "djangorestframework" not in (
-        MODULE_SOURCE_ROOT.joinpath("orgs", "pyproject.toml")
-        .read_text(encoding="utf-8")
-        .lower()
-    )
 
     request = SimpleNamespace(
         META={
