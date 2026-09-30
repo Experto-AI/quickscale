@@ -13,29 +13,34 @@ from django.core.checks import CheckMessage, Error
 
 from quickscale_modules_billing.services import BillingSettingsSnapshot
 
+#: The declared settings this check reads.  Presence is the generic settings
+#: check's concern; the guard below keeps this check from raising when one is
+#: missing, so ``manage.py check`` reports the missing setting instead.
+_DECLARED_SETTINGS = (
+    "QUICKSCALE_BILLING_ENABLED",
+    "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
+    "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
+    "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
+    "QUICKSCALE_BILLING_CURRENCY",
+)
+
 
 def check_billing_settings(
     app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
-    """Fail startup on invalid billing configuration.
+    """Fail startup on an invalid resolved billing runtime.
 
-    Invalid configuration is a missing ``QUICKSCALE_BILLING_ENABLED`` flag, or
-    an enabled billing module whose Stripe secret key or webhook signing
-    secret resolves empty.  The module's manifest default enables billing, so
-    an operator who does not use Stripe switches billing off explicitly.
+    Invalid configuration is an enabled billing module whose Stripe secret
+    key or webhook signing secret resolves empty.  The module's manifest
+    default enables billing, so an operator who does not use Stripe switches
+    billing off explicitly.  The declared options themselves are validated by
+    the generic settings check registered alongside this one.
     """
-    messages: list[CheckMessage] = []
-    if not hasattr(settings, "QUICKSCALE_BILLING_ENABLED"):
-        messages.append(
-            Error(
-                "The QUICKSCALE_BILLING_ENABLED setting is required. "
-                "Set it to True or False in your Django settings.",
-                id="quickscale_billing.E001",
-            )
-        )
-        return messages
+    if any(not hasattr(settings, name) for name in _DECLARED_SETTINGS):
+        return []
 
+    messages: list[CheckMessage] = []
     snapshot = BillingSettingsSnapshot.from_settings()
     if not snapshot.enabled:
         return messages

@@ -1,6 +1,9 @@
 """Django settings for QuickScale billing module tests."""
 
 import os
+from pathlib import Path
+
+from quickscale_core.manifest.settings_schema import load_settings_schema
 
 # BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
@@ -40,6 +43,20 @@ MIDDLEWARE = [
 
 QUICKSCALE_MODE = "solo"
 QUICKSCALE_BILLING_ENABLED = True
+QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"
+QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"
+QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR = "QUICKSCALE_BILLING_WEBHOOK_SECRET"
+QUICKSCALE_BILLING_CURRENCY = "usd"
+QUICKSCALE_BILLING_API_RATE_LIMIT = "30/hour"
+
+# Rule 3: the compiled option schema the generic startup check reads, derived
+# from the module's own manifest so it can never drift from the declarations.
+_MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
+MODULE_SETTINGS_SCHEMA = {
+    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
+    for name in ("billing", "orgs")
+}
+
 ROOT_URLCONF = "tests.urls"
 
 # The generated settings install the shared rule 9 handler; the module suite
