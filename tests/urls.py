@@ -1,4 +1,8 @@
-"""URL configuration for testing"""
+"""URL configuration for testing
+
+The module's mount lives in its manifest's ``url_includes`` entry (``accounts/``);
+this harness mounts the same path.
+"""
 
 from django.shortcuts import render
 from django.http import HttpResponse

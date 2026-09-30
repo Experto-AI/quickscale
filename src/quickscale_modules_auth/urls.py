@@ -15,6 +15,6 @@ urlpatterns = [
     path("", include("allauth.urls")),
     # Custom profile management URLs
     path("profile/", ProfileView.as_view(), name="profile"),
-    path("profile/edit/", ProfileUpdateView.as_view(), name="profile-edit"),
-    path("account/delete/", AccountDeleteView.as_view(), name="account-delete"),
+    path("profile/edit/", ProfileUpdateView.as_view(), name="profile_edit"),
+    path("account/delete/", AccountDeleteView.as_view(), name="account_delete"),
 ]

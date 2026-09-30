@@ -130,8 +130,8 @@ The module mounts under `accounts/`, alongside django-allauth's own routes:
 | `accounts/password/change/` | django-allauth | Change password |
 | `accounts/password/reset/` | django-allauth | Request password reset |
 | `accounts/profile/` (`quickscale_auth:profile`) | Module | View profile |
-| `accounts/profile/edit/` (`quickscale_auth:profile-edit`) | Module | Edit profile |
-| `accounts/account/delete/` (`quickscale_auth:account-delete`) | Module | Delete account |
+| `accounts/profile/edit/` (`quickscale_auth:profile_edit`) | Module | Edit profile |
+| `accounts/account/delete/` (`quickscale_auth:account_delete`) | Module | Delete account |
 
 ## Management commands
 
