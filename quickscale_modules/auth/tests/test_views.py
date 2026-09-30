@@ -1163,7 +1163,7 @@ class TestAccountDeleteView:
         assert response.status_code == 200
         assert mock_resume.call_count == 2
         assert any(
-            "Manual billing reconciliation" in message for message in caplog.messages
+            "Manual provider reconciliation" in message for message in caplog.messages
         )
 
     def test_account_delete_records_retained_organization_obligation_skips(
@@ -1266,16 +1266,17 @@ class TestAccountDeleteView:
                 for message in caplog.messages
             )
 
-    def test_account_delete_graceful_when_billing_not_installed(
+    def test_account_delete_graceful_without_a_declared_provider(
         self, authenticated_client, user
     ):
-        """Deletion does not fail when the billing module is not
-        installed."""
-        # Patch INSTALLED_APPS so the billing guard in
-        # _cancel_personal_org_subscriptions skips the billing code.
-        from unittest.mock import patch
+        """Deletion does not fail when no account-deletion provider is installed.
 
-        from django.conf import settings
+        A project without billing declares no handler through the rule 4
+        ``account_deletion_handlers`` capability; patching the collection
+        simulates that absence, because the app registry is process-wide and
+        cannot be re-derived inside one test.
+        """
+        from unittest.mock import patch
 
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -1293,15 +1294,14 @@ class TestAccountDeleteView:
             role=OrgRole.OWNER,
         )
 
-        with patch.object(
-            settings,
-            "INSTALLED_APPS",
-            [app for app in settings.INSTALLED_APPS if app != "quickscale_billing"],
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(),
         ):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
-        # Deletion proceeds even though billing is not installed.
+        # Deletion proceeds even though no provider is declared.
         assert response.status_code == 302
 
     def test_account_delete_cancels_only_owned_personal_org(
@@ -1793,7 +1793,7 @@ class TestAccountDeleteView:
         assert response.status_code == 200
         assert get_user_model().objects.filter(pk=user.pk).exists()
         assert any(
-            "Billing references changed" in str(message.message)
+            "Provider references changed" in str(message.message)
             for message in messages_framework.get_messages(response.wsgi_request)
         )
 
@@ -1927,3 +1927,237 @@ class TestAccountDeleteViewSA35:
             user=other_user,
             organization=org,
         ).exists()
+
+
+class _StubProviderError(Exception):
+    """A provider-state error a stub handler declares as fail-closed."""
+
+
+class _IncompleteAccountDeletionHandler:
+    """A declared handler missing the operations the capability requires."""
+
+    label = "incomplete_provider"
+
+    def account_deletion_handled_app_labels(self):
+        return (self.label,)
+
+    def account_deletion_fail_closed_errors(self):
+        return (_StubProviderError,)
+
+
+class _StubAccountDeletionHandler:
+    """A rule 4 account-deletion handler that records the calls it receives."""
+
+    label = "stub_provider"
+
+    def __init__(
+        self,
+        calls: list[str],
+        *,
+        reference_organization_ids: tuple[int, ...] = (),
+        cancel_error: Exception | None = None,
+    ) -> None:
+        self._calls = calls
+        self._reference_organization_ids = reference_organization_ids
+        self._cancel_error = cancel_error
+
+    def account_deletion_handled_app_labels(self) -> tuple[str, ...]:
+        return (self.label,)
+
+    def account_deletion_fail_closed_errors(self) -> tuple[type[BaseException], ...]:
+        return (_StubProviderError,)
+
+    def account_deletion_user_reference_organization_ids(self, user_id):
+        self._calls.append("discover")
+        return self._reference_organization_ids
+
+    def account_deletion_subscription_mutation_lock(self, organization_id):
+        from contextlib import nullcontext
+
+        self._calls.append("lock")
+        return nullcontext()
+
+    def reconcile_account_deletion_purchase_provider_state(
+        self, organization_id, user_id
+    ) -> None:
+        self._calls.append("purchase")
+
+    def reconcile_account_deletion_provider_state(self, organization_id) -> None:
+        self._calls.append("reconcile")
+
+    def cancel_account_deletion_subscription(self, user, organization):
+        self._calls.append("cancel")
+        if self._cancel_error is not None:
+            raise self._cancel_error
+        return None
+
+    def resume_account_deletion_subscription(
+        self, user, organization, transition
+    ) -> None:
+        self._calls.append("resume")
+
+    def detach_account_deletion_user_references(self, user_id, organization_ids) -> int:
+        self._calls.append("detach")
+        return 0
+
+
+@pytest.mark.django_db
+class TestAccountDeleteViewDeclaredHandlers:
+    """Rule 4: account deletion drives declared handlers, not module names."""
+
+    def test_account_delete_drives_the_declared_handler(
+        self, authenticated_client, user
+    ):
+        """Every declared operation runs in order for the user's personal org."""
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Declared Handler",
+            slug="declared-handler",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        calls: list[str] = []
+        handler = _StubAccountDeletionHandler(
+            calls,
+            reference_organization_ids=(organization.pk,),
+        )
+
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(handler,),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 302
+        assert not get_user_model().objects.filter(pk=user.pk).exists()
+        assert calls == [
+            "discover",
+            "lock",
+            "purchase",
+            "reconcile",
+            "cancel",
+            "discover",
+            "detach",
+        ]
+
+    def test_account_delete_blocks_when_a_declared_handler_is_incomplete(
+        self, authenticated_client, user
+    ):
+        """A handler missing a protocol operation fails the deletion closed."""
+        from unittest.mock import patch
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(_IncompleteAccountDeletionHandler(),),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        message_text = " ".join(
+            str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+        assert "account-deletion capability" in message_text
+        assert "cancel_account_deletion_subscription" in message_text
+
+    def test_account_delete_blocks_on_a_declared_provider_error(
+        self, authenticated_client, user
+    ):
+        """A fail-closed error declared by the handler renders a blocked response."""
+        from unittest.mock import patch
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Declared Error",
+            slug="declared-error",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        handler = _StubAccountDeletionHandler(
+            [],
+            cancel_error=_StubProviderError("provider state is not terminal"),
+        )
+
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(handler,),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert any(
+            "provider state is not terminal" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+
+    def test_account_delete_reraises_an_undeclared_provider_error(
+        self, authenticated_client, user
+    ):
+        """An error outside the declared set propagates instead of being masked."""
+        from unittest.mock import patch
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Undeclared Error",
+            slug="undeclared-error",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        handler = _StubAccountDeletionHandler(
+            [],
+            cancel_error=ValueError("unexpected provider defect"),
+        )
+
+        with (
+            patch(
+                "quickscale_modules_auth.views.collect_capabilities",
+                return_value=(handler,),
+            ),
+            pytest.raises(ValueError, match="unexpected provider defect"),
+        ):
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
