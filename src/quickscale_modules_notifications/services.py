@@ -331,8 +331,14 @@ def sanitize_provider_tags(
     *,
     settings_snapshot: NotificationSettingsSnapshot,
 ) -> list[str]:
-    """Return provider-visible tags limited to the approved non-sensitive allowlist."""
-    allowed_tags = set(settings_snapshot.allowed_tags)
+    """Return provider-visible tags limited to the approved non-sensitive allowlist.
+
+    The allowlist is canonicalized for comparison the same way each candidate
+    tag is, so an accepted but noncanonical entry (one that reached settings
+    outside ``apply``'s normalization) still matches its canonical form
+    instead of silently dropping the tag.
+    """
+    allowed_tags = {_normalize_tag(tag) for tag in settings_snapshot.allowed_tags}
     seen: set[str] = set()
     sanitized: list[str] = []
     for raw_value in [*settings_snapshot.default_tags, *(tags or ())]:
