@@ -10,6 +10,11 @@ Uses PostgreSQL unconditionally.  Configure the connection via env vars:
 """
 
 import os
+from pathlib import Path
+
+from quickscale_core.manifest.settings_schema import load_settings_schema
+
+_MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
 
 # BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
@@ -111,18 +116,101 @@ QUICKSCALE_MODE = "solo"
 USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
 
-# Required by modules in INSTALLED_APPS that have AppConfig.ready() guards:
-# billing enabled-flag
+# Rule 3: every declared setting of the installed modules, so each module's
+# generic startup check runs against a complete stub.
+# auth
+SESSION_COOKIE_AGE = 1209600
+# billing
 QUICKSCALE_BILLING_ENABLED = True
-# CRM API-enable flag
-CRM_ENABLE_API = True
-# forms settings
+QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"
+QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"
+QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR = "QUICKSCALE_BILLING_WEBHOOK_SECRET"
+QUICKSCALE_BILLING_CURRENCY = "usd"
+QUICKSCALE_BILLING_API_RATE_LIMIT = "30/hour"
+# social
+QUICKSCALE_SOCIAL_LINK_TREE_ENABLED = True
+QUICKSCALE_SOCIAL_LAYOUT_VARIANT = "list"
+QUICKSCALE_SOCIAL_EMBEDS_ENABLED = True
+QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST = [
+    "facebook",
+    "instagram",
+    "linkedin",
+    "tiktok",
+    "x",
+    "youtube",
+]
+QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS = 300
+QUICKSCALE_SOCIAL_LINKS_PER_PAGE = 24
+QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE = 12
+# forms
 FORMS_SUBMISSIONS_API = True
 FORMS_RATE_LIMIT = "5/hour"
 FORMS_SPAM_PROTECTION = True
-# blog settings
+FORMS_PER_PAGE = 25
+FORMS_DATA_RETENTION_DAYS = 365
+# listings
+LISTINGS_PER_PAGE = 12
+# blog
 BLOG_ENABLE_RSS = True
-# notifications required settings
+BLOG_API_RATE_LIMIT = "5/hour"
+BLOG_POSTS_PER_PAGE = 10
+# crm
+CRM_ENABLE_API = True
+CRM_DEALS_PER_PAGE = 25
+CRM_CONTACTS_PER_PAGE = 50
+# backups
+QUICKSCALE_BACKUPS_RETENTION_DAYS = 14
+QUICKSCALE_BACKUPS_NAMING_PREFIX = "db"
+QUICKSCALE_BACKUPS_TARGET_MODE = "local"
+QUICKSCALE_BACKUPS_LOCAL_DIRECTORY = ".quickscale/backups"
+QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME = ""
+QUICKSCALE_BACKUPS_REMOTE_PREFIX = "backups/private"
+QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL = ""
+QUICKSCALE_BACKUPS_REMOTE_REGION_NAME = ""
+QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR = (
+    "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
+)
+QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
+    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
+)
+QUICKSCALE_BACKUPS_AUTOMATION_ENABLED = False
+QUICKSCALE_BACKUPS_SCHEDULE = "0 2 * * *"
+# notifications
 QUICKSCALE_NOTIFICATIONS_ENABLED = True
 QUICKSCALE_NOTIFICATIONS_PROVIDER = "log"
+QUICKSCALE_NOTIFICATIONS_SENDER_NAME = "QuickScale"
+QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL = "noreply@quickscale.example"
+QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL = "support@example.com"
+QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN = "mg.example.com"
+QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR = "RESEND_API_KEY"
+QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR = (
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+)
+QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS = ["quickscale", "transactional"]
+QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
+    "quickscale",
+    "transactional",
+    "notifications",
+    "auth",
+    "forms",
+    "ops",
+    "testing",
+]
+QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS = 300
 MEDIA_URL = "/media/"
+
+MODULE_SETTINGS_SCHEMA = {
+    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
+    for name in (
+        "auth",
+        "orgs",
+        "billing",
+        "social",
+        "forms",
+        "listings",
+        "blog",
+        "crm",
+        "backups",
+        "notifications",
+    )
+}

@@ -28,7 +28,10 @@ and the check registration run on every startup path.
 from django.apps import AppConfig
 from django.db.backends.signals import connection_created
 
-from quickscale_core.runtime import register_module_checks
+from quickscale_core.runtime import (
+    register_module_checks,
+    register_module_settings_check,
+)
 from quickscale_modules_orgs.removal import (
     OWNED_TENANT_ROWS,
     PURGE_TOMBSTONE,
@@ -136,8 +139,8 @@ class QuickscaleOrgsConfig(AppConfig):
         # The helper runs every check eagerly, so runserver, migrate, and a
         # WSGI server all refuse to start on an error-level failure, and it
         # registers the same callables as ``quickscale_orgs`` system checks
-        # for ``manage.py check``.  Order matters: QUICKSCALE_MODE is
-        # validated before the BYPASSRLS/SUPERUSER role guard.
+        # for ``manage.py check``.  Order matters: rule 3's generic check
+        # validates QUICKSCALE_MODE before the BYPASSRLS/SUPERUSER role guard.
         #
         # SA203: a privileged command exempts *only* the role check, inside
         # check_rls_role.  The installations below stay unconditional, so a
@@ -153,16 +156,17 @@ class QuickscaleOrgsConfig(AppConfig):
         # database catalog state and neither may block startup.
         from quickscale_modules_orgs.checks import (
             check_provider_id_conformance,
-            check_quickscale_mode,
             check_removal_obligation_discharge,
             check_rls_role,
             check_tenant_manager_inheritance,
         )
 
+        # Rule 3 first: the declared mode is validated (presence, choices)
+        # before the BYPASSRLS/SUPERUSER role guard reads it.
+        register_module_settings_check(self, "orgs")
         register_module_checks(
             self,
             [
-                check_quickscale_mode,
                 check_rls_role,
                 check_tenant_manager_inheritance,
                 check_provider_id_conformance,
