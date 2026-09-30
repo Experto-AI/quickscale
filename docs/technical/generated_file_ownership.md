@@ -111,6 +111,7 @@ classified through ``FRESH_FIRST_IDENTITY_ROOT_FILES`` instead.
  ``frontend/src/test/setup.ts``,
  ``frontend/src/test/App.test.tsx``,
  ``frontend/src/test/csrf.test.tsx``,
+ ``frontend/src/test/FormRenderer.test.tsx``,
  ``frontend/src/test/RootDispatch.test.tsx``,
  ``frontend/src/test/PublicSocialPages.test.tsx``,
  ``frontend/src/test/useApiErrors.test.ts``,

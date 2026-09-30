@@ -116,3 +116,9 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current frontend/src/hooks/useApi.ts and frontend/src/hooks/usePublicSocialSurface.ts: getApiPayloadMessage reads the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}} from a raw payload, and the public social hook uses it so a non-managed error body shows its message instead of the generic contract-mismatch text."
       - "Optionally copy the current frontend/src/test/PublicSocialPages.test.tsx cases to pin the message and first-field-message behavior."
+  - id: sa223-theme-error-shape-forms
+    minimum: "0.89.0"
+    title: "Adopt one-shape error handling in the theme's form client"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/src/components/forms/FormRenderer.tsx and frontend/src/hooks/useFormSchema.ts: the form client submits through the shared apiRequest client and renders the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}} — validation field errors under their fields, a field with no visible error outlet (hidden fields included, which never block submission locally) and non-field errors as a global message, and the shape's message for every other failure — and the schema hook surfaces the shape's message when the form schema cannot be fetched."
+      - "Optionally copy the current frontend/src/test/FormRenderer.test.tsx cases to pin the field-error, non-field-error, shaped-message, and network-failure behavior."

@@ -227,10 +227,10 @@ defaults.
     `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
     route names become snake_case without the module name, in auth, orgs, notifications, social,
     billing, crm, and forms.
-  - *APIs.* Blog, listings, orgs, and billing have landed: their endpoints are DRF views with
-    session authentication and the one error shape; the theme's `useApi.ts` and public social pages
-    read that shape. Remaining: forms' submit error body and the theme's form client, as their slice
-    lands.
+  - *APIs.* Blog, listings, orgs, billing, and forms have landed: their endpoints are DRF views
+    with the one error shape (forms' public schema and submit routes stay anonymous; the others
+    use session authentication); the theme's `useApi.ts`, public social pages, and form client
+    read that shape. Remaining: the URL mounts and route names.
 
   **Acceptance:** every API error body matches the one shape; a list of every moved
   public URL, with its operator step, is ready for SA215's release notes; every throttle scope has the stem and

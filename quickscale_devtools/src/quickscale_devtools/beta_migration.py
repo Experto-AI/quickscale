@@ -226,6 +226,7 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "frontend/src/test/RootDispatch.test.tsx",
     "frontend/src/test/PublicSocialPages.test.tsx",
     "frontend/src/test/useApiErrors.test.ts",
+    "frontend/src/test/FormRenderer.test.tsx",
     "frontend/e2e/home.spec.ts",
     # ---- shadcn/ui components (user-owned after generation) ----
     "frontend/src/components/ui/checkbox.tsx",

@@ -214,6 +214,7 @@ describe('CSRF request callers', () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 201,
+      headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     })
 

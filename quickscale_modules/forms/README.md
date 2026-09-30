@@ -44,6 +44,11 @@ by `quickscale apply`. The public schema and submit endpoints stay available reg
 | `GET/PATCH` | `api/admin/forms/{id}/submissions/{sub_id}/` | Staff+ | Submission detail/update |
 | `GET` | `api/admin/forms/{id}/submissions/export/` | Staff+ | Download CSV |
 
+Every error answers the shared `{"error": {"code", "message", "fields"}}` shape (`fields` only
+for validation errors), produced by `quickscale_core.runtime.conventions.exception_handler` —
+the handler `quickscale apply` installs in `REST_FRAMEWORK`; a manual installation must install
+it the same way (see Operations).
+
 ### Built-in form presets
 
 | Slug | Fields |
@@ -116,7 +121,8 @@ quickscale apply
 ```
 
 A manual installation adds `rest_framework`, `django_filters`, and `quickscale_modules_forms`
-to `INSTALLED_APPS`, mounts the module's URLs, and runs `python manage.py migrate`. A fresh
+to `INSTALLED_APPS`, mounts the module's URLs, sets `REST_FRAMEWORK["EXCEPTION_HANDLER"]` to
+`quickscale_core.runtime.conventions.exception_handler`, and runs `python manage.py migrate`. A fresh
 `migrate` on a clean database creates the four built-in presets as part of the initial data
 migration — no separate seed step is needed on first install. Run
 `python manage.py quickscale_forms_seed_presets` to re-create a preset that was manually
