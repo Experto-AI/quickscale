@@ -1,7 +1,6 @@
 """Views for account management"""
 
-from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack
 import logging
 from typing import Any
 
@@ -215,10 +214,24 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
             user, handled_app_labels
         )
 
-        with self._subscription_mutation_locks(
-            prepared_member_org_ids | cancellation_org_ids | prepared_provider_org_ids,
-            handlers,
-        ):
+        lock_stack = ExitStack()
+        try:
+            self._enter_account_deletion_locks(
+                lock_stack,
+                prepared_member_org_ids
+                | cancellation_org_ids
+                | prepared_provider_org_ids,
+                handlers,
+            )
+        except _AccountDeletionProviderBlocked as exc:
+            lock_stack.close()
+            messages.error(
+                self.request,
+                f"Account deletion is blocked by provider state: {exc}",
+            )
+            return self.form_invalid(form)
+
+        with lock_stack:
             try:
                 try:
                     self._reconcile_provider_purchase_checkouts(
@@ -700,26 +713,30 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                     user.pk,
                 )
 
-    @contextmanager
-    def _subscription_mutation_locks(
+    def _enter_account_deletion_locks(
         self,
+        stack: ExitStack,
         organization_ids: set[Any],
         handlers: tuple[Any, ...],
-    ) -> Iterator[None]:
-        """Serialize cancellation, deletion decision, and compensation."""
-        if not organization_ids or not handlers:
-            yield
-            return
+    ) -> None:
+        """Acquire each declared handler's provider locks for the deletion.
 
-        with ExitStack() as stack:
-            for handler in handlers:
-                for organization_id in sorted(organization_ids, key=str):
+        Serializes cancellation, deletion decision, and compensation.  A
+        declared provider error during acquisition fails the deletion closed
+        before any provider work; any other exception propagates.
+        """
+        for handler in handlers:
+            for organization_id in sorted(organization_ids, key=str):
+                try:
                     stack.enter_context(
                         handler.account_deletion_subscription_mutation_lock(
                             organization_id
                         )
                     )
-            yield
+                except Exception as exc:
+                    if not _provider_error_is_blocking(handler, exc):
+                        raise
+                    raise _AccountDeletionProviderBlocked(str(exc)) from exc
 
     def _detach_provider_user_references(
         self,

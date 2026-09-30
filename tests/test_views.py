@@ -1960,6 +1960,7 @@ class _StubAccountDeletionHandler:
         reference_organization_ids: tuple[int, ...] = (),
         reconcile_scope: str = "cancellation",
         cancel_error: Exception | None = None,
+        lock_error: Exception | None = None,
         transition: object | None = None,
         on_cancel=None,
     ) -> None:
@@ -1967,6 +1968,7 @@ class _StubAccountDeletionHandler:
         self._reference_organization_ids = reference_organization_ids
         self._reconcile_scope = reconcile_scope
         self._cancel_error = cancel_error
+        self._lock_error = lock_error
         self._transition = transition
         self._on_cancel = on_cancel
         self.reconciled_organization_ids: list[Any] = []
@@ -1985,10 +1987,18 @@ class _StubAccountDeletionHandler:
         return self._reference_organization_ids
 
     def account_deletion_subscription_mutation_lock(self, organization_id):
-        from contextlib import nullcontext
+        from contextlib import contextmanager, nullcontext
 
         self._calls.append("lock")
-        return nullcontext()
+        if self._lock_error is None:
+            return nullcontext()
+
+        @contextmanager
+        def raise_on_enter():
+            raise self._lock_error
+            yield
+
+        return raise_on_enter()
 
     def reconcile_account_deletion_purchase_provider_state(
         self, organization_id, user_id
@@ -2342,5 +2352,45 @@ class TestAccountDeleteViewDeclaredHandlers:
         assert get_user_model().objects.filter(pk=user.pk).exists()
         assert any(
             "not that app's config" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+
+    def test_account_delete_blocks_on_a_declared_lock_error(
+        self, authenticated_client, user
+    ):
+        """A declared provider error while acquiring a lock blocks the deletion."""
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Declared Lock Error",
+            slug="declared-lock-error",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        handler = _StubAccountDeletionHandler(
+            [],
+            lock_error=_StubProviderError("provider lock unavailable"),
+        )
+
+        with _declared_handlers(handler):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert any(
+            "provider lock unavailable" in str(message.message)
             for message in messages_framework.get_messages(response.wsgi_request)
         )
