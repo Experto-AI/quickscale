@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from decimal import Decimal
-import json
 from typing import Any
 
 from django.conf import settings
@@ -12,18 +12,30 @@ from django.http import (
     HttpRequest,
     HttpResponse,
     HttpResponseBase,
-    JsonResponse,
 )
 from django.shortcuts import redirect, resolve_url
 from django.urls import reverse
 from django.views.generic import TemplateView
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import (
+    NotAuthenticated,
+    NotFound,
+    PermissionDenied,
+    ValidationError,
+)
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import JSONParser
+from rest_framework.permissions import AllowAny
+from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_modules_billing.exceptions import (
+    BillingError,
+    BillingWebhookError,
+    OrgSelectionRequiredError,
+)
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
@@ -41,12 +53,7 @@ from quickscale_modules_billing.serializers import (
     SubscriptionSerializer,
 )
 from quickscale_modules_billing.services import (
-    BillingError,
-    BillingConfigurationError,
-    BillingDisabledError,
     BillingSettingsSnapshot,
-    BillingSubscriptionAnomalyError,
-    BillingValidationError,
     cancel_current_subscription,
     create_checkout_session,
     create_billing_portal_session,
@@ -74,22 +81,35 @@ def _resolve_request_organization(
     return organization, False
 
 
-def _parse_json_object_payload(
-    request: HttpRequest,
-) -> tuple[dict[str, Any] | None, HttpResponse | None]:
-    try:
-        payload = json.loads(request.body.decode("utf-8") or "{}")
-    except UnicodeDecodeError:
-        return None, JsonResponse({"error": "Invalid JSON payload"}, status=400)
-    except json.JSONDecodeError:
-        return None, JsonResponse({"error": "Invalid JSON payload"}, status=400)
+def _require_authenticated(request: Request) -> None:
+    """Raise the module's 401 for a caller without a session."""
+    if not request.user.is_authenticated:
+        raise NotAuthenticated("Authentication required")
 
-    if not isinstance(payload, dict):
-        return None, JsonResponse(
-            {"error": "JSON object payload expected"},
-            status=400,
-        )
-    return payload, None
+
+def _require_request_organization(
+    request: Request,
+    *,
+    require_owner: bool = True,
+) -> Any:
+    """Return the request's organization, refusing a missing or unauthorized one."""
+    organization, access_denied = _resolve_request_organization(
+        request._request,
+        require_owner=require_owner,
+    )
+    if organization is None:
+        raise OrgSelectionRequiredError()
+    if access_denied:
+        raise PermissionDenied("Forbidden")
+    return organization
+
+
+def _json_object_payload(request: Request) -> Mapping[str, Any]:
+    """Return the request's JSON object payload or fail validation."""
+    payload = request.data
+    if not isinstance(payload, Mapping):
+        raise ValidationError({"non_field_errors": ["JSON object payload expected"]})
+    return payload
 
 
 def _dashboard_url(*, organization: Any | None) -> str:
@@ -99,8 +119,6 @@ def _dashboard_url(*, organization: Any | None) -> str:
 def _pricing_url(*, organization: Any | None) -> str:
     return reverse("quickscale_billing:pricing-page")
 
-
-_ORG_SELECTION_REQUIRED_ERROR = "Organization selection required."
 
 _ZERO_DECIMAL_PRICE_CURRENCIES = frozenset({"jpy"})
 
@@ -126,10 +144,68 @@ class _TransactionPagination(PageNumberPagination):
         return Response(data)
 
 
-class PlanListView(APIView):
+class BillingSessionAuthentication(SessionAuthentication):
+    """Session authentication that keeps a 401 challenge for anonymous callers.
+
+    DRF answers an unauthenticated request 403 when the authentication scheme
+    declares no challenge header; the billing API has always answered 401, so
+    the scheme names its challenge.
+    """
+
+    def authenticate_header(self, request: Request) -> str:
+        del request
+        return "Session"
+
+
+class _BillingAPIView(APIView):
+    """Shared DRF wiring for billing's JSON endpoints.
+
+    Session authentication only (DRF enforces CSRF on unsafe methods),
+    ``AllowAny`` because each view performs its own authentication and
+    organization checks, and JSON-only parsing and rendering so an
+    HTML-preferring client never receives DRF's browsable-API page instead
+    of the one QuickScale error shape (Module Conventions rule 9).
+    """
+
+    authentication_classes = [BillingSessionAuthentication]
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
+    renderer_classes = [JSONRenderer]
+
+    def handle_exception(self, exc: Exception) -> Response:
+        """Classify a webhook-scoped provider failure as a server error here.
+
+        ``BillingWebhookError`` carries 400 for the signature-verified webhook
+        transport (Module Conventions rule 26); on a customer-facing endpoint
+        the same provider anomaly is a server-side failure, so it answers the
+        base error's 500 instead.
+        """
+        if isinstance(exc, BillingWebhookError):
+            exc = BillingError(str(exc))
+        return super().handle_exception(exc)
+
+
+class _RenderedAPIView(_BillingAPIView):
+    """APIView variant that renders the response during dispatch.
+
+    DRF 3.16+ defers response rendering to the WSGI handler layer, so
+    calling ``as_view()(request)`` directly (outside the middleware
+    stack) leaves ``response.content`` inaccessible.  This mixin renders
+    the response at the end of ``dispatch()`` so that the content is
+    available immediately — preserving the pre-existing behavior for
+    direct view invocations.
+    """
+
+    def dispatch(self, *args: Any, **kwargs: Any) -> HttpResponse:
+        response = super().dispatch(*args, **kwargs)
+        if isinstance(response, Response):
+            response.render()
+        return response
+
+
+class PlanListView(_BillingAPIView):
     """Return the public recurring billing catalog."""
 
-    permission_classes = [AllowAny]
     http_method_names = ["get"]
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -145,29 +221,9 @@ class PlanListView(APIView):
         return Response(serializer.data)
 
 
-class _RenderedAPIView(APIView):
-    """APIView variant that renders the response during dispatch.
-
-    DRF 3.16+ defers response rendering to the WSGI handler layer, so
-    calling ``as_view()(request)`` directly (outside the middleware
-    stack) leaves ``response.content`` inaccessible.  This mixin renders
-    the response at the end of ``dispatch()`` so that the content is
-    available immediately — preserving the pre-existing ``JsonResponse``
-    behavior for direct view invocations.
-    """
-
-    def dispatch(self, *args: Any, **kwargs: Any) -> HttpResponse:
-        response = super().dispatch(*args, **kwargs)
-        if isinstance(response, Response):
-            response.render()
-        return response
-
-
 class CreateCheckoutSessionView(_RenderedAPIView):
     """Create a hosted Stripe checkout session for a one-time credit purchase."""
 
-    permission_classes = [AllowAny]
-    authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
     # Tighter than the generated user/anon defaults; the rate for this scope
     # is contributed by the billing wiring spec.
@@ -175,55 +231,27 @@ class CreateCheckoutSessionView(_RenderedAPIView):
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentication required"}, status=401)
+        _require_authenticated(request)
+        organization = _require_request_organization(request)
 
-        organization, access_denied = _resolve_request_organization(
-            request._request,
-            require_owner=True,
-        )
-        if organization is None:
-            return Response(
-                {"error": _ORG_SELECTION_REQUIRED_ERROR},
-                status=409,
-            )
-        if access_denied:
-            return Response(status=403)
-
-        payload, payload_error = _parse_json_object_payload(request._request)
-        if payload_error is not None:
-            return payload_error
-        assert payload is not None  # noqa: S101 - internal invariant guaranteed by the caller
-
+        payload = _json_object_payload(request)
         serializer = CreateCheckoutSessionSerializer(data=payload)
         if not serializer.is_valid():
-            return Response({"errors": serializer.errors}, status=400)
+            raise ValidationError(serializer.errors)
 
-        try:
-            checkout_url = create_checkout_session(
-                request.user,
-                serializer.validated_data["plan"],
-                reverse("quickscale_billing:purchase-success"),
-                reverse("quickscale_billing:purchase-cancel"),
-                organization=organization,
-            )
-        except BillingDisabledError as exc:
-            return Response({"error": str(exc)}, status=403)
-        except BillingValidationError as exc:
-            return Response({"error": str(exc)}, status=400)
-        except BillingConfigurationError as exc:
-            return Response({"error": str(exc)}, status=500)
-        except BillingError as exc:
-            return Response({"error": str(exc)}, status=500)
-
+        checkout_url = create_checkout_session(
+            request.user,
+            serializer.validated_data["plan"],
+            reverse("quickscale_billing:purchase-success"),
+            reverse("quickscale_billing:purchase-cancel"),
+            organization=organization,
+        )
         return Response({"checkout_url": checkout_url})
 
 
 class CreateSubscriptionCheckoutView(_RenderedAPIView):
     """Create a hosted Stripe checkout session for a recurring subscription."""
 
-    permission_classes = [AllowAny]
-    authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
     # Tighter than the generated user/anon defaults; the rate for this scope
     # is contributed by the billing wiring spec.
@@ -231,55 +259,27 @@ class CreateSubscriptionCheckoutView(_RenderedAPIView):
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentication required"}, status=401)
+        _require_authenticated(request)
+        organization = _require_request_organization(request)
 
-        organization, access_denied = _resolve_request_organization(
-            request._request,
-            require_owner=True,
-        )
-        if organization is None:
-            return Response(
-                {"error": _ORG_SELECTION_REQUIRED_ERROR},
-                status=409,
-            )
-        if access_denied:
-            return Response(status=403)
-
-        payload, payload_error = _parse_json_object_payload(request._request)
-        if payload_error is not None:
-            return payload_error
-        assert payload is not None  # noqa: S101 - internal invariant guaranteed by the caller
-
+        payload = _json_object_payload(request)
         serializer = CreateSubscriptionCheckoutSerializer(data=payload)
         if not serializer.is_valid():
-            return Response({"errors": serializer.errors}, status=400)
+            raise ValidationError(serializer.errors)
 
-        try:
-            checkout_url = create_subscription_checkout_session(
-                request.user,
-                serializer.validated_data["plan"],
-                reverse("quickscale_billing:subscription-success"),
-                reverse("quickscale_billing:subscription-cancel"),
-                organization=organization,
-            )
-        except BillingDisabledError as exc:
-            return Response({"error": str(exc)}, status=403)
-        except BillingValidationError as exc:
-            return Response({"error": str(exc)}, status=400)
-        except BillingConfigurationError as exc:
-            return Response({"error": str(exc)}, status=500)
-        except BillingError as exc:
-            return Response({"error": str(exc)}, status=500)
-
+        checkout_url = create_subscription_checkout_session(
+            request.user,
+            serializer.validated_data["plan"],
+            reverse("quickscale_billing:subscription-success"),
+            reverse("quickscale_billing:subscription-cancel"),
+            organization=organization,
+        )
         return Response({"checkout_url": checkout_url})
 
 
 class CancelSubscriptionView(_RenderedAPIView):
     """Cancel the authenticated organization's current recurring subscription."""
 
-    permission_classes = [AllowAny]
-    authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
     # Stripe-calling session endpoint; the rate for this scope is contributed
     # by the billing wiring spec.
@@ -287,54 +287,24 @@ class CancelSubscriptionView(_RenderedAPIView):
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentication required"}, status=401)
+        _require_authenticated(request)
+        organization = _require_request_organization(request)
 
-        organization, access_denied = _resolve_request_organization(
-            request._request,
-            require_owner=True,
-        )
-        if organization is None:
-            return Response(
-                {"error": _ORG_SELECTION_REQUIRED_ERROR},
-                status=409,
-            )
-        if access_denied:
-            return Response(status=403)
-
-        payload, payload_error = _parse_json_object_payload(request._request)
-        if payload_error is not None:
-            return payload_error
-        assert payload is not None  # noqa: S101 - internal invariant guaranteed by the caller
-
+        payload = _json_object_payload(request)
         serializer = CancelSubscriptionSerializer(data=payload)
         if not serializer.is_valid():
-            return Response({"errors": serializer.errors}, status=400)
+            raise ValidationError(serializer.errors)
 
-        try:
-            cancel_current_subscription(
-                request.user,
-                organization=organization,
-            )
-        except BillingDisabledError as exc:
-            return Response({"error": str(exc)}, status=403)
-        except BillingValidationError as exc:
-            return Response({"error": str(exc)}, status=400)
-        except BillingSubscriptionAnomalyError as exc:
-            return Response({"error": str(exc)}, status=400)
-        except BillingConfigurationError as exc:
-            return Response({"error": str(exc)}, status=500)
-        except BillingError as exc:
-            return Response({"error": str(exc)}, status=500)
-
+        cancel_current_subscription(
+            request.user,
+            organization=organization,
+        )
         return Response(status=204)
 
 
 class CreateBillingPortalSessionView(_RenderedAPIView):
     """Create a hosted Stripe billing portal session for the current organization."""
 
-    permission_classes = [AllowAny]
-    authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
     # Stripe-calling session endpoint; the rate for this scope is contributed
     # by the billing wiring spec.
@@ -342,68 +312,31 @@ class CreateBillingPortalSessionView(_RenderedAPIView):
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentication required"}, status=401)
+        _require_authenticated(request)
+        organization = _require_request_organization(request)
 
-        organization, access_denied = _resolve_request_organization(
-            request._request,
-            require_owner=True,
-        )
-        if organization is None:
-            return Response(
-                {"error": _ORG_SELECTION_REQUIRED_ERROR},
-                status=409,
-            )
-        if access_denied:
-            return Response(status=403)
-
-        payload, payload_error = _parse_json_object_payload(request._request)
-        if payload_error is not None:
-            return payload_error
-        assert payload is not None  # noqa: S101 - internal invariant guaranteed by the caller
-
+        payload = _json_object_payload(request)
         serializer = CreateBillingPortalSessionSerializer(data=payload)
         if not serializer.is_valid():
-            return Response({"errors": serializer.errors}, status=400)
+            raise ValidationError(serializer.errors)
 
-        try:
-            portal_url = create_billing_portal_session(
-                request.user,
-                reverse("quickscale_billing:portal-return"),
-                organization=organization,
-            )
-        except BillingDisabledError as exc:
-            return Response({"error": str(exc)}, status=403)
-        except BillingValidationError as exc:
-            return Response({"error": str(exc)}, status=400)
-        except BillingConfigurationError as exc:
-            return Response({"error": str(exc)}, status=500)
-        except BillingError as exc:
-            return Response({"error": str(exc)}, status=500)
-
+        portal_url = create_billing_portal_session(
+            request.user,
+            reverse("quickscale_billing:portal-return"),
+            organization=organization,
+        )
         return Response({"portal_url": portal_url})
 
 
-class CreditBalanceView(APIView):
+class CreditBalanceView(_BillingAPIView):
     """Return the authenticated organization's current credit balance snapshot."""
 
-    permission_classes = [AllowAny]
-    authentication_classes = [SessionAuthentication]
     http_method_names = ["get"]
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentication required"}, status=401)
-
-        organization, access_denied = _resolve_request_organization(
-            request._request,
-            require_owner=True,
-        )
-        if organization is None:
-            return Response({"error": _ORG_SELECTION_REQUIRED_ERROR}, status=409)
-        if access_denied:
-            return Response(status=403)
+        _require_authenticated(request)
+        organization = _require_request_organization(request)
 
         balance = CreditBalance.all_objects.filter(organization=organization).first()
         if balance is None:
@@ -412,27 +345,16 @@ class CreditBalanceView(APIView):
         return Response(serializer.data)
 
 
-class CreditTransactionListView(APIView):
+class CreditTransactionListView(_BillingAPIView):
     """Return the authenticated organization's paginated credit transaction history."""
 
-    permission_classes = [AllowAny]
-    authentication_classes = [SessionAuthentication]
     http_method_names = ["get"]
     pagination_class = _TransactionPagination
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentication required"}, status=401)
-
-        organization, access_denied = _resolve_request_organization(
-            request._request,
-            require_owner=True,
-        )
-        if organization is None:
-            return Response({"error": _ORG_SELECTION_REQUIRED_ERROR}, status=409)
-        if access_denied:
-            return Response(status=403)
+        _require_authenticated(request)
+        organization = _require_request_organization(request)
 
         queryset = CreditTransaction.all_objects.filter(organization=organization)
         queryset = queryset.order_by("-created_at", "-id")
@@ -442,26 +364,15 @@ class CreditTransactionListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-class SubscriptionDetailView(APIView):
+class SubscriptionDetailView(_BillingAPIView):
     """Return the authenticated organization's current recurring subscription."""
 
-    permission_classes = [AllowAny]
-    authentication_classes = [SessionAuthentication]
     http_method_names = ["get"]
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentication required"}, status=401)
-
-        organization, access_denied = _resolve_request_organization(
-            request._request,
-            require_owner=True,
-        )
-        if organization is None:
-            return Response({"error": _ORG_SELECTION_REQUIRED_ERROR}, status=409)
-        if access_denied:
-            return Response(status=403)
+        _require_authenticated(request)
+        organization = _require_request_organization(request)
 
         subscription = (
             Subscription.all_objects.select_related("plan")
@@ -471,35 +382,27 @@ class SubscriptionDetailView(APIView):
             .first()
         )
         if subscription is None:
-            return Response({"error": "Current subscription not found."}, status=404)
+            raise NotFound("Current subscription not found.")
 
         serializer = SubscriptionSerializer(subscription)
         return Response(serializer.data)
 
 
-class StripePublishableKeyView(APIView):
+class StripePublishableKeyView(_BillingAPIView):
     """Return the authenticated Stripe publishable key for billing UI clients."""
 
-    permission_classes = [AllowAny]
-    authentication_classes = [SessionAuthentication]
     http_method_names = ["get"]
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentication required"}, status=401)
+        _require_authenticated(request)
 
         organization = getattr(request._request, "org", None)
         if organization is None:
-            return Response({"error": _ORG_SELECTION_REQUIRED_ERROR}, status=409)
+            raise OrgSelectionRequiredError()
 
         snapshot = BillingSettingsSnapshot.from_settings()
-        try:
-            return Response({"publishable_key": snapshot.resolve_publishable_key()})
-        except BillingConfigurationError as exc:
-            return Response({"error": str(exc)}, status=500)
-        except BillingError as exc:
-            return Response({"error": str(exc)}, status=500)
+        return Response({"publishable_key": snapshot.resolve_publishable_key()})
 
 
 class BillingDashboardView(LoginRequiredMixin, TemplateView):

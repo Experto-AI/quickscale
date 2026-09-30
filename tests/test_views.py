@@ -132,7 +132,119 @@ def test_checkout_view_returns_json_401_for_anonymous_requests() -> None:
     )
 
     assert response.status_code == 401
-    assert response.json() == {"error": "Authentication required"}
+    assert response.json() == {
+        "error": {"code": "not_authenticated", "message": "Authentication required"}
+    }
+
+
+@pytest.mark.django_db
+def test_checkout_view_answers_org_selection_and_forbidden_in_one_shape(
+    client: Client,
+    user,
+    organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing or unauthorized organization context answers the one shape."""
+    client.force_login(user)
+    route = reverse("quickscale_billing:purchase-checkout")
+
+    monkeypatch.setattr(
+        billing_views,
+        "_resolve_request_organization",
+        lambda request, require_owner=False: (None, False),
+    )
+    response = client.post(
+        route,
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "org_selection_required",
+            "message": "Organization selection required.",
+        }
+    }
+
+    monkeypatch.setattr(
+        billing_views,
+        "_resolve_request_organization",
+        lambda request, require_owner=False: (organization, True),
+    )
+    response = client.post(
+        route,
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {"code": "permission_denied", "message": "Forbidden"}
+    }
+
+
+@pytest.mark.django_db
+def test_checkout_view_answers_disabled_runtime_with_module_off_404(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
+) -> None:
+    """A disabled billing runtime answers 404, as the Stripe webhook does."""
+    _create_one_time_plan(slug="credits-pack")
+
+    def raise_disabled(*args: Any, **kwargs: Any) -> str:
+        raise BillingDisabledError("Billing module is disabled.")
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_checkout_session",
+        raise_disabled,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:purchase-checkout"),
+        data=json.dumps({"plan_slug": "credits-pack"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {"code": "not_found", "message": "Billing module is disabled."}
+    }
+
+
+@pytest.mark.django_db
+def test_checkout_view_answers_provider_failure_as_server_error(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
+) -> None:
+    """A webhook-scoped provider failure is a server error on this endpoint."""
+    _create_one_time_plan(slug="credits-pack")
+
+    def raise_provider_failure(*args: Any, **kwargs: Any) -> str:
+        raise BillingWebhookError("Stripe customer creation did not return an id.")
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_checkout_session",
+        raise_provider_failure,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:purchase-checkout"),
+        data=json.dumps({"plan_slug": "credits-pack"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "billing_error",
+            "message": "Stripe customer creation did not return an id.",
+        }
+    }
 
 
 def test_subscription_checkout_view_returns_json_401_for_anonymous_requests() -> None:
@@ -145,7 +257,9 @@ def test_subscription_checkout_view_returns_json_401_for_anonymous_requests() ->
     )
 
     assert response.status_code == 401
-    assert response.json() == {"error": "Authentication required"}
+    assert response.json() == {
+        "error": {"code": "not_authenticated", "message": "Authentication required"}
+    }
 
 
 def test_cancel_subscription_view_returns_json_401_for_anonymous_requests(
@@ -175,7 +289,9 @@ def test_cancel_subscription_view_returns_json_401_for_anonymous_requests(
     )
 
     assert response.status_code == 401
-    assert response.json() == {"error": "Authentication required"}
+    assert response.json() == {
+        "error": {"code": "not_authenticated", "message": "Authentication required"}
+    }
     assert called is False
 
 
@@ -208,7 +324,9 @@ def test_billing_portal_session_view_returns_json_401_for_anonymous_requests(
     )
 
     assert response.status_code == 401
-    assert response.json() == {"error": "Authentication required"}
+    assert response.json() == {
+        "error": {"code": "not_authenticated", "message": "Authentication required"}
+    }
     assert called is False
 
 
@@ -228,7 +346,9 @@ def test_billing_read_views_return_json_401_for_anonymous_requests(
     response = client.get(reverse(f"quickscale_billing:{route_name}"))
 
     assert response.status_code == 401
-    assert response.json() == {"error": "Authentication required"}
+    assert response.json() == {
+        "error": {"code": "not_authenticated", "message": "Authentication required"}
+    }
 
 
 @pytest.mark.django_db
@@ -528,7 +648,12 @@ def test_billing_config_view_returns_500_for_missing_or_blank_publishable_key(
 
     assert response.status_code == 500
     assert response.data == {
-        "error": "Stripe publishable key is not configured in the runtime environment."
+        "error": {
+            "code": "configuration_error",
+            "message": (
+                "Stripe publishable key is not configured in the runtime environment."
+            ),
+        }
     }
 
 
@@ -697,9 +822,13 @@ def test_checkout_view_rejects_caller_supplied_redirect_fields(
 
     assert response.status_code == 400
     assert response.json() == {
-        "errors": {
-            "cancel_url": ["This field is not allowed."],
-            "success_url": ["This field is not allowed."],
+        "error": {
+            "code": "validation_error",
+            "message": "Invalid input.",
+            "fields": {
+                "cancel_url": ["This field is not allowed."],
+                "success_url": ["This field is not allowed."],
+            },
         }
     }
 
@@ -727,9 +856,13 @@ def test_subscription_checkout_view_rejects_caller_supplied_redirect_fields(
 
     assert response.status_code == 400
     assert response.json() == {
-        "errors": {
-            "cancel_url": ["This field is not allowed."],
-            "success_url": ["This field is not allowed."],
+        "error": {
+            "code": "validation_error",
+            "message": "Invalid input.",
+            "fields": {
+                "cancel_url": ["This field is not allowed."],
+                "success_url": ["This field is not allowed."],
+            },
         }
     }
 
@@ -766,8 +899,12 @@ def test_cancel_subscription_view_rejects_caller_supplied_return_url_without_cal
 
     assert response.status_code == 400
     assert response.json() == {
-        "errors": {
-            "return_url": ["This field is not allowed."],
+        "error": {
+            "code": "validation_error",
+            "message": "Invalid input.",
+            "fields": {
+                "return_url": ["This field is not allowed."],
+            },
         }
     }
     assert called is False
@@ -807,8 +944,12 @@ def test_billing_portal_session_view_rejects_caller_supplied_return_url_without_
 
     assert response.status_code == 400
     assert response.json() == {
-        "errors": {
-            "return_url": ["This field is not allowed."],
+        "error": {
+            "code": "validation_error",
+            "message": "Invalid input.",
+            "fields": {
+                "return_url": ["This field is not allowed."],
+            },
         }
     }
     assert called is False
@@ -1132,7 +1273,10 @@ def test_subscription_checkout_view_blocks_while_current_subscription_exists(
 
     assert response.status_code == 400
     assert response.json() == {
-        "error": "User already has a current recurring subscription."
+        "error": {
+            "code": "validation_error",
+            "message": "User already has a current recurring subscription.",
+        }
     }
 
 
@@ -1229,8 +1373,10 @@ def test_cancel_subscription_view_preserves_concurrent_provider_replacement(
     )
 
     subscription.refresh_from_db()
+    body = response.json()
     assert response.status_code == 500
-    assert "captured subscription changed" in response.json()["error"]
+    assert body["error"]["code"] == "billing_error"
+    assert "captured subscription changed" in body["error"]["message"]
     assert subscription.stripe_subscription_id == "sub_view_cancel_identity_b"
 
 
@@ -1335,7 +1481,9 @@ def test_subscription_detail_view_returns_404_when_current_subscription_is_missi
     response = client.get(reverse("quickscale_billing:subscription-detail"))
 
     assert response.status_code == 404
-    assert response.json() == {"error": "Current subscription not found."}
+    assert response.json() == {
+        "error": {"code": "not_found", "message": "Current subscription not found."}
+    }
 
 
 def test_webhook_view_passes_raw_body_and_signature_header(
@@ -1661,14 +1809,13 @@ class TestBillingDrfDefaultCallerParity:
         client: Client,
         route_name: str,
     ) -> None:
-        """Views with internal auth checks must still return custom 401 for anonymous.
+        """Views with internal auth checks must still answer 401 for anonymous.
 
         These views handle authentication inside the view body rather than
         relying on DRF's global permission class.  Under the IsAuthenticated
         default, the explicit ``AllowAny`` lets DRF pass the request through
-        so the view's own auth check can return the custom 401 JSON.
+        so the view's own auth check can refuse the caller.
         """
         response = client.get(reverse(f"quickscale_billing:{route_name}"))
 
         assert response.status_code == 401
-        assert response.json() == {"error": "Authentication required"}
