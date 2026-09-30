@@ -88,6 +88,14 @@ derivation:
           - quickscale_modules_social
       description: "Social Django app label"
 
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - - _quickscale/social/
+            - quickscale_managed.social_urls
+      description: "Social URL include"
+
   option_derivations:
     layout_variant:
       normalization_rules:

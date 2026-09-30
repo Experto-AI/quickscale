@@ -15,9 +15,11 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
+from quickscale_core.manifest import build_generic_manifest_spec
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_social.adapter import (
+    _qualify_managed_url_includes,
     _social_manifest_adapter,
     _social_manifest_apps,
     get_manifest_adapter,
@@ -34,6 +36,15 @@ def _social_options() -> dict[str, Any]:
         "cache_ttl_seconds": 300,
         "links_per_page": 24,
         "embeds_per_page": 12,
+    }
+
+
+def _managed_files() -> dict[str, str]:
+    """Return the social manifest's declared managed output -> renderer mapping."""
+    return {
+        "quickscale_managed/__init__.py": "social.managed_init",
+        "quickscale_managed/social_urls.py": "social.managed_urls",
+        "quickscale_managed/social_views.py": "social.managed_views",
     }
 
 
@@ -100,6 +111,63 @@ assert not any(name.startswith("quickscale_core.dr_engine") for name in sys.modu
             f"adapter import failed without Django:\nstdout: {result.stdout}\n"
             f"stderr: {result.stderr}"
         )
+
+
+class TestSocialManifestMount:
+    """Rule 7: social's mount lives only in the manifest."""
+
+    def test_manifest_owns_the_social_mount(self) -> None:
+        """The manifest's url_includes is the mount's only home."""
+        spec = build_generic_manifest_spec("social", {})
+
+        assert spec.url_includes == (
+            ("_quickscale/social/", "quickscale_managed.social_urls"),
+        )
+        assert spec.pre_home_url_includes == ()
+
+    def test_adapter_qualifies_the_manifest_include(self) -> None:
+        """The adapter supplies the project package the manifest cannot know."""
+        spec = _social_manifest_adapter({}, project_package="myapp")
+
+        assert spec.url_includes == (
+            ("_quickscale/social/", "myapp.quickscale_managed.social_urls"),
+        )
+
+    def test_undeclared_include_target_fails_closed(self) -> None:
+        """A target social does not render is refused, not qualified."""
+        with pytest.raises(ValueError, match="managed URLconf social renders"):
+            _qualify_managed_url_includes(
+                (("_quickscale/social/", "quickscale_managed.socail_urls"),),
+                "myapp",
+                managed_files=_managed_files(),
+            )
+
+    def test_non_urlconf_include_target_fails_closed(self) -> None:
+        """A managed file that is not the rendered URLconf is refused."""
+        with pytest.raises(ValueError, match="managed URLconf social renders"):
+            _qualify_managed_url_includes(
+                (("_quickscale/social/", "quickscale_managed.social_views"),),
+                "myapp",
+                managed_files=_managed_files(),
+            )
+
+    def test_absolute_include_target_fails_closed(self) -> None:
+        """A target outside the managed package is refused, not qualified."""
+        with pytest.raises(ValueError, match="managed URLconf social renders"):
+            _qualify_managed_url_includes(
+                (("_quickscale/social/", "quickscale_modules_social.urls"),),
+                "myapp",
+                managed_files=_managed_files(),
+            )
+
+    def test_empty_include_set_fails_closed(self) -> None:
+        """A manifest without the mount cannot silently wire nothing."""
+        with pytest.raises(ValueError, match="expected the module's mount"):
+            _qualify_managed_url_includes(
+                (),
+                "myapp",
+                managed_files=_managed_files(),
+            )
 
 
 class TestSocialManifestAdapterProjectPackage:

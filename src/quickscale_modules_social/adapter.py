@@ -13,6 +13,7 @@ without module source is not a supported context (AF7 fail-hard decision).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from quickscale_core.runtime.manifest import (
@@ -32,6 +33,61 @@ from quickscale_core.runtime.manifest import (
     social_provider_supports_embeds,
 )
 
+#: Renderer ID of the managed URLconf in the social manifest's managed_files.
+_MANAGED_URLCONF_RENDERER = "social.managed_urls"
+
+
+def _qualify_managed_url_includes(
+    includes: tuple[tuple[str, str], ...],
+    project_package: str,
+    *,
+    managed_files: Mapping[str, str],
+) -> tuple[tuple[str, str], ...]:
+    """Qualify social's manifest-declared URL includes for the project package.
+
+    The manifest owns the module's mount and declares social's URLconf
+    project-relatively (``quickscale_managed.social_urls``); the generated
+    project's package name reaches wiring only here, so the adapter supplies
+    it.  A target that is not the managed URLconf social renders (the declared
+    managed file whose renderer is :data:`_MANAGED_URLCONF_RENDERER`) fails
+    closed instead of emitting an unimportable include.
+
+    Args:
+        includes: The ``(route, include_path)`` pairs projected from the
+            social ``module.yml`` manifest.
+        project_package: The generated project's Python package name.
+        managed_files: The ``output_path -> renderer`` mapping projected from
+            the same manifest, used to identify the rendered URLconf.
+
+    Returns:
+        The includes with every target qualified as
+        ``{project_package}.{include_path}``.
+
+    Raises:
+        ValueError: When no include is declared or a target names no managed
+            URLconf social renders.
+    """
+    if not includes:
+        raise ValueError(
+            "Invalid social manifest url_includes: expected the module's mount"
+        )
+    urlconf_modules = {
+        output_path[: -len(".py")].replace("/", ".")
+        for output_path, renderer in managed_files.items()
+        if renderer == _MANAGED_URLCONF_RENDERER and output_path.endswith(".py")
+    }
+    qualified: list[tuple[str, str]] = []
+    for route, include_path in includes:
+        if include_path not in urlconf_modules:
+            declared = ", ".join(sorted(urlconf_modules)) or "none declared"
+            raise ValueError(
+                "Invalid social manifest url_includes target "
+                f"{include_path!r}: expected the managed URLconf social renders "
+                f"({declared})"
+            )
+        qualified.append((route, f"{project_package}.{include_path}"))
+    return tuple(qualified)
+
 
 def _social_manifest_adapter(
     options: dict[str, Any],
@@ -42,8 +98,9 @@ def _social_manifest_adapter(
 
     Settings: ``QUICKSCALE_SOCIAL_*`` keys derived from resolved options plus
     fixed path constants.
-    URL includes: a single ``project_package``-qualified include pointing at
-    ``{project_package}.quickscale_managed.social_urls``.
+    URL includes: the manifest-declared mount (``_quickscale/social/``) and
+    its project-relative managed URLconf target, qualified with
+    ``project_package`` into ``{project_package}.quickscale_managed.social_urls``.
     Managed files: sourced from the manifest-declared ``managed_files``
     contract in the social ``module.yml``.  The assembler converts each
     declaration's ``output_path`` and ``renderer`` into a placeholder
@@ -108,11 +165,10 @@ def _social_manifest_adapter(
         derived_settings=settings,
         apps=apps,
         middleware=(),
-        url_includes=(
-            (
-                SOCIAL_INTEGRATION_BASE_PATH.lstrip("/"),
-                f"{project_package}.quickscale_managed.social_urls",
-            ),
+        url_includes=_qualify_managed_url_includes(
+            manifest_spec.url_includes,
+            project_package,
+            managed_files=manifest_spec.managed_files,
         ),
         pre_home_url_includes=(),
         managed_files=managed_file_declarations,
@@ -128,7 +184,7 @@ def _social_manifest_adapter(
         # populated from the manifest declarations, not from hardcoded paths.
         renderer_dispatch: dict[str, str] = {
             "social.managed_init": render_social_managed_init_module(),
-            "social.managed_urls": render_social_managed_urls_module(),
+            _MANAGED_URLCONF_RENDERER: render_social_managed_urls_module(),
             "social.managed_views": render_social_managed_views_module(
                 provider_allowlist,
                 embed_provider_allowlist,
