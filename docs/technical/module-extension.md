@@ -236,9 +236,13 @@ If that transition cannot happen immediately, the documentation should still sta
 
 ## Standard Documentation Contract for Every Module
 
-Every module README should include a required section using this taxonomy:
+[Module Conventions rule 11](decisions.md#module-conventions) owns the README outline:
+Overview, Configuration (every manifest option), Public surface, URLs, Management commands,
+Operations, Extending — in that order, with no versions in headings. Rule 38 adds that the
+Configuration heading names every manifest option key and the Management commands heading
+names every command the module ships.
 
-### Required Subsections
+The extension contract belongs inside the README's Extending section, covering:
 
 1. **What QuickScale owns**
 2. **What the project owns**
@@ -246,7 +250,7 @@ Every module README should include a required section using this taxonomy:
 4. **Structured extension points**
 5. **Upgrade expectations**
 
-### Suggested README Template
+Suggested material for that section:
 
 | Section | Purpose |
 | --- | --- |

@@ -30,8 +30,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 3 | — | Deferred |
 | SA224 | Standardize module templates, static files, and template tags | post-v88 | 2 | — | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
-| SA227 | Standardize package files, commands, tooling, tests, and READMEs | post-v88 | 1 | — | Deferred |
-| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA224, SA226, SA227 | Deferred |
+| SA215 | Enforce module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA224, SA226 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -42,7 +41,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA227 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA217 ──► SA219 ──► SA224
 Track 3: SA223 ──► SA220 ──► SA226 ──► SA216 (after SA215)
      critical path: SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
@@ -56,7 +55,7 @@ SA217's startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA22
 authorization needs SA220's capabilities and SA223's DRF views. SA204 freezes migration history
 before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** Track 1's SA227 (READMEs only) has slack until SA215. Track 3's SA223 fills the wait
+**Off the critical path.** Track 3's SA223 fills the wait
 for SA219; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
 user-referencing models.
 
@@ -66,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA227 | yes | yes | yes | **yes** | no |
+| 1 | SA215 | no | no | no | no | **yes** |
 | 2 | SA217 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA223 | yes | yes | yes | **yes** | **yes** |
 
@@ -280,18 +279,7 @@ defaults.
 
   **Surfaces:** orgs `permissions`; blog, listings, crm, forms, orgs, social, analytics.
 
-- [ ] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
-
-  **Context:** inventory § 38; rules 11 and 38. Module READMEs follow no common heading set, and
-  most omit option keys and commands.
-
-  **Scope:** every module README follows the rule 11 headings and names every option key and
-  command (rule 38).
-
-  **Acceptance:** every README has the rule 11 headings and names its manifest options and
-  management commands.
-
-  **Surfaces:** every module's README.
+- [x] **SA227 — Standardize package files, commands, tooling, tests, and READMEs.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 

@@ -212,6 +212,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     the shipped set from `quickscale_modules/*/module.yml`, so a module that ships an RLS boundary
     suite joins the isolation gate automatically, and an incomplete module directory fails those
     gates closed instead of dropping out of them.
+  - **Module READMEs share one outline.** Every module README uses the same seven sections —
+    Overview, Configuration, Public surface, URLs, Management commands, Operations, Extending —
+    and names every manifest option key under Configuration and every shipped management command
+    under Management commands.
   - **Blog automation API is a DRF surface.** The blog publish and media endpoints are DRF views
     with session authentication, answer the shared `{"error": {"code", "message", "fields"}}`
     shape, and throttle by client IP under the `quickscale_blog_api` scope at the module's
