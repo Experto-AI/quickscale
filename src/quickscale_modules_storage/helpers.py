@@ -43,10 +43,23 @@ class ValidatedUpload:
     format: str
 
 
-def _read_setting(settings_obj: Any | Mapping[str, Any], key: str, default: Any) -> Any:
+def _setting(settings_obj: Any | Mapping[str, Any], key: str) -> Any:
+    """Return one declared storage setting, without a default (rule 3).
+
+    ``settings_obj`` is Django settings or a mapping (backup-engine and test
+    callers pass either).  An absent setting fails loudly instead of silently
+    resolving to a fallback; in a running project the startup check has
+    already refused that state.
+    """
     if isinstance(settings_obj, Mapping):
-        return settings_obj.get(key, default)
-    return getattr(settings_obj, key, default)
+        try:
+            return settings_obj[key]
+        except KeyError:
+            raise ImproperlyConfigured(f"{key} setting is required.") from None
+    try:
+        return getattr(settings_obj, key)
+    except AttributeError:
+        raise ImproperlyConfigured(f"{key} setting is required.") from None
 
 
 def _normalize_backend(raw_backend: str | None) -> str:
@@ -88,12 +101,12 @@ def select_storage_backend(
 ) -> StorageBackendSelection:
     """Resolve local vs S3-compatible backend settings from Django settings.
 
-    SA30: raises ``ImproperlyConfigured`` when ``QUICKSCALE_STORAGE_BACKEND``
-    is missing or invalid instead of silently defaulting.
+    Rule 3: every declared setting is read directly with no default; an absent
+    setting raises rather than resolving to a fallback, and an invalid backend
+    value raises ``ImproperlyConfigured``.  In a running project the module's
+    startup check has already refused both states.
     """
-    raw_backend = _read_setting(settings_obj, "QUICKSCALE_STORAGE_BACKEND", None)
-    if raw_backend is None:
-        raise ImproperlyConfigured("QUICKSCALE_STORAGE_BACKEND setting is required.")
+    raw_backend = _setting(settings_obj, "QUICKSCALE_STORAGE_BACKEND")
     backend = _normalize_backend(str(raw_backend))
 
     if backend == "local":
@@ -105,25 +118,15 @@ def select_storage_backend(
         )
 
     options: dict[str, Any] = {
-        "bucket_name": str(
-            _read_setting(settings_obj, "AWS_STORAGE_BUCKET_NAME", "")
-        ).strip(),
-        "endpoint_url": str(
-            _read_setting(settings_obj, "AWS_S3_ENDPOINT_URL", "")
-        ).strip(),
-        "region_name": str(
-            _read_setting(settings_obj, "AWS_S3_REGION_NAME", "")
-        ).strip(),
-        "access_key_id": str(
-            _read_setting(settings_obj, "AWS_ACCESS_KEY_ID", "")
-        ).strip(),
+        "bucket_name": str(_setting(settings_obj, "AWS_STORAGE_BUCKET_NAME")).strip(),
+        "endpoint_url": str(_setting(settings_obj, "AWS_S3_ENDPOINT_URL")).strip(),
+        "region_name": str(_setting(settings_obj, "AWS_S3_REGION_NAME")).strip(),
+        "access_key_id": str(_setting(settings_obj, "AWS_ACCESS_KEY_ID")).strip(),
         "secret_access_key": str(
-            _read_setting(settings_obj, "AWS_SECRET_ACCESS_KEY", "")
+            _setting(settings_obj, "AWS_SECRET_ACCESS_KEY")
         ).strip(),
-        "default_acl": str(_read_setting(settings_obj, "AWS_DEFAULT_ACL", "")).strip(),
-        "querystring_auth": bool(
-            _read_setting(settings_obj, "AWS_QUERYSTRING_AUTH", False)
-        ),
+        "default_acl": str(_setting(settings_obj, "AWS_DEFAULT_ACL")).strip(),
+        "querystring_auth": bool(_setting(settings_obj, "AWS_QUERYSTRING_AUTH")),
     }
 
     return StorageBackendSelection(
