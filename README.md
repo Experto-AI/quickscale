@@ -1,198 +1,77 @@
 # QuickScale Blog Module
 
-Production-ready blog module for Django projects with Markdown support, featured images, categories, tags, and optional RSS feeds.
+Production-ready blog module for Django projects with Markdown support, featured images,
+categories, tags, and optional RSS feeds.
 
-## Features
+## Overview
 
-### ✅ Implemented
+- Markdown editing through django-markdownx.
+- Rich post model: title, slug, content, excerpt, featured image, and draft/published status.
+- Categories and tags for content classification.
+- Author profiles with bio and avatar.
+- Featured images with generated thumbnails.
+- A two-step automation API: upload images over HTTP, then publish Markdown posts with a
+  featured-image reference.
+- An RSS feed of the latest 20 published posts when enabled.
+- Semantic, zero-style HTML templates and SEO-friendly slugs.
+- Tenant-scoped through orgs' `TenantModel`; `orgs` is required alongside `blog`.
 
-- **Markdown Editor Integration**: WYSIWYG Markdown editing with django-markdownx
-- **Rich Post Model**: Title, slug, content, excerpt, featured image, status (draft/published)
-- **Organization**: Categories and tags for content classification
-- **Author Profiles**: Extended user profiles with bio and avatar
-- **Featured Images**: Auto-generated thumbnails (300x200, 800x450)
-- **Automation API**: Upload images over API, then publish Markdown posts with a featured image reference
-- **API Throttling**: `BLOG_API_RATE_LIMIT` applies one additive per-IP limit across the authenticated blog automation endpoints
-- **RSS Feed**: Latest 20 published posts with full metadata when `BLOG_ENABLE_RSS` is enabled
-- **Zero-Style Templates**: Semantic HTML base templates (no CSS classes)
-- **Pagination**: `BLOG_POSTS_PER_PAGE` controls the page size (default: 10)
-- **SEO-Friendly**: Slugs, meta tags, semantic HTML structure
+Dependencies: Django >= 6.0, django-markdownx >= 4.0.11, and Pillow >= 12.3.0,<13.0.0.
 
-## Installation
+## Configuration
 
-### Via QuickScale CLI (Recommended)
+The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
+write them to the generated settings, and `quickscale.yml` carries the desired values.
 
-```bash
-quickscale plan myapp --add blog
-cd myapp
-quickscale apply
+| Option | Type | Default | Django setting | Description |
+|--------|------|---------|----------------|-------------|
+| `posts_per_page` | integer | `10` | `BLOG_POSTS_PER_PAGE` | Number of posts per page. |
+| `api_rate_limit` | string | `5/hour` | `BLOG_API_RATE_LIMIT` | Throttle rate for authenticated blog API requests, per IP. Format: `<count>/<period>`. |
+| `enable_rss` | boolean | `true` | `BLOG_ENABLE_RSS` | Enable the RSS route at runtime. |
+
+Additional Django settings configure the editor and the automation API:
+
+```python
+MARKDOWNX_MARKDOWN_EXTENSIONS = [
+    "markdown.extensions.fenced_code",
+    "markdown.extensions.tables",
+    "markdown.extensions.toc",
+]
+MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
+MARKDOWNX_UPLOAD_MAX_SIZE = 5 * 1024 * 1024
+MARKDOWNX_IMAGE_MAX_SIZE = {"size": (1920, 1080), "quality": 90}
+
+BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+BLOG_API_ALLOWED_IMAGE_FORMATS = ["PNG", "JPEG", "WEBP", "GIF"]
+BLOG_API_UPLOAD_MAX_WIDTH = 4096
+BLOG_API_UPLOAD_MAX_HEIGHT = 4096
+BLOG_API_TOKENS = []  # Optional machine-auth tokens for automation pipelines
 ```
 
-This will:
-- Add the blog module to your project's configuration
-- Embed the blog module into your project's `modules/blog/` directory during apply
-- Configure `settings.py` with required settings
-- Add blog URLs to your `urls.py`
-- Capture any module options in `quickscale.yml`
+## Public surface
 
-### Configuration Options
-
-The shipped `quickscale.yml` options for this module are:
-
-1. **Posts per page** (`BLOG_POSTS_PER_PAGE`, default: 10)
-2. **Enable RSS feed** (`BLOG_ENABLE_RSS`, default: yes)
-3. **Blog API rate limit** (`BLOG_API_RATE_LIMIT`, default: `5/hour`)
-
-### Manual Installation
-
-If embedding manually, install the orgs baseline first. The blog module depends
-on `quickscale-module-orgs` and relies on the `quickscale_orgs.Organization` model
-plus `request.org` tenant resolution from `TenantMiddleware`. In SaaS mode, keep
-the orgs active-org session flow in place so flat `/blog/...` requests resolve
-the current organization correctly.
-
-1. Add to `INSTALLED_APPS` in `settings.py`:
-   ```python
-   INSTALLED_APPS = [
-       # ... other apps
-       "markdownx",
-       "quickscale_modules_orgs",
-       "quickscale_modules_blog",
-   ]
-    ```
-
-2. Add the orgs tenant middleware after session/auth middleware in `settings.py`:
-   ```python
-   MIDDLEWARE = [
-       # ... other middleware
-       "django.contrib.sessions.middleware.SessionMiddleware",
-       "django.contrib.auth.middleware.AuthenticationMiddleware",
-       "quickscale_modules_orgs.middleware.TenantMiddleware",
-   ]
-   ```
-
-3. Configure Markdownx in `settings.py`:
-   ```python
-   # Markdownx settings
-   MARKDOWNX_MARKDOWN_EXTENSIONS = [
-       "markdown.extensions.fenced_code",
-       "markdown.extensions.tables",
-       "markdown.extensions.toc",
-   ]
-   MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
-   ```
-
-4. Root-include blog URLs and the Markdownx upload URLs in `urls.py`:
-   ```python
-   from django.urls import include, path
-
-   urlpatterns = [
-       # ... other patterns
-       path("", include("quickscale_modules_blog.urls")),
-       path("markdownx/", include("markdownx.urls")),
-   ]
-   ```
-
-   > **Note**: The blog module's ``urls.py`` already defines the ``/blog/...``
-   > prefix, so it must be included at root (``path('', ...)``). Keep the
-   > sibling ``markdownx/`` include as shown so the editor upload/browser URLs
-   > resolve correctly. There are no ``/orgs/<slug>/blog/...`` paths — the
-   > active organization is resolved from ``request.org`` at runtime (System org
-   > for anonymous readers, session- or personal-org for authenticated readers).
-
-5. Run migrations:
-   ```bash
-   python manage.py migrate quickscale_blog
-   ```
-
-6. Collect static files:
-   ```bash
-   python manage.py collectstatic
-   ```
-
-## Usage
-
-### Available URLs
-
-After embedding, these URLs are available:
-
-- `/blog/` - Post list (paginated)
-- `/blog/post/<slug>/` - Post detail
-- `/blog/category/<slug>/` - Posts by category
-- `/blog/tag/<slug>/` - Posts by tag
-- `/blog/feed/` - RSS feed when `BLOG_ENABLE_RSS = True`
-- `/blog/api/media/` - Staff upload endpoint for blog images
-- `/blog/api/publish/` - Staff publish endpoint for Markdown blog posts
+Models: `Post`, `Category`, `Tag`, `AuthorProfile`, and `BlogMediaAsset`, the stored
+image-upload asset the automation flow references. The models are registered in the Django
+admin with Markdown editing support.
 
 ### Automation API
 
-The blog module now supports a two-step automation flow:
+The two-step automation flow is:
 
-1. Upload each image with `POST /blog/api/media/`
-2. Rewrite Markdown image links to the returned URLs
-3. Publish the post with `POST /blog/api/publish/`
+1. Upload each image with `POST blog/api/media/`.
+2. Rewrite Markdown image links to the returned URLs.
+3. Publish the post with `POST blog/api/publish/`.
 
-#### Upload media
+Both endpoints accept a staff session with CSRF, or a bearer token configured in
+`BLOG_API_TOKENS`; the rate limit (`BLOG_API_RATE_LIMIT`) applies after successful auth and CSRF
+checks. Media upload accepts `multipart/form-data` with `file` (required), `alt`, and `kind`
+(`inline`, `featured`, or `general`), and enforces `BLOG_API_UPLOAD_MAX_BYTES`, the allowed
+image formats, `BLOG_API_UPLOAD_MAX_WIDTH`, and `BLOG_API_UPLOAD_MAX_HEIGHT`. Publish accepts
+`application/json` with `title` and `content` (required), and optional `excerpt`,
+`category_slug`, `tags`, `featured_image_id`, and `featured_image_alt`. The publish response
+returns the post `id`, `slug`, `url`, and `status`.
 
-**Request**
-
-- `POST /blog/api/media/`
-- Auth: staff session + CSRF, or bearer token configured in `BLOG_API_TOKENS`
-- Rate limit: `BLOG_API_RATE_LIMIT` (default `5/hour`) applies after successful auth/CSRF checks
-- `multipart/form-data`
-- Fields:
-    - `file` (required)
-    - `alt` (optional)
-    - `kind` (optional: `inline`, `featured`, `general`)
-- Validation: enforces `BLOG_API_UPLOAD_MAX_BYTES`, allowed image formats,
-  `BLOG_API_UPLOAD_MAX_WIDTH`, and `BLOG_API_UPLOAD_MAX_HEIGHT`; Pillow
-  decompression-bomb failures are returned as a stable validation error rather
-  than a traceback.
-
-**Response**
-
-```json
-{
-    "id": 12,
-    "url": "https://example.com/media/blog/uploads/2026/03/diagram-a1b2c3d4e5f6.png",
-    "alt": "Pep Martorell interview diagram",
-    "kind": "inline",
-    "width": 1600,
-    "height": 900
-}
-```
-
-#### Publish post
-
-**Request**
-
-- `POST /blog/api/publish/`
-- Auth: staff session + CSRF, or bearer token configured in `BLOG_API_TOKENS`
-- Rate limit: `BLOG_API_RATE_LIMIT` (default `5/hour`) applies after successful auth/CSRF checks
-- `application/json`
-- Fields:
-    - `title` (required)
-    - `content` (required Markdown)
-    - `excerpt` (optional)
-    - `category_slug` (optional)
-    - `tags` (optional)
-    - `featured_image_id` (optional; id from `/blog/api/media/`)
-    - `featured_image_alt` (optional override for the uploaded asset alt)
-
-**Response**
-
-```json
-{
-    "id": 42,
-    "slug": "pep-martorell-interview",
-    "url": "/blog/post/pep-martorell-interview/",
-    "status": "published"
-}
-```
-
-#### Non-browser automation auth
-
-For pipelines, configure bearer tokens in Django settings:
+Bearer tokens for pipelines:
 
 ```python
 BLOG_API_TOKENS = [
@@ -203,330 +82,95 @@ BLOG_API_TOKENS = [
 ]
 ```
 
-Then send:
-
 ```http
 Authorization: Bearer <BLOG_API_TOKEN>
 ```
 
-If you do not configure bearer tokens, both endpoints continue to work with standard Django staff sessions and CSRF protection.
+### RSS feed
 
-### Creating Posts
+The default `blog/feed/` route exists only when `BLOG_ENABLE_RSS` is true; it publishes the
+latest 20 published posts with full metadata.
 
-#### Via Django Admin
+## URLs
 
-1. Access the Django admin at `/admin/`
-2. Navigate to "Blog" section
-3. Create categories and tags (optional)
-4. Create a new post:
-   - Add title (slug auto-generated)
-   - Write content in Markdown
-   - Upload featured image (optional)
-   - Select category and tags (optional)
-   - Set status to "Published"
-5. Save the post
+`quickscale apply` mounts the module at the project root; the module's own paths are:
 
-#### Programmatically
+| URL name | Path | Purpose |
+|----------|------|---------|
+| `quickscale_blog:post_list` | `blog/` | Paginated post list |
+| `quickscale_blog:post_detail` | `blog/post/<slug>/` | Post detail |
+| `quickscale_blog:category_list` | `blog/category/<slug>/` | Posts by category |
+| `quickscale_blog:tag_list` | `blog/tag/<slug>/` | Posts by tag |
+| `quickscale_blog:feed` | `blog/feed/` | RSS feed when `BLOG_ENABLE_RSS` is true |
+| `quickscale_blog:api_upload_media` | `blog/api/media/` | Staff image upload for the automation API |
+| `quickscale_blog:api_publish_post` | `blog/api/publish/` | Staff publish endpoint for Markdown posts |
 
-```python
-from django.contrib.auth import get_user_model
-from quickscale_modules_blog.models import Post, Category, Tag
-from quickscale_modules_orgs.models import Organization
+There are no `/orgs/<slug>/blog/...` paths: the active organization is resolved from
+`request.org` at runtime (the System organization for anonymous readers, the session or personal
+organization for authenticated readers).
 
-User = get_user_model()
-user = User.objects.first()
+## Management commands
 
-# Public content uses the System organization (D2)
-system_org = Organization.objects.get_system_org()
+This module ships no management commands.
 
-# Create a category in the System org
-category = Category.objects.create(
-    name="Technology",
-    description="Posts about technology",
-    organization=system_org,
-)
+## Operations
 
-# Create tags in the System org
-tag1 = Tag.objects.create(name="Python", organization=system_org)
-tag2 = Tag.objects.create(name="Django", organization=system_org)
+Add the module through QuickScale:
 
-# Create a published post in the System org
-post = Post.objects.create(
-    title="Getting Started with Django",
-    author=user,
-    content="# Introduction\n\nDjango is a powerful web framework...",
-    excerpt="Learn the basics of Django development",
-    status="published",
-    category=category,
-    organization=system_org,
-)
-post.tags.add(tag1, tag2)
-
-# For tenant-scoped content, use the active org from request context:
-# tenant_post = Post.objects.create(
-#     title="Tenant Post",
-#     author=user,
-#     content="# Tenant content",
-#     status="published",
-#     organization=request.org,  # set by TenantMiddleware
-# )
+```bash
+quickscale plan myapp --add blog
+cd myapp
+quickscale apply
 ```
 
-### Template Customization
+`quickscale apply` embeds the module into `modules/blog/`, configures settings and URLs, and
+captures the module options in `quickscale.yml`.
 
-All templates extend `quickscale_blog/blog/base.html`. To customize:
-
-1. **Override the base template** in your project:
-   ```
-   templates/quickscale_blog/blog/base.html
-   ```
-
-2. **Override individual templates**:
-   ```
-   templates/quickscale_blog/blog/post_list.html
-   templates/quickscale_blog/blog/post_detail.html
-   templates/quickscale_blog/blog/category_list.html
-   templates/quickscale_blog/blog/tag_list.html
-   ```
-
-3. **Example: Extending base template**:
-   ```django
-   {% extends "base.html" %}  {# Your project's base template #}
-
-   {% block content %}
-       {% block blog_content %}{% endblock %}
-   {% endblock %}
-   ```
-
-### Styling
-
-The module provides zero-style semantic HTML templates. To add styling:
-
-1. **Create theme-specific CSS**:
-   ```css
-   /* static/css/blog.css */
-   .blog-post {
-       margin-bottom: 2rem;
-   }
-
-   .blog-post h2 {
-       font-size: 2rem;
-       margin-bottom: 1rem;
-   }
-
-   .blog-post img {
-       max-width: 100%;
-       height: auto;
-   }
-   ```
-
-2. **Include in your base template**:
-   ```django
-   {% block extra_css %}
-       <link rel="stylesheet" href="{% static 'css/blog.css' %}">
-   {% endblock %}
-   ```
-
-### Model Extension
-
-To add custom fields to the Post model:
-
-1. **Create a custom model** that extends Post:
-   ```python
-   # myapp/models.py
-   from quickscale_modules_blog.models import Post
-
-
-   class RealEstatePost(Post):
-       property_price = models.DecimalField(max_digits=10, decimal_places=2)
-       bedrooms = models.IntegerField()
-       bathrooms = models.IntegerField()
-
-       class Meta:
-           proxy = True  # Use proxy if no additional DB fields
-   ```
-
-2. **Register in admin**:
-   ```python
-   # myapp/admin.py
-   from django.contrib import admin
-   from markdownx.admin import MarkdownxModelAdmin
-   from .models import RealEstatePost
-
-
-   @admin.register(RealEstatePost)
-   class RealEstatePostAdmin(MarkdownxModelAdmin):
-       list_display = ["title", "property_price", "bedrooms", "bathrooms"]
-   ```
-
-### RSS Feed Customization
-
-The default `/blog/feed/` route exists only when `BLOG_ENABLE_RSS` is true. If you replace it, keep that setting gate in your project URLs.
-
-To customize the RSS feed:
+A manual installation embeds the orgs baseline first, then adds `markdownx`,
+`quickscale_modules_orgs`, and `quickscale_modules_blog` to `INSTALLED_APPS`, adds
+`quickscale_modules_orgs.middleware.TenantMiddleware` after the session and authentication
+middleware, configures Markdownx, root-includes the module URLs and the sibling `markdownx/`
+include, and runs `python manage.py migrate quickscale_blog` plus
+`python manage.py collectstatic`.
 
 ```python
-# myproject/feeds.py
-from quickscale_modules_blog.feeds import LatestPostsFeed
-
-
-class CustomBlogFeed(LatestPostsFeed):
-    title = "My Custom Blog Feed"
-    description = "Custom description"
-
-    def items(self):
-        # Return 50 posts instead of 20
-        return Post.objects.filter(status="published").order_by("-published_date")[:50]
-```
-
-Then update your urls.py:
-```python
-from myproject.feeds import CustomBlogFeed
-
 urlpatterns = [
-    path("blog/feed/", CustomBlogFeed(), name="feed"),
+    path("", include("quickscale_modules_blog.urls")),
+    path("markdownx/", include("markdownx.urls")),
 ]
 ```
 
-## Configuration Reference
+Creating posts:
 
-### Settings
+- Through the Django admin: create categories and tags, then a post with Markdown content and
+  an optional featured image, and set its status to published.
+- Programmatically: import `Post`, `Category`, and `Tag`; public content uses the System
+  organization (`Organization.objects.get_system_org()`), while tenant-scoped content uses
+  `request.org` set by `TenantMiddleware`.
 
-Add these to your `settings.py` to customize blog behavior:
+Template customization: all templates extend `quickscale_blog/blog/base.html`. Override the
+base at `templates/quickscale_blog/blog/base.html` or individual pages at
+`templates/quickscale_blog/blog/<page>.html`. The module ships zero-style semantic templates;
+add your own CSS in the project.
 
-```python
-# Blog pagination
-BLOG_POSTS_PER_PAGE = 10  # Posts per page
-BLOG_ENABLE_RSS = True  # Enable the /blog/feed/ route at runtime
+Troubleshooting:
 
-# Markdownx configuration
-MARKDOWNX_MARKDOWN_EXTENSIONS = [
-    "markdown.extensions.fenced_code",  # Code blocks
-    "markdown.extensions.tables",  # Tables
-    "markdown.extensions.toc",  # Table of contents
-    "markdown.extensions.extra",  # Extra features
-]
+- **"No such table: quickscale_blog_post"** — run `python manage.py migrate quickscale_blog`.
+- **Markdown not rendering** — ensure `markdownx` is in `INSTALLED_APPS` and use
+  `{% load markdownx %}` with `{{ post.content|markdownify }}`.
+- **Images not uploading** — check `MEDIA_URL`, `MEDIA_ROOT`, and the development media route.
+- **Thumbnails not generating** — ensure Pillow is installed.
+- **RSS feed not validating** — ensure posts have `published_date` set and status published.
 
-# Image upload settings
-MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
-MARKDOWNX_UPLOAD_MAX_SIZE = 5 * 1024 * 1024  # 5MB
-MARKDOWNX_IMAGE_MAX_SIZE = {"size": (1920, 1080), "quality": 90}
+## Extending
 
-# Blog automation API settings
-BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
-BLOG_API_ALLOWED_IMAGE_FORMATS = ["PNG", "JPEG", "WEBP", "GIF"]
-BLOG_API_UPLOAD_MAX_WIDTH = 4096
-BLOG_API_UPLOAD_MAX_HEIGHT = 4096
-BLOG_API_RATE_LIMIT = "5/hour"
-BLOG_API_TOKENS = []  # Optional machine-auth tokens for automation pipelines
-
-# Featured image settings
-BLOG_THUMBNAIL_SIZES = {
-    "small": (300, 200),
-    "medium": (800, 450),
-    "large": (1200, 675),
-}
-```
-
-## Testing
-
-Run module tests:
-
-```bash
-# From repository root
-make MODULE=blog test -- --modules
-```
-
-With coverage:
-
-```bash
-# From repository root
-poetry run pytest quickscale_modules/blog/tests/ --cov=quickscale_modules_blog --cov-report=html
-```
-
-## Troubleshooting
-
-### Issue: "No such table: quickscale_blog_post"
-
-**Solution**: Run migrations:
-```bash
-python manage.py migrate quickscale_blog
-```
-
-### Issue: Markdown not rendering
-
-**Solution**: Ensure `markdownx` is in INSTALLED_APPS and load the template tag:
-```django
-{% load markdownx %}
-{{ post.content|markdownify }}
-```
-
-### Issue: Images not uploading
-
-**Solution**: Check media settings:
-```python
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
-```
-
-And ensure your urls.py serves media files in development:
-```python
-from django.conf import settings
-from django.conf.urls.static import static
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-```
-
-### Issue: Thumbnails not generating
-
-**Solution**: Ensure Pillow is installed:
-```bash
-pip install Pillow
-```
-
-### Issue: RSS feed not validating
-
-**Solution**: Ensure posts have `published_date` set and status is "published".
-
-## Development
-
-### Running Tests Locally
-
-```bash
-# From repository root
-make MODULE=blog test -- --modules
-```
-
-### Code Quality
-
-```bash
-# Format code
-poetry run ruff format quickscale_modules/blog/src/ quickscale_modules/blog/tests/
-
-# Check code
-poetry run ruff check quickscale_modules/blog/src/ quickscale_modules/blog/tests/
-
-# Type check
-poetry run mypy quickscale_modules/blog/src/
-```
-
-## Dependencies
-
-- Django >= 6.0
-- django-markdownx ^4.0.0
-- Pillow ^10.0.0
-
-## License
-
-Apache 2.0 License - see LICENSE file for details.
-
-## Support
-
-For issues and questions:
-- GitHub Issues: https://github.com/Experto-AI/quickscale/issues
-- Documentation: https://github.com/Experto-AI/quickscale
-
-## Contributing
-
-Contributions welcome! See CONTRIBUTING.md for guidelines.
+- **Model extension**: subclass `Post` (a proxy model works when no extra columns are needed)
+  and register the subclass in the admin with `MarkdownxModelAdmin`.
+- **RSS customization**: subclass `quickscale_modules_blog.feeds.LatestPostsFeed`, override its
+  `title`, `description`, or `items()`, and mount your class at `blog/feed/` under the
+  `BLOG_ENABLE_RSS` gate.
+- **Development**: `make MODULE=blog test -- --modules` from the repository root; Ruff and MyPy
+  run through the repository's shared configuration.
+- **License**: Apache 2.0, see the LICENSE file for details.
+- **Support and contributions**: [GitHub Issues](https://github.com/Experto-AI/quickscale/issues),
+  the [QuickScale documentation](https://github.com/Experto-AI/quickscale), and CONTRIBUTING.md.
