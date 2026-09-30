@@ -226,7 +226,7 @@ class TestContactFormE2EWorkflow:
             assert field in stored_names, f"Field value '{field}' not stored"
 
     def test_missing_required_field_returns_400(self, api_client, seeded_contact_form):
-        """Submitting without a required field returns 400 with field errors."""
+        """Submitting without a required field returns 400 in the one QuickScale error shape."""
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Alice",
@@ -237,7 +237,13 @@ class TestContactFormE2EWorkflow:
         response = api_client.post(url, data=payload, format="json")
 
         assert response.status_code == 400
-        assert "errors" in response.data
+        assert response.data == {
+            "error": {
+                "code": "validation_error",
+                "message": "Invalid input.",
+                "fields": {"email": ["This field is required."]},
+            }
+        }
 
     # ------------------------------------------------------------------
     # 4. Spam protection
@@ -291,9 +297,18 @@ class TestContactFormE2EWorkflow:
 
         # The forms wiring contributes the rate from FORMS_RATE_LIMIT; DRF
         # binds DEFAULT_THROTTLE_RATES onto the throttle class at import time,
-        # so the test applies both bindings itself.
+        # so the test applies both bindings itself.  A wholesale REST_FRAMEWORK
+        # override replaces the module settings' exception handler, so the
+        # override carries it too and the throttled body stays the one shape.
         with (
-            override_settings(REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": scope_rates}),
+            override_settings(
+                REST_FRAMEWORK={
+                    "EXCEPTION_HANDLER": (
+                        "quickscale_core.runtime.conventions.exception_handler"
+                    ),
+                    "DEFAULT_THROTTLE_RATES": scope_rates,
+                }
+            ),
             patch.object(ScopedRateThrottle, "THROTTLE_RATES", scope_rates),
         ):
             first = api_client.post(url, data=payload, format="json")
@@ -303,6 +318,7 @@ class TestContactFormE2EWorkflow:
         assert first.status_code == 201
         assert second.status_code == 201
         assert third.status_code == 429
+        assert third.data["error"]["code"] == "throttled"
 
     # ------------------------------------------------------------------
     # 6. Admin retrieval

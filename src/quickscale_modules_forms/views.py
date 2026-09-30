@@ -21,6 +21,7 @@ from django.http import Http404, HttpResponse
 from django.views.generic import TemplateView
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import (
     CreateAPIView,
     ListAPIView,
@@ -288,6 +289,10 @@ class FormSubmitAPIView(CreateAPIView):
         with org_scope(org):
             form = self._get_form()
             data = request.data
+            if not isinstance(data, dict):
+                raise ValidationError(
+                    {"non_field_errors": ["Request body must be a JSON object."]}
+                )
 
             # Honeypot check — silently mark as spam, do NOT reveal detection
             honeypot_value = data.get(HONEYPOT_FIELD_NAME, "")
@@ -309,13 +314,13 @@ class FormSubmitAPIView(CreateAPIView):
                     status=status.HTTP_201_CREATED,
                 )
 
-            # Validate submitted data against form field definitions
+            # Validate submitted data against form field definitions.  An
+            # invalid payload raises DRF's ValidationError so the shared
+            # exception handler renders the one QuickScale error shape
+            # ({"error": {"code", "message", "fields"}}); the module builds
+            # no error body itself (Module Conventions rule 9).
             serializer = self.get_serializer(data=data)
-            if not serializer.is_valid():
-                return Response(
-                    {"errors": serializer.errors},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            serializer.is_valid(raise_exception=True)
 
             # Persist submission inside a transaction
             with transaction.atomic():
