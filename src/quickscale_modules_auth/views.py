@@ -723,7 +723,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         Serializes cancellation, deletion decision, and compensation.  A
         declared provider error during acquisition fails the deletion closed,
         and every lock acquired before any acquisition failure is released
-        before the error propagates, declared or not.
+        before the error propagates — declared, unexpected, or an interrupt.
         """
         try:
             for handler in handlers:
@@ -738,7 +738,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                         if not _provider_error_is_blocking(handler, exc):
                             raise
                         raise _AccountDeletionProviderBlocked(str(exc)) from exc
-        except Exception:
+        except BaseException:
             stack.close()
             raise
 
