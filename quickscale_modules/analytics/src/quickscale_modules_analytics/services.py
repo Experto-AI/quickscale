@@ -20,8 +20,6 @@ from quickscale_modules_analytics.events import (
 logger = logging.getLogger(__name__)
 
 ANALYTICS_PROVIDER_POSTHOG = "posthog"
-DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR = "POSTHOG_API_KEY"
-DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR = "POSTHOG_HOST"
 ANALYTICS_POSTHOG_DEFAULT_HOST = "https://us.i.posthog.com"
 
 
