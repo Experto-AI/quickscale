@@ -265,6 +265,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     allauth adapter collects installed modules' declared post-login and post-signup redirect
     hooks, orgs declares the organization-aware ones instead of subclassing that adapter, and
     the organization purge clears the organization-scoped cache keys social declares.
+  - **Social's mount is manifest-owned and its integration routes are snake_case.** The social
+    module declares `_quickscale/social/` in its manifest's `url_includes` entry instead of its
+    adapter, and its managed payload routes are named `link_tree` and `embeds`; the endpoints
+    stay at `/_quickscale/social/` and `/_quickscale/social/embeds/`.
   - **Module dependencies are bare names that select their closure.** A manifest's
     `required_modules` lists bare module names with no version floors and no `implies` key;
     `quickscale plan` and `quickscale apply` now select every required module transitively, so
