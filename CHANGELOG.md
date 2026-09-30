@@ -253,6 +253,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Auth's mount is manifest-owned and its routes are snake_case.** The auth module declares
     `accounts/` in its manifest's `url_includes` entry instead of its adapter, and its profile
     routes are named `profile_edit` and `account_delete`; every public URL is unchanged.
+  - **Organizations serve every URL under `/orgs/`.** The orgs module declares its `orgs/` mount
+    in its manifest and namespaces its snake_case routes as `quickscale_orgs`, its JSON API
+    answers at `/orgs/api/...` (was `/api/orgs/...`), and the root dashboard route is gone so the
+    site root belongs to the project.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -152,12 +152,12 @@ def test_org_new_flow_can_use_crm_without_manual_stage_seeding(
 
 @pytest.mark.django_db
 def test_api_org_create_flow_seeds_canonical_stages(client, staff_user) -> None:
-    """The /api/orgs/ flow should seed exactly one canonical local stage set."""
+    """The /orgs/api/ flow should seed exactly one canonical local stage set."""
 
     client.force_login(staff_user)
 
     create_response = client.post(
-        "/api/orgs/",
+        "/orgs/api/",
         data=json.dumps({"name": "API Org"}),
         content_type="application/json",
     )

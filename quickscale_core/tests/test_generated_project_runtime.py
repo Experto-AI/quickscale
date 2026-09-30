@@ -3371,7 +3371,7 @@ class TestGeneratedProjectRuntimeSmoke:
             session_fingerprint = proxy_diagnostics["certificate_fingerprint_sha256"]
             assert proxy_diagnostics["certificate_generation_count"] == 1
             assert len(session_fingerprint) == 64
-            api_url = f"{base_url}/api/orgs/"
+            api_url = f"{base_url}/orgs/api/"
 
             def run_browser_assertions() -> None:
                 netlog_path = tmp_path / "chromium-netlog.json"
@@ -3529,7 +3529,7 @@ class TestGeneratedProjectRuntimeSmoke:
                         omitted_header_result = positive_page.evaluate(
                             """
                             async (name) => {
-                              const response = await fetch('/api/orgs/', {
+                              const response = await fetch('/orgs/api/', {
                                 method: 'POST',
                                 credentials: 'same-origin',
                                 headers: {
@@ -3613,7 +3613,7 @@ class TestGeneratedProjectRuntimeSmoke:
                         persisted_result = positive_page.evaluate(
                             """
                             async () => {
-                              const response = await fetch('/api/orgs/', {
+                              const response = await fetch('/orgs/api/', {
                                 credentials: 'same-origin',
                                 headers: {Accept: 'application/json'},
                               })
@@ -3651,7 +3651,7 @@ class TestGeneratedProjectRuntimeSmoke:
                             request
                             for request in observed_proxy_requests
                             if request["method"] == "POST"
-                            and request["target"] == "/api/orgs/"
+                            and request["target"] == "/orgs/api/"
                             and organization_name.encode() in request["body"]
                         ]
                         assert len(create_requests) == 1, (

@@ -46,6 +46,26 @@ derivation:
           - quickscale_modules_orgs
       description: "Orgs Django app label"
 
+    - wiring_field: pre_home_url_includes
+      derivation_type: conditional
+      source_options: [mode]
+      expression:
+        branches:
+          solo:
+            - ["orgs/", "quickscale_modules_orgs.urls"]
+          saas: []
+      description: "Mount orgs before home in solo mode"
+
+    - wiring_field: url_includes
+      derivation_type: conditional
+      source_options: [mode]
+      expression:
+        branches:
+          solo: []
+          saas:
+            - ["orgs/", "quickscale_modules_orgs.urls"]
+      description: "Mount orgs after home in saas mode"
+
   option_derivations:
     mode:
       normalization_rules:

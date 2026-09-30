@@ -79,7 +79,7 @@ export function OrgSettingsPage() {
         <CardHeader>
           <CardTitle>General</CardTitle>
           <CardDescription>
-            Changes are saved through `/api/orgs/:slug/settings/`. Slug changes require a full
+            Changes are saved through `/orgs/api/:slug/settings/`. Slug changes require a full
             document reload to land on the new canonical URL.
           </CardDescription>
         </CardHeader>

@@ -53,7 +53,8 @@
       "sa223": "Regenerated 2026-09-30 — the React theme's useApi.ts parses the one QuickScale error shape and a new src/test/useApiErrors.test.ts pins it; both emitted paths were re-hashed in all three variants.",
       "sa223-social-page": "Regenerated 2026-09-30 — useApi.ts exports the shared payload-message reader and usePublicSocialSurface.ts uses it to surface the one QuickScale error shape for a non-managed payload; PublicSocialPages.test.tsx pins the message and first-field-message cases. useApi.ts, usePublicSocialSurface.ts, and PublicSocialPages.test.tsx were re-hashed in all three variants.",
       "sa217": "Regenerated 2026-09-30 — the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644.",
-      "sa223-forms-error-shape": "Regenerated 2026-09-30 — the theme form client (FormRenderer.tsx) submits through the shared apiRequest client and renders the one QuickScale error shape, useFormSchema.ts surfaces that shape's message for a failed schema fetch, and the new src/test/FormRenderer.test.tsx pins the field-error, non-field-error, shaped-message, and network-failure behavior; csrf.test.tsx's FormRenderer mock now answers a JSON content type. FormRenderer.tsx, useFormSchema.ts, csrf.test.tsx, and FormRenderer.test.tsx were re-hashed in all three variants."
+      "sa223-forms-error-shape": "Regenerated 2026-09-30 — the theme form client (FormRenderer.tsx) submits through the shared apiRequest client and renders the one QuickScale error shape, useFormSchema.ts surfaces that shape's message for a failed schema fetch, and the new src/test/FormRenderer.test.tsx pins the field-error, non-field-error, shaped-message, and network-failure behavior; csrf.test.tsx's FormRenderer mock now answers a JSON content type. FormRenderer.tsx, useFormSchema.ts, csrf.test.tsx, and FormRenderer.test.tsx were re-hashed in all three variants.",
+      "sa223-orgs-url-mount": "Regenerated 2026-09-30 — the orgs module declares its mount (orgs/) in its manifest, the generated urls.py keeps /orgs/api/ out of both React org shell route patterns (the slug route and the org subpage route) so the module's JSON API reaches Django, and the theme's org API client calls /orgs/api/... instead of /api/orgs/... . testproject/urls.py, frontend/src/hooks/useOrgs.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -267,7 +268,7 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
-      "sha256": "a3e48e4b2a2f3bc6e17369a7d79580f85aa0588eff90aa49d7acb8bb5d89f1c2"
+      "sha256": "f61c6e6e42523181a5edeb0b941b650c6e632b4780d829e75230805bf2076aa0"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",
@@ -339,7 +340,7 @@
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
       "mode": "664",
-      "sha256": "26a737b4c86e0c2dde3899933b0d5cdfe6881bfd7f1d53c1a4703347ca90527f"
+      "sha256": "6d8667fbe3ac8aae295094518aab7122992b6c435d62aa2f4abaed52f3cdfb19"
     },
     "frontend/src/pages/orgs/OrgDashboardPage.tsx": {
       "mode": "664",
@@ -359,7 +360,7 @@
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
       "mode": "664",
-      "sha256": "82c2ceebd286a0483b6a3d64d9dd2f340ce110d292144a33983ff247b218d870"
+      "sha256": "15451cf4848e1095f494d239af650b47d0f3aaf5fd1a5d138c4f6f9b95132b6b"
     },
     "frontend/src/posthog-js.d.ts": {
       "mode": "664",
@@ -391,7 +392,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "3e709780d21c86395f02f7d41aa38658a12d5d468a3ce7452d0befabd841bb30"
+      "sha256": "832e6ba0b8589214c2f2a58c3e306d81a187233e7be782a5ceaa701085f4bcce"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -515,7 +516,7 @@
     },
     "testproject/urls.py": {
       "mode": "664",
-      "sha256": "f38893ed71ac8b913b913760c2badc0cf53c4ea0f0a12d9a30281332926601c0"
+      "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
     },
     "testproject/urls_modules.py": {
       "mode": "664",
@@ -745,7 +746,7 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
-      "sha256": "a3e48e4b2a2f3bc6e17369a7d79580f85aa0588eff90aa49d7acb8bb5d89f1c2"
+      "sha256": "f61c6e6e42523181a5edeb0b941b650c6e632b4780d829e75230805bf2076aa0"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",
@@ -817,7 +818,7 @@
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
       "mode": "664",
-      "sha256": "26a737b4c86e0c2dde3899933b0d5cdfe6881bfd7f1d53c1a4703347ca90527f"
+      "sha256": "6d8667fbe3ac8aae295094518aab7122992b6c435d62aa2f4abaed52f3cdfb19"
     },
     "frontend/src/pages/orgs/OrgDashboardPage.tsx": {
       "mode": "664",
@@ -837,7 +838,7 @@
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
       "mode": "664",
-      "sha256": "82c2ceebd286a0483b6a3d64d9dd2f340ce110d292144a33983ff247b218d870"
+      "sha256": "15451cf4848e1095f494d239af650b47d0f3aaf5fd1a5d138c4f6f9b95132b6b"
     },
     "frontend/src/posthog-js.d.ts": {
       "mode": "664",
@@ -869,7 +870,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "3e709780d21c86395f02f7d41aa38658a12d5d468a3ce7452d0befabd841bb30"
+      "sha256": "832e6ba0b8589214c2f2a58c3e306d81a187233e7be782a5ceaa701085f4bcce"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -993,7 +994,7 @@
     },
     "testproject/urls.py": {
       "mode": "664",
-      "sha256": "f38893ed71ac8b913b913760c2badc0cf53c4ea0f0a12d9a30281332926601c0"
+      "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
     },
     "testproject/urls_modules.py": {
       "mode": "664",
@@ -1223,7 +1224,7 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
-      "sha256": "a3e48e4b2a2f3bc6e17369a7d79580f85aa0588eff90aa49d7acb8bb5d89f1c2"
+      "sha256": "f61c6e6e42523181a5edeb0b941b650c6e632b4780d829e75230805bf2076aa0"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",
@@ -1295,7 +1296,7 @@
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
       "mode": "664",
-      "sha256": "26a737b4c86e0c2dde3899933b0d5cdfe6881bfd7f1d53c1a4703347ca90527f"
+      "sha256": "6d8667fbe3ac8aae295094518aab7122992b6c435d62aa2f4abaed52f3cdfb19"
     },
     "frontend/src/pages/orgs/OrgDashboardPage.tsx": {
       "mode": "664",
@@ -1315,7 +1316,7 @@
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
       "mode": "664",
-      "sha256": "82c2ceebd286a0483b6a3d64d9dd2f340ce110d292144a33983ff247b218d870"
+      "sha256": "15451cf4848e1095f494d239af650b47d0f3aaf5fd1a5d138c4f6f9b95132b6b"
     },
     "frontend/src/posthog-js.d.ts": {
       "mode": "664",
@@ -1347,7 +1348,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "3e709780d21c86395f02f7d41aa38658a12d5d468a3ce7452d0befabd841bb30"
+      "sha256": "832e6ba0b8589214c2f2a58c3e306d81a187233e7be782a5ceaa701085f4bcce"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -1471,7 +1472,7 @@
     },
     "testproject/urls.py": {
       "mode": "664",
-      "sha256": "f38893ed71ac8b913b913760c2badc0cf53c4ea0f0a12d9a30281332926601c0"
+      "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
     },
     "testproject/urls_modules.py": {
       "mode": "664",

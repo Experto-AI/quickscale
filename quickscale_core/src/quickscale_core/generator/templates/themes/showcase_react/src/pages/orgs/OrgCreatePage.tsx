@@ -95,7 +95,7 @@ export function OrgCreatePage() {
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>1. QuickScale creates the organization and records you as the owner.</p>
           <p>
-            2. The frontend performs a full redirect to the onboarding URL returned by `/api/orgs/`.
+            2. The frontend performs a full redirect to the onboarding URL returned by `/orgs/api/`.
           </p>
           <p>
             3. Billing pricing opens when available; otherwise QuickScale lands on the new org-aware

@@ -1,4 +1,9 @@
-"""Pre-home URL configuration used to validate the solo org root contract."""
+"""Pre-home URL configuration used to validate the orgs mount contract.
+
+With the orgs module mounted at ``orgs/`` before the project's home route, the
+module's own URLs resolve under ``/orgs/`` while the project root stays with
+the project (Module Conventions rule 7).
+"""
 
 from __future__ import annotations
 
@@ -19,12 +24,12 @@ from tests.urls import (
 
 
 urlpatterns = [
-    path("", include("quickscale_modules_orgs.urls")),
+    path("orgs/", include("quickscale_modules_orgs.urls")),
     path("", home_view, name="home"),
     path("healthcheck/", healthcheck_view, name="healthcheck"),
     path("accounts/profile/", accounts_profile_view, name="accounts-profile"),
     path(
-        "api/orgs/<slug:org_slug>/context/",
+        "orgs/api/<slug:org_slug>/context/",
         api_org_context_view,
         name="api-org-context",
     ),

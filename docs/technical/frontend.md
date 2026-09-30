@@ -114,7 +114,7 @@ Consequences worth internalising:
 
 - The shell patterns at step 2 are **anchored and shallow** (`/blog` exactly). Deeper module paths such as `/blog/post/<slug>/` fall through to the module at step 5. This is why a project can have both a React "Blog" page and a server-rendered blog index — they are different URLs, by design.
 - The catch-all at step 6 means **404s from unmatched paths render the SPA**, not `handler404`. `custom_404_view` fires only for explicit `Http404` raises inside a matched view.
-- **`PRE_HOME` vs `POST_HOME` is how a module takes a URL away from the shell.** Modules declare this through `pre_home_url_includes` / `url_includes` on their wiring spec (`quickscale_core/src/quickscale_core/module_wiring.py`). The only current user is `orgs`: in **solo** mode it registers pre-home so Django owns `/orgs*`; in **saas** mode it registers post-home so the React org pages win (`quickscale_modules/orgs/src/quickscale_modules_orgs/adapter.py`).
+- **`PRE_HOME` vs `POST_HOME` is how a module takes a URL away from the shell.** Modules declare this through `pre_home_url_includes` / `url_includes` on their wiring spec (`quickscale_core/src/quickscale_core/module_wiring.py`). The only current user is `orgs`: in **solo** mode it registers pre-home so Django owns `/orgs*`; in **saas** mode it registers post-home so the React org pages win (`quickscale_modules/orgs/module.yml`).
 - `/orgs*` shell routes are served by `orgs_react_shell_view`, which is `@login_required`. Anonymous users are redirected by Django rather than hydrating an SPA that would immediately fail.
 
 ---

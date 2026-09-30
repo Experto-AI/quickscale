@@ -9,6 +9,6 @@ from django.urls import include, path
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include("quickscale_modules_orgs.urls")),
+    path("orgs/", include("quickscale_modules_orgs.urls")),
     path("", include("quickscale_modules_crm.urls")),
 ]

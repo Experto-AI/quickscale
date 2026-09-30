@@ -43,7 +43,7 @@ from .current_org import (
 from .models import Organization, OrganizationMembership
 
 EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
-API_ORG_PREFIX = "/api/orgs/"
+API_ORG_PREFIX = "/orgs/api/"
 
 GetResponse = Callable[[HttpRequest], HttpResponse]
 
@@ -74,7 +74,7 @@ class TenantMiddleware:
 
     Orgs-module management paths (``/orgs/``, ``/orgs/new/``,
     ``/orgs/invitations/...``, ``/orgs/<slug>/``, ``/orgs/<slug>/members/...``,
-    ``/orgs/<slug>/settings/``, and all ``/api/orgs/...``) pass through
+    ``/orgs/<slug>/settings/``, and all ``/orgs/api/...``) pass through
     without org resolution — the views own membership and access control
     for those routes.
 
@@ -237,7 +237,7 @@ class TenantMiddleware:
         ):
             return True
 
-        # All /api/orgs/ paths are orgs-module owned.
+        # All /orgs/api/ paths are orgs-module owned.
         if path.startswith(API_ORG_PREFIX):
             return True
 
