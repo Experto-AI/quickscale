@@ -188,7 +188,7 @@ def _load_tracked_notification_sender() -> Any | None:
 
 
 def _should_send_untracked_inline() -> bool:
-    return str(getattr(settings, "EMAIL_BACKEND", "")).strip() in _SYNC_EMAIL_BACKENDS
+    return str(settings.EMAIL_BACKEND).strip() in _SYNC_EMAIL_BACKENDS
 
 
 def _send_untracked_submission_email(

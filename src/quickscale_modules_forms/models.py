@@ -7,37 +7,25 @@ from django.db import models
 
 from quickscale_modules_orgs.models import TenantModel
 
-DEFAULT_FORM_DATA_RETENTION_DAYS = 365
 HONEYPOT_FIELD_NAME = "_hp_name"
 
 
 def get_default_form_data_retention_days() -> int:
-    """Return the settings-backed default retention window for new forms."""
-    raw_value = getattr(
-        settings,
-        "FORMS_DATA_RETENTION_DAYS",
-        DEFAULT_FORM_DATA_RETENTION_DAYS,
-    )
-    try:
-        retention_days = int(raw_value)
-    except TypeError:
-        return DEFAULT_FORM_DATA_RETENTION_DAYS
-    except ValueError:
-        return DEFAULT_FORM_DATA_RETENTION_DAYS
-    return retention_days if retention_days >= 0 else DEFAULT_FORM_DATA_RETENTION_DAYS
+    """Return the declared retention window for new forms.
+
+    Rule 3: the startup check has validated ``FORMS_DATA_RETENTION_DAYS``
+    against the manifest schema, so the value is read directly.
+    """
+    return settings.FORMS_DATA_RETENTION_DAYS
 
 
 def is_form_spam_protection_enabled(form: "Form") -> bool:
     """Return whether honeypot handling is active for the given form.
 
-    SA17.4 — no True default: FORMS_SPAM_PROTECTION must be explicitly set.
-    AppConfig.ready() enforces presence at startup; this is a defensive
-    check so a missing value is treated as disabled (False).
+    Rule 3: the startup check has validated ``FORMS_SPAM_PROTECTION`` against
+    the manifest schema, so the value is read directly.
     """
-    return bool(
-        getattr(settings, "FORMS_SPAM_PROTECTION", None)
-        and form.spam_protection_enabled
-    )
+    return bool(settings.FORMS_SPAM_PROTECTION and form.spam_protection_enabled)
 
 
 class Form(TenantModel):
