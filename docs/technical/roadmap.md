@@ -52,10 +52,8 @@ Arrows within a track are queue order; the table holds the actual dependency edg
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
 ported, and SA204 has not frozen the migration history. SA219's renames and refusals run through
-SA217's startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's org-role
-authorization needs SA220's capabilities and SA223's DRF views. Each critical-path ticket is kept
-thin: the parts that need no predecessor were split out (SA228 from SA220, SA229 from SA226, SA230
-from SA215) and run in parallel with SA219 and SA223. SA204 freezes migration history
+the startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's org-role
+authorization needs SA220's capabilities and SA223's DRF views. SA204 freezes migration history
 before any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA228 (Track 1) and SA223 (Track 3) fill the wait for SA219; SA229
@@ -88,7 +86,7 @@ A track is **truly green** only when all three states are yes.
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
   docs), and, for the conventions, the manifest option schema and the CLI's `module_config`,
-  module settings names, and `is_enabled()` (SA217, SA219, SA220).
+  module settings names, and `is_enabled()` (SA219, SA220).
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
@@ -99,7 +97,7 @@ A track is **truly green** only when all three states are yes.
   theme's React API client (SA223, SA229, SA226).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
-  SA217, SA219, SA220, SA223, SA226, SA228, SA229, SA230) touch every module and cross every track, so each lands in
+  SA219, SA220, SA223, SA226, SA228, SA229, SA230) touch every module and cross every track, so each lands in
   module-sized slices through that queue, merging `v89` before each slice; a slice edits another
   convention ticket's surface only where its own rule forces it (a rename's callers, for example).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
@@ -155,8 +153,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the conformance test, its registry row, and gate documentation.
 
-- [x] **SA217 — Read the manifest option schema in core and check settings at startup.**
-
 - [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
   **Context:** inventory §§ 1, 2, 4, 33, 37, 41; D1–D3, D8, D34, D38, D42; rules 1, 6, 31, 35, and
@@ -172,12 +168,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
     option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
     notifications' `os.getenv` reads and in-code default variable names go (rule 35).
-  - *Dependencies.* `required_modules` holds bare names and `plan`/`apply` select them; version
-    floors, their parser, and `implies` go from the seven manifests, their core copies, and the
-    implication resolver (rule 39). **Landed:** the manifest loader refuses a version specifier
-    or an `implies` key, `plan`/`apply` materialize the transitive required closure (orgs now
-    requires `auth` and `notifications`), and no manifest or bundled copy carries a floor or
-    `implies`; the settings-names, no-legacy, secrets, off-surface, and theme items remain open.
 
   Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)
   disabled, admin kept; `apply` refuses to switch off a module another installed module lists in
@@ -189,8 +179,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Acceptance:** every row of the D1 table is applied; each module's `_ENABLED = False` has a test
   that its public surfaces answer as disabled; a `quickscale.yml` or environment with a
   retired name fails with the replacement named; no generated file or doc uses a retired name; no
-  module calls `os.getenv`; a switched-off module's theme flag is false; no manifest has a version
-  floor or `implies`.
+  module calls `os.getenv`; a switched-off module's theme flag is false.
 
   **Surfaces:** every manifest and module settings read; `quickscale_cli` plan and apply;
   `.env.example`; the generated settings templates (Track 3); the theme's `index.html.j2`;
@@ -198,22 +187,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
 
-  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. An `auth ↔ orgs`
-  import cycle, modules reading other modules' settings, core reading `backups` settings, and orgs
-  naming feature modules by string. None of it needs SA219's names, so it runs beside SA219; the
-  `is_enabled()` part stays in SA220.
+  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. Modules reading
+  other modules' settings, core reading `backups` settings, and orgs naming feature modules by
+  string.
 
   **Scope:**
-  - *Dependencies.* `orgs` stops importing `auth` and `social`, `auth` stops importing `billing`,
-    `blog` stops reading storage's setting and importing `storage.helpers`, and `dr_engine` stops
-    reading backups' settings, through `services.py` and the shared `AppConfig` capabilities.
-    Manifests' `required_modules` are left to SA219 and SA220.
-    *Landed:* `orgs` imports neither `auth` nor `social` any more — its post-auth redirects and
-    its cache-key collection are `AppConfig` capabilities (`auth` owns the single
-    `ACCOUNT_ADAPTER`; `social` declares its own org-scoped cache keys), and `auth` imports no
-    part of `billing` — billing declares its account-deletion handler as an
-    `account_deletion_handlers` capability and `auth` collects it. Still open here: `blog` →
-    `storage`, `dr_engine` → `backups`, every `services.py` surface, and the import-graph test.
+  - *Dependencies.* `blog` stops reading storage's setting and importing `storage.helpers`, and
+    `dr_engine` stops reading backups' settings, through `services.py` and the shared `AppConfig`
+    capabilities. Manifests' `required_modules` are left to SA220.
   - *References by name* (rule 34). orgs' `require_org_feature` moves to billing's published
     surface; the purge command's billing steps and `removal.BOUNDARY_GUARDED_OBLIGATIONS` become
     billing's removal declarations, and its blog and crm label prefixes come from those modules'
@@ -224,7 +205,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Service surface.* Every module gains `services.py`; every `services.py` gains `__all__`,
     keyword-only signatures, and `<Module>Error` on failure, with `test_services.py`.
 
-  **Acceptance:** the `auth ↔ orgs` cycle is gone; an import-graph test matches the D6 layers,
+  **Acceptance:** an import-graph test matches the D6 layers,
   counting references by name as well as imports; no module reads another module's settings; no
   module's source names a higher-layer module; every `services.py` meets the service surface.
 
@@ -233,8 +214,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA220 — Give every module `is_enabled()` and make `required_modules` cover every import.**
 
-  **Context:** the part of the dependency convention that needs SA219's `_ENABLED` settings and
-  bare-name `required_modules`; SA228 delivers the rest.
+  **Context:** the part of the dependency convention that needs SA219's `_ENABLED` settings.
 
   **Scope:** every `services.py` gains `is_enabled()` reading SA219's `_ENABLED`; `required_modules`
   covers every import SA228 leaves (including `blog` → `storage`), and the import-graph test checks
@@ -263,9 +243,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA229 — Tie write effects to commit, send email only through notifications, and move feature events to their owners.**
 
   **Context:** inventory §§ 22–24, 35; D23–D25, D36; rules 20–22 and 33. A second email sender
-  lives in forms, write effects are not tied to commit, analytics owns feature events. None of it
-  needs SA220's capabilities or SA223's DRF views; it follows SA223 on Track 3 because both edit
-  forms, crm, and social.
+  lives in forms, write effects are not tied to commit, analytics owns feature events.
 
   **Scope:** forms' fallback email sender goes and forms and orgs require notifications; write
   effects (forms' submission effects, orgs' invitation, crm's bootstrap receiver, social's cache
@@ -281,7 +259,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA226 — Authorize tenant modules by org role.**
 
   **Context:** inventory § 21; D22; rule 19. Tenant modules authorize with site-wide `is_staff`.
-  Needs SA220's capabilities and SA223's DRF views; SA229 carries the rest of the old ticket.
 
   **Scope:** blog, listings, crm, and forms authorize by org role through orgs' `permissions` (new
   DRF `HasOrgRole`).
