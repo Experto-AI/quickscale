@@ -93,6 +93,10 @@ always-on RLS boot guard through its `checks.py`.
 - `removal.py` publishes the removal contract: `RemovalAction`, `RemovalBoundary`,
   `RemovalCoordinator`, `OrganizationRemovalObligation`, and `ExternalProviderField`, with the
   declaration helpers each owning app uses.
+- `apps.py` declares orgs' own capabilities (Module Conventions rule 4): the organization-aware
+  post-login and post-signup redirect hooks auth's allauth adapter collects, and the
+  `social-cache-state` obligation executor, which clears the organization-scoped cache keys
+  installed modules declare through `organization_cache_keys`.
 
 ## URLs
 
@@ -187,4 +191,7 @@ supported removal path; organization data cannot be silently dropped.
   field that neither a declared obligation nor its model classifies. See
   [module-extension.md](../../docs/technical/module-extension.md#project-owned-tenant-models).
 - An app that owns organization-scoped data declares its removal obligations on its
-  `AppConfig` so purge and account deletion discharge them without orgs knowing the app.
+  `AppConfig` so purge and account deletion discharge them without orgs knowing the app. A
+  module that owns organization-scoped cache state also declares its keys through the
+  `organization_cache_keys` capability, so the purge clears them without orgs knowing the key
+  shapes.

@@ -25,6 +25,9 @@ alone; the priming install, the SA70 last-owner ``pre_delete`` backstop,
 and the check registration run on every startup path.
 """
 
+from collections.abc import Callable, Iterable
+from typing import Any, cast
+
 from django.apps import AppConfig
 from django.db.backends.signals import connection_created
 
@@ -104,35 +107,45 @@ class QuickscaleOrgsConfig(AppConfig):
             ),
         )
 
+    def post_login_redirect_hooks(self) -> tuple[Callable[[Any], str | None], ...]:
+        """Declare orgs' post-login redirect hook (Module Conventions rule 4).
+
+        Auth owns the single allauth adapter and collects every installed
+        module's declared hooks, using the first URL one returns; orgs
+        declares the organization-aware redirect here so it imports no part
+        of auth.
+        """
+        from quickscale_modules_orgs._redirects import post_login_redirect
+
+        return (post_login_redirect,)
+
+    def post_signup_redirect_hooks(self) -> tuple[Callable[[Any], str | None], ...]:
+        """Declare orgs' post-signup redirect hook (Module Conventions rule 4)."""
+        from quickscale_modules_orgs._redirects import post_signup_redirect
+
+        return (post_signup_redirect,)
+
     def invalidate_organization_cache(self, organization_id: object) -> None:
-        """Invalidate organization-scoped cache state for *organization_id*.
+        """Invalidate every installed app's declared organization-scoped keys.
 
         This is the executor for the ``social-cache-state`` obligation declared
         in :meth:`removal_obligations`: the purge boundary calls it after the
         organization's rows are deleted, and the tombstone retry path calls it
-        to heal an invalidation that failed.  It clears the organization-scoped
-        keys of the installed cache-owning modules (social).
+        to heal an invalidation that failed.  Each cache-owning module declares
+        its own keys through the rule 4 ``organization_cache_keys`` capability,
+        so orgs names no other module and clears exactly what its modules
+        declare.
         """
-        from django.apps import apps as django_apps
-
-        if not django_apps.is_installed("quickscale_modules_social"):
-            return
-
         from django.core.cache import cache
 
-        from quickscale_modules_social.contracts import (
-            SOCIAL_EMBEDS_CACHE_KEY,
-            SOCIAL_LINKS_CACHE_KEY,
-        )
+        from quickscale_core.runtime import collect_capabilities
 
-        cache.delete_many(
-            [
-                SOCIAL_LINKS_CACHE_KEY,
-                f"{SOCIAL_LINKS_CACHE_KEY}:org:{organization_id}",
-                SOCIAL_EMBEDS_CACHE_KEY,
-                f"{SOCIAL_EMBEDS_CACHE_KEY}:org:{organization_id}",
-            ]
-        )
+        keys: list[str] = []
+        for declaration in collect_capabilities("organization_cache_keys"):
+            cache_keys = cast("Callable[[object], Iterable[str]]", declaration)
+            keys.extend(cache_keys(organization_id))
+        if keys:
+            cache.delete_many(keys)
 
     def ready(self) -> None:
         # ---- Rule 10 — startup checks through the shared helper --------
