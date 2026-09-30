@@ -20,7 +20,10 @@ This module owns both halves of the data contract:
   schema and runs the same per-option validation engine ``plan`` and
   ``apply`` use, so the vocabulary cannot drift; with no declared
   normalization rules the engine is a pure check — a value of the wrong
-  shape is refused, never coerced into the right one.
+  shape is refused, never coerced into the right one.  A list option whose
+  manifest declares a ``list`` normalization rule carries that fact as
+  ``list_items``, so the check runs the engine's non-scalar-item guard too —
+  still without normalizing the value it validates.
 
 :func:`load_settings_schema` is the convenience the module test settings use
 to build their schema from the module's own manifest, the form rule 3 blesses
@@ -38,6 +41,9 @@ from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.manifest.option_validation import (
     OptionValidationIssue,
     collect_option_validation_issues,
+    has_list_normalizer,
+    setting_display_name,
+    unsupported_list_items,
 )
 from quickscale_core.manifest.schema import ConfigOption, ModuleManifest
 
@@ -77,11 +83,17 @@ def compile_settings_schema(manifest: ModuleManifest) -> SettingsSchema:
                 f"Mutable option {option_name!r} of module {manifest.name!r} "
                 "declares no django_setting."
             )
-        schema[option_name] = {
+        entry: dict[str, object] = {
             "setting": django_setting,
             "type": option.option_type,
             "validation": dict(option.validation or {}),
         }
+        if has_list_normalizer(manifest, option_name):
+            # The runtime check reconstructs options without the manifest's
+            # normalization rules, so the entry carries the one fact its
+            # item-shape guard needs; the value itself is never normalized.
+            entry["list_items"] = True
+        schema[option_name] = entry
     return schema
 
 
@@ -150,4 +162,18 @@ def collect_setting_issues(
         version="",
         mutable_options=options,
     )
-    return collect_option_validation_issues(manifest, dict(values))
+    issues = list(collect_option_validation_issues(manifest, dict(values)))
+    for option_name, value in values.items():
+        if module_schema[option_name].get("list_items") is not True:
+            continue
+        unsupported = unsupported_list_items(value)
+        if unsupported:
+            label = setting_display_name(module_name, options[option_name])
+            rendered = ", ".join(str(item) for item in unsupported)
+            issues.append(
+                OptionValidationIssue(
+                    option_name,
+                    f"{label} contains unsupported items: {rendered}",
+                )
+            )
+    return issues

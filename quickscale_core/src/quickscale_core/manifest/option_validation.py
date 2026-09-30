@@ -163,7 +163,7 @@ def _supplied_type_matches(
     return canonical is not None and option_type_matches(option.option_type, canonical)
 
 
-def _unsupported_list_items(value: Any) -> list[Any]:
+def unsupported_list_items(value: Any) -> list[Any]:
     """Return the items of a list value that are neither scalars nor empties.
 
     The ``list`` normalization rule cannot represent a mapping, a non-empty
@@ -182,7 +182,7 @@ def _unsupported_list_items(value: Any) -> list[Any]:
     return unsupported
 
 
-def _has_list_normalizer(manifest: ModuleManifest, option_name: str) -> bool:
+def has_list_normalizer(manifest: ModuleManifest, option_name: str) -> bool:
     """Return whether *option_name* declares a ``list`` normalization rule.
 
     The scalar-item rule exists for lists a ``list`` rule canonicalizes; a
@@ -302,8 +302,8 @@ def _single_value_issues(
     issues: list[str] = []
 
     unsupported_items = (
-        _unsupported_list_items(value)
-        if _has_list_normalizer(manifest, option.name)
+        unsupported_list_items(value)
+        if has_list_normalizer(manifest, option.name)
         else []
     )
     if unsupported_items:
@@ -538,8 +538,10 @@ __all__ = [
     "SINGLE_OPTION_VALIDATION_KEYS",
     "OptionValidationIssue",
     "collect_option_validation_issues",
+    "has_list_normalizer",
     "option_type_matches",
     "option_value_is_empty",
     "setting_display_name",
+    "unsupported_list_items",
     "validate_module_options",
 ]

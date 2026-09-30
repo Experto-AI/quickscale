@@ -27,7 +27,11 @@ from quickscale_core.module_wiring import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _manifest(*options: ConfigOption, name: str = "demo") -> ModuleManifest:
+def _manifest(
+    *options: ConfigOption,
+    name: str = "demo",
+    option_derivations: dict[str, dict[str, object]] | None = None,
+) -> ModuleManifest:
     mutable = {option.name: option for option in options if option.django_setting}
     immutable = {option.name: option for option in options if not option.django_setting}
     return ModuleManifest(
@@ -35,6 +39,7 @@ def _manifest(*options: ConfigOption, name: str = "demo") -> ModuleManifest:
         version="1.0.0",
         mutable_options=mutable,
         immutable_options=immutable,
+        option_derivations=option_derivations or {},
     )
 
 
@@ -110,6 +115,21 @@ class TestCompileSettingsSchema:
 
         assert list(compile_settings_schema(manifest)) == ["alpha", "zeta"]
 
+    def test_list_rule_marks_the_entry_for_the_runtime_item_guard(self) -> None:
+        manifest = _manifest(
+            _option("tags", option_type="list", setting="TAGS"),
+            option_derivations={
+                "tags": {"normalization_rules": [{"rule_type": "list"}]}
+            },
+        )
+
+        assert compile_settings_schema(manifest)["tags"] == {
+            "setting": "TAGS",
+            "type": "list",
+            "validation": {},
+            "list_items": True,
+        }
+
     def test_shipped_manifest_compiles_every_declared_setting(self) -> None:
         manifest = load_manifest_from_path(
             REPO_ROOT / "quickscale_modules" / "storage" / "module.yml"
@@ -173,6 +193,33 @@ class TestCollectSettingIssues:
         assert [issue.message for issue in issues] == [
             "LISTINGS_PER_PAGE (modules.demo.per_page) must be >= 1"
         ]
+
+    def _list_schema(self) -> dict[str, dict[str, object]]:
+        return compile_settings_schema(
+            _manifest(
+                _option("tags", option_type="list", setting="TAGS"),
+                option_derivations={
+                    "tags": {"normalization_rules": [{"rule_type": "list"}]}
+                },
+            )
+        )
+
+    def test_non_scalar_list_item_is_refused_without_being_stringified(self) -> None:
+        """A list rule's item guard runs at startup, matching plan/apply."""
+        issues = collect_setting_issues(
+            "demo", self._list_schema(), {"tags": [{"api_key": "sk_live_123"}]}
+        )
+
+        assert [issue.message for issue in issues] == [
+            "TAGS (modules.demo.tags) contains unsupported items: "
+            "{'api_key': 'sk_live_123'}"
+        ]
+
+    def test_noncanonical_string_list_items_are_preserved(self) -> None:
+        """The item guard refuses shapes, not spelling; no normalization runs."""
+        issues = collect_setting_issues("demo", self._list_schema(), {"tags": ["VIP"]})
+
+        assert issues == []
 
     def test_only_supplied_options_are_checked(self) -> None:
         """The runtime check reports absent settings itself; the engine sees present ones."""
