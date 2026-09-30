@@ -2,7 +2,10 @@
 
 from django.apps import AppConfig
 
-from quickscale_core.runtime import register_module_checks
+from quickscale_core.runtime import (
+    register_module_checks,
+    register_module_settings_check,
+)
 
 
 class QuickscaleNotificationsConfig(AppConfig):
@@ -17,8 +20,14 @@ class QuickscaleNotificationsConfig(AppConfig):
         # Late import: checks.py reads the notifications settings snapshot,
         # which touches models, so it must load after the app registry is ready.
         from quickscale_modules_notifications.checks import (
-            check_required_settings,
+            check_runtime_settings,
             check_vendor_secrets,
         )
 
-        register_module_checks(self, [check_required_settings, check_vendor_secrets])
+        # Rule 3 first: a missing or invalid declared setting is reported by
+        # the generic check before the runtime checks read it.
+        register_module_settings_check(self, "notifications")
+        register_module_checks(
+            self,
+            [check_runtime_settings, check_vendor_secrets],
+        )

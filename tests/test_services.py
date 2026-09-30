@@ -445,7 +445,10 @@ def test_dispatch_notification_message_fails_loudly_for_live_backend_without_api
 ) -> None:
     monkeypatch.delenv("RESEND_API_KEY", raising=False)
 
-    with override_settings(EMAIL_BACKEND="anymail.backends.resend.EmailBackend"):
+    with override_settings(
+        EMAIL_BACKEND="anymail.backends.resend.EmailBackend",
+        QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL="noreply@example.com",
+    ):
         dispatch_notification_message(queued_message.pk)
 
     queued_message.refresh_from_db()
@@ -466,7 +469,10 @@ def test_dispatch_notification_message_fails_loudly_for_live_backend_with_placeh
 ) -> None:
     monkeypatch.setenv("RESEND_API_KEY", "configured-live-key")
 
-    with override_settings(EMAIL_BACKEND="anymail.backends.resend.EmailBackend"):
+    with override_settings(
+        EMAIL_BACKEND="anymail.backends.resend.EmailBackend",
+        QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL="noreply@example.com",
+    ):
         dispatch_notification_message(queued_message.pk)
 
     queued_message.refresh_from_db()
