@@ -67,10 +67,7 @@ config:
   immutable: {}
 
 required_modules:
-  - orgs>=0.86.0
-
-implies:
-  - name: orgs
+  - orgs
 
 dependencies: []
 
