@@ -419,6 +419,250 @@ class TestRegisterModuleChecks:
 
 
 # ===================================================================
+# register_module_settings_check — rule 3
+# ===================================================================
+
+_LISTINGS_SCHEMA = {
+    "listings": {
+        "listings_per_page": {
+            "setting": "LISTINGS_PER_PAGE",
+            "type": "integer",
+            "validation": {"min": 1},
+        }
+    }
+}
+
+
+def _registered_settings_checks(registry, label: str) -> list:
+    return [
+        check
+        for check in registry.registered_checks
+        if label in getattr(check, "tags", ())
+    ]
+
+
+@pytest.mark.usefixtures("configured_django")
+class TestRegisterModuleSettingsCheck:
+    """The generic settings check validates the project's schema at startup."""
+
+    label = "quickscale_test_listings"
+
+    def _app_config(self) -> _FakeAppConfig:
+        return _FakeAppConfig(self.label)
+
+    def test_valid_settings_register_the_check(self, system_check_registry) -> None:
+        from django.test import override_settings
+
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            LISTINGS_PER_PAGE=12,
+        ):
+            conventions.register_module_settings_check(self._app_config(), "listings")
+
+        assert _registered_settings_checks(system_check_registry, self.label)
+
+    def test_wrong_type_fails_startup_naming_the_setting(
+        self, system_check_registry
+    ) -> None:
+        from django.test import override_settings
+
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            LISTINGS_PER_PAGE="12",
+        ):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(), "listings"
+                )
+
+        message = str(excinfo.value)
+        assert "LISTINGS_PER_PAGE" in message
+        assert "must be an integer" in message
+        assert "quickscale apply" in message
+
+    def test_violated_rule_fails_startup_naming_the_rule(
+        self, system_check_registry
+    ) -> None:
+        from django.test import override_settings
+
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            LISTINGS_PER_PAGE=0,
+        ):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(), "listings"
+                )
+
+        message = str(excinfo.value)
+        assert "LISTINGS_PER_PAGE" in message
+        assert "must be >= 1" in message
+        assert "quickscale apply" in message
+
+    def test_missing_setting_fails_startup_naming_the_setting(
+        self, system_check_registry
+    ) -> None:
+        from django.test import override_settings
+
+        with override_settings(MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(), "listings"
+                )
+
+        message = str(excinfo.value)
+        assert "LISTINGS_PER_PAGE is not set" in message
+        assert "quickscale apply" in message
+
+    def test_missing_schema_fails_startup(self, system_check_registry) -> None:
+        from django.test import override_settings
+
+        with override_settings(MODULE_SETTINGS_SCHEMA=None):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(), "listings"
+                )
+
+        message = str(excinfo.value)
+        assert "MODULE_SETTINGS_SCHEMA is missing" in message
+        assert "quickscale apply" in message
+
+    def test_schema_without_the_module_fails_startup(
+        self, system_check_registry
+    ) -> None:
+        from django.test import override_settings
+
+        with override_settings(MODULE_SETTINGS_SCHEMA={"other": {}}):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(), "listings"
+                )
+
+        message = str(excinfo.value)
+        assert "No settings schema for module 'listings'" in message
+        assert "quickscale apply" in message
+
+    def test_required_when_violation_fails_startup(self, system_check_registry) -> None:
+        from django.test import override_settings
+
+        schema = {
+            "demo": {
+                "backend": {
+                    "setting": "BACKEND",
+                    "type": "string",
+                    "validation": {"choices": ["local", "s3"]},
+                },
+                "credentials": {
+                    "setting": "CREDENTIALS",
+                    "type": "string",
+                    "validation": {"required_when": {"backend": ["s3"]}},
+                },
+            }
+        }
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=schema,
+            BACKEND="s3",
+            CREDENTIALS="",
+        ):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    _FakeAppConfig("quickscale_test_demo"), "demo"
+                )
+
+        message = str(excinfo.value)
+        assert "CREDENTIALS" in message
+        assert "required when" in message
+        assert "BACKEND" in message
+        assert "quickscale apply" in message
+
+    def test_managed_wiring_supplies_a_declared_setting(
+        self, system_check_registry
+    ) -> None:
+        """A declared setting present in MODULE_SETTINGS satisfies the check."""
+        from django.test import override_settings
+
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            MODULE_SETTINGS={"LISTINGS_PER_PAGE": 12},
+            LISTINGS_PER_PAGE=12,
+        ):
+            conventions.register_module_settings_check(self._app_config(), "listings")
+
+        assert _registered_settings_checks(system_check_registry, self.label)
+
+    def test_managed_wiring_absence_is_reported_even_with_a_base_default(
+        self, system_check_registry
+    ) -> None:
+        """A base or library default must not stand in for the managed value."""
+        from django.test import override_settings
+
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            MODULE_SETTINGS={},
+            LISTINGS_PER_PAGE=12,
+        ):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(), "listings"
+                )
+
+        assert "LISTINGS_PER_PAGE is not set" in str(excinfo.value)
+
+    def test_library_default_does_not_satisfy_a_declared_setting(
+        self, system_check_registry
+    ) -> None:
+        """A declared setting only a library default supplies is still missing."""
+        from django.test import override_settings
+
+        schema = {
+            "docs": {
+                "media_url": {
+                    "setting": "MEDIA_URL",
+                    "type": "string",
+                    "validation": {},
+                }
+            }
+        }
+        with override_settings(MODULE_SETTINGS_SCHEMA=schema):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    _FakeAppConfig("quickscale_test_docs"), "docs"
+                )
+
+        assert "MEDIA_URL is not set" in str(excinfo.value)
+
+    def test_explicitly_configured_library_named_setting_passes(
+        self, system_check_registry
+    ) -> None:
+        """An explicitly configured library-named setting satisfies the check."""
+        from django.test import override_settings
+
+        schema = {
+            "docs": {
+                "media_url": {
+                    "setting": "MEDIA_URL",
+                    "type": "string",
+                    "validation": {},
+                }
+            }
+        }
+        with override_settings(MODULE_SETTINGS_SCHEMA=schema, MEDIA_URL="/media/"):
+            conventions.register_module_settings_check(
+                _FakeAppConfig("quickscale_test_docs"), "docs"
+            )
+
+        assert _registered_settings_checks(
+            system_check_registry, "quickscale_test_docs"
+        )
+
+    def test_control_non_string_module_name_fails_loudly(
+        self, system_check_registry
+    ) -> None:
+        with pytest.raises(ValueError, match="non-empty module name"):
+            conventions.register_module_settings_check(self._app_config(), "")
+
+
+# ===================================================================
 # exception_handler — rule 9
 # ===================================================================
 

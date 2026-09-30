@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from quickscale_core.manifest.settings_schema import load_settings_schema
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SHARED_TEST_TEMPLATES = (
     Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
@@ -96,6 +98,15 @@ LOGGING: dict[str, object] = {}
 
 # Listings module settings
 LISTINGS_PER_PAGE = 12
+
+# Rule 3: the compiled option schema the generic startup check reads.  The
+# test settings generate it from the module's own manifest, the form rule 3
+# allows, so it can never drift from the declared options.
+_MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
+MODULE_SETTINGS_SCHEMA = {
+    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
+    for name in ("listings", "orgs")
+}
 
 # DRF configuration mirroring the generated settings: session authentication
 # only and the one QuickScale error shape (Module Conventions rule 9).

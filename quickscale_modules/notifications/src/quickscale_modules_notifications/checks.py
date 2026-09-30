@@ -14,30 +14,45 @@ from django.core.checks import CheckMessage, Error
 
 from quickscale_modules_notifications.services import NotificationSettingsSnapshot
 
+#: The settings the runtime snapshot reads.  The declared ones are the
+#: generic settings check's concern; the guard keeps this check from raising
+#: when one is missing, so ``manage.py check`` reports the missing setting
+#: instead.
+_RUNTIME_SETTINGS = (
+    "QUICKSCALE_NOTIFICATIONS_ENABLED",
+    "QUICKSCALE_NOTIFICATIONS_PROVIDER",
+    "QUICKSCALE_NOTIFICATIONS_SENDER_NAME",
+    "QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL",
+    "QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL",
+    "QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN",
+    "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR",
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
+    "QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS",
+    "QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS",
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS",
+)
 
-def check_required_settings(
+
+def check_runtime_settings(
     app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
-    """Fail startup when a required notifications runtime setting is absent."""
-    messages: list[CheckMessage] = []
-    if not hasattr(settings, "QUICKSCALE_NOTIFICATIONS_ENABLED"):
-        messages.append(
-            Error(
-                "The QUICKSCALE_NOTIFICATIONS_ENABLED setting is required. "
-                "Set it to True or False in your Django settings.",
-                id="quickscale_notifications.E001",
-            )
+    """Fail startup when an applied-but-undeclared runtime setting is absent.
+
+    ``QUICKSCALE_NOTIFICATIONS_PROVIDER`` is projected by the module's adapter
+    and read directly by the runtime snapshot, but the manifest does not
+    declare it yet — so rule 3's generic settings check cannot cover it.
+    When SA219 declares it, the generic check takes over and this check goes.
+    """
+    if hasattr(settings, "QUICKSCALE_NOTIFICATIONS_PROVIDER"):
+        return []
+    return [
+        Error(
+            "The QUICKSCALE_NOTIFICATIONS_PROVIDER setting is required. "
+            "Set it to the configured provider name in your Django settings.",
+            id="quickscale_notifications.E001",
         )
-    if not hasattr(settings, "QUICKSCALE_NOTIFICATIONS_PROVIDER"):
-        messages.append(
-            Error(
-                "The QUICKSCALE_NOTIFICATIONS_PROVIDER setting is required. "
-                "Set it to the configured provider name in your Django settings.",
-                id="quickscale_notifications.E002",
-            )
-        )
-    return messages
+    ]
 
 
 def check_vendor_secrets(
@@ -50,11 +65,8 @@ def check_vendor_secrets(
     signing secret is required (rule 26).  The Resend API key is required only
     when the active email backend is the live Resend backend.
     """
-    if not (
-        hasattr(settings, "QUICKSCALE_NOTIFICATIONS_ENABLED")
-        and hasattr(settings, "QUICKSCALE_NOTIFICATIONS_PROVIDER")
-    ):
-        # check_required_settings reports the missing setting itself.
+    if any(not hasattr(settings, name) for name in _RUNTIME_SETTINGS):
+        # The generic settings check reports the missing declared settings.
         return []
 
     snapshot = NotificationSettingsSnapshot.from_settings()

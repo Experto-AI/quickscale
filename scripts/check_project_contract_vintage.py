@@ -95,6 +95,8 @@ _EMIT_SOURCES_SNIPPET = (
 _WATCHED_TEMPLATE_PATHS: frozenset[str] | None = None
 _EMITTED_TEMPLATE_SOURCES_AT: dict[str, frozenset[str]] = {}
 _REVISION_EMISSION_MAPPINGS: dict[str, dict[str, str] | None] = {}
+_MANIFEST_VINTAGES_AT: dict[tuple[str, str], ModuleVintage | None] = {}
+_FILES_AT_COMMIT: dict[tuple[str, str], str] = {}
 _MANIFEST_PATHS_AT: dict[str, tuple[str, ...]] = {}
 _EVER_PRESENT_MANIFEST_PATHS: dict[str, tuple[str, ...]] = {}
 _DECLARATION_IDS_AT: dict[str, frozenset[str]] = {}
@@ -491,7 +493,14 @@ def _module_vintage(content: str, label: str) -> ModuleVintage | None:
 
 
 def _manifest_vintage_at(commit: str, path: str) -> ModuleVintage | None:
-    return _module_vintage(_file_at_commit(commit, path), f"{path} at {commit[:12]}")
+    # Memoized: the historical-id lookups revisit the same (commit, path)
+    # pairs from several roots, and every miss costs a YAML parse.
+    key = (commit, path)
+    if key not in _MANIFEST_VINTAGES_AT:
+        _MANIFEST_VINTAGES_AT[key] = _module_vintage(
+            _file_at_commit(commit, path), f"{path} at {commit[:12]}"
+        )
+    return _MANIFEST_VINTAGES_AT[key]
 
 
 def _manifest_ids_at(commit: str, path: str) -> set[str]:
@@ -746,9 +755,17 @@ def _path_exists_in_index(path: str) -> bool:
 
 
 def _file_at_commit(commit: str, path: str) -> str:
-    if not _path_exists_at(commit, path):
-        return ""
-    return _git("show", f"{commit}:{path}")
+    # Memoized: each miss runs two git subprocesses, and the manifest
+    # walkers ask for the same revisions from several roots.
+    key = (commit, path)
+    cached = _FILES_AT_COMMIT.get(key)
+    if cached is None:
+        if not _path_exists_at(commit, path):
+            cached = ""
+        else:
+            cached = _git("show", f"{commit}:{path}")
+        _FILES_AT_COMMIT[key] = cached
+    return cached
 
 
 def _file_in_index(path: str) -> str:

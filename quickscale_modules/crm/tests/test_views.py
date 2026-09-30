@@ -976,72 +976,24 @@ class TestCRMPageSizeSettings:
         assert len(response.data) == 1
 
 
-class TestCRMPageSizeFailHard:
-    """Page-size settings must raise descriptively when missing or malformed."""
+class TestCRMPageSizeReadsDeclaredSetting:
+    """The paginators read the declared settings directly (rule 3).
 
-    @override_settings(CRM_CONTACTS_PER_PAGE=None)
-    def test_contact_page_size_missing_setting_raises_improperly_configured(
-        self,
-    ) -> None:
-        """Missing CRM_CONTACTS_PER_PAGE should raise at request time."""
-        from django.core.exceptions import ImproperlyConfigured
+    A missing or malformed page size is refused by the generic startup check
+    before a request runs, so the paginators carry no validation of their own.
+    """
+
+    @override_settings(CRM_CONTACTS_PER_PAGE=33)
+    def test_contact_page_size_reads_the_setting(self) -> None:
         from quickscale_modules_crm.views import ContactPagination
 
-        paginator = ContactPagination()
+        assert ContactPagination().get_page_size(None) == 33
 
-        with pytest.raises(
-            ImproperlyConfigured,
-            match="CRM_CONTACTS_PER_PAGE",
-        ):
-            paginator.get_page_size(None)
-
-    @override_settings(CRM_CONTACTS_PER_PAGE="not-a-number")
-    def test_contact_page_size_non_numeric_setting_raises_improperly_configured(
-        self,
-    ) -> None:
-        """Non-numeric CRM_CONTACTS_PER_PAGE should raise at request time."""
-        from django.core.exceptions import ImproperlyConfigured
-        from quickscale_modules_crm.views import ContactPagination
-
-        paginator = ContactPagination()
-
-        with pytest.raises(
-            ImproperlyConfigured,
-            match="CRM_CONTACTS_PER_PAGE",
-        ):
-            paginator.get_page_size(None)
-
-    @override_settings(CRM_DEALS_PER_PAGE=None)
-    def test_deal_page_size_missing_setting_raises_improperly_configured(
-        self,
-    ) -> None:
-        """Missing CRM_DEALS_PER_PAGE should raise at request time."""
-        from django.core.exceptions import ImproperlyConfigured
+    @override_settings(CRM_DEALS_PER_PAGE=44)
+    def test_deal_page_size_reads_the_setting(self) -> None:
         from quickscale_modules_crm.views import DealPagination
 
-        paginator = DealPagination()
-
-        with pytest.raises(
-            ImproperlyConfigured,
-            match="CRM_DEALS_PER_PAGE",
-        ):
-            paginator.get_page_size(None)
-
-    @override_settings(CRM_DEALS_PER_PAGE="not-a-number")
-    def test_deal_page_size_non_numeric_setting_raises_improperly_configured(
-        self,
-    ) -> None:
-        """Non-numeric CRM_DEALS_PER_PAGE should raise at request time."""
-        from django.core.exceptions import ImproperlyConfigured
-        from quickscale_modules_crm.views import DealPagination
-
-        paginator = DealPagination()
-
-        with pytest.raises(
-            ImproperlyConfigured,
-            match="CRM_DEALS_PER_PAGE",
-        ):
-            paginator.get_page_size(None)
+        assert DealPagination().get_page_size(None) == 44
 
 
 @pytest.mark.django_db

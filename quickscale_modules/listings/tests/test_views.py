@@ -3,8 +3,6 @@
 from decimal import Decimal
 
 import pytest
-from django.core.exceptions import ImproperlyConfigured
-from django.test.utils import override_settings
 from django.urls import reverse
 
 
@@ -45,29 +43,9 @@ class TestListingListView:
         assert len(response.context["page_obj"].object_list) == 2
         assert response.context["is_paginated"] is True
 
-    def test_listing_list_invalid_listings_per_page_raises_improperly_configured(
-        self,
-        client,
-        listing_factory,
-        settings,
-    ):
-        """Invalid LISTINGS_PER_PAGE raises ImproperlyConfigured instead of falling back."""
-        settings.LISTINGS_PER_PAGE = "invalid"
-
-        with pytest.raises(ImproperlyConfigured, match="LISTINGS_PER_PAGE"):
-            client.get(reverse("concrete_listing_list"))
-
-    def test_listing_list_bool_listings_per_page_raises_improperly_configured(
-        self,
-        client,
-        listing_factory,
-        settings,
-    ):
-        """Bool LISTINGS_PER_PAGE raises ImproperlyConfigured."""
-        settings.LISTINGS_PER_PAGE = False
-
-        with pytest.raises(ImproperlyConfigured, match="LISTINGS_PER_PAGE"):
-            client.get(reverse("concrete_listing_list"))
+    # An invalid LISTINGS_PER_PAGE is refused by the generic startup check
+    # (rule 3) before a request runs; that behavior is covered by the core
+    # check tests and by test_apps.py's registration test.
 
     def test_filter_by_price_min(self, client, listing_factory):
         """Test filtering by minimum price"""
@@ -212,53 +190,6 @@ class TestListingListView:
         assert response.status_code == 200
         assert calls["used"] is True
         assert "Published Listing" not in str(response.content)
-
-
-@override_settings(LISTINGS_PER_PAGE=None)
-def test_listings_page_size_missing_setting_raises_improperly_configured() -> None:
-    """Missing LISTINGS_PER_PAGE raises ImproperlyConfigured."""
-    with pytest.raises(
-        ImproperlyConfigured, match="LISTINGS_PER_PAGE setting is required"
-    ):
-        # Access through the view's helper
-        from quickscale_modules_listings.views import _get_positive_int_setting
-
-        _get_positive_int_setting("LISTINGS_PER_PAGE")
-
-
-@override_settings(LISTINGS_PER_PAGE="not-a-number")
-def test_listings_page_size_non_numeric_setting_raises_improperly_configured() -> None:
-    """Non-numeric LISTINGS_PER_PAGE raises ImproperlyConfigured."""
-    with pytest.raises(ImproperlyConfigured, match="LISTINGS_PER_PAGE"):
-        from quickscale_modules_listings.views import _get_positive_int_setting
-
-        _get_positive_int_setting("LISTINGS_PER_PAGE")
-
-
-@override_settings(LISTINGS_PER_PAGE=0)
-def test_listings_page_size_non_positive_setting_raises_improperly_configured() -> None:
-    """Non-positive LISTINGS_PER_PAGE raises ImproperlyConfigured."""
-    with pytest.raises(ImproperlyConfigured, match="positive integer"):
-        from quickscale_modules_listings.views import _get_positive_int_setting
-
-        _get_positive_int_setting("LISTINGS_PER_PAGE")
-
-
-@override_settings(LISTINGS_PER_PAGE=-5)
-def test_listings_page_size_negative_setting_raises_improperly_configured() -> None:
-    """Negative LISTINGS_PER_PAGE raises ImproperlyConfigured."""
-    with pytest.raises(ImproperlyConfigured, match="positive integer"):
-        from quickscale_modules_listings.views import _get_positive_int_setting
-
-        _get_positive_int_setting("LISTINGS_PER_PAGE")
-
-
-@override_settings(LISTINGS_PER_PAGE=24)
-def test_listings_page_size_valid_setting_passes() -> None:
-    """Valid LISTINGS_PER_PAGE returns the value."""
-    from quickscale_modules_listings.views import _get_positive_int_setting
-
-    assert _get_positive_int_setting("LISTINGS_PER_PAGE") == 24
 
 
 @pytest.mark.django_db

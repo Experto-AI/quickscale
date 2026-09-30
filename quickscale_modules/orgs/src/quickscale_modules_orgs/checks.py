@@ -7,26 +7,26 @@ configuration and invariant checks below to
 error-level check fails) and registers them as ``quickscale_orgs`` system
 checks.
 
+The declared options (``QUICKSCALE_MODE`` and its type/choices) are validated
+by rule 3's generic settings check, registered from ``ready()`` before these.
+
 The checks:
 
-1. ``check_quickscale_mode`` (SA14.6) — requires the explicit
-   ``QUICKSCALE_MODE`` tenancy mode and rejects values other than ``solo``
-   or ``saas``.
-2. ``check_rls_role`` (SA68 Phase 1) — the always-on BYPASSRLS/SUPERUSER
+1. ``check_rls_role`` (SA68 Phase 1) — the always-on BYPASSRLS/SUPERUSER
    boot guard, with its two narrow exemptions (a sanctioned privileged
    command, or the ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape hatch).
-3. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
+2. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
    ``organization_id`` or the exact FORCE-RLS policy contract.
-4. ``check_model_classification`` (SA1.4) — warns when a concrete project
+3. ``check_model_classification`` (SA1.4) — warns when a concrete project
    model has no marker-derived tenant classification.
-5. ``check_tenant_manager_inheritance`` (SA222) — errors when a model
+4. ``check_tenant_manager_inheritance`` (SA222) — errors when a model
    carries a ``TenantManager`` without inheriting ``TenantModel``, because
    inheritance is the only tenant marker.
-6. ``check_provider_id_conformance`` (SA208) — errors when a tenant model's
+5. ``check_provider_id_conformance`` (SA208) — errors when a tenant model's
    non-relational ``*_id`` field is neither covered by a declared
    refuse-or-reconcile obligation nor classified by the model's own
    ``provider_id_classification`` declaration.
-7. ``check_removal_obligation_discharge`` (SA213) — errors when a declared
+6. ``check_removal_obligation_discharge`` (SA213) — errors when a declared
    obligation demands an action its removal boundary has no shared-coordinator
    route for, because only a boundary that bypasses the coordinator could
    discharge it.
@@ -40,7 +40,7 @@ reads live PostgreSQL catalog state, so it cannot run from ``ready()`` in
 processes that must start without a database (and it must never block a
 startup, being warning-only).
 
-The mode, role, stray-manager, provider-ID, and discharge checks run eagerly
+The role, stray-manager, provider-ID, and discharge checks run eagerly
 through the helper.  The provider-ID and discharge checks are ``ERROR``
 messages: they read model
 and app declarations only, so they cannot depend on migration or database
@@ -59,7 +59,6 @@ import os
 from collections.abc import Iterator
 
 from django.apps import apps
-from django.conf import settings
 from django.core.checks import CheckMessage, Error, Warning, register
 from django.db import connection
 
@@ -122,38 +121,6 @@ def _is_privileged_command() -> bool:
     hatch see ``check_rls_role``.
     """
     return os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND") in _PRIVILEGED_COMMANDS
-
-
-def check_quickscale_mode(
-    app_configs: object = None,
-    **kwargs: object,
-) -> list[CheckMessage]:
-    """SA14.6 — Require ``QUICKSCALE_MODE`` when orgs is installed.
-
-    Fails startup when ``QUICKSCALE_MODE`` is unset, preventing a saas-mode
-    generated project from silently defaulting to solo-mode tenancy, and
-    rejects values other than ``"solo"`` or ``"saas"`` so that an invalid
-    mode does not silently behave as solo.
-    """
-    mode = getattr(settings, "QUICKSCALE_MODE", None)
-    if mode is None:
-        return [
-            Error(
-                "QUICKSCALE_MODE setting is required when "
-                "quickscale_orgs is installed. "
-                "Set it to 'solo' for single-tenant or 'saas' for "
-                "multi-tenant mode.",
-                id="quickscale_orgs.E005",
-            )
-        ]
-    if mode not in ("solo", "saas"):
-        return [
-            Error(
-                f"QUICKSCALE_MODE must be 'solo' or 'saas', got {mode!r}.",
-                id="quickscale_orgs.E005",
-            )
-        ]
-    return []
 
 
 def check_rls_role(

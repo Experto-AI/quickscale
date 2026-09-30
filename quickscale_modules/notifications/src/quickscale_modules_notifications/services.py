@@ -14,7 +14,7 @@ from email.utils import formataddr
 from typing import Any, Protocol, cast
 
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
 from django.db import transaction
@@ -66,29 +66,6 @@ _EVENT_STATUS_MAP = {
     "complained": NotificationDelivery.Status.COMPLAINED,
     "email.complained": NotificationDelivery.Status.COMPLAINED,
 }
-
-
-def _require_notification_runtime_setting(
-    setting_name: str,
-    help_text: str,
-) -> None:
-    """Raise when a required notification runtime setting is absent."""
-    if not hasattr(settings, setting_name):
-        raise ImproperlyConfigured(
-            f"The {setting_name} setting is required. {help_text}"
-        )
-
-
-def validate_required_notification_settings() -> None:
-    """Fail fast when the core notifications runtime settings are unset."""
-    _require_notification_runtime_setting(
-        "QUICKSCALE_NOTIFICATIONS_ENABLED",
-        "Set it to True or False in your Django settings.",
-    )
-    _require_notification_runtime_setting(
-        "QUICKSCALE_NOTIFICATIONS_PROVIDER",
-        "Set it to the configured provider name in your Django settings.",
-    )
 
 
 class DeliveryMailer(Protocol):
@@ -155,58 +132,31 @@ class NotificationSettingsSnapshot:
 
     @classmethod
     def from_settings(cls) -> NotificationSettingsSnapshot:
-        """Create a snapshot from Django settings defaults."""
-        validate_required_notification_settings()
+        """Create a snapshot from Django settings.
+
+        Rule 3: every declared value is read directly; apply wrote the
+        canonical values and the module's startup check has validated them,
+        so the snapshot neither defaults nor coerces.  ``EMAIL_BACKEND`` is
+        Django's own setting.
+        """
         return cls(
             enabled=bool(settings.QUICKSCALE_NOTIFICATIONS_ENABLED),
             provider_name=str(settings.QUICKSCALE_NOTIFICATIONS_PROVIDER),
-            email_backend=str(getattr(settings, "EMAIL_BACKEND", "")),
-            sender_name=str(
-                getattr(settings, "QUICKSCALE_NOTIFICATIONS_SENDER_NAME", "QuickScale")
-            ),
-            sender_email=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL",
-                    getattr(settings, "DEFAULT_FROM_EMAIL", ""),
-                )
-            ),
-            reply_to_email=str(
-                getattr(settings, "QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL", "")
-            ),
-            resend_domain=str(
-                getattr(settings, "QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN", "")
-            ),
+            email_backend=str(settings.EMAIL_BACKEND),
+            sender_name=str(settings.QUICKSCALE_NOTIFICATIONS_SENDER_NAME),
+            sender_email=str(settings.QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL),
+            reply_to_email=str(settings.QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL),
+            resend_domain=str(settings.QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN),
             resend_api_key_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR",
-                    "RESEND_API_KEY",
-                )
+                settings.QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
             ),
             webhook_secret_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
-                    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
-                )
+                settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
             ),
-            default_tags=_normalize_tag_sequence(
-                getattr(
-                    settings,
-                    "QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS",
-                    _DEFAULT_DEFAULT_TAGS,
-                )
-            ),
-            allowed_tags=_normalize_tag_sequence(
-                getattr(
-                    settings,
-                    "QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS",
-                    _DEFAULT_ALLOWED_TAGS,
-                )
-            ),
+            default_tags=tuple(settings.QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS),
+            allowed_tags=tuple(settings.QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS),
             webhook_ttl_seconds=int(
-                getattr(settings, "QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS", 300)
+                settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS
             ),
         )
 
@@ -228,17 +178,22 @@ class NotificationSettingsSnapshot:
         }
 
     def resolve_resend_api_key(self) -> str:
-        """Resolve the live Resend API key from the configured environment variable."""
-        env_var_name = self.resend_api_key_env_var.strip() or "RESEND_API_KEY"
-        return os.getenv(env_var_name, "").strip()
+        """Resolve the live Resend API key from the configured environment variable.
+
+        Rule 3: the configured name is the only name.  A blank name resolves
+        to no key, and the startup check refuses the enabled module rather
+        than this method substituting a runtime fallback.
+        """
+        return os.getenv(self.resend_api_key_env_var.strip(), "").strip()
 
     def resolve_webhook_secret(self) -> str:
-        """Resolve the shared webhook signing secret from the configured environment variable."""
-        env_var_name = (
-            self.webhook_secret_env_var.strip()
-            or "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
-        )
-        return os.getenv(env_var_name, "").strip()
+        """Resolve the shared webhook signing secret from the configured environment variable.
+
+        Rule 3: the configured name is the only name.  A blank name resolves
+        to no secret, and the startup check refuses the enabled module rather
+        than this method substituting a runtime fallback.
+        """
+        return os.getenv(self.webhook_secret_env_var.strip(), "").strip()
 
     def live_delivery_enabled(self) -> bool:
         """Return whether the active email backend is the Anymail Resend backend."""
@@ -376,8 +331,14 @@ def sanitize_provider_tags(
     *,
     settings_snapshot: NotificationSettingsSnapshot,
 ) -> list[str]:
-    """Return provider-visible tags limited to the approved non-sensitive allowlist."""
-    allowed_tags = set(settings_snapshot.allowed_tags)
+    """Return provider-visible tags limited to the approved non-sensitive allowlist.
+
+    The allowlist is canonicalized for comparison the same way each candidate
+    tag is, so an accepted but noncanonical entry (one that reached settings
+    outside ``apply``'s normalization) still matches its canonical form
+    instead of silently dropping the tag.
+    """
+    allowed_tags = {_normalize_tag(tag) for tag in settings_snapshot.allowed_tags}
     seen: set[str] = set()
     sanitized: list[str] = []
     for raw_value in [*settings_snapshot.default_tags, *(tags or ())]:

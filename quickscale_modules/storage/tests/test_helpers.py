@@ -21,6 +21,26 @@ from quickscale_modules_storage.helpers import (
 )
 
 
+def _storage_settings(**overrides: object) -> dict[str, object]:
+    """A complete declared storage settings mapping for helper tests.
+
+    Rule 3 removed the helper's defaults, so callers hand over every setting
+    ``select_storage_backend`` reads (the same set ``apply`` writes).
+    """
+    values: dict[str, object] = {
+        "QUICKSCALE_STORAGE_BACKEND": "local",
+        "AWS_STORAGE_BUCKET_NAME": "",
+        "AWS_S3_ENDPOINT_URL": "",
+        "AWS_S3_REGION_NAME": "",
+        "AWS_ACCESS_KEY_ID": "",
+        "AWS_SECRET_ACCESS_KEY": "",
+        "AWS_DEFAULT_ACL": "",
+        "AWS_QUERYSTRING_AUTH": False,
+    }
+    values.update(overrides)
+    return values
+
+
 def _uploaded_image(
     *,
     filename: str = "asset.png",
@@ -91,11 +111,10 @@ class TestSelectStorageBackend:
 
     def test_s3_backend_uses_s3_storage(self) -> None:
         resolved = select_storage_backend(
-            {
-                "QUICKSCALE_STORAGE_BACKEND": "s3",
-                "AWS_STORAGE_BUCKET_NAME": "my-bucket",
-                "AWS_S3_ENDPOINT_URL": "",
-            }
+            _storage_settings(
+                QUICKSCALE_STORAGE_BACKEND="s3",
+                AWS_STORAGE_BUCKET_NAME="my-bucket",
+            )
         )
         assert resolved.backend == "s3"
         assert resolved.use_s3_compatible is True
@@ -105,10 +124,10 @@ class TestSelectStorageBackend:
 
     def test_r2_backend_accepts_endpoint_mode(self) -> None:
         resolved = select_storage_backend(
-            {
-                "QUICKSCALE_STORAGE_BACKEND": "r2",
-                "AWS_S3_ENDPOINT_URL": "https://example.r2.cloudflarestorage.com",
-            }
+            _storage_settings(
+                QUICKSCALE_STORAGE_BACKEND="r2",
+                AWS_S3_ENDPOINT_URL="https://example.r2.cloudflarestorage.com",
+            )
         )
         assert resolved.backend == "r2"
         assert resolved.options["endpoint_url"].startswith("https://")
@@ -175,6 +194,7 @@ class TestSelectStorageBackend:
                 "AWS_S3_REGION_NAME": "auto",
                 "AWS_ACCESS_KEY_ID": "key-id",
                 "AWS_SECRET_ACCESS_KEY": "secret-key",
+                "AWS_DEFAULT_ACL": "",
                 "AWS_QUERYSTRING_AUTH": False,
             },
             storage_factory=FakeStorage,

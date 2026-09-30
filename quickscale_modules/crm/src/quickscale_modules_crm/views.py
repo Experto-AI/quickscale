@@ -5,7 +5,7 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.views import redirect_to_login
-from django.core.exceptions import ImproperlyConfigured, PermissionDenied
+from django.core.exceptions import PermissionDenied
 from django.db.models import Case, CharField, Count, F, Q, QuerySet, Sum, Value, When
 from django.http import Http404, HttpRequest
 from django.http.response import HttpResponseBase
@@ -201,10 +201,9 @@ class CRMApiEnabledMixin:
     """Hide CRM API endpoints when the module-level API toggle is disabled."""
 
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
-        # SA17.3 — no True default: CRM_ENABLE_API must be explicitly set.
-        # AppConfig.ready() enforces presence at startup; this is a
-        # defensive check so a missing value is treated as disabled.
-        if not bool(getattr(settings, "CRM_ENABLE_API", None)):
+        # Rule 3: the startup check has validated the declared value, so the
+        # view reads it directly (and is never reached while it is missing).
+        if not settings.CRM_ENABLE_API:
             raise Http404
         APIView.initial(self, request, *args, **kwargs)
 
@@ -223,16 +222,9 @@ class ContactPagination(_PlainListPagination):
 
     def get_page_size(self, request: Request) -> int:
         del request
-        # SA17.3 — explicit validation: reject missing/non-numeric values.
-        page_size = getattr(settings, "CRM_CONTACTS_PER_PAGE", None)
-        if page_size is None:
-            raise ImproperlyConfigured("CRM_CONTACTS_PER_PAGE setting is required.")
-        try:
-            return int(page_size)
-        except TypeError, ValueError:
-            raise ImproperlyConfigured(
-                f"CRM_CONTACTS_PER_PAGE must be a valid integer, got {page_size!r}"
-            )
+        # Rule 3: read the declared setting directly; the startup check has
+        # already refused a missing or invalid value.
+        return settings.CRM_CONTACTS_PER_PAGE
 
 
 class DealPagination(_PlainListPagination):
@@ -240,16 +232,9 @@ class DealPagination(_PlainListPagination):
 
     def get_page_size(self, request: Request) -> int:
         del request
-        # SA17.3 — explicit validation: reject missing/non-numeric values.
-        page_size = getattr(settings, "CRM_DEALS_PER_PAGE", None)
-        if page_size is None:
-            raise ImproperlyConfigured("CRM_DEALS_PER_PAGE setting is required.")
-        try:
-            return int(page_size)
-        except TypeError, ValueError:
-            raise ImproperlyConfigured(
-                f"CRM_DEALS_PER_PAGE must be a valid integer, got {page_size!r}"
-            )
+        # Rule 3: read the declared setting directly; the startup check has
+        # already refused a missing or invalid value.
+        return settings.CRM_DEALS_PER_PAGE
 
 
 class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):

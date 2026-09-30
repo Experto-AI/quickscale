@@ -43,10 +43,6 @@ from quickscale_modules_billing.models import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BILLING_CURRENCY = "usd"
-DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"
-DEFAULT_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"  # noqa: S105 - environment-variable name constant, not a credential
-DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR = "QUICKSCALE_BILLING_WEBHOOK_SECRET"  # noqa: S105 - environment-variable name constant, not a credential
 # The Stripe API version this module is written against: the version
 # stripe-python 15.x ships pinned. It is set on the SDK before every call and
 # every webhook event must report the same named release.
@@ -109,41 +105,22 @@ class BillingSettingsSnapshot:
 
     @classmethod
     def from_settings(cls) -> BillingSettingsSnapshot:
-        """Create a billing runtime snapshot from Django settings."""
+        """Create a billing runtime snapshot from Django settings.
+
+        Rule 3: every value is read directly; apply wrote the canonical
+        values and the module's startup check has validated them, so the
+        snapshot neither defaults nor coerces.
+        """
         return cls(
             enabled=bool(settings.QUICKSCALE_BILLING_ENABLED),
             publishable_key_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-                    DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-                )
-            ).strip()
-            or DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-            secret_key_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
-                    DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-                )
-            ).strip()
-            or DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
+                settings.QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR
+            ),
+            secret_key_env_var=str(settings.QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR),
             webhook_secret_env_var=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
-                    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-                )
-            ).strip()
-            or DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-            billing_currency=str(
-                getattr(
-                    settings,
-                    "QUICKSCALE_BILLING_CURRENCY",
-                    DEFAULT_BILLING_CURRENCY,
-                )
-            ).strip()
-            or DEFAULT_BILLING_CURRENCY,
+                settings.QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR
+            ),
+            billing_currency=str(settings.QUICKSCALE_BILLING_CURRENCY),
         )
 
     def resolve_publishable_key(self) -> str:

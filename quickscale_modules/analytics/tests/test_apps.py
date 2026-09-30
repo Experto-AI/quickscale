@@ -73,14 +73,24 @@ def test_ready_raises_improperly_configured_when_enabled_setting_missing(
         config.ready()
 
 
-def test_check_reports_unsupported_provider(settings) -> None:
-    """A provider other than PostHog is invalid configuration."""
+@patch("quickscale_modules_analytics.apps.configure_analytics_client")
+def test_ready_refuses_unsupported_provider(
+    mock_configure_analytics_client, settings
+) -> None:
+    """Rule 3: a provider outside the manifest's choices refuses startup."""
     settings.QUICKSCALE_ANALYTICS_PROVIDER = "plausible"
+    config = QuickscaleAnalyticsConfig(
+        "quickscale_modules_analytics",
+        import_module("quickscale_modules_analytics"),
+    )
 
-    messages = check_analytics_settings()
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="QUICKSCALE_ANALYTICS_PROVIDER",
+    ):
+        config.ready()
 
-    assert messages
-    assert "QUICKSCALE_ANALYTICS_PROVIDER" in messages[0].msg
+    mock_configure_analytics_client.assert_not_called()
 
 
 def test_check_reports_empty_api_key_for_live_analytics(settings, monkeypatch) -> None:

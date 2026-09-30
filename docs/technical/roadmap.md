@@ -24,8 +24,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA217 | Read the manifest option schema in core and check settings at startup | post-v88 | 2 | — | Deferred |
-| SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | SA217 | Deferred |
+| SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | — | Deferred |
 | SA220 | Untangle module dependencies behind `services.py` and capabilities | post-v88 | 3 | SA219 | Deferred |
 | SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 3 | — | Deferred |
 | SA226 | Standardize authorization, email, write effects, and events | post-v88 | 3 | SA220, SA223 | Deferred |
@@ -41,9 +40,9 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA217 ──► SA219
+Track 2: SA219
 Track 3: SA223 ──► SA220 ──► SA226 ──► SA216 (after SA215)
-     critical path: SA217 → SA219 → SA220 → SA226 → SA215 → SA191 → SA153
+     critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -64,7 +63,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA215 | no | no | no | no | **yes** |
-| 2 | SA217 | yes | yes | yes | **yes** | **yes** |
+| 2 | SA219 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA223 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
@@ -134,21 +133,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the conformance test and its registry row; release notes; decisions; the inventory.
 
-- [ ] **SA217 — Read the manifest option schema in core and check settings at startup.**
-
-  **Context:** inventory §§ 3, 7, 14; D4, D15; Module Conventions rules 3 and 12. Option
-configuration is manifest-owned; every module still carries its own settings reader and code
-defaults.
-
-  **Scope:** `apply` writes `MODULE_SETTINGS_SCHEMA` into `settings/modules.py`; one generic
-  startup check in `quickscale_core.runtime`, run through the shared checks helper and registered
-  by each module, validates every declared setting; per-module readers and code defaults go.
-
-  **Acceptance:** a setting of the wrong type or a violated `required_when` fails startup with the
-  setting's name; no module keeps its own settings reader or code default.
-
-  **Surfaces:** `quickscale_core` `runtime`; `quickscale_cli` apply; module settings reads. Track 2
-  surfaces plus the `runtime` facade (Track 3), through the serialized queue.
+- [x] **SA217 — Read the manifest option schema in core and check settings at startup.**
 
 - [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
 

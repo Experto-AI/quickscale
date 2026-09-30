@@ -40,7 +40,7 @@ def test_app_config_ready_is_safe_to_call() -> None:
     "setting_name",
     [
         "QUICKSCALE_NOTIFICATIONS_ENABLED",
-        "QUICKSCALE_NOTIFICATIONS_PROVIDER",
+        "QUICKSCALE_NOTIFICATIONS_SENDER_NAME",
     ],
 )
 def test_ready_raises_when_required_notification_setting_missing(
@@ -57,16 +57,17 @@ def test_ready_raises_when_required_notification_setting_missing(
     "setting_name",
     [
         "QUICKSCALE_NOTIFICATIONS_ENABLED",
-        "QUICKSCALE_NOTIFICATIONS_PROVIDER",
+        "QUICKSCALE_NOTIFICATIONS_SENDER_NAME",
     ],
 )
-def test_snapshot_from_settings_raises_when_required_notification_setting_missing(
+def test_snapshot_from_settings_reads_declared_settings_directly(
     settings: Any,
     setting_name: str,
 ) -> None:
+    """Rule 3: a missing declared setting raises instead of defaulting."""
     delattr(settings, setting_name)
 
-    with pytest.raises(ImproperlyConfigured, match=setting_name):
+    with pytest.raises(AttributeError):
         NotificationSettingsSnapshot.from_settings()
 
 
@@ -78,6 +79,17 @@ def test_snapshot_from_settings_uses_explicit_runtime_values(settings: Any) -> N
 
     assert snapshot.enabled is False
     assert snapshot.provider_name == "smtp"
+
+
+def test_ready_raises_when_provider_missing(settings: Any) -> None:
+    """The applied provider setting is required until SA219 declares it."""
+    delattr(settings, "QUICKSCALE_NOTIFICATIONS_PROVIDER")
+
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="QUICKSCALE_NOTIFICATIONS_PROVIDER",
+    ):
+        _build_config().ready()
 
 
 def test_vendor_secret_check_reports_empty_webhook_secret(
@@ -125,11 +137,11 @@ def test_missing_setting_fails_check_migrate_and_runserver(settings: Any) -> Non
     from django.core.management.base import SystemCheckError
     from django.core.management.commands import migrate, runserver
 
-    delattr(settings, "QUICKSCALE_NOTIFICATIONS_PROVIDER")
+    delattr(settings, "QUICKSCALE_NOTIFICATIONS_ENABLED")
 
-    with pytest.raises(SystemCheckError, match="QUICKSCALE_NOTIFICATIONS_PROVIDER"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_NOTIFICATIONS_ENABLED"):
         call_command("check")
-    with pytest.raises(SystemCheckError, match="QUICKSCALE_NOTIFICATIONS_PROVIDER"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_NOTIFICATIONS_ENABLED"):
         migrate.Command().check()
-    with pytest.raises(SystemCheckError, match="QUICKSCALE_NOTIFICATIONS_PROVIDER"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_NOTIFICATIONS_ENABLED"):
         runserver.Command().check()

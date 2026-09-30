@@ -5,6 +5,7 @@ Implements `quickscale apply [config]` - executes quickscale.yml configuration
 
 import copy
 import os
+import shlex
 import subprocess
 import sys
 import traceback
@@ -50,7 +51,6 @@ from quickscale_cli.commands.apply_support import _resolve_apply_raw_root  # noq
 from quickscale_cli.commands.contract_vintage import (
     declared_adoption_step_ids,
     enforce_shipped_contract_vintage,
-    record_confirmed_adoption,
     record_contract_adoption,
 )
 from quickscale_cli.commands.module_commands import (
@@ -3168,14 +3168,16 @@ def _execute_apply_steps(
 
         # A confirmed adoption on a project with nothing else to apply is
         # recorded here, under the lock, after any provenance repair, so the
-        # no-op gate below cannot discard the confirmation (SA207).
+        # no-op gate below cannot discard the confirmation (SA207).  The
+        # managed wiring is regenerated first so the adoption carries the
+        # release's settings schema; a failed regeneration records nothing.
         if (
             ctx.confirm_contract_adoption
             and not ctx.delta.has_changes
             and not ctx.has_pending_post_embed_recovery
         ):
-            current_state = ProjectStateManager(ctx.output_path).load_state()
-            record_contract_adoption(current_state, ctx.output_path)
+            if not _regenerate_and_record_adoption(ctx):
+                raise click.Abort()
             click.secho(
                 "\n✅ Nothing else to do. Configuration matches applied state.",
                 fg="green",
@@ -3759,9 +3761,74 @@ def _enforce_apply_contract_vintage_preflight(
     )
 
 
-def _record_confirmed_adoption(output_path: Path) -> None:
-    """Record a confirmed contract adoption under the apply advisory lock."""
-    record_confirmed_adoption(output_path, operation="apply")
+def _record_regenerated_wiring_hashes(ctx: ApplyContext) -> None:
+    """Record the regenerated managed wiring's hashes in applied state.
+
+    Loads through :class:`ProjectStateManager` so a pre-consolidation
+    project's legacy module tracking and hash records are read-through
+    imported and materialized rather than dropped when the consolidated
+    sections are first written.  Without the hash records, ``quickscale
+    status`` reports the adoption's own regeneration as managed-file drift.
+    """
+    state_manager = ProjectStateManager(ctx.output_path)
+    state = state_manager.load_state()
+    if state is None:
+        return
+    managed_paths = _resolve_managed_wiring_paths(ctx.qs_config)
+    for path_str, digest in compute_file_hashes(ctx.output_path, managed_paths).items():
+        state.managed_files[path_str] = ManagedFileRecord(path=path_str, hash=digest)
+    state_manager.save_state(state)
+
+
+def _regenerate_and_record_adoption(ctx: ApplyContext) -> bool:
+    """Regenerate managed wiring, then record the confirmed adoption.
+
+    Adopting the current generation contract includes its managed wiring: an
+    older ``settings/modules.py`` without the release's schema would leave
+    every installed module refusing startup.  The regenerated files' hashes
+    are recorded before the adoption so the project does not report
+    QuickScale's own regeneration as drift.  Nothing is recorded when the
+    regeneration fails, so a project can never acknowledge a contract it did
+    not receive.
+    """
+    embedded_modules = sorted(ctx.existing_state.modules) if ctx.existing_state else []
+    if not _regenerate_managed_wiring_for_apply(ctx, embedded_modules):
+        click.secho(
+            "\n❌ Contract adoption not recorded: managed wiring regeneration failed.",
+            fg="red",
+            err=True,
+        )
+        return False
+    _record_regenerated_wiring_hashes(ctx)
+    current_state = ProjectStateManager(ctx.output_path).load_state()
+    record_contract_adoption(current_state, ctx.output_path)
+    return True
+
+
+def _record_confirmed_adoption(ctx: ApplyContext) -> bool | None:
+    """Record a confirmed contract adoption under the apply advisory lock.
+
+    The locked section re-reads authoritative state and recomputes the delta
+    before acting, so a concurrent apply that landed between the pre-lock
+    read and the lock cannot be overwritten by a regeneration built from the
+    stale context.  Returns ``None`` when the no-delta premise no longer
+    holds; the caller aborts rather than acting on a stale desired snapshot.
+    """
+    lock = AdvisoryLock(ctx.output_path, operation="apply")
+    try:
+        lock.acquire()
+    except AdvisoryLockContentionError as error:
+        raise click.ClickException(
+            "Unable to acquire the project state lock to record the contract "
+            f"adoption: {error}"
+        ) from error
+    try:
+        _refresh_context_after_lock(ctx)
+        if ctx.delta.has_changes or ctx.has_pending_post_embed_recovery:
+            return None
+        return _regenerate_and_record_adoption(ctx)
+    finally:
+        lock.release()
 
 
 @click.command()
@@ -3921,7 +3988,24 @@ def apply(
         and not ctx.has_pending_post_embed_recovery
         and not has_pending_provenance_repair
     ):
-        _record_confirmed_adoption(ctx.output_path)
+        adopted = _record_confirmed_adoption(ctx)
+        if adopted is None:
+            # A concurrent apply landed between the pre-lock read and the
+            # lock.  The desired configuration in memory may be stale, so do
+            # not act on it: ask the operator to re-run against the current
+            # state instead of applying a stale desired snapshot.
+            click.secho(
+                "\n⚠️  The project configuration changed while waiting for "
+                "the state lock. Re-run the same command "
+                f"(quickscale apply {shlex.quote(str(config))} "
+                "--confirm-contract-adoption) to "
+                "apply the current configuration.",
+                fg="yellow",
+                err=True,
+            )
+            raise click.Abort()
+        if not adopted:
+            raise click.Abort()
         click.secho(
             "\n✅ Nothing else to do. Configuration matches applied state.",
             fg="green",

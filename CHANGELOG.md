@@ -65,6 +65,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     env-var options, so enabling `storage` or `backups` — including on an existing project's next
     `apply` — now shows the variables those modules require, and a conformance check fails when a
     declared variable has no placeholder.
+  - **Module settings are declared once and checked at startup.** `quickscale apply` writes a
+    `MODULE_SETTINGS_SCHEMA` into the managed `settings/modules.py`, and each module validates its
+    declared settings against it at startup — refusing a missing, wrong-typed, or rule-violating
+    value with the setting's name and the `quickscale apply` fix. Module code reads its declared
+    settings directly, with no code defaults.
   - **Generated settings gate proxy trust and bound the correlation id.** The generated production
     settings trust `X-Forwarded-Proto` only while `USE_X_FORWARDED_FOR` is enabled, so a single-host
     deployment no longer lets a spoofed header suppress the HTTPS redirect or set secure cookies on

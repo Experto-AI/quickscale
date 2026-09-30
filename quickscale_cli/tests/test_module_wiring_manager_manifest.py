@@ -12,6 +12,7 @@ exercise the manager indirectly through CLI commands.
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 import sys
 import types
@@ -33,11 +34,21 @@ from quickscale_core.manifest.entry_point import (
     MANAGED_ADAPTER_ORIGINS,
     MANIFEST_ADAPTER_REGISTRY,
     build_manifest_wiring_spec,
+    load_module_manifest,
     refresh_managed_adapters,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.settings_schema import compile_settings_schema
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_core import module_wiring as core_module_wiring
+
+
+def _with_compiled_schema(spec: ModuleWiringSpec, module_name: str) -> ModuleWiringSpec:
+    """Attach the compiled settings schema the manager adds (rule 3)."""
+    return replace(
+        spec,
+        settings_schema=compile_settings_schema(load_module_manifest(module_name)),
+    )
 
 
 def _write_minimal_project(
@@ -118,6 +129,16 @@ def _load_embedded_manifest_contract(project_path: Path) -> dict[str, Any]:
 
 def _read_emitted_module_settings(project_path: Path) -> dict[str, Any]:
     """Read ``MODULE_SETTINGS`` without executing generated project code."""
+    return _read_emitted_assignment(project_path, "MODULE_SETTINGS")
+
+
+def _read_emitted_module_settings_schema(project_path: Path) -> dict[str, Any]:
+    """Read the rule 3 ``MODULE_SETTINGS_SCHEMA`` emitted into modules.py."""
+    return _read_emitted_assignment(project_path, "MODULE_SETTINGS_SCHEMA")
+
+
+def _read_emitted_assignment(project_path: Path, target_name: str) -> dict[str, Any]:
+    """Literal-eval one annotated dict assignment from the generated file."""
     settings_path = project_path / "myapp" / "settings" / "modules.py"
     tree = ast.parse(settings_path.read_text(), filename=str(settings_path))
     assignments = [
@@ -125,15 +146,13 @@ def _read_emitted_module_settings(project_path: Path) -> dict[str, Any]:
         for node in tree.body
         if isinstance(node, ast.AnnAssign)
         and isinstance(node.target, ast.Name)
-        and node.target.id == "MODULE_SETTINGS"
+        and node.target.id == target_name
     ]
-    assert len(assignments) == 1, (
-        "Generated modules.py must define MODULE_SETTINGS once"
-    )
+    assert len(assignments) == 1, f"Generated modules.py must define {target_name} once"
     value_node = assignments[0].value
-    assert value_node is not None, "MODULE_SETTINGS assignment must have a value"
+    assert value_node is not None, f"{target_name} assignment must have a value"
     value = ast.literal_eval(value_node)
-    assert isinstance(value, dict), "MODULE_SETTINGS must be a dictionary"
+    assert isinstance(value, dict), f"{target_name} must be a dictionary"
     return value
 
 
@@ -299,8 +318,11 @@ class TestRegenerateManagedWiringManifestPath:
         )
 
         refresh_managed_adapters()
-        expected_spec = build_manifest_wiring_spec(
-            "analytics", desired_options["analytics"], project_package="myapp"
+        expected_spec = _with_compiled_schema(
+            build_manifest_wiring_spec(
+                "analytics", desired_options["analytics"], project_package="myapp"
+            ),
+            "analytics",
         )
 
         with (
@@ -385,8 +407,11 @@ class TestRegenerateManagedWiringManifestPath:
 
         refresh_managed_adapters()
         expected_specs = {
-            module_name: build_manifest_wiring_spec(
-                module_name, empty_options[module_name], project_package="myapp"
+            module_name: _with_compiled_schema(
+                build_manifest_wiring_spec(
+                    module_name, empty_options[module_name], project_package="myapp"
+                ),
+                module_name,
             )
             for module_name in module_names
         }
@@ -477,6 +502,37 @@ class TestRegenerateManagedWiringManifestPath:
         assert any(value is False for value in emitted.values())
         assert any(value == "" for value in emitted.values())
         assert any(isinstance(value, list) for value in emitted.values())
+
+    def test_all_embedded_modules_emit_their_compiled_settings_schema(
+        self, tmp_path: Path
+    ) -> None:
+        """Rule 3: regeneration writes each module's compiled schema."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project)
+        _write_complete_embedded_inventory(project)
+        contract = _load_embedded_manifest_contract(project)
+        names = contract["names"]
+        options = contract["options"]
+        manifests = contract["manifests"]
+        assert isinstance(names, tuple)
+        assert isinstance(options, dict)
+        assert isinstance(manifests, dict)
+
+        _write_minimal_project(
+            project,
+            modules={name: options[name] for name in names},
+        )
+
+        success, message = regenerate_managed_wiring(project)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+        emitted_schema = _read_emitted_module_settings_schema(project)
+        assert set(emitted_schema) == set(names)
+        for name in names:
+            manifest = manifests[name]
+            expected = compile_settings_schema(manifest)
+            assert emitted_schema[name] == expected
+            assert set(emitted_schema[name]) == set(manifest.mutable_options)
 
 
 class TestRegenerateManagedWiringSkipUnknown:

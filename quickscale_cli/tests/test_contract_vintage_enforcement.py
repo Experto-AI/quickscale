@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,7 +29,12 @@ from quickscale_core.manifest.loader import (
     load_manifest_from_path,
     load_project_contract_vintage,
 )
-from quickscale_core.project_state import ProjectStateManager
+from quickscale_core.project_state import (
+    ModuleConfig,
+    ModuleInfo,
+    ProjectStateManager,
+    compute_file_hashes,
+)
 from quickscale_core.schema.state_schema import (
     ModuleState,
     ProjectState,
@@ -618,24 +624,32 @@ def test_locked_apply_path_records_confirmation_on_no_delta(
     ctx = SimpleNamespace(
         output_path=tmp_path,
         existing_state=state,
-        qs_config=SimpleNamespace(modules={"orgs": object()}),
+        qs_config=SimpleNamespace(
+            modules={"orgs": object()},
+            project=SimpleNamespace(package="example"),
+        ),
         delta=SimpleNamespace(has_changes=False),
         has_pending_post_embed_recovery=False,
         confirm_contract_adoption=True,
     )
     handle_delta = Mock()
     execute_locked = Mock()
+    regenerate = Mock(return_value=True)
 
     monkeypatch.setattr(apply_command, "_refresh_context_after_lock", Mock())
     monkeypatch.setattr(apply_command, "_validate_split_ref_override_coverage", Mock())
     monkeypatch.setattr(apply_command, "_attempt_provenance_repair_if_needed", Mock())
     monkeypatch.setattr(apply_command, "_handle_delta_and_existing_state", handle_delta)
     monkeypatch.setattr(apply_command, "_execute_apply_steps_locked", execute_locked)
+    monkeypatch.setattr(
+        apply_command, "_regenerate_managed_wiring_for_apply", regenerate
+    )
 
     apply_command._execute_apply_steps(ctx, False, True, True)
 
     assert handle_delta.call_count == 0
     assert execute_locked.call_count == 0
+    regenerate.assert_called_once_with(ctx, ["orgs"])
     reloaded = ProjectStateManager(tmp_path).load_state()
     assert reloaded is not None
     assert reloaded.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
@@ -772,20 +786,32 @@ def test_status_reports_adopted_steps_as_satisfied(
     assert diagnostics["project_steps_behind_count"] == 0
 
 
-def test_apply_confirm_contract_adoption_records_without_config_change(
-    monkeypatch: pytest.MonkeyPatch,
+def _adoption_only_apply_context(
     tmp_path: Path,
-) -> None:
-    """SA207: an unchanged configuration still has an adoption-only path."""
-    state = _state("0.87.0")
+    *,
+    modules: tuple[str, ...] = ("orgs",),
+) -> SimpleNamespace:
+    """Build the pre-lock context an adoption-only apply run sees."""
+    state = _state("0.87.0", modules=modules)
     StateManager(tmp_path).save(state)
-    context = SimpleNamespace(
+    return SimpleNamespace(
         existing_state=state,
-        qs_config=SimpleNamespace(modules={"orgs": object()}),
+        qs_config=SimpleNamespace(
+            modules={module: object() for module in modules},
+            project=SimpleNamespace(package="example"),
+        ),
         delta=SimpleNamespace(has_changes=False),
         output_path=tmp_path,
         has_pending_post_embed_recovery=False,
     )
+
+
+def _patch_apply_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    context: SimpleNamespace,
+) -> Mock:
+    """Patch the apply preflight and return the execute-steps spy."""
     execute = Mock()
     config_path = tmp_path / "quickscale.yml"
     config_path.write_text("version: '1'\n")
@@ -801,18 +827,210 @@ def test_apply_confirm_contract_adoption_records_without_config_change(
     monkeypatch.setattr(
         apply_command, "_provenance_repair_might_be_needed", Mock(return_value=False)
     )
+    monkeypatch.setattr(apply_command, "_refresh_context_after_lock", Mock())
     monkeypatch.setattr(apply_command, "_execute_apply_steps", execute)
+    return execute
+
+
+def test_apply_confirm_contract_adoption_regenerates_then_records_without_config_change(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """SA207/SA217: an unchanged configuration adopts by regenerating wiring."""
+    context = _adoption_only_apply_context(tmp_path)
+    execute = _patch_apply_preflight(monkeypatch, tmp_path, context)
+    regenerate = Mock(return_value=True)
+    monkeypatch.setattr(
+        apply_command, "_regenerate_managed_wiring_for_apply", regenerate
+    )
 
     result = CliRunner().invoke(
-        apply_command.apply, [str(config_path), "--confirm-contract-adoption"]
+        apply_command.apply,
+        [str(tmp_path / "quickscale.yml"), "--confirm-contract-adoption"],
     )
 
     assert result.exit_code == 0
     assert execute.call_count == 0
+    regenerate.assert_called_once_with(context, ["orgs"])
     reloaded = ProjectStateManager(tmp_path).load_state()
     assert reloaded is not None
     assert reloaded.project.project_contract == "0.89.0"
     assert reloaded.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
+
+
+def test_apply_confirm_contract_adoption_records_regenerated_wiring_hashes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The adoption's own regeneration must not read back as drift."""
+    context = _adoption_only_apply_context(tmp_path)
+    _patch_apply_preflight(monkeypatch, tmp_path, context)
+    monkeypatch.setattr(
+        apply_command, "_regenerate_managed_wiring_for_apply", Mock(return_value=True)
+    )
+    package_dir = tmp_path / "example"
+    (package_dir / "settings").mkdir(parents=True)
+    (package_dir / "settings" / "modules.py").write_text(
+        "MODULE_SETTINGS_SCHEMA = {}\n"
+    )
+    (package_dir / "urls_modules.py").write_text("MODULE_URLPATTERNS = []\n")
+
+    result = CliRunner().invoke(
+        apply_command.apply,
+        [str(tmp_path / "quickscale.yml"), "--confirm-contract-adoption"],
+    )
+
+    assert result.exit_code == 0
+    reloaded_state = StateManager(tmp_path).load()
+    assert reloaded_state is not None
+    expected = compute_file_hashes(
+        tmp_path,
+        ["example/settings/modules.py", "example/urls_modules.py"],
+    )
+    assert expected
+    assert {
+        path: reloaded_state.managed_files[path].hash for path in expected
+    } == expected
+
+
+def test_apply_adoption_aborts_when_configuration_changes_under_lock(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A concurrent apply must not be overwritten from a stale desired snapshot."""
+    project_dir = tmp_path / "Project A"
+    project_dir.mkdir()
+    config_path = project_dir / "quickscale.yml"
+    config_path.write_text("version: '1'\n")
+    context = _adoption_only_apply_context(tmp_path)
+    execute = _patch_apply_preflight(monkeypatch, tmp_path, context)
+    regenerate = Mock(return_value=True)
+    monkeypatch.setattr(
+        apply_command, "_regenerate_managed_wiring_for_apply", regenerate
+    )
+
+    def _refresh(ctx: object) -> None:
+        ctx.delta = SimpleNamespace(has_changes=True)
+
+    monkeypatch.setattr(apply_command, "_refresh_context_after_lock", _refresh)
+
+    result = CliRunner().invoke(
+        apply_command.apply,
+        [str(config_path), "--confirm-contract-adoption"],
+    )
+
+    assert result.exit_code != 0
+    assert execute.call_count == 0
+    regenerate.assert_not_called()
+    assert shlex.quote(str(config_path)) in result.output
+    assert "--confirm-contract-adoption" in result.output
+    reloaded = ProjectStateManager(tmp_path).load_state()
+    assert reloaded is not None
+    assert reloaded.project.adopted_contract_steps == []
+
+
+def test_adoption_records_hashes_without_dropping_legacy_module_tracking(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A pre-consolidation project keeps its legacy tracking through adoption."""
+    context = _adoption_only_apply_context(tmp_path)
+    legacy_state = QuickScaleState(
+        version="1",
+        project=ProjectState(
+            slug="example",
+            package="example",
+            theme="showcase_react",
+        ),
+        modules={"orgs": ModuleState(name="orgs", version="0.89.0")},
+    )
+    StateManager(tmp_path).save(legacy_state)
+    state_manager = ProjectStateManager(tmp_path)
+    legacy_config = ModuleConfig(default_remote="https://example.com/r.git")
+    legacy_config.modules["orgs"] = ModuleInfo(
+        prefix="modules/orgs",
+        branch="splits/orgs-module",
+        installed_version="0.89.0",
+        installed_at="2026-09-01",
+    )
+    state_manager.save_config(legacy_config)
+    state_manager.save_managed_file_hashes({"example/settings/modules.py": "oldhash"})
+
+    _patch_apply_preflight(monkeypatch, tmp_path, context)
+    monkeypatch.setattr(
+        apply_command, "_regenerate_managed_wiring_for_apply", Mock(return_value=True)
+    )
+    package_dir = tmp_path / "example"
+    (package_dir / "settings").mkdir(parents=True)
+    (package_dir / "settings" / "modules.py").write_text("SCHEMA = {}\n")
+    (package_dir / "urls_modules.py").write_text("PATTERNS = []\n")
+
+    result = CliRunner().invoke(
+        apply_command.apply,
+        [str(tmp_path / "quickscale.yml"), "--confirm-contract-adoption"],
+    )
+
+    assert result.exit_code == 0
+    reloaded = ProjectStateManager(tmp_path).load_state()
+    assert reloaded is not None
+    assert reloaded.modules["orgs"].prefix == "modules/orgs"
+    assert reloaded.modules["orgs"].branch == "splits/orgs-module"
+    assert reloaded.modules["orgs"].installed_at == "2026-09-01"
+    expected = compute_file_hashes(
+        tmp_path,
+        ["example/settings/modules.py", "example/urls_modules.py"],
+    )
+    assert expected
+    assert {path: reloaded.managed_files[path].hash for path in expected} == expected
+
+
+def test_record_confirmed_adoption_defers_when_the_delta_appears_under_lock(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A concurrent apply that lands under the lock is not overwritten."""
+    context = _adoption_only_apply_context(tmp_path)
+    regenerate = Mock(return_value=True)
+    monkeypatch.setattr(
+        apply_command, "_regenerate_managed_wiring_for_apply", regenerate
+    )
+
+    def _refresh(ctx: object) -> None:
+        ctx.delta = SimpleNamespace(has_changes=True)
+
+    monkeypatch.setattr(apply_command, "_refresh_context_after_lock", _refresh)
+
+    assert apply_command._record_confirmed_adoption(context) is None
+    regenerate.assert_not_called()
+    reloaded = ProjectStateManager(tmp_path).load_state()
+    assert reloaded is not None
+    assert reloaded.project.adopted_contract_steps == []
+
+
+def test_apply_confirm_contract_adoption_not_recorded_when_regeneration_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A failed managed-wiring regeneration must not record an adoption."""
+    context = _adoption_only_apply_context(tmp_path)
+    _patch_apply_preflight(monkeypatch, tmp_path, context)
+    monkeypatch.setattr(
+        apply_command, "_regenerate_managed_wiring_for_apply", Mock(return_value=False)
+    )
+    record = Mock()
+    monkeypatch.setattr(apply_command, "record_contract_adoption", record)
+
+    result = CliRunner().invoke(
+        apply_command.apply,
+        [str(tmp_path / "quickscale.yml"), "--confirm-contract-adoption"],
+    )
+
+    assert result.exit_code != 0
+    record.assert_not_called()
+    reloaded = ProjectStateManager(tmp_path).load_state()
+    assert reloaded is not None
+    assert reloaded.project.project_contract == "0.87.0"
+    assert reloaded.project.adopted_contract_steps == []
 
 
 def test_status_keeps_unknown_orphan_as_drift(
