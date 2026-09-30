@@ -176,7 +176,7 @@ class TestPostDetailView:
         assert response.status_code == 200
         html = response.content.decode()
         assert 'class="blog-markdown-content"' in html
-        assert "quickscale_modules_blog/blog.css" in html
+        assert "quickscale_blog/css/blog.css" in html
 
     def test_post_detail_escapes_inline_html_in_markdown(
         self, client, author_user, system_org, blog_org_scope
