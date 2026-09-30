@@ -351,8 +351,8 @@ def render_social_managed_urls_module() -> str:
         app_name = "quickscale_managed_social"
 
         urlpatterns = [
-            path("", social_link_tree_payload, name="quickscale-social-link-tree"),
-            path("embeds/", social_embeds_payload, name="quickscale-social-embeds"),
+            path("", social_link_tree_payload, name="link_tree"),
+            path("embeds/", social_embeds_payload, name="embeds"),
         ]
         ''').lstrip()
 

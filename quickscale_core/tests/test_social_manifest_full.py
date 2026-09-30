@@ -385,6 +385,7 @@ class TestSocialManagedFileRenderers:
         assert "social_embeds_payload" in content
         assert "social_link_tree_payload" in content
         assert "urlpatterns" in content
-        assert "quickscale-social-link-tree" in content
-        assert "quickscale-social-embeds" in content
+        assert 'path("", social_link_tree_payload, name="link_tree")' in content
+        assert 'path("embeds/", social_embeds_payload, name="embeds")' in content
+        assert "quickscale-social" not in content
         assert "app_name = " in content
