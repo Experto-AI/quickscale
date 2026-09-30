@@ -250,6 +250,24 @@ class TestYamlToModuleDerivationSchema:
 name: sample-module
 version: "1.0.0"
 
+config:
+  immutable:
+    email:
+      type: string
+      default: ''
+      description: A description
+      validation: {}
+    enabled:
+      type: boolean
+      default: true
+      description: A description
+      validation: {}
+    provider:
+      type: string
+      default: ''
+      description: A description
+      validation: {}
+
 derivation:
   derived_settings:
     - setting_key: MY_APP_ENABLED
@@ -418,6 +436,14 @@ derivation:
 name: sample-module
 version: "1.0.0"
 
+config:
+  immutable:
+    mode:
+      type: string
+      default: basic
+      description: A description
+      validation: {}
+
 derivation:
   option_derivations:
     mode:
@@ -439,6 +465,7 @@ derivation:
       wiring_projections:
         - wiring_field: url_includes
           derivation_type: conditional
+          source_options: [mode]
           expression:
             branches:
               simple: []
@@ -481,6 +508,7 @@ derivation:
                         {
                             "wiring_field": "url_includes",
                             "derivation_type": "conditional",
+                            "source_options": ["mode"],
                             "expression": {
                                 "branches": {
                                     "simple": [],

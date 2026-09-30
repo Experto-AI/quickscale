@@ -377,8 +377,8 @@ projects into a Django setting.
 
 **SA215 amendment** (§[Module Conventions](#module-conventions) rule 12): within
 `module.yml`, an option's checks are written in its own `validation` block under
-`config` and compiled into the derivation schema's `ValidationRule`s — one engine,
-authored next to the option; `derivation.option_derivations.<option>.validation_rules`
+`config`, and the option-validation engine reads that block directly — one
+engine, authored next to the option; `derivation.option_derivations.<option>.validation_rules`
 and `legacy_aliases` are refused at load, as are the top-level
 `derivation.validation_rules` and `derivation.legacy_aliases` lists (rule 6
 forbids aliases). A direct one-to-one projection is the option's `django_setting`
@@ -559,7 +559,7 @@ settings read but never declared, and every default written twice. Renames are a
   manifest default is the only default and is applied by `apply`, never at runtime.
 - ✅ Each module calls the generic startup check from `quickscale_core.runtime` for its own
   label in `AppConfig.ready()` (rule 10). The check validates every declared setting against the schema,
-  with the same validation vocabulary `plan`/`apply` use (`ValidationRule`), without coercion, and
+  with the same validation vocabulary `plan`/`apply` use (the option's `validation` block), without coercion, and
   fails startup naming the setting, the rule, and "run `quickscale apply`". Core holds no
   per-module names; the schema comes from the project.
 - ✅ Module test settings define every declared setting; they may be generated from the manifest.

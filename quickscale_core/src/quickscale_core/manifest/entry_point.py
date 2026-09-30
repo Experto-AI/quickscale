@@ -88,6 +88,10 @@ def build_generic_manifest_spec(
     """
     del project_package
     manifest = load_module_manifest(module_name)
+    supplied = dict(options or {})
+    from quickscale_core.contracts.resolvers import raise_for_retired_options
+
+    raise_for_retired_options(manifest, supplied)
     schema = build_schema_from_manifest(
         manifest_name=module_name,
         wiring_projections=manifest.wiring_projections,
@@ -99,7 +103,7 @@ def build_generic_manifest_spec(
     result = resolve_module_config(
         manifest,
         schema,
-        overrides=dict(options or {}),
+        overrides=supplied,
     )
     return assemble_wiring_spec(result, post_hook=post_hook)
 

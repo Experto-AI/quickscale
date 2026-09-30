@@ -477,9 +477,17 @@ def collect_option_validation_issues(
                 for message in _cross_option_issues(manifest, option, resolved)
             )
             continue
-        for message in _single_value_issues(
-            manifest, option, resolved.get(option_name)
-        ):
+        resolved_value = resolved.get(option_name)
+        if not option_type_matches(option.option_type, resolved_value):
+            # A normalization rule changed the canonical shape; the option
+            # must still carry a value of its declared type.
+            issues.append(_type_issue(manifest, option, option_name))
+            issues.extend(
+                OptionValidationIssue(option_name, message)
+                for message in _cross_option_issues(manifest, option, resolved)
+            )
+            continue
+        for message in _single_value_issues(manifest, option, resolved_value):
             issues.append(OptionValidationIssue(option_name, message))
         for message in _cross_option_issues(manifest, option, resolved):
             issues.append(OptionValidationIssue(option_name, message))

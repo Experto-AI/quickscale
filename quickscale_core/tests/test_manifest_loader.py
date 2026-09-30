@@ -1822,6 +1822,13 @@ derivation:
         yaml_content = """
 name: mymod
 version: '1.0.0'
+config:
+  immutable:
+    enabled:
+      type: boolean
+      default: true
+      description: A description
+      validation: {}
 derivation:
   derived_settings:
     - setting_key: MY_APP_ENABLED
@@ -1883,6 +1890,13 @@ derivation:
         yaml_content = """
 name: billing
 version: '1.0.0'
+config:
+  immutable:
+    provider:
+      type: string
+      default: ''
+      description: A description
+      validation: {}
 implies:
   - name: orgs
 derivation:
@@ -1920,6 +1934,18 @@ derivation:
         yaml_content = """
 name: analytics
 version: '1.0.0'
+config:
+  immutable:
+    enabled:
+      type: boolean
+      default: true
+      description: A description
+      validation: {}
+    provider:
+      type: string
+      default: ''
+      description: A description
+      validation: {}
 derivation:
   wiring_projections:
     - wiring_field: apps
@@ -2024,6 +2050,596 @@ derivation:
         with pytest.raises(
             ManifestError,
             match=r"option_derivations\.mode\.derived_settings must be a list",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_settings_entry_must_be_a_mapping(self) -> None:
+        """A null entry in a wired list section fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  derived_settings:\n    - null\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"derivation\.derived_settings\[0\] must be a mapping",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_option_settings_entry_must_be_a_mapping(self) -> None:
+        """A malformed per-option wiring entry fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  option_derivations:\n    mode:\n"
+            "      wiring_projections: [null]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"option_derivations\.mode\.wiring_projections\[0\] must be a mapping",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_settings_expression_must_be_a_mapping(self) -> None:
+        """A null expression would crash the builder, so it fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  derived_settings:\n    - setting_key: X\n"
+            "      derivation_type: direct\n      expression: null\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"derivation\.derived_settings\[0\]\.expression must be a mapping",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_wiring_default_must_be_a_list(self) -> None:
+        """A null wiring default would crash the builder, so it fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n    - wiring_field: apps\n"
+            "      derivation_type: static\n      expression:\n        value: [x]\n"
+            "      default: null\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"derivation\.wiring_projections\[0\]\.default must be a list",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_option_unknown_key_is_refused(self) -> None:
+        """A misspelled per-option key cannot load and be silently ignored."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  option_derivations:\n    tags:\n"
+            "      normalisation_rules:\n        - rule_type: list\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"option_derivations\.tags declares unknown key 'normalisation_rules'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_option_non_string_key_is_refused(self) -> None:
+        """A non-string key is refused, never sorted against strings."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  option_derivations:\n    tags:\n"
+            "      1: []\n"
+        )
+        with pytest.raises(ManifestError, match="declares unknown key '1'"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_conditional_branches_must_be_a_mapping(self) -> None:
+        """A null branches mapping would crash resolution, so it fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n"
+            "      type: string\n"
+            "      default: go\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "derivation:\n  derived_settings:\n"
+            "    - setting_key: X\n"
+            "      source_options: [mode]\n"
+            "      derivation_type: conditional\n"
+            "      expression:\n        branches: null\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"derived_settings\[0\]\.expression\.branches must be a mapping",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_conditional_cannot_select_a_list_option(self) -> None:
+        """A list selector cannot crash branch membership, so it fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    tags:\n"
+            "      type: list\n"
+            "      default: []\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n"
+            "      source_options: [tags]\n"
+            "      derivation_type: conditional\n"
+            "      expression:\n        branches: {a: [x]}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"wiring_projections\[0\]\.source_options cannot select list option 'tags'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_unknown_top_level_key_is_refused(self) -> None:
+        """A dropped top-level declaration cannot load silently."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\nderivation:\n  validations_rules: []\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match="derivation declares unknown key 'validations_rules'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_option_undeclared_name_is_refused(self) -> None:
+        """A misspelled option name cannot load and never normalize."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  option_derivations:\n    tagz:\n"
+            "      normalization_rules:\n        - source_key: tagz\n"
+            "          target_key: tagz\n          rule_type: lowercase\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match="option_derivations.tagz names an undeclared option",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_unknown_wiring_field_is_refused(self) -> None:
+        """A misspelled projection field cannot contribute nothing silently."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: appz\n      derivation_type: static\n"
+            "      expression:\n        value: [x]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"wiring_projections\[0\]\.wiring_field must be one of",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_unknown_derivation_type_is_refused(self) -> None:
+        """A misspelled derivation type cannot skip resolution silently."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: statci\n"
+            "      expression:\n        value: [x]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"wiring_projections\[0\]\.derivation_type must be one of",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_wiring_field_must_be_a_string(self) -> None:
+        """An unhashable field is refused, never a bare TypeError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: [apps]\n      derivation_type: static\n"
+            "      expression:\n        value: [x]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"wiring_projections\[0\]\.wiring_field must be one of",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_computed_template_conversion_is_restricted(self) -> None:
+        """An unsupported conversion cannot load and then render nothing."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: basic\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: computed\n"
+            '      expression:\n        values: ["{mode!z}"]\n'
+        )
+        with pytest.raises(
+            ManifestError,
+            match="conversion '!z' is not supported",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_selector_null_rule_list_is_refused(self) -> None:
+        """A malformed selector rule list is refused, never a TypeError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  option_derivations:\n    mode:\n"
+            "      normalization_rules: null\n"
+            "  wiring_projections:\n"
+            "    - wiring_field: apps\n      source_options: [mode]\n"
+            "      derivation_type: conditional\n"
+            "      expression:\n        branches: {x: [y]}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"option_derivations\.mode\.normalization_rules' must be a list",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_direct_option_must_be_declared(self) -> None:
+        """A direct projection cannot reference an undeclared option."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  derived_settings:\n"
+            "    - setting_key: X\n      derivation_type: direct\n"
+            "      expression:\n        option: ghost\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match="expression.option references unknown option 'ghost'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_static_contribution_must_be_a_list(self) -> None:
+        """A scalar static contribution cannot be silently discarded."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: static\n"
+            "      expression:\n        value: my_app\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.value must be a list of contributions for 'apps'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_url_branch_items_must_be_pairs(self) -> None:
+        """A URL branch item that is not a pair cannot be silently dropped."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: url_includes\n      derivation_type: conditional\n"
+            "      source_options: [mode]\n"
+            "      expression:\n        branches:\n          go: [not-a-pair]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"branches\.go\[0\] must be a \[route, include\] pair",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_template_format_spec_must_format_a_string(self) -> None:
+        """A numeric format spec cannot silently degrade a string template."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  derived_settings:\n"
+            "    - setting_key: X\n      derivation_type: computed\n"
+            '      expression:\n        template: "{mode:+d}"\n'
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"format spec '\+d' cannot format a string",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_rule_keys_must_match_the_owning_option(self) -> None:
+        """A rule naming another key is not executed, so it is refused."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  option_derivations:\n    mode:\n"
+            "      normalization_rules:\n"
+            "        - source_key: ghost\n          target_key: new_mode\n"
+            "          rule_type: lowercase\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"normalization_rules\[0\] must declare source_key and target_key as 'mode'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_excludes_unknown_key_is_refused(self) -> None:
+        """A misspelled gate key cannot enforce a conditional rule always."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    enabled:\n      type: boolean\n      default: true\n"
+            "      description: A description\n      validation: {}\n"
+            "    sender:\n      type: string\n      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n"
+            "        excludes:\n          values: [blocked]\n"
+            "          wen: {enabled: true}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"validation\.excludes declares unknown key 'wen'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_not_empty_marker_must_be_boolean_true(self) -> None:
+        """`{not_empty: 1}` cannot pass and then never match at runtime."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    context:\n      type: string\n      default: ''\n"
+            "      description: A description\n      validation: {}\n"
+            "    token:\n      type: string\n      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n        required_when:\n"
+            "          context: {not_empty: 1}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match="must be a literal, a non-empty list, or {not_empty: true}",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_direct_requires_an_expression(self) -> None:
+        """A direct projection with no option cannot project None silently."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  derived_settings:\n"
+            "    - setting_key: X\n      source_options: [mode]\n"
+            "      derivation_type: direct\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"derived_settings\[0\]\.expression must be a mapping",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_setting_key_must_be_declared(self) -> None:
+        """A derived setting cannot enter the settings map as an empty key."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  derived_settings:\n"
+            "    - derivation_type: direct\n"
+            "      expression:\n        option: mode\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"derived_settings\[0\]\.setting_key must be a non-empty string",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_static_contribution_item_must_be_a_string(self) -> None:
+        """An item the resolver drops or stringifies cannot load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: static\n"
+            "      expression:\n        value: [null]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.value\[0\] must be an app or middleware label",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_nested_rule_keys_must_match_the_owning_option(self) -> None:
+        """A nested item rule naming another key is not executed, so it is refused."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    tags:\n      type: list\n      default: []\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  option_derivations:\n    tags:\n"
+            "      normalization_rules:\n"
+            "        - source_key: tags\n          target_key: tags\n"
+            "          rule_type: list\n"
+            "          item_rules:\n"
+            "            - source_key: ghost\n              rule_type: lowercase\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"item_rules\[0\] must declare source_key as 'tags'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_nested_rule_declared_null_key_is_refused(self) -> None:
+        """A declared nested key is checked even when its value is null."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    tags:\n      type: list\n      default: []\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  option_derivations:\n    tags:\n"
+            "      normalization_rules:\n"
+            "        - source_key: tags\n          target_key: tags\n"
+            "          rule_type: list\n"
+            "          item_rules:\n"
+            "            - source_key: null\n              rule_type: lowercase\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"item_rules\[0\] must declare source_key as 'tags'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_static_requires_a_value(self) -> None:
+        """A static projection with no value cannot load inert."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: static\n"
+            "      expression: {}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.value is required for a static projection",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_computed_requires_a_template(self) -> None:
+        """A computed derived setting with no template cannot project None."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  derived_settings:\n"
+            "    - setting_key: X\n      derivation_type: computed\n"
+            "      expression: {}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.template is required for a computed projection",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_conditional_requires_a_selector(self) -> None:
+        """A conditional projection with no selector cannot load inert."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: conditional\n"
+            "      expression:\n        branches: {x: [y]}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match="source_options must list the selector option",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_contribution_items_must_be_strings(self) -> None:
+        """A mapping item cannot be stringified into an app label."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: static\n"
+            "      expression:\n        value: [{plugin: on}]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.value\[0\] must be an app or middleware label",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_url_pair_must_be_exactly_two_strings(self) -> None:
+        """A malformed pair cannot be silently truncated."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: url_includes\n      derivation_type: static\n"
+            "      expression:\n        value: [[a, b, c]]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.value\[0\] must be a \[route, include\] pair of strings",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_direct_url_default_must_be_pairs(self) -> None:
+        """A known default that cannot be a URL pair fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    routes:\n      type: list\n      default: [users/]\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: url_includes\n      derivation_type: direct\n"
+            "      expression:\n        option: routes\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.option default\[0\] must be a \[route, include\] pair of strings",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_computed_values_items_must_be_strings(self) -> None:
+        """A null computed value cannot become the app label 'None'."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  wiring_projections:\n"
+            "    - wiring_field: apps\n      derivation_type: computed\n"
+            "      expression:\n        values: [null]\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=r"expression\.values\[0\] must be a string",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_computed_template_must_not_be_empty(self) -> None:
+        """An empty template cannot silently project the default."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  derived_settings:\n"
+            "    - setting_key: X\n      derivation_type: computed\n"
+            '      expression:\n        template: ""\n'
+        )
+        with pytest.raises(
+            ManifestError,
+            match="must be a non-empty template",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_computed_template_placeholder_is_restricted(self) -> None:
+        """Attribute access in a template would crash, so it fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    tags:\n      type: string\n      default: ''\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  derived_settings:\n"
+            "    - setting_key: X\n      derivation_type: computed\n"
+            '      expression:\n        template: "{tags.not_a_property}"\n'
+        )
+        with pytest.raises(
+            ManifestError,
+            match="placeholder 'tags.not_a_property' must be a plain option name",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_selector_with_list_normalization_is_refused(self) -> None:
+        """A selector whose rule can yield a list cannot key a branch."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    mode:\n      type: string\n      default: go\n"
+            "      description: A description\n      validation: {}\n"
+            "derivation:\n  option_derivations:\n    mode:\n"
+            "      normalization_rules:\n"
+            "        - source_key: mode\n          target_key: mode\n"
+            "          rule_type: choice_map\n          mapping:\n"
+            "            go: [oops]\n"
+            "  wiring_projections:\n"
+            "    - wiring_field: apps\n      source_options: [mode]\n"
+            "      derivation_type: conditional\n"
+            "      expression:\n        branches: {x: [y]}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match="cannot select 'mode'",
         ):
             load_manifest(yaml_content, "mymod")
 

@@ -320,6 +320,61 @@ class TestExtendedValidationVocabulary:
             "TAGS (modules.demo.tags) contains unsupported items: {'x': True}"
         ]
 
+    def test_rule_after_list_that_changes_shape_is_refused(self) -> None:
+        """A chain that stringifies the list is refused as the wrong shape."""
+        manifest = _manifest(
+            _option("tags", option_type="list", default=[], setting="TAGS")
+        )
+        manifest.option_derivations = {
+            "tags": {
+                "normalization_rules": [
+                    {"source_key": "tags", "target_key": "tags", "rule_type": "list"},
+                    {"source_key": "tags", "target_key": "tags", "rule_type": "slug"},
+                ]
+            }
+        }
+        assert validate_module_options(manifest, {"tags": ["hello", "world"]}) == [
+            "TAGS (modules.demo.tags) must be a list"
+        ]
+
+    def test_canonical_value_must_match_the_declared_type(self) -> None:
+        """A rule that changes the canonical type is refused."""
+        manifest = _manifest(_option("mode", default="", setting="MODE"))
+        manifest.option_derivations = {
+            "mode": {
+                "normalization_rules": [
+                    {
+                        "source_key": "mode",
+                        "target_key": "mode",
+                        "rule_type": "choice_map",
+                        "mapping": {"a": ["wrong"]},
+                    }
+                ]
+            }
+        }
+        assert validate_module_options(manifest, {"mode": "a"}) == [
+            "MODE (modules.demo.mode) must be a string"
+        ]
+
+    def test_canonical_none_is_refused(self) -> None:
+        """A rule that maps a valid value to None is refused."""
+        manifest = _manifest(_option("mode", default="", setting="MODE"))
+        manifest.option_derivations = {
+            "mode": {
+                "normalization_rules": [
+                    {
+                        "source_key": "mode",
+                        "target_key": "mode",
+                        "rule_type": "choice_map",
+                        "mapping": {"a": None},
+                    }
+                ]
+            }
+        }
+        assert validate_module_options(manifest, {"mode": "a"}) == [
+            "MODE (modules.demo.mode) must be a string"
+        ]
+
     def test_choices_on_a_list_checks_each_item(self) -> None:
         manifest = _manifest(
             _option(

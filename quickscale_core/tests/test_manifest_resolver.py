@@ -2082,3 +2082,40 @@ class TestListNormalization:
             manifest, schema, overrides={"providers": ["ok", {"ops": True}]}
         )
         assert result.resolved["providers"] == ["ok", {"ops": True}]
+
+    def test_item_rule_container_is_not_stringified_by_a_later_rule(self) -> None:
+        """A rule producing a container ends the item chain, not slugged."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        schema = _make_schema(
+            option_derivations={
+                "providers": OptionDerivation(
+                    option_key="providers",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="list",
+                            item_rules=[
+                                NormalizationRule(
+                                    source_key="providers",
+                                    target_key="providers",
+                                    rule_type="choice_map",
+                                    mapping={"ok": {"key": "val"}},
+                                ),
+                                NormalizationRule(
+                                    source_key="providers",
+                                    target_key="providers",
+                                    rule_type="slug",
+                                ),
+                            ],
+                        )
+                    ],
+                )
+            }
+        )
+        result = resolve_module_config(
+            manifest, schema, overrides={"providers": ["ok"]}
+        )
+        assert result.resolved["providers"] == [{"key": "val"}]

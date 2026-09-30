@@ -178,6 +178,10 @@ def _apply_list_rule(value: Any, rule: NormalizationRule) -> Any:
         candidate = item
         for item_rule in rule.item_rules:
             candidate = _apply_normalization_rule(candidate, item_rule)
+            if candidate is None or _is_empty_container(candidate):
+                break
+            if not isinstance(candidate, (str, int, float, bool)):
+                break
         if candidate is None:
             continue
         if isinstance(candidate, str) and not candidate.strip():
@@ -528,7 +532,10 @@ def _project_derived_setting(setting: DerivedSetting, resolved: dict[str, Any]) 
         for source_key in setting.source_options:
             if source_key in resolved:
                 selector = resolved[source_key]
-                if selector in branches:
+                if (
+                    isinstance(selector, (str, int, float, bool))
+                    and selector in branches
+                ):
                     return branches[selector]
         return setting.default
 
@@ -544,7 +551,7 @@ def _project_derived_setting(setting: DerivedSetting, resolved: dict[str, Any]) 
                     k: str(v) if v is not None else "" for k, v in resolved.items()
                 }
                 return template.format(**context)
-            except KeyError, IndexError, ValueError:
+            except KeyError, IndexError, ValueError, AttributeError:
                 return setting.default
         return setting.default
 
@@ -666,7 +673,10 @@ def _project_wiring_contribution(
         for source_key in projection.source_options:
             if source_key in resolved:
                 selector = resolved[source_key]
-                if selector in branches:
+                if (
+                    isinstance(selector, (str, int, float, bool))
+                    and selector in branches
+                ):
                     return _coerce_contribution(branches[selector], wiring_field)
         return _coerce_contribution(projection.default, wiring_field)
 
@@ -681,7 +691,7 @@ def _project_wiring_contribution(
             try:
                 rendered = str(template).format(**context)
                 result.append(rendered)
-            except KeyError, IndexError, ValueError:
+            except KeyError, IndexError, ValueError, AttributeError:
                 pass
         if result:
             return _coerce_contribution(result, wiring_field)

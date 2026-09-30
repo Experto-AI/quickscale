@@ -121,6 +121,13 @@ class TestResolveManifestModuleOptions:
                 "notifications", {"resend_api_key": "raw-secret"}
             )
 
+    def test_generic_adapter_boundary_refuses_a_retired_key(self) -> None:
+        """The adapter entry point refuses a retired key before resolving."""
+        from quickscale_core.manifest.entry_point import build_generic_manifest_spec
+
+        with pytest.raises(ConfigValidationError, match="access_key_id"):
+            build_generic_manifest_spec("storage", {"access_key_id": "raw-secret"})
+
 
 # ===================================================================
 # Notifications

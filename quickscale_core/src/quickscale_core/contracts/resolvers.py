@@ -42,12 +42,13 @@ def load_module_manifest_with_fallback(module_name: str) -> Any:
     )
 
 
-def _raise_for_retired_options(manifest: Any, options: Mapping[str, Any]) -> None:
+def raise_for_retired_options(manifest: Any, options: Mapping[str, Any]) -> None:
     """Refuse a supplied key the manifest declares retired.
 
     ``retired_options`` is the one home of a retired key's refusal; resolving
     fails closed with the authored message instead of silently dropping the
-    key, matching the sanitize and validation layers.
+    key, matching the sanitize and validation layers.  Both the generic
+    resolver here and the adapter entry point call this guard.
     """
     retired = sorted(name for name in manifest.retired_options if name in options)
     if not retired:
@@ -71,7 +72,7 @@ def resolve_manifest_module_options(
     """
     manifest = load_module_manifest_with_fallback(module_name)
     supplied = dict(options or {})
-    _raise_for_retired_options(manifest, supplied)
+    raise_for_retired_options(manifest, supplied)
     schema = build_schema_from_manifest(
         manifest_name=module_name,
         wiring_projections=manifest.wiring_projections,
@@ -85,5 +86,6 @@ def resolve_manifest_module_options(
 
 __all__ = [
     "load_module_manifest_with_fallback",
+    "raise_for_retired_options",
     "resolve_manifest_module_options",
 ]
