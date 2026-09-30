@@ -1,89 +1,145 @@
 # QuickScale Auth Module
 
-**Status**: ✅ Production Ready
+Production-ready standalone authentication module for QuickScale projects using django-allauth,
+with a custom user model and organization-aware account flows.
 
-Production-ready standalone authentication module for QuickScale projects using django-allauth with custom User model patterns.
+## Overview
 
-## Features
+- django-allauth integration for email/password authentication.
+- Custom `User` model extending Django's `AbstractUser`, ready for custom fields.
+- Authentication views: login, logout, signup, and password management.
+- Account management: profile view/edit and account deletion.
+- Responsive account templates and client-side plus server-side form validation.
+- Security: CSRF protection and password strength indicators.
+- A post-registration signal receiver for project-specific logic.
+- A declarative `module.yml` manifest with mutable and immutable options.
 
-### ✅ Implemented
+`orgs` is required alongside `auth`: it supplies the account adapter that extends this module's
+adapter with organization-aware post-login redirects, the tenant middleware, and the
+`QUICKSCALE_MODE` runtime mode. Dependencies: Django 6.0+ and django-allauth
+`>=65.18.0,<66.0.0`.
 
-- **django-allauth Integration**: Email/password authentication
-- **Custom User Model**: Extends Django's AbstractUser with custom fields support
-- **Authentication Views**: Login, logout, signup, password management
-- **Account Management**: Profile view/edit, account deletion
-- **Modern HTML Theme**: Beautiful, responsive design with gradients and animations
-- **Module Navigation**: Dynamic navigation showing installed/uninstalled modules
-- **Form Validation**: Client-side and server-side validation
-- **Security**: CSRF protection, password strength indicators
-- **Signals**: Post-registration hooks for custom logic
-- **Module Manifest**: Declarative config with mutable/immutable options
+## Configuration
 
-## Module Manifest
+The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
+write them to the generated settings, and `quickscale.yml` carries the desired values.
 
-The auth module includes a `module.yml` manifest that defines configuration options:
+### Mutable options
 
-### Mutable Options (can be changed anytime with `quickscale apply`)
+Mutable options can be changed at any time with `quickscale apply`.
 
-| Option | Django Setting | Default | Description |
-|--------|---------------|---------|-------------|
-| `registration_enabled` | `ACCOUNT_ALLOW_REGISTRATION` | `true` | Allow new user signups |
-| `email_verification` | `ACCOUNT_EMAIL_VERIFICATION` | `none` | Email verification mode |
-| `session_cookie_age` | `SESSION_COOKIE_AGE` | `1209600` | Session timeout in seconds |
-
-### Immutable Options (set when the module is first added, cannot be changed)
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `authentication_method` | `email` | How users authenticate (email, username, or both) |
-
-### Changing Configuration
-
-**Mutable options** can be changed in `quickscale.yml` and applied:
+| Option | Type | Default | Django setting | Description |
+|--------|------|---------|----------------|-------------|
+| `registration_enabled` | boolean | `true` | `ACCOUNT_ALLOW_REGISTRATION` | Allow new user signups. |
+| `email_verification` | string | `none` | `ACCOUNT_EMAIL_VERIFICATION` | Email verification requirement: `none`, `optional`, or `mandatory`. |
+| `session_cookie_age` | integer | `1209600` | `SESSION_COOKIE_AGE` | Session cookie lifetime in seconds (default: 2 weeks). |
 
 ```yaml
 modules:
   auth:
-    options:
-      registration_enabled: false  # Disable signups
-      session_cookie_age: 86400    # 1 day session
+    registration_enabled: false  # Disable signups
+    session_cookie_age: 86400    # 1 day session
 ```
 
 ```bash
 quickscale apply
 ```
 
-**Immutable options** require removing the module configuration and adding it again with the new values:
+### Immutable options
+
+Immutable options are set when the module is first added and cannot be changed in place.
+Changing one requires removing the module configuration and adding it again with the new
+values:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `authentication_method` | string | `email` | How users authenticate: `email`, `username`, or `both`. |
 
 ```bash
 quickscale remove auth
-# Update quickscale.yml with new immutable options
+# Update quickscale.yml with the new immutable options
 quickscale apply
 ```
 
-## Navigation & Module Integration
+### allauth settings
 
-The auth module includes dynamic navigation that shows all available QuickScale modules:
+The generated settings render the options above into the django-allauth configuration
+(65.x format):
 
-- **Installed modules**: Displayed as clickable links with icons
-- **Uninstalled modules**: Shown as disabled/grayed out with "Not installed" indicator
-- **Automatic detection**: Uses QuickScale's module configuration system
-- **Responsive design**: Navigation adapts to mobile screens
+```python
+AUTH_USER_MODEL = "quickscale_auth.User"
+SITE_ID = 1
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_ALLOW_REGISTRATION = True
+ACCOUNT_ADAPTER = "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
+ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"
+LOGIN_REDIRECT_URL = "/accounts/profile/"
+LOGOUT_REDIRECT_URL = "/"
+QUICKSCALE_MODE = "solo"  # or "saas"
+```
 
-Current documented navigation entry:
-- 👤 **Authentication** - Current module (always enabled when installed)
+`ACCOUNT_LOGIN_METHODS` and `ACCOUNT_SIGNUP_FIELDS` follow `authentication_method`:
 
-Additional cross-module links should only be documented here once the corresponding shipped integration is part of the auth surface.
+```python
+# username only
+ACCOUNT_LOGIN_METHODS = {"username"}
+ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]
 
-### 🚧 Still Evolving
+# both
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+```
 
-- **Email verification workflows**: Stronger production email flows may continue to evolve
-- **Social provider integrations**: Google, GitHub, and similar integrations remain future-facing and are not part of the current shipped configuration contract
-- **Additional theme variants**: HTML and React-specific auth experiences may expand over time
+Session handling:
 
-## Installation
+```python
+SESSION_COOKIE_AGE = 1209600  # 2 weeks
+SESSION_SAVE_EVERY_REQUEST = True  # Extend session on activity
+```
 
-### 1. Add the Module
+## Public surface
+
+- `User` model (`quickscale_auth.User`) extending `AbstractUser`; `AUTH_USER_MODEL` points at
+  it.
+- `SignupForm` in `forms.py`, wired through `ACCOUNT_SIGNUP_FORM_CLASS`.
+- Account templates under `templates/quickscale_auth/` (with allauth overrides under
+  `templates/account/`) extending `quickscale_auth/base.html`.
+- Static assets under `static/quickscale_modules_auth/{css,js}/`.
+- Account flows: login, logout, signup, password change and reset, profile view/edit, and
+  account deletion.
+- `receivers.py` connects a `user_signed_up` receiver from `ready()` as the post-registration
+  hook; `signals.py` is reserved for signals the module sends.
+- `allauth_adapter.py` holds the module's allauth account adapter; orgs' adapter subclasses it
+  so the installed pair keeps organization-aware redirects.
+
+## URLs
+
+The module mounts under `accounts/`, alongside django-allauth's own routes:
+
+| Path | Source | Purpose |
+|------|--------|---------|
+| `accounts/login/` | django-allauth | Login page |
+| `accounts/signup/` | django-allauth | Registration page |
+| `accounts/logout/` | django-allauth | Logout confirmation |
+| `accounts/password/change/` | django-allauth | Change password |
+| `accounts/password/reset/` | django-allauth | Request password reset |
+| `accounts/profile/` (`quickscale_auth:profile`) | Module | View profile |
+| `accounts/profile/edit/` (`quickscale_auth:profile-edit`) | Module | Edit profile |
+| `accounts/account/delete/` (`quickscale_auth:account-delete`) | Module | Delete account |
+
+## Management commands
+
+This module ships no management commands.
+
+## Operations
+
+Add the module through QuickScale:
 
 ```bash
 quickscale plan myapp --add auth
@@ -91,317 +147,73 @@ cd myapp
 quickscale apply
 ```
 
-This workflow will:
-- Add the auth module to your project configuration
-- Embed module files into `modules/auth/` during `quickscale apply`
-- Automatically configure settings and URLs
-- Run initial migrations as part of apply
+`quickscale apply` embeds the module into `modules/auth/`, configures settings, middleware, and
+URLs, and runs the initial migrations.
 
-### 2. Manual Configuration (if needed)
-
-If you need to manually configure the module:
-
-#### Add to INSTALLED_APPS in `settings.py`:
+A manual installation adds `allauth`, `allauth.account`, `django.contrib.sites`,
+`quickscale_modules_auth`, and `quickscale_modules_orgs` to `INSTALLED_APPS`; adds
+`allauth.account.middleware.AccountMiddleware` and
+`quickscale_modules_orgs.middleware.TenantMiddleware` to `MIDDLEWARE`; applies the settings
+block above; and includes the URLs:
 
 ```python
-INSTALLED_APPS = [
-    # Django apps
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "django.contrib.sites",  # Required by allauth
-    # Third-party apps
-    "allauth",
-    "allauth.account",
-    # QuickScale modules (orgs is required alongside auth)
-    "quickscale_modules_auth",
-    "quickscale_modules_orgs",
-    # Your apps
-    # ...
-]
-```
-
-#### Add the required middleware in `settings.py`:
-
-```python
-MIDDLEWARE = [
-    # ... existing middleware, AuthenticationMiddleware included ...
-    "allauth.account.middleware.AccountMiddleware",
-    "quickscale_modules_orgs.middleware.TenantMiddleware",
-]
-```
-
-#### Configure django-allauth in `settings.py`:
-
-```python
-# Authentication backends
-AUTHENTICATION_BACKENDS = [
-    "django.contrib.auth.backends.ModelBackend",
-    "allauth.account.auth_backends.AuthenticationBackend",
-]
-
-# Custom user model
-AUTH_USER_MODEL = "quickscale_auth.User"
-
-# Site ID (required by django.contrib.sites)
-SITE_ID = 1
-
-# Allauth settings (django-allauth 65.x format)
-ACCOUNT_LOGIN_METHODS = {"email"}
-ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "none"  # Set to "mandatory" or "optional" as needed
-ACCOUNT_ALLOW_REGISTRATION = True  # Set to False to disable signups
-# orgs installs alongside auth; its adapter extends auth's and keeps the
-# organization-aware post-login redirects.
-ACCOUNT_ADAPTER = "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
-# Required when orgs is installed: "solo" (single-tenant) or "saas".
-QUICKSCALE_MODE = "solo"
-ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"
-LOGIN_REDIRECT_URL = "/accounts/profile/"
-LOGOUT_REDIRECT_URL = "/"
-
-# Session settings
-SESSION_COOKIE_AGE = 1209600  # 2 weeks
-```
-
-#### Include auth URLs in your project's `urls.py`:
-
-```python
-from django.contrib import admin
-from django.urls import path, include
-
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
-    path("accounts/", include("quickscale_modules_auth.urls")),  # Auth URLs
+    path("accounts/", include("quickscale_modules_auth.urls")),
     # Required alongside auth. In solo mode keep this include before your
     # home route; in saas mode place it after the home route.
-    path("", include("quickscale_modules_orgs.urls")),  # Orgs URLs
-    # Your other URLs
+    path("", include("quickscale_modules_orgs.urls")),
 ]
 ```
 
-orgs is required alongside auth; the app, middleware, URL include, and
-`QUICKSCALE_MODE` entries above are its minimum manual configuration. Orgs
-refuses a superuser or BYPASSRLS database connection unless the command is its
-guarded one-shot migration:
+Run migrations through the privileged one-shot command; orgs refuses a superuser or BYPASSRLS
+database connection otherwise:
 
 ```bash
 QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate
 ```
 
-Serve under a restricted role (NOSUPERUSER, NOBYPASSRLS). The
-`QUICKSCALE_ALLOW_BYPASSRLS=1` opt-in is for non-serving single-tenant
-development and tests, never serving; see the
+Serve under a restricted role (NOSUPERUSER, NOBYPASSRLS). The `QUICKSCALE_ALLOW_BYPASSRLS=1`
+opt-in is for non-serving single-tenant development and tests, never serving; see the
 [Launcher One-Shot Command-Env Contract](../../docs/technical/decisions.md#launcher-one-shot-command-env-contract).
 
-### 3. Run Migrations
+Optionally create a superuser with `python manage.py createsuperuser`.
 
-```bash
-QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate
-```
+### Template customization
 
-### 4. Create Superuser (Optional)
+All account templates extend `quickscale_auth/base.html`. Override the base template at
+`templates/quickscale_auth/base.html`, individual pages at
+`templates/quickscale_auth/account/<page>.html`, and add custom assets under
+`static/quickscale_modules_auth/css/` or `js/`.
 
-```bash
-python manage.py createsuperuser
-```
+### Troubleshooting
 
-## Usage
+- **"No such table: quickscale_auth_user"** — run `python manage.py migrate quickscale_auth`.
+- **"AUTH_USER_MODEL refers to model that has not been installed"** — add
+  `quickscale_modules_auth` to `INSTALLED_APPS` before running migrations.
+- **Login redirects to `/accounts/profile/` but the page does not exist** — set a different
+  `LOGIN_REDIRECT_URL`.
+- **Templates not found** — ensure `quickscale_modules_auth` is in `INSTALLED_APPS` and run
+  `python manage.py collectstatic`.
 
-### Available URLs
+## Extending
 
-After embedding the module, these URLs are available:
-
-- `/accounts/login/` - Login page
-- `/accounts/signup/` - Registration page
-- `/accounts/logout/` - Logout confirmation
-- `/accounts/password/change/` - Change password
-- `/accounts/password/reset/` - Request password reset
-- `/accounts/profile/` - View profile
-- `/accounts/profile/edit/` - Edit profile
-- `/accounts/account/delete/` - Delete account
-
-### Template Customization
-
-All templates extend `quickscale_auth/base.html`. To customize:
-
-1. **Override the base template** in your project:
-   ```
-   templates/quickscale_auth/base.html
-   ```
-
-2. **Override individual templates**:
-   ```
-   templates/quickscale_auth/account/login.html
-   templates/quickscale_auth/account/signup.html
-   ```
-
-3. **Add custom CSS/JS**:
-   ```
-   static/quickscale_modules_auth/css/custom.css
-   static/quickscale_modules_auth/js/custom.js
-   ```
-
-### Custom User Fields
-
-To add custom fields to the User model:
-
-1. **Edit** `modules/auth/models.py`:
-   ```python
-   class User(AbstractUser):
-       # Add custom fields
-       phone = models.CharField(max_length=20, blank=True)
-       bio = models.TextField(blank=True)
-   ```
-
-2. **Create migration**:
-   ```bash
-   python manage.py makemigrations quickscale_auth
-   python manage.py migrate
-   ```
-
-3. **Update forms** to include new fields in `modules/auth/forms.py`
-
-### Signal Handlers
-
-The module provides a post-registration signal receiver in `receivers.py`. Customize it to add your own logic:
-
-```python
-@receiver(user_signed_up)
-def on_user_signed_up(sender, request, user, **kwargs):
-    # Send welcome email
-    send_welcome_email(user.email)
-
-    # Create user profile
-    UserProfile.objects.create(user=user)
-
-    # Log registration
-    logger.info(f"New user registered: {user.username}")
-```
-
-## Configuration Options
-
-### Enable/Disable Registration
-
-```python
-# In settings.py
-ACCOUNT_ALLOW_REGISTRATION = False  # Disable signups
-```
-
-### Change Authentication Method
-
-```python
-# Use email only (default) - django-allauth 65.x format
-ACCOUNT_LOGIN_METHODS = {"email"}
-ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
-
-# Use username only
-ACCOUNT_LOGIN_METHODS = {"username"}
-ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]
-
-# Use both (optional alternative)
-ACCOUNT_LOGIN_METHODS = {"email", "username"}
-ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
-```
-
-### Session Timeout
-
-```python
-SESSION_COOKIE_AGE = 86400  # 1 day in seconds
-SESSION_SAVE_EVERY_REQUEST = True  # Extend session on activity
-```
-
-## Testing
-
-Run module tests:
-
-```bash
-cd modules/auth
-pytest
-```
-
-With coverage:
-
-```bash
-pytest --cov=src/quickscale_modules_auth --cov-report=html
-```
-
-## Troubleshooting
-
-### Issue: "No such table: quickscale_auth_user"
-
-**Solution**: Run migrations:
-```bash
-python manage.py migrate quickscale_auth
-```
-
-### Issue: "AUTH_USER_MODEL refers to model that has not been installed"
-
-**Solution**: Add `quickscale_modules_auth` to INSTALLED_APPS before running migrations.
-
-### Issue: Login redirects to /accounts/profile/ but page doesn't exist
-
-**Solution**: Either create a profile view or set a different LOGIN_REDIRECT_URL:
-```python
-LOGIN_REDIRECT_URL = "/"  # Redirect to home page instead
-```
-
-### Issue: Templates not found
-
-**Solution**: Ensure `quickscale_modules_auth` is in INSTALLED_APPS and collectstatic has been run:
-```bash
-python manage.py collectstatic
-```
-
-## Module Distribution
-
-This module uses **git subtree** distribution:
-
-- **Development**: `quickscale_modules/auth/` on main branch
-- **Distribution**: `splits/auth-module` branch
-- **Project configuration**: `quickscale plan myapp --add auth` followed by `quickscale apply`
-- **Updates**: `quickscale update`
-
-## Contributing
-
-To contribute improvements:
-
-```bash
-# Make changes in modules/auth/
-git add modules/auth/
-git commit -m "feat(auth): your improvement"
-
-# Push back to QuickScale (if you have access)
-quickscale push --module auth
-
-# Or create a pull request with your changes
-```
-
-## Dependencies
-
-- Django 6.0+
-- django-allauth 65.14+
-
-## Documentation
-
-- [django-allauth Documentation](https://django-allauth.readthedocs.io/)
-- [QuickScale User Manual](https://github.com/Experto-AI/quickscale/blob/main/docs/technical/user_manual.md)
-- [QuickScale Roadmap](https://github.com/Experto-AI/quickscale/blob/main/docs/technical/roadmap.md)
-
-## License
-
-Apache 2.0 License - Same as QuickScale project
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/Experto-AI/quickscale/issues)
-- **Docs**: [QuickScale Documentation](https://github.com/Experto-AI/quickscale/tree/main/docs)
-- **Release updates**: Follow the main QuickScale docs and tagged release notes for current support surface changes
-
----
-
-**Note**: This module is production-ready for basic authentication. Advanced capabilities such as email verification and future social provider integrations may continue to evolve in later releases.
+- **Custom user fields**: add fields to `User` in `modules/auth/models.py`, run
+  `python manage.py makemigrations quickscale_auth && python manage.py migrate`, and update
+  `forms.py` to include them.
+- **Registration hooks**: extend the `user_signed_up` receiver in `receivers.py` to add
+  welcome emails, profiles, or logging.
+- **Social providers**: provider integrations are not part of the current shipped
+  configuration contract.
+- **Distribution and updates**: modules are distributed through the git-subtree workflow;
+  update an embedded module with `quickscale update`.
+- **Development**: module tests run from the maintainer repository root, for example
+  `make MODULE=auth test -- --modules`; run `poetry run pytest` inside the module directory for
+  a standalone checkout.
+- **Documentation**: [django-allauth documentation](https://django-allauth.readthedocs.io/),
+  [QuickScale user manual](../../docs/technical/user_manual.md), and
+  [QuickScale roadmap](../../docs/technical/roadmap.md).
+- **Support**: [GitHub Issues](https://github.com/Experto-AI/quickscale/issues) and the
+  [QuickScale documentation](https://github.com/Experto-AI/quickscale/tree/main/docs).
+- Licensed under the Apache 2.0 License, same as the QuickScale project.
