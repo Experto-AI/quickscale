@@ -26,7 +26,7 @@ class TestTemplateCSSLoading:
 
         # Verify CSS block exists and loads auth.css
         assert "{% block extra_css %}" in template_content
-        assert "quickscale_modules_auth/css/auth.css" in template_content
+        assert "quickscale_auth/css/auth.css" in template_content
 
         # Verify block.super is called to inherit parent CSS
         assert "{{ block.super }}" in template_content
@@ -35,19 +35,19 @@ class TestTemplateCSSLoading:
         """Test profile page includes auth module CSS"""
         response = authenticated_client.get(reverse("quickscale_auth:profile"))
         assert response.status_code == 200
-        assert b"quickscale_modules_auth/css/auth.css" in response.content
+        assert b"quickscale_auth/css/auth.css" in response.content
 
     def test_profile_edit_page_includes_auth_css(self, authenticated_client):
         """Test profile edit page includes auth module CSS"""
         response = authenticated_client.get(reverse("quickscale_auth:profile-edit"))
         assert response.status_code == 200
-        assert b"quickscale_modules_auth/css/auth.css" in response.content
+        assert b"quickscale_auth/css/auth.css" in response.content
 
     def test_account_delete_page_includes_auth_css(self, authenticated_client):
         """Test account delete page includes auth module CSS"""
         response = authenticated_client.get(reverse("quickscale_auth:account-delete"))
         assert response.status_code == 200
-        assert b"quickscale_modules_auth/css/auth.css" in response.content
+        assert b"quickscale_auth/css/auth.css" in response.content
 
     def test_login_page_uses_shared_shell_and_login_specific_structure(
         self, anonymous_client
@@ -58,7 +58,7 @@ class TestTemplateCSSLoading:
 
         content = response.content.decode("utf-8")
         assert 'class="site-nav"' in content
-        assert "quickscale_modules_auth/css/auth.css" in content
+        assert "quickscale_auth/css/auth.css" in content
         assert 'data-auth-view="login"' in content
         assert 'class="auth-login"' in content
         assert "auth-form-container--login" in content
@@ -69,7 +69,7 @@ class TestTemplateCSSLoading:
 
         module_path = Path(quickscale_modules_auth.__file__).parent
         auth_css = (
-            module_path / "static" / "quickscale_modules_auth" / "css" / "auth.css"
+            module_path / "static" / "quickscale_auth" / "css" / "auth.css"
         ).read_text()
         assert (
             '.form-group input:not([type="checkbox"]):not([type="radio"])' in auth_css
@@ -82,7 +82,7 @@ class TestTemplateCSSLoading:
 
         content = response.content.decode("utf-8")
         main_css_pos = content.find('href="/static/css/style.css"')
-        auth_css_pos = content.find("quickscale_modules_auth/css/auth.css")
+        auth_css_pos = content.find("quickscale_auth/css/auth.css")
 
         # Both should be present
         assert main_css_pos != -1, "Main CSS not found in response"
