@@ -11,7 +11,6 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError
 from django.db.models import QuerySet
 from django.http import HttpRequest
@@ -44,37 +43,10 @@ from .permissions import IsStaffUser
 
 
 logger = logging.getLogger(__name__)
-DEFAULT_LISTINGS_PER_PAGE = 12
 
 # ---------------------------------------------------------------------------
 # Publish API helpers
 # ---------------------------------------------------------------------------
-
-
-def _get_positive_int_setting(setting_name: str) -> int:
-    """Return a positive integer setting value or raise ImproperlyConfigured.
-
-    SA30: direct required read — rejects missing, non-integer, and non-positive
-    values with a descriptive error instead of silently falling back.
-    """
-    value = getattr(settings, setting_name, None)
-    if value is None:
-        raise ImproperlyConfigured(f"{setting_name} setting is required.")
-    if isinstance(value, bool):
-        raise ImproperlyConfigured(
-            f"{setting_name} must be a valid positive integer, got {type(value).__name__}"
-        )
-    try:
-        parsed_value = int(value)
-    except TypeError, ValueError:
-        raise ImproperlyConfigured(
-            f"{setting_name} must be a valid positive integer, got {value!r}"
-        )
-    if parsed_value <= 0:
-        raise ImproperlyConfigured(
-            f"{setting_name} must be a positive integer, got {parsed_value}"
-        )
-    return parsed_value
 
 
 def create_published_listing_from_payload(
@@ -258,17 +230,17 @@ class ListingListView(ListingsPublicReadMixin, ListView):
     model = Listing
     template_name = "quickscale_listings/listings/listing_list.html"
     context_object_name = "listings"
-    paginate_by = DEFAULT_LISTINGS_PER_PAGE
     filterset_class: type[Any] | None = None
 
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
-        """Return the runtime-configured listings-per-page value.
+        """Return the project's declared page size.
 
-        SA30: raises ``ImproperlyConfigured`` when ``LISTINGS_PER_PAGE`` is
-        missing, non-integer, or non-positive instead of silently defaulting.
+        Rule 3: the value is read directly from Django settings, which the
+        module's startup check has already validated against the manifest's
+        schema, so there is no fallback here.
         """
         del queryset
-        return _get_positive_int_setting("LISTINGS_PER_PAGE")
+        return settings.LISTINGS_PER_PAGE
 
     def get_filterset_class(self) -> type[Any]:
         """Resolve the filterset class, defaulting to the shared factory."""
