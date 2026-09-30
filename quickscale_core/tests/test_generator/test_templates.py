@@ -3236,7 +3236,7 @@ class TestDevOpsTemplateRendering:
     def test_ci_workflow_contains_tenant_isolation_check(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """CI workflow should include a check_tenant_isolation step when orgs is selected or implied (SA1.5)."""
+        """CI workflow should include a check_tenant_isolation step when orgs is selected or required (SA1.5)."""
         template = jinja_env.get_template("github/workflows/ci.yml.j2")
 
         # Default (selected_modules=None) — legacy behavior: render the step
@@ -3267,7 +3267,7 @@ class TestDevOpsTemplateRendering:
     def test_makefile_contains_check_tenant_isolation_target(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Makefile should include a check-tenant-isolation target when orgs is selected or implied (SA1.5)."""
+        """Makefile should include a check-tenant-isolation target when orgs is selected or required (SA1.5)."""
         template = jinja_env.get_template("Makefile.j2")
 
         # Default (selected_modules=None) — legacy behavior: render target

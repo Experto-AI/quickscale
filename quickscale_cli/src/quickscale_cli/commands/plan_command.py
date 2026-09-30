@@ -31,7 +31,7 @@ from quickscale_core.contracts.module_catalog import (
     ModuleCatalogEntry,
     get_module_readiness_reason,
 )
-from quickscale_core.manifest.implications import resolve_module_implications
+from quickscale_core.manifest.required_modules import resolve_required_modules
 from quickscale_core.schema.config_schema import (
     ConfigValidationError,
     DockerConfig,
@@ -87,30 +87,30 @@ def _merge_module_names(*module_groups: list[str]) -> list[str]:
     return merged
 
 
-def _materialize_implied_module_configs(
+def _materialize_required_module_configs(
     module_names: list[str],
     module_options: dict[str, dict[str, Any]],
 ) -> tuple[list[str], dict[str, dict[str, Any]], list[str]]:
-    """Add explicit config blocks for modules that are implied by selection."""
+    """Add explicit config blocks for modules required by the selection."""
     present_module_names = _merge_module_names(
         module_names, list(module_options.keys())
     )
-    implied_configs = resolve_module_implications(present_module_names)
-    if not implied_configs:
+    required_configs = resolve_required_modules(present_module_names)
+    if not required_configs:
         return present_module_names, module_options, []
 
     merged_module_names = _merge_module_names(
         present_module_names,
-        list(implied_configs.keys()),
+        list(required_configs.keys()),
     )
     merged_module_options = dict(module_options)
-    for module_name, options in implied_configs.items():
+    for module_name, options in required_configs.items():
         merged_module_options[module_name] = _copy_module_options(
             options,
             module_name=module_name,
         )
 
-    return merged_module_names, merged_module_options, list(implied_configs.keys())
+    return merged_module_names, merged_module_options, list(required_configs.keys())
 
 
 def _get_existing_module_options(
@@ -491,7 +491,7 @@ def _prepare_added_module_data(
     *,
     configure_modules: bool,
 ) -> tuple[list[str], dict[str, dict[str, Any]], list[str]]:
-    """Prepare module options and implied modules for add mode."""
+    """Prepare module options and required modules for add mode."""
     existing_options = _get_existing_module_options(project_path, existing_config)
     all_modules = _merge_module_names(all_existing, new_modules)
 
@@ -507,23 +507,23 @@ def _prepare_added_module_data(
         for module_name in new_modules:
             existing_options.setdefault(module_name, {})
 
-    all_modules, existing_options, implied_modules = (
-        _materialize_implied_module_configs(
+    all_modules, existing_options, required_modules = (
+        _materialize_required_module_configs(
             all_modules,
             existing_options,
         )
     )
-    if implied_modules:
-        new_modules = _merge_module_names(new_modules, implied_modules)
-        # Run implied modules through registry-backed configurators so that
-        # billing/CRM planner flows invoke configurators for implied
+    if required_modules:
+        new_modules = _merge_module_names(new_modules, required_modules)
+        # Run required modules through registry-backed configurators so that
+        # billing/CRM planner flows invoke configurators for required
         # notifications/orgs in the same planning pass.
         if configure_modules:
             existing_options.update(
                 _configure_selected_modules(
-                    implied_modules,
+                    required_modules,
                     existing_options,
-                    new_modules=set(implied_modules),
+                    new_modules=set(required_modules),
                 )
             )
 
@@ -790,19 +790,21 @@ def _handle_reconfigure(
             )
         )
 
-    all_modules, module_options, implied_modules = _materialize_implied_module_configs(
-        all_modules,
-        module_options,
+    all_modules, module_options, required_modules = (
+        _materialize_required_module_configs(
+            all_modules,
+            module_options,
+        )
     )
-    # Run implied modules through registry-backed configurators so that
-    # reconfigure flows invoke configurators for implied notifications/orgs
+    # Run required modules through registry-backed configurators so that
+    # reconfigure flows invoke configurators for required notifications/orgs
     # in the same planning pass.
-    if configure_modules and implied_modules:
+    if configure_modules and required_modules:
         module_options.update(
             _configure_selected_modules(
-                implied_modules,
+                required_modules,
                 module_options,
-                new_modules=set(implied_modules),
+                new_modules=set(required_modules),
             )
         )
 
@@ -1041,21 +1043,21 @@ def _build_new_project_config(
             )
         )
 
-    selected_modules, module_options, implied_modules = (
-        _materialize_implied_module_configs(
+    selected_modules, module_options, required_modules = (
+        _materialize_required_module_configs(
             selected_modules,
             module_options,
         )
     )
-    # Run implied modules through registry-backed configurators so that
-    # new-project flows invoke configurators for implied notifications/orgs
+    # Run required modules through registry-backed configurators so that
+    # new-project flows invoke configurators for required notifications/orgs
     # in the same planning pass.
-    if configure_modules and implied_modules:
+    if configure_modules and required_modules:
         module_options.update(
             _configure_selected_modules(
-                implied_modules,
+                required_modules,
                 module_options,
-                new_modules=set(implied_modules),
+                new_modules=set(required_modules),
             )
         )
 

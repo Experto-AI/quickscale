@@ -154,26 +154,6 @@ class ProjectContractVintage:
 
 
 @dataclass
-class ImpliesEntry:
-    """Declares that this module implies another module should also be included.
-
-    When module A implies module B, the implication resolver (T2.2) will ensure
-    module B is added to the effective module set whenever A is selected.
-    An optional ``default_config`` provides configuration defaults to apply
-    to the implied module.
-
-    Attributes:
-        name: The implied module name (must match a known module).
-        default_config: Optional default configuration values for the
-            implied module.  Keys are config option names; values are
-            the defaults to apply.
-    """
-
-    name: str
-    default_config: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
 class ModuleManifest:
     """Complete module manifest from module.yml"""
 
@@ -185,7 +165,6 @@ class ModuleManifest:
     required_modules: list[str] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
     managed_files: dict[str, ManagedFileDeclaration] = field(default_factory=dict)
-    implies: list[ImpliesEntry] = field(default_factory=list)
 
     # ------------------------------------------------------------------ #
     # Derivation metadata (T2.3+)

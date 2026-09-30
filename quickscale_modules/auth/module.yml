@@ -55,13 +55,9 @@ retired_options:
     Legacy config key 'social_providers' is no longer supported. Remove it
     from the auth module options.
 
-# Required first-party modules with minimum versions
+# Required first-party modules (bare names; rule 39)
 required_modules:
-  - orgs>=0.86.0
-
-# Modules implied when this module is selected
-implies:
-  - name: orgs
+  - orgs
 
 derivation:
   wiring_projections:

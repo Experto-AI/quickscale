@@ -2,8 +2,8 @@
 
 Every shipped module's ``module.yml`` must remain readable when the maintainer
 monorepo's ``quickscale_modules/`` workspace is absent — the installed-wheel
-context.  Before this suite, only ``notifications`` (SA111a) and the implication
-resolver (SA113) carried the bundled-manifest fallback; the other twelve call
+context.  Before this suite, only ``notifications`` (SA111a) and the required-
+module resolver (SA113) carried the bundled-manifest fallback; the other twelve call
 sites raised ``ImproperlyConfigured`` and aborted ``quickscale apply`` at config
 validation for every project (``orgs`` is implied by every module set, so
 ``_validate_module_prerequisites`` hit it first).
@@ -123,10 +123,11 @@ class TestNoManifestCallSiteRegresses:
         "contracts/module_discovery.py",
         # Source-required operation; stays fail-hard per the AF7 contract.
         "manifest/entry_point.py",
-        # SA113: carries its own audited fallback with additional bundled-mode
-        # fail-hard semantics (missing snapshot manifest is an error, not a
-        # skip), so it cannot collapse onto the shared path-only resolver.
-        "manifest/implications.py",
+        # SA113: the required-module resolver carries its own audited fallback
+        # with additional bundled-mode fail-hard semantics (missing snapshot
+        # manifest is an error, not a skip), so it cannot collapse onto the
+        # shared path-only resolver.
+        "manifest/required_modules.py",
     }
 
     def test_manifest_readers_use_the_shared_resolver(self) -> None:

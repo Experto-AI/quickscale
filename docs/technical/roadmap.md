@@ -152,7 +152,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
     notifications' `os.getenv` reads and in-code default variable names go (rule 35).
   - *Dependencies.* `required_modules` holds bare names and `plan`/`apply` select them; version
     floors, their parser, and `implies` go from the seven manifests, their core copies, and the
-    implication resolver (rule 39).
+    implication resolver (rule 39). **Landed:** the manifest loader refuses a version specifier
+    or an `implies` key, `plan`/`apply` materialize the transitive required closure (orgs now
+    requires `auth` and `notifications`), and no manifest or bundled copy carries a floor or
+    `implies`; the settings-names, no-legacy, secrets, off-surface, and theme items remain open.
 
   Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)
   disabled, admin kept; `apply` refuses to switch off a module another installed module lists in
@@ -169,7 +172,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** every manifest and module settings read; `quickscale_cli` plan and apply;
   `.env.example`; the generated settings templates (Track 3); the theme's `index.html.j2`;
-  core's manifest loader and implication resolver; railway.md and user docs.
+  core's manifest loader and required-module resolver; railway.md and user docs.
 
 - [ ] **SA220 — Untangle module dependencies behind `services.py` and capabilities.**
 

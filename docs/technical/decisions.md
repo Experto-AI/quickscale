@@ -1987,9 +1987,9 @@ behaviour or diagnostics to the current context.
 ``refresh_managed_adapters()`` all require a resolvable modules base path. They fail hard
 (``ImproperlyConfigured``) in the ``BUNDLED`` provenance state. Only
 ``discover_bundled_module_names()``, ``get_discovered_module_names()``,
-``get_resolution_source()``, and ``resolve_module_implications()`` (with the bundled
-fallback) work from bundled data alone. ``resolve_module_implications()`` applies a
-fail-hard boundary in the bundled fallback path: missing selected or implied module
+``get_resolution_source()``, and ``resolve_required_modules()`` (with the bundled
+fallback) work from bundled data alone. ``resolve_required_modules()`` applies a
+fail-hard boundary in the bundled fallback path: missing selected or required module
 manifests raise ``ImproperlyConfigured`` rather than being silently skipped. This preserves
 the AF7 fail-hard intent where it is genuinely load-bearing — generation needs real module
 source — while allowing the shipped module universe to be read from the bundled snapshot.

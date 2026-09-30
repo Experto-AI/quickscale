@@ -740,7 +740,7 @@ docker:
     assert result.exit_code == 1
     assert "generated project (sa201-throttling)" in result.output
     assert config_path.read_text() == original_config
-    assert "Added implied module config" not in result.output
+    assert "Added required module config" not in result.output
 
 
 def test_status_uses_shipped_vintage_for_old_embedded_manifest(

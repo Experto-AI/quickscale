@@ -3,7 +3,6 @@
 from quickscale_core.manifest import (
     ConfigOption,
     ContractVintage,
-    ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
 )
@@ -443,11 +442,6 @@ class TestModuleManifestManagedFiles:
 
 
 # ---------------------------------------------------------------------------
-# ImpliesEntry
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # ContractVintage and parse_version_tuple
 # ---------------------------------------------------------------------------
 
@@ -524,92 +518,30 @@ class TestContractVintage:
         assert a == b
 
 
-class TestImpliesEntry:
-    """Tests for the ImpliesEntry dataclass."""
-
-    def test_creation_with_name_only(self) -> None:
-        """ImpliesEntry can be created with just a name."""
-        entry = ImpliesEntry(name="orgs")
-        assert entry.name == "orgs"
-        assert entry.default_config == {}
-
-    def test_creation_with_default_config(self) -> None:
-        """ImpliesEntry accepts an optional default_config dict."""
-        entry = ImpliesEntry(
-            name="notifications",
-            default_config={"enabled": True, "sender_name": "QuickScale"},
-        )
-        assert entry.name == "notifications"
-        assert entry.default_config == {
-            "enabled": True,
-            "sender_name": "QuickScale",
-        }
-
-    def test_default_config_is_empty_dict_by_default(self) -> None:
-        """ImpliesEntry.default_config defaults to an empty dict."""
-        entry = ImpliesEntry(name="analytics")
-        assert entry.default_config == {}
-
-
-class TestModuleManifestImplies:
-    """Tests for ModuleManifest.implies field."""
+class TestModuleManifestRequiredModules:
+    """Tests for ModuleManifest.required_modules field."""
 
     def test_default_empty(self) -> None:
-        """ModuleManifest defaults implies to an empty list."""
+        """ModuleManifest defaults required_modules to an empty list."""
         manifest = ModuleManifest(name="m", version="1.0.0")
-        assert manifest.implies == []
+        assert manifest.required_modules == []
 
-    def test_implies_populated(self) -> None:
-        """ModuleManifest accepts implies entries."""
-        entry = ImpliesEntry(name="orgs")
-        manifest = ModuleManifest(
-            name="billing",
-            version="1.0.0",
-            implies=[entry],
-        )
-        assert len(manifest.implies) == 1
-        assert manifest.implies[0] is entry
-        assert manifest.implies[0].name == "orgs"
-
-    def test_multiple_implies_entries(self) -> None:
-        """ModuleManifest supports multiple implies entries."""
-        entry_a = ImpliesEntry(name="orgs")
-        entry_b = ImpliesEntry(
-            name="notifications",
-            default_config={"enabled": True},
-        )
-        manifest = ModuleManifest(
-            name="social",
-            version="1.0.0",
-            implies=[entry_a, entry_b],
-        )
-        assert len(manifest.implies) == 2
-        assert manifest.implies[0].name == "orgs"
-        assert manifest.implies[1].name == "notifications"
-        assert manifest.implies[1].default_config == {"enabled": True}
-
-    def test_implies_is_not_in_defaults(self) -> None:
-        """Implies entries do not appear in config option defaults."""
-        entry = ImpliesEntry(name="orgs")
-        manifest = ModuleManifest(
-            name="billing",
-            version="1.0.0",
-            implies=[entry],
-        )
-        defaults = manifest.get_defaults()
-        # implies is a separate field, not a config option key
-        assert "orgs" not in defaults
-        assert defaults == {}
-
-    def test_implies_preserved_with_required_modules(self) -> None:
-        """implies and required_modules are independent fields."""
-        entry = ImpliesEntry(name="notifications")
+    def test_required_modules_populated(self) -> None:
+        """ModuleManifest accepts bare required-module names."""
         manifest = ModuleManifest(
             name="orgs",
             version="1.0.0",
-            required_modules=[],
-            implies=[entry],
+            required_modules=["auth", "notifications"],
         )
-        assert manifest.required_modules == []
-        assert len(manifest.implies) == 1
-        assert manifest.implies[0].name == "notifications"
+        assert manifest.required_modules == ["auth", "notifications"]
+
+    def test_required_modules_is_not_in_defaults(self) -> None:
+        """Required-module names do not appear in config option defaults."""
+        manifest = ModuleManifest(
+            name="billing",
+            version="1.0.0",
+            required_modules=["orgs"],
+        )
+        defaults = manifest.get_defaults()
+        assert "orgs" not in defaults
+        assert defaults == {}

@@ -7,8 +7,6 @@ import re
 import tomllib
 from pathlib import Path
 
-from packaging.version import Version
-
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
 )
@@ -18,9 +16,6 @@ from quickscale_core.manifest.entry_point import (
     refresh_managed_adapters,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
-from quickscale_core.manifest.required_modules import (
-    parse_required_module_entry,
-)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULES_ROOT = REPO_ROOT / "quickscale_modules"
@@ -137,8 +132,7 @@ def _runtime_module_dependency_names(module_name: str) -> set[str]:
 def _required_module_package_names(module_name: str) -> set[str]:
     manifest = load_manifest_from_path(_manifest_path(module_name))
     package_names: set[str] = set()
-    for entry in manifest.required_modules:
-        name, _version = parse_required_module_entry(entry)
+    for name in manifest.required_modules:
         package_names.add(f"{FIRST_PARTY_MODULE_PACKAGE_PREFIX}{name}".lower())
     return package_names
 
@@ -461,90 +455,48 @@ def test_react_index_html_and_typescript_interface_module_sets_are_symmetric() -
 
 
 # ---------------------------------------------------------------------------
-# SA7.4 — required_modules version-floor contract
+# Module Conventions rule 39 — bare required-module names
 # ---------------------------------------------------------------------------
 
 
-def test_billing_required_modules_has_orgs_version_floor() -> None:
-    """Billing module requires orgs with a >=0.86.0 version floor."""
-    manifest = load_manifest_from_path(_manifest_path("billing"))
-    assert len(manifest.required_modules) == 1
-    name, version = parse_required_module_entry(manifest.required_modules[0])
-    assert name == "orgs"
-    assert version is not None, "Expected a version floor"
-    assert Version(version) >= Version("0.86.0"), (
-        f"Expected floor >= 0.86.0, got {version}"
-    )
+ORG_DEPENDANTS = ["auth", "billing", "blog", "crm", "listings", "social"]
 
 
-def test_blog_required_modules_has_orgs_version_floor() -> None:
-    """Blog module requires orgs with a >=0.86.0 version floor."""
-    manifest = load_manifest_from_path(_manifest_path("blog"))
-    assert len(manifest.required_modules) == 1
-    name, version = parse_required_module_entry(manifest.required_modules[0])
-    assert name == "orgs"
-    assert version is not None, "Expected a version floor"
-    assert Version(version) >= Version("0.86.0"), (
-        f"Expected floor >= 0.86.0, got {version}"
-    )
+def test_org_dependants_require_bare_orgs() -> None:
+    """Each orgs dependant declares orgs as a bare name, with no floor."""
+    for module_name in ORG_DEPENDANTS:
+        manifest = load_manifest_from_path(_manifest_path(module_name))
+        assert manifest.required_modules == ["orgs"], (
+            f"{module_name} must require bare 'orgs', got {manifest.required_modules!r}"
+        )
 
 
-def test_crm_required_modules_has_orgs_version_floor() -> None:
-    """CRM module requires orgs with a >=0.86.0 version floor."""
-    manifest = load_manifest_from_path(_manifest_path("crm"))
-    assert len(manifest.required_modules) == 1
-    name, version = parse_required_module_entry(manifest.required_modules[0])
-    assert name == "orgs"
-    assert version is not None, "Expected a version floor"
-    assert Version(version) >= Version("0.86.0"), (
-        f"Expected floor >= 0.86.0, got {version}"
-    )
-
-
-def test_social_required_modules_has_orgs_version_floor() -> None:
-    """Social module requires orgs with a >=0.86.0 version floor."""
-    manifest = load_manifest_from_path(_manifest_path("social"))
-    assert len(manifest.required_modules) == 1
-    name, version = parse_required_module_entry(manifest.required_modules[0])
-    assert name == "orgs"
-    assert version is not None, "Expected a version floor"
-    assert Version(version) >= Version("0.86.0"), (
-        f"Expected floor >= 0.86.0, got {version}"
-    )
-
-
-def test_listings_required_modules_has_orgs_version_floor() -> None:
-    """Listings module requires orgs with a >=0.86.0 version floor."""
-    manifest = load_manifest_from_path(_manifest_path("listings"))
-    assert len(manifest.required_modules) == 1
-    name, version = parse_required_module_entry(manifest.required_modules[0])
-    assert name == "orgs"
-    assert version is not None, "Expected a version floor"
-    assert Version(version) >= Version("0.86.0"), (
-        f"Expected floor >= 0.86.0, got {version}"
-    )
-
-
-def test_auth_required_modules_has_orgs_version_floor() -> None:
-    """Auth module requires orgs with a >=0.86.0 version floor (SA81)."""
-    manifest = load_manifest_from_path(_manifest_path("auth"))
-    assert len(manifest.required_modules) == 1
-    name, version = parse_required_module_entry(manifest.required_modules[0])
-    assert name == "orgs"
-    assert version is not None, "Expected a version floor"
-    assert Version(version) >= Version("0.86.0"), (
-        f"Expected floor >= 0.86.0, got {version}"
-    )
-
-
-def test_orgs_required_modules_has_auth() -> None:
-    """Orgs module requires auth (without a version floor, SA81)."""
+def test_orgs_requires_auth_and_notifications() -> None:
+    """Orgs requires auth and notifications as bare names (rule 20)."""
     manifest = load_manifest_from_path(_manifest_path("orgs"))
-    assert len(manifest.required_modules) == 1
-    name, version = parse_required_module_entry(manifest.required_modules[0])
-    assert name == "auth"
-    # orgs/module.yml declares `- auth` with no version constraint
-    assert version is None, f"Expected no version floor for orgs->auth, got {version}"
+    assert manifest.required_modules == ["auth", "notifications"]
+
+
+def test_no_manifest_declares_a_version_specifier_or_implies() -> None:
+    """Closed-world check over the raw manifests: no floors, no ``implies``."""
+    import yaml
+
+    offenders: list[str] = []
+    for module_dir in sorted(MODULES_ROOT.iterdir()):
+        manifest_path = module_dir / "module.yml"
+        if not manifest_path.is_file():
+            continue
+        data = yaml.safe_load(manifest_path.read_text()) or {}
+        for entry in data.get("required_modules") or []:
+            if not isinstance(entry, str) or "=" in entry or ">" in entry:
+                offenders.append(f"{manifest_path}: required_modules entry {entry!r}")
+        if "implies" in data:
+            offenders.append(f"{manifest_path}: retired 'implies' key")
+
+    assert not offenders, (
+        "Manifests must declare bare required-module names only "
+        "(rule 39):\n" + "\n".join(offenders)
+    )
 
 
 def test_root_lock_has_no_sibling_module_dependency_edges() -> None:
@@ -581,7 +533,7 @@ def test_root_lock_has_no_sibling_module_dependency_edges() -> None:
 def test_required_module_paths_are_available() -> None:
     """Every manifest required_modules entry must map to an existing directory.
 
-    After SA81, sibling relationships are expressed only via module.yml
+    Sibling relationships are expressed only via module.yml
     ``required_modules``.  This test verifies the target module directory
     exists for every declared dependency across all seven affected modules.
     """
@@ -590,8 +542,7 @@ def test_required_module_paths_are_available() -> None:
 
     for module_name in sorted(affected_modules):
         manifest = load_manifest_from_path(_manifest_path(module_name))
-        for entry in manifest.required_modules:
-            dep_name, _version = parse_required_module_entry(entry)
+        for dep_name in manifest.required_modules:
             dep_path = MODULES_ROOT / dep_name
             if not dep_path.is_dir():
                 missing.append(

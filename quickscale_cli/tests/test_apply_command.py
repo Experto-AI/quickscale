@@ -15,11 +15,9 @@ from quickscale_cli.commands.apply_command import (
     _load_and_validate_config,
     _regenerate_managed_wiring_for_apply,
     _validate_module_prerequisites,
-    _validate_required_module_versions,
     apply,
 )
 from quickscale_core.contracts.resolvers import resolve_manifest_module_options
-from quickscale_core.manifest.schema import ModuleManifest
 from quickscale_core.schema.config_schema import (
     ConfigValidationError,
     validate_config,
@@ -211,41 +209,25 @@ modules:
 
         assert expected_marker in capsys.readouterr().err
 
-    def test_apply_billing_requires_auth_module(self, capsys):
-        """Billing apply should fail early when auth is not selected."""
+    def test_apply_billing_dependency_selection_is_not_a_prerequisite(self) -> None:
+        """Billing prerequisites no longer refuse a missing auth: selection owns it.
+
+        ``_load_and_validate_config`` materializes billing's required closure
+        (orgs → auth, notifications) before this helper runs, so the helper
+        must not re-refuse the dependency question.
+        """
         qs_config = SimpleNamespace(modules={"billing": SimpleNamespace(options={})})
 
-        with pytest.raises(click.Abort):
-            _validate_module_prerequisites(qs_config)
+        _validate_module_prerequisites(qs_config)  # no raise
 
-        error_output = capsys.readouterr().err
-        assert (
-            "Billing requires the auth module before apply can continue" in error_output
-        )
-        assert (
-            "Add 'auth' under modules in quickscale.yml before applying billing"
-            in error_output
-        )
-
-    def test_apply_orgs_requires_auth_module(self, capsys):
-        """Orgs apply should fail early when auth is not selected."""
+    def test_apply_orgs_dependency_selection_is_not_a_prerequisite(self) -> None:
+        """Orgs prerequisites no longer refuse a missing auth: selection owns it."""
         qs_config = SimpleNamespace(modules={"orgs": SimpleNamespace(options={})})
 
-        with pytest.raises(click.Abort):
-            _validate_module_prerequisites(qs_config)
+        _validate_module_prerequisites(qs_config)  # no raise
 
-        error_output = capsys.readouterr().err
-        assert (
-            "Organizations requires the auth module before apply can continue"
-            in error_output
-        )
-        assert (
-            "Add 'auth' under modules in quickscale.yml before applying orgs"
-            in error_output
-        )
-
-    def test_apply_orgs_with_notifications_still_requires_auth_module(self, capsys):
-        """Implied notifications must not weaken the explicit orgs->auth prerequisite."""
+    def test_apply_orgs_with_notifications_no_auth_abort(self) -> None:
+        """Materialized notifications do not re-trigger an auth prerequisite."""
         qs_config = SimpleNamespace(
             modules={
                 "orgs": SimpleNamespace(options={}),
@@ -255,14 +237,7 @@ modules:
             }
         )
 
-        with pytest.raises(click.Abort):
-            _validate_module_prerequisites(qs_config)
-
-        error_output = capsys.readouterr().err
-        assert (
-            "Organizations requires the auth module before apply can continue"
-            in error_output
-        )
+        _validate_module_prerequisites(qs_config)  # no raise
 
     # ------------------------------------------------------------------
     # SA27 — blog, forms, storage, orgs option validation
@@ -423,110 +398,6 @@ modules:
 # ---------------------------------------------------------------------------
 
 
-class TestValidateRequiredModuleVersions:
-    """Tests for the _validate_required_module_versions wrapper in apply_command."""
-
-    def _manifest(self, name: str, version: str) -> ModuleManifest:
-        return ModuleManifest(name=name, version=version)
-
-    def test_validate_passes_without_manifests(self) -> None:
-        """Empty manifests dict must not raise."""
-        _validate_required_module_versions({})
-
-    def test_validate_passes_without_constraints(self) -> None:
-        """Plain required_module names without version specs pass."""
-        billing = self._manifest("billing", "0.85.0")
-        billing.required_modules = ["orgs"]
-        _validate_required_module_versions(
-            {
-                "billing": billing,
-                "orgs": self._manifest("orgs", "0.86.0"),
-            }
-        )
-
-    def test_validate_passes_with_satisfied_floor(self) -> None:
-        """An installed version meeting the minimum floor passes."""
-        billing = self._manifest("billing", "0.85.0")
-        billing.required_modules = ["orgs>=0.86.0"]
-        _validate_required_module_versions(
-            {
-                "billing": billing,
-                "orgs": self._manifest("orgs", "0.86.0"),
-            }
-        )
-
-    def test_validate_aborts_on_violated_floor(self) -> None:
-        """An installed version below the minimum floor raises click.Abort."""
-        billing = self._manifest("billing", "0.85.0")
-        billing.required_modules = ["orgs>=0.86.0"]
-        with pytest.raises(click.Abort):
-            _validate_required_module_versions(
-                {
-                    "billing": billing,
-                    "orgs": self._manifest("orgs", "0.85.0"),
-                }
-            )
-
-    def test_validate_aborts_on_missing_required_module(self) -> None:
-        """A missing required module raises click.Abort."""
-        billing = self._manifest("billing", "0.85.0")
-        billing.required_modules = ["orgs>=0.86.0"]
-        with pytest.raises(click.Abort):
-            _validate_required_module_versions(
-                {
-                    "billing": billing,
-                }
-            )
-
-    def test_post_embed_disk_loaded_manifests_detect_violation(self, tmp_path) -> None:
-        """Post-embed manifest loading from disk catches a version floor
-        violation when a newly embedded module depends on an already-installed
-        module below the floor.
-
-        This simulates the CR-SA7.4-001 scenario: orgs is installed at 0.85.0,
-        billing (which requires orgs>=0.86.0) has just been embedded, and
-        _load_module_manifests returns the full post-embed set including
-        billing's manifest.  _validate_required_module_versions must then
-        detect the violation through the CLI abort wrapper.
-        """
-        from quickscale_cli.commands.apply_command import (
-            _load_module_manifests,
-        )
-
-        project = tmp_path / "myapp"
-        project.mkdir()
-
-        # Create orgs module at 0.85.0 (below the 0.86.0 floor)
-        orgs_dir = project / "modules" / "orgs"
-        orgs_dir.mkdir(parents=True)
-        (orgs_dir / "module.yml").write_text(
-            'name: orgs\nversion: "0.85.0"\nrequired_modules:\n  - auth\n'
-        )
-
-        # Create billing module requiring orgs>=0.86.0 (simulating just-embedded)
-        billing_dir = project / "modules" / "billing"
-        billing_dir.mkdir(parents=True)
-        (billing_dir / "module.yml").write_text(
-            'name: billing\nversion: "0.85.0"\nrequired_modules:\n  - orgs>=0.86.0\n'
-        )
-        auth_dir = project / "modules" / "auth"
-        auth_dir.mkdir(parents=True)
-        (auth_dir / "module.yml").write_text('name: auth\nversion: "0.85.0"\n')
-
-        manifests = _load_module_manifests(
-            project,
-            ["billing", "orgs", "auth"],
-            strict=True,
-        )
-
-        # Org and billing must both be loaded.
-        assert "orgs" in manifests
-        assert "billing" in manifests
-
-        with pytest.raises(click.Abort):
-            _validate_required_module_versions(manifests)
-
-
 class TestApplyConfigValidationAutoAdds:
     """Tests for config validation auto-add behaviors in apply command."""
 
@@ -606,8 +477,8 @@ docker:
             assert "orgs" in modules
             assert "notifications" in modules
 
-    def test_apply_crm_requires_auth_module_via_implied_orgs(self, capsys):
-        """CRM without auth should fail fast because CRM implies orgs which requires auth."""
+    def test_apply_crm_without_auth_is_not_a_prerequisite_failure(self) -> None:
+        """CRM's auth dependency is selection-owned, not a prerequisite refusal."""
         qs_config = SimpleNamespace(
             modules={
                 "crm": SimpleNamespace(options={}),
@@ -618,14 +489,7 @@ docker:
             }
         )
 
-        with pytest.raises(click.Abort):
-            _validate_module_prerequisites(qs_config)
-
-        error_output = capsys.readouterr().err
-        assert (
-            "Organizations requires the auth module before apply can continue"
-            in error_output
-        )
+        _validate_module_prerequisites(qs_config)  # no raise
 
     def test_apply_crm_rejects_non_bool_enable_api(self, capsys):
         """CRM option errors are refused when quickscale.yml is validated."""
@@ -1144,7 +1008,7 @@ docker:
 """
                 )
 
-            # Second apply should show delta.  Adding auth implies orgs, whose
+            # Second apply should show delta.  Adding auth requires orgs, whose
             # SA208 provider-ID adoption step this fixture has not recorded, so
             # acknowledge the contract-vintage boundary to reach the delta.
             result2 = runner.invoke(
@@ -1357,10 +1221,10 @@ git_index_checkpoint: "deadbeefcafebabedeadbeefcafebabedeadbeef"
 
         assert result.exit_code == 0
         assert "Nothing to do" not in result.output
-        # auth now implies orgs→notifications, so the delta has changes
-        # and the recovery path proceeds through normal apply with implied
+        # auth now requires orgs→notifications, so the delta has changes
+        # and the recovery path proceeds through normal apply with required
         # modules instead of the dedicated recovery no-op gate message.
-        assert "Added implied module config to quickscale.yml" in result.output
+        assert "Added required module config to quickscale.yml" in result.output
         assert "Pending post-embed apply recovery detected" not in result.output
         mock_execute.assert_called_once()
         assert mock_execute.call_args.args[0].has_pending_post_embed_recovery is True

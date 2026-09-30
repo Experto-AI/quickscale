@@ -10,7 +10,6 @@ from quickscale_core.manifest.loader import (
     get_manifest_for_module,
     load_project_contract_vintage,
 )
-from quickscale_core.manifest.schema import ImpliesEntry
 
 
 class TestLoadManifest:
@@ -1407,179 +1406,77 @@ managed_files:
 
 
 # ---------------------------------------------------------------------------
-# Implies parsing
+# Retired implies key and required_modules parsing
 # ---------------------------------------------------------------------------
 
 
-class TestLoadManifestImplies:
-    """Tests for the implies section in load_manifest."""
+class TestLoadManifestRetiredImplies:
+    """The retired ``implies`` key is refused, whatever its payload."""
 
-    def test_no_implies_section(self) -> None:
-        """Manifests without implies produce an empty list."""
-        yaml_content = "name: mymod\nversion: '1.0.0'\n"
-        manifest = load_manifest(yaml_content, "mymod")
-        assert manifest.implies == []
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "implies:\n  - name: orgs\n",
+            "implies: []\n",
+            "implies: not_a_list\n",
+            "implies:\n  - not_a_mapping\n",
+        ],
+    )
+    def test_implies_key_is_refused(self, payload: str) -> None:
+        """Any implies key fails the load, naming the retired key."""
+        yaml_content = f"name: mymod\nversion: '1.0.0'\n{payload}"
+        with pytest.raises(ManifestError, match="'implies' is retired"):
+            load_manifest(yaml_content, "mymod")
 
-    def test_empty_implies_section(self) -> None:
-        """An empty implies list is accepted."""
-        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies: []\n"
-        manifest = load_manifest(yaml_content, "mymod")
-        assert manifest.implies == []
+    def test_implies_refusal_names_required_modules_and_rule(self) -> None:
+        """The refusal names the replacement key and the governing rule."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies:\n  - name: orgs\n"
+        with pytest.raises(ManifestError) as exc_info:
+            load_manifest(yaml_content, "mymod")
+        message = str(exc_info.value)
+        assert "required_modules" in message
+        assert "rule 39" in message
 
-    def test_single_implied_module(self) -> None:
-        """A single implies entry is parsed correctly."""
-        yaml_content = """
-name: billing
-version: "1.0.0"
-implies:
-  - name: orgs
-"""
-        manifest = load_manifest(yaml_content, "billing")
-        assert len(manifest.implies) == 1
-        entry = manifest.implies[0]
-        assert isinstance(entry, ImpliesEntry)
-        assert entry.name == "orgs"
-        assert entry.default_config == {}
 
-    def test_multiple_implied_modules(self) -> None:
-        """Multiple implies entries are parsed correctly."""
-        yaml_content = """
-name: billing
-version: "1.0.0"
-implies:
-  - name: orgs
-  - name: notifications
-    default_config:
-      enabled: true
-      sender_name: "QuickScale"
-"""
-        manifest = load_manifest(yaml_content, "billing")
-        assert len(manifest.implies) == 2
-        assert manifest.implies[0].name == "orgs"
-        assert manifest.implies[1].name == "notifications"
-        assert manifest.implies[1].default_config == {
-            "enabled": True,
-            "sender_name": "QuickScale",
-        }
+class TestLoadManifestRequiredModules:
+    """Bare-name required_modules parsing (Module Conventions rule 39)."""
 
-    def test_implies_with_default_config(self) -> None:
-        """Implies entry with default_config is parsed correctly."""
-        yaml_content = """
-name: orgs
-version: "1.0.0"
-implies:
-  - name: notifications
-    default_config:
-      enabled: true
-      sender_name: "QuickScale"
-      sender_email: "noreply@example.com"
-      resend_api_key_env_var: "RESEND_API_KEY"
-      webhook_secret_env_var: "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
-      default_tags:
-        - quickscale
-        - transactional
-      allowed_tags:
-        - quickscale
-        - transactional
-        - notifications
-        - auth
-      webhook_ttl_seconds: 300
-"""
+    def test_bare_names_are_preserved(self) -> None:
+        """Bare module names load in declaration order."""
+        yaml_content = (
+            "name: orgs\nversion: '1.0.0'\n"
+            "required_modules:\n  - auth\n  - notifications\n"
+        )
         manifest = load_manifest(yaml_content, "orgs")
-        assert len(manifest.implies) == 1
-        entry = manifest.implies[0]
-        assert entry.name == "notifications"
-        assert entry.default_config["enabled"] is True
-        assert entry.default_config["sender_name"] == "QuickScale"
-        assert entry.default_config["default_tags"] == ["quickscale", "transactional"]
-        assert entry.default_config["webhook_ttl_seconds"] == 300
+        assert manifest.required_modules == ["auth", "notifications"]
 
-    def test_implies_not_list_raises(self) -> None:
-        """implies that is not a list raises ManifestError."""
-        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies: not_a_list\n"
-        with pytest.raises(ManifestError, match="implies"):
-            load_manifest(yaml_content, "mymod")
-
-    def test_implies_entry_not_mapping_raises(self) -> None:
-        """An implies entry that is not a mapping raises ManifestError."""
-        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies:\n  - not_a_mapping\n"
-        with pytest.raises(ManifestError, match="implies"):
-            load_manifest(yaml_content, "mymod")
-
-    def test_implies_entry_missing_name_raises(self) -> None:
-        """An implies entry without name raises ManifestError."""
+    def test_version_specifier_is_refused(self) -> None:
+        """A version floor is retired and refused by name."""
         yaml_content = (
-            "name: mymod\nversion: '1.0.0'\nimplies:\n  - default_config: {}\n"
+            "name: billing\nversion: '1.0.0'\nrequired_modules:\n  - orgs>=0.86.0\n"
         )
-        with pytest.raises(ManifestError, match="name"):
-            load_manifest(yaml_content, "mymod")
+        with pytest.raises(ManifestError, match="version specifiers are retired"):
+            load_manifest(yaml_content, "billing")
 
-    def test_implies_entry_empty_name_raises(self) -> None:
-        """An implies entry with empty name raises ManifestError."""
-        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies:\n  - name: ''\n"
-        with pytest.raises(ManifestError, match="name"):
-            load_manifest(yaml_content, "mymod")
+    def test_empty_entry_is_refused(self) -> None:
+        """An empty entry is refused."""
+        yaml_content = "name: billing\nversion: '1.0.0'\nrequired_modules:\n  - ''\n"
+        with pytest.raises(ManifestError, match="must not be empty"):
+            load_manifest(yaml_content, "billing")
 
-    def test_implies_entry_default_config_not_mapping_raises(self) -> None:
-        """An implies entry with non-mapping default_config raises ManifestError."""
-        yaml_content = (
-            "name: mymod\nversion: '1.0.0'\nimplies:\n"
-            "  - name: orgs\n    default_config: not_a_mapping\n"
-        )
-        with pytest.raises(ManifestError, match="default_config"):
-            load_manifest(yaml_content, "mymod")
+    def test_non_string_entry_is_refused(self) -> None:
+        """A non-string entry is refused."""
+        yaml_content = "name: billing\nversion: '1.0.0'\nrequired_modules:\n  - 5\n"
+        with pytest.raises(ManifestError, match="Expected a bare module name"):
+            load_manifest(yaml_content, "billing")
 
-    def test_implies_coexists_with_required_modules(self) -> None:
-        """implies and required_modules parse independently."""
-        yaml_content = """
-name: billing
-version: "1.0.0"
-required_modules:
-  - orgs
-implies:
-  - name: notifications
-"""
-        manifest = load_manifest(yaml_content, "billing")
-        assert manifest.required_modules == ["orgs"]
-        assert len(manifest.implies) == 1
-        assert manifest.implies[0].name == "notifications"
-
-    def test_implies_does_not_break_backward_compat(self) -> None:
-        """A manifest without implies still loads and has empty implies."""
-        yaml_content = "name: auth\nversion: '1.0.0'\n"
-        manifest = load_manifest(yaml_content, "auth")
-        assert manifest.implies == []
-        assert manifest.name == "auth"
-        assert manifest.version == "1.0.0"
-
-    def test_orgs_implies_notifications_default_config_parity(self) -> None:
-        """The orgs module's implied default_config for notifications
-        is empty — defaults are sourced from notifications/module.yml only.
-
-        SA7.3 removed the duplicated inline defaults from orgs/module.yml.
-        Re-adding them would silently create a second source of truth for
-        notifications defaults, so this test asserts the default_config
-        block stays empty.
-        """
+    def test_orgs_requires_auth_and_notifications(self) -> None:
+        """The shipped orgs manifest requires auth and notifications."""
         repo_root = Path(__file__).resolve().parent.parent.parent
         orgs_manifest = load_manifest_from_path(
             repo_root / "quickscale_modules" / "orgs" / "module.yml"
         )
-
-        # Find the implies entry for notifications
-        notifications_implies = [
-            e for e in orgs_manifest.implies if e.name == "notifications"
-        ]
-        assert len(notifications_implies) == 1
-        implied_config = notifications_implies[0].default_config
-
-        # Must be empty — notifications provides its own canonical defaults
-        assert implied_config == {}, (
-            f"orgs implies notifications default_config must be empty.\n"
-            f"SA7.3 removed the duplicated inline defaults; notifications "
-            f"defaults are now sourced exclusively from\n"
-            f"notifications/module.yml. Found: {implied_config}"
-        )
+        assert orgs_manifest.required_modules == ["auth", "notifications"]
 
 
 # ---------------------------------------------------------------------------
@@ -1883,8 +1780,8 @@ derivation:
         with pytest.raises(ManifestError, match="derivation"):
             load_manifest(yaml_content, "mymod")
 
-    def test_derivation_coexists_with_implies(self) -> None:
-        """derivation and implies parse independently."""
+    def test_derivation_coexists_with_required_modules(self) -> None:
+        """derivation and required_modules parse independently."""
         yaml_content = """
 name: billing
 version: '1.0.0'
@@ -1895,8 +1792,8 @@ config:
       default: ''
       description: A description
       validation: {}
-implies:
-  - name: orgs
+required_modules:
+  - orgs
 derivation:
   option_derivations:
     provider:
@@ -1906,8 +1803,7 @@ derivation:
           rule_type: lowercase
 """
         manifest = load_manifest(yaml_content, "billing")
-        assert len(manifest.implies) == 1
-        assert manifest.implies[0].name == "orgs"
+        assert manifest.required_modules == ["orgs"]
         assert (
             manifest.option_derivations["provider"]["normalization_rules"][0][
                 "rule_type"
