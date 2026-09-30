@@ -29,6 +29,7 @@ from quickscale_modules_billing.exceptions import (
     BillingWebhookError,
     BillingWebhookSignatureError,
     InsufficientCreditsError,
+    OrgSelectionRequiredError,
 )
 from quickscale_modules_billing.models import (
     CREDIT_TRANSACTION_BUSINESS_REFERENCE_KEYS,
@@ -4354,6 +4355,7 @@ __all__ = [
     "get_stripe_client",
     "handle_stripe_event",
     "InsufficientCreditsError",
+    "OrgSelectionRequiredError",
     "resume_current_subscription",
     "reconcile_account_deletion_subscription_checkout",
     "reconcile_organization_removal_subscription_checkout",

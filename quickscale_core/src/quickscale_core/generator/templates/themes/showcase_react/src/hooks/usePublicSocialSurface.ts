@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { ApiError, getApiPayloadMessage } from '@/hooks/useApi'
 import { useProjectConfig, type PublicSocialSurface } from '@/hooks/useModules'
 
 export type SocialPayloadStatus = 'enabled' | 'empty' | 'disabled' | 'error'
@@ -224,8 +225,15 @@ async function fetchPublicSocialPayload<TSurface extends PublicSocialSurface>(
     return payload as SocialPayloadBySurface[TSurface]
   }
 
-  throw new Error(
-    `QuickScale social ${surface} payload did not match the managed contract (HTTP ${response.status})`,
+  // The managed payload is the domain contract; when the endpoint answers
+  // something else, a transport-level error in the one QuickScale shape
+  // ({"error": {"code", "message", "fields"}}) keeps its message so the page
+  // shows it instead of the generic contract-mismatch text.
+  const fallback = `QuickScale social ${surface} payload did not match the managed contract (HTTP ${response.status})`
+  throw new ApiError(
+    response.status,
+    getApiPayloadMessage(payload) ?? fallback,
+    payload,
   )
 }
 
