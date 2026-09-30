@@ -1,7 +1,6 @@
 """Views for account management"""
 
-from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack
 import logging
 from typing import Any
 
@@ -14,6 +13,7 @@ from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
 from django.urls import reverse_lazy
 from django.views.generic import DeleteView, DetailView, UpdateView
+from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_orgs.models import (
     Organization,
     OrganizationMembership,
@@ -25,7 +25,7 @@ from quickscale_modules_orgs.removal import (
     RemovalCoordinator,
 )
 
-from quickscale_modules_auth.exceptions import _AccountDeletionBillingBlocked
+from quickscale_modules_auth.exceptions import _AccountDeletionProviderBlocked
 from quickscale_modules_auth.forms import ProfileUpdateForm
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,73 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
-#: Apps whose account-deletion reconciliation is scoped by their own adapter
-#: rather than by the set of organizations the deletion touches.
-_SCOPED_RECONCILIATION_APPS = frozenset({"quickscale_billing"})
+#: The operations every app that declares the rule 4
+#: ``account_deletion_handlers`` capability must provide.  A consumer cannot
+#: import a provider's types (rule 5), so the capability is duck-typed and an
+#: incomplete declaration fails the deletion closed instead of silently
+#: skipping provider work.
+_ACCOUNT_DELETION_HANDLER_METHODS: tuple[str, ...] = (
+    "account_deletion_handled_app_labels",
+    "account_deletion_fail_closed_errors",
+    "account_deletion_reconcile_scope",
+    "account_deletion_user_reference_organization_ids",
+    "account_deletion_subscription_mutation_lock",
+    "reconcile_account_deletion_purchase_provider_state",
+    "reconcile_account_deletion_provider_state",
+    "cancel_account_deletion_subscription",
+    "resume_account_deletion_subscription",
+    "detach_account_deletion_user_references",
+)
+
+#: The organization scope a declared handler reconciles over.  A ``touched``
+#: handler runs its ``reconcile_account_deletion_provider_state`` executor for
+#: every organization the deletion touches; a ``cancellation`` handler runs it
+#: only for the organizations whose subscriptions the deletion cancels, so a
+#: retained organization's open provider state is not resolved.
+_ACCOUNT_DELETION_RECONCILE_SCOPES: frozenset[str] = frozenset(
+    {"cancellation", "touched"}
+)
+
+
+def _is_string_tuple(value: object) -> bool:
+    """Return whether *value* is a tuple of non-empty strings."""
+    return (
+        isinstance(value, tuple)
+        and bool(value)
+        and all(isinstance(item, str) and item for item in value)
+    )
+
+
+def _is_exception_type_tuple(value: object) -> bool:
+    """Return whether *value* is a non-empty tuple of exception types."""
+    return (
+        isinstance(value, tuple)
+        and bool(value)
+        and all(
+            isinstance(item, type) and issubclass(item, BaseException) for item in value
+        )
+    )
+
+
+def _handler_name(handler: object) -> str:
+    """Name a declared handler in failure messages without importing its type."""
+    label = getattr(handler, "label", None)
+    if isinstance(label, str) and label:
+        return f"{label!r}"
+    return repr(handler)
+
+
+def _provider_error_is_blocking(handler: Any, exc: Exception) -> bool:
+    """Return whether *handler* declares *exc* as a fail-closed error."""
+    return isinstance(exc, tuple(handler.account_deletion_fail_closed_errors()))
+
+
+def _installed_app_config(label: str) -> Any:
+    """Return the installed app config for *label*, or ``None`` when absent."""
+    try:
+        return apps.get_app_config(label)
+    except LookupError:
+        return None
 
 
 class ProfileView(LoginRequiredMixin, DetailView):
@@ -105,6 +169,16 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         user = self.request.user
         coordinator = RemovalCoordinator(RemovalBoundary.ACCOUNT_DELETE)
 
+        try:
+            handlers = self._account_deletion_handlers()
+            handled_app_labels = self._handled_app_labels(handlers)
+        except _AccountDeletionProviderBlocked as exc:
+            messages.error(
+                self.request,
+                f"Account deletion is blocked by provider state: {exc}",
+            )
+            return self.form_invalid(form)
+
         with transaction.atomic():
             member_organizations = self._lock_member_organizations(user)
             prepared_member_org_ids = {
@@ -124,47 +198,65 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                 )
             }
 
-        cancellation_transitions: dict[Any, Any] = {}
+        cancellation_transitions: dict[tuple[int, Any], Any] = {}
         deletion_succeeded = False
         try:
-            prepared_billing_org_ids = self._billing_user_reference_organization_ids(
-                user
+            prepared_provider_org_ids = self._provider_user_reference_organization_ids(
+                user, handlers
             )
-        except _AccountDeletionBillingBlocked as exc:
+        except _AccountDeletionProviderBlocked as exc:
             messages.error(
                 self.request,
-                f"Account deletion is blocked by billing state: {exc}",
+                f"Account deletion is blocked by provider state: {exc}",
             )
             return self.form_invalid(form)
         prepared_tenant_user_ref_org_ids = self._tenant_user_reference_organization_ids(
-            user
+            user, handled_app_labels
         )
 
-        with self._subscription_mutation_locks(
-            prepared_member_org_ids | cancellation_org_ids | prepared_billing_org_ids
-        ):
+        lock_stack = ExitStack()
+        try:
+            self._enter_account_deletion_locks(
+                lock_stack,
+                prepared_member_org_ids
+                | cancellation_org_ids
+                | prepared_provider_org_ids,
+                handlers,
+            )
+        except _AccountDeletionProviderBlocked as exc:
+            messages.error(
+                self.request,
+                f"Account deletion is blocked by provider state: {exc}",
+            )
+            return self.form_invalid(form)
+
+        with lock_stack:
             try:
                 try:
-                    self._reconcile_account_deletion_purchase_checkouts(
+                    self._reconcile_provider_purchase_checkouts(
                         user,
-                        prepared_billing_org_ids,
+                        prepared_provider_org_ids,
+                        handlers,
                     )
                     self._reconcile_removal_provider_state(
                         prepared_member_org_ids
-                        | prepared_billing_org_ids
+                        | prepared_provider_org_ids
                         | prepared_tenant_user_ref_org_ids
-                        | cancellation_org_ids
+                        | cancellation_org_ids,
+                        handlers,
+                        handled_app_labels,
                     )
                     self._cancel_personal_org_subscriptions(
                         user,
                         cancellation_org_ids,
+                        handlers,
                         cancellation_transitions=cancellation_transitions,
                     )
                     coordinator.discharge_stage(RemovalAction.RECONCILE)
-                except _AccountDeletionBillingBlocked as exc:
+                except _AccountDeletionProviderBlocked as exc:
                     messages.error(
                         self.request,
-                        f"Account deletion is blocked by billing state: {exc}",
+                        f"Account deletion is blocked by provider state: {exc}",
                     )
                     return self.form_invalid(form)
 
@@ -174,15 +266,19 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                     with transaction.atomic():
                         locked_organizations = self._lock_organizations(
                             prepared_member_org_ids
-                            | prepared_billing_org_ids
+                            | prepared_provider_org_ids
                             | prepared_tenant_user_ref_org_ids
                         )
                         member_org_ids = set(self._member_organization_ids(user))
-                        current_billing_org_ids = (
-                            self._billing_user_reference_organization_ids(user)
+                        current_provider_org_ids = (
+                            self._provider_user_reference_organization_ids(
+                                user, handlers
+                            )
                         )
                         current_tenant_user_ref_org_ids = (
-                            self._tenant_user_reference_organization_ids(user)
+                            self._tenant_user_reference_organization_ids(
+                                user, handled_app_labels
+                            )
                         )
                         if member_org_ids != prepared_member_org_ids:
                             messages.error(
@@ -192,10 +288,10 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                             )
                             rejection_response = self.form_invalid(form)
                             member_organizations = []
-                        elif current_billing_org_ids != prepared_billing_org_ids:
+                        elif current_provider_org_ids != prepared_provider_org_ids:
                             messages.error(
                                 self.request,
-                                "Billing references changed while account deletion was "
+                                "Provider references changed while account deletion was "
                                 "being prepared. Retry the deletion.",
                             )
                             rejection_response = self.form_invalid(form)
@@ -246,10 +342,12 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                             self._detach_tenant_user_references(
                                 user,
                                 current_tenant_user_ref_org_ids,
+                                handled_app_labels,
                             )
-                            self._detach_billing_user_references(
+                            self._detach_provider_user_references(
                                 user,
-                                current_billing_org_ids,
+                                current_provider_org_ids,
+                                handlers,
                             )
                             self._record_account_delete_skips(
                                 locked_organizations,
@@ -276,14 +374,14 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                     return self.form_invalid(form)
                 except IntegrityError:
                     logger.exception(
-                        "Account deletion rolled back after billing references changed "
+                        "Account deletion rolled back after provider references changed "
                         "for user %s (pk=%s).",
                         user,
                         user.pk,
                     )
                     messages.error(
                         self.request,
-                        "Billing references changed while account deletion was being "
+                        "Provider references changed while account deletion was being "
                         "prepared. Retry the deletion.",
                     )
                     return self.form_invalid(form)
@@ -297,16 +395,16 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                 )
                 deletion_succeeded = True
                 return success_response
-            except _AccountDeletionBillingBlocked as exc:
+            except _AccountDeletionProviderBlocked as exc:
                 messages.error(
                     self.request,
-                    f"Account deletion is blocked by billing state: {exc}",
+                    f"Account deletion is blocked by provider state: {exc}",
                 )
                 return self.form_invalid(form)
             finally:
                 if not deletion_succeeded:
-                    self._resume_personal_org_subscriptions(
-                        user, cancellation_transitions
+                    self._resume_provider_subscriptions(
+                        user, cancellation_transitions, handlers
                     )
 
     def form_invalid(self, form: Any) -> HttpResponse:
@@ -414,42 +512,138 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
         return blocking
 
+    def _account_deletion_handlers(self) -> tuple[Any, ...]:
+        """Return every installed app's declared account-deletion handler.
+
+        Rule 4: an app that holds account-deletion state declares the
+        operations touching it through the ``account_deletion_handlers``
+        capability, and this boundary collects them instead of naming any
+        provider.  A declaration that cannot run every operation fails the
+        deletion closed rather than skipping provider work, and a handler must
+        be the declaring app's own config: the app's required ``RECONCILE``
+        executor lives there, so the method the boundary calls is that hook.
+        """
+        handlers = collect_capabilities("account_deletion_handlers")
+        for handler in handlers:
+            name = _handler_name(handler)
+            missing = [
+                method
+                for method in _ACCOUNT_DELETION_HANDLER_METHODS
+                if not callable(getattr(handler, method, None))
+            ]
+            if missing:
+                raise _AccountDeletionProviderBlocked(
+                    f"The account-deletion capability declared by {name} is "
+                    f"incomplete; missing {', '.join(missing)}."
+                )
+            if not _is_string_tuple(handler.account_deletion_handled_app_labels()):
+                raise _AccountDeletionProviderBlocked(
+                    f"The account-deletion capability declared by {name} must "
+                    "return a non-empty tuple of app labels."
+                )
+            if not _is_exception_type_tuple(
+                handler.account_deletion_fail_closed_errors()
+            ):
+                raise _AccountDeletionProviderBlocked(
+                    f"The account-deletion capability declared by {name} must "
+                    "return a non-empty tuple of exception types."
+                )
+            scope = handler.account_deletion_reconcile_scope()
+            if (
+                not isinstance(scope, str)
+                or scope not in _ACCOUNT_DELETION_RECONCILE_SCOPES
+            ):
+                raise _AccountDeletionProviderBlocked(
+                    f"The account-deletion capability declared by {name} declares "
+                    f"an unknown reconcile scope {scope!r}."
+                )
+            for label in handler.account_deletion_handled_app_labels():
+                if _installed_app_config(label) is not handler:
+                    raise _AccountDeletionProviderBlocked(
+                        f"The account-deletion capability declared by {name} claims "
+                        f"the app label {label!r} but is not that app's config; a "
+                        "provider must declare its own app config as its handler."
+                    )
+        return handlers
+
+    def _handled_app_labels(self, handlers: tuple[Any, ...]) -> frozenset[str]:
+        """Return the app labels the declared handlers own."""
+        labels: set[str] = set()
+        for handler in handlers:
+            labels.update(handler.account_deletion_handled_app_labels())
+        return frozenset(labels)
+
+    def _call_account_deletion_handler(
+        self,
+        handler: Any,
+        method_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Call one declared handler operation, failing closed on its errors.
+
+        A handler declares the provider-state errors that block account
+        deletion; any other exception is unexpected and propagates, so a
+        provider defect is never masked as a user-facing block.
+        """
+        try:
+            return getattr(handler, method_name)(*args, **kwargs)
+        except Exception as exc:
+            if not _provider_error_is_blocking(handler, exc):
+                raise
+            raise _AccountDeletionProviderBlocked(str(exc)) from exc
+
     def _reconcile_removal_provider_state(
         self,
         organization_ids: set[Any],
+        handlers: tuple[Any, ...],
+        handled_app_labels: frozenset[str],
     ) -> None:
-        """Run every installed app's account-deletion provider hook.
+        """Run touched-scope provider reconciliation before the RECONCILE stage.
 
         The ``RECONCILE`` stage's executor is the declaring app's
         ``reconcile_account_deletion_provider_state`` hook, so the boundary
-        calls each installed app that provides one before discharging the
-        stage, over every organization the deletion touches.  Billing's
-        subscription-checkout reconciliation has its own organization scope
-        (the organizations whose subscriptions the deletion actually cancels),
-        so it runs from ``_cancel_personal_org_subscriptions`` instead.
+        calls it before discharging the stage, over every organization the
+        deletion touches.  A declared handler whose
+        ``account_deletion_reconcile_scope`` is ``touched`` runs there; an
+        installed app that exposes the hook without declaring the capability
+        is served the same way, so the declaring app's own work still runs.
+        A handler declaring the narrower ``cancellation`` scope owns its
+        reconciliation through ``_cancel_personal_org_subscriptions`` instead.
         """
         if not organization_ids:
             return
+        touched_handlers = [
+            handler
+            for handler in handlers
+            if handler.account_deletion_reconcile_scope() == "touched"
+        ]
         hooks: list[tuple[str, Any]] = []
         for app_config in sorted(
             apps.get_app_configs(), key=lambda config: config.label
         ):
-            if app_config.label in _SCOPED_RECONCILIATION_APPS:
+            if app_config.label in handled_app_labels:
                 continue
             hook = getattr(
                 app_config, "reconcile_account_deletion_provider_state", None
             )
             if callable(hook):
                 hooks.append((app_config.label, hook))
-        if not hooks:
+        if not touched_handlers and not hooks:
             return
 
         for organization_id in sorted(organization_ids, key=str):
+            for handler in touched_handlers:
+                self._call_account_deletion_handler(
+                    handler,
+                    "reconcile_account_deletion_provider_state",
+                    organization_id,
+                )
             for label, hook in hooks:
                 try:
                     hook(organization_id)
                 except Exception as exc:  # noqa: BLE001 - fail closed on any provider error
-                    raise _AccountDeletionBillingBlocked(
+                    raise _AccountDeletionProviderBlocked(
                         f"{label} provider reconciliation failed: {exc}"
                     ) from exc
 
@@ -457,188 +651,146 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         self,
         user: Any,
         organization_ids: set[Any],
+        handlers: tuple[Any, ...],
         *,
-        cancellation_transitions: dict[Any, Any],
+        cancellation_transitions: dict[tuple[int, Any], Any],
     ) -> None:
-        """Cancel active subscriptions on the user's personal orgs that
-        will not survive account deletion.
+        """Cancel each declared handler's state on the user's personal orgs
+        that will not survive account deletion.
 
-        Derives cancel targets from all OrganizationMembership rows where
-        the user is an OWNER of a personal org, excludes any org where
-        other memberships remain after deleting the user, and calls
-        cancel_current_subscription for every remaining target.
+        The caller derives cancel targets from all OrganizationMembership rows
+        where the user is an OWNER of a personal org and excludes any org where
+        other memberships remain after deleting the user; every remaining target
+        is cancelled through each declared handler, and a handler declaring the
+        ``cancellation`` reconcile scope resolves its checkout first.
 
         ``cancellation_transitions`` records only provider false-to-true state
-        changes made by this attempt. The caller restores those exact
-        subscriptions on every path where the account survives.
+        changes made by this attempt, keyed by handler index and organization so
+        each handler is restored with the exact transition it produced.
         """
-        if not organization_ids:
+        if not organization_ids or not handlers:
             return
-
-        from django.conf import settings
-
-        if "quickscale_modules_billing" not in settings.INSTALLED_APPS:
-            return
-
-        try:
-            from quickscale_modules_billing.services import (
-                BillingError,
-                cancel_current_subscription,
-            )
-        except ImportError as exc:
-            raise _AccountDeletionBillingBlocked(
-                "Billing services are unavailable. Retry the deletion later."
-            ) from exc
 
         organizations = Organization.objects.filter(pk__in=organization_ids).order_by(
             "pk"
         )
-        # Billing's checkout reconciliation stays scoped to the organizations
-        # whose subscriptions this deletion cancels: a retained organization's
-        # open checkout is not this user's to reconcile.
-        app_config = apps.get_app_config("quickscale_billing")
-        reconcile_checkout = getattr(
-            app_config,
-            "reconcile_account_deletion_provider_state",
-            None,
-        )
-        if not callable(reconcile_checkout):
-            raise _AccountDeletionBillingBlocked(
-                "Billing provider reconciliation is unavailable."
-            )
+        # A cancellation-scope handler reconciles an organization's checkout
+        # only where this deletion cancels its subscription: a retained
+        # organization's open checkout is not this user's to reconcile.
         for org in organizations:
-            try:
-                reconcile_checkout(org.pk)
-            except BillingError as exc:
-                raise _AccountDeletionBillingBlocked(str(exc)) from exc
-            try:
-                transition = cancel_current_subscription(
+            for handler_index, handler in enumerate(handlers):
+                if handler.account_deletion_reconcile_scope() == "cancellation":
+                    self._call_account_deletion_handler(
+                        handler,
+                        "reconcile_account_deletion_provider_state",
+                        org.pk,
+                    )
+                transition = self._call_account_deletion_handler(
+                    handler,
+                    "cancel_account_deletion_subscription",
                     user,
-                    organization=org,
-                    capture_transition=True,
+                    org,
                 )
                 if transition is not None and getattr(transition, "changed", False):
-                    cancellation_transitions[org.pk] = transition
-            except BillingError as exc:
-                raise _AccountDeletionBillingBlocked(str(exc)) from exc
+                    cancellation_transitions[(handler_index, org.pk)] = transition
 
-    def _reconcile_account_deletion_purchase_checkouts(
+    def _reconcile_provider_purchase_checkouts(
         self,
         user: Any,
         organization_ids: set[Any],
+        handlers: tuple[Any, ...],
     ) -> None:
-        """Require every one-time Checkout tied to the account to be terminal."""
+        """Require every declared handler's one-time state to be terminal."""
         if not organization_ids:
             return
-        billing_config = apps.get_app_config("quickscale_billing")
-        reconcile = getattr(
-            billing_config,
-            "reconcile_account_deletion_purchase_provider_state",
-            None,
-        )
-        if not callable(reconcile):
-            raise _AccountDeletionBillingBlocked(
-                "Billing purchase reconciliation is unavailable."
-            )
-        from quickscale_modules_billing.services import BillingError
-
-        for organization_id in sorted(organization_ids, key=str):
-            try:
-                reconcile(organization_id, user.pk)
-            except BillingError as exc:
-                raise _AccountDeletionBillingBlocked(str(exc)) from exc
-
-    @contextmanager
-    def _subscription_mutation_locks(
-        self,
-        organization_ids: set[Any],
-    ) -> Iterator[None]:
-        """Serialize cancellation, deletion decision, and compensation."""
-        if not organization_ids:
-            yield
-            return
-
-        from django.conf import settings
-
-        if "quickscale_modules_billing" not in settings.INSTALLED_APPS:
-            yield
-            return
-
-        try:
-            from quickscale_modules_billing.services import (
-                subscription_provider_mutation_lock,
-            )
-        except ImportError:
-            yield
-            return
-
-        with ExitStack() as stack:
+        for handler in handlers:
             for organization_id in sorted(organization_ids, key=str):
-                stack.enter_context(
-                    subscription_provider_mutation_lock(organization_id)
+                self._call_account_deletion_handler(
+                    handler,
+                    "reconcile_account_deletion_purchase_provider_state",
+                    organization_id,
+                    user.pk,
                 )
-            yield
 
-    def _detach_billing_user_references(
+    def _enter_account_deletion_locks(
+        self,
+        stack: ExitStack,
+        organization_ids: set[Any],
+        handlers: tuple[Any, ...],
+    ) -> None:
+        """Acquire each declared handler's provider locks for the deletion.
+
+        Serializes cancellation, deletion decision, and compensation.  A
+        declared provider error during acquisition fails the deletion closed,
+        and every lock acquired before any acquisition failure is released
+        before the error propagates — declared, unexpected, or an interrupt.
+        If releasing an acquired lock also fails, its failure is logged and
+        the acquisition failure is the one that propagates.
+        """
+        try:
+            for handler in handlers:
+                for organization_id in sorted(organization_ids, key=str):
+                    try:
+                        stack.enter_context(
+                            handler.account_deletion_subscription_mutation_lock(
+                                organization_id
+                            )
+                        )
+                    except Exception as exc:
+                        if not _provider_error_is_blocking(handler, exc):
+                            raise
+                        raise _AccountDeletionProviderBlocked(str(exc)) from exc
+        except BaseException:
+            try:
+                stack.close()
+            except BaseException:
+                logger.exception(
+                    "Account deletion provider-lock cleanup failed after an "
+                    "acquisition failure; re-raising the acquisition failure."
+                )
+            raise
+
+    def _detach_provider_user_references(
         self,
         user: Any,
         organization_ids: set[Any],
+        handlers: tuple[Any, ...],
     ) -> None:
-        """Null billing provenance under each organization's FORCE-RLS scope."""
+        """Null each declared handler's user provenance under FORCE-RLS scope."""
         if not organization_ids:
             return
-
-        from django.conf import settings
-
-        if "quickscale_modules_billing" not in settings.INSTALLED_APPS:
-            return
-        billing_config = apps.get_app_config("quickscale_billing")
-        detach_user = getattr(
-            billing_config,
-            "detach_account_deletion_user_references",
-            None,
-        )
-        if not callable(detach_user):
-            raise _AccountDeletionBillingBlocked(
-                "Billing account-deletion reconciliation is unavailable."
+        for handler in handlers:
+            self._call_account_deletion_handler(
+                handler,
+                "detach_account_deletion_user_references",
+                user.pk,
+                list(organization_ids),
             )
-        from quickscale_modules_billing.services import BillingError
 
-        try:
-            detach_user(user.pk, list(organization_ids))
-        except BillingError as exc:
-            raise _AccountDeletionBillingBlocked(str(exc)) from exc
-
-    def _billing_user_reference_organization_ids(self, user: Any) -> set[Any]:
-        """Discover billing provenance independently of current memberships."""
-        from django.conf import settings
-
-        if "quickscale_modules_billing" not in settings.INSTALLED_APPS:
-            return set()
-        billing_config = apps.get_app_config("quickscale_billing")
-        discover_organization_ids = getattr(
-            billing_config,
-            "account_deletion_user_reference_organization_ids",
-            None,
-        )
-        if not callable(discover_organization_ids):
-            raise _AccountDeletionBillingBlocked(
-                "Billing account-deletion discovery is unavailable."
+    def _provider_user_reference_organization_ids(
+        self, user: Any, handlers: tuple[Any, ...]
+    ) -> set[Any]:
+        """Discover provider-owned organizations independently of memberships."""
+        organization_ids: set[Any] = set()
+        for handler in handlers:
+            organization_ids.update(
+                self._call_account_deletion_handler(
+                    handler,
+                    "account_deletion_user_reference_organization_ids",
+                    user.pk,
+                )
             )
-        from quickscale_modules_billing.services import BillingError
+        return organization_ids
 
-        try:
-            return set(discover_organization_ids(user.pk))
-        except BillingError as exc:
-            raise _AccountDeletionBillingBlocked(str(exc)) from exc
-
-    def _tenant_user_reference_specs(self) -> list[tuple[Any, tuple[str, ...]]]:
-        """Return nullable user-provenance fields on enrolled non-billing models."""
+    def _tenant_user_reference_specs(
+        self, handled_app_labels: frozenset[str]
+    ) -> list[tuple[Any, tuple[str, ...]]]:
+        """Return nullable user-provenance fields on enrolled unhandled models."""
         from quickscale_modules_orgs.tenancy import get_tenant_models
 
         specs: list[tuple[Any, tuple[str, ...]]] = []
         for model in get_tenant_models():
-            if model._meta.app_label == "quickscale_billing":
+            if model._meta.app_label in handled_app_labels:
                 continue
             field_attnames = tuple(
                 field.attname
@@ -649,7 +801,9 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                 specs.append((model, field_attnames))
         return specs
 
-    def _tenant_user_reference_organization_ids(self, user: Any) -> set[Any]:
+    def _tenant_user_reference_organization_ids(
+        self, user: Any, handled_app_labels: frozenset[str]
+    ) -> set[Any]:
         """Discover retained tenant provenance independently of memberships."""
         from quickscale_modules_orgs.current_org import (
             account_deletion_user_reference_organization_ids,
@@ -657,18 +811,19 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
 
         return account_deletion_user_reference_organization_ids(
             user.pk,
-            excluded_app_labels=frozenset({"quickscale_billing"}),
+            excluded_app_labels=handled_app_labels,
         )
 
     def _detach_tenant_user_references(
         self,
         user: Any,
         organization_ids: set[Any],
+        handled_app_labels: frozenset[str],
     ) -> None:
         """Null retained tenant provenance under each table's FORCE-RLS scope."""
         from quickscale_modules_orgs.current_org import org_scope
 
-        specs = self._tenant_user_reference_specs()
+        specs = self._tenant_user_reference_specs(handled_app_labels)
         for organization in Organization.objects.filter(
             pk__in=organization_ids
         ).order_by("pk"):
@@ -680,38 +835,42 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                             **{field_attname: user.pk},
                         ).update(**{field_attname: None})
 
-    def _resume_personal_org_subscriptions(
+    def _resume_provider_subscriptions(
         self,
         user: Any,
-        cancellation_transitions: dict[Any, Any],
+        cancellation_transitions: dict[tuple[int, Any], Any],
+        handlers: tuple[Any, ...],
     ) -> None:
-        """Compensate successful cancellations when account deletion is rejected."""
+        """Compensate each handler's cancellations when account deletion is rejected."""
         if not cancellation_transitions:
             return
 
-        from quickscale_modules_billing.services import resume_current_subscription
-
-        organizations = Organization.objects.filter(
-            pk__in=cancellation_transitions
-        ).order_by("pk")
-        for organization in organizations:
-            try:
-                transition = cancellation_transitions[organization.pk]
-                resume_current_subscription(
-                    user,
-                    organization=organization,
-                    transition=transition,
+        organization_ids = {org_pk for _, org_pk in cancellation_transitions}
+        for organization in Organization.objects.filter(
+            pk__in=organization_ids
+        ).order_by("pk"):
+            for handler_index, handler in enumerate(handlers):
+                transition = cancellation_transitions.get(
+                    (handler_index, organization.pk)
                 )
-            except Exception:
-                logger.exception(
-                    "Account deletion compensation failed for user %s (pk=%s), "
-                    "organization %s (pk=%s). Manual billing reconciliation is "
-                    "required.",
-                    user,
-                    user.pk,
-                    organization.name,
-                    organization.pk,
-                )
+                if transition is None:
+                    continue
+                try:
+                    handler.resume_account_deletion_subscription(
+                        user,
+                        organization,
+                        transition,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Account deletion compensation failed for user %s (pk=%s), "
+                        "organization %s (pk=%s). Manual provider reconciliation is "
+                        "required.",
+                        user,
+                        user.pk,
+                        organization.name,
+                        organization.pk,
+                    )
 
     def _record_account_delete_skips(
         self,

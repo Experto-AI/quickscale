@@ -1,5 +1,8 @@
 """Tests for auth module views"""
 
+from contextlib import contextmanager
+from typing import Any
+
 import pytest
 from django.urls import reverse
 
@@ -1163,7 +1166,7 @@ class TestAccountDeleteView:
         assert response.status_code == 200
         assert mock_resume.call_count == 2
         assert any(
-            "Manual billing reconciliation" in message for message in caplog.messages
+            "Manual provider reconciliation" in message for message in caplog.messages
         )
 
     def test_account_delete_records_retained_organization_obligation_skips(
@@ -1266,16 +1269,17 @@ class TestAccountDeleteView:
                 for message in caplog.messages
             )
 
-    def test_account_delete_graceful_when_billing_not_installed(
+    def test_account_delete_graceful_without_a_declared_provider(
         self, authenticated_client, user
     ):
-        """Deletion does not fail when the billing module is not
-        installed."""
-        # Patch INSTALLED_APPS so the billing guard in
-        # _cancel_personal_org_subscriptions skips the billing code.
-        from unittest.mock import patch
+        """Deletion does not fail when no account-deletion provider is installed.
 
-        from django.conf import settings
+        A project without billing declares no handler through the rule 4
+        ``account_deletion_handlers`` capability; patching the collection
+        simulates that absence, because the app registry is process-wide and
+        cannot be re-derived inside one test.
+        """
+        from unittest.mock import patch
 
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -1293,15 +1297,14 @@ class TestAccountDeleteView:
             role=OrgRole.OWNER,
         )
 
-        with patch.object(
-            settings,
-            "INSTALLED_APPS",
-            [app for app in settings.INSTALLED_APPS if app != "quickscale_billing"],
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(),
         ):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
-        # Deletion proceeds even though billing is not installed.
+        # Deletion proceeds even though no provider is declared.
         assert response.status_code == 302
 
     def test_account_delete_cancels_only_owned_personal_org(
@@ -1793,7 +1796,7 @@ class TestAccountDeleteView:
         assert response.status_code == 200
         assert get_user_model().objects.filter(pk=user.pk).exists()
         assert any(
-            "Billing references changed" in str(message.message)
+            "Provider references changed" in str(message.message)
             for message in messages_framework.get_messages(response.wsgi_request)
         )
 
@@ -1927,3 +1930,593 @@ class TestAccountDeleteViewSA35:
             user=other_user,
             organization=org,
         ).exists()
+
+
+class _StubProviderError(Exception):
+    """A provider-state error a stub handler declares as fail-closed."""
+
+
+class _IncompleteAccountDeletionHandler:
+    """A declared handler missing the operations the capability requires."""
+
+    label = "incomplete_provider"
+
+    def account_deletion_handled_app_labels(self):
+        return (self.label,)
+
+    def account_deletion_fail_closed_errors(self):
+        return (_StubProviderError,)
+
+
+class _StubAccountDeletionHandler:
+    """A rule 4 account-deletion handler that records the calls it receives."""
+
+    label = "stub_provider"
+
+    def __init__(
+        self,
+        calls: list[Any],
+        *,
+        reference_organization_ids: tuple[int, ...] = (),
+        reconcile_scope: str = "cancellation",
+        cancel_error: Exception | None = None,
+        lock_error: Exception | None = None,
+        transition: object | None = None,
+        on_cancel=None,
+    ) -> None:
+        self._calls = calls
+        self._reference_organization_ids = reference_organization_ids
+        self._reconcile_scope = reconcile_scope
+        self._cancel_error = cancel_error
+        self._lock_error = lock_error
+        self._transition = transition
+        self._on_cancel = on_cancel
+        self.reconciled_organization_ids: list[Any] = []
+
+    def account_deletion_handled_app_labels(self) -> tuple[str, ...]:
+        return (self.label,)
+
+    def account_deletion_fail_closed_errors(self) -> tuple[type[BaseException], ...]:
+        return (_StubProviderError,)
+
+    def account_deletion_reconcile_scope(self) -> str:
+        return self._reconcile_scope
+
+    def account_deletion_user_reference_organization_ids(self, user_id):
+        self._calls.append("discover")
+        return self._reference_organization_ids
+
+    def account_deletion_subscription_mutation_lock(self, organization_id):
+        from contextlib import contextmanager, nullcontext
+
+        self._calls.append("lock")
+        if self._lock_error is None:
+            return nullcontext()
+
+        @contextmanager
+        def raise_on_enter():
+            raise self._lock_error
+            yield
+
+        return raise_on_enter()
+
+    def reconcile_account_deletion_purchase_provider_state(
+        self, organization_id, user_id
+    ) -> None:
+        self._calls.append("purchase")
+
+    def reconcile_account_deletion_provider_state(self, organization_id) -> None:
+        self._calls.append("reconcile")
+        self.reconciled_organization_ids.append(organization_id)
+
+    def cancel_account_deletion_subscription(self, user, organization):
+        self._calls.append("cancel")
+        if self._on_cancel is not None:
+            self._on_cancel(organization)
+        if self._cancel_error is not None:
+            raise self._cancel_error
+        return self._transition
+
+    def resume_account_deletion_subscription(
+        self, user, organization, transition
+    ) -> None:
+        self._calls.append(("resume", transition))
+
+    def detach_account_deletion_user_references(self, user_id, organization_ids) -> int:
+        self._calls.append("detach")
+        return 0
+
+
+@contextmanager
+def _declared_handlers(*handlers):
+    """Install *handlers* as the declared account-deletion providers for one request.
+
+    The app-config lookup answers with each handler for the labels it claims,
+    mirroring the identity between a provider and its own app config.
+    """
+    from unittest.mock import patch
+
+    def resolve(label):
+        return next(
+            handler
+            for handler in handlers
+            if label in handler.account_deletion_handled_app_labels()
+        )
+
+    with (
+        patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=handlers,
+        ),
+        patch(
+            "quickscale_modules_auth.views._installed_app_config",
+            side_effect=resolve,
+        ),
+    ):
+        yield
+
+
+@pytest.mark.django_db
+class TestAccountDeleteViewDeclaredHandlers:
+    """Rule 4: account deletion drives declared handlers, not module names."""
+
+    def test_account_delete_drives_the_declared_handler(
+        self, authenticated_client, user
+    ):
+        """Every declared operation runs in order for the user's personal org."""
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Declared Handler",
+            slug="declared-handler",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        calls: list[str] = []
+        handler = _StubAccountDeletionHandler(
+            calls,
+            reference_organization_ids=(organization.pk,),
+        )
+
+        with _declared_handlers(handler):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 302
+        assert not get_user_model().objects.filter(pk=user.pk).exists()
+        assert calls == [
+            "discover",
+            "lock",
+            "purchase",
+            "reconcile",
+            "cancel",
+            "discover",
+            "detach",
+        ]
+
+    def test_account_delete_blocks_when_a_declared_handler_is_incomplete(
+        self, authenticated_client, user
+    ):
+        """A handler missing a protocol operation fails the deletion closed."""
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        with _declared_handlers(_IncompleteAccountDeletionHandler()):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        message_text = " ".join(
+            str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+        assert "account-deletion capability" in message_text
+        assert "cancel_account_deletion_subscription" in message_text
+
+    def test_account_delete_blocks_on_a_declared_provider_error(
+        self, authenticated_client, user
+    ):
+        """A fail-closed error declared by the handler renders a blocked response."""
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Declared Error",
+            slug="declared-error",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        handler = _StubAccountDeletionHandler(
+            [],
+            cancel_error=_StubProviderError("provider state is not terminal"),
+        )
+
+        with _declared_handlers(handler):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert any(
+            "provider state is not terminal" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+
+    def test_account_delete_reraises_an_undeclared_provider_error(
+        self, authenticated_client, user
+    ):
+        """An error outside the declared set propagates instead of being masked."""
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Undeclared Error",
+            slug="undeclared-error",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        handler = _StubAccountDeletionHandler(
+            [],
+            cancel_error=ValueError("unexpected provider defect"),
+        )
+
+        with (
+            _declared_handlers(handler),
+            pytest.raises(ValueError, match="unexpected provider defect"),
+        ):
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
+
+    def test_account_delete_blocks_on_an_unknown_reconcile_scope(
+        self, authenticated_client, user
+    ):
+        """A handler declaring an unknown reconcile scope fails closed."""
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        handler = _StubAccountDeletionHandler([], reconcile_scope="everywhere")
+
+        with _declared_handlers(handler):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert any(
+            "unknown reconcile scope" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+
+    def test_account_delete_reconciles_a_touched_scope_handler_for_retained_orgs(
+        self, authenticated_client, user
+    ):
+        """A touched-scope handler reconciles every organization the deletion touches."""
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        shared_org = Organization.objects.create(
+            name="Retained Touched",
+            slug="retained-touched",
+        )
+        owner = get_user_model().objects.create_user(
+            username="touched-owner",
+            email="touched-owner@example.com",
+            password="TouchedOwner123!",
+        )
+        OrganizationMembership.objects.create(
+            user=owner,
+            organization=shared_org,
+            role=OrgRole.OWNER,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=shared_org,
+            role=OrgRole.MEMBER,
+        )
+        calls: list[Any] = []
+        handler = _StubAccountDeletionHandler(calls, reconcile_scope="touched")
+
+        with _declared_handlers(handler):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 302
+        assert handler.reconciled_organization_ids == [shared_org.pk]
+
+    def test_account_delete_compensates_each_handler_with_its_own_transition(
+        self, authenticated_client, user
+    ):
+        """Each declared handler is resumed with the transition it produced."""
+        from types import SimpleNamespace
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Shared Compensation",
+            slug="shared-compensation",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        other_owner = get_user_model().objects.create_user(
+            username="compensation-owner",
+            email="compensation-owner@example.com",
+            password="CompensationOwner123!",
+        )
+        first_transition = SimpleNamespace(changed=True)
+        second_transition = SimpleNamespace(changed=True)
+        first_calls: list[Any] = []
+        second_calls: list[Any] = []
+
+        def reject_deletion(org):
+            OrganizationMembership.objects.create(
+                user=other_owner,
+                organization=org,
+                role=OrgRole.OWNER,
+            )
+
+        first = _StubAccountDeletionHandler(
+            first_calls,
+            transition=first_transition,
+        )
+        second = _StubAccountDeletionHandler(
+            second_calls,
+            transition=second_transition,
+            on_cancel=reject_deletion,
+        )
+        second.label = "stub_provider_second"
+
+        with _declared_handlers(first, second):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert first_calls[-1] == ("resume", first_transition)
+        assert second_calls[-1] == ("resume", second_transition)
+
+    def test_account_delete_blocks_a_handler_that_is_not_its_app_config(
+        self, authenticated_client, user
+    ):
+        """A handler claiming an app's label must be that app's own config."""
+        from unittest.mock import patch
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        handler = _StubAccountDeletionHandler([])
+        handler.label = "quickscale_billing"
+
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(handler,),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert any(
+            "not that app's config" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+
+    def test_account_delete_blocks_on_a_declared_lock_error(
+        self, authenticated_client, user
+    ):
+        """A declared provider error while acquiring a lock blocks the deletion."""
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Declared Lock Error",
+            slug="declared-lock-error",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        handler = _StubAccountDeletionHandler(
+            [],
+            lock_error=_StubProviderError("provider lock unavailable"),
+        )
+
+        with _declared_handlers(handler):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert any(
+            "provider lock unavailable" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+
+    @pytest.mark.parametrize("lock_error_type", [ValueError, KeyboardInterrupt])
+    def test_account_delete_releases_acquired_locks_on_an_undeclared_lock_error(
+        self, authenticated_client, user, lock_error_type
+    ):
+        """An unexpected acquisition failure releases every acquired lock."""
+        from contextlib import contextmanager
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organizations = [
+            Organization.objects.create(
+                name=f"Lock Release {index}",
+                slug=f"lock-release-{index}",
+                is_personal=True,
+            )
+            for index in range(2)
+        ]
+        for organization in organizations:
+            OrganizationMembership.objects.create(
+                user=user,
+                organization=organization,
+                role=OrgRole.OWNER,
+            )
+        events: list[tuple[str, Any]] = []
+        handler = _StubAccountDeletionHandler([])
+        acquisitions = {"count": 0}
+
+        @contextmanager
+        def recording_lock(organization_id):
+            events.append(("enter", organization_id))
+            yield
+            events.append(("exit", organization_id))
+
+        def fail_second_lock(organization_id):
+            acquisitions["count"] += 1
+            if acquisitions["count"] == 2:
+                raise lock_error_type("unexpected lock defect")
+            return recording_lock(organization_id)
+
+        handler.account_deletion_subscription_mutation_lock = fail_second_lock
+        first_organization_id = sorted(
+            (organization.pk for organization in organizations), key=str
+        )[0]
+
+        with (
+            _declared_handlers(handler),
+            pytest.raises(lock_error_type, match="unexpected lock defect"),
+        ):
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
+
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert events == [
+            ("enter", first_organization_id),
+            ("exit", first_organization_id),
+        ]
+
+    def test_account_delete_preserves_the_acquisition_error_when_cleanup_fails(
+        self, authenticated_client, user
+    ):
+        """A failing lock release cannot replace the error that triggered it."""
+        from contextlib import contextmanager
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organizations = [
+            Organization.objects.create(
+                name=f"Cleanup Failure {index}",
+                slug=f"cleanup-failure-{index}",
+                is_personal=True,
+            )
+            for index in range(2)
+        ]
+        for organization in organizations:
+            OrganizationMembership.objects.create(
+                user=user,
+                organization=organization,
+                role=OrgRole.OWNER,
+            )
+        events: list[tuple[str, Any]] = []
+        handler = _StubAccountDeletionHandler([])
+        acquisitions = {"count": 0}
+
+        @contextmanager
+        def failing_release_lock(organization_id):
+            events.append(("enter", organization_id))
+            try:
+                yield
+            finally:
+                events.append(("exit", organization_id))
+                raise RuntimeError("unlock failed")
+
+        def fail_second_lock(organization_id):
+            acquisitions["count"] += 1
+            if acquisitions["count"] == 2:
+                raise ValueError("unexpected lock defect")
+            return failing_release_lock(organization_id)
+
+        handler.account_deletion_subscription_mutation_lock = fail_second_lock
+        first_organization_id = sorted(
+            (organization.pk for organization in organizations), key=str
+        )[0]
+
+        with (
+            _declared_handlers(handler),
+            pytest.raises(ValueError, match="unexpected lock defect"),
+        ):
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
+
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert events == [
+            ("enter", first_organization_id),
+            ("exit", first_organization_id),
+        ]
