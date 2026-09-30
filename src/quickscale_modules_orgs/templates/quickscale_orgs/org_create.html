@@ -1,17 +1,14 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>Create organization</title>
-</head>
-<body>
-    {% include "quickscale_orgs/_debug_banner.html" %}
-    <h1>Create your organization</h1>
-    <p>Name your workspace. QuickScale will derive a unique slug on the server.</p>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Create organization</button>
-    </form>
-</body>
-</html>
+{% extends "quickscale_orgs/base.html" %}
+
+{% block title %}Create organization{% endblock %}
+
+{% block orgs_content %}
+{% include "quickscale_orgs/_debug_banner.html" %}
+<h1>Create your organization</h1>
+<p>Name your workspace. QuickScale will derive a unique slug on the server.</p>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create organization</button>
+</form>
+{% endblock %}
