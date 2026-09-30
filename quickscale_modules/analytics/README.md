@@ -2,19 +2,35 @@
 
 Service-style PostHog analytics foundation for QuickScale-generated projects.
 
-This module is the v0.80.0 backend-first analytics contract. Repository SSOT still lives in ../../README.md, ../../docs/technical/decisions.md, and ../../docs/technical/roadmap.md.
+## Overview
 
-## What Ships In v0.80.0
+Analytics is a service-style integration module: it ships no models, admin, migrations, or
+data tables. It initializes the PostHog Python SDK safely during startup without blocking
+Django boot, exposes server-side capture helpers with a stable event vocabulary, and offers
+template tags for manual server-rendered adoption without a context processor.
 
-- An installable Django app that initializes the PostHog Python SDK safely during startup without blocking Django boot.
-- Flat `QUICKSCALE_ANALYTICS_*` settings as the authoritative planner/apply contract.
-- Server-side capture helpers for generic events plus the first-party `form_submit` and `social_link_click` vocabulary.
-- Template tags for manual server-rendered adoption without introducing a context processor.
-- No models, admin, URLs, or migrations because analytics is an approved service-style integration module in this milestone.
+- A flat `QUICKSCALE_ANALYTICS_*` settings surface owned by the module manifest.
+- Server-side capture helpers for generic events plus the first-party `form_submit` and
+  `social_link_click` vocabulary.
+- A module-owned overview page at `analytics/`.
 
-## Configuration Surface
+## Configuration
 
-Planner-owned config remains authoritative in generated settings and `quickscale.yml`.
+The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
+write them to the generated settings, and `quickscale.yml` carries the desired values.
+
+| Option | Type | Default | Django setting | Description |
+|--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_ANALYTICS_ENABLED` | Enable the analytics runtime. When disabled, QuickScale removes managed backend analytics wiring. |
+| `provider` | string | `posthog` | `QUICKSCALE_ANALYTICS_PROVIDER` | Approved analytics provider; PostHog is the only supported option. |
+| `posthog_api_key_env_var` | string | `POSTHOG_API_KEY` | `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR` | Environment-variable name containing the PostHog project API key. |
+| `posthog_host_env_var` | string | `POSTHOG_HOST` | `QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR` | Optional environment-variable name containing the PostHog ingestion host override. |
+| `posthog_host` | string | `https://us.i.posthog.com` | `QUICKSCALE_ANALYTICS_POSTHOG_HOST` | Fallback PostHog ingestion host used when the host env var is blank. |
+| `exclude_debug` | boolean | `true` | `QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG` | Disable analytics automatically when Django `DEBUG` is true. |
+| `exclude_staff` | boolean | `false` | `QUICKSCALE_ANALYTICS_EXCLUDE_STAFF` | Skip request-scoped analytics payloads for authenticated staff users. |
+| `anonymous_by_default` | boolean | `true` | `QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT` | Use session-based anonymous distinct IDs unless operators explicitly opt into authenticated identity linkage. |
+
+The same desired state in `quickscale.yml`:
 
 ```yaml
 modules:
@@ -29,34 +45,51 @@ modules:
     anonymous_by_default: true
 ```
 
-Supported mutable keys come from [module.yml](./module.yml):
+## Public surface
 
-- `enabled`
-- `provider` (`posthog` only)
-- `posthog_api_key_env_var`
-- `posthog_host_env_var`
-- `posthog_host`
-- `exclude_debug`
-- `exclude_staff`
-- `anonymous_by_default`
+- `get_analytics_runtime_settings()` returns an `AnalyticsRuntimeSettingsSnapshot`;
+  `is_analytics_active()` and `analytics_enabled_for_request(request)` answer whether capture
+  runs for the current process and request.
+- `configure_analytics_client()` initializes the PostHog client; `capture_event()`,
+  `capture_form_submit()`, and `capture_social_link_click()` send the first-party events;
+  `get_distinct_id()` resolves the active distinct ID.
+- `get_template_analytics_context()` builds the dictionary the template tags render.
+- `events.py` holds the stable event vocabulary: `ANALYTICS_EVENT_PAGEVIEW`
+  (`$pageview`), `ANALYTICS_EVENT_FORM_SUBMIT` (`form_submit`), and
+  `ANALYTICS_EVENT_SOCIAL_LINK_CLICK` (`social_link_click`).
+- Template tags, loaded with `{% load analytics_tags %}`:
+  `analytics_public_config` returns the resolved runtime config dictionary for the current
+  request, and `analytics_public_config_json` returns the same payload as JSON for inline
+  script or bootstrap patterns.
 
-## Runtime Notes
+## URLs
 
-- Startup is intentionally non-blocking. Missing SDK or missing env vars disable analytics safely instead of preventing app startup.
-- The module never persists raw PostHog credentials in settings, `quickscale.yml`, or state files. Env-var references stay authoritative.
-- Existing React and HTML theme files remain user-owned in v0.80.0. Use the provided template tags only when you explicitly adopt analytics in server-rendered templates.
+`quickscale apply` mounts the module under `analytics/`. The single route is:
 
-## Template Tags
+| URL name | Path | View |
+|----------|------|------|
+| `quickscale_analytics:analytics-dashboard` | `analytics/` | Module-owned analytics overview page. |
 
-Load `analytics_tags` for manual HTML adoption:
+## Management commands
 
-- `analytics_public_config` returns the resolved runtime config dictionary for the current request.
-- `analytics_public_config_json` returns the same payload as JSON for inline script/bootstrap patterns.
+This module ships no management commands.
 
-These tags do not rewrite templates automatically and they remain optional in this phase.
+## Operations
 
-## Related Docs
+- Startup is intentionally non-blocking: a missing SDK or missing environment variables
+  disable analytics safely instead of preventing app startup.
+- The module never persists raw PostHog credentials in settings, `quickscale.yml`, or state
+  files; the `_env_var` options are the authoritative references.
+- `exclude_debug` and `exclude_staff` keep non-production and staff traffic out of capture;
+  `anonymous_by_default` keeps distinct IDs session-based unless authenticated identity
+  linkage is explicitly enabled.
+- Existing React and HTML theme files remain user-owned: use the template tags only when you
+  explicitly adopt analytics in server-rendered templates.
 
-- ../../docs/technical/roadmap.md
-- ../../docs/planning/analytics-provider-comparison.md
-- ../README.md
+## Extending
+
+- The template tags are the supported manual adoption path for server-rendered templates;
+  they do not rewrite templates automatically.
+- Related documentation: [roadmap](../../docs/technical/roadmap.md),
+  [analytics provider comparison](../../docs/planning/analytics-provider-comparison.md), and
+  the [module workspace README](../README.md).
