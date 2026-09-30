@@ -315,10 +315,24 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
     )
     assert throttle_classes == [
         (
+            "quickscale_modules/blog/src/quickscale_modules_blog/throttles.py",
+            "BlogApiThrottle",
+        ),
+        (
             "quickscale_modules/forms/src/quickscale_modules_forms/throttles.py",
             "FormSubmitThrottle",
-        )
+        ),
     ], f"Unexpected first-party throttle inventory: {throttle_classes!r}"
+
+    blog_throttle = next(
+        record for record in classes if record.name == "BlogApiThrottle"
+    )
+    assert blog_throttle.bases == ("ClientIPThrottleMixin", "ScopedRateThrottle")
+    assert [
+        node.name
+        for node in blog_throttle.node.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ] == ["get_cache_key"]
 
     form_throttle = next(
         record for record in classes if record.name == "FormSubmitThrottle"
@@ -330,6 +344,7 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     ] == ["get_cache_key"]
 
+    relative_blog_views = "quickscale_modules/blog/src/quickscale_modules_blog/views.py"
     relative_forms_views = (
         "quickscale_modules/forms/src/quickscale_modules_forms/views.py"
     )
@@ -348,6 +363,7 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
             "StripeWebhookView",
             (),
         ),
+        (relative_blog_views, "BlogApiBaseView", ("BlogApiThrottle",)),
         (relative_forms_views, "FormSubmitAPIView", ("FormSubmitThrottle",)),
         (
             "quickscale_modules/notifications/src/quickscale_modules_notifications/views.py",
@@ -369,11 +385,6 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
                 "quickscale_modules/forms/src/quickscale_modules_forms/views.py",
                 "FormSubmitAPIView.create",
                 325,
-            ),
-            (
-                "quickscale_modules/blog/src/quickscale_modules_blog/views.py",
-                "_get_blog_api_rate_limit_ident",
-                282,
             ),
         ]
     )
