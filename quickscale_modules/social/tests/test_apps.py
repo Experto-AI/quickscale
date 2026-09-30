@@ -4,6 +4,8 @@ import pytest
 from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 
+from quickscale_modules_social.services import organization_cache_keys
+
 
 def test_social_app_config_matches_packaged_module_contract() -> None:
     """The packaged app config should expose the expected name, label, and title."""
@@ -13,6 +15,32 @@ def test_social_app_config_matches_packaged_module_contract() -> None:
     assert config.label == "quickscale_social"
     assert config.verbose_name == "QuickScale Social"
     assert config.default_auto_field == "django.db.models.BigAutoField"
+
+
+def test_app_config_declares_organization_cache_keys() -> None:
+    """Rule 4: social declares its org-scoped cache keys as a capability."""
+    config = apps.get_app_config("quickscale_social")
+
+    declarations = config.organization_cache_keys()
+
+    assert declarations == (organization_cache_keys,)
+
+
+def test_organization_cache_keys_cover_bare_and_org_partitioned_keys() -> None:
+    """The declaration returns the social keys a removal boundary must clear."""
+    from quickscale_modules_social.contracts import (
+        SOCIAL_EMBEDS_CACHE_KEY,
+        SOCIAL_LINKS_CACHE_KEY,
+    )
+
+    keys = organization_cache_keys("00000000-0000-0000-0000-000000000042")
+
+    assert set(keys) == {
+        SOCIAL_LINKS_CACHE_KEY,
+        f"{SOCIAL_LINKS_CACHE_KEY}:org:00000000-0000-0000-0000-000000000042",
+        SOCIAL_EMBEDS_CACHE_KEY,
+        f"{SOCIAL_EMBEDS_CACHE_KEY}:org:00000000-0000-0000-0000-000000000042",
+    }
 
 
 @pytest.mark.parametrize(

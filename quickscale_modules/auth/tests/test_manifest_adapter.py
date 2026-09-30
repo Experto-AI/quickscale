@@ -85,16 +85,18 @@ class TestAuthManifestAdapter:
         )
         assert spec.pre_home_url_includes == ()
 
-    def test_account_adapter_stays_single_writer(self) -> None:
-        """Auth does not wire ACCOUNT_ADAPTER; the orgs adapter owns the key.
+    def test_manifest_owns_the_account_adapter(self) -> None:
+        """Rule 30: auth's manifest is the single writer of ACCOUNT_ADAPTER.
 
-        orgs' adapter extends this module's adapter, and every auth install
-        also selects orgs, so the configured adapter keeps auth's behavior
-        while the key has one writer.
+        Auth owns the one allauth adapter; installed modules contribute their
+        post-auth redirects as AppConfig capabilities instead of another
+        adapter class that extends this one.
         """
         spec = _auth_manifest_adapter({"authentication_method": "email"})
 
-        assert "ACCOUNT_ADAPTER" not in spec.settings
+        assert spec.settings["ACCOUNT_ADAPTER"] == (
+            "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
+        )
 
     @pytest.mark.parametrize(
         "options",

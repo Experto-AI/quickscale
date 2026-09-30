@@ -37,7 +37,6 @@ def _orgs_post_hook(
     settings = dict(spec.settings)
     settings.update(
         {
-            "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
             "QUICKSCALE_MODE": mode,
         }
     )

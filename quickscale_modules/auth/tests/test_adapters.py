@@ -46,6 +46,53 @@ class TestQuickscaleAccountAdapter:
         url = self.adapter.get_login_redirect_url(request)
         assert url == "/dashboard/"
 
+    def test_login_redirect_prefers_a_declared_hook(self, monkeypatch):
+        """Rule 4: a declared post-login hook supplies the redirect."""
+        monkeypatch.setattr(
+            "quickscale_modules_auth.allauth_adapter.collect_capabilities",
+            lambda capability: (lambda request: f"/from-hook/{capability}/",),
+        )
+        request = self.factory.get("/")
+
+        url = self.adapter.get_login_redirect_url(request)
+
+        assert url == "/from-hook/post_login_redirect_hooks/"
+
+    def test_login_redirect_uses_the_first_answering_hook(self, monkeypatch):
+        """A hook answering None leaves the next declared hook a turn."""
+        monkeypatch.setattr(
+            "quickscale_modules_auth.allauth_adapter.collect_capabilities",
+            lambda capability: (
+                lambda request: None,
+                lambda request: "/second-hook/",
+            ),
+        )
+        request = self.factory.get("/")
+
+        url = self.adapter.get_login_redirect_url(request)
+
+        assert url == "/second-hook/"
+
+    def test_signup_redirect_prefers_a_declared_hook(self, monkeypatch):
+        """Rule 4: a declared post-signup hook supplies the redirect."""
+        monkeypatch.setattr(
+            "quickscale_modules_auth.allauth_adapter.collect_capabilities",
+            lambda capability: (lambda request: "/from-signup/",),
+        )
+        request = self.factory.get("/")
+
+        url = self.adapter.get_signup_redirect_url(request)
+
+        assert url == "/from-signup/"
+
+    def test_signup_redirect_falls_back_to_the_allauth_default(self):
+        """With no hook answering, allauth's own default path applies."""
+        request = self.factory.get("/")
+
+        url = self.adapter.get_signup_redirect_url(request)
+
+        assert url == "/accounts/profile/"
+
     def test_save_user_with_commit(self):
         """Test save_user with commit=True"""
         from django.contrib.auth import get_user_model

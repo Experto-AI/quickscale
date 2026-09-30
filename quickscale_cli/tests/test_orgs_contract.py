@@ -67,7 +67,6 @@ def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
         "quickscale_modules_orgs.middleware.TenantMiddleware",
     )
     assert orgs_spec.settings == {
-        "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
         "QUICKSCALE_MODE": "solo",
     }
     assert orgs_spec.pre_home_url_includes == (
@@ -105,7 +104,7 @@ def test_orgs_wiring_preserves_auth_contracts_when_both_are_selected() -> None:
     ) < middleware.index("quickscale_modules_orgs.middleware.TenantMiddleware")
     assert (
         settings["ACCOUNT_ADAPTER"]
-        == "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
+        == "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
     )
     assert urls[0] == ("orgs/", "quickscale_modules_orgs.urls")
     assert ("accounts/", "allauth.urls") in urls

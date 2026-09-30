@@ -210,8 +210,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Module wiring refuses conflicting settings.** `apply` fails and names both modules and the
     setting when two modules contribute one wiring key with different values, while
     `REST_FRAMEWORK` contributions merge key by key so one module's throttle rates cannot replace
-    another's. Auth no longer contributes `ACCOUNT_ADAPTER`; the orgs adapter, which extends
-    auth's, is its single writer.
+    another's. The account adapter has one writer: auth owns `ACCOUNT_ADAPTER`, and modules
+    contribute their post-auth redirects as hooks it collects.
   - **Shipped-module lists derive from module manifests.** Core's catalog descriptions, the Bandit
     scan roots, the theme lint's module set, and the PostgreSQL isolation profile and runner read
     the shipped set from `quickscale_modules/*/module.yml`, so a module that ships an RLS boundary
@@ -261,6 +261,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     notifications module declares `notifications/` in its manifest's `url_includes` entry instead
     of its adapter, and its route is named `resend_webhook`; the Resend endpoint stays at
     `/notifications/webhooks/resend/`.
+  - **Post-auth redirects and organization cache keys are declared capabilities.** Auth's single
+    allauth adapter collects installed modules' declared post-login and post-signup redirect
+    hooks, orgs declares the organization-aware ones instead of subclassing that adapter, and
+    the organization purge clears the organization-scoped cache keys social declares.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

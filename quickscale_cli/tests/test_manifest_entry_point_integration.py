@@ -82,7 +82,7 @@ class TestSourceDiscoveredManifestAdapterParity:
 
         assert (
             settings["ACCOUNT_ADAPTER"]
-            == "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
+            == "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
         )
         assert "MARKDOWNX_MARKDOWN_EXTENSIONS" in settings
 
