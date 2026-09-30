@@ -1,5 +1,7 @@
 """Tests for auth module views"""
 
+from typing import Any
+
 import pytest
 from django.urls import reverse
 
@@ -1952,20 +1954,30 @@ class _StubAccountDeletionHandler:
 
     def __init__(
         self,
-        calls: list[str],
+        calls: list[Any],
         *,
         reference_organization_ids: tuple[int, ...] = (),
+        reconcile_scope: str = "cancellation",
         cancel_error: Exception | None = None,
+        transition: object | None = None,
+        on_cancel=None,
     ) -> None:
         self._calls = calls
         self._reference_organization_ids = reference_organization_ids
+        self._reconcile_scope = reconcile_scope
         self._cancel_error = cancel_error
+        self._transition = transition
+        self._on_cancel = on_cancel
+        self.reconciled_organization_ids: list[Any] = []
 
     def account_deletion_handled_app_labels(self) -> tuple[str, ...]:
         return (self.label,)
 
     def account_deletion_fail_closed_errors(self) -> tuple[type[BaseException], ...]:
         return (_StubProviderError,)
+
+    def account_deletion_reconcile_scope(self) -> str:
+        return self._reconcile_scope
 
     def account_deletion_user_reference_organization_ids(self, user_id):
         self._calls.append("discover")
@@ -1984,17 +1996,20 @@ class _StubAccountDeletionHandler:
 
     def reconcile_account_deletion_provider_state(self, organization_id) -> None:
         self._calls.append("reconcile")
+        self.reconciled_organization_ids.append(organization_id)
 
     def cancel_account_deletion_subscription(self, user, organization):
         self._calls.append("cancel")
+        if self._on_cancel is not None:
+            self._on_cancel(organization)
         if self._cancel_error is not None:
             raise self._cancel_error
-        return None
+        return self._transition
 
     def resume_account_deletion_subscription(
         self, user, organization, transition
     ) -> None:
-        self._calls.append("resume")
+        self._calls.append(("resume", transition))
 
     def detach_account_deletion_user_references(self, user_id, organization_ids) -> int:
         self._calls.append("detach")
@@ -2161,3 +2176,141 @@ class TestAccountDeleteViewDeclaredHandlers:
             pytest.raises(ValueError, match="unexpected provider defect"),
         ):
             authenticated_client.post(reverse("quickscale_auth:account_delete"))
+
+    def test_account_delete_blocks_on_an_unknown_reconcile_scope(
+        self, authenticated_client, user
+    ):
+        """A handler declaring an unknown reconcile scope fails closed."""
+        from unittest.mock import patch
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        handler = _StubAccountDeletionHandler([], reconcile_scope="everywhere")
+
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(handler,),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert any(
+            "unknown reconcile scope" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+
+    def test_account_delete_reconciles_a_touched_scope_handler_for_retained_orgs(
+        self, authenticated_client, user
+    ):
+        """A touched-scope handler reconciles every organization the deletion touches."""
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        shared_org = Organization.objects.create(
+            name="Retained Touched",
+            slug="retained-touched",
+        )
+        owner = get_user_model().objects.create_user(
+            username="touched-owner",
+            email="touched-owner@example.com",
+            password="TouchedOwner123!",
+        )
+        OrganizationMembership.objects.create(
+            user=owner,
+            organization=shared_org,
+            role=OrgRole.OWNER,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=shared_org,
+            role=OrgRole.MEMBER,
+        )
+        calls: list[Any] = []
+        handler = _StubAccountDeletionHandler(calls, reconcile_scope="touched")
+
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(handler,),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 302
+        assert handler.reconciled_organization_ids == [shared_org.pk]
+
+    def test_account_delete_compensates_each_handler_with_its_own_transition(
+        self, authenticated_client, user
+    ):
+        """Each declared handler is resumed with the transition it produced."""
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Shared Compensation",
+            slug="shared-compensation",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        other_owner = get_user_model().objects.create_user(
+            username="compensation-owner",
+            email="compensation-owner@example.com",
+            password="CompensationOwner123!",
+        )
+        first_transition = SimpleNamespace(changed=True)
+        second_transition = SimpleNamespace(changed=True)
+        first_calls: list[Any] = []
+        second_calls: list[Any] = []
+
+        def reject_deletion(org):
+            OrganizationMembership.objects.create(
+                user=other_owner,
+                organization=org,
+                role=OrgRole.OWNER,
+            )
+
+        first = _StubAccountDeletionHandler(
+            first_calls,
+            transition=first_transition,
+        )
+        second = _StubAccountDeletionHandler(
+            second_calls,
+            transition=second_transition,
+            on_cancel=reject_deletion,
+        )
+
+        with patch(
+            "quickscale_modules_auth.views.collect_capabilities",
+            return_value=(first, second),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert get_user_model().objects.filter(pk=user.pk).exists()
+        assert first_calls[-1] == ("resume", first_transition)
+        assert second_calls[-1] == ("resume", second_transition)
