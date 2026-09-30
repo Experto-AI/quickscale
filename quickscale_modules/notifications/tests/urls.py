@@ -5,6 +5,6 @@ from django.urls import include, path
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include("quickscale_modules_notifications.urls")),
+    path("notifications/", include("quickscale_modules_notifications.urls")),
     path("", include("quickscale_modules_forms.urls")),
 ]
