@@ -224,7 +224,6 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                 handlers,
             )
         except _AccountDeletionProviderBlocked as exc:
-            lock_stack.close()
             messages.error(
                 self.request,
                 f"Account deletion is blocked by provider state: {exc}",
@@ -722,21 +721,26 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         """Acquire each declared handler's provider locks for the deletion.
 
         Serializes cancellation, deletion decision, and compensation.  A
-        declared provider error during acquisition fails the deletion closed
-        before any provider work; any other exception propagates.
+        declared provider error during acquisition fails the deletion closed,
+        and every lock acquired before any acquisition failure is released
+        before the error propagates, declared or not.
         """
-        for handler in handlers:
-            for organization_id in sorted(organization_ids, key=str):
-                try:
-                    stack.enter_context(
-                        handler.account_deletion_subscription_mutation_lock(
-                            organization_id
+        try:
+            for handler in handlers:
+                for organization_id in sorted(organization_ids, key=str):
+                    try:
+                        stack.enter_context(
+                            handler.account_deletion_subscription_mutation_lock(
+                                organization_id
+                            )
                         )
-                    )
-                except Exception as exc:
-                    if not _provider_error_is_blocking(handler, exc):
-                        raise
-                    raise _AccountDeletionProviderBlocked(str(exc)) from exc
+                    except Exception as exc:
+                        if not _provider_error_is_blocking(handler, exc):
+                            raise
+                        raise _AccountDeletionProviderBlocked(str(exc)) from exc
+        except Exception:
+            stack.close()
+            raise
 
     def _detach_provider_user_references(
         self,
