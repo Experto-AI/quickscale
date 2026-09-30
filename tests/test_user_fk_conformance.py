@@ -472,7 +472,7 @@ class TestAccountDeleteViewSurvivorRegression:
         # ---- Act: delete via AccountDeleteView ----
         from django.urls import reverse
 
-        response = client.post(reverse("quickscale_auth:account-delete"))
+        response = client.post(reverse("quickscale_auth:account_delete"))
 
         # ---- Assert: deletion succeeded ----
         assert response.status_code == 302, (
