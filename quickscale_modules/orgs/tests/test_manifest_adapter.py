@@ -31,7 +31,6 @@ class TestOrgsManifestAdapter:
             "quickscale_modules_orgs.middleware.TenantMiddleware",
         )
         assert spec.settings == {
-            "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
             "QUICKSCALE_MODE": "solo",
         }
         assert spec.pre_home_url_includes == (

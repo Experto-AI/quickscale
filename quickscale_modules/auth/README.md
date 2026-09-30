@@ -14,10 +14,10 @@ with a custom user model and organization-aware account flows.
 - A post-registration signal receiver for project-specific logic.
 - A declarative `module.yml` manifest with mutable and immutable options.
 
-`orgs` is required alongside `auth`: it supplies the account adapter that extends this module's
-adapter with organization-aware post-login redirects, the tenant middleware, and the
-`QUICKSCALE_MODE` runtime mode. Dependencies: Django 6.0+ and django-allauth
-`>=65.18.0,<66.0.0`.
+`orgs` is required alongside `auth`: it supplies the tenant middleware, the
+`QUICKSCALE_MODE` runtime mode, and the organization-aware post-auth redirects, which it
+declares as an `AppConfig` capability this module's account adapter collects. Dependencies:
+Django 6.0+ and django-allauth `>=65.18.0,<66.0.0`.
 
 ## Configuration
 
@@ -77,7 +77,7 @@ ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_ALLOW_REGISTRATION = True
-ACCOUNT_ADAPTER = "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
+ACCOUNT_ADAPTER = "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
 ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"
 LOGIN_REDIRECT_URL = "/accounts/profile/"
 LOGOUT_REDIRECT_URL = "/"
@@ -115,8 +115,9 @@ SESSION_SAVE_EVERY_REQUEST = True  # Extend session on activity
   account deletion.
 - `receivers.py` connects a `user_signed_up` receiver from `ready()` as the post-registration
   hook; `signals.py` is reserved for signals the module sends.
-- `allauth_adapter.py` holds the module's allauth account adapter; orgs' adapter subclasses it
-  so the installed pair keeps organization-aware redirects.
+- `allauth_adapter.py` holds the module's allauth account adapter; it collects installed
+  modules' declared post-auth redirect hooks (orgs declares the organization-aware ones) and
+  falls back to `LOGIN_REDIRECT_URL` when none answers.
 
 ## URLs
 

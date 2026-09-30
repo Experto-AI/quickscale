@@ -446,20 +446,22 @@ Customers self-provision without platform owner intervention:
 3. Redirect → /       → dashboard, ready to use (no org creation step shown)
 ```
 
-The allauth adapter handles both modes:
+The redirects live in `orgs` as post-login and post-signup hooks the module declares on its
+`AppConfig`; `auth`'s single allauth adapter collects every installed module's declared hooks
+and uses the first one that answers, so `orgs` never subclasses or imports the adapter:
 
 ```python
-class OrgsAccountAdapter(DefaultAccountAdapter):
-    def get_login_redirect_url(self, request):
-        if not OrganizationMembership.objects.filter(user=request.user).exists():
-            if settings.QUICKSCALE_MODE == "solo":
-                Organization.objects.create_personal_for(request.user)
-                return "/"
-            return "/orgs/new/"
-        return super().get_login_redirect_url(request)
+# quickscale_modules_orgs._redirects — declared by QuickscaleOrgsConfig
+def post_login_redirect(request) -> str | None:
+    if not OrganizationMembership.objects.filter(user=request.user).exists():
+        if settings.QUICKSCALE_MODE == "solo":
+            Organization.objects.create_personal_for(request.user)
+            return None  # the adapter's LOGIN_REDIRECT_URL applies
+        return "/orgs/new/"
+    return None
 ```
 
-Wired via `ACCOUNT_ADAPTER = 'quickscale_modules_orgs.adapters.OrgsAccountAdapter'` in module settings.
+Wired via `ACCOUNT_ADAPTER = 'quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter'` in auth's module settings.
 
 ---
 

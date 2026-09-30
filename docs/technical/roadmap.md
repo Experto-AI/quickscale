@@ -205,6 +205,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `blog` stops reading storage's setting and importing `storage.helpers`, and `dr_engine` stops
     reading backups' settings, through `services.py` and the shared `AppConfig` capabilities.
     Manifests' `required_modules` are left to SA219 and SA220.
+    *Landed:* `orgs` imports neither `auth` nor `social` any more — its post-auth redirects and
+    its cache-key collection are `AppConfig` capabilities (`auth` owns the single
+    `ACCOUNT_ADAPTER`; `social` declares its own org-scoped cache keys). Still open here: `auth`
+    → `billing`, `blog` → `storage`, `dr_engine` → `backups`, every `services.py` surface, and the
+    import-graph test.
   - *References by name* (rule 34). orgs' `require_org_feature` moves to billing's published
     surface; the purge command's billing steps and `removal.BOUNDARY_GUARDED_OBLIGATIONS` become
     billing's removal declarations, and its blog and crm label prefixes come from those modules'

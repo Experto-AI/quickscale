@@ -33,7 +33,6 @@ middleware:
   - quickscale_modules_orgs.middleware.TenantMiddleware
 
 settings:
-  ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter
   QUICKSCALE_MODE: solo
 
 derivation:
