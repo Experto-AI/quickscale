@@ -26,7 +26,7 @@ class TestOrgsManifestAdapter:
         spec = _orgs_manifest_adapter({})
 
         assert isinstance(spec, ModuleWiringSpec)
-        assert spec.apps == ("quickscale_modules_orgs",)
+        assert spec.apps == ("rest_framework", "quickscale_modules_orgs")
         assert spec.middleware == (
             "quickscale_modules_orgs.middleware.TenantMiddleware",
         )
