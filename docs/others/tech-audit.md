@@ -22,8 +22,8 @@ finding names one:
 - **R3 — the release pipeline** (`.github/workflows/publish.yml`), OIDC trusted publishing to PyPI.
 
 **Entry points.** R2: per-module URLconfs — DRF `APIView`s in billing/forms/crm, two `csrf_exempt`
-webhooks (Stripe, notifications), blog/listings staff publishing APIs with a custom token path,
-class-based auth/org views, and the operator commands `purge_organization`,
+webhooks (Stripe, notifications), the blog and listings staff publishing APIs as DRF session
+views, class-based auth/org views, and the operator commands `purge_organization`,
 `migrate_billing_to_orgs`, and the DR backup/restore surface. R1: the Click command tree plus the
 generated `start.sh`/`Dockerfile` launchers. R3: tag-triggered workflow dispatch.
 
@@ -218,7 +218,7 @@ fails. `n/a` means the safeguard does not apply to that entry point.
 | Credit balance / transactions / subscription detail | session + explicit check | `require_owner=True` | n/a (GET) | DRF | `user` default | n/a | n/a | DRF | n/a |
 | `PlanListView`, `PricingPageView` | `AllowAny` — public catalog | n/a | n/a | DRF / autoescape | `anon`/`user` defaults | n/a | n/a | DRF | n/a |
 | Blog automation API (`publish`, `media`) | session (CSRF enforced) | staff permission | DRF parsing + module validation | DRF JSON | `quickscale_blog_api` at `BLOG_API_RATE_LIMIT` — Notes | n/a | slug conflict → 409 | `{"error": {"code", …}}` | n/a |
-| Listings publishing API | session (CSRF enforced) | staff + `_resolve_api_org` | request parsing | JSON | none — Notes | n/a | slug conflict → 409 | JSON | n/a |
+| Listings publishing API | session (CSRF enforced) | staff permission | DRF parsing + module validation | DRF JSON | none — Notes | n/a | slug conflict → 409 | `{"error": {"code", …}}` | n/a |
 | Forms public submit | `AllowAny` — public form | n/a | DRF serializer | DRF | `FormSubmitThrottle` + required rate | n/a | n/a | DRF | submission row |
 | `AccountDeleteView` | `LoginRequiredMixin` | self only; last-owner check under row locks | confirmation form | autoescape | out of scope (self-service) | provider I/O outside transactions | locked re-validation + compensating resume | Django messages | removal-obligation skip log |
 | Org views + `TenantMiddleware` | `LoginRequiredMixin` | membership check on the session org, 403 on mismatch | Django forms | autoescape | out of scope | n/a | n/a | Django | n/a |

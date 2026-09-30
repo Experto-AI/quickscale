@@ -13,8 +13,8 @@ for marketplace verticals (real estate, jobs, events, products).
 - Semantic, zero-style HTML templates and SEO-friendly slugs.
 - Tenant-scoped through orgs' `TenantModel`; `orgs` is required alongside `listings`.
 
-Dependencies: Django >= 6.0, django-filter >= 26.1, django-markdownx >= 4.0.11, and Pillow
->= 12.3.0,<13.0.0.
+Dependencies: Django >= 6.0, Django REST Framework >= 3.17.2, django-filter >= 26.1,
+django-markdownx >= 4.0.11, and Pillow >= 12.3.0,<13.0.0.
 
 ## Configuration
 
@@ -46,9 +46,15 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 ### Publish API
 
 `POST listings/api/publish/` creates and publishes a listing from a JSON payload for
-authenticated staff users. The organization is ambient: it comes from `request.org` set by
-orgs' `TenantMiddleware`. Requests are validated before creation and answer with a validation
-error, or a conflict error when the slug or a unique field already exists.
+authenticated staff users. It is a DRF `APIView` with session authentication only (CSRF is
+enforced) and the JSON renderer alone. Every error the view answers takes the shared QuickScale
+shape `{"error": {"code", "message", "fields"}}`, produced by
+`quickscale_core.runtime.conventions.exception_handler` — the handler `quickscale apply`
+installs in `REST_FRAMEWORK` (a manual installation must install it the same way; see
+Operations). The organization is ambient: it comes from `request.org` set by orgs'
+`TenantMiddleware`; a session naming an organization the user no longer belongs to is refused
+by that middleware before the view runs. Requests are validated before creation and answer with
+a validation error, or a conflict error when the slug or a unique field already exists.
 
 ### Filtering
 
@@ -93,9 +99,20 @@ quickscale apply
 captures the module options in `quickscale.yml`.
 
 A manual installation embeds the orgs baseline first (the models need `quickscale_orgs` and
-`TenantMiddleware`), then adds `django_filters` and `quickscale_modules_listings` to
-`INSTALLED_APPS`, mounts the module URLs under `listings/`, and runs
-`python manage.py migrate`.
+`TenantMiddleware`), then adds `rest_framework`, `django_filters`, and
+`quickscale_modules_listings` to `INSTALLED_APPS`, mounts the module URLs under `listings/`,
+installs the shared error handler so module APIs answer the one QuickScale shape, and runs
+`python manage.py migrate`. Compose the handler into whatever `REST_FRAMEWORK` configuration
+the project already has — other modules contribute keys such as their throttle rates, and
+replacing the dict drops them:
+
+```python
+REST_FRAMEWORK = dict(globals().get("REST_FRAMEWORK", {}))
+REST_FRAMEWORK.setdefault(
+    "EXCEPTION_HANDLER",
+    "quickscale_core.runtime.conventions.exception_handler",
+)
+```
 
 Template customization: all templates extend `quickscale_listings/base.html`.
 Override the base at `templates/quickscale_listings/base.html` or individual pages at
