@@ -137,8 +137,8 @@ def _snapshot(**overrides: Any) -> services.AnalyticsRuntimeSettingsSnapshot:
     defaults: dict[str, Any] = {
         "enabled": True,
         "provider": services.ANALYTICS_PROVIDER_POSTHOG,
-        "posthog_api_key_env_var": services.DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
-        "posthog_host_env_var": services.DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
+        "posthog_api_key_env_var": "POSTHOG_API_KEY",
+        "posthog_host_env_var": "POSTHOG_HOST",
         "posthog_host": services.ANALYTICS_POSTHOG_DEFAULT_HOST,
         "exclude_debug": False,
         "exclude_staff": False,
