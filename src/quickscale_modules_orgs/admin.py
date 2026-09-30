@@ -82,7 +82,9 @@ class OrganizationAdmin(admin.ModelAdmin):
             f" as this organization.",
             level=messages.SUCCESS,
         )
-        return redirect(reverse("org-detail", kwargs={"org_slug": org_slug}))
+        return redirect(
+            reverse("quickscale_orgs:detail", kwargs={"org_slug": org_slug})
+        )
 
     def _admin_exit_debug_view(self, request: HttpRequest) -> HttpResponse:
         """Admin exit point for VIEW-AS: directly clear the debug session."""

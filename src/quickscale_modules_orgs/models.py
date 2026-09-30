@@ -67,13 +67,17 @@ class Organization(models.Model):
     def clean(self) -> None:
         """Validate reserved singleton invariants for the System org."""
         super().clean()
-        from .constants import SYSTEM_ORG_SLUG
+        from .constants import RESERVED_ORG_SLUGS, SYSTEM_ORG_SLUG
 
         errors: dict[str, str] = {}
 
         # is_system must not be null.
         if self.is_system is None:
             errors["is_system"] = "is_system must not be null."
+
+        # The module's JSON API owns /orgs/api/, so the "api" slug is reserved.
+        if self.slug in RESERVED_ORG_SLUGS:
+            errors["slug"] = f"The slug '{self.slug}' is reserved for the module's API."
 
         # slug="__system__" implies is_system=True.
         if self.slug == SYSTEM_ORG_SLUG and self.is_system is not True:

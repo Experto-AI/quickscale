@@ -117,7 +117,7 @@ urlpatterns = [
     path("healthcheck/", healthcheck_view, name="healthcheck"),
     path("accounts/profile/", accounts_profile_view, name="accounts-profile"),
     path(
-        "api/orgs/<slug:org_slug>/context/",
+        "orgs/api/<slug:org_slug>/context/",
         api_org_context_view,
         name="api-org-context",
     ),
@@ -153,7 +153,7 @@ urlpatterns = [
         OrgDashboardView.as_view(),
         name="sa41-org-dashboard",
     ),
-    path("", include("quickscale_modules_orgs.urls")),
+    path("orgs/", include("quickscale_modules_orgs.urls")),
     # AccountDeleteView needs auth URL routing in the test harness
     # so view-level survivor regression can reach it.
     # Use the same explicit namespace tuple pattern as the auth test harness
