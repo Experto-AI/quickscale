@@ -221,6 +221,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     shape, and throttle by client IP under the `quickscale_blog_api` scope at the module's
     `api_rate_limit` option; `BLOG_API_TOKENS` bearer access and the blog throttle counter table
     are removed.
+  - **Listings publish API is a DRF surface.** `POST listings/api/publish/` is a DRF view with
+    session authentication (CSRF enforced) behind the same staff gate, and it answers the shared
+    `{"error": {"code", "message", "fields"}}` shape with stable codes for validation, parse,
+    conflict, and server failures; the module's last plain-`JsonResponse` endpoint is gone.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -2519,7 +2519,12 @@ _EXPECTED_CATALOG_APPS: dict[str, tuple[str, ...]] = {
     "blog": ("rest_framework", "markdownx", "quickscale_modules_blog"),
     "crm": ("rest_framework", "django_filters", "quickscale_modules_crm"),
     "forms": ("rest_framework", "django_filters", "quickscale_modules_forms"),
-    "listings": ("django_filters", "markdownx", "quickscale_modules_listings"),
+    "listings": (
+        "rest_framework",
+        "django_filters",
+        "markdownx",
+        "quickscale_modules_listings",
+    ),
     "notifications": _SA167A_MANIFEST_APPS["notifications"],
     "orgs": _SA167A_MANIFEST_APPS["orgs"],
     "social": ("quickscale_modules_social",),
