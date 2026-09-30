@@ -21,7 +21,9 @@ from quickscale_core.contracts.resolvers import (
     resolve_manifest_module_options,
 )
 from quickscale_core.manifest.option_validation import validate_module_options
+from quickscale_core.manifest.resolver import ResolverResult
 from quickscale_core.manifest.schema import ModuleManifest
+from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_modules_notifications.adapter import (
     NOTIFICATIONS_CONSOLE_EMAIL_BACKEND,
     NOTIFICATIONS_LIVE_EMAIL_BACKEND,
@@ -46,6 +48,7 @@ def _make_mock_manifest(
     manifest.name = name
     manifest.get_defaults.return_value = defaults or {}
     manifest.managed_files = {}
+    manifest.retired_options = {}
     # SA5.1: manifest bridge reads derivation attributes from the manifest.
     manifest.wiring_projections = None
     manifest.derived_settings = None
@@ -111,6 +114,64 @@ class TestResolveManifestModuleOptions:
             "ops",
             "testing",
         ]
+
+    def test_retired_key_is_refused_before_resolving(self) -> None:
+        """A retired key fails closed with the manifest's authored message."""
+        with pytest.raises(ConfigValidationError, match="resend_api_key"):
+            resolve_manifest_module_options(
+                "notifications", {"resend_api_key": "raw-secret"}
+            )
+
+    def test_generic_adapter_boundary_refuses_a_retired_key(self) -> None:
+        """The adapter entry point refuses a retired key before resolving."""
+        from quickscale_core.manifest import ManifestError
+        from quickscale_core.manifest.entry_point import build_generic_manifest_spec
+
+        with pytest.raises(ManifestError, match="access_key_id"):
+            build_generic_manifest_spec("storage", {"access_key_id": "raw-secret"})
+
+    def test_resolution_boundary_refuses_validation_issues(self) -> None:
+        """A resolution issue fails closed at the non-adapter boundary."""
+        fake = ResolverResult(
+            module_name="analytics",
+            defaults={},
+            resolved={},
+            validation_issues=["modules.analytics.routes cannot feed url_includes"],
+        )
+        with (
+            patch(_MANIFEST_PATCH_PATH) as mock_load,
+            patch(
+                "quickscale_core.contracts.resolvers.resolve_module_config",
+                return_value=fake,
+            ),
+        ):
+            mock_load.return_value = _make_mock_manifest("analytics", {})
+            with pytest.raises(ConfigValidationError, match="cannot feed url_includes"):
+                resolve_manifest_module_options("analytics", {})
+
+    def test_adapter_boundary_refuses_validation_issues(self) -> None:
+        """A resolution issue fails closed at the adapter boundary too."""
+        from quickscale_core.manifest import ManifestError
+        from quickscale_core.manifest.entry_point import build_generic_manifest_spec
+
+        fake = ResolverResult(
+            module_name="analytics",
+            defaults={},
+            resolved={},
+            validation_issues=["modules.analytics.routes cannot feed url_includes"],
+        )
+        with (
+            patch(
+                "quickscale_core.manifest.entry_point.load_module_manifest"
+            ) as mock_manifest,
+            patch(
+                "quickscale_core.manifest.entry_point.resolve_module_config",
+                return_value=fake,
+            ),
+        ):
+            mock_manifest.return_value = _make_mock_manifest("analytics", {})
+            with pytest.raises(ManifestError, match="cannot feed url_includes"):
+                build_generic_manifest_spec("analytics", {})
 
 
 # ===================================================================
@@ -226,6 +287,11 @@ class TestNotificationsAdapterPredicates:
         """A null state value wires a blank setting, never the string "None"."""
         spec = get_notifications_adapter()({"reply_to_email": None})
         assert spec.settings["QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL"] == ""
+
+    def test_adapter_refuses_a_retired_key(self) -> None:
+        """The adapter path refuses a retired raw-secret key, never drops it."""
+        with pytest.raises(ConfigValidationError, match="webhook_secret"):
+            get_notifications_adapter()({"webhook_secret": "whsec_raw"})
 
 
 # ===================================================================

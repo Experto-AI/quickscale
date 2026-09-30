@@ -38,7 +38,7 @@ from quickscale_core.manifest.assembler import (
     assemble_wiring_spec,
 )
 from quickscale_core.manifest.derivation import build_schema_from_manifest
-from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.loader import ManifestError, load_manifest_from_path
 from quickscale_core.manifest.resolver import resolve_module_config
 from quickscale_core.module_wiring import ModuleWiringSpec
 
@@ -84,10 +84,15 @@ def build_generic_manifest_spec(
     """Build a wiring spec from the derivation rules in ``module.yml``.
 
     ``project_package`` is accepted for signature parity with module-owned
-    adapters.  The generic manifest path does not use it.
+    adapters.  The generic manifest path does not use it.  A supplied retired
+    key or a resolution issue fails closed before wiring is assembled.
     """
     del project_package
     manifest = load_module_manifest(module_name)
+    supplied = dict(options or {})
+    retired = sorted(name for name in manifest.retired_options if name in supplied)
+    if retired:
+        raise ManifestError(manifest.retired_options[retired[0]], module_name)
     schema = build_schema_from_manifest(
         manifest_name=module_name,
         wiring_projections=manifest.wiring_projections,
@@ -99,8 +104,10 @@ def build_generic_manifest_spec(
     result = resolve_module_config(
         manifest,
         schema,
-        overrides=dict(options or {}),
+        overrides=supplied,
     )
+    if result.validation_issues:
+        raise ManifestError(result.validation_issues[0], module_name)
     return assemble_wiring_spec(result, post_hook=post_hook)
 
 

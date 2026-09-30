@@ -310,7 +310,7 @@ The declarative-derivation *rule* is authoritative in
 [decisions.md §Module Derivation Schema](./decisions.md#module-derivation-schema);
 this is the type reference.
 
-**Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The manifest loader wires the `derivation` section into these types and the resolver executes them; the per-module CLI contract-file path they replaced is gone.
+**Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The manifest loader parses the `derivation` section into these types; the resolver executes the wiring projections, derived settings, and per-option derivations, and the loader refuses a top-level `normalization_rules`, `validation_rules`, or `legacy_aliases` declaration that nothing would execute, as well as a per-option `validation_rules` or `legacy_aliases` declaration (rule 6). The per-module CLI contract-file path they replaced is gone.
 
 **YAML-friendly shapes:** All dataclass fields use simple scalars (`str`, `int`, `float`, `bool`, `None`), lists, and dicts so `module.yml` `derivation:` sections round-trip through `yaml.safe_load` (via `load_manifest`/`build_schema_from_manifest`) without custom codecs.
 
@@ -319,8 +319,8 @@ this is the type reference.
 | Type | Purpose |
 |------|---------|
 | `NormalizationRule` | Declarative normalisation transformation (identity, strip, lowercase, url, choice_map, coerce_int, coerce_bool, `slug`, and `list` with nested `item_rules`) |
-| `ValidationRule` | Declarative validation constraint for the legacy `derivation.validation_rules` form (choices, range, required, pattern, type); the live per-option `validation` block uses rule 12's complete vocabulary — `choices`, `min` / `max`, `pattern`, `not_empty`, `required_when`, `any_of`, `subset_of`, `excludes`, and `intersects` |
-| `LegacyKeyAlias` | Mapping from deprecated configuration keys to current replacements |
+| `ValidationRule` | Declarative validation constraint type (`choices`, `range`, `required`, `pattern`, `type`) used by the derivation-schema API; a manifest's checks are authored in the option's `validation` block, which uses rule 12's complete vocabulary — `choices`, `min` / `max`, `pattern`, `not_empty`, `required_when`, `any_of`, `subset_of`, `excludes`, and `intersects` — and the loader refuses a `derivation.option_derivations.<option>.validation_rules` declaration |
+| `LegacyKeyAlias` | Deprecated-key mapping type retained by the derivation-schema API; manifest alias authoring is refused at load (rule 6 — a renamed option is refused by name via `retired_options`) |
 | `DerivedSetting` | Django setting projected from one or more configuration options |
 | `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
 | `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |

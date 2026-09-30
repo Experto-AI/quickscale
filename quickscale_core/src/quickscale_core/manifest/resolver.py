@@ -116,27 +116,77 @@ def _slugify(value: Any, *, max_length: Any, replace: Mapping[str, Any]) -> str:
     return candidate
 
 
-def _coerce_list_items(value: Any) -> list[Any]:
-    """Coerce a raw value into the items a ``list`` rule normalizes."""
+def _is_supported_list_item(item: Any) -> bool:
+    """Return whether *item* is a scalar or an empty container.
+
+    The ``list`` rule documents comma-split strings and wrapped scalars; an
+    empty container is an emptied item the rule drops.  Anything else (a
+    mapping, a non-empty container, an arbitrary object) is not representable.
+    """
+    if item is None or isinstance(item, (str, int, float, bool)):
+        return True
+    if isinstance(item, (list, tuple, set, frozenset, Mapping)):
+        return not item
+    return False
+
+
+def _coerce_list_items(value: Any) -> list[Any] | None:
+    """Return the items a ``list`` rule normalizes, or ``None`` when *value*
+    is a shape the rule cannot represent.
+
+    ``None`` is empty; a string comma-splits; a list or tuple is taken as
+    items when every item is a scalar or an empty container; a scalar wraps.
+    An unsupported shape — a mapping, a set, an item the rule would silently
+    stringify — returns ``None`` so the declared type check refuses the value
+    instead of the rule turning it into a plausible-looking list.
+    """
     if value is None:
         return []
     if isinstance(value, str):
         return list(value.split(","))
     if isinstance(value, (list, tuple)):
-        return list(value)
-    return [value]
+        items = list(value)
+        if not all(_is_supported_list_item(item) for item in items):
+            return None
+        return items
+    if isinstance(value, (int, float, bool)):
+        return [value]
+    return None
 
 
-def _apply_list_rule(value: Any, rule: NormalizationRule) -> list[Any]:
-    """Apply a ``list`` rule: coerce, run nested item rules, drop empties/dedupe."""
+def _is_empty_container(value: Any) -> bool:
+    """Return whether *value* is an empty list or mapping item."""
+    return isinstance(value, (list, tuple, set, frozenset, Mapping)) and not value
+
+
+def _apply_list_rule(value: Any, rule: NormalizationRule) -> Any:
+    """Apply a ``list`` rule: coerce, run nested item rules, drop empties/dedupe.
+
+    An empty item — ``None`` or an empty container — is dropped before the item
+    rules run, so a rule can never stringify it (``slug`` would turn an empty
+    set into the literal ``"set"``).  A value the rule cannot represent (a
+    mapping or another non-scalar container) is returned unchanged, so the
+    declared type check refuses it instead of the rule silently stringifying it.
+    """
+    items = _coerce_list_items(value)
+    if items is None:
+        return value
     normalized: list[Any] = []
-    for item in _coerce_list_items(value):
+    for item in items:
+        if item is None or _is_empty_container(item):
+            continue
         candidate = item
         for item_rule in rule.item_rules:
             candidate = _apply_normalization_rule(candidate, item_rule)
+            if candidate is None or _is_empty_container(candidate):
+                break
+            if not isinstance(candidate, (str, int, float, bool)):
+                break
         if candidate is None:
             continue
         if isinstance(candidate, str) and not candidate.strip():
+            continue
+        if _is_empty_container(candidate):
             continue
         if candidate in normalized:
             continue
@@ -203,6 +253,22 @@ def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
     return value
 
 
+def _list_chain_declines(value: Any, rules: list[NormalizationRule]) -> bool:
+    """Return whether a list-normalization chain must leave *value* alone.
+
+    An unsupported shape must reach the declared type check unchanged; when the
+    chain declares a ``list`` rule, an earlier rule (``slug``) must not
+    stringify its items first.
+    """
+    if not any(rule.rule_type == "list" for rule in rules):
+        return False
+    if value is None:
+        return False
+    if isinstance(value, (list, tuple)):
+        return not all(_is_supported_list_item(item) for item in value)
+    return not isinstance(value, (str, int, float, bool))
+
+
 def _normalize_value(
     value: Any,
     option_key: str,
@@ -211,10 +277,12 @@ def _normalize_value(
 ) -> Any:
     """Apply all applicable normalization rules to a single option value.
 
-    Shared rules are applied first (in order), then per-option rules.
+    Shared rules are applied first (in order), then per-option rules.  A chain
+    that declares a ``list`` rule declines an unsupported shape entirely, so no
+    earlier rule in the chain can stringify it before the type check sees it.
 
     Args:
-        value: The raw value to normalize.
+        value: The raw input value.
         option_key: The option key being normalized.
         option_derivation: The per-option derivation metadata, if any.
         shared_rules: Module-wide normalization rules.
@@ -222,17 +290,20 @@ def _normalize_value(
     Returns:
         The normalized value.
     """
-    result = value
-
-    # Apply shared rules first
-    for rule in shared_rules:
-        if rule.source_key == "*" or rule.source_key == option_key:
-            result = _apply_normalization_rule(result, rule)
-
-    # Apply per-option rules
+    rules = [
+        rule
+        for rule in shared_rules
+        if rule.source_key == "*" or rule.source_key == option_key
+    ]
     if option_derivation is not None:
-        for rule in option_derivation.normalization_rules:
-            result = _apply_normalization_rule(result, rule)
+        rules.extend(option_derivation.normalization_rules)
+
+    if _list_chain_declines(value, rules):
+        return value
+
+    result = value
+    for rule in rules:
+        result = _apply_normalization_rule(result, rule)
 
     return result
 
@@ -461,7 +532,10 @@ def _project_derived_setting(setting: DerivedSetting, resolved: dict[str, Any]) 
         for source_key in setting.source_options:
             if source_key in resolved:
                 selector = resolved[source_key]
-                if selector in branches:
+                if (
+                    isinstance(selector, (str, int, float, bool))
+                    and selector in branches
+                ):
                     return branches[selector]
         return setting.default
 
@@ -477,7 +551,7 @@ def _project_derived_setting(setting: DerivedSetting, resolved: dict[str, Any]) 
                     k: str(v) if v is not None else "" for k, v in resolved.items()
                 }
                 return template.format(**context)
-            except KeyError, IndexError, ValueError:
+            except KeyError, IndexError, ValueError, AttributeError:
                 return setting.default
         return setting.default
 
@@ -599,7 +673,10 @@ def _project_wiring_contribution(
         for source_key in projection.source_options:
             if source_key in resolved:
                 selector = resolved[source_key]
-                if selector in branches:
+                if (
+                    isinstance(selector, (str, int, float, bool))
+                    and selector in branches
+                ):
                     return _coerce_contribution(branches[selector], wiring_field)
         return _coerce_contribution(projection.default, wiring_field)
 
@@ -614,7 +691,7 @@ def _project_wiring_contribution(
             try:
                 rendered = str(template).format(**context)
                 result.append(rendered)
-            except KeyError, IndexError, ValueError:
+            except KeyError, IndexError, ValueError, AttributeError:
                 pass
         if result:
             return _coerce_contribution(result, wiring_field)
@@ -702,6 +779,44 @@ def normalize_module_option_values(
     return resolved
 
 
+def _url_projection_issues(
+    derivation_schema: ModuleDerivationSchema, resolved: dict[str, Any]
+) -> list[str]:
+    """Return issues for direct URL projections whose values are not pairs.
+
+    A direct projection reads an option's runtime value; when that value is a
+    non-``None`` item that is not a ``[route, include]`` pair of strings the
+    contribution would be silently discarded, so resolution records the issue
+    for the boundaries to refuse.
+    """
+    issues: list[str] = []
+    for projection in derivation_schema.get_all_wiring_projections():
+        if (
+            projection.wiring_field not in _WIRING_URL_FIELDS
+            or projection.derivation_type != "direct"
+        ):
+            continue
+        option_key = projection.expression.get("option")
+        if not isinstance(option_key, str) or option_key not in resolved:
+            continue
+        value = resolved[option_key]
+        if value is None:
+            continue
+        items = value if isinstance(value, (list, tuple)) else [value]
+        for index, item in enumerate(items):
+            if (
+                not isinstance(item, (list, tuple))
+                or len(item) != 2
+                or not all(isinstance(part, str) for part in item)
+            ):
+                issues.append(
+                    f"modules.{derivation_schema.module_name}.{option_key} cannot "
+                    f"feed {projection.wiring_field}: item {index} is not a "
+                    "[route, include] pair of strings"
+                )
+    return issues
+
+
 def resolve_module_config(
     manifest: ModuleManifest,
     derivation_schema: ModuleDerivationSchema,
@@ -775,6 +890,7 @@ def resolve_module_config(
     # Step 7: Project wiring contributions (apps, middleware, url_includes,
     # pre_home_url_includes) from the derivation schema's wiring projections.
     wiring = _project_all_wiring(derivation_schema, resolved)
+    validation_issues.extend(_url_projection_issues(derivation_schema, resolved))
 
     def _to_str_tuple(items: list[Any]) -> tuple[str, ...]:
         return tuple(str(x) for x in items)

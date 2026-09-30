@@ -12,7 +12,10 @@ from typing import Any, Callable, Mapping
 import click
 
 from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
-from quickscale_core.manifest.option_validation import validate_module_options
+from quickscale_core.manifest.option_validation import (
+    collect_option_validation_issues,
+    validate_module_options,
+)
 from quickscale_core.manifest.resolver import normalize_module_option_values
 
 
@@ -97,9 +100,21 @@ def _raise_for_invalid_manifest_config(
     module_name: str,
     manifest: Any,
     config: Mapping[str, Any],
+    *,
+    supplied: Mapping[str, Any] | None = None,
 ) -> None:
-    """Abort with actionable messaging when a manifest-owned config is invalid."""
-    issues = validate_module_options(manifest, dict(config), supplied=dict(config))
+    """Abort with actionable messaging when a manifest-owned config is invalid.
+
+    *supplied* carries the values as they were authored, before the manifest's
+    normalization, so the declared type is judged on what the caller entered (a
+    comma string for a list option is an accepted spelling) rather than only on
+    its canonical form; it defaults to *config*.
+    """
+    issues = validate_module_options(
+        manifest,
+        dict(config),
+        supplied=dict(config if supplied is None else supplied),
+    )
     if not issues:
         return
 
@@ -132,6 +147,37 @@ def _raise_for_retired_existing_config(
     raise click.Abort()
 
 
+def _drop_invalid_existing(
+    module_name: str,
+    manifest: Any,
+    existing: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Drop stored values the manifest refuses before they seed a prompt.
+
+    An unsupported stored shape (a mapping where a list is required) must not
+    be rendered as a prompt default and accepted back as a valid-looking list;
+    the affected option falls back to its manifest default, the issues are
+    surfaced, and the user can still enter a replacement.
+    """
+    issues = collect_option_validation_issues(
+        manifest, dict(existing), supplied=dict(existing)
+    )
+    if not issues:
+        return dict(existing)
+    click.secho(
+        f"\n⚠️  Existing {module_name} configuration has invalid values; "
+        "the affected options fall back to their manifest defaults.",
+        fg="yellow",
+        err=True,
+    )
+    for issue in issues:
+        click.echo(f"  • {issue.message}", err=True)
+    invalid_options = {issue.option_name for issue in issues}
+    return {
+        name: value for name, value in existing.items() if name not in invalid_options
+    }
+
+
 def configure_module_from_manifest(
     module_name: str,
     non_interactive: bool = False,
@@ -151,28 +197,32 @@ def configure_module_from_manifest(
     """
     manifest = load_module_manifest_with_fallback(module_name)
     _raise_for_retired_existing_config(module_name, manifest, existing_config)
-    defaults = normalize_module_option_values(
-        manifest, _declared_config(manifest, existing_config)
-    )
+    existing = _declared_config(manifest, existing_config)
 
     if non_interactive:
+        defaults = normalize_module_option_values(manifest, existing)
         click.echo(f"\n⚙️  Using default {module_name} module configuration...")
         for option in manifest.get_all_options().values():
             click.echo(
                 f"  • {option.description or option.name}: {defaults[option.name]}"
             )
-        _raise_for_invalid_manifest_config(module_name, manifest, defaults)
+        _raise_for_invalid_manifest_config(
+            module_name, manifest, defaults, supplied=existing
+        )
         return defaults
 
+    existing = _drop_invalid_existing(module_name, manifest, existing)
+    defaults = normalize_module_option_values(manifest, existing)
+
     click.echo(f"\n⚙️  Configuring {module_name} module...")
-    config = normalize_module_option_values(
-        manifest,
-        {
-            option_name: _prompt_for_manifest_option(option, defaults[option_name])
-            for option_name, option in manifest.get_all_options().items()
-        },
+    collected = {
+        option_name: _prompt_for_manifest_option(option, defaults[option_name])
+        for option_name, option in manifest.get_all_options().items()
+    }
+    config = normalize_module_option_values(manifest, collected)
+    _raise_for_invalid_manifest_config(
+        module_name, manifest, config, supplied=collected
     )
-    _raise_for_invalid_manifest_config(module_name, manifest, config)
     return config
 
 

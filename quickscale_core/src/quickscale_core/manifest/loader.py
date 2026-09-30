@@ -9,6 +9,7 @@ from __future__ import annotations
 import posixpath
 from pathlib import Path
 import re
+import string
 from typing import Any
 
 import yaml
@@ -215,15 +216,17 @@ def _validate_condition_mapping(
                 module_name,
             )
         if isinstance(expected, list):
-            if not expected:
+            if not expected or not all(
+                isinstance(item, (str, int, float, bool)) for item in expected
+            ):
                 raise ManifestError(
                     f"Option '{option_name}' validation.{key_path}."
-                    f"{condition_option} must be a literal, a non-empty list, "
-                    "or {not_empty: true}",
+                    f"{condition_option} must be a literal, a non-empty list of "
+                    "literals, or {not_empty: true}",
                     module_name,
                 )
         elif isinstance(expected, dict):
-            if expected != {"not_empty": True}:
+            if set(expected) != {"not_empty"} or expected["not_empty"] is not True:
                 raise ManifestError(
                     f"Option '{option_name}' validation.{key_path}."
                     f"{condition_option} must be a literal, a non-empty list, "
@@ -231,6 +234,13 @@ def _validate_condition_mapping(
                     module_name,
                 )
         elif expected is None:
+            raise ManifestError(
+                f"Option '{option_name}' validation.{key_path}."
+                f"{condition_option} must be a literal, a non-empty list, "
+                "or {not_empty: true}",
+                module_name,
+            )
+        elif not isinstance(expected, (str, int, float, bool)):
             raise ManifestError(
                 f"Option '{option_name}' validation.{key_path}."
                 f"{condition_option} must be a literal, a non-empty list, "
@@ -338,6 +348,13 @@ def _validate_validation_block(
                 "with 'values' and an optional 'when'",
                 module_name,
             )
+        for block_key in block:
+            if block_key not in ("values", "when"):
+                raise ManifestError(
+                    f"Option '{option_name}' validation.{key} declares unknown "
+                    f"key '{block_key}' (allowed: values, when)",
+                    module_name,
+                )
         values = block.get("values")
         if not isinstance(values, list) or not values:
             raise ManifestError(
@@ -696,6 +713,48 @@ _DERIVATION_LIST_FIELDS = frozenset(
     }
 )
 
+#: Per-option derivation sub-sections the engine executes.  Anything else is
+#: refused at load, so a misspelled declaration cannot load and be ignored.
+_OPTION_DERIVATION_KEYS = frozenset(
+    {"normalization_rules", "derived_settings", "wiring_projections"}
+)
+
+#: Top-level derivation sections the parser accepts; anything else is refused.
+_DERIVATION_SECTION_KEYS = frozenset(
+    {
+        "normalization_rules",
+        "validation_rules",
+        "legacy_aliases",
+        "derived_settings",
+        "wiring_projections",
+        "option_derivations",
+    }
+)
+
+#: Executable wiring fields and derivation types a projection may declare.
+_WIRING_FIELDS = frozenset(
+    {"apps", "middleware", "url_includes", "pre_home_url_includes"}
+)
+_DERIVATION_TYPES = frozenset({"static", "direct", "conditional", "computed"})
+
+#: Top-level derivation sections nothing executes.  A non-null declaration is
+#: refused at load so a rule or alias that would silently do nothing fails hard
+#: instead of shipping.
+_INERT_DERIVATION_SECTION_ERRORS = {
+    "normalization_rules": (
+        "derivation.normalization_rules is no longer executed; declare the rule "
+        "under derivation.option_derivations.<option>.normalization_rules"
+    ),
+    "validation_rules": (
+        "derivation.validation_rules is no longer executed; declare the option's "
+        "checks in its config validation block"
+    ),
+    "legacy_aliases": (
+        "derivation.legacy_aliases is no longer executed; a renamed option is "
+        "refused by name through the manifest's retired_options block"
+    ),
+}
+
 
 def _assert_is_mapping(
     value: Any,
@@ -794,9 +853,396 @@ def _validate_normalization_rule_list(
             )
 
 
+def _selector_chain_yields_unhashable(
+    selector: str, option_derivations: dict[str, Any]
+) -> bool:
+    """Return whether *selector*'s declared normalization can yield a container.
+
+    A conditional branch selector is used as a mapping key, so its normalized
+    value must stay scalar; a ``list`` rule or a ``choice_map`` value that is a
+    container would make branch membership crash.
+    """
+    rules = option_derivations.get(selector, {}).get("normalization_rules", [])
+    if not isinstance(rules, list):
+        # A malformed rule list is refused by the normalization-rule validation.
+        return False
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        if rule.get("rule_type") == "list":
+            return True
+        if rule.get("rule_type") == "choice_map":
+            mapping = rule.get("mapping")
+            if isinstance(mapping, dict) and any(
+                not isinstance(value, (str, int, float, bool, type(None)))
+                for value in mapping.values()
+            ):
+                return True
+    return False
+
+
+def _validate_rule_owner_keys(
+    rule: dict[str, Any],
+    opt_key: str,
+    path: str,
+    module_name: str | None,
+    *,
+    require_present: bool,
+) -> None:
+    """Require a per-option rule's declared key names to match its option.
+
+    An outer rule must name the owning option; nested item rules are executed
+    per item and may omit the names, but a name they do declare must match.
+    """
+    source_key = rule.get("source_key")
+    target_key = rule.get("target_key")
+    if require_present:
+        if source_key != opt_key or target_key != opt_key:
+            raise ManifestError(
+                f"{path} must declare source_key and target_key as '{opt_key}'",
+                module_name,
+            )
+    else:
+        if "source_key" in rule and rule["source_key"] != opt_key:
+            raise ManifestError(
+                f"{path} must declare source_key as '{opt_key}'", module_name
+            )
+        if "target_key" in rule and rule["target_key"] != opt_key:
+            raise ManifestError(
+                f"{path} must declare target_key as '{opt_key}'", module_name
+            )
+    for index, nested in enumerate(rule.get("item_rules") or []):
+        if isinstance(nested, dict):
+            _validate_rule_owner_keys(
+                nested,
+                opt_key,
+                f"{path}.item_rules[{index}]",
+                module_name,
+                require_present=False,
+            )
+
+
+def _validate_wiring_contribution(
+    value: Any, wiring_field: str, path: str, module_name: str | None
+) -> None:
+    """Validate a concrete projection contribution for its wiring field.
+
+    The resolver discards a non-list contribution and any item that is not a
+    ``[route, include]`` pair for URL fields; a declaration that would be
+    discarded must fail the load instead of silently contributing nothing.
+    """
+    if not isinstance(value, (list, tuple)):
+        raise ManifestError(
+            f"{path} must be a list of contributions for '{wiring_field}'",
+            module_name,
+        )
+    if wiring_field in ("url_includes", "pre_home_url_includes"):
+        for index, item in enumerate(value):
+            if (
+                not isinstance(item, (list, tuple))
+                or len(item) != 2
+                or not all(isinstance(part, str) for part in item)
+            ):
+                raise ManifestError(
+                    f"{path}[{index}] must be a [route, include] pair of strings",
+                    module_name,
+                )
+    else:
+        for index, item in enumerate(value):
+            if not isinstance(item, str):
+                raise ManifestError(
+                    f"{path}[{index}] must be an app or middleware label",
+                    module_name,
+                )
+
+
+def _validate_computed_template(
+    template: str,
+    field_path: str,
+    module_name: str | None,
+    declared_options: dict[str, Any],
+) -> None:
+    """Refuse a computed template the resolver cannot render safely.
+
+    Only plain ``{option_name}`` placeholders are supported; attribute or item
+    access and nested format specs would raise outside the resolver's handled
+    exceptions, and an empty template cannot be executed.
+    """
+    if not template:
+        raise ManifestError(f"{field_path} must be a non-empty template", module_name)
+    try:
+        fields = list(string.Formatter().parse(template))
+    except ValueError as error:
+        raise ManifestError(
+            f"{field_path} is not a valid format string: {error}", module_name
+        ) from error
+    for _literal, field_name, format_spec, conversion in fields:
+        if field_name is None:
+            continue
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", field_name):
+            raise ManifestError(
+                f"{field_path} placeholder '{field_name}' must be a plain option name",
+                module_name,
+            )
+        if field_name not in declared_options:
+            raise ManifestError(
+                f"{field_path} references unknown option '{field_name}'",
+                module_name,
+            )
+        if conversion is not None and conversion not in ("s", "r", "a"):
+            raise ManifestError(
+                f"{field_path} conversion '!{conversion}' is not supported",
+                module_name,
+            )
+        if "{" in (format_spec or ""):
+            raise ManifestError(
+                f"{field_path} format spec may not nest placeholders",
+                module_name,
+            )
+        if format_spec:
+            try:
+                format("x", format_spec)
+            except ValueError, TypeError:
+                raise ManifestError(
+                    f"{field_path} format spec '{format_spec}' cannot format a string",
+                    module_name,
+                ) from None
+
+
+def _validate_derivation_entry(
+    entry: dict[str, Any],
+    path: str,
+    module_name: str | None,
+    *,
+    wiring: bool,
+    declared_options: dict[str, Any],
+    option_derivations: dict[str, Any],
+) -> None:
+    """Validate the shapes a derivation entry's parser and resolver consume.
+
+    ``expression`` is parsed as a mapping, ``source_options`` as a list of
+    option names, and wiring ``default`` as a list; projection fields and
+    derivation types must be executable values; a conditional selector must
+    name a declared option whose normalization stays scalar.  Anything consumed
+    and malformed fails the load here so an accepted declaration can never
+    crash schema construction or resolution or silently contribute nothing.
+    """
+    derivation_type = str(
+        entry.get("derivation_type", "static" if wiring else "direct")
+    )
+    if derivation_type not in _DERIVATION_TYPES:
+        allowed = ", ".join(sorted(_DERIVATION_TYPES))
+        raise ManifestError(
+            f"{path}.derivation_type must be one of: {allowed}", module_name
+        )
+    if wiring:
+        wiring_field_raw = entry.get("wiring_field")
+        if (
+            not isinstance(wiring_field_raw, str)
+            or wiring_field_raw not in _WIRING_FIELDS
+        ):
+            allowed = ", ".join(sorted(_WIRING_FIELDS))
+            raise ManifestError(
+                f"{path}.wiring_field must be one of: {allowed}", module_name
+            )
+        wiring_field = wiring_field_raw
+        if "default" in entry:
+            _validate_wiring_contribution(
+                entry["default"], wiring_field, f"{path}.default", module_name
+            )
+    if "expression" in entry:
+        expression = entry["expression"]
+        if not isinstance(expression, dict):
+            raise ManifestError(f"{path}.expression must be a mapping", module_name)
+        if (
+            derivation_type == "conditional"
+            and "branches" in expression
+            and not isinstance(expression["branches"], dict)
+        ):
+            raise ManifestError(
+                f"{path}.expression.branches must be a mapping", module_name
+            )
+        if derivation_type == "computed":
+            if wiring:
+                if "values" in expression:
+                    values = expression["values"]
+                    if not isinstance(values, list) or not values:
+                        raise ManifestError(
+                            f"{path}.expression.values must be a non-empty list",
+                            module_name,
+                        )
+                    for index, value in enumerate(values):
+                        if not isinstance(value, str):
+                            raise ManifestError(
+                                f"{path}.expression.values[{index}] must be a string",
+                                module_name,
+                            )
+                        _validate_computed_template(
+                            value,
+                            f"{path}.expression.values[{index}]",
+                            module_name,
+                            declared_options,
+                        )
+            elif "template" in expression:
+                template = expression["template"]
+                if not isinstance(template, str):
+                    raise ManifestError(
+                        f"{path}.expression.template must be a string", module_name
+                    )
+                _validate_computed_template(
+                    template,
+                    f"{path}.expression.template",
+                    module_name,
+                    declared_options,
+                )
+        if derivation_type == "static" and wiring and "value" in expression:
+            _validate_wiring_contribution(
+                expression["value"],
+                wiring_field,
+                f"{path}.expression.value",
+                module_name,
+            )
+        if derivation_type == "conditional" and wiring:
+            branches = expression.get("branches")
+            if isinstance(branches, dict):
+                for branch_key, branch_value in branches.items():
+                    _validate_wiring_contribution(
+                        branch_value,
+                        wiring_field,
+                        f"{path}.expression.branches.{branch_key}",
+                        module_name,
+                    )
+        if (
+            derivation_type == "computed"
+            and wiring
+            and wiring_field in ("url_includes", "pre_home_url_includes")
+        ):
+            raise ManifestError(
+                f"{path}: computed projections cannot target URL wiring fields",
+                module_name,
+            )
+        allowed_expression_keys = {
+            "direct": {"option"},
+            "static": {"value"},
+            "conditional": {"branches"},
+            "computed": {"values"} if wiring else {"template"},
+        }[derivation_type]
+        for expression_key in expression:
+            if expression_key not in allowed_expression_keys:
+                allowed = ", ".join(sorted(allowed_expression_keys))
+                raise ManifestError(
+                    f"{path}.expression declares unknown key '{expression_key}' "
+                    f"(allowed: {allowed})",
+                    module_name,
+                )
+    if derivation_type == "direct":
+        expression = entry.get("expression")
+        if not isinstance(expression, dict):
+            raise ManifestError(
+                f"{path}.expression must be a mapping with an 'option' for a "
+                "direct projection",
+                module_name,
+            )
+        option_key = expression.get("option")
+        if not isinstance(option_key, str) or not option_key:
+            raise ManifestError(
+                f"{path}.expression.option must be a declared option name",
+                module_name,
+            )
+        declared = declared_options.get(option_key)
+        if declared is None:
+            raise ManifestError(
+                f"{path}.expression.option references unknown option '{option_key}'",
+                module_name,
+            )
+        if (
+            wiring
+            and wiring_field in ("url_includes", "pre_home_url_includes")
+            and getattr(declared, "option_type", None) != "list"
+        ):
+            raise ManifestError(
+                f"{path}.expression.option must be a list option to target "
+                f"'{wiring_field}'",
+                module_name,
+            )
+        if wiring and wiring_field in ("url_includes", "pre_home_url_includes"):
+            default_items = getattr(declared, "default", None)
+            if isinstance(default_items, (list, tuple)) and default_items:
+                _validate_wiring_contribution(
+                    default_items,
+                    wiring_field,
+                    f"{path}.expression.option default",
+                    module_name,
+                )
+    if derivation_type != "direct":
+        expression = entry.get("expression")
+        if not isinstance(expression, dict):
+            raise ManifestError(f"{path}.expression must be a mapping", module_name)
+        required_key = {
+            "static": "value",
+            "conditional": "branches",
+            "computed": "values" if wiring else "template",
+        }.get(derivation_type)
+        if required_key is not None and required_key not in expression:
+            raise ManifestError(
+                f"{path}.expression.{required_key} is required for a "
+                f"{derivation_type} projection",
+                module_name,
+            )
+    if derivation_type == "conditional":
+        selectors = entry.get("source_options")
+        if not isinstance(selectors, list) or not selectors:
+            raise ManifestError(
+                f"{path}.source_options must list the selector option for a "
+                "conditional projection",
+                module_name,
+            )
+    if not wiring:
+        setting_key = entry.get("setting_key")
+        if not isinstance(setting_key, str) or not setting_key:
+            raise ManifestError(
+                f"{path}.setting_key must be a non-empty string", module_name
+            )
+    if "source_options" in entry and derivation_type != "conditional":
+        raise ManifestError(
+            f"{path}.source_options is only valid for a conditional projection",
+            module_name,
+        )
+    if "source_options" in entry:
+        source_options = entry["source_options"]
+        if not isinstance(source_options, list):
+            raise ManifestError(f"{path}.source_options must be a list", module_name)
+        for index, item in enumerate(source_options):
+            if not isinstance(item, str):
+                raise ManifestError(
+                    f"{path}.source_options[{index}] must be an option name",
+                    module_name,
+                )
+        if derivation_type == "conditional":
+            for item in source_options:
+                declared = declared_options.get(item)
+                if declared is None:
+                    raise ManifestError(
+                        f"{path}.source_options references unknown option '{item}'",
+                        module_name,
+                    )
+                if getattr(declared, "option_type", None) == "list":
+                    raise ManifestError(
+                        f"{path}.source_options cannot select list option '{item}'",
+                        module_name,
+                    )
+                if _selector_chain_yields_unhashable(item, option_derivations):
+                    raise ManifestError(
+                        f"{path}.source_options cannot select '{item}': its "
+                        "normalization can produce a non-scalar value",
+                        module_name,
+                    )
+
+
 def _parse_derivation_section(
     data: dict[str, Any],
     module_name: str | None,
+    declared_options: dict[str, Any],
 ) -> dict[str, Any]:
     """Parse the optional ``derivation`` section from manifest data.
 
@@ -804,7 +1250,10 @@ def _parse_derivation_section(
     ``derivation_rules``, ``validation_rules``, ``legacy_aliases``,
     ``derived_settings``, ``wiring_projections``, and ``option_derivations``.
     List fields default to empty lists; ``option_derivations`` defaults to
-    an empty dict.
+    an empty dict.  The legacy top-level ``normalization_rules``,
+    ``validation_rules``, and ``legacy_aliases`` sections are refused: nothing
+    in the live engine executes them, so accepting one would ship an unread
+    declaration.
 
     Args:
         data: The full parsed YAML data dictionary.
@@ -814,7 +1263,8 @@ def _parse_derivation_section(
         Dict of parsed derivation sub-sections.
 
     Raises:
-        ManifestError: If a section is malformed.
+        ManifestError: If a section is malformed or an inert legacy section is
+            declared.
     """
     raw = data.get("derivation")
     if raw is None:
@@ -823,6 +1273,16 @@ def _parse_derivation_section(
         return result
 
     derivation = _assert_is_mapping(raw, "derivation", module_name)
+    for inert_field, inert_message in _INERT_DERIVATION_SECTION_ERRORS.items():
+        if inert_field in derivation:
+            raise ManifestError(inert_message, module_name)
+    for key in derivation:
+        if key not in _DERIVATION_SECTION_KEYS:
+            allowed = ", ".join(sorted(_DERIVATION_SECTION_KEYS))
+            raise ManifestError(
+                f"derivation declares unknown key '{key}' (allowed: {allowed})",
+                module_name,
+            )
 
     result = {}
     for field in _DERIVATION_LIST_FIELDS:
@@ -858,6 +1318,75 @@ def _parse_derivation_section(
             module_name,
         )
 
+    for field in ("derived_settings", "wiring_projections"):
+        for index, entry in enumerate(result[field]):
+            if not isinstance(entry, dict):
+                raise ManifestError(
+                    f"derivation.{field}[{index}] must be a mapping",
+                    module_name,
+                )
+            _validate_derivation_entry(
+                entry,
+                f"derivation.{field}[{index}]",
+                module_name,
+                wiring=field == "wiring_projections",
+                declared_options=declared_options,
+                option_derivations=result["option_derivations"],
+            )
+
+    for opt_key, opt_value in result["option_derivations"].items():
+        if "validation_rules" in opt_value:
+            raise ManifestError(
+                f"derivation.option_derivations.{opt_key}.validation_rules is no "
+                "longer executed; declare the option's checks in its config "
+                "validation block",
+                module_name,
+            )
+        if "legacy_aliases" in opt_value:
+            raise ManifestError(
+                f"derivation.option_derivations.{opt_key}.legacy_aliases is no "
+                "longer executed; a renamed option is refused by name through "
+                "the manifest's retired_options block",
+                module_name,
+            )
+        for key in opt_value:
+            if not isinstance(key, str) or key not in _OPTION_DERIVATION_KEYS:
+                allowed = ", ".join(sorted(_OPTION_DERIVATION_KEYS))
+                raise ManifestError(
+                    f"derivation.option_derivations.{opt_key} declares unknown "
+                    f"key '{key}' (allowed: {allowed})",
+                    module_name,
+                )
+        for section_key in ("derived_settings", "wiring_projections"):
+            if section_key not in opt_value:
+                continue
+            section = opt_value[section_key]
+            if not isinstance(section, list):
+                raise ManifestError(
+                    f"derivation.option_derivations.{opt_key}.{section_key} "
+                    "must be a list",
+                    module_name,
+                )
+            for index, entry in enumerate(section):
+                if not isinstance(entry, dict):
+                    raise ManifestError(
+                        f"derivation.option_derivations.{opt_key}.{section_key}"
+                        f"[{index}] must be a mapping",
+                        module_name,
+                    )
+                _validate_derivation_entry(
+                    entry,
+                    f"derivation.option_derivations.{opt_key}.{section_key}[{index}]",
+                    module_name,
+                    wiring=section_key == "wiring_projections",
+                    declared_options=declared_options,
+                    option_derivations=result["option_derivations"],
+                )
+        if opt_key not in declared_options:
+            raise ManifestError(
+                f"derivation.option_derivations.{opt_key} names an undeclared option",
+                module_name,
+            )
     _validate_normalization_rule_list(
         result.get("normalization_rules", []),
         "derivation.normalization_rules",
@@ -869,6 +1398,14 @@ def _parse_derivation_section(
             f"derivation.option_derivations.{opt_key}.normalization_rules",
             module_name,
         )
+        for index, rule in enumerate(opt_value.get("normalization_rules") or []):
+            _validate_rule_owner_keys(
+                rule,
+                opt_key,
+                f"derivation.option_derivations.{opt_key}.normalization_rules[{index}]",
+                module_name,
+                require_present=True,
+            )
 
     return result
 
@@ -1160,7 +1697,9 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     implies = _parse_implies(data, module_name)
 
     # Parse derivation section (T2.3+; additive; every field defaults to [])
-    derivation = _parse_derivation_section(data, module_name)
+    derivation = _parse_derivation_section(
+        data, module_name, {**mutable_options, **immutable_options}
+    )
 
     # Parse contract-vintage section (SA10.2; additive; None when absent)
     contract_vintage = _parse_contract_vintage(data, module_name)
