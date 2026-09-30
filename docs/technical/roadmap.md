@@ -221,10 +221,9 @@ defaults.
   **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
   URL prefixes still live in three places.
 
-  **Scope:** mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; orgs gains
-  an `app_name` and moves under `orgs/`; APIs to `<mount>api/`, webhooks to `<mount>webhooks/`;
-  route names become snake_case without the module name, in orgs, notifications, social,
-  billing, crm, and forms.
+  **Scope:** mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; APIs to
+  `<mount>api/`, webhooks to `<mount>webhooks/`; route names become snake_case without the module
+  name, in notifications, social, billing, crm, and forms.
 
   **Acceptance:** a list of every moved public URL, with its operator step, is ready for SA215's
   release notes; every throttle scope has the stem and its rate from a setting.

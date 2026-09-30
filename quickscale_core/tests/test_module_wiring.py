@@ -563,7 +563,7 @@ def test_generated_urls_template_places_react_shell_reservations_before_modules(
     assert react_shell_marker in content
     assert pre_home_marker in content
     assert post_home_marker in content
-    assert r"^orgs/[^/]+/(blog|listings|members|settings)/?$" in content
+    assert r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$" in content
     assert r"^orgs/[^/]+/forms/[^/]+/?$" not in content
     assert r"^orgs/[^/]+/billing/" not in content
     assert r"^orgs/invitations/" not in content

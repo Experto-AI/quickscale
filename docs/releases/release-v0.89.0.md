@@ -122,6 +122,20 @@ verification stack writes a report-derived `MIGRATION_PROMPT.md` handoff into th
 beta-migration-only additions do not themselves change generated-project output, public package
 APIs, or upgrade requirements; the shared-design generated-file boundary is described above.
 
+**Moved URLs.** The organizations module now serves its JSON API under its mount: `/api/orgs/...`
+moves to `/orgs/api/...` (organization list/create at `/orgs/api/`, org-scoped endpoints under
+`/orgs/api/<slug>/...`), and the slugless VIEW-AS exit moves from `/debug/exit/` to
+`/orgs/debug/exit/`. The operator step is to update custom frontend code that calls
+`/api/orgs/...`, any saved link or form that posted to `/debug/exit/`, and project-owned template
+overrides that reverse the retired global orgs route names (`org-members-invite`,
+`org-members-invitation-revoke`, `org-debug-exit`), which become the namespaced snake_case names
+(`quickscale_orgs:members_invite`, `quickscale_orgs:members_invitation_revoke`,
+`quickscale_orgs:debug_exit`). The module's HTML routes (org dashboard, members, settings,
+invitation accept) keep their existing `/orgs/...` URLs, and no provider webhook endpoint changes.
+The root dashboard route is removed, so the site root belongs to the project and the module's pages
+live under `/orgs/`; the module now reserves the `api` slug, so an existing organization with that
+slug must be renamed.
+
 ## Delivery provenance
 
 The SA195/SA192 delivery was synchronized with `v89` at

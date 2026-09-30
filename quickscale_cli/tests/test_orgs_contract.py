@@ -57,7 +57,7 @@ modules:
 
 
 def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
-    """Solo orgs wiring should reserve the root include before home."""
+    """Solo orgs wiring should mount orgs before home."""
     orgs_spec = build_manifest_wiring_spec(
         "orgs", {"mode": "solo"}, project_package="myapp"
     )
@@ -70,19 +70,21 @@ def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
         "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
         "QUICKSCALE_MODE": "solo",
     }
-    assert orgs_spec.pre_home_url_includes == (("", "quickscale_modules_orgs.urls"),)
+    assert orgs_spec.pre_home_url_includes == (
+        ("orgs/", "quickscale_modules_orgs.urls"),
+    )
     assert orgs_spec.url_includes == ()
 
 
 def test_orgs_wiring_spec_registers_saas_runtime_surface() -> None:
-    """SaaS orgs wiring should keep the root include in the post-home bucket."""
+    """SaaS orgs wiring should keep the orgs mount in the post-home bucket."""
     orgs_spec = build_manifest_wiring_spec(
         "orgs", {"mode": "saas"}, project_package="myapp"
     )
 
     assert orgs_spec.settings["QUICKSCALE_MODE"] == "saas"
     assert orgs_spec.pre_home_url_includes == ()
-    assert orgs_spec.url_includes == (("", "quickscale_modules_orgs.urls"),)
+    assert orgs_spec.url_includes == (("orgs/", "quickscale_modules_orgs.urls"),)
 
 
 def test_orgs_wiring_preserves_auth_contracts_when_both_are_selected() -> None:
@@ -105,6 +107,6 @@ def test_orgs_wiring_preserves_auth_contracts_when_both_are_selected() -> None:
         settings["ACCOUNT_ADAPTER"]
         == "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
     )
-    assert urls[0] == ("", "quickscale_modules_orgs.urls")
+    assert urls[0] == ("orgs/", "quickscale_modules_orgs.urls")
     assert ("accounts/", "allauth.urls") in urls
-    assert ("", "quickscale_modules_orgs.urls") in urls
+    assert ("orgs/", "quickscale_modules_orgs.urls") in urls

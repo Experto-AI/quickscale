@@ -146,6 +146,7 @@ class OrganizationManager(models.Manager["Organization"]):
 
     def create_personal_for(self, user: Any) -> "Organization":
         """Return the user's personal organization, creating it if needed."""
+        from .constants import RESERVED_ORG_SLUGS
         from .models import OrgRole, OrganizationMembership
 
         existing_membership = (
@@ -182,6 +183,8 @@ class OrganizationManager(models.Manager["Organization"]):
             if candidate in seen_slugs:
                 continue
             seen_slugs.add(candidate)
+            if candidate in RESERVED_ORG_SLUGS:
+                continue
 
             try:
                 with transaction.atomic():

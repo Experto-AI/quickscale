@@ -51,9 +51,10 @@ react_shell_urlpatterns = [
     path("", react_shell_view, name="home"),
     re_path(r"^orgs/?$", orgs_react_shell_view),
     re_path(r"^orgs/new/?$", orgs_react_shell_view),
-    re_path(r"^orgs/[^/]+/?$", orgs_react_shell_view),
+    # The module's JSON API lives under /orgs/api/ and must reach Django.
+    re_path(r"^orgs/(?!api(?:/|$))[^/]+/?$", orgs_react_shell_view),
     re_path(
-        r"^orgs/[^/]+/(blog|listings|members|settings)/?$",
+        r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$",
         orgs_react_shell_view,
     ),
     re_path(r"^(profile|blog|listings|crm|settings)/?$", react_shell_view),

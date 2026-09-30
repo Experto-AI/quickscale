@@ -464,6 +464,21 @@ def test_create_personal_for_uses_suffixed_slug_after_multiple_collisions() -> N
 
 
 @pytest.mark.django_db
+def test_create_personal_for_skips_the_reserved_api_slug() -> None:
+    """A user named "api" must not take the slug the module's API owns."""
+    user = _create_user(
+        username="api",
+        email="api@example.com",
+        password="secret123",
+    )
+
+    organization = Organization.objects.create_personal_for(user)
+
+    assert organization.slug == "apiexamplecom"
+    assert organization.is_personal is True
+
+
+@pytest.mark.django_db
 def test_organization_invitation_save_rejects_owner_role() -> None:
     """Direct invitation saves should fail closed for unsupported owner role."""
 
@@ -697,6 +712,15 @@ def test_system_slug_reserved_rejects_non_system_org() -> None:
         )
 
     assert SYSTEM_ORG_SLUG in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_api_slug_reserved_rejects_org() -> None:
+    """The module's JSON API owns /orgs/api/, so no organization takes that slug."""
+    with pytest.raises(ValidationError) as exc_info:
+        Organization.objects.create(name="Api", slug="api")
+
+    assert "reserved for the module's API" in str(exc_info.value)
 
 
 @pytest.mark.django_db

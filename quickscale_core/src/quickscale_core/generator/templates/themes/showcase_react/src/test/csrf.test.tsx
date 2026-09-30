@@ -156,7 +156,7 @@ describe('CSRF request callers', () => {
       headers: new Headers(),
     })
 
-    await apiRequest('/api/orgs/', { method: 'POST', body: '{}' })
+    await apiRequest('/orgs/api/', { method: 'POST', body: '{}' })
 
     expect(requestHeaders().get('X-CSRFToken')).toBe(maskedCsrfToken)
   })
@@ -169,7 +169,7 @@ describe('CSRF request callers', () => {
       headers: new Headers(),
     })
 
-    await apiRequest('/api/orgs/', { method: 'POST', body: '{}' })
+    await apiRequest('/orgs/api/', { method: 'POST', body: '{}' })
 
     expect(requestHeaders().get('X-CSRFToken')).toBe(secondCsrfToken)
   })

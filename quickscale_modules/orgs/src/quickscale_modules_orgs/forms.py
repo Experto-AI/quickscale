@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
+from .constants import RESERVED_ORG_SLUGS
 from .models import (
     OrgRole,
     Organization,
@@ -40,7 +41,8 @@ def _generated_slug_candidates(name: str) -> Iterator[str]:
             "Enter a name that contains at least one letter or number."
         )
 
-    yield truncated_base
+    if truncated_base not in RESERVED_ORG_SLUGS:
+        yield truncated_base
 
     suffix = 2
     while True:
@@ -49,7 +51,9 @@ def _generated_slug_candidates(name: str) -> Iterator[str]:
         if available_length <= 0:
             raise RuntimeError("Organization slug max_length is too small.")
         suffixed_base = truncated_base[:available_length].rstrip("-")
-        yield f"{suffixed_base}{suffix_text}"
+        candidate = f"{suffixed_base}{suffix_text}"
+        if candidate not in RESERVED_ORG_SLUGS:
+            yield candidate
         suffix += 1
 
 
@@ -65,6 +69,8 @@ def _normalize_unique_slug(
         raise forms.ValidationError(
             "Enter a slug that contains at least one letter or number."
         )
+    if normalized in RESERVED_ORG_SLUGS:
+        raise forms.ValidationError("This slug is reserved for the module's API.")
 
     queryset = Organization.objects.all()
     if exclude_org is not None and exclude_org.pk is not None:

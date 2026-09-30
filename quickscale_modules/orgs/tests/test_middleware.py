@@ -51,11 +51,10 @@ def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Organization dashboard" in response.content.decode()
-    assert "alice" in response.content.decode()
-    assert Organization.objects.filter(
+    personal_org = Organization.objects.get(
         is_personal=True, quickscale_orgs_memberships__user=user
-    ).exists()
+    )
+    assert response.content.decode() == f"{personal_org.slug}|{personal_org.id}"
 
 
 @pytest.mark.django_db
@@ -134,7 +133,7 @@ def test_saas_mode_allows_org_api_bootstrap_without_membership(
     )
     client.force_login(user)
 
-    response = client.get("/api/orgs/")
+    response = client.get("/orgs/api/")
 
     assert response.status_code == 200
     assert response.json() == {"organizations": []}
@@ -413,7 +412,7 @@ def test_api_org_management_path_passes_through_middleware(
         role=OrgRole.MEMBER,
     )
 
-    request = RequestFactory().get(f"/api/orgs/{organization.slug}/context/")
+    request = RequestFactory().get(f"/orgs/api/{organization.slug}/context/")
     request.user = user
     request.session = {ACTIVE_ORG_SESSION_KEY: str(organization.pk)}
 
@@ -471,6 +470,9 @@ def test_switching_mode_changes_route_behaviour_without_model_changes(
         password="secret123",
     )
     Organization.objects.create_personal_for(user)
+    personal_org = Organization.objects.get(
+        is_personal=True, quickscale_orgs_memberships__user=user
+    )
     organization = Organization.objects.create(name="Beta", slug="beta")
     OrganizationMembership.objects.create(
         user=user,
@@ -494,7 +496,7 @@ def test_switching_mode_changes_route_behaviour_without_model_changes(
         saas_response = TenantMiddleware(home_view)(request)
 
     assert solo_response.status_code == 200
-    assert "Organization dashboard" in solo_response.content.decode()
+    assert solo_response.content.decode() == f"{personal_org.slug}|{personal_org.id}"
     assert saas_response.status_code == 200
     assert (
         saas_response.content.decode() == f"{organization.slug}|{str(organization.id)}"
@@ -1243,7 +1245,7 @@ def test_saas_content_route_superuser_without_membership(settings) -> None:
 
 @pytest.mark.django_db
 def test_org_management_paths_accessible_without_session_org(client, settings) -> None:
-    """Org management paths (/orgs/, /api/orgs/) work without a session org."""
+    """Org management paths (/orgs/, /orgs/api/) work without a session org."""
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="mgmt-no-session",
@@ -1338,11 +1340,11 @@ def test_org_switcher_updates_session_org(client, settings) -> None:
         "/orgs/acme/debug/view-as/",
         "/orgs/acme/debug/exit/",
         # API orgs module routes
-        "/api/orgs/",
-        "/api/orgs/acme/",
-        "/api/orgs/acme/members/",
-        "/api/orgs/acme/settings/",
-        "/api/orgs/acme/context/",
+        "/orgs/api/",
+        "/orgs/api/acme/",
+        "/orgs/api/acme/members/",
+        "/orgs/api/acme/settings/",
+        "/orgs/api/acme/context/",
     ],
 )
 def test_is_org_management_path_accepts_orgs_module_paths(path) -> None:

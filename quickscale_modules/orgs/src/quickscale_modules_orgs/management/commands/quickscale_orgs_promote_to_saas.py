@@ -10,6 +10,7 @@ from django.core.management.base import BaseCommand
 from django.db import models
 from django.utils.text import slugify
 
+from quickscale_modules_orgs.constants import RESERVED_ORG_SLUGS
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
 
 
@@ -49,13 +50,16 @@ def _iter_slug_candidates(organization: Organization) -> Iterator[str]:
     bases = _personal_slug_bases(organization)
 
     for base in bases:
-        yield base
+        if base not in RESERVED_ORG_SLUGS:
+            yield base
         for suffix in count(2):
             suffix_token = f"-{suffix}"
             candidate_base = base[: max_length - len(suffix_token)].strip("-")
             if not candidate_base:
                 break
-            yield f"{candidate_base}{suffix_token}"
+            candidate = f"{candidate_base}{suffix_token}"
+            if candidate not in RESERVED_ORG_SLUGS:
+                yield candidate
 
 
 class Command(BaseCommand):
@@ -87,7 +91,11 @@ class Command(BaseCommand):
             "pk"
         ):
             current_slug = str(organization.slug or "").strip()
-            if current_slug and slugify(current_slug) == current_slug:
+            if (
+                current_slug
+                and slugify(current_slug) == current_slug
+                and current_slug not in RESERVED_ORG_SLUGS
+            ):
                 continue
 
             used_slugs.discard(current_slug)
