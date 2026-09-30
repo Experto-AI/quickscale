@@ -6,8 +6,10 @@ from importlib import import_module
 
 from django.apps import apps
 
+import pytest
+from django.core.exceptions import ImproperlyConfigured
+
 from quickscale_modules_orgs.apps import QuickscaleOrgsConfig
-from quickscale_modules_orgs.checks import check_quickscale_mode
 from quickscale_modules_orgs.removal import (
     OWNED_TENANT_ROWS,
     PURGE_TOMBSTONE,
@@ -41,18 +43,14 @@ def test_app_config_declares_its_removal_obligations() -> None:
     }
 
 
-def test_mode_check_passes_when_setting_present(settings) -> None:
-    """A supported ``QUICKSCALE_MODE`` reports no failure."""
-    settings.QUICKSCALE_MODE = "solo"
-
-    assert check_quickscale_mode() == []
-
-
-def test_mode_check_reports_missing_setting(settings) -> None:
-    """A missing ``QUICKSCALE_MODE`` is reported by name."""
+def test_startup_check_refuses_a_missing_mode(settings) -> None:
+    """Rule 3: the generic settings check refuses a missing declared setting."""
     del settings.QUICKSCALE_MODE
 
-    messages = check_quickscale_mode()
+    config = QuickscaleOrgsConfig(
+        "quickscale_modules_orgs",
+        import_module("quickscale_modules_orgs"),
+    )
 
-    assert messages
-    assert "QUICKSCALE_MODE" in messages[0].msg
+    with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_MODE"):
+        config.ready()

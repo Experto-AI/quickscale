@@ -13,11 +13,17 @@ This module is the one implementation of the three cross-module conventions:
   ``manage.py check``), aggregates every failure into one
   :class:`~django.core.exceptions.ImproperlyConfigured`, and registers the
   same functions as system checks tagged with the module's app label.
+* :func:`register_module_settings_check` — rule 3's generic settings check.
+  A module calls it from ``ready()`` with its own module name; the check
+  validates every setting declared in the project's ``MODULE_SETTINGS_SCHEMA``
+  (written by ``quickscale apply``) against the manifest's type and validation
+  vocabulary, without coercion, and fails startup naming the setting and the
+  fix.  Core holds no per-module names; the schema comes from the project.
 * :func:`exception_handler` — rule 9's single QuickScale HTTP error shape,
   installed as ``REST_FRAMEWORK["EXCEPTION_HANDLER"]`` by the generated
   settings.
 
-The root ``quickscale_core.runtime`` facade exposes all three lazily, so
+The root ``quickscale_core.runtime`` facade exposes all four lazily, so
 importing the facade in a process without Django (CLI ``plan``/``apply``)
 never imports this module.  :func:`exception_handler` imports DRF inside the
 call, so a project without a DRF-embedding module never imports
@@ -33,8 +39,11 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 from django.apps import AppConfig, apps
-from django.core.checks import CheckMessage, register
+from django.conf import settings
+from django.core.checks import CheckMessage, Error, register
 from django.core.exceptions import ImproperlyConfigured
+
+from quickscale_core.manifest.settings_schema import collect_setting_issues
 
 if TYPE_CHECKING:
     from rest_framework.response import Response
@@ -43,6 +52,7 @@ __all__ = [
     "collect_capabilities",
     "exception_handler",
     "register_module_checks",
+    "register_module_settings_check",
 ]
 
 #: The callable contract of a module check: Django's system-check signature,
@@ -267,6 +277,138 @@ def register_module_checks(
         )
     for check in check_functions:
         register(label)(cast("_RegisteredCheck", check))
+
+
+#: The managed-settings block ``quickscale apply`` writes and this check reads.
+_SETTINGS_SCHEMA_ATTRIBUTE = "MODULE_SETTINGS_SCHEMA"
+
+#: System-check ids for the failures the generic settings check reports.
+_SETTINGS_SCHEMA_MISSING_ID = "quickscale_settings.E001"
+_SETTINGS_MISSING_ID = "quickscale_settings.E002"
+_SETTINGS_INVALID_ID = "quickscale_settings.E003"
+
+#: The operator fix every settings failure names.
+_SETTINGS_APPLY_HINT = "Run `quickscale apply` to regenerate the managed settings."
+
+
+def register_module_settings_check(
+    app_config: AppConfig,
+    module_name: str,
+) -> None:
+    """Run and register rule 3's generic settings check for *module_name*.
+
+    A module calls this from ``ready()`` for its own name.  The check reads
+    the project's ``settings.MODULE_SETTINGS_SCHEMA`` — written by
+    ``quickscale apply`` — and validates every declared setting of
+    *module_name*: the setting must exist, and its value must satisfy the
+    declared type and validation block.  Validation never coerces, so a
+    string where an integer is declared is refused rather than converted.
+    Every failure names the setting, the rule, and the ``quickscale apply``
+    fix.
+
+    Args:
+        app_config: The module's app config; its label tags the registered
+            system check and names the module in aggregated failures.
+        module_name: The module's name — the key its schema is stored under
+            in ``MODULE_SETTINGS_SCHEMA``.
+
+    Raises:
+        ValueError: when *module_name* is not a non-empty string.
+        ImproperlyConfigured: when the project's schema or any declared
+            setting is missing or invalid.
+    """
+    if not isinstance(module_name, str) or not module_name:
+        raise ValueError(
+            "register_module_settings_check() requires a non-empty module name."
+        )
+    register_module_checks(app_config, [_module_settings_check(module_name)])
+
+
+def _module_settings_check(module_name: str) -> CheckCallable:
+    """Return the generic settings check bound to *module_name*."""
+
+    def check(app_configs: object = None, **kwargs: object) -> list[CheckMessage]:
+        return _module_settings_issues(module_name)
+
+    return check
+
+
+def _declared_setting_is_supplied(setting_name: str) -> bool:
+    """Return whether the managed wiring supplied *setting_name*.
+
+    In a generated project ``settings/modules.py`` contributes both the
+    ``MODULE_SETTINGS`` mapping and the schema, and ``settings/base.py``
+    applies the mapping; a declared setting absent from that mapping was not
+    written by ``apply``, even when a base template default or a library
+    default happens to define the name.  Without the managed mapping (module
+    test settings, standalone configurations) the configured settings must
+    explicitly set the name; Django's ``is_overridden`` distinguishes that
+    from a global or third-party default.
+    """
+    managed = getattr(settings, "MODULE_SETTINGS", None)
+    if isinstance(managed, Mapping):
+        return setting_name in managed and hasattr(settings, setting_name)
+    is_overridden = getattr(settings, "is_overridden", None)
+    if not callable(is_overridden):
+        return hasattr(settings, setting_name)
+    return bool(hasattr(settings, setting_name) and is_overridden(setting_name))
+
+
+def _module_settings_issues(module_name: str) -> list[CheckMessage]:
+    """Validate the project's declared settings for *module_name*."""
+    schema_all = getattr(settings, _SETTINGS_SCHEMA_ATTRIBUTE, None)
+    if not isinstance(schema_all, Mapping):
+        return [
+            Error(
+                f"settings.{_SETTINGS_SCHEMA_ATTRIBUTE} is missing or malformed; "
+                f"the managed module settings wiring is out of date. "
+                f"{_SETTINGS_APPLY_HINT}",
+                id=_SETTINGS_SCHEMA_MISSING_ID,
+            )
+        ]
+    module_schema = schema_all.get(module_name)
+    if not isinstance(module_schema, Mapping) or not module_schema:
+        return [
+            Error(
+                f"No settings schema for module {module_name!r}; the module is "
+                f"installed but the managed module settings wiring does not "
+                f"declare it. {_SETTINGS_APPLY_HINT}",
+                id=_SETTINGS_SCHEMA_MISSING_ID,
+            )
+        ]
+
+    values: dict[str, object] = {}
+    issues: list[CheckMessage] = []
+    for option_name, entry in sorted(module_schema.items()):
+        if not isinstance(entry, Mapping):
+            raise ValueError(
+                f"Malformed schema entry for option {option_name!r} of module "
+                f"{module_name!r}; expected a mapping."
+            )
+        setting_name = entry.get("setting")
+        if not isinstance(setting_name, str) or not setting_name:
+            raise ValueError(
+                f"Malformed schema entry for option {option_name!r} of module "
+                f"{module_name!r}; expected a 'setting' name."
+            )
+        if not _declared_setting_is_supplied(setting_name):
+            issues.append(
+                Error(
+                    f"{setting_name} is not set. {_SETTINGS_APPLY_HINT}",
+                    id=_SETTINGS_MISSING_ID,
+                )
+            )
+            continue
+        values[option_name] = getattr(settings, setting_name)
+
+    for issue in collect_setting_issues(module_name, module_schema, values):
+        issues.append(
+            Error(
+                f"{issue.message}. {_SETTINGS_APPLY_HINT}",
+                id=_SETTINGS_INVALID_ID,
+            )
+        )
+    return issues
 
 
 def exception_handler(

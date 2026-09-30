@@ -9,7 +9,10 @@ from typing import Any
 
 from django.apps import AppConfig
 
-from quickscale_core.runtime import register_module_checks
+from quickscale_core.runtime import (
+    register_module_checks,
+    register_module_settings_check,
+)
 from quickscale_modules_orgs.removal import (
     BILLING_PROVIDER_STATE,
     ExternalProviderField,
@@ -186,4 +189,7 @@ class QuickscaleBillingConfig(AppConfig):
         # touches models, so it must load after the app registry is ready.
         from quickscale_modules_billing.checks import check_billing_settings
 
+        # Rule 3 first: a missing or invalid declared setting is reported by
+        # the generic check before the runtime check reads it.
+        register_module_settings_check(self, "billing")
         register_module_checks(self, [check_billing_settings])

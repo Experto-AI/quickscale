@@ -25,8 +25,6 @@ from quickscale_modules_social.contracts import (
     SOCIAL_STATUS_DISABLED,
     SOCIAL_STATUS_EMPTY,
     SOCIAL_STATUS_ENABLED,
-    SOCIAL_STATUS_ERROR,
-    SocialConfigurationError,
     get_social_runtime_settings,
     normalize_social_provider_allowlist,
     normalize_social_url,
@@ -65,28 +63,20 @@ def _reset_org_context() -> None:
     set_current_org_id(None)
 
 
-def test_get_social_runtime_settings_normalizes_provider_allowlist() -> None:
-    """Runtime settings should normalize provider aliases and preserve order."""
+def test_get_social_runtime_settings_reads_declared_values_directly() -> None:
+    """Runtime settings read the canonical declared values (rule 3).
+
+    Apply canonicalizes and writes the values, and the module's startup check
+    validates them; the runtime snapshot neither defaults nor coerces.
+    """
     with override_settings(
-        QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=[" YouTube ", "twitter", "youtube"],
+        QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube", "x"],
         QUICKSCALE_SOCIAL_LAYOUT_VARIANT="cards",
     ):
         snapshot = get_social_runtime_settings()
 
     assert snapshot.provider_allowlist == ("youtube", "x")
     assert snapshot.layout_variant == "cards"
-
-
-def test_get_social_runtime_settings_rejects_disabling_all_public_surfaces() -> None:
-    """The runtime contract must keep at least one social surface enabled."""
-    with override_settings(
-        QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=False,
-        QUICKSCALE_SOCIAL_EMBEDS_ENABLED=False,
-    ):
-        with pytest.raises(SocialConfigurationError) as exc_info:
-            get_social_runtime_settings()
-
-    assert "link_tree_enabled or embeds_enabled enabled" in str(exc_info.value)
 
 
 @django_db
@@ -443,43 +433,9 @@ def test_contract_helpers_normalize_urls_and_raise_specific_errors() -> None:
         resolve_social_embed_metadata("https://www.youtube.com/watch?list=PL123")
 
 
-@pytest.mark.parametrize(
-    ("overrides", "message"),
-    [
-        (
-            {"QUICKSCALE_SOCIAL_LINK_TREE_ENABLED": "sometimes"},
-            "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED must be a boolean",
-        ),
-        (
-            {"QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE": 0},
-            "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE must be at least 1",
-        ),
-        (
-            {"QUICKSCALE_SOCIAL_LAYOUT_VARIANT": "mosaic"},
-            "QUICKSCALE_SOCIAL_LAYOUT_VARIANT must be one of: list, cards, grid",
-        ),
-        (
-            {"QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": []},
-            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST cannot be empty",
-        ),
-        (
-            {"QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": ["youtube", "mastodon"]},
-            "contains unsupported providers: mastodon",
-        ),
-        (
-            {"QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": ["linkedin"]},
-            "must include TikTok or YouTube when embeds are enabled",
-        ),
-    ],
-)
-def test_get_social_runtime_settings_rejects_additional_invalid_values(
-    overrides: dict[str, object],
-    message: str,
-) -> None:
-    """Runtime settings should reject invalid types and unsupported provider mixes."""
-    with override_settings(**overrides):
-        with pytest.raises(SocialConfigurationError, match=message):
-            get_social_runtime_settings()
+# Invalid option values are refused by the generic startup check (rule 3)
+# before a request runs; that behavior is covered by core check tests and by
+# test_apps.py's parametrized startup-refusal tests.
 
 
 @django_db
@@ -544,7 +500,7 @@ def test_invalidate_social_cache_is_not_exported_as_public_bulk_api() -> None:
     assert "invalidate_social_cache" not in social_services.__all__
 
 
-def test_build_social_link_tree_payload_freezes_disabled_and_error_semantics() -> None:
+def test_build_social_link_tree_payload_freezes_disabled_semantics() -> None:
     """Managed link-tree payloads should distinguish disabled surfaces from errors."""
     with override_settings(
         QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=False,
@@ -570,23 +526,14 @@ def test_build_social_link_tree_payload_freezes_disabled_and_error_semantics() -
     }
     assert social_payload_status_code(disabled_payload["status"]) == 200
 
-    with override_settings(
-        QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=False,
-        QUICKSCALE_SOCIAL_EMBEDS_ENABLED=False,
-    ):
-        error_payload = build_social_link_tree_payload()
-    error_message = cast(str, error_payload["error"])
-
-    assert error_payload["status"] == SOCIAL_STATUS_ERROR
-    assert error_payload["enabled"] is False
-    assert error_payload["links"] == []
-    assert error_payload["total_links"] == 0
-    assert "link_tree_enabled or embeds_enabled enabled" in error_message
-    assert social_payload_status_code(error_payload["status"]) == 503
+    # Invalid option combinations (both public surfaces off; embeds with no
+    # embed-capable provider) are refused by the generic startup check
+    # (rule 3), so the payload builder never sees them at runtime; the
+    # startup refusal is covered by test_apps.py.
 
 
 @django_db
-def test_build_social_embeds_payload_freezes_enabled_disabled_and_error_semantics(
+def test_build_social_embeds_payload_freezes_enabled_and_disabled_semantics(
     org,
 ) -> None:
     """Managed embed payloads should expose deterministic state and filtered items."""
@@ -686,16 +633,9 @@ def test_build_social_embeds_payload_freezes_enabled_disabled_and_error_semantic
         assert disabled_payload["total_embeds"] == 0
         assert disabled_payload["error"] is None
 
-        with override_settings(QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["facebook"]):
-            error_payload = build_social_embeds_payload()
-        error_message = cast(str, error_payload["error"])
-
-        assert error_payload["status"] == SOCIAL_STATUS_ERROR
-        assert error_payload["enabled"] is False
-        assert error_payload["embeds"] == []
-        assert error_payload["total_embeds"] == 0
-        assert "must include TikTok or YouTube" in error_message
-        assert social_payload_status_code(error_payload["status"]) == 503
+        # An embeds-enabled surface with no embed-capable provider is refused
+        # by the generic startup check (rule 3), so the payload builder never
+        # sees it at runtime; test_apps.py covers the startup refusal.
     finally:
         _reset_org_context()
 

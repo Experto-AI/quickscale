@@ -29,6 +29,17 @@ def test_s3_backend_reports_a_half_configured_pair(settings) -> None:
     assert "AWS_SECRET_ACCESS_KEY" in messages[0].msg
 
 
+def test_s3_backend_reports_a_missing_projected_credential(settings) -> None:
+    """A projected credential missing entirely is reported, not skipped."""
+    settings.QUICKSCALE_STORAGE_BACKEND = "s3"
+    del settings.AWS_SECRET_ACCESS_KEY
+
+    messages = check_vendor_secrets()
+
+    assert messages
+    assert "AWS_SECRET_ACCESS_KEY" in messages[0].msg
+
+
 def test_s3_backend_without_credentials_uses_the_default_chain(settings) -> None:
     """Both credentials empty defer to boto3's default credential chain."""
     settings.QUICKSCALE_STORAGE_BACKEND = "s3"
@@ -47,14 +58,15 @@ def test_s3_backend_passes_with_credentials(settings) -> None:
     assert check_vendor_secrets() == []
 
 
-def test_missing_backend_setting_is_reported(settings) -> None:
-    """A missing backend selection is invalid configuration."""
+def test_missing_backend_setting_fails_startup(settings) -> None:
+    """Rule 3: the generic settings check refuses a missing declared setting."""
+    from django.apps import apps
+    from django.core.exceptions import ImproperlyConfigured
+
     del settings.QUICKSCALE_STORAGE_BACKEND
 
-    messages = check_vendor_secrets()
-
-    assert messages
-    assert "QUICKSCALE_STORAGE_BACKEND" in messages[0].msg
+    with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_STORAGE_BACKEND"):
+        apps.get_app_config("quickscale_storage").ready()
 
 
 def test_missing_credentials_fail_check_migrate_and_runserver(settings) -> None:

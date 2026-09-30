@@ -2,7 +2,10 @@
 
 from django.apps import AppConfig
 
-from quickscale_core.runtime import register_module_checks
+from quickscale_core.runtime import (
+    register_module_checks,
+    register_module_settings_check,
+)
 
 
 class QuickscaleBackupsConfig(AppConfig):
@@ -35,4 +38,7 @@ class QuickscaleBackupsConfig(AppConfig):
         # populating the app registry.
         from quickscale_modules_backups.checks import check_private_remote_credentials
 
+        # Rule 3 first: a missing or invalid declared setting is reported by
+        # the generic check before the runtime check reads it.
+        register_module_settings_check(self, "backups")
         register_module_checks(self, [check_private_remote_credentials])

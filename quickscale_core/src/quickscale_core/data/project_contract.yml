@@ -104,6 +104,12 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current .github/workflows/ci.yml job environment: when analytics, billing, or notifications is selected it defines non-live placeholder credentials (POSTHOG_API_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY, QUICKSCALE_BILLING_WEBHOOK_SECRET, RESEND_API_KEY, QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET) so an enabled module's startup check passes in CI, which never calls the live vendors."
       - "A project that configured a custom *_env_var name adds that variable to the same job environment; the placeholders are test values only and do not belong in a serving environment."
+  - id: sa217-settings-schema
+    minimum: "0.89.0"
+    title: "Adopt the managed settings schema import"
+    adoption_steps:
+      - "Add MODULE_SETTINGS_SCHEMA to the `from .modules import ...` statement in <package>/settings/base.py (or otherwise expose the managed schema to Django settings), and commit that edit: `quickscale update` refuses a dirty tree. Then run `quickscale update --confirm-contract-adoption`, which updates the embedded modules through their configured branch, regenerates settings/modules.py with the compiled schema every installed module's startup check validates against, and records the adoption. An unflagged update or apply is refused while the adoption is pending, and apply alone cannot regenerate the wiring while the embedded modules are still on an older version. Until both are in place a module refuses startup with quickscale_settings.E001."
+      - "A project generated at this version or later already imports the schema; only an earlier project needs the manual edit."
   - id: sa223-theme-error-shape
     minimum: "0.89.0"
     title: "Adopt the one-shape API error parsing in the React theme client"

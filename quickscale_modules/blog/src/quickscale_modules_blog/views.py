@@ -62,7 +62,6 @@ DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH = 4096
 DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
 IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
-DEFAULT_BLOG_POSTS_PER_PAGE = 10
 
 # ---------------------------------------------------------------------------
 # Org-resolution helpers for the single-URL contract (T1.6)
@@ -113,8 +112,13 @@ def _resolve_api_org(request: Request | HttpRequest, author: Any) -> Any:
     return org
 
 
-def _get_positive_int_setting(setting_name: str, default: int) -> int:
-    """Return a positive integer setting value or the provided default."""
+def _upload_limit_setting(setting_name: str, default: int) -> int:
+    """Return an optional image-upload limit or *default*.
+
+    The upload limits are not manifest options yet, so their defaults live in
+    code; once the manifest declares them, ``apply`` writes them and this
+    helper goes.
+    """
     value = getattr(settings, setting_name, default)
     if isinstance(value, bool):
         return default
@@ -209,11 +213,11 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
     max_upload_bytes = int(
         max_upload_bytes_setting or DEFAULT_BLOG_API_UPLOAD_MAX_BYTES
     )
-    max_upload_width = _get_positive_int_setting(
+    max_upload_width = _upload_limit_setting(
         "BLOG_API_UPLOAD_MAX_WIDTH",
         DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH,
     )
-    max_upload_height = _get_positive_int_setting(
+    max_upload_height = _upload_limit_setting(
         "BLOG_API_UPLOAD_MAX_HEIGHT",
         DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT,
     )
@@ -590,15 +594,11 @@ class PostListView(BlogPublicReadMixin, ListView):
     model = Post
     template_name = "quickscale_blog/blog/post_list.html"
     context_object_name = "posts"
-    paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
 
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
-        """Return the runtime-configured posts-per-page value."""
+        """Return the project's declared posts-per-page value (rule 3)."""
         del queryset
-        return _get_positive_int_setting(
-            "BLOG_POSTS_PER_PAGE",
-            DEFAULT_BLOG_POSTS_PER_PAGE,
-        )
+        return settings.BLOG_POSTS_PER_PAGE
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return only published posts, ordered by publish date"""
@@ -638,15 +638,11 @@ class CategoryListView(BlogPublicReadMixin, ListView):
     model = Post
     template_name = "quickscale_blog/blog/category_list.html"
     context_object_name = "posts"
-    paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
 
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
-        """Return the runtime-configured posts-per-page value."""
+        """Return the project's declared posts-per-page value (rule 3)."""
         del queryset
-        return _get_positive_int_setting(
-            "BLOG_POSTS_PER_PAGE",
-            DEFAULT_BLOG_POSTS_PER_PAGE,
-        )
+        return settings.BLOG_POSTS_PER_PAGE
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts in the specified category"""
@@ -673,15 +669,11 @@ class TagListView(BlogPublicReadMixin, ListView):
     model = Post
     template_name = "quickscale_blog/blog/tag_list.html"
     context_object_name = "posts"
-    paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
 
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
-        """Return the runtime-configured posts-per-page value."""
+        """Return the project's declared posts-per-page value (rule 3)."""
         del queryset
-        return _get_positive_int_setting(
-            "BLOG_POSTS_PER_PAGE",
-            DEFAULT_BLOG_POSTS_PER_PAGE,
-        )
+        return settings.BLOG_POSTS_PER_PAGE
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts with the specified tag"""

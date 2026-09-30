@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -28,6 +29,7 @@ from quickscale_core.manifest.loader import (
     ModuleVersionMismatchError,
     assert_manifest_version_matches_core,
 )
+from quickscale_core.manifest.settings_schema import compile_settings_schema
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_core.schema.config_schema import validate_config
 from quickscale_core.schema.state_schema import StateManager
@@ -204,11 +206,19 @@ def _build_one_wiring_spec(
     package_name: str,
 ) -> tuple[ModuleWiringSpec | None, str | None]:
     try:
+        spec = build_manifest_wiring_spec(
+            module_name,
+            dict(options),
+            project_package=package_name,
+        )
+        # Rule 3: the managed settings file carries each module's compiled
+        # option schema so the runtime check validates the settings the
+        # project actually holds.
+        manifest = load_module_manifest(module_name)
         return (
-            build_manifest_wiring_spec(
-                module_name,
-                dict(options),
-                project_package=package_name,
+            replace(
+                spec,
+                settings_schema=compile_settings_schema(manifest),
             ),
             None,
         )

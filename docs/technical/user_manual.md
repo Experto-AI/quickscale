@@ -367,9 +367,16 @@ without state keep the normal generation flow.
 
 After completing every named adoption step, repeat the command with
 `--confirm-contract-adoption` to record the adopted vintage in `.quickscale/state.yml`, or with
-`--acknowledge-contract-vintage` to proceed for that invocation only. Neither flag rewrites
-generated files; only the recording option advances `project_contract`, and once it does, the
-project needs no flag again until a later vintage increase.
+`--acknowledge-contract-vintage` to proceed for that invocation only. Neither flag rewrites the
+user-owned generated files an adoption step names, but for `quickscale update` and `quickscale
+apply` the confirming option also regenerates the QuickScale-managed wiring (`<package>/settings/modules.py`
+and `<package>/urls_modules.py`) from the installed modules — which is how an adoption step whose
+deliverable is managed wiring, such as the SA217 settings schema, completes. Such a step therefore
+runs in this order: make and commit the manual edit (`quickscale update` refuses a dirty tree),
+then run `quickscale update --confirm-contract-adoption`, which updates the embedded modules,
+regenerates the wiring, and records the adoption; a confirmed no-delta `quickscale apply`
+regenerates the wiring the same way. Only the recording option advances `project_contract`, and
+once it does, the project needs no flag again until a later vintage increase.
 
 For the shared-design step declared in the project-level contract, adopt all of the following
 project-owned generated-file changes before recording adoption or using

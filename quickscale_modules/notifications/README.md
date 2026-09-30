@@ -58,7 +58,6 @@ Retired option keys (`resend_api_key`, `webhook_secret`) are refused by name; us
   verification and replay-safe event ingestion.
 - `sanitize_provider_tags()` and `sanitize_provider_metadata()` restrict what reaches the
   provider.
-- `validate_required_notification_settings()` fails when a required runtime setting is absent.
 
 The module's own errors live in `exceptions.py` under `NotificationError`, with
 `NotificationConfigurationError`, `NotificationDisabledError`, `NotificationTemplateError`,
@@ -70,10 +69,10 @@ plus subject/body pairs for generic messages, form submissions, and organization
 
 ### Startup checks
 
-Startup checks run through the shared `quickscale_core.runtime` helper: required settings are
-validated, and a secret a switched-on feature needs — the webhook signing secret while
-notifications are enabled, the Resend API key while the live Resend backend is active — fails
-startup when empty.
+Startup checks run through the shared `quickscale_core.runtime` helper: the module's declared
+settings are validated against the schema `quickscale apply` writes, and a secret a switched-on
+feature needs — the webhook signing secret while notifications are enabled, the Resend API key
+while the live Resend backend is active — fails startup when empty.
 
 ## URLs
 
