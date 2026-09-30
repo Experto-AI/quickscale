@@ -154,7 +154,9 @@ URL wiring:
 - Fixed public pages: `/social` and `/social/embeds` (fresh `showcase_react` generations), served
   by Django template wrappers that hydrate the shared React bundle.
 - Managed JSON endpoints: `/_quickscale/social/` and `/_quickscale/social/embeds/`, rendered
-  into the generated project's managed wiring and backed by the module services.
+  into the generated project's managed wiring and backed by the module services. The mount
+  (`_quickscale/social/`) is declared in the module's manifest `url_includes` entry, and the
+  managed URLconf names its routes `link_tree` and `embeds`.
 
 ## Management commands
 
