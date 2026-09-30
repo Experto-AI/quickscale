@@ -120,12 +120,18 @@ class TestFormSubmitAPIView:
     def test_returns_400_on_missing_required_field(
         self, api_client, form, form_field, email_field
     ):
-        """Missing required field returns 400 with field errors"""
+        """Missing required field returns 400 in the one QuickScale error shape"""
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice"}  # missing email
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 400
-        assert "errors" in response.data
+        assert response.data == {
+            "error": {
+                "code": "validation_error",
+                "message": "Invalid input.",
+                "fields": {"email": ["This field is required."]},
+            }
+        }
 
     @pytest.mark.parametrize(
         "payload,expected_error",
@@ -144,8 +150,34 @@ class TestFormSubmitAPIView:
         data = {"full_name": payload, "email": payload, "company": payload}
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 400
-        assert expected_error in response.data["errors"]["full_name"][0]
-        assert expected_error in response.data["errors"]["email"][0]
+        error = response.data["error"]
+        assert error["code"] == "validation_error"
+        assert expected_error in error["fields"]["full_name"][0]
+        assert expected_error in error["fields"]["email"][0]
+
+    @pytest.mark.parametrize(
+        "payload,post_kwargs",
+        [
+            ([1, 2, 3], {"format": "json"}),
+            ("text", {"format": "json"}),
+            (123, {"format": "json"}),
+            ("null", {"content_type": "application/json"}),
+        ],
+    )
+    def test_returns_400_for_non_object_json_body(
+        self, api_client, form, form_field, email_field, payload, post_kwargs
+    ):
+        """A JSON body that is not an object returns 400 in the one shape, never 500."""
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        response = api_client.post(url, data=payload, **post_kwargs)
+        assert response.status_code == 400
+        assert response.data == {
+            "error": {
+                "code": "validation_error",
+                "message": "Invalid input.",
+                "fields": {"non_field_errors": ["Request body must be a JSON object."]},
+            }
+        }
 
     def test_honeypot_silently_marks_spam_and_returns_201(
         self, api_client, form, form_field, email_field
@@ -206,10 +238,11 @@ class TestFormSubmitAPIView:
         assert submission.is_spam is False
 
     def test_returns_404_for_inactive_form(self, api_client, inactive_form):
-        """Submit to inactive form returns 404"""
+        """Submit to inactive form returns 404 in the one QuickScale error shape"""
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "inactive"})
         response = api_client.post(url, data={}, format="json")
         assert response.status_code == 404
+        assert response.data["error"]["code"] == "not_found"
 
     def test_creates_submission_and_field_values(
         self, api_client, form, form_field, email_field
@@ -500,9 +533,18 @@ class TestFormSubmitAPIView:
 
         # The forms wiring contributes the rate from FORMS_RATE_LIMIT; DRF
         # binds DEFAULT_THROTTLE_RATES onto the throttle class at import time,
-        # so the test applies both bindings itself.
+        # so the test applies both bindings itself.  A wholesale REST_FRAMEWORK
+        # override replaces the module settings' exception handler, so the
+        # override carries it too and the throttled body stays the one shape.
         with (
-            override_settings(REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": scope_rates}),
+            override_settings(
+                REST_FRAMEWORK={
+                    "EXCEPTION_HANDLER": (
+                        "quickscale_core.runtime.conventions.exception_handler"
+                    ),
+                    "DEFAULT_THROTTLE_RATES": scope_rates,
+                }
+            ),
             patch.object(ScopedRateThrottle, "THROTTLE_RATES", scope_rates),
         ):
             first = api_client.post(url, data=data, format="json")
@@ -512,6 +554,7 @@ class TestFormSubmitAPIView:
         assert first.status_code == 201
         assert second.status_code == 201
         assert third.status_code == 429
+        assert third.data["error"]["code"] == "throttled"
         cache.clear()
 
 
