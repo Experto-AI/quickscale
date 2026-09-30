@@ -1696,7 +1696,7 @@ class TestNotificationsModuleConfig:
         )
         assert settings["DEFAULT_FROM_EMAIL"] == "noreply@example.com"
         assert "QUICKSCALE_NOTIFICATIONS_ENABLED" in settings
-        assert ("", "quickscale_modules_notifications.urls") in urls
+        assert ("notifications/", "quickscale_modules_notifications.urls") in urls
 
     def test_notifications_wiring_live_delivery_owns_email_backend(self):
         specs = _build_specs(

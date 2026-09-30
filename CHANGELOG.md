@@ -257,6 +257,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     in its manifest and namespaces its snake_case routes as `quickscale_orgs`, its JSON API
     answers at `/orgs/api/...` (was `/api/orgs/...`), and the root dashboard route is gone so the
     site root belongs to the project.
+  - **Notifications' mount is manifest-owned and its webhook route is snake_case.** The
+    notifications module declares `notifications/` in its manifest's `url_includes` entry instead
+    of its adapter, and its route is named `resend_webhook`; the Resend endpoint stays at
+    `/notifications/webhooks/resend/`.
   - **Post-auth redirects and organization cache keys are declared capabilities.** Auth's single
     allauth adapter collects installed modules' declared post-login and post-signup redirect
     hooks, orgs declares the organization-aware ones instead of subclassing that adapter, and

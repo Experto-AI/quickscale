@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from quickscale_core.manifest import build_generic_manifest_spec
 from quickscale_modules_notifications.adapter import (
     _notifications_derived_settings,
     _notifications_manifest_adapter,
@@ -15,6 +16,16 @@ def test_get_manifest_adapter_returns_callable() -> None:
     assert get_manifest_adapter() is _notifications_manifest_adapter
 
 
+def test_manifest_owns_the_notifications_mount() -> None:
+    """Rule 7: the manifest's url_includes is the mount's only home."""
+    spec = build_generic_manifest_spec("notifications", {})
+
+    assert spec.url_includes == (
+        ("notifications/", "quickscale_modules_notifications.urls"),
+    )
+    assert spec.pre_home_url_includes == ()
+
+
 def test_default_delivery_is_console_safe() -> None:
     spec = _notifications_manifest_adapter({})
 
@@ -23,7 +34,10 @@ def test_default_delivery_is_console_safe() -> None:
         "django.core.mail.backends.console.EmailBackend"
     )
     assert spec.settings["DEFAULT_FROM_EMAIL"] == "noreply@example.com"
-    assert ("", "quickscale_modules_notifications.urls") in spec.url_includes
+    assert (
+        "notifications/",
+        "quickscale_modules_notifications.urls",
+    ) in spec.url_includes
 
 
 def test_live_resend_delivery_adds_anymail_and_email_settings() -> None:
