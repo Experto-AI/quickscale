@@ -95,6 +95,14 @@ def _provider_error_is_blocking(handler: Any, exc: Exception) -> bool:
     return isinstance(exc, tuple(handler.account_deletion_fail_closed_errors()))
 
 
+def _installed_app_config(label: str) -> Any:
+    """Return the installed app config for *label*, or ``None`` when absent."""
+    try:
+        return apps.get_app_config(label)
+    except LookupError:
+        return None
+
+
 class ProfileView(LoginRequiredMixin, DetailView):
     """Display user profile"""
 
@@ -499,7 +507,9 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         operations touching it through the ``account_deletion_handlers``
         capability, and this boundary collects them instead of naming any
         provider.  A declaration that cannot run every operation fails the
-        deletion closed rather than skipping provider work.
+        deletion closed rather than skipping provider work, and a handler must
+        be the declaring app's own config: the app's required ``RECONCILE``
+        executor lives there, so the method the boundary calls is that hook.
         """
         handlers = collect_capabilities("account_deletion_handlers")
         for handler in handlers:
@@ -535,6 +545,13 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                     f"The account-deletion capability declared by {name} declares "
                     f"an unknown reconcile scope {scope!r}."
                 )
+            for label in handler.account_deletion_handled_app_labels():
+                if _installed_app_config(label) is not handler:
+                    raise _AccountDeletionProviderBlocked(
+                        f"The account-deletion capability declared by {name} claims "
+                        f"the app label {label!r} but is not that app's config; a "
+                        "provider must declare its own app config as its handler."
+                    )
         return handlers
 
     def _handled_app_labels(self, handlers: tuple[Any, ...]) -> frozenset[str]:
