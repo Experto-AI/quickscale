@@ -210,6 +210,17 @@ class QuickscaleBillingConfig(AppConfig):
 
         return (BillingError,)
 
+    def account_deletion_reconcile_scope(self) -> str:
+        """Return the organization scope billing reconciles before deletion.
+
+        ``cancellation``: billing reconciles an organization's subscription
+        checkout only where this deletion cancels its subscription, because a
+        retained organization's open checkout is not this user's to resolve.
+        A handler declaring ``touched`` is reconciled for every organization
+        the deletion touches.
+        """
+        return "cancellation"
+
     def account_deletion_subscription_mutation_lock(
         self,
         organization_id: Any,

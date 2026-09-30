@@ -90,8 +90,9 @@ runtime-owned and never hardcode the publishable key in the frontend source tree
 `QuickscaleBillingConfig` declares billing's account-deletion handler through the Module
 Conventions rule 4 `account_deletion_handlers` capability: account deletion collects every
 installed handler and drives Stripe purchase-checkout reconciliation, subscription-checkout
-reconciliation, cancellation with compensation, provider mutation locking, and provenance
-detachment through it, so no consumer imports billing's services or names its label.
+reconciliation for the organizations whose subscriptions the deletion cancels, cancellation
+with compensation, provider mutation locking, and provenance detachment through it, so no
+consumer imports billing's services or names its label.
 
 ### API contract
 

@@ -42,6 +42,7 @@ User = get_user_model()
 _ACCOUNT_DELETION_HANDLER_METHODS: tuple[str, ...] = (
     "account_deletion_handled_app_labels",
     "account_deletion_fail_closed_errors",
+    "account_deletion_reconcile_scope",
     "account_deletion_user_reference_organization_ids",
     "account_deletion_subscription_mutation_lock",
     "reconcile_account_deletion_purchase_provider_state",
@@ -49,6 +50,15 @@ _ACCOUNT_DELETION_HANDLER_METHODS: tuple[str, ...] = (
     "cancel_account_deletion_subscription",
     "resume_account_deletion_subscription",
     "detach_account_deletion_user_references",
+)
+
+#: The organization scope a declared handler reconciles over.  A ``touched``
+#: handler runs its ``reconcile_account_deletion_provider_state`` executor for
+#: every organization the deletion touches; a ``cancellation`` handler runs it
+#: only for the organizations whose subscriptions the deletion cancels, so a
+#: retained organization's open provider state is not resolved.
+_ACCOUNT_DELETION_RECONCILE_SCOPES: frozenset[str] = frozenset(
+    {"cancellation", "touched"}
 )
 
 
@@ -181,7 +191,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                 )
             }
 
-        cancellation_transitions: dict[Any, Any] = {}
+        cancellation_transitions: dict[tuple[int, Any], Any] = {}
         deletion_succeeded = False
         try:
             prepared_provider_org_ids = self._provider_user_reference_organization_ids(
@@ -213,6 +223,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                         | prepared_provider_org_ids
                         | prepared_tenant_user_ref_org_ids
                         | cancellation_org_ids,
+                        handlers,
                         handled_app_labels,
                     )
                     self._cancel_personal_org_subscriptions(
@@ -515,6 +526,15 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                     f"The account-deletion capability declared by {name} must "
                     "return a non-empty tuple of exception types."
                 )
+            scope = handler.account_deletion_reconcile_scope()
+            if (
+                not isinstance(scope, str)
+                or scope not in _ACCOUNT_DELETION_RECONCILE_SCOPES
+            ):
+                raise _AccountDeletionProviderBlocked(
+                    f"The account-deletion capability declared by {name} declares "
+                    f"an unknown reconcile scope {scope!r}."
+                )
         return handlers
 
     def _handled_app_labels(self, handlers: tuple[Any, ...]) -> frozenset[str]:
@@ -547,19 +567,28 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
     def _reconcile_removal_provider_state(
         self,
         organization_ids: set[Any],
+        handlers: tuple[Any, ...],
         handled_app_labels: frozenset[str],
     ) -> None:
-        """Run every undeclared app's account-deletion provider hook.
+        """Run touched-scope provider reconciliation before the RECONCILE stage.
 
         The ``RECONCILE`` stage's executor is the declaring app's
         ``reconcile_account_deletion_provider_state`` hook, so the boundary
-        calls each installed app that provides one before discharging the
-        stage, over every organization the deletion touches.  An app that
-        declares the ``account_deletion_handlers`` capability owns its own
-        reconciliation (and its scope) through that handler instead.
+        calls it before discharging the stage, over every organization the
+        deletion touches.  A declared handler whose
+        ``account_deletion_reconcile_scope`` is ``touched`` runs there; an
+        installed app that exposes the hook without declaring the capability
+        is served the same way, so the declaring app's own work still runs.
+        A handler declaring the narrower ``cancellation`` scope owns its
+        reconciliation through ``_cancel_personal_org_subscriptions`` instead.
         """
         if not organization_ids:
             return
+        touched_handlers = [
+            handler
+            for handler in handlers
+            if handler.account_deletion_reconcile_scope() == "touched"
+        ]
         hooks: list[tuple[str, Any]] = []
         for app_config in sorted(
             apps.get_app_configs(), key=lambda config: config.label
@@ -571,10 +600,16 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
             )
             if callable(hook):
                 hooks.append((app_config.label, hook))
-        if not hooks:
+        if not touched_handlers and not hooks:
             return
 
         for organization_id in sorted(organization_ids, key=str):
+            for handler in touched_handlers:
+                self._call_account_deletion_handler(
+                    handler,
+                    "reconcile_account_deletion_provider_state",
+                    organization_id,
+                )
             for label, hook in hooks:
                 try:
                     hook(organization_id)
@@ -589,7 +624,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         organization_ids: set[Any],
         handlers: tuple[Any, ...],
         *,
-        cancellation_transitions: dict[Any, Any],
+        cancellation_transitions: dict[tuple[int, Any], Any],
     ) -> None:
         """Cancel each declared handler's state on the user's personal orgs
         that will not survive account deletion.
@@ -597,11 +632,12 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         The caller derives cancel targets from all OrganizationMembership rows
         where the user is an OWNER of a personal org and excludes any org where
         other memberships remain after deleting the user; every remaining target
-        is reconciled and cancelled through each declared handler.
+        is cancelled through each declared handler, and a handler declaring the
+        ``cancellation`` reconcile scope resolves its checkout first.
 
         ``cancellation_transitions`` records only provider false-to-true state
-        changes made by this attempt. The caller restores those exact
-        subscriptions on every path where the account survives.
+        changes made by this attempt, keyed by handler index and organization so
+        each handler is restored with the exact transition it produced.
         """
         if not organization_ids or not handlers:
             return
@@ -609,16 +645,17 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         organizations = Organization.objects.filter(pk__in=organization_ids).order_by(
             "pk"
         )
-        # A handler's checkout reconciliation stays scoped to the organizations
-        # whose subscriptions this deletion cancels: a retained organization's
-        # open checkout is not this user's to reconcile.
+        # A cancellation-scope handler reconciles an organization's checkout
+        # only where this deletion cancels its subscription: a retained
+        # organization's open checkout is not this user's to reconcile.
         for org in organizations:
-            for handler in handlers:
-                self._call_account_deletion_handler(
-                    handler,
-                    "reconcile_account_deletion_provider_state",
-                    org.pk,
-                )
+            for handler_index, handler in enumerate(handlers):
+                if handler.account_deletion_reconcile_scope() == "cancellation":
+                    self._call_account_deletion_handler(
+                        handler,
+                        "reconcile_account_deletion_provider_state",
+                        org.pk,
+                    )
                 transition = self._call_account_deletion_handler(
                     handler,
                     "cancel_account_deletion_subscription",
@@ -626,7 +663,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                     org,
                 )
                 if transition is not None and getattr(transition, "changed", False):
-                    cancellation_transitions[org.pk] = transition
+                    cancellation_transitions[(handler_index, org.pk)] = transition
 
     def _reconcile_provider_purchase_checkouts(
         self,
@@ -755,23 +792,28 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
     def _resume_provider_subscriptions(
         self,
         user: Any,
-        cancellation_transitions: dict[Any, Any],
+        cancellation_transitions: dict[tuple[int, Any], Any],
         handlers: tuple[Any, ...],
     ) -> None:
-        """Compensate successful cancellations when account deletion is rejected."""
+        """Compensate each handler's cancellations when account deletion is rejected."""
         if not cancellation_transitions:
             return
 
-        organizations = Organization.objects.filter(
-            pk__in=cancellation_transitions
-        ).order_by("pk")
-        for organization in organizations:
-            for handler in handlers:
+        organization_ids = {org_pk for _, org_pk in cancellation_transitions}
+        for organization in Organization.objects.filter(
+            pk__in=organization_ids
+        ).order_by("pk"):
+            for handler_index, handler in enumerate(handlers):
+                transition = cancellation_transitions.get(
+                    (handler_index, organization.pk)
+                )
+                if transition is None:
+                    continue
                 try:
                     handler.resume_account_deletion_subscription(
                         user,
                         organization,
-                        cancellation_transitions[organization.pk],
+                        transition,
                     )
                 except Exception:
                     logger.exception(

@@ -255,6 +255,7 @@ def test_app_config_declares_account_deletion_handler_capability() -> None:
 
     assert config.account_deletion_handlers() == (config,)
     assert config.account_deletion_handled_app_labels() == ("quickscale_billing",)
+    assert config.account_deletion_reconcile_scope() == "cancellation"
 
 
 def test_app_config_declares_account_deletion_fail_closed_errors() -> None:
