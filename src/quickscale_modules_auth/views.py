@@ -724,6 +724,8 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         declared provider error during acquisition fails the deletion closed,
         and every lock acquired before any acquisition failure is released
         before the error propagates — declared, unexpected, or an interrupt.
+        If releasing an acquired lock also fails, its failure is logged and
+        the acquisition failure is the one that propagates.
         """
         try:
             for handler in handlers:
@@ -739,7 +741,13 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                             raise
                         raise _AccountDeletionProviderBlocked(str(exc)) from exc
         except BaseException:
-            stack.close()
+            try:
+                stack.close()
+            except BaseException:
+                logger.exception(
+                    "Account deletion provider-lock cleanup failed after an "
+                    "acquisition failure; re-raising the acquisition failure."
+                )
             raise
 
     def _detach_provider_user_references(
