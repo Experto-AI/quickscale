@@ -198,21 +198,24 @@ class ModuleManifest:
     # section leave these fields as their default empty values.
     # ------------------------------------------------------------------ #
     derivation_rules: list[dict[str, Any]] = field(default_factory=list)
-    """Normalisation rules declared in the manifest derivation section."""
+    """Retained derivation metadata field; the loader refuses top-level
+    ``normalization_rules`` authoring, so a loaded manifest leaves this empty."""
     validation_rules: list[dict[str, Any]] = field(default_factory=list)
-    """Validation rules declared in the manifest derivation section."""
+    """Retained derivation metadata field; the loader refuses manifest
+    ``validation_rules`` authoring, so a loaded manifest leaves this empty."""
     legacy_aliases: list[dict[str, Any]] = field(default_factory=list)
-    """Legacy key aliases declared in the manifest derivation section."""
+    """Retained derivation metadata field; the loader refuses manifest alias
+    authoring (rule 6), so a loaded manifest leaves this empty."""
     derived_settings: list[dict[str, Any]] = field(default_factory=list)
     """Derived Django settings declared in the manifest derivation section."""
     wiring_projections: list[dict[str, Any]] = field(default_factory=list)
     """Wiring projections declared in the manifest derivation section."""
     option_derivations: dict[str, dict[str, Any]] = field(default_factory=dict)
     """Per-option derivation metadata keyed by option name. Each value is a
-    raw dict with optional ``normalization_rules``, ``validation_rules``,
-    ``legacy_aliases``, ``derived_settings``, and ``wiring_projections``
-    sub-lists.  Populated from the ``derivation.option_derivations`` section
-    in the manifest YAML."""
+    raw dict with optional ``normalization_rules``, ``derived_settings``, and
+    ``wiring_projections`` sub-lists; the loader refuses a ``validation_rules``
+    or ``legacy_aliases`` declaration.  Populated from the
+    ``derivation.option_derivations`` section in the manifest YAML."""
 
     retired_options: dict[str, str] = field(default_factory=dict)
     """Retired option keys mapped to the message naming their removal.

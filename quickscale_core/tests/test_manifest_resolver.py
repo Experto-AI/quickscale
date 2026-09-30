@@ -22,6 +22,7 @@ from quickscale_core.manifest import (
     OptionDerivation,
     ResolverResult,
     ValidationRule,
+    WiringProjection,
     resolve_module_config,
 )
 from quickscale_core.manifest.resolver import (
@@ -54,6 +55,7 @@ def _make_schema(
     option_derivations: dict[str, OptionDerivation] | None = None,
     shared_normalization_rules: list[NormalizationRule] | None = None,
     shared_validation_rules: list[ValidationRule] | None = None,
+    wiring_projections: list[WiringProjection] | None = None,
 ) -> ModuleDerivationSchema:
     """Build a minimal ModuleDerivationSchema for testing."""
     return ModuleDerivationSchema(
@@ -62,6 +64,7 @@ def _make_schema(
         option_derivations=option_derivations or {},
         shared_normalization_rules=shared_normalization_rules or [],
         shared_validation_rules=shared_validation_rules or [],
+        module_wiring_projections=wiring_projections or [],
     )
 
 
@@ -1997,3 +2000,172 @@ class TestListNormalization:
             manifest, self._schema(), overrides={"providers": None}
         )
         assert empty.resolved["providers"] == []
+
+    def test_list_drops_empty_container_items(self) -> None:
+        """An empty list/mapping item is an emptied item, item rules or not."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        schema = _make_schema(
+            option_derivations={
+                "providers": OptionDerivation(
+                    option_key="providers",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="list",
+                        )
+                    ],
+                )
+            }
+        )
+        result = resolve_module_config(
+            manifest, schema, overrides={"providers": [[], {}, "ok"]}
+        )
+        assert result.resolved["providers"] == ["ok"]
+
+    def test_list_leaves_an_unsupported_container_unchanged(self) -> None:
+        """A mapping is not stringified into items; the type check refuses it."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        result = resolve_module_config(
+            manifest, self._schema(), overrides={"providers": {"youtube": True}}
+        )
+        assert result.resolved["providers"] == {"youtube": True}
+
+    def test_list_with_an_unsupported_item_is_left_unchanged(self) -> None:
+        """One unrepresentable item leaves the whole list for the type check."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        result = resolve_module_config(
+            manifest, self._schema(), overrides={"providers": ["ok", {"x": 1}]}
+        )
+        assert result.resolved["providers"] == ["ok", {"x": 1}]
+
+    def test_list_drops_empty_items_before_item_rules(self) -> None:
+        """An empty container or null item never reaches the slug rule."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        result = resolve_module_config(
+            manifest,
+            self._schema(),
+            overrides={"providers": ["ok", set(), None, "ok"]},
+        )
+        assert result.resolved["providers"] == ["ok"]
+
+    def test_preceding_rule_cannot_erase_an_unsupported_item(self) -> None:
+        """A list-target chain declines before an earlier slug can stringify."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        schema = _make_schema(
+            option_derivations={
+                "providers": OptionDerivation(
+                    option_key="providers",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="slug",
+                        ),
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="list",
+                        ),
+                    ],
+                )
+            }
+        )
+        result = resolve_module_config(
+            manifest, schema, overrides={"providers": ["ok", {"ops": True}]}
+        )
+        assert result.resolved["providers"] == ["ok", {"ops": True}]
+
+    def test_direct_url_projection_records_invalid_items(self) -> None:
+        """A value that cannot form URL pairs is recorded, not dropped."""
+        manifest = _make_manifest(
+            mutable_options={"routes": _list_option("routes", "ROUTES")}
+        )
+        schema = _make_schema(
+            wiring_projections=[
+                WiringProjection(
+                    wiring_field="url_includes",
+                    derivation_type="direct",
+                    source_options=["routes"],
+                    expression={"option": "routes"},
+                    default=[],
+                    description="Routes",
+                )
+            ]
+        )
+        result = resolve_module_config(
+            manifest, schema, overrides={"routes": ["users/"]}
+        )
+        assert result.validation_issues == [
+            "modules.test_module.routes cannot feed url_includes: item 0 is "
+            "not a [route, include] pair of strings"
+        ]
+
+    def test_direct_url_projection_accepts_pairs(self) -> None:
+        """A list of pairs resolves without issues."""
+        manifest = _make_manifest(
+            mutable_options={"routes": _list_option("routes", "ROUTES")}
+        )
+        schema = _make_schema(
+            wiring_projections=[
+                WiringProjection(
+                    wiring_field="url_includes",
+                    derivation_type="direct",
+                    source_options=["routes"],
+                    expression={"option": "routes"},
+                    default=[],
+                    description="Routes",
+                )
+            ]
+        )
+        result = resolve_module_config(
+            manifest, schema, overrides={"routes": [["users/", "app.urls"]]}
+        )
+        assert result.validation_issues == []
+
+    def test_item_rule_container_is_not_stringified_by_a_later_rule(self) -> None:
+        """A rule producing a container ends the item chain, not slugged."""
+        manifest = _make_manifest(
+            mutable_options={"providers": _list_option("providers", "PROVIDERS")}
+        )
+        schema = _make_schema(
+            option_derivations={
+                "providers": OptionDerivation(
+                    option_key="providers",
+                    normalization_rules=[
+                        NormalizationRule(
+                            source_key="providers",
+                            target_key="providers",
+                            rule_type="list",
+                            item_rules=[
+                                NormalizationRule(
+                                    source_key="providers",
+                                    target_key="providers",
+                                    rule_type="choice_map",
+                                    mapping={"ok": {"key": "val"}},
+                                ),
+                                NormalizationRule(
+                                    source_key="providers",
+                                    target_key="providers",
+                                    rule_type="slug",
+                                ),
+                            ],
+                        )
+                    ],
+                )
+            }
+        )
+        result = resolve_module_config(
+            manifest, schema, overrides={"providers": ["ok"]}
+        )
+        assert result.resolved["providers"] == [{"key": "val"}]

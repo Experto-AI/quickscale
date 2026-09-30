@@ -23,7 +23,16 @@ The complete vocabulary, as Module Conventions rule 12 records it:
 * the condition grammar shared by ``required_when``, ``excludes.when``, and
   ``intersects.when``: a mapping whose entries must all hold; each entry's
   value is a literal, a list of literals, or ``{not_empty: true}``.  Existing
-  single-entry literal/list conditions keep their meaning.
+  single-entry literal/list conditions keep their meaning;
+* declared normalization kinds, applied to supplied values before the
+  value-level checks — ``identity``, ``strip``, ``lowercase``, ``url``,
+  ``choice_map``, ``coerce_int``, ``coerce_bool``, ``slug``, and ``list``.
+  ``slug`` lowercases, maps ``_`` and whitespace to ``-``, drops characters
+  outside ``[a-z0-9-]``, collapses repeated dashes, trims leading/trailing
+  dashes, takes an optional ``max_length``, and applies an optional ``replace``
+  mapping first.  ``list`` comma-splits a string or wraps a scalar, applies its
+  nested ``item_rules`` to each item, drops empties, and dedupes preserving
+  order; a provider alias table is a ``choice_map`` item rule.
 
 A check this vocabulary cannot express needs a decision edit before it is
 added.  A runtime predicate that decides module behavior from resolved options
@@ -42,8 +51,10 @@ Values are canonicalized before the value-level checks: the caller's own
 canonicalization runs first, then the manifest's declared normalization rules
 through :func:`~quickscale_core.manifest.resolver.normalize_module_option_values`,
 so ``GRID`` and ``" 5/hour "`` are judged as the canonical forms the manifest
-names.  The declared ``type`` is checked against the values as supplied, before
-any lossy coercion.
+names.  The declared ``type`` is checked against the values as supplied — a
+string the manifest's own rules turn into the declared type is an accepted
+spelling (a ``list`` rule comma-splitting a string), while a value of another
+shape is refused as the wrong type.
 """
 
 from __future__ import annotations
@@ -127,6 +138,65 @@ def option_type_matches(option_type: str, value: Any) -> bool:
     if option_type == "list":
         return isinstance(value, list)
     return True
+
+
+def _supplied_type_matches(
+    manifest: ModuleManifest, option: ConfigOption, value: Any
+) -> bool:
+    """Return whether *value* satisfies the option's declared ``type``.
+
+    A *string* the manifest's own normalization rules turn into the declared
+    type is an accepted spelling: a ``list`` rule comma-splits a string, so a
+    string supplied for a list option is judged as the list it canonicalizes
+    to.  A value of another shape is judged as supplied — the rules document no
+    mapping or container input — and ``None`` never matches.
+    """
+    if value is None:
+        return False
+    if option_type_matches(option.option_type, value):
+        return True
+    if not isinstance(value, str):
+        return False
+    canonical = normalize_module_option_values(manifest, {option.name: value}).get(
+        option.name
+    )
+    return canonical is not None and option_type_matches(option.option_type, canonical)
+
+
+def _unsupported_list_items(value: Any) -> list[Any]:
+    """Return the items of a list value that are neither scalars nor empties.
+
+    The ``list`` normalization rule cannot represent a mapping, a non-empty
+    container, or an arbitrary object; the engine refuses such an item rather
+    than letting a rule stringify it into a plausible-looking value.
+    """
+    if not isinstance(value, (list, tuple)):
+        return []
+    unsupported: list[Any] = []
+    for item in value:
+        if item is None or isinstance(item, (str, int, float, bool)):
+            continue
+        if isinstance(item, (list, tuple, set, frozenset, Mapping)) and not item:
+            continue
+        unsupported.append(item)
+    return unsupported
+
+
+def _has_list_normalizer(manifest: ModuleManifest, option_name: str) -> bool:
+    """Return whether *option_name* declares a ``list`` normalization rule.
+
+    The scalar-item rule exists for lists a ``list`` rule canonicalizes; a
+    list without one (a URL-pair list feeding a direct projection) keeps its
+    own item shapes, which the resolution boundary validates.
+    """
+    rules: list[Any] = list(manifest.derivation_rules or [])
+    derivations = manifest.option_derivations or {}
+    entry = derivations.get(option_name)
+    if isinstance(entry, dict):
+        rules.extend(entry.get("normalization_rules") or [])
+    return any(
+        isinstance(rule, dict) and rule.get("rule_type") == "list" for rule in rules
+    )
 
 
 def _type_issue(
@@ -230,6 +300,15 @@ def _single_value_issues(
     validation = option.validation or {}
     label = setting_display_name(manifest.name, option)
     issues: list[str] = []
+
+    unsupported_items = (
+        _unsupported_list_items(value)
+        if _has_list_normalizer(manifest, option.name)
+        else []
+    )
+    if unsupported_items:
+        rendered = ", ".join(str(item) for item in unsupported_items)
+        issues.append(f"{label} contains unsupported items: {rendered}")
 
     choices = validation.get("choices")
     if isinstance(choices, list) and choices:
@@ -387,9 +466,10 @@ def collect_option_validation_issues(
             ``sanitize_module_options``).  Only names the manifest declares are
             considered; undeclared keys are another layer's concern.
         supplied: The same values as they were authored, before any lossy
-            coercion.  The declared ``type`` is checked against these so a
+            coercion.  The declared ``type`` is checked against these, so a
             value the caller would stringify is still refused as the wrong
-            type.  Defaults to *overrides*.
+            type; a value the manifest's own normalization rules turn into the
+            declared type is an accepted spelling.  Defaults to *overrides*.
 
     Returns:
         Every failed constraint, in option-name order, each carrying the
@@ -411,18 +491,24 @@ def collect_option_validation_issues(
             checked_value = raw_values[option_name]
         else:
             checked_value = resolved.get(option_name)
-        if checked_value is None or not option_type_matches(
-            option.option_type, checked_value
-        ):
+        if not _supplied_type_matches(manifest, option, checked_value):
             issues.append(_type_issue(manifest, option, option_name))
             issues.extend(
                 OptionValidationIssue(option_name, message)
                 for message in _cross_option_issues(manifest, option, resolved)
             )
             continue
-        for message in _single_value_issues(
-            manifest, option, resolved.get(option_name)
-        ):
+        resolved_value = resolved.get(option_name)
+        if not option_type_matches(option.option_type, resolved_value):
+            # A normalization rule changed the canonical shape; the option
+            # must still carry a value of its declared type.
+            issues.append(_type_issue(manifest, option, option_name))
+            issues.extend(
+                OptionValidationIssue(option_name, message)
+                for message in _cross_option_issues(manifest, option, resolved)
+            )
+            continue
+        for message in _single_value_issues(manifest, option, resolved_value):
             issues.append(OptionValidationIssue(option_name, message))
         for message in _cross_option_issues(manifest, option, resolved):
             issues.append(OptionValidationIssue(option_name, message))
