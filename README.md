@@ -62,6 +62,10 @@ Models: `Post`, `Category`, `Tag`, `AuthorProfile`, and `BlogMediaAsset`, the st
 image-upload asset the automation flow references. The models are registered in the Django
 admin with Markdown editing support.
 
+Module-to-module use goes through `services.py` (Module Conventions rule 4): the publish and
+media-upload operations and the `BlogError` base are its declared `__all__` surface, and every
+argument after the leading request or payload subject is keyword-only (rule 23).
+
 ### Automation API
 
 The two-step automation flow is:

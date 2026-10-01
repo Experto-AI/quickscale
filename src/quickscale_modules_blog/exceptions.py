@@ -15,6 +15,7 @@ from rest_framework.exceptions import APIException
 
 __all__ = [
     "BlogError",
+    "BlogMediaUploadError",
     "BlogMediaUploadValidationError",
     "BlogPublishConflictError",
     "BlogPublishError",
@@ -57,3 +58,10 @@ class BlogMediaUploadValidationError(BlogError):
     def __init__(self, errors: dict[str, str]) -> None:
         super().__init__("Invalid media upload payload")
         self.errors = errors
+
+
+class BlogMediaUploadError(BlogError, APIException):
+    """Raised when a blog media asset write fails unexpectedly."""
+
+    status_code = 500
+    default_code = "upload_failed"
