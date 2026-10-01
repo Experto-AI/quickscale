@@ -28,7 +28,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA228 | Break import cycles and cross-module settings reads; give every `services.py` its public surface | post-v88 | 1 | — | Deferred |
 | SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219, SA228 | Deferred |
 | SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
-| SA230 | Build the conformance-test harness with the rules already met | post-v88 | 1 | — | Deferred |
+| SA230 | Build the conformance-test harness with the rules already met | post-v88 | 3 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA226, SA230 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
@@ -40,9 +40,9 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA228 ──► SA230 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA228 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA219 ──► SA220
-Track 3: SA226 ──► SA216 (after SA215)
+Track 3: SA230 ──► SA226 ──► SA216 (after SA215)
      critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
@@ -51,13 +51,12 @@ Arrows within a track are queue order; the table holds the actual dependency edg
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
 ported, and SA204 has not frozen the migration history. SA219's renames and refusals run through
 the startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's org-role
-authorization needs SA220's capabilities and the standardized DRF views SA223 delivered. SA204
-freezes migration history
-before any post-SA153 module schema change. SA154 is an inventory, not work.
+authorization needs SA220's capabilities. SA204 freezes migration history before any post-SA153
+module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA228 (Track 1) and the delivered SA223 and SA229 (Track 3) filled the
-wait for SA219; SA226 waits for SA220, and SA230 is the harness SA215 adds rules to; SA216 waits
-for SA215 because both change auth's views, orgs' removal path, and the user-referencing models.
+**Off the critical path.** SA228 (Track 1) and SA230 (Track 3) run while SA219 and SA220 land;
+SA230 is the harness SA215 adds rules to. SA216 waits for SA215 because both change auth's views,
+orgs' removal path, and the user-referencing models.
 
 ### Track states
 
@@ -67,7 +66,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA228 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA219 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA226 | no | no | no | no | **yes** |
+| 3 | SA230 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -78,7 +77,7 @@ A track is **truly green** only when all three states are yes.
   extension documentation, and, for the conventions, module identities, models and their
   `0001_initial`, module READMEs, and module templates, static files, and template tags, with the
   module page templates and the generated `base.html`, and cross-module imports and settings reads,
-  the `services.py` public surface, and the conformance harness (SA228, SA230).
+  and the `services.py` public surface (SA228).
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
   every package, `ruff.toml`, the test-settings stubs, the CLI apply/deploy/update commands and
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
@@ -93,10 +92,10 @@ A track is **truly green** only when all three states are yes.
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
-  theme's React API client (SA223, SA229, SA226).
+  theme's React API client, and the conformance harness with its registry row (SA230, SA226).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
-  SA219, SA220, SA223, SA226, SA228, SA229, SA230) touch every module and cross every track, so each lands in
+  SA219, SA220, SA226, SA228, SA230) touch every module and cross every track, so each lands in
   module-sized slices through that queue, merging `v89` before each slice; a slice edits another
   convention ticket's surface only where its own rule forces it (a rename's callers, for example).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
@@ -124,10 +123,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Scope:** SA230's rule 40 conformance test extended to every rule of 1–39 it does not yet
-  cover, with a control case per rule; the release notes; the inventory's closing pass. Code changes are in the convention tickets (SA219 owns
-  refusing retired names); a drift item none of them fixed is fixed here or recorded as an accepted
-  exception.
+  **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
+  control case per rule; the release notes; the inventory's closing pass. A drift item no
+  convention ticket fixed is fixed here or recorded as an accepted exception.
 
   **Acceptance:** every inventory drift item (sections 1–41) is fixed or recorded as an accepted
   exception with its reason; the conformance test passes and rejects a violation of each rule; a
@@ -139,8 +137,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA230 — Build the conformance-test harness with the rules already met.**
 
-  **Context:** SA215's rule 40 test need not wait for every convention ticket. The harness and the
-  rules the shipped code already meets (for example SA224's template rules) can land now, so each
+  **Context:** the harness and the rules the shipped code already meets can land now, so each
   convention ticket's rules drop into a running gate.
 
   **Scope:** the rule 40 conformance test and its registry row; a check with a control case for
@@ -225,10 +222,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   fails when an import or reference by name is missing from `required_modules`.
 
   **Surfaces:** every `services.py` and manifest; the import-graph test.
-
-- [x] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
-
-- [x] **SA229 — Tie write effects to commit, send email only through notifications, and move feature events to their owners.**
 
 - [ ] **SA226 — Authorize tenant modules by org role.**
 
