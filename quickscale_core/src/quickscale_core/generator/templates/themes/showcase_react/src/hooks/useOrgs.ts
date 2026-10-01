@@ -100,9 +100,9 @@ function buildOrgApiPath(orgSlug: string, path = ''): string {
   return `/orgs/api/${orgSlug}${path ? normalizedPath : '/'}`
 }
 
-function buildOrgBillingApiPath(orgSlug: string, path: string): string {
+function buildBillingApiPath(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `/orgs/${orgSlug}/api/billing${normalizedPath}`
+  return `/billing/api${normalizedPath}`
 }
 
 function invalidateOrgQueries(queryClient: ReturnType<typeof useQueryClient>, orgSlug: string) {
@@ -240,12 +240,12 @@ export function useOrgBilling(orgSlug: string, enabled = true) {
   const billingEnabled = enabled && Boolean(orgSlug)
 
   const subscription = useApiData<OrgSubscriptionResponse>(
-    buildOrgBillingApiPath(orgSlug, 'subscription/'),
+    buildBillingApiPath('subscription/'),
     ['orgs', orgSlug, 'billing', 'subscription'],
     { enabled: billingEnabled },
   )
   const balance = useApiData<OrgBalanceResponse>(
-    buildOrgBillingApiPath(orgSlug, 'balance/'),
+    buildBillingApiPath('balance/'),
     ['orgs', orgSlug, 'billing', 'balance'],
     { enabled: billingEnabled },
   )

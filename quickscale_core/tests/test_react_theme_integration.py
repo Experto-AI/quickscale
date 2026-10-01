@@ -397,7 +397,8 @@ class TestReactThemeGeneration:
         ).read_text()
 
         assert "buildOrgApiPath" in use_orgs
-        assert "buildOrgBillingApiPath" in use_orgs
+        assert "buildBillingApiPath" in use_orgs
+        assert "/billing/api" in use_orgs
         assert "next_url: string" in use_orgs
         assert "billing_pricing_url: string | null" in use_orgs
         assert "member_count?: number" in use_orgs
