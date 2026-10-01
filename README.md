@@ -15,7 +15,7 @@ with a custom user model and organization-aware account flows.
 - A declarative `module.yml` manifest with mutable and immutable options.
 
 `orgs` is required alongside `auth`: it supplies the tenant middleware, the
-`QUICKSCALE_MODE` runtime mode, and the organization-aware post-auth redirects, which it
+`QUICKSCALE_ORGS_MODE` runtime mode, and the organization-aware post-auth redirects, which it
 declares as an `AppConfig` capability this module's account adapter collects. Dependencies:
 Django 6.0+ and django-allauth `>=65.18.0,<66.0.0`.
 
@@ -81,7 +81,7 @@ ACCOUNT_ADAPTER = "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdap
 ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"
 LOGIN_REDIRECT_URL = "/accounts/profile/"
 LOGOUT_REDIRECT_URL = "/"
-QUICKSCALE_MODE = "solo"  # or "saas"
+QUICKSCALE_ORGS_MODE = "solo"  # or "saas"
 ```
 
 `ACCOUNT_LOGIN_METHODS` and `ACCOUNT_SIGNUP_FIELDS` follow `authentication_method`:
