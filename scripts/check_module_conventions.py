@@ -784,6 +784,18 @@ def rule_2_identity_names(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _declares_literal_url_includes(value: ast.expr) -> bool:
+    """
+    Return True when a non-empty list/tuple literal hard-codes URL wiring.
+
+    Rule 7 makes the manifest the only place that sets a module's mount, so an
+    adapter naming literal include pairs violates it.  An *empty* literal
+    declares no include at all: it is how a switched-off module mounts none of
+    its public URLs (rule 1), so it stays allowed and the check must not flag it.
+    """
+    return isinstance(value, (ast.List, ast.Tuple)) and bool(value.elts)
+
+
 def rule_7_urls(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -815,18 +827,27 @@ def rule_7_urls(corpus: Corpus) -> list[str]:
             for node in ast.walk(_parse(adapter)):
                 if isinstance(node, ast.Call):
                     for keyword in node.keywords:
-                        if keyword.arg == "url_includes" and isinstance(
-                            keyword.value, (ast.List, ast.Tuple)
+                        if keyword.arg == "url_includes" and _declares_literal_url_includes(
+                            keyword.value
                         ):
                             violations.append(
                                 f"rule 7: {module.name}: adapter.py declares a literal url_includes"
                             )
-                elif isinstance(node, ast.Assign) and isinstance(node.value, (ast.List, ast.Tuple)):
-                    for target in node.targets:
-                        if isinstance(target, ast.Name) and target.id == "url_includes":
-                            violations.append(
-                                f"rule 7: {module.name}: adapter.py declares a literal url_includes"
-                            )
+                    continue
+                targets: list[ast.expr] = []
+                if isinstance(node, ast.Assign) and _declares_literal_url_includes(node.value):
+                    targets = list(node.targets)
+                elif (
+                    isinstance(node, ast.AnnAssign)
+                    and node.value is not None
+                    and _declares_literal_url_includes(node.value)
+                ):
+                    targets = [node.target]
+                for target in targets:
+                    if isinstance(target, ast.Name) and target.id == "url_includes":
+                        violations.append(
+                            f"rule 7: {module.name}: adapter.py declares a literal url_includes"
+                        )
         urls = module.files.get("urls.py")
         if urls is None:
             continue
@@ -1002,11 +1023,22 @@ def rule_9_http_apis(corpus: Corpus) -> list[str]:
 
 
 def _calls_within(node: ast.AST) -> list[ast.Call]:
+    """Return calls reachable in a node, skipping statically dead branches."""
     calls: list[ast.Call] = []
     pending = [node]
     while pending:
         current = pending.pop()
         if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(current, ast.If) and isinstance(current.test, ast.Constant):
+            pending.extend(current.body if current.test.value else current.orelse)
+            continue
+        if (
+            isinstance(current, ast.While)
+            and isinstance(current.test, ast.Constant)
+            and current.test.value is False
+        ):
+            pending.extend(current.orelse)
             continue
         if isinstance(current, ast.Call):
             calls.append(current)
@@ -1017,15 +1049,51 @@ def _calls_within(node: ast.AST) -> list[ast.Call]:
 def _direct_calls(node: ast.AST) -> list[ast.Call]:
     """Return calls executed by a function body before it terminates."""
     calls: list[ast.Call] = []
-    for statement in getattr(node, "body", []):
+    _collect_direct_calls(list(getattr(node, "body", [])), calls)
+    return calls
+
+
+def _collect_direct_calls(statements: list[ast.stmt], calls: list[ast.Call]) -> bool:
+    """Collect executed calls in order; return True when the sequence terminates."""
+    for statement in statements:
         if isinstance(statement, ast.Raise):
-            break
+            return True
         if isinstance(statement, ast.Return):
             if statement.value is not None:
                 calls.extend(_calls_within(statement.value))
-            break
+            return True
+        if isinstance(statement, ast.If):
+            test = statement.test
+            calls.extend(_calls_within(test))
+            if isinstance(test, ast.Constant):
+                branch = statement.body if test.value else statement.orelse
+                if _collect_direct_calls(branch, calls):
+                    return True
+            else:
+                body_terminates = _collect_direct_calls(statement.body, calls)
+                else_terminates = _collect_direct_calls(statement.orelse, calls)
+                if body_terminates and else_terminates:
+                    return True
+            continue
+        if isinstance(statement, (ast.With, ast.AsyncWith)):
+            if _collect_direct_calls(statement.body, calls):
+                return True
+            continue
+        if isinstance(statement, ast.Try):
+            body_terminates = _collect_direct_calls(statement.body, calls)
+            handlers_terminate = bool(statement.handlers) and all(
+                _collect_direct_calls(handler.body, calls) for handler in statement.handlers
+            )
+            else_terminates = False
+            if not body_terminates:
+                else_terminates = _collect_direct_calls(statement.orelse, calls)
+            final_terminates = _collect_direct_calls(statement.finalbody, calls)
+            raise_path_terminates = (not statement.handlers) or handlers_terminate
+            if body_terminates or final_terminates or (else_terminates and raise_path_terminates):
+                return True
+            continue
         calls.extend(_calls_within(statement))
-    return calls
+    return False
 
 
 def _registration_reachable(tree: ast.Module) -> bool:
@@ -1973,8 +2041,25 @@ def _failure_branch(statement: ast.If, signature_names: set[str]) -> list[ast.st
     return None
 
 
-def _calls_construct_event(value: ast.expr | None) -> bool:
-    return isinstance(value, ast.Call) and _call_func_name(value) == "construct_event"
+def _calls_construct_event(value: ast.expr | None, signature_names: set[str]) -> bool:
+    """
+    Credit an SDK verification call only when its signature slot reads the incoming signature.
+
+    The slot is the SDK's second positional argument (`sig_header`) or an
+    explicit `sig_header`/`signature` keyword, as the Stripe SDK and the
+    billing wrapper use.  A trusted name anywhere else (say, as the payload)
+    does not prove the incoming signature was verified.
+    """
+    if not isinstance(value, ast.Call) or _call_func_name(value) != "construct_event":
+        return False
+    if not signature_names:
+        return False
+    for keyword in value.keywords:
+        if keyword.arg in {"sig_header", "signature"} and _references_names(
+            keyword.value, signature_names
+        ):
+            return True
+    return len(value.args) >= 2 and _references_names(value.args[1], signature_names)
 
 
 def _may_return_any(statements: list[ast.stmt]) -> bool:
@@ -2059,7 +2144,7 @@ def _verification_on_accepting_path(statements: list[ast.stmt], signature_names:
         if isinstance(statement, ast.Raise):
             return False
         if isinstance(statement, ast.Return):
-            return _calls_construct_event(statement.value)
+            return _calls_construct_event(statement.value, trusted)
         if isinstance(statement, ast.If):
             test = statement.test
             if isinstance(test, ast.Constant) and test.value is False:
@@ -2087,7 +2172,7 @@ def _verification_on_accepting_path(statements: list[ast.stmt], signature_names:
             for target in targets:
                 if isinstance(target, ast.Name) and target.id in trusted:
                     trusted.discard(target.id)
-            if _calls_construct_event(statement.value):
+            if _calls_construct_event(statement.value, trusted):
                 return True
     return False
 

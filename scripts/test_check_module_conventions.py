@@ -214,6 +214,61 @@ def test_url_mount_control() -> None:
     assert _violations(checker.rule_7_urls, replace(module, manifest=manifest))
 
 
+def test_url_include_literal_control() -> None:
+    module = _golden_module()
+    broken_keyword = _with_files(
+        module,
+        adapter=(
+            "def build():\n"
+            "    return Wiring(url_includes=[['demo/', 'quickscale_modules_demo.urls']])\n"
+        ),
+    )
+    assert any(
+        "literal url_includes" in violation
+        for violation in _violations(checker.rule_7_urls, broken_keyword)
+    )
+    broken_assignment = _with_files(
+        module,
+        adapter=(
+            "def build():\n"
+            "    url_includes = [['demo/', 'quickscale_modules_demo.urls']]\n"
+            "    return url_includes\n"
+        ),
+    )
+    assert any(
+        "literal url_includes" in violation
+        for violation in _violations(checker.rule_7_urls, broken_assignment)
+    )
+    broken_annotated = _with_files(
+        module,
+        adapter=(
+            "def build():\n"
+            "    url_includes: list = [['demo/', 'quickscale_modules_demo.urls']]\n"
+            "    return url_includes\n"
+        ),
+    )
+    assert any(
+        "literal url_includes" in violation
+        for violation in _violations(checker.rule_7_urls, broken_annotated)
+    )
+    empty_literals = _with_files(
+        module,
+        adapter=(
+            "def build():\n"
+            "    url_includes = ()\n"
+            "    if not url_includes:\n"
+            "        return Wiring(url_includes=[])\n"
+            "    return url_includes\n"
+        ),
+    )
+    assert _violations(checker.rule_7_urls, empty_literals) == []
+    annotated_empty = _with_files(
+        module,
+        adapter=("def build():\n    url_includes: list = []\n    return url_includes\n"),
+    )
+    assert _violations(checker.rule_7_urls, annotated_empty) == []
+
+
 def test_template_page_control() -> None:
     module = _golden_module()
     broken = _with_files(
@@ -883,6 +938,69 @@ def test_registration_after_return_control() -> None:
         "registers nothing" in violation
         for violation in _violations(checker.rule_10_checks_errors, broken)
     )
+
+
+def test_registration_in_dead_branch_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        if False:\n            register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+
+
+def test_registration_after_terminal_branch_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        if True:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+
+
+def test_registration_after_terminal_try_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        try:\n"
+            "            return\n"
+            "        finally:\n"
+            "            pass\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+
+
+def test_registration_in_evaluated_condition_control() -> None:
+    module = _golden_module()
+    good = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        if register_module_checks(self, [check_demo]):\n            pass\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, good) == []
 
 
 def test_webhook_nested_sentinel_control() -> None:
@@ -2011,6 +2129,54 @@ def test_webhook_ignored_verification_control() -> None:
                 "    return body\n"
             )
         },
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, broken)
+    )
+
+
+def test_webhook_sdk_constant_signature_control() -> None:
+    broken = _webhook_module(
+        "import stripe\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    return stripe.Webhook.construct_event(body, 'fixed', 'secret')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, broken)
+    )
+
+
+def test_webhook_sdk_incoming_signature_control() -> None:
+    positional = _webhook_module(
+        "import stripe\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    return stripe.Webhook.construct_event(body, signature, 'secret')\n"
+    )
+    assert _violations(checker.rule_26_webhooks, positional) == []
+    keyword = _webhook_module(
+        "import stripe\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    return stripe.Webhook.construct_event(\n"
+        "        payload=body, sig_header=signature, secret='secret'\n"
+        "    )\n"
+    )
+    assert _violations(checker.rule_26_webhooks, keyword) == []
+    wrapper = _webhook_module(
+        "def handle(*, body, signature):\n"
+        "    return client.construct_event(\n"
+        "        body=body, signature=signature, webhook_secret='secret'\n"
+        "    )\n"
+    )
+    assert _violations(checker.rule_26_webhooks, wrapper) == []
+
+
+def test_webhook_sdk_wrong_signature_slot_control() -> None:
+    broken = _webhook_module(
+        "import stripe\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    return stripe.Webhook.construct_event(signature, 'fixed', 'secret')\n"
     )
     assert any(
         "does not verify a signature" in violation
