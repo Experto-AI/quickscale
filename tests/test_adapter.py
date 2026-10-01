@@ -29,6 +29,7 @@ from quickscale_modules_social.adapter import (
 def _social_options() -> dict[str, Any]:
     """Return the focused adapter options used by manifest mocks."""
     return {
+        "enabled": True,
         "provider_allowlist": ["youtube"],
         "link_tree_enabled": True,
         "layout_variant": "list",
@@ -132,6 +133,21 @@ class TestSocialManifestMount:
         assert spec.url_includes == (
             ("_quickscale/social/", "myapp.quickscale_managed.social_urls"),
         )
+
+    def test_disabled_module_drops_the_mount_but_keeps_managed_files(self) -> None:
+        """Rule 1 (D3): off keeps the app, settings, and managed files, and
+        mounts none of the module's public URLs."""
+        spec = _social_manifest_adapter({"enabled": False}, project_package="myapp")
+
+        assert spec.settings["QUICKSCALE_SOCIAL_ENABLED"] is False
+        assert spec.apps == ("quickscale_modules_social",)
+        assert spec.url_includes == ()
+        assert spec.pre_home_url_includes == ()
+        assert set(spec.managed_files) == {
+            "quickscale_managed/__init__.py",
+            "quickscale_managed/social_urls.py",
+            "quickscale_managed/social_views.py",
+        }
 
     def test_undeclared_include_target_fails_closed(self) -> None:
         """A target social does not render is refused, not qualified."""
@@ -371,6 +387,7 @@ class TestSocialManifestAdapterEmbedFiltering:
     ) -> None:
         """Only embed-supporting providers appear in the embed allowlist."""
         mock_resolve.return_value = {
+            "enabled": True,
             "provider_allowlist": ["youtube", "linkedin", "x"],
             "link_tree_enabled": True,
             "layout_variant": "list",
@@ -422,6 +439,7 @@ class TestSocialManifestAdapterEmbedFiltering:
     ) -> None:
         """When no provider supports embeds, the embed allowlist is empty."""
         mock_resolve.return_value = {
+            "enabled": True,
             "provider_allowlist": ["linkedin", "x"],
             "link_tree_enabled": True,
             "layout_variant": "list",
@@ -473,6 +491,7 @@ class TestSocialManifestAdapterRendererIdReplacement:
     ) -> None:
         """The post-resolution hook must replace renderer-ID placeholders with content."""
         mock_resolve.return_value = {
+            "enabled": True,
             "provider_allowlist": ["youtube", "linkedin"],
             "link_tree_enabled": True,
             "layout_variant": "list",
@@ -539,6 +558,7 @@ class TestSocialManifestAdapterRendererIdReplacement:
     ) -> None:
         """A renderer ID not in the dispatch table must be skipped silently."""
         mock_resolve.return_value = {
+            "enabled": True,
             "provider_allowlist": ["youtube"],
             "link_tree_enabled": True,
             "layout_variant": "list",

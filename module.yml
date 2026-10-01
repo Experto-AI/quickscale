@@ -4,6 +4,13 @@ description: "Curated social links and embeds with fixed public routes and norma
 
 config:
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_SOCIAL_ENABLED
+      description: "Enable the social module. Off keeps the module installed with its data intact and mounts none of its public /social URLs."
+      validation: {}
+
     link_tree_enabled:
       type: boolean
       default: true

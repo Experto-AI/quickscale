@@ -158,6 +158,20 @@ def _social_manifest_adapter(
     apps = _social_manifest_apps(social_manifest)
     managed_file_declarations = tuple(social_manifest.managed_files.values())
 
+    url_includes: tuple[tuple[str, str], ...]
+    if bool(resolved["enabled"]):
+        url_includes = _qualify_managed_url_includes(
+            manifest_spec.url_includes,
+            project_package,
+            managed_files=manifest_spec.managed_files,
+        )
+    else:
+        # Rule 1 (D3): off keeps the module installed — app, admin, settings,
+        # and managed files — and mounts none of its public URLs.  The
+        # qualification helper accepts only the enabled module's declared
+        # mount, so the off branch assigns the empty tuple directly.
+        url_includes = ()
+
     result = ResolverResult(
         module_name="social",
         defaults={},
@@ -165,11 +179,7 @@ def _social_manifest_adapter(
         derived_settings=settings,
         apps=apps,
         middleware=(),
-        url_includes=_qualify_managed_url_includes(
-            manifest_spec.url_includes,
-            project_package,
-            managed_files=manifest_spec.managed_files,
-        ),
+        url_includes=url_includes,
         pre_home_url_includes=(),
         managed_files=managed_file_declarations,
     )
