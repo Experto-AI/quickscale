@@ -69,6 +69,12 @@ QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = True
 QUICKSCALE_ANALYTICS_EXCLUDE_STAFF = False
 QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT = True
 
+# Rule 35: apply renders the projected secret settings from the environment
+# variables the `_ENV_VAR` options name.  Tests set these settings directly,
+# as storage's suite does, so resolution is exercised through the setting.
+QUICKSCALE_ANALYTICS_POSTHOG_API_KEY = ""
+QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE = ""
+
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
 MODULE_SETTINGS_SCHEMA = {

@@ -55,6 +55,16 @@ def _analytics_post_hook(
             "The manifest derivation produced an invalid result."
         )
 
+    # Rule 35: each secret reaches module code as a setting that renders the
+    # environment variable its `_ENV_VAR` option names (core's `__QS_ENV__`
+    # projection), so module code never calls os.getenv itself.
+    settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"] = "__QS_ENV__:" + str(
+        settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR"]
+    )
+    settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE"] = "__QS_ENV__:" + str(
+        settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR"]
+    )
+
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,

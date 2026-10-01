@@ -251,9 +251,9 @@ def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(
 
     checkout_url = create_checkout_session(
         user,
-        plan,
-        "https://app.example.com/billing/purchase/success",
-        "https://app.example.com/billing/purchase/cancel",
+        plan=plan,
+        success_url="https://app.example.com/billing/purchase/success",
+        cancel_url="https://app.example.com/billing/purchase/cancel",
         organization=organization,
         stripe_client=fake_client,
     )
@@ -333,9 +333,9 @@ def test_create_checkout_session_retains_preparing_reservation_on_provider_error
     with pytest.raises(RuntimeError, match="provider unavailable"):
         create_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/purchase/success",
-            "https://app.example.com/billing/purchase/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -372,9 +372,9 @@ def test_create_checkout_session_retries_preparing_reservation_idempotently(
     with pytest.raises(RuntimeError, match="response lost"):
         create_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/purchase/success",
-            "https://app.example.com/billing/purchase/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -383,9 +383,9 @@ def test_create_checkout_session_retries_preparing_reservation_idempotently(
     fake_client.create_checkout_session = provider_create  # type: ignore[method-assign]
     checkout_url = create_checkout_session(
         user,
-        plan,
-        "https://app.example.com/billing/purchase/success",
-        "https://app.example.com/billing/purchase/cancel",
+        plan=plan,
+        success_url="https://app.example.com/billing/purchase/success",
+        cancel_url="https://app.example.com/billing/purchase/cancel",
         organization=organization,
         stripe_client=fake_client,
     )
@@ -448,9 +448,9 @@ def test_response_lost_purchase_checkout_reaches_terminal_state_from_webhook(
     with pytest.raises(RuntimeError, match="response lost"):
         create_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/purchase/success",
-            "https://app.example.com/billing/purchase/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -525,9 +525,9 @@ def test_create_checkout_session_persists_provider_id_when_url_is_missing(
     with pytest.raises(BillingError, match="did not return a hosted URL"):
         create_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/purchase/success",
-            "https://app.example.com/billing/purchase/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -577,9 +577,9 @@ def test_purchase_checkout_creation_holds_provider_mutation_lock(
         try:
             return billing_services.create_checkout_session(
                 user,
-                plan,
-                "https://app.example.com/success",
-                "https://app.example.com/cancel",
+                plan=plan,
+                success_url="https://app.example.com/success",
+                cancel_url="https://app.example.com/cancel",
                 organization=organization,
             )
         finally:
@@ -697,9 +697,9 @@ def test_create_checkout_session_rejects_non_one_time_plan(
     with pytest.raises(BillingValidationError, match="one-time purchases"):
         create_checkout_session(
             user,
-            monthly_plan,
-            "https://app.example.com/billing/purchase/success",
-            "https://app.example.com/billing/purchase/cancel",
+            plan=monthly_plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
             organization=organization,
             stripe_client=FakePurchaseStripeClient(),
         )
@@ -724,9 +724,9 @@ def test_create_checkout_session_rejects_mismatched_stripe_price(
     with pytest.raises(BillingValidationError, match="does not match"):
         create_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/purchase/success",
-            "https://app.example.com/billing/purchase/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -1314,3 +1314,39 @@ def test_stripe_client_retrieve_price_returns_normalized_mapping() -> None:
         "type": "one_time",
     }
     assert stripe_module.api_key == "sk_test"
+
+
+@pytest.mark.django_db
+def test_create_checkout_session_translates_provider_errors(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """Rule 23: a provider failure answers through the module's BillingError base."""
+    plan = _create_one_time_plan(slug="checkout-provider-error")
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+
+    def failing_retrieve_price(*, price_id: str) -> dict[str, Any]:
+        del price_id
+        raise stripe.StripeError("network down")
+
+    fake_client.retrieve_price = failing_retrieve_price  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="Stripe checkout session creation failed"):
+        create_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )

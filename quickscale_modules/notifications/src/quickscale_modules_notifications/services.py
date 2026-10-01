@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import time
 from email.utils import formataddr
 from typing import Any, Protocol, cast
@@ -39,6 +38,30 @@ from quickscale_modules_notifications.models import (
     NotificationMessage,
     NotificationSettings,
 )
+
+__all__ = [
+    "DeliveryMailer",
+    "NotificationConfigurationError",
+    "NotificationDisabledError",
+    "NotificationError",
+    "NotificationSettingsSnapshot",
+    "NotificationTemplateDefinition",
+    "NotificationTemplateError",
+    "NotificationValidationError",
+    "NotificationWebhookError",
+    "NotificationWebhookSignatureError",
+    "RenderedNotification",
+    "WebhookIngestionResult",
+    "build_webhook_signature_headers",
+    "dispatch_notification_message",
+    "ensure_default_settings",
+    "ingest_webhook_event",
+    "load_settings_snapshot",
+    "render_notification",
+    "sanitize_provider_metadata",
+    "sanitize_provider_tags",
+    "send_notification",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -181,22 +204,23 @@ class NotificationSettingsSnapshot:
         }
 
     def resolve_resend_api_key(self) -> str:
-        """Resolve the live Resend API key from the configured environment variable.
+        """Resolve the live Resend API key from the applied secret setting (rule 35).
 
-        Rule 3: the configured name is the only name.  A blank name resolves
-        to no key, and the startup check refuses the enabled module rather
-        than this method substituting a runtime fallback.
+        Rule 3: the applied setting is the only source.  An unset or empty
+        setting resolves to no key, and the startup check refuses the enabled
+        module rather than this method substituting a runtime fallback.
         """
-        return os.getenv(self.resend_api_key_env_var.strip(), "").strip()
+        return str(settings.QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY).strip()
 
     def resolve_webhook_secret(self) -> str:
-        """Resolve the shared webhook signing secret from the configured environment variable.
+        """Resolve the shared webhook signing secret from the applied setting (rule 35).
 
-        Rule 3: the configured name is the only name.  A blank name resolves
-        to no secret, and the startup check refuses the enabled module rather
-        than this method substituting a runtime fallback.
+        Rule 3: the applied setting is the only source.  An unset or empty
+        setting resolves to no secret, and the startup check refuses the
+        enabled module rather than this method substituting a runtime
+        fallback.
         """
-        return os.getenv(self.webhook_secret_env_var.strip(), "").strip()
+        return str(settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET).strip()
 
     def live_delivery_enabled(self) -> bool:
         """Return whether the active email backend is the Anymail Resend backend."""
@@ -459,7 +483,12 @@ def dispatch_notification_message(
 ) -> NotificationMessage:
     """Dispatch queued recipient deliveries for a logical notification message."""
     with transaction.atomic():
-        message = NotificationMessage.objects.select_for_update().get(pk=message_id)
+        try:
+            message = NotificationMessage.objects.select_for_update().get(pk=message_id)
+        except NotificationMessage.DoesNotExist as exc:
+            raise NotificationError(
+                f"Notification message {message_id} does not exist."
+            ) from exc
         deliveries = list(message.deliveries.select_for_update().order_by("pk"))
         settings_snapshot = load_settings_snapshot()
         _ensure_notifications_enabled(settings_snapshot)
@@ -908,7 +937,12 @@ def _normalize_recipients(recipients: Sequence[str]) -> list[str]:
         candidate = str(raw_value).strip().lower()
         if not candidate:
             continue
-        validate_email(candidate)
+        try:
+            validate_email(candidate)
+        except ValidationError as exc:
+            raise NotificationValidationError(
+                f"Invalid recipient email address: {candidate}"
+            ) from exc
         if candidate in seen:
             continue
         seen.add(candidate)

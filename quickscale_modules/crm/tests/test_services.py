@@ -15,6 +15,8 @@ import pytest
 
 from django.db import connection, transaction
 
+from quickscale_modules_crm import services
+from quickscale_modules_crm.exceptions import CrmError
 from quickscale_modules_crm.models import Stage
 from quickscale_modules_crm.services import (
     DEFAULT_STAGE_BLUEPRINT,
@@ -25,6 +27,7 @@ from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_id,
 )
+from quickscale_modules_orgs.models import Organization
 
 
 @pytest.mark.django_db
@@ -299,3 +302,23 @@ def test_ensure_org_default_stages_restores_db_guc_in_outer_transaction(org_a) -
         "from the AF9 execute wrapper persists, leaking the seeded org "
         "UUID to subsequent no-context queries in the same transaction."
     )
+
+
+def test_services_publishes_exactly_the_declared_surface() -> None:
+    """Rule 23: ``__all__`` is the module's declared public service surface."""
+    assert services.__all__ == [
+        "CrmError",
+        "DEFAULT_STAGE_BLUEPRINT",
+        "ensure_org_default_stages",
+    ]
+    for name in services.__all__:
+        assert hasattr(services, name)
+
+
+@pytest.mark.django_db
+def test_missing_organization_raises_module_error(org_a) -> None:
+    """Rule 23: the bootstrap answers a vanished organization through CrmError."""
+    Organization.objects.filter(pk=org_a.pk).delete()
+
+    with pytest.raises(CrmError, match="no longer exists"):
+        ensure_org_default_stages(org_a)

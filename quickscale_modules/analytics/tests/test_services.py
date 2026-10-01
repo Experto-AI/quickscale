@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import warnings
 from types import SimpleNamespace
@@ -160,10 +161,15 @@ def test_analytics_enabled_for_request_rejects_disabled_and_unsupported_snapshot
 ):
     """Disabled runtimes and unsupported providers must stay template-inactive."""
     assert (
-        services.analytics_enabled_for_request(None, _snapshot(enabled=False)) is False
+        services.analytics_enabled_for_request(
+            None, runtime_settings=_snapshot(enabled=False)
+        )
+        is False
     )
     assert (
-        services.analytics_enabled_for_request(None, _snapshot(provider="plausible"))
+        services.analytics_enabled_for_request(
+            None, runtime_settings=_snapshot(provider="plausible")
+        )
         is False
     )
 
@@ -172,7 +178,9 @@ def test_analytics_enabled_for_request_rejects_disabled_and_unsupported_snapshot
 def test_analytics_enabled_for_request_rejects_debug_requests_when_excluded() -> None:
     """DEBUG exclusion should suppress analytics exposure even with valid config."""
     assert (
-        services.analytics_enabled_for_request(None, _snapshot(exclude_debug=True))
+        services.analytics_enabled_for_request(
+            None, runtime_settings=_snapshot(exclude_debug=True)
+        )
         is False
     )
 
@@ -203,15 +211,14 @@ def test_configure_analytics_client_disables_when_runtime_is_off() -> None:
     assert services._ANALYTICS_DISABLED_REASON == "disabled"
 
 
-def test_configure_analytics_client_missing_enabled_setting_raises_attribute_error(
-    monkeypatch,
-) -> None:
+def test_configure_analytics_client_missing_enabled_setting_raises_attribute_error() -> (
+    None
+):
     """Missing QUICKSCALE_ANALYTICS_ENABLED should raise AttributeError."""
     runtime_settings = SimpleNamespace(
         DEBUG=False,
         QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
     )
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     with (
         patch(
@@ -238,12 +245,15 @@ def test_configure_analytics_client_rejects_unsupported_providers(caplog) -> Non
     assert "only supports the PostHog provider" in caplog.text
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_configure_analytics_client_initializes_posthog_client(monkeypatch) -> None:
-    """Analytics should initialize a PostHog client from env vars and settings."""
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+    QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE="https://eu.i.posthog.com",
+)
+def test_configure_analytics_client_initializes_posthog_client() -> None:
+    """Analytics should initialize a PostHog client from the applied settings."""
     fake_posthog = DummyPosthogModule()
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
-    monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
 
     with patch(
         "quickscale_modules_analytics.services.posthog",
@@ -260,11 +270,14 @@ def test_configure_analytics_client_initializes_posthog_client(monkeypatch) -> N
     assert client.kwargs["disable_geoip"] is True
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_configure_analytics_client_reuses_cached_settings(monkeypatch) -> None:
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+)
+def test_configure_analytics_client_reuses_cached_settings() -> None:
     """Repeated setup calls should short-circuit when the runtime snapshot is unchanged."""
     fake_posthog = DummyPosthogModule()
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     with patch(
         "quickscale_modules_analytics.services.posthog",
@@ -276,14 +289,15 @@ def test_configure_analytics_client_reuses_cached_settings(monkeypatch) -> None:
     assert services.configure_analytics_client() is True
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_configure_analytics_client_supports_module_style_posthog_fallback(
-    monkeypatch,
-) -> None:
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+    QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE="https://eu.i.posthog.com",
+)
+def test_configure_analytics_client_supports_module_style_posthog_fallback() -> None:
     """Older module-style PostHog SDK shapes should still be configured safely."""
     legacy_module = LegacyPosthogModule()
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
-    monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
 
     with patch(
         "quickscale_modules_analytics.services.posthog",
@@ -296,9 +310,12 @@ def test_configure_analytics_client_supports_module_style_posthog_fallback(
     assert legacy_module.disabled is False
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+)
 def test_configure_analytics_client_handles_factory_initialization_errors(
-    monkeypatch,
     caplog,
 ) -> None:
     """SDK constructor failures should disable analytics without breaking startup."""
@@ -308,7 +325,6 @@ def test_configure_analytics_client_handles_factory_initialization_errors(
             del kwargs
             raise RuntimeError("boom")
 
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
     caplog.set_level(logging.WARNING, logger=services.__name__)
 
     with patch(
@@ -321,11 +337,14 @@ def test_configure_analytics_client_handles_factory_initialization_errors(
     assert "failed to initialize the PostHog client" in caplog.text
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_capture_event_uses_active_client(monkeypatch) -> None:
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+)
+def test_capture_event_uses_active_client() -> None:
     """capture_event should forward events to the configured PostHog client."""
     fake_posthog = DummyPosthogModule()
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     with patch(
         "quickscale_modules_analytics.services.posthog",
@@ -333,7 +352,11 @@ def test_capture_event_uses_active_client(monkeypatch) -> None:
     ):
         assert services.configure_analytics_client() is True
 
-    services.capture_event("session:abc", "custom_event", {"source": "test"})
+    services.capture_event(
+        distinct_id="session:abc",
+        event="custom_event",
+        properties={"source": "test"},
+    )
 
     assert fake_posthog.clients[0].captures == [
         ("session:abc", "custom_event", {"source": "test"})
@@ -365,6 +388,26 @@ def test_services_publish_only_the_generic_capture_helper() -> None:
     assert "capture_social_link_click" not in services.__all__
     assert not hasattr(services, "capture_form_submit")
     assert not hasattr(services, "capture_social_link_click")
+
+
+def test_services_public_signatures_are_keyword_only_after_one_subject() -> None:
+    """Rule 23: keyword-only parameters follow at most one leading subject."""
+    capture_parameters = list(
+        inspect.signature(services.capture_event).parameters.values()
+    )
+    assert all(
+        parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        for parameter in capture_parameters
+    )
+
+    enabled_parameters = list(
+        inspect.signature(services.analytics_enabled_for_request).parameters.values()
+    )
+    assert enabled_parameters[0].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert all(
+        parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        for parameter in enabled_parameters[1:]
+    )
 
 
 @pytest.mark.django_db()
@@ -471,10 +514,9 @@ def test_get_distinct_id_returns_anonymous_when_session_bootstrap_fails(
     DEBUG=False,
     QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
     QUICKSCALE_ANALYTICS_EXCLUDE_STAFF=True,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
 )
-def test_template_context_disables_tracking_for_staff(
-    monkeypatch, rf: RequestFactory
-) -> None:
+def test_template_context_disables_tracking_for_staff(rf: RequestFactory) -> None:
     """Staff exclusion should suppress template-exposed analytics values."""
     user_model = get_user_model()
     staff_user = user_model.objects.create_user(
@@ -486,7 +528,6 @@ def test_template_context_disables_tracking_for_staff(
     request = rf.get("/")
     _add_session(request)
     request.user = staff_user
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     context = services.get_template_analytics_context(request)
 
@@ -494,17 +535,34 @@ def test_template_context_disables_tracking_for_staff(
     assert context["posthog_api_key"] == ""
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_template_context_resolves_runtime_env_vars(monkeypatch) -> None:
-    """Template context should resolve runtime env vars without persisting them."""
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
-    monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
-
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+    QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE="https://eu.i.posthog.com",
+)
+def test_template_context_reads_applied_secret_settings() -> None:
+    """Template context should read the applied secret settings without persisting them."""
     context = services.get_template_analytics_context()
 
     assert context["enabled"] is True
     assert context["posthog_api_key"] == "test-posthog-key"
     assert context["posthog_host"] == "https://eu.i.posthog.com"
+
+
+def test_template_context_survives_disabled_wiring_without_projected_secrets(
+    settings,
+) -> None:
+    """A disabled runtime omits the projected secrets; the context must not resolve them."""
+    settings.QUICKSCALE_ANALYTICS_ENABLED = False
+    del settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY
+    del settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE
+
+    context = services.get_template_analytics_context()
+
+    assert context["enabled"] is False
+    assert context["posthog_api_key"] == ""
+    assert context["posthog_host"] == ""
 
 
 def test_capture_event_returns_early_when_runtime_is_inactive() -> None:
@@ -516,7 +574,11 @@ def test_capture_event_returns_early_when_runtime_is_inactive() -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=False,
     ):
-        services.capture_event("session:abc", "custom_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="custom_event",
+            properties={"source": "test"},
+        )
 
     assert client.captures == []
 
@@ -529,7 +591,11 @@ def test_capture_event_ignores_non_callable_client_capture() -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=True,
     ):
-        services.capture_event("session:abc", "custom_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="custom_event",
+            properties={"source": "test"},
+        )
 
 
 def test_capture_event_falls_back_to_legacy_positional_signature() -> None:
@@ -541,7 +607,11 @@ def test_capture_event_falls_back_to_legacy_positional_signature() -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=True,
     ):
-        services.capture_event("session:abc", "legacy_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="legacy_event",
+            properties={"source": "test"},
+        )
 
     assert client.calls == [("session:abc", "legacy_event", {"source": "test"})]
 
@@ -555,7 +625,11 @@ def test_capture_event_logs_when_legacy_fallback_fails(caplog) -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=True,
     ):
-        services.capture_event("session:abc", "broken_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="broken_event",
+            properties={"source": "test"},
+        )
 
     assert "failed to capture event 'broken_event'" in caplog.text
 
@@ -569,6 +643,10 @@ def test_capture_event_logs_generic_client_errors(caplog) -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=True,
     ):
-        services.capture_event("session:abc", "broken_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="broken_event",
+            properties={"source": "test"},
+        )
 
     assert "failed to capture event 'broken_event'" in caplog.text

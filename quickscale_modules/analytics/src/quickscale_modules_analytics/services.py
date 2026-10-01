@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Protocol, cast
@@ -74,13 +73,13 @@ class AnalyticsRuntimeSettingsSnapshot:
         )
 
     def resolve_posthog_api_key(self) -> str:
-        """Resolve the PostHog API key from the configured environment variable."""
-        return os.getenv(self.posthog_api_key_env_var.strip(), "").strip()
+        """Resolve the PostHog API key from the applied secret setting (rule 35)."""
+        return str(settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY).strip()
 
     def resolve_posthog_host(self) -> str:
-        """Resolve the PostHog host from the configured env var, else the setting."""
+        """Resolve the PostHog host override from the applied setting, else the fallback."""
         return (
-            os.getenv(self.posthog_host_env_var.strip(), "").strip()
+            str(settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE).strip()
             or self.posthog_host.strip()
         )
 
@@ -131,6 +130,7 @@ def _request_is_staff(request: HttpRequest | None) -> bool:
 
 def analytics_enabled_for_request(
     request: HttpRequest | None,
+    *,
     runtime_settings: AnalyticsRuntimeSettingsSnapshot | None = None,
 ) -> bool:
     """Return whether analytics should be exposed for the current request."""
@@ -225,13 +225,13 @@ def get_template_analytics_context(
 ) -> dict[str, object]:
     """Return template-safe analytics config for manual template adoption."""
     snapshot = get_analytics_runtime_settings()
-    enabled = analytics_enabled_for_request(request, snapshot)
+    enabled = analytics_enabled_for_request(request, runtime_settings=snapshot)
     return {
         "enabled": enabled,
         "provider": snapshot.provider,
         "posthog_api_key": snapshot.resolve_posthog_api_key() if enabled else "",
         "posthog_api_key_env_var": snapshot.posthog_api_key_env_var,
-        "posthog_host": snapshot.resolve_posthog_host(),
+        "posthog_host": snapshot.resolve_posthog_host() if enabled else "",
         "posthog_host_env_var": snapshot.posthog_host_env_var,
         "exclude_debug": snapshot.exclude_debug,
         "exclude_staff": snapshot.exclude_staff,
@@ -275,11 +275,17 @@ def get_distinct_id(request: HttpRequest) -> str:
 
 
 def capture_event(
+    *,
     distinct_id: str,
     event: str,
     properties: dict[str, Any] | None = None,
 ) -> None:
-    """Capture an analytics event safely, never raising to callers."""
+    """Capture an analytics event safely, never raising to callers.
+
+    Rule 22: this is the module's only capture entry point, so the sending
+    module names its own event; rule 23's listed exception keeps it
+    best-effort, because a vendor outage must not fail a request.
+    """
     if not distinct_id or not event or not is_analytics_active():
         return
 
