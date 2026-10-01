@@ -1090,14 +1090,14 @@ def test_checkout_view_creates_session_with_server_owned_redirect_urls(
 
     def fake_create_checkout_session(
         auth_user,
-        auth_plan,
+        *,
+        plan: Any,
         success_url: str,
         cancel_url: str,
-        *,
         organization: Any | None = None,
     ) -> str:
         captured_call["user"] = auth_user
-        captured_call["plan"] = auth_plan
+        captured_call["plan"] = plan
         captured_call["success_url"] = success_url
         captured_call["cancel_url"] = cancel_url
         captured_call["organization"] = organization
@@ -1137,14 +1137,14 @@ def test_checkout_view_keeps_flat_redirect_urls_for_authenticated_solo_request_o
 
     def fake_create_checkout_session(
         auth_user,
-        auth_plan,
+        *,
+        plan: Any,
         success_url: str,
         cancel_url: str,
-        *,
         organization: Any | None = None,
     ) -> str:
         captured_call["user"] = auth_user
-        captured_call["plan"] = auth_plan
+        captured_call["plan"] = plan
         captured_call["success_url"] = success_url
         captured_call["cancel_url"] = cancel_url
         captured_call["organization"] = organization
@@ -1188,14 +1188,14 @@ def test_subscription_checkout_view_creates_session_with_server_owned_redirect_u
 
     def fake_create_subscription_checkout_session(
         auth_user,
-        auth_plan,
+        *,
+        plan: Any,
         success_url: str,
         cancel_url: str,
-        *,
         organization: Any | None = None,
     ) -> str:
         captured_call["user"] = auth_user
-        captured_call["plan"] = auth_plan
+        captured_call["plan"] = plan
         captured_call["success_url"] = success_url
         captured_call["cancel_url"] = cancel_url
         captured_call["organization"] = organization
@@ -1243,13 +1243,13 @@ def test_subscription_checkout_view_blocks_while_current_subscription_exists(
 
     def fake_create_subscription_checkout_session(
         auth_user,
-        auth_plan,
+        *,
+        plan: Any,
         success_url: str,
         cancel_url: str,
-        *,
         organization: Any | None = None,
     ) -> str:
-        del auth_plan, success_url, cancel_url
+        del plan, success_url, cancel_url
         assert organization is not None
         assert Subscription.all_objects.filter(
             Subscription.current_status_q(),

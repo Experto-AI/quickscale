@@ -216,11 +216,11 @@ def test_account_deletion_adapter_delegates_user_reference_detachment() -> None:
     ) as detach:
         result = config.detach_account_deletion_user_references(
             "user-1",
-            ["org-1", "org-2"],
+            organization_ids=["org-1", "org-2"],
         )
 
     assert result == 2
-    detach.assert_called_once_with("user-1", ["org-1", "org-2"])
+    detach.assert_called_once_with("user-1", organization_ids=["org-1", "org-2"])
 
 
 def test_account_deletion_adapter_delegates_user_reference_discovery() -> None:
