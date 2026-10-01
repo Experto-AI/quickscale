@@ -10,6 +10,13 @@ config:
   # Mutable options - can be changed after embed via quickscale apply
   # These update Django settings.py automatically
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_FORMS_ENABLED
+      description: "Enable the forms module. Off keeps the module installed with its data intact, mounts none of its public URLs, and stops its scheduled retention command."
+      validation: {}
+
     submissions_per_page:
       type: integer
       default: 25

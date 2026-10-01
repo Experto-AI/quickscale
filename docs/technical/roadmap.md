@@ -162,7 +162,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     option keys), blog's undeclared upload/format settings are declared, notifications' `provider`
     is declared, billing's `billing_currency` key is `currency`, and orgs' mode is
     `QUICKSCALE_ORGS_MODE` across the manifest, generator and theme templates, module code, tests,
-    and docs, with the retired `QUICKSCALE_MODE` refused at startup. **Open:** every module's
+    and docs, with the retired `QUICKSCALE_MODE` refused at startup. **Landed:** blog, CRM, forms,
+    and listings also declare `QUICKSCALE_<MODULE>_ENABLED`; off keeps the installed app, drops
+    their own public URL mounts, keeps their staff-guarded Markdownx editor mount for the retained
+    admin, turns their theme flags false, and stops forms' scheduled retention command. **Open:**
+    auth, backups, orgs, social, and storage's
     `QUICKSCALE_<MODULE>_ENABLED`, and the backups fallback deletion.
   - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
     check refuses retired settings, each naming the replacement. Generated templates, docs, and

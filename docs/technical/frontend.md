@@ -74,8 +74,9 @@ It is written by `templates/index.html.j2` and carries:
 [decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) changes how
 the producer fills `modules` and `modulePaths`: the generator renders `index.html.j2` from the
 discovered module set, a flag is `true` only when the module is installed and its
-`QUICKSCALE_<MODULE>_ENABLED` is on, and paths come from `{% url %}`, not literals. The table above
-describes the shipped state until then; the three-place rule below is unchanged.
+`QUICKSCALE_<MODULE>_ENABLED` is on, and paths come from `{% url %}`, not literals. Blog, CRM,
+forms, and listings already require installed-and-enabled; the table above describes the remaining
+shipped state until the rest lands. The three-place rule below is unchanged.
 | `owner.mode` | `"solo"` or `"saas"` — see [organizations.md](organizations.md) |
 | `owner.currentOrgSlug` | Current org slug, or `null` |
 | `publicPage` | Optional; present only on public non-SPA social surfaces |

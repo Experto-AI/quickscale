@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import override_settings
 from django.utils import timezone
 
@@ -226,6 +227,12 @@ class TestFormsSeedPresets:
 @pytest.mark.django_db
 class TestFormsAnonymizeSubmissions:
     """Tests for the quickscale_forms_anonymize_submissions management command"""
+
+    @override_settings(QUICKSCALE_FORMS_ENABLED=False)
+    def test_disabled_module_refuses_the_retention_job(self):
+        """Rule 1 (D3): a switched-off module runs none of its scheduled jobs."""
+        with pytest.raises(CommandError, match="QUICKSCALE_FORMS_ENABLED"):
+            call_command("quickscale_forms_anonymize_submissions", verbosity=0)
 
     def test_anonymize_does_not_touch_recent_submissions(self, form):
         """Submissions newer than data_retention_days are not anonymized"""
