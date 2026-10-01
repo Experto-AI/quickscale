@@ -80,8 +80,8 @@ class TestPostListView:
         settings,
         blog_org_scope,
     ):
-        """Test post list pagination reads BLOG_POSTS_PER_PAGE at runtime."""
-        settings.BLOG_POSTS_PER_PAGE = 2
+        """Test post list pagination reads QUICKSCALE_BLOG_POSTS_PER_PAGE at runtime."""
+        settings.QUICKSCALE_BLOG_POSTS_PER_PAGE = 2
         _create_published_posts(
             author_user, system_org, count=3, blog_org_scope=blog_org_scope
         )
@@ -94,7 +94,7 @@ class TestPostListView:
         assert len(response.context["page_obj"].object_list) == 2
         assert response.context["is_paginated"] is True
 
-    # An invalid BLOG_POSTS_PER_PAGE is refused by the generic startup check
+    # An invalid QUICKSCALE_BLOG_POSTS_PER_PAGE is refused by the generic startup check
     # (rule 3) before a request runs; the view reads the value directly and
     # never falls back to a code default.
 
@@ -543,8 +543,8 @@ class TestCategoryListView:
         settings,
         blog_org_scope,
     ):
-        """Test category list pagination reads BLOG_POSTS_PER_PAGE at runtime."""
-        settings.BLOG_POSTS_PER_PAGE = 2
+        """Test category list pagination reads QUICKSCALE_BLOG_POSTS_PER_PAGE at runtime."""
+        settings.QUICKSCALE_BLOG_POSTS_PER_PAGE = 2
         with blog_org_scope(system_org):
             category = Category.objects.create(
                 name="Paginated Tech", organization=system_org
@@ -617,8 +617,8 @@ class TestTagListView:
         settings,
         blog_org_scope,
     ):
-        """Test tag list pagination reads BLOG_POSTS_PER_PAGE at runtime."""
-        settings.BLOG_POSTS_PER_PAGE = 2
+        """Test tag list pagination reads QUICKSCALE_BLOG_POSTS_PER_PAGE at runtime."""
+        settings.QUICKSCALE_BLOG_POSTS_PER_PAGE = 2
         with blog_org_scope(system_org):
             tag = Tag.objects.create(name="Paginated Python", organization=system_org)
         _create_published_posts(

@@ -1,7 +1,7 @@
 """Tests for blog AppConfig startup behavior.
 
 Fail-hard blog module settings: ``AppConfig.ready()`` must raise
-``ImproperlyConfigured`` when ``BLOG_ENABLE_RSS`` or ``MEDIA_URL`` is
+``ImproperlyConfigured`` when ``QUICKSCALE_BLOG_RSS_ENABLED`` or ``MEDIA_URL`` is
 missing.
 """
 
@@ -37,8 +37,8 @@ def test_app_config_ready_is_safe_to_call() -> None:
 def test_ready_raises_improperly_configured_when_blog_enable_rss_missing(
     settings: Any,
 ) -> None:
-    """Missing BLOG_ENABLE_RSS must raise at startup."""
-    del settings.BLOG_ENABLE_RSS
+    """Missing QUICKSCALE_BLOG_RSS_ENABLED must raise at startup."""
+    del settings.QUICKSCALE_BLOG_RSS_ENABLED
 
     config = QuickscaleBlogConfig(
         "quickscale_modules_blog",
@@ -47,7 +47,7 @@ def test_ready_raises_improperly_configured_when_blog_enable_rss_missing(
 
     with pytest.raises(
         ImproperlyConfigured,
-        match="BLOG_ENABLE_RSS",
+        match="QUICKSCALE_BLOG_RSS_ENABLED",
     ):
         config.ready()
 
@@ -81,11 +81,11 @@ def test_missing_rss_setting_fails_check_migrate_and_runserver(settings: Any) ->
     from django.core.management.base import SystemCheckError
     from django.core.management.commands import migrate, runserver
 
-    del settings.BLOG_ENABLE_RSS
+    del settings.QUICKSCALE_BLOG_RSS_ENABLED
 
-    with pytest.raises(SystemCheckError, match="BLOG_ENABLE_RSS"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_BLOG_RSS_ENABLED"):
         call_command("check")
-    with pytest.raises(SystemCheckError, match="BLOG_ENABLE_RSS"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_BLOG_RSS_ENABLED"):
         migrate.Command().check()
-    with pytest.raises(SystemCheckError, match="BLOG_ENABLE_RSS"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_BLOG_RSS_ENABLED"):
         runserver.Command().check()

@@ -65,11 +65,11 @@ class TestBlogUrls:
     def test_feed_url(self, settings, configured_value):
         """Test RSS feed URL resolves correctly when enabled.
 
-        Note: ``BLOG_ENABLE_RSS`` is now required — the
+        Note: ``QUICKSCALE_BLOG_RSS_ENABLED`` is now required — the
         ``None``/unset case is no longer valid and is covered by
         startup validation in ``AppConfig.ready()``.
         """
-        settings.BLOG_ENABLE_RSS = configured_value
+        settings.QUICKSCALE_BLOG_RSS_ENABLED = configured_value
 
         with _reloaded_blog_test_urlconf():
             url = reverse("quickscale_blog:feed")
@@ -81,7 +81,7 @@ class TestBlogUrls:
     )
     def test_feed_url_omitted_when_rss_disabled(self, settings, configured_value):
         """Test RSS feed URL is omitted from the URLconf when disabled."""
-        settings.BLOG_ENABLE_RSS = configured_value
+        settings.QUICKSCALE_BLOG_RSS_ENABLED = configured_value
 
         with _reloaded_blog_test_urlconf():
             with pytest.raises(NoReverseMatch):

@@ -26,11 +26,15 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
-| `posts_per_page` | integer | `10` | `BLOG_POSTS_PER_PAGE` | Number of posts per page. |
-| `api_rate_limit` | string | `5/hour` | `BLOG_API_RATE_LIMIT` | Throttle rate for authenticated blog API requests, per IP. Format: `<count>/<period>`. |
-| `enable_rss` | boolean | `true` | `BLOG_ENABLE_RSS` | Enable the RSS route at runtime. |
+| `posts_per_page` | integer | `10` | `QUICKSCALE_BLOG_POSTS_PER_PAGE` | Number of posts per page. |
+| `api_rate_limit` | string | `5/hour` | `QUICKSCALE_BLOG_API_RATE_LIMIT` | Throttle rate for authenticated blog API requests, per IP. Format: `<count>/<period>`. |
+| `rss_enabled` | boolean | `true` | `QUICKSCALE_BLOG_RSS_ENABLED` | Enable the RSS route at runtime. |
+| `api_upload_max_bytes` | integer | `10485760` | `QUICKSCALE_BLOG_API_UPLOAD_MAX_BYTES` | Maximum accepted media-upload size in bytes. |
+| `api_upload_max_width` | integer | `4096` | `QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH` | Maximum accepted media-upload image width in pixels. |
+| `api_upload_max_height` | integer | `4096` | `QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT` | Maximum accepted media-upload image height in pixels. |
+| `api_allowed_image_formats` | list | `["PNG", "JPEG", "WEBP", "GIF"]` | `QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS` | Image formats accepted by the media-upload API. |
 
-Additional Django settings configure the editor and the automation API:
+Additional Django settings configure the editor and the shared error shape:
 
 ```python
 MARKDOWNX_MARKDOWN_EXTENSIONS = [
@@ -42,16 +46,11 @@ MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
 MARKDOWNX_UPLOAD_MAX_SIZE = 5 * 1024 * 1024
 MARKDOWNX_IMAGE_MAX_SIZE = {"size": (1920, 1080), "quality": 90}
 
-BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
-BLOG_API_ALLOWED_IMAGE_FORMATS = ["PNG", "JPEG", "WEBP", "GIF"]
-BLOG_API_UPLOAD_MAX_WIDTH = 4096
-BLOG_API_UPLOAD_MAX_HEIGHT = 4096
-
 # DRF: the shared error shape and the blog API throttle scope
 REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
     "DEFAULT_THROTTLE_RATES": {
-        "quickscale_blog_api": BLOG_API_RATE_LIMIT,
+        "quickscale_blog_api": QUICKSCALE_BLOG_API_RATE_LIMIT,
     },
 }
 ```
@@ -71,10 +70,10 @@ The two-step automation flow is:
 3. Publish the post with `POST blog/api/publish/`.
 
 Both endpoints accept a staff session with CSRF; the DRF throttle (`quickscale_blog_api`, its
-rate from `BLOG_API_RATE_LIMIT`) applies after authentication and permissions. Media upload
+rate from `QUICKSCALE_BLOG_API_RATE_LIMIT`) applies after authentication and permissions. Media upload
 accepts `multipart/form-data` with `file` (required), `alt`, and `kind`
-(`inline`, `featured`, or `general`), and enforces `BLOG_API_UPLOAD_MAX_BYTES`, the allowed
-image formats, `BLOG_API_UPLOAD_MAX_WIDTH`, and `BLOG_API_UPLOAD_MAX_HEIGHT`. Publish accepts
+(`inline`, `featured`, or `general`), and enforces `QUICKSCALE_BLOG_API_UPLOAD_MAX_BYTES`, the allowed
+image formats, `QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH`, and `QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT`. Publish accepts
 `application/json` with `title` and `content` (required), and optional `excerpt`,
 `category_slug`, `tags`, `featured_image_id`, and `featured_image_alt`. The publish response
 returns the post `id`, `slug`, `url`, and `status`.
@@ -84,7 +83,7 @@ former bearer-token scheme (`BLOG_API_TOKENS`) is removed.
 
 ### RSS feed
 
-The default `blog/feed/` route exists only when `BLOG_ENABLE_RSS` is true; it publishes the
+The default `blog/feed/` route exists only when `QUICKSCALE_BLOG_RSS_ENABLED` is true; it publishes the
 latest 20 published posts with full metadata.
 
 ## URLs
@@ -98,7 +97,7 @@ module's routes are:
 | `quickscale_blog:post_detail` | `blog/post/<slug>/` | Post detail |
 | `quickscale_blog:category_list` | `blog/category/<slug>/` | Posts by category |
 | `quickscale_blog:tag_list` | `blog/tag/<slug>/` | Posts by tag |
-| `quickscale_blog:feed` | `blog/feed/` | RSS feed when `BLOG_ENABLE_RSS` is true |
+| `quickscale_blog:feed` | `blog/feed/` | RSS feed when `QUICKSCALE_BLOG_RSS_ENABLED` is true |
 | `quickscale_blog:api_upload_media` | `blog/api/media/` | Staff image upload for the automation API |
 | `quickscale_blog:api_publish_post` | `blog/api/publish/` | Staff publish endpoint for Markdown posts |
 
@@ -126,7 +125,7 @@ captures the module options in `quickscale.yml`.
 A manual installation embeds the orgs baseline first, then adds `rest_framework`, `markdownx`,
 `quickscale_modules_orgs`, and `quickscale_modules_blog` to `INSTALLED_APPS`, adds
 `quickscale_modules_orgs.middleware.TenantMiddleware` after the session and authentication
-middleware, sets the required `MEDIA_URL` (non-trivial) and `BLOG_ENABLE_RSS` settings,
+middleware, sets the required `MEDIA_URL` (non-trivial) and `QUICKSCALE_BLOG_RSS_ENABLED` settings,
 configures Markdownx and DRF (the shared error handler and the `quickscale_blog_api` throttle
 rate shown under Configuration), mounts the module at `blog/` with the sibling `markdownx/`
 include, and runs `python manage.py migrate quickscale_blog` plus
@@ -167,7 +166,7 @@ Troubleshooting:
   and register the subclass in the admin with `MarkdownxModelAdmin`.
 - **RSS customization**: subclass `quickscale_modules_blog.feeds.LatestPostsFeed`, override its
   `title`, `description`, or `items()`, and mount your class at `blog/feed/` under the
-  `BLOG_ENABLE_RSS` gate.
+  `QUICKSCALE_BLOG_RSS_ENABLED` gate.
 - **Development**: `make MODULE=blog test -- --modules` from the repository root; Ruff and MyPy
   run through the repository's shared configuration.
 - **License**: Apache 2.0, see the LICENSE file for details.

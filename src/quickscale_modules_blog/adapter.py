@@ -16,15 +16,19 @@ def _blog_post_hook(
 ) -> ModuleWiringSpec:
     """Apply blog-specific type coercions and static markdownx settings."""
     settings = dict(spec.settings)
-    settings["BLOG_POSTS_PER_PAGE"] = int(settings["BLOG_POSTS_PER_PAGE"])
-    settings["BLOG_ENABLE_RSS"] = bool(settings["BLOG_ENABLE_RSS"])
-    api_rate = str(settings["BLOG_API_RATE_LIMIT"]).strip()
+    settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] = int(
+        settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"]
+    )
+    settings["QUICKSCALE_BLOG_RSS_ENABLED"] = bool(
+        settings["QUICKSCALE_BLOG_RSS_ENABLED"]
+    )
+    api_rate = str(settings["QUICKSCALE_BLOG_API_RATE_LIMIT"]).strip()
     if not api_rate:
         raise ManifestError(
-            "Blog manifest setting BLOG_API_RATE_LIMIT resolved to empty value. "
+            "Blog manifest setting QUICKSCALE_BLOG_API_RATE_LIMIT resolved to empty value. "
             "The manifest derivation produced an invalid result."
         )
-    settings["BLOG_API_RATE_LIMIT"] = api_rate
+    settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] = api_rate
     # Rule 32 — the blog automation API's scope carries the module stem and
     # its rate is the module's _RATE_LIMIT option, contributed here for rule
     # 30's merge.
