@@ -20,9 +20,9 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
-| `enable_api` | boolean | `true` | `CRM_ENABLE_API` | Enable REST API endpoints at `crm/api/`. |
-| `deals_per_page` | integer | `25` | `CRM_DEALS_PER_PAGE` | Number of deals per page in list views. |
-| `contacts_per_page` | integer | `50` | `CRM_CONTACTS_PER_PAGE` | Number of contacts per page in list views. |
+| `api_enabled` | boolean | `true` | `QUICKSCALE_CRM_API_ENABLED` | Enable REST API endpoints at `crm/api/`. |
+| `deals_per_page` | integer | `25` | `QUICKSCALE_CRM_DEALS_PER_PAGE` | Number of deals per page in list views. |
+| `contacts_per_page` | integer | `50` | `QUICKSCALE_CRM_CONTACTS_PER_PAGE` | Number of contacts per page in list views. |
 
 ## Public surface
 
@@ -48,7 +48,7 @@ stage.
 
 ### API
 
-All staff-authenticated API endpoints are available under `crm/api/` when `CRM_ENABLE_API` is
+All staff-authenticated API endpoints are available under `crm/api/` when `QUICKSCALE_CRM_API_ENABLED` is
 `true`:
 
 | Endpoint | Methods | Description |
@@ -78,7 +78,7 @@ All CRM API endpoints, including standalone note routes, nested note actions, an
 actions, use session authentication and require a staff user. The HTML dashboard at
 `crm/dashboard/` is a separate staff-only surface: anonymous users are redirected to the
 configured login entry, authenticated non-staff users receive `403`, and staff users can view
-the dashboard regardless of the `CRM_ENABLE_API` toggle. When `CRM_ENABLE_API` is `false`, the
+the dashboard regardless of the `QUICKSCALE_CRM_API_ENABLED` toggle. When `QUICKSCALE_CRM_API_ENABLED` is `false`, the
 `crm/api/` routes remain hidden and return `404`.
 
 Filtering:

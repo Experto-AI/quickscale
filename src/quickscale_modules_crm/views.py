@@ -203,7 +203,7 @@ class CRMApiEnabledMixin:
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
         # Rule 3: the startup check has validated the declared value, so the
         # view reads it directly (and is never reached while it is missing).
-        if not settings.CRM_ENABLE_API:
+        if not settings.QUICKSCALE_CRM_API_ENABLED:
             raise Http404
         APIView.initial(self, request, *args, **kwargs)
 
@@ -218,23 +218,23 @@ class _PlainListPagination(PageNumberPagination):
 
 
 class ContactPagination(_PlainListPagination):
-    """Contact page size driven by CRM_CONTACTS_PER_PAGE."""
+    """Contact page size driven by QUICKSCALE_CRM_CONTACTS_PER_PAGE."""
 
     def get_page_size(self, request: Request) -> int:
         del request
         # Rule 3: read the declared setting directly; the startup check has
         # already refused a missing or invalid value.
-        return settings.CRM_CONTACTS_PER_PAGE
+        return settings.QUICKSCALE_CRM_CONTACTS_PER_PAGE
 
 
 class DealPagination(_PlainListPagination):
-    """Deal page size driven by CRM_DEALS_PER_PAGE."""
+    """Deal page size driven by QUICKSCALE_CRM_DEALS_PER_PAGE."""
 
     def get_page_size(self, request: Request) -> int:
         del request
         # Rule 3: read the declared setting directly; the startup check has
         # already refused a missing or invalid value.
-        return settings.CRM_DEALS_PER_PAGE
+        return settings.QUICKSCALE_CRM_DEALS_PER_PAGE
 
 
 class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
