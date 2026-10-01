@@ -100,6 +100,9 @@ and `get_tenant_models()`. The module also installs the always-on RLS boot guard
   post-login and post-signup redirect hooks auth's allauth adapter collects, and the
   `social-cache-state` obligation executor, which clears the organization-scoped cache keys
   installed modules declare through `organization_cache_keys`.
+- `services.py` re-exports `OrgsError` and `CurrentOrgError`, the module's error surface
+  (Module Conventions rules 4 and 23); the org lifecycle operations stay in the module's own
+  views and forms.
 
 ## URLs
 
