@@ -39,6 +39,30 @@ from quickscale_modules_notifications.models import (
     NotificationSettings,
 )
 
+__all__ = [
+    "DeliveryMailer",
+    "NotificationConfigurationError",
+    "NotificationDisabledError",
+    "NotificationError",
+    "NotificationSettingsSnapshot",
+    "NotificationTemplateDefinition",
+    "NotificationTemplateError",
+    "NotificationValidationError",
+    "NotificationWebhookError",
+    "NotificationWebhookSignatureError",
+    "RenderedNotification",
+    "WebhookIngestionResult",
+    "build_webhook_signature_headers",
+    "dispatch_notification_message",
+    "ensure_default_settings",
+    "ingest_webhook_event",
+    "load_settings_snapshot",
+    "render_notification",
+    "sanitize_provider_metadata",
+    "sanitize_provider_tags",
+    "send_notification",
+]
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_ALLOWED_TAGS = (
@@ -459,7 +483,12 @@ def dispatch_notification_message(
 ) -> NotificationMessage:
     """Dispatch queued recipient deliveries for a logical notification message."""
     with transaction.atomic():
-        message = NotificationMessage.objects.select_for_update().get(pk=message_id)
+        try:
+            message = NotificationMessage.objects.select_for_update().get(pk=message_id)
+        except NotificationMessage.DoesNotExist as exc:
+            raise NotificationError(
+                f"Notification message {message_id} does not exist."
+            ) from exc
         deliveries = list(message.deliveries.select_for_update().order_by("pk"))
         settings_snapshot = load_settings_snapshot()
         _ensure_notifications_enabled(settings_snapshot)
@@ -908,7 +937,12 @@ def _normalize_recipients(recipients: Sequence[str]) -> list[str]:
         candidate = str(raw_value).strip().lower()
         if not candidate:
             continue
-        validate_email(candidate)
+        try:
+            validate_email(candidate)
+        except ValidationError as exc:
+            raise NotificationValidationError(
+                f"Invalid recipient email address: {candidate}"
+            ) from exc
         if candidate in seen:
             continue
         seen.add(candidate)

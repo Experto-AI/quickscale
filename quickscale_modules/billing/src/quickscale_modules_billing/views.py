@@ -241,9 +241,9 @@ class CreateCheckoutSessionView(_RenderedAPIView):
 
         checkout_url = create_checkout_session(
             request.user,
-            serializer.validated_data["plan"],
-            reverse("quickscale_billing:purchase_success"),
-            reverse("quickscale_billing:purchase_cancel"),
+            plan=serializer.validated_data["plan"],
+            success_url=reverse("quickscale_billing:purchase_success"),
+            cancel_url=reverse("quickscale_billing:purchase_cancel"),
             organization=organization,
         )
         return Response({"checkout_url": checkout_url})
@@ -269,9 +269,9 @@ class CreateSubscriptionCheckoutView(_RenderedAPIView):
 
         checkout_url = create_subscription_checkout_session(
             request.user,
-            serializer.validated_data["plan"],
-            reverse("quickscale_billing:subscription_success"),
-            reverse("quickscale_billing:subscription_cancel"),
+            plan=serializer.validated_data["plan"],
+            success_url=reverse("quickscale_billing:subscription_success"),
+            cancel_url=reverse("quickscale_billing:subscription_cancel"),
             organization=organization,
         )
         return Response({"checkout_url": checkout_url})
@@ -322,7 +322,7 @@ class CreateBillingPortalSessionView(_RenderedAPIView):
 
         portal_url = create_billing_portal_session(
             request.user,
-            reverse("quickscale_billing:portal_return"),
+            return_url=reverse("quickscale_billing:portal_return"),
             organization=organization,
         )
         return Response({"portal_url": portal_url})

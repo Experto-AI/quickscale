@@ -344,6 +344,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Blog and listings publish their operations as a service surface.** Each module's publish
     and upload operations live in its `services.py` under a declared `__all__` with keyword-only
     arguments, so callers import the module's public surface rather than its views.
+  - **Auth and orgs publish their service surface.** Every first-party module now declares its
+    public service surface in `services.py` with `__all__` and keyword-only arguments after at
+    most one leading subject, so callers stop reaching into module internals.
+  - **Modules stop reading each other's settings.** Forms asks analytics' runtime snapshot and
+    orgs asks notifications' settings snapshot, so one module's configuration never leaks into
+    another's code.
   - **Module secrets reach module code as applied settings.** Analytics and notifications read
     their PostHog key and host, Resend API key, and webhook secret from projected Django settings
     that `quickscale apply` renders from each module's `_env_var` option, and a switched-on module

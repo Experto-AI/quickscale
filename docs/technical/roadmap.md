@@ -25,8 +25,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | — | Deferred |
-| SA228 | Break import cycles and cross-module settings reads; give every `services.py` its public surface | post-v88 | 1 | — | Deferred |
-| SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219, SA228 | Deferred |
+| SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219 | Deferred |
 | SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
 | SA230 | Build the conformance-test harness with the rules already met | post-v88 | 3 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA226, SA230 | Deferred |
@@ -40,7 +39,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA228 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA219 ──► SA220
 Track 3: SA230 ──► SA226 ──► SA216 (after SA215)
      critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
@@ -54,8 +53,8 @@ the startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's 
 authorization needs SA220's capabilities. SA204 freezes migration history before any post-SA153
 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA228 (Track 1) and SA230 (Track 3) run while SA219 and SA220 land;
-SA230 is the harness SA215 adds rules to. SA216 waits for SA215 because both change auth's views,
+**Off the critical path.** SA230 (Track 3) runs while SA219 and SA220 land; it is the harness
+SA215 adds rules to. SA216 waits for SA215 because both change auth's views,
 orgs' removal path, and the user-referencing models.
 
 ### Track states
@@ -64,7 +63,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA228 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA215 | no | no | no | no | **yes** |
 | 2 | SA219 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA230 | yes | yes | yes | **yes** | no |
 
@@ -200,35 +199,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `.env.example`; the generated settings templates (Track 3); the theme's `index.html.j2`;
   core's manifest loader and required-module resolver; railway.md and user docs.
 
-- [ ] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
-
-  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. orgs' purge path
-  and boundary table no longer name another module, and the rule's import-graph test landed as
-  `quickscale_core/tests/test_module_import_graph.py`; several modules' service surfaces remain.
-
-  **Scope:**
-  - *References by name* (rule 34). **Landed:** the purge command's billing steps and
-    `removal.BOUNDARY_GUARDED_OBLIGATIONS` are billing's declared removal hooks, blog's and crm's
-    label prefixes come from those modules' declarations, orgs' `checks.py` boundary table is
-    declared by each boundary's owner (auth declares account deletion), and orgs' post-create
-    billing handoff is billing's declared `organization_pricing_url_hooks` capability, which
-    activates the new organization first, so orgs names no billing route, and
-    `TENANT_TABLE_REGISTRY` is test-owned (`orgs/tests/_tenant_table_registry.py`), so shipped
-    source carries no parity oracle.
-  - *Service surface.* Every module gains `services.py`; every `services.py` gains `__all__`,
-    keyword-only signatures, and `<Module>Error` on failure, with `test_services.py`.
-    **Landed:** blog and listings publish their publish and upload operations through
-    `services.py` (keyword-only after the leading subject, `BlogError`/`ListingsError`
-    re-exported), with `test_services.py`. **Open:** `services.py` for auth and orgs; `__all__`
-    for backups, CRM, and notifications; keyword-only signatures in analytics, billing, and
-    backups; forms' `test_services.py`.
-
-  **Acceptance:** an import-graph test matches the D6 layers,
-  counting references by name as well as imports; no module reads another module's settings; no
-  module's source names a higher-layer module; every `services.py` meets the service surface.
-
-  **Surfaces:** auth, orgs, billing, blog, storage, backups, every `services.py`;
-  `quickscale_core/dr_engine/` (Track 2, through the serialized merge queue); `auth/views.py`.
+- [x] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
 
 - [ ] **SA220 — Give every module `is_enabled()` and make `required_modules` cover every import.**
 

@@ -198,7 +198,10 @@ class QuickscaleBillingConfig(AppConfig):
             detach_account_deletion_user_references,
         )
 
-        return detach_account_deletion_user_references(user_id, organization_ids)
+        return detach_account_deletion_user_references(
+            user_id,
+            organization_ids=organization_ids,
+        )
 
     def account_deletion_user_reference_organization_ids(
         self,
