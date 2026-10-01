@@ -17,8 +17,15 @@ from typing import Sequence
 
 from django.db import transaction
 
+from quickscale_modules_crm.exceptions import CrmError
 from quickscale_modules_crm.models import Stage
 from quickscale_modules_orgs.models import Organization
+
+__all__ = [
+    "CrmError",
+    "DEFAULT_STAGE_BLUEPRINT",
+    "ensure_org_default_stages",
+]
 
 # Canonical default stage blueprint, matching the shipped migration 0001.
 # Each entry is (name, order).  terminal_semantic is intentionally left
@@ -77,7 +84,12 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
         # --- Serialized critical section ----------------------------------
         with transaction.atomic():
             # Lock the Organization row to serialize concurrent bootstrap calls.
-            Organization.objects.select_for_update().get(pk=organization.pk)
+            try:
+                Organization.objects.select_for_update().get(pk=organization.pk)
+            except Organization.DoesNotExist as exc:
+                raise CrmError(
+                    "The organization no longer exists; default stages were not seeded."
+                ) from exc
 
             # Under-lock recheck — another thread may have seeded between the
             # optimistic precheck and the lock acquisition.
