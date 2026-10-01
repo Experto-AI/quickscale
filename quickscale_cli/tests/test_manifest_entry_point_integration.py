@@ -401,9 +401,9 @@ class TestBillingManifestEntryPoint:
 
     def test_url_include(self) -> None:
         spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
-        assert len(spec.url_includes) >= 1
-        # Billing is included at root.
-        assert any(prefix == "" for prefix, _ in spec.url_includes)
+        # The manifest declares billing's mount; the URLconf is module-relative
+        # (Module Conventions rule 7).
+        assert spec.url_includes == (("billing/", "quickscale_modules_billing.urls"),)
 
     def test_currency_setting(self) -> None:
         spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)

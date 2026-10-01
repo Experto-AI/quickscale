@@ -136,6 +136,15 @@ The root dashboard route is removed, so the site root belongs to the project and
 live under `/orgs/`; the module now reserves the `api` slug, so an existing organization with that
 slug must be renamed.
 
+**Billing URLs.** The billing module's JSON API moves under its mount: `/api/billing/...` becomes
+`/billing/api/...` (for example, `/api/billing/plans/` becomes `/billing/api/plans/`). The Stripe
+webhook stays at `/billing/webhooks/stripe/` and the module's Django pages keep their existing
+`/billing/...` URLs. The operator step is to update custom frontend code that calls
+`/api/billing/...`, and to rename project-owned template overrides that reverse the retired
+kebab-case billing route names (`billing-dashboard`, `pricing-page`, `stripe-webhook`, and the
+rest), which become the namespaced snake_case names under `quickscale_billing:` (`dashboard`,
+`pricing_page`, `stripe_webhook`, and the rest).
+
 ## Delivery provenance
 
 The SA195/SA192 delivery was synchronized with `v89` at

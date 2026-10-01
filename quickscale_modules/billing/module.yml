@@ -113,7 +113,7 @@ derivation:
       derivation_type: static
       expression:
         value:
-          - - ""
+          - - billing/
             - quickscale_modules_billing.urls
       description: "Billing URL includes"
 

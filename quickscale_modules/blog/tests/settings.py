@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "markdownx",
     "quickscale_modules_orgs",
+    "quickscale_modules_storage",
     "quickscale_modules_blog",
 ]
 
@@ -102,12 +103,26 @@ QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH = 4096
 QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
 QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS = ["PNG", "JPEG", "WEBP", "GIF"]
 
+# Rule 3: storage's declared settings, so installing it here satisfies both
+# its generic settings check and the rule 35 vendor check.
+QUICKSCALE_STORAGE_BACKEND = "local"
+QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+AWS_STORAGE_BUCKET_NAME = ""
+AWS_S3_ENDPOINT_URL = ""
+AWS_S3_REGION_NAME = ""
+QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR = "AWS_ACCESS_KEY_ID"
+QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR = "AWS_SECRET_ACCESS_KEY"
+AWS_DEFAULT_ACL = ""
+AWS_QUERYSTRING_AUTH = False
+AWS_ACCESS_KEY_ID = ""
+AWS_SECRET_ACCESS_KEY = ""
+
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
 MODULE_SETTINGS_SCHEMA = {
     name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("blog", "orgs")
+    for name in ("blog", "orgs", "storage")
 }
 
 # DRF configuration mirroring the generated settings: session authentication
