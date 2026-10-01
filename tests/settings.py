@@ -79,6 +79,7 @@ USE_TZ = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+QUICKSCALE_ORGS_ENABLED = True
 QUICKSCALE_ORGS_MODE = "saas"
 
 LOGIN_URL = "/accounts/login/"
