@@ -15,6 +15,7 @@ from quickscale_modules_orgs.removal import (
     OWNED_TENANT_ROWS,
     PURGE_TOMBSTONE,
     SOCIAL_CACHE_STATE,
+    RemovalBoundary,
 )
 
 
@@ -42,6 +43,21 @@ def test_app_config_declares_its_removal_obligations() -> None:
         SOCIAL_CACHE_STATE,
         PURGE_TOMBSTONE,
     }
+
+
+def test_app_config_declares_its_removal_boundary_implementation() -> None:
+    """Each removal boundary's owner declares where its implementation lives."""
+    config = QuickscaleOrgsConfig(
+        "quickscale_modules_orgs",
+        import_module("quickscale_modules_orgs"),
+    )
+
+    assert config.removal_boundary_implementations()[RemovalBoundary.PURGE] == (
+        "quickscale_modules_orgs",
+        "quickscale_modules_orgs.management.commands."
+        "quickscale_orgs_purge_organization",
+        "Command.handle",
+    )
 
 
 def test_app_config_declares_post_auth_redirect_hooks() -> None:
