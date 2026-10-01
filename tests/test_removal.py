@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -19,17 +20,20 @@ from quickscale_modules_orgs.removal import (
     PROVIDER_BACKED,
     PURGE_TOMBSTONE,
     SOCIAL_CACHE_STATE,
+    BoundaryGuardedHooks,
     ExternalProviderField,
     OrganizationRemovalObligation,
     RemovalAction,
     RemovalBoundary,
     RemovalCoordinator,
     coordinator_discharge_actions,
+    declared_boundary_guards,
     declared_provider_backed_fields,
     declared_refusal_fields,
     declared_removal_obligations,
     external_provider_obligation_mismatches,
     organization_removal_obligations,
+    removal_boundary_implementations,
 )
 from quickscale_modules_orgs.tenancy import get_tenant_models
 
@@ -382,9 +386,12 @@ def test_declared_obligations_reject_provider_fields_without_refusal() -> None:
         declared_removal_obligations(config)
 
 
-def test_declared_obligations_reject_a_self_asserted_boundary_guard() -> None:
-    """Only the module the boundary guards may claim a bespoke guard."""
-    obligation = OrganizationRemovalObligation(
+def _boundary_guarded_obligation(
+    *,
+    hooks: BoundaryGuardedHooks | None,
+) -> OrganizationRemovalObligation:
+    """Build a declaration whose provider field needs the app's own guard."""
+    return OrganizationRemovalObligation(
         name="acme-provider-state",
         purge_action=RemovalAction.REFUSE,
         account_delete_action=RemovalAction.SKIP,
@@ -396,32 +403,121 @@ def test_declared_obligations_reject_a_self_asserted_boundary_guard() -> None:
                 boundary_guarded=True,
             ),
         ),
+        boundary_guarded_hooks=hooks,
     )
-    config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
 
-    with pytest.raises(ValueError, match="belongs to another module"):
+
+def test_declared_obligations_reject_boundary_guarded_fields_without_hooks() -> None:
+    """A bespoke guard must be declared, not merely asserted."""
+    config = SimpleNamespace(
+        label="acme_app",
+        removal_obligations=(_boundary_guarded_obligation(hooks=None),),
+    )
+
+    with pytest.raises(ValueError, match="without boundary_guarded_hooks"):
         declared_removal_obligations(config)
 
 
-def test_declared_obligations_reject_a_borrowed_boundary_guard_obligation() -> None:
-    """A project app cannot borrow the reserved obligation name."""
-    obligation = OrganizationRemovalObligation(
-        name=BILLING_PROVIDER_STATE,
-        purge_action=RemovalAction.REFUSE,
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Retained.",
-        external_provider_fields=(
-            ExternalProviderField(
-                "acme_app.asset",
-                "vendor_customer_id",
-                boundary_guarded=True,
-            ),
-        ),
+def test_declared_obligations_reject_a_missing_boundary_guard_hook() -> None:
+    """Every named guard hook must exist on the declaring app's config."""
+    obligation = _boundary_guarded_obligation(
+        hooks=BoundaryGuardedHooks(
+            guard="guard_provider_state",
+            reconcile="reconcile_provider_state",
+            mutation_lock="provider_mutation_lock",
+        )
     )
-    config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
+    config = SimpleNamespace(
+        label="acme_app",
+        removal_obligations=(obligation,),
+        guard_provider_state=lambda organization, **kwargs: "",
+    )
 
-    with pytest.raises(ValueError, match="belongs to another module"):
+    with pytest.raises(ValueError, match="'reconcile' hook"):
         declared_removal_obligations(config)
+
+
+def test_declared_obligations_accept_boundary_guarded_fields_with_hooks() -> None:
+    """The declaring app's own hooks are what a bespoke guard runs."""
+    obligation = _boundary_guarded_obligation(
+        hooks=BoundaryGuardedHooks(
+            guard="guard_provider_state",
+            reconcile="reconcile_provider_state",
+            mutation_lock="provider_mutation_lock",
+        )
+    )
+    config = SimpleNamespace(
+        label="acme_app",
+        removal_obligations=(obligation,),
+        guard_provider_state=lambda organization, **kwargs: "",
+        reconcile_provider_state=lambda organization_id, persist: "",
+        provider_mutation_lock=lambda organization_id: nullcontext(),
+    )
+
+    assert declared_removal_obligations(config) == (obligation,)
+
+
+def test_installed_billing_declares_its_boundary_guard_hooks() -> None:
+    """Billing's guarded obligation resolves to hooks its own config exposes."""
+    billing = next(
+        guard
+        for guard in declared_boundary_guards()
+        if guard.obligation.name == BILLING_PROVIDER_STATE
+    )
+
+    assert billing.app_config.label == "quickscale_billing"
+    assert callable(billing.guard)
+    assert callable(billing.reconcile)
+    assert callable(billing.mutation_lock)
+
+
+def test_installed_boundaries_declare_their_implementations() -> None:
+    """Each removal boundary's owner declares where its implementation lives."""
+    implementations = removal_boundary_implementations()
+
+    assert implementations[RemovalBoundary.PURGE][1].endswith(
+        "quickscale_orgs_purge_organization"
+    )
+    assert implementations[RemovalBoundary.ACCOUNT_DELETE] == (
+        "quickscale_modules_auth",
+        "quickscale_modules_auth.views",
+        "AccountDeleteView.form_valid",
+    )
+
+
+def test_boundary_implementation_rejects_an_uninstalled_shipping_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A declaration naming an uninstalled shipping app fails closed."""
+    from django.apps import apps
+
+    from quickscale_modules_orgs.checks import check_removal_obligation_discharge
+
+    config = apps.get_app_config("quickscale_billing")
+    monkeypatch.setattr(
+        config,
+        "removal_boundary_implementations",
+        lambda: {
+            RemovalBoundary.PURGE: (
+                "quickscale_module_orgs",
+                "nonexistent.boundary",
+                "missing",
+            )
+        },
+        raising=False,
+    )
+
+    with pytest.raises(ValueError, match="not installed"):
+        removal_boundary_implementations()
+
+    messages = check_removal_obligation_discharge(app_configs=None)
+
+    assert any(
+        message.id == "quickscale_orgs.E002"
+        and "Failed to read the declared removal-boundary implementations"
+        in message.msg
+        for message in messages
+    )
 
 
 def test_every_boundary_declares_coordinator_routes() -> None:

@@ -41,6 +41,7 @@ from quickscale_modules_orgs.removal import (
     SOCIAL_CACHE_STATE,
     OrganizationRemovalObligation,
     RemovalAction,
+    RemovalBoundary,
 )
 
 
@@ -106,6 +107,23 @@ class QuickscaleOrgsConfig(AppConfig):
                 ),
             ),
         )
+
+    def removal_boundary_implementations(
+        self,
+    ) -> dict[RemovalBoundary, tuple[str, str, str]]:
+        """Declare orgs' purge boundary implementation (Module Conventions rule 34).
+
+        Each removal boundary's owner declares where its implementation lives,
+        so the discharge check holds no other module's label or module path.
+        """
+        return {
+            RemovalBoundary.PURGE: (
+                self.name,
+                "quickscale_modules_orgs.management.commands."
+                "quickscale_orgs_purge_organization",
+                "Command.handle",
+            ),
+        }
 
     def post_login_redirect_hooks(self) -> tuple[Callable[[Any], str | None], ...]:
         """Declare orgs' post-login redirect hook (Module Conventions rule 4).
