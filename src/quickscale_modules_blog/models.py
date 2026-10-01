@@ -2,11 +2,10 @@
 
 import posixpath
 import warnings
-from collections.abc import Callable
-from importlib import import_module
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from django.conf import settings
@@ -20,43 +19,32 @@ from PIL import Image
 
 from quickscale_modules_orgs.models import TenantModel
 
-storage_build_upload_path: Callable[..., str] | None = None
-storage_build_public_media_url: Callable[..., str] | None = None
-storage_helpers: Any | None
-try:
-    storage_helpers = import_module("quickscale_modules_storage.helpers")
-except ModuleNotFoundError:
-    storage_helpers = None
-
-if storage_helpers is not None:
-    storage_build_upload_path = getattr(storage_helpers, "build_upload_path", None)
-    storage_build_public_media_url = getattr(
-        storage_helpers, "build_public_media_url", None
-    )
+from . import _storage
 
 
 def _build_public_media_url(stored_reference: str) -> str:
-    """Return a public URL for a stored media reference."""
+    """Return a public URL for a stored media reference.
+
+    Storage's service resolves storage's own settings (rules 3, 4, and 34);
+    without storage installed, the fallback uses only the project's
+    ``MEDIA_URL`` and reads no storage setting.
+    """
+    services = _storage.storage_services()
+    if services is not None:
+        return services.build_public_media_url(stored_reference)
+
     reference = (stored_reference or "").strip()
     if not reference:
         return ""
 
-    public_base_url = str(
-        getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
-    ).strip()
-    media_url = str(settings.MEDIA_URL).strip()
+    parsed = urlparse(reference)
+    if parsed.scheme and parsed.netloc:
+        return reference
 
-    if storage_build_public_media_url is not None:
-        return storage_build_public_media_url(
-            reference,
-            public_base_url=public_base_url,
-            media_url=media_url,
-        )
+    if reference.startswith("/"):
+        return reference
 
-    if public_base_url:
-        return f"{public_base_url.rstrip('/')}/{reference.lstrip('/')}"
-
-    normalized_media_url = media_url
+    normalized_media_url = str(settings.MEDIA_URL).strip()
     if not normalized_media_url.startswith("/") and not normalized_media_url.startswith(
         "http"
     ):
@@ -104,8 +92,11 @@ def _prepare_thumbnail_image(image: Image.Image, image_format: str) -> Image.Ima
 
 def blog_media_upload_to(_: "BlogMediaAsset", filename: str) -> str:
     """Build a stable, collision-resistant upload path for blog media assets."""
-    if storage_build_upload_path is not None:
-        return storage_build_upload_path("blog", "uploads", filename)
+    services = _storage.storage_services()
+    if services is not None:
+        return services.build_upload_path(
+            "blog", asset_kind="uploads", filename=filename
+        )
 
     extension = Path(filename).suffix.lower() or ".bin"
     stem = slugify(Path(filename).stem) or "image"
@@ -208,7 +199,7 @@ class AuthorProfile(models.Model):
         return f"{self.user.username} - Author Profile"
 
     def get_avatar_url(self) -> str:
-        """Return the public avatar URL using storage helpers when available."""
+        """Return the public avatar URL through storage's services when available."""
         if not self.avatar:
             return ""
         return _build_public_media_url(str(self.avatar.name))
@@ -346,7 +337,7 @@ class Post(TenantModel):
         return reverse("quickscale_blog:post_detail", kwargs={"slug": self.slug})
 
     def get_featured_image_url(self) -> str:
-        """Return the public featured image URL using storage helpers when available."""
+        """Return the public featured image URL through storage's services when available."""
         if not self.featured_image:
             return ""
         return _build_public_media_url(str(self.featured_image.name))
