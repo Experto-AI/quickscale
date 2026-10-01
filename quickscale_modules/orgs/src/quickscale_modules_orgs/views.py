@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC
 from importlib import import_module
 from typing import Any, cast
@@ -33,6 +33,8 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from quickscale_core.runtime import collect_capabilities
 
 from .constants import (
     ACTIVE_ORG_SESSION_KEY,
@@ -101,13 +103,19 @@ def _canonical_org_detail_path(organization: Organization) -> str:
 
 
 def _billing_pricing_path(organization: Organization) -> str | None:
-    try:
-        return reverse(
-            "quickscale_billing:org-pricing-page",
-            kwargs={"org_slug": organization.slug},
-        )
-    except NoReverseMatch:
-        return None
+    """Return the first declared post-create pricing URL, if any (rule 4).
+
+    Billing declares its pricing-page handoff through the rule 4
+    ``organization_pricing_url_hooks`` capability; collecting it keeps
+    billing's route name, label, and settings out of orgs' source, and with
+    no provider the create flow keeps its canonical detail-path fallback.
+    """
+    for declaration in collect_capabilities("organization_pricing_url_hooks"):
+        hook = cast("Callable[[Organization], str | None]", declaration)
+        pricing_url = hook(organization)
+        if pricing_url:
+            return pricing_url
+    return None
 
 
 def _org_creation_redirect_urls(organization: Organization) -> dict[str, str | None]:
@@ -374,9 +382,13 @@ class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
 
     def form_valid(self, form: OrgCreateForm) -> HttpResponse:
         organization = form.save(user=self.request.user)
+        # The handoff lands on a flat billing route, which TenantMiddleware
+        # resolves from the session, so record the new organization as active
+        # before redirecting; solo mode ignores the key.
+        self.request.session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
         next_url = _org_creation_redirect_urls(organization)["next_url"]
         # ``next_url`` is always a string: the helper falls back to the
-        # canonical org detail path when the billing pricing route is absent.
+        # canonical org detail path when no module declares a handoff.
         return redirect(cast(str, next_url))
 
 
@@ -993,6 +1005,9 @@ class OrgApiListCreateView(OrgApiBaseView):
             raise DRFValidationError(_form_error_data(form))
 
         organization = form.save(user=request.user)
+        # See OrgCreateView.form_valid: the flat-route handoff resolves its
+        # organization from the session, so the new organization becomes active.
+        request.session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
         redirect_urls = _org_creation_redirect_urls(organization)
         return Response(
             {

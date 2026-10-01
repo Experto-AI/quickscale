@@ -30,7 +30,9 @@ it boundary-guarded and declares the guard, reconciliation, and provider-mutex h
 liveness itself; an app-owned stage runs the declaring app's own hook; each removal boundary's owner
 declares where its implementation lives; blog and CRM declare their purge-summary prefixes; and
 account deletion records the data-removal steps it deliberately skips when an organization
-survives.
+survives. Organization creation hands off to billing's pricing page through the same
+declared-capability pattern after activating the new organization, falling back to the new
+organization's dashboard when billing is off or absent.
 
 Server-rendered auth, billing, blog, listings, and CRM pages now share the generated React theme's
 design tokens and page shell. Their templates preserve Django-owned forms, URLs, sessions, and

@@ -1695,9 +1695,11 @@ def test_org_settings_rejects_the_reserved_api_slug(client, settings) -> None:
 
 
 @pytest.mark.django_db
-@override_settings(ROOT_URLCONF="tests.urls_pre_home")
-def test_saas_pre_home_root_redirects_to_org_index(client, settings) -> None:
-    settings.QUICKSCALE_ORGS_MODE = "saas"
+# Both overrides ride the decorator: mutating the ``settings`` fixture while a
+# decorator override is active leaks ROOT_URLCONF past the test (the fixture
+# restores the decorator's holder after the decorator disabled it).
+@override_settings(ROOT_URLCONF="tests.urls_pre_home", QUICKSCALE_ORGS_MODE="saas")
+def test_saas_pre_home_root_redirects_to_org_index(client) -> None:
     user = get_user_model().objects.create_user(
         username="saas-owner",
         email="saas-owner@example.com",
@@ -1718,9 +1720,11 @@ def test_saas_pre_home_root_redirects_to_org_index(client, settings) -> None:
 
 
 @pytest.mark.django_db
-@override_settings(ROOT_URLCONF="tests.urls_pre_home")
-def test_solo_pre_home_mount_keeps_project_root(client, settings) -> None:
-    settings.QUICKSCALE_ORGS_MODE = "solo"
+# Both overrides ride the decorator: mutating the ``settings`` fixture while a
+# decorator override is active leaks ROOT_URLCONF past the test (the fixture
+# restores the decorator's holder after the decorator disabled it).
+@override_settings(ROOT_URLCONF="tests.urls_pre_home", QUICKSCALE_ORGS_MODE="solo")
+def test_solo_pre_home_mount_keeps_project_root(client) -> None:
     user = get_user_model().objects.create_user(
         username="solo-owner",
         email="solo-owner@example.com",
