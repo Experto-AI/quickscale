@@ -1,8 +1,9 @@
 """Tenancy helpers for the QuickScale organizations module.
 
 This module provides the canonical owned-model contract helpers
-for tenant-scoped models across all QuickScale modules (D3 — PROTECT),
-plus the shipped-module tenant-table registry used by the AF1 conformance gate.
+for tenant-scoped models across all QuickScale modules (D3 — PROTECT).
+The shipped-module tenant-table parity registry is test-owned
+(``tests/_tenant_table_registry.py``, Module Conventions rule 34).
 """
 
 from __future__ import annotations
@@ -115,342 +116,6 @@ class TenantTableEntry:
             f"TenantTableEntry(app_label={self._app_label!r}, "
             f"model_name={self._model_name!r}, status={self._status.name})"
         )
-
-
-# ---------------------------------------------------------------------------
-# Central tenant-table registry (AF1 Phase 1)
-# ---------------------------------------------------------------------------
-# This is the shipped-module parity oracle for which models participate in
-# the tenant isolation contract. Runtime discovery is marker-derived and does
-# not consult this literal. Every shipped concrete model must appear in
-# exactly one of the three categories below.
-#
-# Runtime classification remains marker-derived; this literal supplies only
-# the shipped-model parity oracle for repository conformance checks.
-# ---------------------------------------------------------------------------
-
-TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
-    # ====== ENROLLED =====================================================
-    # Tenant-owned ``TenantModel`` subclasses with a direct
-    # ``organization_id`` column, the inherited ``TenantManager`` pair,
-    # and a live FORCE-RLS policy.
-    # ======================================================================
-    # -- CRM --
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="Tag",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="crm_tag_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="Company",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="crm_company_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="Contact",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="crm_contact_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="Stage",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="crm_stage_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="Deal",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="crm_deal_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="ContactNote",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="crm_contactnote_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="DealNote",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="crm_dealnote_org_isolation",
-    ),
-    # -- Forms --
-    TenantTableEntry(
-        app_label="quickscale_forms",
-        model_name="Form",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="forms_form_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_forms",
-        model_name="FormField",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="forms_formfield_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_forms",
-        model_name="FormSubmission",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="forms_formsubmission_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_forms",
-        model_name="FormFieldValue",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="forms_formfieldvalue_org_isolation",
-    ),
-    # -- Billing --
-    TenantTableEntry(
-        app_label="quickscale_billing",
-        model_name="CreditBalance",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="billing_credit_balance_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_billing",
-        model_name="CreditTransaction",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="billing_credit_transaction_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_billing",
-        model_name="PurchaseCheckout",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="billing_purchase_checkout_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_billing",
-        model_name="Subscription",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="billing_subscription_org_isolation",
-    ),
-    # -- Blog --
-    TenantTableEntry(
-        app_label="quickscale_blog",
-        model_name="Category",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="blog_category_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_blog",
-        model_name="Tag",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="blog_tag_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_blog",
-        model_name="BlogMediaAsset",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="blog_media_asset_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_blog",
-        model_name="Post",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="blog_post_org_isolation",
-    ),
-    # -- Listings --
-    TenantTableEntry(
-        app_label="quickscale_listings",
-        model_name="Listing",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="listings_listing_org_isolation",
-    ),
-    # -- Social --
-    TenantTableEntry(
-        app_label="quickscale_social",
-        model_name="SocialLink",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="social_link_org_isolation",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_social",
-        model_name="SocialEmbed",
-        status=TenantTableStatus.ENROLLED,
-        policy_name="social_embed_org_isolation",
-    ),
-    # ====== REVIEWED EXCLUSIONS ==========================================
-    # Models intentionally excluded from the tenant-isolation contract.
-    # ======================================================================
-    # -- Orgs (control-plane — the tenancy infrastructure itself) --
-    TenantTableEntry(
-        app_label="quickscale_orgs",
-        model_name="Organization",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Control-plane model: tenant definition table, not tenant-scoped.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_orgs",
-        model_name="OrganizationMembership",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Control-plane model: membership tracks the user-org "
-        "relationship; it is not tenant-scoped data.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_orgs",
-        model_name="OrganizationInvitation",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Control-plane model: pending invitations are "
-        "tenancy-infrastructure records.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_orgs",
-        model_name="OrganizationTombstone",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Control-plane model: purge-tracking records are "
-        "tenancy-infrastructure, not tenant-owned data.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_orgs",
-        model_name="TenantModel",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Abstract base model — not concrete.",
-    ),
-    # -- Billing (system-wide, not tenant-scoped) --
-    TenantTableEntry(
-        app_label="quickscale_billing",
-        model_name="Plan",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="System-wide plan definition, not tenant-owned.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_billing",
-        model_name="WebhookEvent",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="System-wide webhook idempotency record, not tenant-owned.",
-    ),
-    # -- Blog (user-profile, not tenant-scoped) --
-    TenantTableEntry(
-        app_label="quickscale_blog",
-        model_name="AuthorProfile",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="User-profile extension linked to auth.User, not tenant-scoped.",
-    ),
-    # -- Auto-created ManyToMany through tables --
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="Contact_tags",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Auto-created ManyToMany through table — no tenant-scoped data.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_crm",
-        model_name="Deal_tags",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Auto-created ManyToMany through table — no tenant-scoped data.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_blog",
-        model_name="Post_tags",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Auto-created ManyToMany through table — no tenant-scoped data.",
-    ),
-    # -- Auth (system-wide user model, not tenant-scoped) --
-    TenantTableEntry(
-        app_label="quickscale_auth",
-        model_name="User",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="System-wide user model: identities are cross-tenant, not tenant-scoped.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_auth",
-        model_name="User_groups",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Auto-created ManyToMany through table for auth.User.groups — "
-        "no tenant-scoped data.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_auth",
-        model_name="User_user_permissions",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Auto-created ManyToMany through table for auth.User.user_permissions "
-        "-- no tenant-scoped data.",
-    ),
-    # -- Backups (operational/DR records, not tenant-scoped) --
-    TenantTableEntry(
-        app_label="quickscale_backups",
-        model_name="BackupPolicy",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Operational backup policy — singleton config, not tenant-scoped.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_backups",
-        model_name="BackupArtifact",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Operational backup artifact metadata — not tenant-scoped.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_backups",
-        model_name="BackupSnapshot",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Internal DR snapshot metadata — not tenant-scoped.",
-    ),
-    # -- Notifications (system-wide operational records, not tenant-scoped) --
-    TenantTableEntry(
-        app_label="quickscale_notifications",
-        model_name="NotificationSettings",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Operational notification configuration — not tenant-scoped.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_notifications",
-        model_name="NotificationMessage",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="System-wide notification send-request — not tenant-scoped.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_notifications",
-        model_name="NotificationDelivery",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Recipient delivery tracking — not tenant-scoped.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_notifications",
-        model_name="NotificationDeliveryEvent",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Provider delivery event history — not tenant-scoped.",
-    ),
-    # -- Abstract base models --
-    # -- Test-only models --
-    TenantTableEntry(
-        app_label="quickscale_orgs",
-        model_name="ConcreteTenantResource",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Test-only model defined in test_models.py for "
-        "TenantManager behaviour tests; not a real tenant table.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_orgs",
-        model_name="ForwardFKChild",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Test-only model defined in test_models.py for "
-        "AF2 Phase 1 forward-FK traversal regression tests; "
-        "not a real tenant table.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_orgs",
-        model_name="TenantExcludedModel",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Test-only model defined in test_management_commands.py for "
-        "SA15.1 tenant_excluded marker classification tests; "
-        "not a real tenant table.",
-    ),
-    # ====== PENDING REMEDIATION ==========================================
-    # Known child/detail tables that lack direct ``organization_id``
-    # and FORCE-RLS.  Tracked with equality-footprint metadata naming
-    # the parent seam.  These will be promoted to ENROLLED in a later
-    # AF1 phase after the schema migration lands.
-    # ======================================================================
-]
-
-#: Convenience lookup: ``(app_label, model_name) -> TenantTableEntry``.
-REGISTRY_LOOKUP: dict[tuple[str, str], TenantTableEntry] = {
-    (entry.app_label, entry.model_name): entry for entry in TENANT_TABLE_REGISTRY
-}
 
 
 # ---------------------------------------------------------------------------
@@ -1228,8 +893,8 @@ ORG_ID_COLUMN: str = "organization_id"
 QS_APP_PREFIX: str = "quickscale_"
 
 #: Known third-party app-label prefixes excluded from project-app detection.
-#: Models from these apps are not expected to appear in
-#: ``TENANT_TABLE_REGISTRY``.  Users may extend this tuple in their own
+#: Models from these apps are not expected to appear in the shipped-module
+#: tenant-table registry.  Users may extend this tuple in their own
 #: project to include additional third-party app labels.
 THIRD_PARTY_APP_PREFIXES: tuple[str, ...] = (
     "allauth",
@@ -1432,9 +1097,8 @@ def _get_m2m_through_classification(model: type[models.Model]) -> bool:
     """Check if an implicit M2M through model is classifiable via its relations.
 
     This compatibility-named helper now uses the marker-only relation path.
-    It deliberately does not consult ``REGISTRY_LOOKUP`` or
-    ``TENANT_TABLE_REGISTRY``; project-owned implicit through models inherit
-    classification only from marker-classified endpoints.
+    It consults no registry oracle; project-owned implicit through models
+    inherit classification only from marker-classified endpoints.
 
     Args:
         model: A Django ``Model`` subclass (expected to be an implicit
@@ -1457,9 +1121,9 @@ def is_classified_in_registry(model: type[models.Model]) -> bool:
     * It is an auto-created implicit ManyToMany through model whose
       project-owned endpoints are marker-classified (SA15.1 — Option A).
 
-    The historical function name is retained for compatibility. The literal
-    ``TENANT_TABLE_REGISTRY`` is a shipped-module parity oracle only and is
-    never consulted for runtime classification.
+    The historical function name is retained for compatibility. The
+    shipped-module parity registry lives in test code and is never consulted
+    for runtime classification.
 
     Args:
         model: A Django ``Model`` subclass.
@@ -1478,8 +1142,8 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
     ``tenant_excluded``.
 
     A model is unclassified when it has no marker-derived tenant contract
-    (SA15.1). The shipped literal registry is deliberately not part of this
-    runtime decision.
+    (SA15.1). The test-owned shipped-module registry is deliberately not part
+    of this runtime decision.
     Auto-created implicit ManyToMany through models whose source and
     target models are both classified are considered classified via
     relation inference (SA15.1 — Option A).
@@ -1497,8 +1161,8 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
 # ---------------------------------------------------------------------------
 # This function produces a human-readable tenant-table registry from model
 # markers, replacing the hand-maintained HTML count assertions that were
-# previously embedded in the technical docs. The shipped-module literal
-# ``TENANT_TABLE_REGISTRY`` remains only as a parity-oracle target.
+# previously embedded in the technical docs. The test-owned shipped-module
+# registry remains only a parity-oracle target.
 #
 # A model's status is determined as follows:
 #   1. ``tenant_excluded`` marker → ``EXCLUDED_REVIEWED``
@@ -1507,10 +1171,9 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
 #   4. Otherwise → not included in the marker-driven overview.
 #
 # The derived overview uses ``_is_classified_by_marker_only`` — a marker-only
-# classification path that does NOT consult ``REGISTRY_LOOKUP`` or
-# ``TENANT_TABLE_REGISTRY``.  This ensures the derived view is purely
-# marker-driven: every model must be detectable by markers alone, with
-# no registry fallback at any layer (SA15.3 — follow-up).
+# classification path that consults no registry oracle.  This ensures the
+# derived view is purely marker-driven: every model must be detectable by
+# markers alone, with no registry fallback at any layer (SA15.3 — follow-up).
 # ---------------------------------------------------------------------------
 
 
@@ -1522,8 +1185,8 @@ def _get_m2m_through_classification_marker_only(
     This implementation is shared by the compatibility-named
     :func:`_get_m2m_through_classification` wrapper, runtime classification,
     and :func:`get_derived_registry_overview`. It recursively uses
-    :func:`_is_classified_by_marker_only`, so no path consults
-    ``REGISTRY_LOOKUP``.
+    :func:`_is_classified_by_marker_only`, so no path consults a registry
+    oracle.
 
     Only **project-owned** endpoints must be marker-classified.
     Non-project endpoints (Django contrib models, third-party packages)
@@ -1531,7 +1194,7 @@ def _get_m2m_through_classification_marker_only(
     tenant-registry contract and do not need markers.  This ensures
     auto-created through tables like ``quickscale_auth.User_groups``
     (project-owned ``User`` with ``tenant_excluded`` → contrib ``Group``)
-    are classifiable by the marker-only path without ``REGISTRY_LOOKUP``.
+    are classifiable by the marker-only path without a registry lookup.
 
     Args:
         model: A Django ``Model`` subclass (expected to be an implicit
@@ -1568,7 +1231,7 @@ def _get_m2m_through_classification_marker_only(
 def _is_classified_by_marker_only(model: type[models.Model]) -> bool:
     """Return ``True`` if *model* is classifiable via markers only.
 
-    This function does not consult ``REGISTRY_LOOKUP``. It is the
+    This function does not consult a registry oracle. It is the
     marker-based implementation used by :func:`is_classified_in_registry`
     and :func:`get_derived_registry_overview`:
 
@@ -1582,7 +1245,7 @@ def _is_classified_by_marker_only(model: type[models.Model]) -> bool:
 
     Returns:
         ``True`` if the model is classifiable using markers alone,
-        without consulting ``TENANT_TABLE_REGISTRY``.
+        without consulting a registry oracle.
     """
     if has_tenant_excluded_marker(model):
         return True
@@ -1605,11 +1268,11 @@ def get_derived_registry_overview() -> list[TenantTableEntry]:
     * :func:`is_tenant_model` for ENROLLED detection via ``TenantModel``
       inheritance.
 
-    This is the **derived** alternative to the shipped-module
-    ``TENANT_TABLE_REGISTRY`` literal. A cross-check test asserts that the
-    two views agree for installed shipped models; project-owned models are
-    intentionally outside that literal parity set. Every model must be
-    detectable by markers alone, with no registry fallback.
+    This is the **derived** alternative to the test-owned shipped-module
+    parity registry. A cross-check test asserts that the two views agree for
+    installed shipped models; project-owned models are intentionally outside
+    that parity set. Every model must be detectable by markers alone, with no
+    registry fallback.
 
     Returns:
         A list of ``TenantTableEntry`` objects sorted by
@@ -1653,7 +1316,7 @@ def get_derived_registry_overview() -> list[TenantTableEntry]:
             )
         else:
             # Models without a marker-derived contract are intentionally
-            # absent. In particular, the shipped literal cannot enroll a
+            # absent. In particular, the test-owned registry cannot enroll a
             # project-owned model and is never a runtime fallback.
             continue
 
@@ -1673,9 +1336,9 @@ def get_derived_registry_overview() -> list[TenantTableEntry]:
 #
 # These helpers are imported by ``check_tenant_isolation`` management command
 # (SA1.3), the Django system checks in ``checks.py`` (SA1.3), and the
-# conformance gate tests.  They intentionally do **not** depend on
-# ``TENANT_TABLE_REGISTRY``, which covers only the ``quickscale_modules_*``
-# prefix; SA1.3 detection is app-label-agnostic.
+# conformance gate tests.  They intentionally do **not** depend on the
+# test-owned shipped-module registry, which covers only the
+# ``quickscale_modules_*`` prefix; SA1.3 detection is app-label-agnostic.
 # ---------------------------------------------------------------------------
 
 

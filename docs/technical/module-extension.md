@@ -68,7 +68,7 @@ Every module does **not** need to implement every surface.
 ### Project-Owned Tenant Models
 
 A generated project may add tenant-scoped models in its own Django app without
-editing a vendored QuickScale module or adding an entry to
+editing a vendored QuickScale module or adding an entry to the test-owned
 `TENANT_TABLE_REGISTRY`. Runtime classification is marker-derived: a concrete
 model is enrolled when it inherits the tenant contract (`TenantModel` directly
 or through a module's abstract base), while an explicit reason string on
@@ -105,8 +105,8 @@ policy metadata is absent or ambiguous.
 The resulting project-owned model participates in the same W003/W004 system
 check and `check_tenant_isolation` command as shipped module models. Their
 human-readable output and JSON results should include the model. The shipped
-literal registry remains a CI parity oracle for shipped modules only; it is not
-an enrollment API for project-owned extensions.
+module registry is a test-owned CI parity oracle for shipped modules only; it
+is not an enrollment API for project-owned extensions.
 
 A project-owned model also classifies each of its non-relational `*_id` fields
 as provider-backed or not, from its own code:
