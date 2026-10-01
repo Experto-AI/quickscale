@@ -14,9 +14,9 @@ from quickscale_core.manifest.settings_schema import load_settings_schema
 SECRET_KEY = "test-secret-key-for-notifications-module"
 
 # The rule 35 startup checks run while Django populates the app registry,
-# before the test conftest loads, so the env-var names must be populated here.
-os.environ.setdefault("RESEND_API_KEY", "test-resend-api-key")
-os.environ.setdefault("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET", "test-webhook-secret")
+# before the test conftest loads, so the projected secret settings must be
+# populated here.  Apply renders these from the environment; the suite sets
+# them directly, as storage's suite does.
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
@@ -133,6 +133,8 @@ QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR = "RESEND_API_KEY"
 QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR = (
     "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
 )
+QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY = "test-resend-api-key"
+QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "test-webhook-secret"
 QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS = ["quickscale", "transactional"]
 QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
     "quickscale",

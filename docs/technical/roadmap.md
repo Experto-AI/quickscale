@@ -176,9 +176,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `.env.example` use only the new names.
     **Landed:** every renamed option key is refused by name, and each renamed module's startup
     check refuses its retired setting names with the replacement named.
-  - *Secrets.* **Open:** every secret reaches module code as a setting `apply` renders from its
-    `_ENV_VAR` option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
-    notifications' `os.getenv` reads and in-code default variable names go (rule 35).
+  - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
+    option (core's `__QS_ENV__` projection, as storage does). **Landed:** analytics and
+    notifications project `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY`, `…_HOST_OVERRIDE`,
+    `QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY`, and `…_WEBHOOK_SECRET` through `__QS_ENV__`, their
+    services read those settings, their checks report a missing projected setting, and
+    notifications' in-code env-var defaults are gone. **Open:** billing's `os.getenv` reads
+    (rule 35).
 
   Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)
   disabled, admin kept; `apply` refuses to switch off a module another installed module lists in

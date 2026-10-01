@@ -32,6 +32,15 @@ _RUNTIME_SETTINGS = (
     "QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS",
 )
 
+#: The projected secret settings apply writes from the `_ENV_VAR` options
+#: (rule 35).  They are not manifest options, so the generic settings check
+#: does not report them; a missing one is reported here instead of raising
+#: while resolving.
+_PROJECTED_SECRETS = (
+    "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY",
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+)
+
 
 def check_vendor_secrets(
     app_configs: object = None,
@@ -50,6 +59,18 @@ def check_vendor_secrets(
     snapshot = NotificationSettingsSnapshot.from_settings()
     if not snapshot.enabled:
         return []
+
+    missing_projected = [
+        name for name in _PROJECTED_SECRETS if not hasattr(settings, name)
+    ]
+    if missing_projected:
+        return [
+            Error(
+                f"{', '.join(missing_projected)} not set. "
+                "Run `quickscale apply` to regenerate the managed settings.",
+                id="quickscale_notifications.E001",
+            )
+        ]
 
     messages: list[CheckMessage] = []
     if not snapshot.resolve_webhook_secret():

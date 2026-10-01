@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import time
 from email.utils import formataddr
 from typing import Any, Protocol, cast
@@ -181,22 +180,23 @@ class NotificationSettingsSnapshot:
         }
 
     def resolve_resend_api_key(self) -> str:
-        """Resolve the live Resend API key from the configured environment variable.
+        """Resolve the live Resend API key from the applied secret setting (rule 35).
 
-        Rule 3: the configured name is the only name.  A blank name resolves
-        to no key, and the startup check refuses the enabled module rather
-        than this method substituting a runtime fallback.
+        Rule 3: the applied setting is the only source.  An unset or empty
+        setting resolves to no key, and the startup check refuses the enabled
+        module rather than this method substituting a runtime fallback.
         """
-        return os.getenv(self.resend_api_key_env_var.strip(), "").strip()
+        return str(settings.QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY).strip()
 
     def resolve_webhook_secret(self) -> str:
-        """Resolve the shared webhook signing secret from the configured environment variable.
+        """Resolve the shared webhook signing secret from the applied setting (rule 35).
 
-        Rule 3: the configured name is the only name.  A blank name resolves
-        to no secret, and the startup check refuses the enabled module rather
-        than this method substituting a runtime fallback.
+        Rule 3: the applied setting is the only source.  An unset or empty
+        setting resolves to no secret, and the startup check refuses the
+        enabled module rather than this method substituting a runtime
+        fallback.
         """
-        return os.getenv(self.webhook_secret_env_var.strip(), "").strip()
+        return str(settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET).strip()
 
     def live_delivery_enabled(self) -> bool:
         """Return whether the active email backend is the Anymail Resend backend."""
