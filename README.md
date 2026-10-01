@@ -48,13 +48,14 @@ project's home route, in saas mode after it.
 
 ### Permissions
 
-`permissions.py` publishes the role guards used by org-scoped views and APIs:
+`permissions.py` publishes the role guards and the request-organization resolver used by
+org-scoped views and APIs:
 
 - `user_has_org_role(user, organization, min_role)`.
 - `require_org_role(min_role)`, a decorator for function views.
 - `OrgRoleMixin`, a class-based-view mixin with a configurable `min_org_role`.
-- `require_org_feature(feature_key)`, which returns `402` when the organization's active
-  billing plan lacks the feature key.
+- `resolve_request_org(request, route_kwargs)`, which returns the request's organization from
+  the active context or the routed `org_slug`.
 
 ### Tenancy helpers
 

@@ -230,8 +230,11 @@ def test_account_deletion_reference_discovery_query_count_ignores_tenant_count()
         )
 
     view = AccountDeleteView()
+    handled_app_labels = frozenset()
     with CaptureQueriesContext(connection) as baseline_queries:
-        baseline_ids = view._tenant_user_reference_organization_ids(user)
+        baseline_ids = view._tenant_user_reference_organization_ids(
+            user, handled_app_labels
+        )
 
     Organization.objects.bulk_create(
         [
@@ -243,7 +246,9 @@ def test_account_deletion_reference_discovery_query_count_ignores_tenant_count()
         ]
     )
     with CaptureQueriesContext(connection) as expanded_queries:
-        expanded_ids = view._tenant_user_reference_organization_ids(user)
+        expanded_ids = view._tenant_user_reference_organization_ids(
+            user, handled_app_labels
+        )
 
     assert baseline_ids == expanded_ids == {referenced_org.pk}
     assert len(expanded_queries) == len(baseline_queries)
