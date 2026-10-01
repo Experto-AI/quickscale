@@ -10,6 +10,6 @@ urlpatterns = [
     path(
         "",
         AnalyticsDashboardView.as_view(),
-        name="analytics-dashboard",
+        name="dashboard",
     ),
 ]
