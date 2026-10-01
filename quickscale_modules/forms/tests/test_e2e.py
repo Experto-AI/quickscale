@@ -295,7 +295,7 @@ class TestContactFormE2EWorkflow:
         }
         scope_rates = {"quickscale_forms_submit": "2/minute"}
 
-        # The forms wiring contributes the rate from FORMS_RATE_LIMIT; DRF
+        # The forms wiring contributes the rate from QUICKSCALE_FORMS_RATE_LIMIT; DRF
         # binds DEFAULT_THROTTLE_RATES onto the throttle class at import time,
         # so the test applies both bindings itself.  A wholesale REST_FRAMEWORK
         # override replaces the module settings' exception handler, so the

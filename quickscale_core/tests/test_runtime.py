@@ -93,6 +93,7 @@ class TestRuntimeAllExport:
             "register_backup_persistence",
             "resolve_admin_uploaded_restore_artifact",
             "save_default_policy",
+            "settings_policy_snapshot",
         }
         assert persistence_symbols.issubset(runtime.__all__), (
             f"Missing persistence symbols: {persistence_symbols - set(runtime.__all__)}"
@@ -216,6 +217,7 @@ class TestRuntimeAllExport:
             "save_artifact",
             "save_default_policy",
             "save_snapshot",
+            "settings_policy_snapshot",
             "set_backup_snapshot_rollback_pin",
             "set_rollback_pin",
             "social_provider_supports_embeds",
@@ -362,6 +364,7 @@ class TestRuntimeSymbolTypes:
             "register_backup_persistence",
             "resolve_admin_uploaded_restore_artifact",
             "save_default_policy",
+            "settings_policy_snapshot",
         ):
             symbol = getattr(runtime, name, None)
             assert symbol is not None, f"runtime.{name} is None"
@@ -412,6 +415,7 @@ class TestRuntimeImportable:
             "resolve_admin_uploaded_restore_artifact",
             "resolve_manifest_module_options",
             "save_default_policy",
+            "settings_policy_snapshot",
             "set_rollback_pin",
             "social_provider_supports_embeds",
             "sync_media",
@@ -621,6 +625,7 @@ class TestRuntimeDrEagerSurface:
             "load_default_policy",
             "register_backup_persistence",
             "save_default_policy",
+            "settings_policy_snapshot",
         ):
             assert hasattr(runtime_dr, name), (
                 f"runtime_dr.{name} is not a module attribute"
@@ -721,6 +726,7 @@ class TestCallerParityPassEagerSurface:
             ("load_default_policy", "quickscale_core.dr_engine.persistence"),
             ("register_backup_persistence", "quickscale_core.dr_engine.persistence"),
             ("save_default_policy", "quickscale_core.dr_engine.persistence"),
+            ("settings_policy_snapshot", "quickscale_core.dr_engine.persistence"),
         ],
     )
     def test_canonical_identity_dr(self, name: str, canonical_module: str) -> None:
@@ -1116,7 +1122,6 @@ class TestCallerParityPassEagerSurface:
             "_build_pg_dump_command",
             "_build_pg_restore_command",
             "_build_policy_snapshot_from_model",
-            "_build_policy_snapshot_from_settings",
             "_build_release_metadata",
             "_build_snapshot_child_descriptor",
             "_build_snapshot_full_backup_contract",

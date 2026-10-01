@@ -84,7 +84,7 @@ class TestFormModel:
             )
         assert form.data_retention_days == 365
 
-    @override_settings(FORMS_DATA_RETENTION_DAYS=730)
+    @override_settings(QUICKSCALE_FORMS_RETENTION_DAYS=730)
     def test_form_data_retention_days_default_comes_from_setting(self, _system_org):
         """New forms should inherit the settings-backed retention default."""
         from quickscale_modules_orgs.current_org import org_scope
@@ -98,7 +98,7 @@ class TestFormModel:
 
         assert form.data_retention_days == 730
 
-    @override_settings(FORMS_DATA_RETENTION_DAYS=730)
+    @override_settings(QUICKSCALE_FORMS_RETENTION_DAYS=730)
     def test_form_explicit_data_retention_days_preserves_per_row_value(
         self, _system_org
     ):

@@ -1142,8 +1142,8 @@ class TestUploadMediaApi:
     ):
         """Test upload API stores the file and returns stable metadata."""
         settings.MEDIA_ROOT = str(tmp_path)
-        settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
-        settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
+        settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH = 1600
+        settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT = 900
         _login_with_org(client, staff_user)
 
         with without_storage_services(storage_missing):
@@ -1177,8 +1177,8 @@ class TestUploadMediaApi:
         storage_missing,
     ):
         """Upload API should apply the same width ceiling in both validation paths."""
-        settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
-        settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
+        settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH = 1600
+        settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT = 900
         _login_with_org(client, staff_user)
 
         with without_storage_services(storage_missing):
@@ -1201,8 +1201,8 @@ class TestUploadMediaApi:
         storage_missing,
     ):
         """Upload API should apply the same height ceiling in both validation paths."""
-        settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
-        settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
+        settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH = 1600
+        settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT = 900
         _login_with_org(client, staff_user)
 
         with without_storage_services(storage_missing):

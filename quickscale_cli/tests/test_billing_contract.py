@@ -30,7 +30,7 @@ def test_resolved_billing_config_normalizes_and_is_stable() -> None:
             "publishable_key_env_var": "  OPS_STRIPE_PUBLISHABLE_KEY  ",
             "secret_key_env_var": " OPS_STRIPE_SECRET_KEY ",
             "webhook_secret_env_var": "  OPS_BILLING_WEBHOOK_SECRET ",
-            "billing_currency": " EUR ",
+            "currency": " EUR ",
         },
     )
 
@@ -39,7 +39,7 @@ def test_resolved_billing_config_normalizes_and_is_stable() -> None:
         "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
         "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
         "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
-        "billing_currency": "eur",
+        "currency": "eur",
         "api_rate_limit": "30/hour",
     }
     assert resolve_manifest_module_options("billing", resolved) == resolved
@@ -60,10 +60,10 @@ def test_manifest_validation_rejects_invalid_env_var_names() -> None:
 def test_manifest_validation_rejects_invalid_currency() -> None:
     """Unsupported billing currency codes must fail validation."""
     manifest = load_manifest_from_path(MODULE_MANIFEST_PATH)
-    issues = validate_module_options(manifest, {"billing_currency": "credits"})
+    issues = validate_module_options(manifest, {"currency": "credits"})
 
     assert len(issues) == 1
-    assert "modules.billing.billing_currency" in issues[0]
+    assert "modules.billing.currency" in issues[0]
     assert "must be one of" in issues[0]
 
 
@@ -86,7 +86,7 @@ def test_apply_next_steps_name_the_required_stripe_endpoint_version(
                 "publishable_key_env_var": "STRIPE_PUBLISHABLE_KEY",
                 "secret_key_env_var": "STRIPE_SECRET_KEY",
                 "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
-                "billing_currency": "usd",
+                "currency": "usd",
             }
         )
     }

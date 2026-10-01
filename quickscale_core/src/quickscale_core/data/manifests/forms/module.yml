@@ -10,10 +10,10 @@ config:
   # Mutable options - can be changed after embed via quickscale apply
   # These update Django settings.py automatically
   mutable:
-    forms_per_page:
+    submissions_per_page:
       type: integer
       default: 25
-      django_setting: FORMS_PER_PAGE
+      django_setting: QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE
       description: "Number of submissions shown per page in admin."
       validation:
         min: 1
@@ -21,30 +21,30 @@ config:
     spam_protection_enabled:
       type: boolean
       default: true
-      django_setting: FORMS_SPAM_PROTECTION
+      django_setting: QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED
       description: "Enable honeypot spam protection globally for forms that also keep their per-form flag enabled."
       validation: {}
 
     rate_limit:
       type: string
       default: "5/hour"
-      django_setting: FORMS_RATE_LIMIT
+      django_setting: QUICKSCALE_FORMS_RATE_LIMIT
       description: "Throttle rate for form submissions (per IP). Format: '<count>/<period>'."
       validation:
         pattern: ^\d+/(second|minute|hour|day)$
 
-    data_retention_days:
+    retention_days:
       type: integer
       default: 365
-      django_setting: FORMS_DATA_RETENTION_DAYS
+      django_setting: QUICKSCALE_FORMS_RETENTION_DAYS
       description: "Default days assigned to newly created forms before anonymization (0 = keep forever); existing forms keep their stored value."
       validation:
         min: 0
 
-    submissions_api_enabled:
+    api_enabled:
       type: boolean
       default: true
-      django_setting: FORMS_SUBMISSIONS_API
+      django_setting: QUICKSCALE_FORMS_API_ENABLED
       description: "Enable REST API endpoints for admin submission management."
       validation: {}
 
@@ -55,6 +55,18 @@ config:
 dependencies:
   - djangorestframework>=3.17.2
   - django-filter>=26.1
+
+# Retired option keys are refused by name with the message declared here.
+retired_options:
+  forms_per_page: >-
+    Legacy config key 'forms_per_page' is no longer supported. Use
+    'submissions_per_page' instead.
+  data_retention_days: >-
+    Legacy config key 'data_retention_days' is no longer supported. Use
+    'retention_days' instead.
+  submissions_api_enabled: >-
+    Legacy config key 'submissions_api_enabled' is no longer supported. Use
+    'api_enabled' instead.
 
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)

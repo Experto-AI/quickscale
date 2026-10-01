@@ -23,7 +23,7 @@ from quickscale_core.manifest.option_validation import (
 from quickscale_core.schema.config_schema import ConfigValidationError, validate_config
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
-    "enable_api": True,
+    "api_enabled": True,
     "deals_per_page": 25,
     "contacts_per_page": 50,
 }
@@ -31,6 +31,10 @@ _EXPECTED_DEFAULTS: dict[str, object] = {
 _RETIRED_MESSAGE = (
     "Legacy config key 'default_pipeline_stages' is no longer supported. "
     "Remove it from the CRM module options."
+)
+
+_RETIRED_ENABLE_API_MESSAGE = (
+    "Legacy config key 'enable_api' is no longer supported. Use 'api_enabled' instead."
 )
 
 
@@ -54,18 +58,22 @@ class TestCrmManifestContract:
 
     def test_django_settings_are_declared(self) -> None:
         manifest = _manifest()
-        assert manifest.get_option("enable_api").django_setting == "CRM_ENABLE_API"
         assert (
-            manifest.get_option("deals_per_page").django_setting == "CRM_DEALS_PER_PAGE"
+            manifest.get_option("api_enabled").django_setting
+            == "QUICKSCALE_CRM_API_ENABLED"
+        )
+        assert (
+            manifest.get_option("deals_per_page").django_setting
+            == "QUICKSCALE_CRM_DEALS_PER_PAGE"
         )
         assert (
             manifest.get_option("contacts_per_page").django_setting
-            == "CRM_CONTACTS_PER_PAGE"
+            == "QUICKSCALE_CRM_CONTACTS_PER_PAGE"
         )
 
     def test_manifest_declares_the_option_types(self) -> None:
         manifest = _manifest()
-        assert manifest.get_option("enable_api").option_type == "boolean"
+        assert manifest.get_option("api_enabled").option_type == "boolean"
         assert manifest.get_option("deals_per_page").option_type == "integer"
         assert manifest.get_option("contacts_per_page").option_type == "integer"
 
@@ -89,7 +97,7 @@ class TestCrmValidation:
             validate_module_options(
                 _manifest(),
                 {
-                    "enable_api": False,
+                    "api_enabled": False,
                     "deals_per_page": 10,
                     "contacts_per_page": 100,
                 },
@@ -104,7 +112,7 @@ class TestCrmValidation:
         )
         assert any(
             issue.option_name == "deals_per_page"
-            and "CRM_DEALS_PER_PAGE" in issue.message
+            and "QUICKSCALE_CRM_DEALS_PER_PAGE" in issue.message
             for issue in issues
         )
 
@@ -115,18 +123,18 @@ class TestCrmValidation:
         )
         assert any(
             issue.option_name == "contacts_per_page"
-            and "CRM_CONTACTS_PER_PAGE" in issue.message
+            and "QUICKSCALE_CRM_CONTACTS_PER_PAGE" in issue.message
             for issue in issues
         )
 
     def test_non_boolean_enable_api_is_refused(self) -> None:
         issues = collect_option_validation_issues(
             _manifest(),
-            {"enable_api": "yes"},
-            supplied={"enable_api": "yes"},
+            {"api_enabled": "yes"},
+            supplied={"api_enabled": "yes"},
         )
         assert any(
-            issue.option_name == "enable_api" and "boolean" in issue.message
+            issue.option_name == "api_enabled" and "boolean" in issue.message
             for issue in issues
         )
 
@@ -141,8 +149,40 @@ class TestCrmRetiredOption:
 
     def test_manifest_declares_the_retired_key(self) -> None:
         assert _manifest().retired_options == {
-            "default_pipeline_stages": _RETIRED_MESSAGE
+            "default_pipeline_stages": _RETIRED_MESSAGE,
+            "enable_api": _RETIRED_ENABLE_API_MESSAGE,
         }
+
+    def test_engine_reports_the_retired_enable_api_key(self) -> None:
+        issues = collect_option_validation_issues(_manifest(), {"enable_api": True})
+        assert [(issue.option_name, issue.message) for issue in issues] == [
+            ("enable_api", _RETIRED_ENABLE_API_MESSAGE)
+        ]
+
+    def test_config_load_refuses_the_retired_enable_api_key(self) -> None:
+        yaml_content = (
+            'version: "1"\n'
+            "project:\n"
+            "  slug: demo\n"
+            "  package: demo\n"
+            "modules:\n"
+            "  crm:\n"
+            "    enable_api: true\n"
+        )
+
+        with pytest.raises(ConfigValidationError) as excinfo:
+            validate_config(yaml_content)
+
+        assert "enable_api" in str(excinfo.value)
+        assert "api_enabled" in str(excinfo.value)
+
+    def test_state_sanitization_refuses_the_retired_enable_api_key(self) -> None:
+        from quickscale_core.contracts.module_options import sanitize_module_options
+
+        with pytest.raises(ConfigValidationError) as excinfo:
+            sanitize_module_options("crm", {"enable_api": True})
+
+        assert _RETIRED_ENABLE_API_MESSAGE in str(excinfo.value)
 
     def test_engine_reports_the_retired_key_with_the_declared_message(self) -> None:
         issues = collect_option_validation_issues(
@@ -202,7 +242,7 @@ class TestCrmConfigurator:
         )
         assert config["deals_per_page"] == 10
         assert config["contacts_per_page"] == 100
-        assert config["enable_api"] is True
+        assert config["api_enabled"] is True
 
     def test_undeclared_existing_keys_are_dropped(self) -> None:
         entry = MODULE_CONFIGURATOR_REGISTRY["crm"]
@@ -234,7 +274,7 @@ class TestCrmConfigurator:
         config = entry.configure(non_interactive=False)
 
         assert config == {
-            "enable_api": False,
+            "api_enabled": False,
             "deals_per_page": 30,
             "contacts_per_page": 100,
         }

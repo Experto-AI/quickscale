@@ -61,15 +61,15 @@ class TestOptionValidationEngine:
     def test_wrong_type_names_the_setting(self) -> None:
         manifest = _manifest(
             _option(
-                "listings_per_page",
+                "per_page",
                 option_type="integer",
                 default=12,
-                setting="LISTINGS_PER_PAGE",
+                setting="QUICKSCALE_LISTINGS_PER_PAGE",
             )
         )
-        issues = validate_module_options(manifest, {"listings_per_page": "twelve"})
+        issues = validate_module_options(manifest, {"per_page": "twelve"})
         assert issues == [
-            "LISTINGS_PER_PAGE (modules.demo.listings_per_page) must be an integer"
+            "QUICKSCALE_LISTINGS_PER_PAGE (modules.demo.per_page) must be an integer"
         ]
 
     def test_boolean_is_not_an_integer(self) -> None:
@@ -721,10 +721,10 @@ class TestShippedManifestConformance:
         manifest = load_manifest_from_path(
             repo_root / "quickscale_modules" / "listings" / "module.yml"
         )
-        option = manifest.get_option("listings_per_page")
+        option = manifest.get_option("per_page")
         assert option is not None
         assert option.validation == {"min": 1}
-        derivation = manifest.option_derivations.get("listings_per_page", {})
+        derivation = manifest.option_derivations.get("per_page", {})
         assert derivation.get("validation_rules", []) == []
         assert derivation.get("derived_settings", []) == []
 
@@ -746,15 +746,13 @@ class TestPlanApplyEnforcement:
 
     def test_wrong_type_fails_with_the_setting_name(self) -> None:
         with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(
-                self._config('  listings:\n    listings_per_page: "twelve"\n')
-            )
-        assert "LISTINGS_PER_PAGE" in str(exc_info.value)
+            validate_config(self._config('  listings:\n    per_page: "twelve"\n'))
+        assert "QUICKSCALE_LISTINGS_PER_PAGE" in str(exc_info.value)
 
     def test_violated_range_fails_with_the_setting_name(self) -> None:
         with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(self._config("  listings:\n    listings_per_page: 0\n"))
-        assert "LISTINGS_PER_PAGE" in str(exc_info.value)
+            validate_config(self._config("  listings:\n    per_page: 0\n"))
+        assert "QUICKSCALE_LISTINGS_PER_PAGE" in str(exc_info.value)
 
     def test_violated_required_when_fails_with_the_setting_name(self) -> None:
         body = (
@@ -776,10 +774,8 @@ class TestPlanApplyEnforcement:
         assert "no longer supported" in str(exc_info.value)
 
     def test_valid_options_pass(self) -> None:
-        config = validate_config(
-            self._config("  listings:\n    listings_per_page: 24\n")
-        )
-        assert config.modules["listings"].options["listings_per_page"] == 24
+        config = validate_config(self._config("  listings:\n    per_page: 24\n"))
+        assert config.modules["listings"].options["per_page"] == 24
 
     def test_null_value_fails_with_the_setting_name(self) -> None:
         with pytest.raises(ConfigValidationError) as exc_info:

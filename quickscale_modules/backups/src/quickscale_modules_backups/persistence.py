@@ -405,11 +405,11 @@ class _BackupPolicyPersistenceProvider:
         """Load the default policy snapshot from the database or settings.
 
         Returns a ``BackupPolicySnapshot`` built from the default policy row.
-        Falls back to Django settings defaults when no row exists.
+        Falls back to backups' own declared settings when no row exists.
         """
+        from quickscale_core.runtime import _build_policy_snapshot_from_model
         from quickscale_modules_backups.models import BackupPolicy
-        from quickscale_core.runtime import (
-            _build_policy_snapshot_from_model,
+        from quickscale_modules_backups.services import (
             _build_policy_snapshot_from_settings,
         )
 
@@ -417,6 +417,18 @@ class _BackupPolicyPersistenceProvider:
         if policy is None:
             return _build_policy_snapshot_from_settings()
         return _build_policy_snapshot_from_model(policy)
+
+    def settings_policy_snapshot(self) -> Any:
+        """Return the policy snapshot built from backups' own settings.
+
+        The DR engine asks for this through the registered persistence seam,
+        so it never names a backups setting or writes a backups default.
+        """
+        from quickscale_modules_backups.services import (
+            _build_policy_snapshot_from_settings,
+        )
+
+        return _build_policy_snapshot_from_settings()
 
     def save_default_policy(self, policy: Any) -> None:
         """Persist a policy snapshot to the default ``BackupPolicy`` row.
@@ -454,7 +466,7 @@ class _BackupPolicyPersistenceProvider:
         Returns the persisted ``BackupPolicy`` row.
         """
         from quickscale_modules_backups.models import BackupPolicy
-        from quickscale_core.runtime import (
+        from quickscale_modules_backups.services import (
             _build_policy_snapshot_from_settings,
         )
 

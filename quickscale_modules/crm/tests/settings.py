@@ -84,9 +84,9 @@ QUICKSCALE_MODE = "saas"
 LOGIN_URL = "/accounts/login/"
 
 # Required CRM settings (fail-hard: no silent defaults)
-CRM_ENABLE_API = True
-CRM_DEALS_PER_PAGE = 25
-CRM_CONTACTS_PER_PAGE = 50
+QUICKSCALE_CRM_API_ENABLED = True
+QUICKSCALE_CRM_DEALS_PER_PAGE = 25
+QUICKSCALE_CRM_CONTACTS_PER_PAGE = 50
 
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.

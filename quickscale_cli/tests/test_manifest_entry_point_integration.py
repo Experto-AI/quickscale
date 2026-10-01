@@ -381,7 +381,7 @@ class TestBillingManifestEntryPoint:
         "publishable_key_env_var": "STRIPE_PUBLISHABLE_KEY",
         "secret_key_env_var": "STRIPE_SECRET_KEY",
         "webhook_secret_env_var": "QUICKSCALE_BILLING_WEBHOOK_SECRET",
-        "billing_currency": "usd",
+        "currency": "usd",
     }
 
     def test_returns_module_wiring_spec(self) -> None:
@@ -405,7 +405,7 @@ class TestBillingManifestEntryPoint:
         # (Module Conventions rule 7).
         assert spec.url_includes == (("billing/", "quickscale_modules_billing.urls"),)
 
-    def test_billing_currency_setting(self) -> None:
+    def test_currency_setting(self) -> None:
         spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
         assert spec.settings.get("QUICKSCALE_BILLING_CURRENCY") == "usd"
 
@@ -448,7 +448,7 @@ class TestBlogManifestEntryPoint:
 
     _BLOG_OPTIONS = {
         "posts_per_page": 10,
-        "enable_rss": True,
+        "rss_enabled": True,
         "api_rate_limit": "5/hour",
     }
 
@@ -474,11 +474,11 @@ class TestBlogManifestEntryPoint:
 
     def test_posts_per_page_setting(self) -> None:
         spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
-        assert spec.settings.get("BLOG_POSTS_PER_PAGE") == 10
+        assert spec.settings.get("QUICKSCALE_BLOG_POSTS_PER_PAGE") == 10
 
     def test_enable_rss_setting(self) -> None:
         spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
-        assert spec.settings.get("BLOG_ENABLE_RSS") is True
+        assert spec.settings.get("QUICKSCALE_BLOG_RSS_ENABLED") is True
 
     def test_markdownx_settings(self) -> None:
         """Blog spec includes static markdownx settings."""
@@ -495,9 +495,9 @@ class TestBlogManifestEntryPoint:
     def test_all_expected_settings_present(self) -> None:
         spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
         expected_keys = {
-            "BLOG_POSTS_PER_PAGE",
-            "BLOG_ENABLE_RSS",
-            "BLOG_API_RATE_LIMIT",
+            "QUICKSCALE_BLOG_POSTS_PER_PAGE",
+            "QUICKSCALE_BLOG_RSS_ENABLED",
+            "QUICKSCALE_BLOG_API_RATE_LIMIT",
             "MARKDOWNX_MARKDOWN_EXTENSIONS",
             "MARKDOWNX_MEDIA_PATH",
         }
@@ -536,7 +536,7 @@ class TestListingsManifestEntryPoint:
 
     def test_listings_per_page_default(self) -> None:
         spec = build_manifest_wiring_spec("listings", None)
-        assert spec.settings.get("LISTINGS_PER_PAGE") == 12
+        assert spec.settings.get("QUICKSCALE_LISTINGS_PER_PAGE") == 12
 
     def test_markdownx_settings(self) -> None:
         """Listings spec includes static markdownx extensions."""
@@ -544,8 +544,18 @@ class TestListingsManifestEntryPoint:
         assert "MARKDOWNX_MARKDOWN_EXTENSIONS" in spec.settings
 
     def test_custom_listings_per_page(self) -> None:
-        spec = build_manifest_wiring_spec("listings", {"listings_per_page": 24})
-        assert spec.settings.get("LISTINGS_PER_PAGE") == 24
+        spec = build_manifest_wiring_spec("listings", {"per_page": 24})
+        assert spec.settings.get("QUICKSCALE_LISTINGS_PER_PAGE") == 24
+
+    def test_retired_listings_per_page_key_is_refused(self) -> None:
+        from quickscale_core.contracts.module_options import sanitize_module_options
+        from quickscale_core.schema.config_schema import ConfigValidationError
+
+        with pytest.raises(ConfigValidationError) as excinfo:
+            sanitize_module_options("listings", {"listings_per_page": 12})
+
+        assert "listings_per_page" in str(excinfo.value)
+        assert "per_page" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +569,7 @@ class TestCrmManifestEntryPoint:
     _CRM_OPTIONS = {
         "deals_per_page": 25,
         "contacts_per_page": 50,
-        "enable_api": True,
+        "api_enabled": True,
     }
 
     def test_returns_module_wiring_spec(self) -> None:
@@ -583,28 +593,28 @@ class TestCrmManifestEntryPoint:
 
     def test_deals_per_page_setting(self) -> None:
         spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
-        assert spec.settings.get("CRM_DEALS_PER_PAGE") == 25
+        assert spec.settings.get("QUICKSCALE_CRM_DEALS_PER_PAGE") == 25
 
     def test_contacts_per_page_setting(self) -> None:
         spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
-        assert spec.settings.get("CRM_CONTACTS_PER_PAGE") == 50
+        assert spec.settings.get("QUICKSCALE_CRM_CONTACTS_PER_PAGE") == 50
 
     def test_enable_api_setting(self) -> None:
         spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
-        assert spec.settings.get("CRM_ENABLE_API") is True
+        assert spec.settings.get("QUICKSCALE_CRM_API_ENABLED") is True
 
     def test_none_options_uses_defaults(self) -> None:
         spec = build_manifest_wiring_spec("crm", None)
         assert isinstance(spec, ModuleWiringSpec)
-        assert spec.settings.get("CRM_DEALS_PER_PAGE") == 25
-        assert spec.settings.get("CRM_ENABLE_API") is True
+        assert spec.settings.get("QUICKSCALE_CRM_DEALS_PER_PAGE") == 25
+        assert spec.settings.get("QUICKSCALE_CRM_API_ENABLED") is True
 
     def test_all_expected_settings_present(self) -> None:
         spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
         expected_keys = {
-            "CRM_DEALS_PER_PAGE",
-            "CRM_CONTACTS_PER_PAGE",
-            "CRM_ENABLE_API",
+            "QUICKSCALE_CRM_DEALS_PER_PAGE",
+            "QUICKSCALE_CRM_CONTACTS_PER_PAGE",
+            "QUICKSCALE_CRM_API_ENABLED",
         }
         for key in expected_keys:
             assert key in spec.settings, f"Missing expected setting: {key}"
@@ -619,11 +629,11 @@ class TestFormsManifestEntryPoint:
     """End-to-end tests for build_manifest_wiring_spec with forms module."""
 
     _FORMS_OPTIONS = {
-        "forms_per_page": 25,
+        "submissions_per_page": 25,
         "spam_protection_enabled": True,
         "rate_limit": "5/hour",
-        "data_retention_days": 365,
-        "submissions_api_enabled": True,
+        "retention_days": 365,
+        "api_enabled": True,
     }
 
     def test_returns_module_wiring_spec(self) -> None:
@@ -647,38 +657,38 @@ class TestFormsManifestEntryPoint:
 
     def test_forms_per_page_setting(self) -> None:
         spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
-        assert spec.settings.get("FORMS_PER_PAGE") == 25
+        assert spec.settings.get("QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE") == 25
 
     def test_spam_protection_setting(self) -> None:
         spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
-        assert spec.settings.get("FORMS_SPAM_PROTECTION") is True
+        assert spec.settings.get("QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED") is True
 
     def test_rate_limit_setting(self) -> None:
         spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
-        assert spec.settings.get("FORMS_RATE_LIMIT") == "5/hour"
+        assert spec.settings.get("QUICKSCALE_FORMS_RATE_LIMIT") == "5/hour"
 
-    def test_data_retention_days_setting(self) -> None:
+    def test_retention_days_setting(self) -> None:
         spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
-        assert spec.settings.get("FORMS_DATA_RETENTION_DAYS") == 365
+        assert spec.settings.get("QUICKSCALE_FORMS_RETENTION_DAYS") == 365
 
     def test_submissions_api_setting(self) -> None:
         spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
-        assert spec.settings.get("FORMS_SUBMISSIONS_API") is True
+        assert spec.settings.get("QUICKSCALE_FORMS_API_ENABLED") is True
 
     def test_none_options_uses_defaults(self) -> None:
         spec = build_manifest_wiring_spec("forms", None)
         assert isinstance(spec, ModuleWiringSpec)
-        assert spec.settings.get("FORMS_PER_PAGE") == 25
-        assert spec.settings.get("FORMS_SPAM_PROTECTION") is True
+        assert spec.settings.get("QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE") == 25
+        assert spec.settings.get("QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED") is True
 
     def test_all_expected_settings_present(self) -> None:
         spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
         expected_keys = {
-            "FORMS_PER_PAGE",
-            "FORMS_SPAM_PROTECTION",
-            "FORMS_RATE_LIMIT",
-            "FORMS_DATA_RETENTION_DAYS",
-            "FORMS_SUBMISSIONS_API",
+            "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE",
+            "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED",
+            "QUICKSCALE_FORMS_RATE_LIMIT",
+            "QUICKSCALE_FORMS_RETENTION_DAYS",
+            "QUICKSCALE_FORMS_API_ENABLED",
         }
         for key in expected_keys:
             assert key in spec.settings, f"Missing expected setting: {key}"
@@ -691,3 +701,21 @@ class TestFormsManifestEntryPoint:
 # registered via ``refresh_managed_adapters()`` before use.  The module-level
 # call above ensures the active managed adapters are registered for all tests.
 # ---------------------------------------------------------------------------
+
+
+class TestNotificationsProviderOption:
+    """The declared provider is constrained to the implemented runtime."""
+
+    def test_unsupported_provider_is_refused(self) -> None:
+        from quickscale_core.contracts.resolvers import (
+            load_module_manifest_with_fallback,
+        )
+        from quickscale_core.manifest.option_validation import (
+            collect_option_validation_issues,
+        )
+
+        issues = collect_option_validation_issues(
+            load_module_manifest_with_fallback("notifications"),
+            {"provider": "postmark"},
+        )
+        assert any(issue.option_name == "provider" for issue in issues)

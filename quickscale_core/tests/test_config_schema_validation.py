@@ -316,7 +316,7 @@ class TestValidateModules:
         with pytest.raises(ConfigValidationError, match="currency"):
             validate_config(
                 'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n'
-                "modules:\n  billing:\n    billing_currency: FAKE\n"
+                "modules:\n  billing:\n    currency: FAKE\n"
             )
 
 

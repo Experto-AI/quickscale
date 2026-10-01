@@ -7,10 +7,10 @@ description: "Generic listings module for marketplace-style products"
 
 config:
   mutable:
-    listings_per_page:
+    per_page:
       type: integer
       default: 12
-      django_setting: LISTINGS_PER_PAGE
+      django_setting: QUICKSCALE_LISTINGS_PER_PAGE
       description: "Number of listings per page"
       validation:
         min: 1
@@ -25,6 +25,12 @@ dependencies:
   - django-filter>=26.1
   - django-markdownx>=4.0.11
   - Pillow>=12.3.0,<13.0.0
+
+# Retired option keys are refused by name with the message declared here.
+retired_options:
+  listings_per_page: >-
+    Legacy config key 'listings_per_page' is no longer supported. Use
+    'per_page' instead.
 
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)
@@ -51,9 +57,9 @@ derivation:
       description: "Listings URL includes"
 
   option_derivations:
-    listings_per_page:
+    per_page:
       normalization_rules:
-        - source_key: listings_per_page
-          target_key: listings_per_page
+        - source_key: per_page
+          target_key: per_page
           rule_type: strip
-          description: "Strip whitespace from listings_per_page"
+          description: "Strip whitespace from per_page"

@@ -86,8 +86,8 @@ class TestSanitizeDispatcher:
         assert result["retention_days"] == 7
 
     def test_billing_dispatch_passes_declared_keys_through(self) -> None:
-        result = sanitize_module_options("billing", {"billing_currency": "usd"})
-        assert result["billing_currency"] == "usd"
+        result = sanitize_module_options("billing", {"currency": "usd"})
+        assert result["currency"] == "usd"
 
     def test_crm_dispatch_with_retired_raises(self) -> None:
         """The manifest's retired_options declaration raises through sanitize."""

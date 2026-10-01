@@ -1050,8 +1050,12 @@ class TestEmbedModule:
         assert mock_regenerate.call_args.kwargs["option_overrides"] == {
             "blog": {
                 "posts_per_page": 10,
-                "enable_rss": True,
+                "rss_enabled": True,
                 "api_rate_limit": "5/hour",
+                "api_upload_max_bytes": 10485760,
+                "api_upload_max_width": 4096,
+                "api_upload_max_height": 4096,
+                "api_allowed_image_formats": ["PNG", "JPEG", "WEBP", "GIF"],
             }
         }
 
@@ -1707,7 +1711,7 @@ class TestUpdateSingleModule:
                     '    commit_sha: "abc123"',
                     '    embedded_at: "2025-01-01T00:00:00"',
                     "    options:",
-                    "      enable_rss: true",
+                    "      rss_enabled: true",
                 ]
             )
             + "\n"
@@ -1722,7 +1726,7 @@ class TestUpdateSingleModule:
                     "  theme: showcase_react",
                     "modules:",
                     "  blog:",
-                    "    enable_rss: false",
+                    "    rss_enabled: false",
                     "docker:",
                     "  start: false",
                 ]
@@ -1755,7 +1759,7 @@ class TestUpdateSingleModule:
         assert result is False
         assert "Pre-pull local guard blocked update for blog" in captured.err
         assert "quickscale apply" in captured.err
-        assert "blog.enable_rss" in captured.err
+        assert "blog.rss_enabled" in captured.err
         mock_pull.assert_not_called()
         mock_sync_state.assert_not_called()
         mock_commit.assert_not_called()

@@ -739,7 +739,7 @@ class TestPruneAndDelete:
     def test_prune_dry_run_does_not_reconcile_default_policy(self) -> None:
         with (
             patch(
-                f"{_ORCH}._build_policy_snapshot_from_settings",
+                f"{_ORCH}.settings_policy_snapshot",
                 return_value=_policy(),
             ),
             patch(

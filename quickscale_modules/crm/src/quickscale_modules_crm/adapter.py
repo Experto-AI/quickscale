@@ -35,9 +35,15 @@ def _crm_post_hook(
 
     # SA17.3 — Legacy int()/bool() coercions on required settings.
     # The keys must already be present (AppConfig.ready() enforces it).
-    settings["CRM_DEALS_PER_PAGE"] = int(settings["CRM_DEALS_PER_PAGE"])
-    settings["CRM_CONTACTS_PER_PAGE"] = int(settings["CRM_CONTACTS_PER_PAGE"])
-    settings["CRM_ENABLE_API"] = bool(settings["CRM_ENABLE_API"])
+    settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] = int(
+        settings["QUICKSCALE_CRM_DEALS_PER_PAGE"]
+    )
+    settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] = int(
+        settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"]
+    )
+    settings["QUICKSCALE_CRM_API_ENABLED"] = bool(
+        settings["QUICKSCALE_CRM_API_ENABLED"]
+    )
 
     return ModuleWiringSpec(
         apps=spec.apps,

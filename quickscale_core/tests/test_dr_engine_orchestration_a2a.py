@@ -414,30 +414,6 @@ class TestPolicySnapshotOrchestration:
             schedule="0 2 * * *",
         )
 
-    def test_build_policy_snapshot_from_settings_applies_defaults_and_strings(
-        self,
-    ) -> None:
-        fake_settings = SimpleNamespace(
-            QUICKSCALE_BACKUPS_RETENTION_DAYS="7",
-            QUICKSCALE_BACKUPS_NAMING_PREFIX=" app ",
-            QUICKSCALE_BACKUPS_TARGET_MODE="private_remote",
-            QUICKSCALE_BACKUPS_LOCAL_DIRECTORY="backups",
-            QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME="bucket",
-            QUICKSCALE_BACKUPS_REMOTE_PREFIX="prefix",
-            QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL="endpoint",
-            QUICKSCALE_BACKUPS_REMOTE_REGION_NAME="",
-            QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR="ACCESS",
-            QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR="SECRET",
-            QUICKSCALE_BACKUPS_AUTOMATION_ENABLED=True,
-            QUICKSCALE_BACKUPS_SCHEDULE="schedule",
-        )
-        with patch(f"{_ORCH}.settings", fake_settings):
-            result = orch._build_policy_snapshot_from_settings()
-        assert result.retention_days == 7
-        assert result.naming_prefix == " app "
-        assert result.target_mode == "private_remote"
-        assert result.schedule == "schedule"
-
     @pytest.mark.parametrize(
         ("overrides", "expected"),
         [
@@ -485,7 +461,7 @@ class TestPolicySnapshotOrchestration:
         settings_policy = _policy(naming_prefix="settings")
         with (
             patch(
-                f"{_ORCH}._build_policy_snapshot_from_settings",
+                f"{_ORCH}.settings_policy_snapshot",
                 return_value=settings_policy,
             ),
             patch(
@@ -503,7 +479,7 @@ class TestPolicySnapshotOrchestration:
         settings_policy = _policy(naming_prefix="settings")
         with (
             patch(
-                f"{_ORCH}._build_policy_snapshot_from_settings",
+                f"{_ORCH}.settings_policy_snapshot",
                 return_value=settings_policy,
             ),
             patch(
@@ -524,7 +500,7 @@ class TestPolicySnapshotOrchestration:
         settings_policy = _policy(naming_prefix="settings")
         with (
             patch(
-                f"{_ORCH}._build_policy_snapshot_from_settings",
+                f"{_ORCH}.settings_policy_snapshot",
                 return_value=settings_policy,
             ),
             patch(

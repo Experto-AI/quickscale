@@ -131,6 +131,7 @@ __all__ = [
     "save_artifact",
     "save_default_policy",
     "save_snapshot",
+    "settings_policy_snapshot",
     "update_artifact_after_restore",
     # Module wiring spec (from manifest)
     "ModuleWiringSpec",

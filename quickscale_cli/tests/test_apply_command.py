@@ -180,7 +180,7 @@ modules:
                 "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
             ),
             (
-                "billing_currency: credits",
+                "currency: credits",
                 "QUICKSCALE_BILLING_CURRENCY",
             ),
         ],
@@ -283,8 +283,8 @@ modules:
         ("module_options_yaml", "expected_marker"),
         [
             ("    rate_limit: 10 per hour", "must match pattern"),
-            ("    forms_per_page: 0", "must be >= 1"),
-            ("    data_retention_days: -1", "must be >= 0"),
+            ("    submissions_per_page: 0", "must be >= 1"),
+            ("    retention_days: -1", "must be >= 0"),
         ],
     )
     def test_apply_forms_option_errors_fail_config_validation(
@@ -500,14 +500,14 @@ docker:
             "  package: demo\n"
             "modules:\n"
             "  crm:\n"
-            '    enable_api: "yes"\n'
+            '    api_enabled: "yes"\n'
         )
 
         with pytest.raises(ConfigValidationError) as excinfo:
             validate_config(yaml_content)
 
-        assert "CRM_ENABLE_API" in str(excinfo.value)
-        assert "enable_api" in str(excinfo.value)
+        assert "QUICKSCALE_CRM_API_ENABLED" in str(excinfo.value)
+        assert "api_enabled" in str(excinfo.value)
 
     def test_abort_for_not_ready_modules_reports_reason(self, capsys, monkeypatch):
         """A non-ready module in config or state aborts apply with its reason."""

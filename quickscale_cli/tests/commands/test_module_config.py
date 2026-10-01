@@ -50,7 +50,7 @@ class TestBlogModuleConfig:
         """Test default blog configuration."""
         config = MODULE_CONFIGURATOR_REGISTRY["blog"].get_defaults()
 
-        assert config["enable_rss"] is True
+        assert config["rss_enabled"] is True
         assert config["posts_per_page"] == 10
         assert config["api_rate_limit"] == "5/hour"
 
@@ -58,22 +58,31 @@ class TestBlogModuleConfig:
         """Test non-interactive blog configuration."""
         config = MODULE_CONFIGURATOR_REGISTRY["blog"].configure(non_interactive=True)
 
-        assert config["enable_rss"] is True
+        assert config["rss_enabled"] is True
         assert config["posts_per_page"] == 10
         assert config["api_rate_limit"] == "5/hour"
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
     def test_configure_blog_module_interactive(self, mock_confirm, mock_prompt):
-        """Test interactive blog configuration."""
+        """Test interactive blog configuration, one prompt per manifest option."""
         mock_confirm.return_value = False
-        mock_prompt.side_effect = [20, "10/minute"]
+        mock_prompt.side_effect = [
+            20,
+            "10/minute",
+            10485760,
+            4096,
+            4096,
+            "PNG, JPEG, WEBP, GIF",
+        ]
 
         config = MODULE_CONFIGURATOR_REGISTRY["blog"].configure(non_interactive=False)
 
-        assert config["enable_rss"] is False
+        assert config["rss_enabled"] is False
         assert config["posts_per_page"] == 20
         assert config["api_rate_limit"] == "10/minute"
+        assert config["api_upload_max_bytes"] == 10485760
+        assert config["api_allowed_image_formats"] == ["PNG", "JPEG", "WEBP", "GIF"]
 
 
 class TestModuleConfigurators:
@@ -110,4 +119,4 @@ class TestModuleConfigurators:
         entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
 
         config = entry.configure(non_interactive=True)
-        assert "enable_rss" in config
+        assert "rss_enabled" in config
