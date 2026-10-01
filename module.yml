@@ -85,7 +85,7 @@ derivation:
       derivation_type: static
       expression:
         value:
-          - - ""
+          - - forms/
             - quickscale_modules_forms.urls
       description: "Forms URL includes"
 

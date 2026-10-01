@@ -73,7 +73,7 @@ def test_form_submit_throttle_uses_parent_cache_key_when_view_scope_is_declared(
     None
 ):
     throttle = FormSubmitThrottle()
-    request = RequestFactory().post("/api/forms/submit/")
+    request = RequestFactory().post("/forms/api/contact/submit/")
     view = SimpleNamespace(throttle_scope="custom-scope")
 
     with patch(
@@ -88,7 +88,7 @@ def test_form_submit_throttle_uses_parent_cache_key_when_view_scope_is_declared(
 def test_form_submit_throttle_returns_none_when_scope_is_empty() -> None:
     throttle = FormSubmitThrottle()
     throttle.scope = ""
-    request = RequestFactory().post("/api/forms/submit/")
+    request = RequestFactory().post("/forms/api/contact/submit/")
     view = SimpleNamespace(throttle_scope=None)
 
     assert throttle.get_cache_key(request, view) is None
@@ -96,7 +96,7 @@ def test_form_submit_throttle_returns_none_when_scope_is_empty() -> None:
 
 def test_form_submit_throttle_builds_cache_key_from_default_scope() -> None:
     throttle = FormSubmitThrottle()
-    request = RequestFactory().post("/api/forms/submit/")
+    request = RequestFactory().post("/forms/api/contact/submit/")
     view = SimpleNamespace(throttle_scope=None)
 
     with patch.object(throttle, "get_ident", return_value="127.0.0.1"):
@@ -120,7 +120,7 @@ def _make_request(remote_addr: str, xff: str | None = None) -> Any:
     kwargs: dict[str, str] = {"REMOTE_ADDR": remote_addr}
     if xff is not None:
         kwargs["HTTP_X_FORWARDED_FOR"] = xff
-    req = RequestFactory().post("/api/forms/submit/", **kwargs)
+    req = RequestFactory().post("/forms/api/contact/submit/", **kwargs)
     req.user = None  # DRF's get_cache_key checks request.user first
     return req
 

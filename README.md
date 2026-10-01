@@ -37,12 +37,12 @@ by `quickscale apply`. The public schema and submit endpoints stay available reg
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `api/forms/{slug}/` | Public | Fetch form schema |
-| `POST` | `api/forms/{slug}/submit/` | Public | Submit form data |
-| `GET` | `api/admin/forms/` | Staff+ | List forms with submission counts |
-| `GET` | `api/admin/forms/{id}/submissions/` | Staff+ | List submissions |
-| `GET/PATCH` | `api/admin/forms/{id}/submissions/{sub_id}/` | Staff+ | Submission detail/update |
-| `GET` | `api/admin/forms/{id}/submissions/export/` | Staff+ | Download CSV |
+| `GET` | `forms/api/{slug}/` | Public | Fetch form schema |
+| `POST` | `forms/api/{slug}/submit/` | Public | Submit form data |
+| `GET` | `forms/api/admin/forms/` | Staff+ | List forms with submission counts |
+| `GET` | `forms/api/admin/forms/{id}/submissions/` | Staff+ | List submissions |
+| `GET/PATCH` | `forms/api/admin/forms/{id}/submissions/{sub_id}/` | Staff+ | Submission detail/update |
+| `GET` | `forms/api/admin/forms/{id}/submissions/export/` | Staff+ | Download CSV |
 
 Every error answers the shared `{"error": {"code", "message", "fields"}}` shape (`fields` only
 for validation errors), produced by `quickscale_core.runtime.conventions.exception_handler` —
@@ -76,7 +76,7 @@ email backend. Delivery failures are logged and never block submission processin
 
 ### Staff access model
 
-Staff-level access (`api/admin/forms/*`) follows a retained-role model; an active organization
+Staff-level access (`forms/api/admin/forms/*`) follows a retained-role model; an active organization
 selection is required for regular staff to see any data.
 
 | Role | Org context | Behavior |
@@ -91,18 +91,19 @@ logic — a disabled API returns 404 for both superuser and regular staff.
 
 ## URLs
 
-`quickscale apply` mounts the module at the project root; the module's own paths are:
+`quickscale apply` mounts the module at `forms/` (its manifest `url_includes` entry); the
+module's paths are:
 
 | URL name | Path | View |
 |----------|------|------|
-| `quickscale_forms:form-list` | `forms/` | Public form index (React mount point) |
-| `quickscale_forms:form-page` | `forms/<slug>/` | Public form page (React mount point) |
-| `quickscale_forms:form-schema` | `api/forms/<slug>/` | Public form schema |
-| `quickscale_forms:form-submit` | `api/forms/<slug>/submit/` | Public submission endpoint |
-| `quickscale_forms:admin-form-list` | `api/admin/forms/` | Staff form list |
-| `quickscale_forms:admin-submission-list` | `api/admin/forms/<pk>/submissions/` | Staff submission list |
-| `quickscale_forms:admin-submission-detail` | `api/admin/forms/<pk>/submissions/<sub_pk>/` | Staff submission detail |
-| `quickscale_forms:admin-submission-export` | `api/admin/forms/<pk>/submissions/export/` | Staff CSV export |
+| `quickscale_forms:form_list` | `forms/` | Public form index (React mount point) |
+| `quickscale_forms:form_page` | `forms/<slug>/` | Public form page (React mount point) |
+| `quickscale_forms:form_schema` | `forms/api/<slug>/` | Public form schema |
+| `quickscale_forms:form_submit` | `forms/api/<slug>/submit/` | Public submission endpoint |
+| `quickscale_forms:admin_form_list` | `forms/api/admin/forms/` | Staff form list |
+| `quickscale_forms:admin_submission_list` | `forms/api/admin/forms/<pk>/submissions/` | Staff submission list |
+| `quickscale_forms:admin_submission_detail` | `forms/api/admin/forms/<pk>/submissions/<sub_pk>/` | Staff submission detail |
+| `quickscale_forms:admin_submission_export` | `forms/api/admin/forms/<pk>/submissions/export/` | Staff CSV export |
 
 ## Management commands
 
