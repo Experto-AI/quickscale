@@ -82,16 +82,19 @@ them as environment variables.
 
 ## Public surface
 
-Modules that expose public uploaded media should depend on storage helpers rather than
-provider-specific URL behavior. Use helpers from `quickscale_modules_storage.helpers`:
+Modules that expose public uploaded media should depend on storage's public services rather than
+provider-specific URL behavior. Use `quickscale_modules_storage.services`:
 
-- `build_public_media_url()` for canonical public URLs.
+- `build_public_media_url()` for canonical public URLs; it resolves storage's own
+  `public_base_url` and `media_url` settings, so callers read none of them.
 - `build_upload_path()` for cache-friendly object keys.
 - `validate_file_upload()` for shared validation rules.
 - `make_cache_friendly_name()` for immutable-style asset naming.
 - `select_storage_backend()` when backend-aware branching is required.
+- `StorageError` for the one error base the failing services raise (validation and
+  inventory failures), so callers catch the module's error instead of a built-in.
 
-Feature modules should store relative media keys and let helper-backed URL resolution turn
+Feature modules should store relative media keys and let service-backed URL resolution turn
 those keys into final public URLs.
 
 ## URLs
@@ -174,5 +177,5 @@ URLs without signed-query churn.
 
 - This module focuses on public media delivery and shared helper contracts. Private media
   authorization, richer image variants, and async media pipelines are deferred.
-- Project extensions should consume the helpers above instead of branching on a provider
+- Project extensions should consume the services above instead of branching on a provider
   directly.

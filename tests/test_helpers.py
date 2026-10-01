@@ -231,8 +231,8 @@ class TestUploadPathAndNaming:
     def test_build_upload_path_scopes_by_module_kind_and_date(self) -> None:
         path = build_upload_path(
             "blog",
-            "uploads",
-            "hero.png",
+            asset_kind="uploads",
+            filename="hero.png",
             now=datetime(2026, 3, 18, tzinfo=timezone.utc),
             content=b"abc",
         )
@@ -248,7 +248,9 @@ class TestUploadPathAndNaming:
             "quickscale_modules_storage.helpers.timezone.now", lambda: frozen
         )
 
-        path = build_upload_path("blog", "uploads", "hero.png", content=b"abc")
+        path = build_upload_path(
+            "blog", asset_kind="uploads", filename="hero.png", content=b"abc"
+        )
 
         assert path.startswith("blog/uploads/2031/05/")
         assert path.endswith(".png")

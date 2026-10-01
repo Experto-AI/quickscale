@@ -243,14 +243,18 @@ def make_cache_friendly_name(
 
 def build_upload_path(
     module_name: str,
+    *,
     asset_kind: str,
     filename: str,
-    *,
     now: datetime | None = None,
     content: bytes | None = None,
     version: str | None = None,
 ) -> str:
-    """Build a cache-friendly upload path segmented by module and year/month."""
+    """Build a cache-friendly upload path segmented by module and year/month.
+
+    Rule 23: keyword-only after the one leading subject, so a new parameter
+    never reorders a caller's positional arguments.
+    """
     timestamp = now or timezone.now()
     module_segment = slugify(module_name) or "module"
     kind_segment = slugify(asset_kind) or "asset"
