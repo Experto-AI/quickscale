@@ -17,6 +17,9 @@ class QuickscaleCrmConfig(AppConfig):
     label = "quickscale_crm"
     verbose_name = "QuickScale CRM"
 
+    #: Display prefix for the module's models in organization-removal summaries.
+    removal_label_prefix = "CRM"
+
     def ready(self) -> None:
         # ---- SA7.1 — organization_created signal receiver -----------------
         # Import receivers to connect the seed_crm_default_stages_on_org_created
