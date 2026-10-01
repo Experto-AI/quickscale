@@ -555,6 +555,7 @@ def test_invite_view_creates_invitation_and_dispatches_notification(
     client,
     settings,
     monkeypatch,
+    django_capture_on_commit_callbacks,
 ) -> None:
     settings.QUICKSCALE_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
@@ -583,10 +584,11 @@ def test_invite_view_creates_invitation_and_dispatches_notification(
     )
     client.force_login(admin_user)
 
-    response = client.post(
-        f"/orgs/{organization.slug}/members/invite/",
-        {"email": "Invitee@Example.com", "role": OrgRole.ADMIN},
-    )
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(
+            f"/orgs/{organization.slug}/members/invite/",
+            {"email": "Invitee@Example.com", "role": OrgRole.ADMIN},
+        )
 
     invitation = OrganizationInvitation.objects.get(organization=organization)
     assert response.status_code == 302
@@ -608,6 +610,68 @@ def test_invite_view_creates_invitation_and_dispatches_notification(
         ),
         "expires_at": invitation.expires_at.astimezone(timezone.UTC).isoformat(),
     }
+
+
+@pytest.mark.django_db(transaction=True)
+def test_rolled_back_invitation_sends_no_email(
+    client,
+    settings,
+    monkeypatch,
+) -> None:
+    """Rule 21: an invitation email is sent only if the invitation commits."""
+    from django.db import transaction
+
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Helios", slug="helios")
+    admin_user = get_user_model().objects.create_user(
+        username="helios-rollback-admin",
+        email="helios-rollback-admin@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    captured_calls: list[dict[str, object]] = []
+
+    def fake_sender(**kwargs: object) -> object:
+        captured_calls.append(dict(kwargs))
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: fake_sender,
+    )
+    client.force_login(admin_user)
+
+    class _Rollback(Exception):
+        pass
+
+    with pytest.raises(_Rollback):
+        with transaction.atomic():
+            response = client.post(
+                f"/orgs/{organization.slug}/members/invite/",
+                {"email": "Invitee@Example.com", "role": OrgRole.ADMIN},
+            )
+            assert response.status_code == 302
+            raise _Rollback
+
+    assert captured_calls == [], (
+        "a rolled-back invitation must not send the notification email"
+    )
+    assert not OrganizationInvitation.objects.filter(
+        organization=organization
+    ).exists(), "the rolled-back invitation row must not exist"
+
+    # Positive control: the same request without a rollback dispatches once.
+    response = client.post(
+        f"/orgs/{organization.slug}/members/invite/",
+        {"email": "Invitee@Example.com", "role": OrgRole.ADMIN},
+    )
+    assert response.status_code == 302
+    assert len(captured_calls) == 1
 
 
 @pytest.mark.django_db
@@ -1942,6 +2006,7 @@ def test_org_api_invite_creates_invitation_and_dispatches_notification(
     client,
     settings,
     monkeypatch,
+    django_capture_on_commit_callbacks,
 ) -> None:
     settings.QUICKSCALE_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
@@ -1970,11 +2035,12 @@ def test_org_api_invite_creates_invitation_and_dispatches_notification(
     )
     client.force_login(admin_user)
 
-    response = client.post(
-        f"/orgs/api/{organization.slug}/members/invite/",
-        data=json.dumps({"email": "Invitee@Example.com", "role": OrgRole.ADMIN}),
-        content_type="application/json",
-    )
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(
+            f"/orgs/api/{organization.slug}/members/invite/",
+            data=json.dumps({"email": "Invitee@Example.com", "role": OrgRole.ADMIN}),
+            content_type="application/json",
+        )
 
     invitation = OrganizationInvitation.objects.get(organization=organization)
     assert response.status_code == 201
