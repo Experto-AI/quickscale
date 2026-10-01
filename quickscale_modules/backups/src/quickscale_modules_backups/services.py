@@ -18,8 +18,6 @@ from tempfile import mkdtemp, mkstemp
 from typing import Any, Protocol, cast
 
 from quickscale_core.runtime import (  # noqa: F401
-    _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     _ENV_VAR_MANIFEST_FILENAME,
     _MEDIA_SYNC_MANIFEST_FILENAME,
     _PROMOTION_VERIFICATION_FILENAME,
@@ -622,12 +620,22 @@ def dispatch_background_create(
         ) from exc
 
 
-def dispatch_background_prune() -> None:
+def dispatch_background_prune(
+    *,
+    trigger: str = "admin",
+) -> None:
     """Dispatch ``quickscale_backups_prune`` via subprocess, returning immediately.
 
     Spawns the ``quickscale_backups_prune`` management command in a background
     subprocess so the admin request returns without blocking on
     file deletion or remote cleanup.
+
+    Parameters
+    ----------
+    trigger :
+        Provenance to pass as ``--trigger <value>``.  A bare command
+        invocation defaults to the scheduled path, so the manual and admin
+        paths are named explicitly.
 
     Raises
     ------
@@ -635,11 +643,10 @@ def dispatch_background_prune() -> None:
         When ``subprocess.Popen`` itself fails (not a command error).
     """
     manage_py = _get_manage_py()
+    argv = [sys.executable, manage_py, "quickscale_backups_prune"]
+    argv.extend(["--trigger", "scheduled" if trigger == "scheduled" else trigger])
     try:
-        subprocess.Popen(  # noqa: S603 - fixed argv list, shell disabled
-            [sys.executable, manage_py, "quickscale_backups_prune"],
-            close_fds=True,
-        )
+        subprocess.Popen(argv, close_fds=True)  # noqa: S603 - fixed argv list, shell disabled
     except Exception as exc:
         raise BackupError(
             f"Failed to dispatch background backup pruning: {exc}"

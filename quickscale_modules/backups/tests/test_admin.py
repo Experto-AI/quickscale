@@ -608,6 +608,39 @@ class TestBackupPolicyAdmin:
             "Backup creation has been initiated in the background.",
         ]
 
+    def test_async_prune_dispatch_passes_admin_trigger_in_argv(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        """Async prune dispatch passes ``--trigger admin`` to the child process.
+
+        A bare prune invocation is the scheduled path and is refused while the
+        module is switched off; naming the admin provenance keeps the retained
+        admin action working.
+        """
+        with patch(
+            "quickscale_modules_backups.services.subprocess.Popen",
+            return_value=MagicMock(),
+        ) as mocked_popen:
+            response = admin_client.post(
+                reverse("admin:quickscale_backups_backuppolicy_prune"),
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_popen.assert_called_once()
+        popen_args = mocked_popen.call_args[0][0]
+        assert "quickscale_backups_prune" in popen_args
+        assert "--trigger" in popen_args
+        trigger_index = popen_args.index("--trigger")
+        assert trigger_index + 1 < len(popen_args)
+        assert popen_args[trigger_index + 1] == "admin"
+
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Backup pruning has been initiated in the background.",
+        ]
+
     def test_restore_notice_mentions_file_mode_without_broadening_admin_surface(
         self,
         backup_policy: BackupPolicy,
@@ -811,7 +844,7 @@ class TestBackupPolicyAdmin:
             )
 
         assert response.status_code == 200
-        mocked_prune.assert_called_once_with()
+        mocked_prune.assert_called_once_with(trigger="admin")
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             "Backup pruning has been initiated in the background.",
         ]
@@ -867,7 +900,7 @@ class TestBackupPolicyAdmin:
             )
 
         assert response.status_code == 200
-        mocked_prune.assert_called_once_with()
+        mocked_prune.assert_called_once_with(trigger="admin")
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             "Backup pruning has been initiated in the background.",
         ]
@@ -886,7 +919,7 @@ class TestBackupPolicyAdmin:
             )
 
         assert response.status_code == 200
-        mocked_prune.assert_called_once_with()
+        mocked_prune.assert_called_once_with(trigger="admin")
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             "Backup pruning has been initiated in the background.",
         ]

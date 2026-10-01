@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "quickscale_modules_blog",
 ]
 
+QUICKSCALE_ORGS_ENABLED = True
 QUICKSCALE_ORGS_MODE = "saas"
 
 MIDDLEWARE = [
@@ -106,6 +107,7 @@ QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS = ["PNG", "JPEG", "WEBP", "GIF"]
 
 # Rule 3: storage's declared settings, so installing it here satisfies both
 # its generic settings check and the rule 35 vendor check.
+QUICKSCALE_STORAGE_ENABLED = True
 QUICKSCALE_STORAGE_BACKEND = "local"
 QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
 AWS_STORAGE_BUCKET_NAME = ""

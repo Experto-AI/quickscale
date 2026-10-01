@@ -108,10 +108,10 @@
         <a href="/" class="qs-topbar-brand">{%endraw%}{{ project_name }}{%raw%}</a>
         <div class="qs-topbar-nav">
             <a href="/" class="qs-topbar-link">App</a>
-            {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
+            {% if 'quickscale_modules_social' in settings.INSTALLED_APPS and settings.QUICKSCALE_SOCIAL_ENABLED and settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
             <a href="/social" class="qs-topbar-link">Social</a>
             {% endif %}
-            {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+            {% if 'quickscale_modules_social' in settings.INSTALLED_APPS and settings.QUICKSCALE_SOCIAL_ENABLED and settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
             <a href="/social/embeds" class="qs-topbar-link">Embeds</a>
             {% endif %}
         </div>

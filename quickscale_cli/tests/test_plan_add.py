@@ -504,6 +504,7 @@ docker:
                 ["--add", "--configure-modules"],
                 input=(
                     "storage\n"
+                    "y\n"
                     "local\n"
                     "/media/\n"
                     "https://cdn.example.com/media\n"
@@ -540,6 +541,7 @@ class TestPlanNewProjectConfigureModules:
                     "\n\n"
                     "storage\n"
                     "n\n"
+                    "y\n"
                     "local\n"
                     "/media/\n"
                     "https://cdn.example.com/media\n"
@@ -614,7 +616,8 @@ class TestPlanNewProjectConfigureModules:
             # - \n: default theme (showcase_react)
             # - auth,billing: select auth + billing (requires orgs → notifications)
             # - n: don't start Docker
-            # Auth configurator (4 prompts, manifest order):
+            # Auth configurator (5 prompts, manifest order):
+            # - y: enable the auth module
             # - y: enable registration
             # - \n: email verification default (none)
             # - \n: session cookie age default (1209600)
@@ -626,10 +629,12 @@ class TestPlanNewProjectConfigureModules:
             # - \n: webhook secret env var
             # - \n: billing currency
             # - \n: api rate limit default
-            # Orgs configurator (1 prompt, required):
+            # Orgs configurator (2 prompts, manifest order):
+            # - \n: enable orgs (default yes)
             # - \n: orgs mode default (solo)
-            # Notifications configurator (required, 10 prompts, manifest order):
+            # Notifications configurator (required, 11 prompts, manifest order):
             # - \n: enable notifications runtime (default yes)
+            # - \n: provider default (resend)
             # - \n: sender name default
             # - \n: sender email default
             # - \n: reply-to default
@@ -643,7 +648,7 @@ class TestPlanNewProjectConfigureModules:
             result = runner.invoke(
                 plan,
                 ["myapp", "--configure-modules"],
-                input=("\n\nauth,billing\nn\ny\n" + "\n" * 21 + "y\n"),
+                input=("\n\nauth,billing\nn\ny\ny\n" + "\n" * 22 + "y\n"),
             )
 
             assert result.exit_code == 0

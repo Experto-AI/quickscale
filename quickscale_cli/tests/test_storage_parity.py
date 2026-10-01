@@ -26,6 +26,7 @@ _SECRET_KEY_OPTION = "secret_access_key_env_var"
 _RETIRED_OPTIONS = ("access_key_id", "secret_access_key")
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
+    "enabled": True,
     "backend": "local",
     "media_url": "/media/",
     "public_base_url": "",

@@ -49,6 +49,7 @@ MIDDLEWARE = [
 ]
 
 # SaaS mode for org-scoped route testing
+QUICKSCALE_ORGS_ENABLED = True
 QUICKSCALE_ORGS_MODE = "saas"
 
 ROOT_URLCONF = "tests.urls"

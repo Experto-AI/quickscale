@@ -161,19 +161,22 @@ suite, and merge only the reviewed delivery through the serialized queue.
     option keys), blog's undeclared upload/format settings are declared, notifications' `provider`
     is declared, billing's `billing_currency` key is `currency`, and orgs' mode is
     `QUICKSCALE_ORGS_MODE` across the manifest, generator and theme templates, module code, tests,
-    and docs, with the retired `QUICKSCALE_MODE` refused at startup. **Landed:** blog, CRM, forms,
-    and listings also declare `QUICKSCALE_<MODULE>_ENABLED`; off keeps the installed app, drops
-    their own public URL mounts, keeps their staff-guarded Markdownx editor mount for the retained
-    admin, turns their theme flags false, and stops forms' scheduled retention command. **Open:**
-    auth, backups, orgs, social, and storage's
-    `QUICKSCALE_<MODULE>_ENABLED`, and the backups fallback deletion.
+    and docs, with the retired `QUICKSCALE_MODE` refused at startup. **Landed:** every module
+    declares `QUICKSCALE_<MODULE>_ENABLED`; with it off a module keeps the installed app — data,
+    admin, and its own wiring such as the allauth backend, orgs' middleware, and social's managed
+    files — drops its own public URL mounts (blog and listings keep their staff-guarded Markdownx
+    editor mount), turns its theme flag false, and stops its scheduled jobs: the forms retention
+    command and the backups create/prune runs. Backups' and storage's rule-35 credential checks
+    stay silent while off, `apply` refuses to switch off a module an installed module requires,
+    and the backups remote env-var fallbacks are deleted. **Open:** the `{% url %}`-derived
+    `modulePaths` and the discovery-rendered seam producer (rule 31), and the Secrets bullet.
   - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
     check refuses retired settings, each naming the replacement. Generated templates, docs, and
     `.env.example` use only the new names.
     **Landed:** every renamed option key is refused by name, and each renamed module's startup
     check refuses its retired setting names with the replacement named.
-  - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
-    option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
+  - *Secrets.* **Open:** every secret reaches module code as a setting `apply` renders from its
+    `_ENV_VAR` option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
     notifications' `os.getenv` reads and in-code default variable names go (rule 35).
 
   Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)

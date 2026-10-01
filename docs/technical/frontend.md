@@ -68,15 +68,17 @@ It is written by `templates/index.html.j2` and carries:
 | Field | Meaning |
 | --- | --- |
 | `projectName` | Display name |
-| `modules` | Boolean flag per module, derived from `settings.INSTALLED_APPS` (and settings flags for `social`) |
+| `modules` | Boolean flag per module: `true` only when the module is installed and its `QUICKSCALE_<MODULE>_ENABLED` is on |
 | `modulePaths` | Server-resolved base paths for `crm`, `social`, `analytics` |
 
 [decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) changes how
-the producer fills `modules` and `modulePaths`: the generator renders `index.html.j2` from the
-discovered module set, a flag is `true` only when the module is installed and its
-`QUICKSCALE_<MODULE>_ENABLED` is on, and paths come from `{% url %}`, not literals. Blog, CRM,
-forms, and listings already require installed-and-enabled; the table above describes the remaining
-shipped state until the rest lands. The three-place rule below is unchanged.
+the producer fills `modules` and `modulePaths`: a flag is `true` only when the module is installed
+and its `QUICKSCALE_<MODULE>_ENABLED` is on, and paths come from `{% url %}`, not literals. Every
+shipped module flag now requires installed-and-enabled, and the public social producers
+(`templates/social/link_tree.html.j2`, `templates/social/embeds.html.j2`) and the shared
+navigation apply the same installed-and-enabled social condition before hydrating or linking. The
+`modulePaths` rework to `{% url %}` and the discovery-rendered producer D34 option A describes
+remain open until SA215 enforces rule 31. The three-place rule below is unchanged.
 | `owner.mode` | `"solo"` or `"saas"` — see [organizations.md](organizations.md) |
 | `owner.currentOrgSlug` | Current org slug, or `null` |
 | `publicPage` | Optional; present only on public non-SPA social surfaces |
