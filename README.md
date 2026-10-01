@@ -121,6 +121,8 @@ SESSION_SAVE_EVERY_REQUEST = True  # Extend session on activity
 - `allauth_adapter.py` holds the module's allauth account adapter; it collects installed
   modules' declared post-auth redirect hooks (orgs declares the organization-aware ones) and
   falls back to `LOGIN_REDIRECT_URL` when none answers.
+- `services.py` re-exports `AuthError`, the module's one error base (Module Conventions
+  rules 4 and 23); the account flows themselves are allauth- and Django-wired views.
 
 ## URLs
 
