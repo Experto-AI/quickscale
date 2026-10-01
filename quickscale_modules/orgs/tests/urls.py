@@ -7,10 +7,10 @@ from django.http import HttpResponse
 from django.urls import include, path
 from django.views import View
 
+from quickscale_modules_billing.services import require_org_feature
 from quickscale_modules_orgs.models import OrgRole
 from quickscale_modules_orgs.permissions import (
     OrgRoleMixin,
-    require_org_feature,
     require_org_role,
 )
 from quickscale_modules_orgs.views import OrgDashboardView
