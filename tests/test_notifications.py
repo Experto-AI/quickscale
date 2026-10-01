@@ -2,51 +2,65 @@
 
 import pytest
 from django.core import mail
-from django.test import override_settings
 
+from quickscale_modules_forms._email import notify_submission
 from quickscale_modules_forms.models import FormSubmission
-from quickscale_modules_forms.notifications import notify_submission
 
 
 @pytest.mark.django_db
 class TestNotifySubmission:
     """Tests for the notify_submission() function"""
 
-    def test_sends_email_to_all_recipients(self, submission, field_value):
+    def test_sends_email_to_all_recipients(
+        self, submission, field_value, django_capture_on_commit_callbacks
+    ):
         """One email is sent to all comma-separated notify_emails addresses"""
         from quickscale_modules_orgs.current_org import org_scope
 
         submission.form.notify_emails = "a@example.com, b@example.com"
         with org_scope(submission.organization):
             submission.form.save()
-        notify_submission(submission)
-        assert len(mail.outbox) == 1
-        assert "a@example.com" in mail.outbox[0].recipients()
-        assert "b@example.com" in mail.outbox[0].recipients()
+        with django_capture_on_commit_callbacks(execute=True):
+            notify_submission(submission)
+        # The tracked path sends one email per delivery, not one per message.
+        assert len(mail.outbox) == 2
+        recipients = {
+            address for message in mail.outbox for address in message.recipients()
+        }
+        assert recipients == {"a@example.com", "b@example.com"}
 
-    def test_subject_contains_form_title(self, submission, field_value):
+    def test_subject_contains_form_title(
+        self, submission, field_value, django_capture_on_commit_callbacks
+    ):
         """Email subject includes the form title"""
-        notify_submission(submission)
+        with django_capture_on_commit_callbacks(execute=True):
+            notify_submission(submission)
         assert len(mail.outbox) == 1
         assert "Contact" in mail.outbox[0].subject
 
-    def test_body_contains_field_labels_and_values(self, submission, field_value):
+    def test_body_contains_field_labels_and_values(
+        self, submission, field_value, django_capture_on_commit_callbacks
+    ):
         """Email body contains field label-value pairs"""
-        notify_submission(submission)
+        with django_capture_on_commit_callbacks(execute=True):
+            notify_submission(submission)
         assert len(mail.outbox) == 1
         body = mail.outbox[0].body
         assert "Name" in body
         assert "Alice" in body
 
-    def test_includes_html_alternative(self, submission, field_value):
-        """Notification email includes an HTML alternative rendered from template"""
-        notify_submission(submission)
+    def test_includes_html_alternative(
+        self, submission, field_value, django_capture_on_commit_callbacks
+    ):
+        """Notification email includes the tracked HTML alternative"""
+        with django_capture_on_commit_callbacks(execute=True):
+            notify_submission(submission)
         assert len(mail.outbox) == 1
         alternatives = mail.outbox[0].alternatives
         assert alternatives
         html_body, mimetype = alternatives[0]
         assert mimetype == "text/html"
-        assert "<h2>New submission:" in html_body
+        assert "New submission: Test Contact" in html_body
 
     def test_no_email_when_notify_emails_empty(self, form, submission):
         """No email sent when form.notify_emails is blank"""
@@ -68,53 +82,46 @@ class TestNotifySubmission:
         notify_submission(submission)
         assert len(mail.outbox) == 0
 
-    @override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False)
-    def test_falls_back_to_untracked_email_when_notifications_installed_but_disabled(
+    def test_queues_email_through_notifications(
+        self, submission, field_value, django_capture_on_commit_callbacks
+    ):
+        """The only email path is notifications' tracked send (rule 20)."""
+        from quickscale_modules_notifications.models import NotificationMessage
+
+        with django_capture_on_commit_callbacks(execute=True):
+            status = notify_submission(submission)
+
+        assert status == "queued"
+        assert len(mail.outbox) == 1
+        assert "admin@example.com" in mail.outbox[0].recipients()
+        assert NotificationMessage.objects.filter(
+            template_key="notifications.forms_submission"
+        ).exists()
+
+    def test_delivery_exception_does_not_propagate(
         self,
         submission,
         field_value,
         monkeypatch,
+        django_capture_on_commit_callbacks,
     ):
-        """Disabled tracked notifications fall back to the existing untracked email path"""
-
-        def notifications_are_installed(app_label: str) -> bool:
-            return app_label == "quickscale_modules_notifications"
-
-        def fail_import(module_path: str):
-            raise AssertionError(
-                "tracked notifications service should not load when disabled"
-            )
-
-        monkeypatch.setattr(
-            "quickscale_modules_forms.notifications.apps.is_installed",
-            notifications_are_installed,
-        )
-        monkeypatch.setattr(
-            "quickscale_modules_forms.notifications.import_module",
-            fail_import,
-        )
-
-        notify_submission(submission)
-
-        assert len(mail.outbox) == 1
-        assert "admin@example.com" in mail.outbox[0].recipients()
-
-    def test_smtp_exception_does_not_propagate(
-        self, submission, field_value, monkeypatch
-    ):
-        """SMTP failure during notification does not raise an exception"""
+        """A failing tracked delivery never raises out of notify_submission"""
 
         def failing_send(*args, **kwargs):
             raise Exception("SMTP connection refused")
 
         monkeypatch.setattr(
-            "quickscale_modules_forms.notifications.EmailMultiAlternatives.send",
+            "quickscale_modules_forms._email.send_notification",
             failing_send,
         )
         # Should NOT raise
-        notify_submission(submission)
+        with django_capture_on_commit_callbacks(execute=True):
+            status = notify_submission(submission)
+        assert status == "queued"
 
-    def test_subject_without_name_field(self, form, db):
+    def test_subject_without_name_field(
+        self, form, db, django_capture_on_commit_callbacks
+    ):
         """Subject falls back to generic when no name-type field is present"""
         from quickscale_modules_forms.models import FormField, FormFieldValue
         from quickscale_modules_orgs.current_org import org_scope
@@ -144,7 +151,8 @@ class TestNotifySubmission:
                 value="Hello world",
             )
         # org_scope exited — notify_submission wraps its own scope
-        notify_submission(sub)
+        with django_capture_on_commit_callbacks(execute=True):
+            notify_submission(sub)
         assert len(mail.outbox) == 1
         # Subject should NOT contain "from" (no name available)
         assert (
@@ -164,11 +172,13 @@ class TestNotifySubmissionOrgScope:
 
     notify_submission is called inside the view's org_scope() block in
     production. The FK traversal submission.values.all() inside
-    _build_submission_notification_content must resolve with the active org
+    _build_submission_notification_context must resolve with the active org
     context to pass RLS filtering on the child FormFieldValue table.
     """
 
-    def test_notification_body_contains_org_scoped_field_values(self, db):
+    def test_notification_body_contains_org_scoped_field_values(
+        self, db, django_capture_on_commit_callbacks
+    ):
         """Calling notify_submission inside org_scope() renders field values."""
         from quickscale_modules_forms.models import (
             Form,
@@ -182,39 +192,41 @@ class TestNotifySubmissionOrgScope:
         org = Organization.objects.create(name="Tenant Org", slug="tenant-org")
 
         # Create data inside org_scope so FORCE RLS allows the writes
-        with org_scope(org):
-            form = Form.all_objects.create(
-                title="Tenant Form",
-                slug="tenant-form",
-                organization=org,
-                notify_emails="tenant@example.com",
-            )
-            field = FormField.all_objects.create(
-                form=form,
-                organization=org,
-                field_type=FormField.FieldType.TEXT,
-                label="Message",
-                name="message",
-                order=1,
-            )
-            sub = FormSubmission.all_objects.create(
-                form=form,
-                organization=org,
-                ip_address="10.0.0.1",
-            )
-            FormFieldValue.all_objects.create(
-                submission=sub,
-                organization=org,
-                field=field,
-                field_name="message",
-                field_label="Message",
-                value="Tenant-scoped content",
-            )
+        with django_capture_on_commit_callbacks(execute=True):
+            with org_scope(org):
+                form = Form.all_objects.create(
+                    title="Tenant Form",
+                    slug="tenant-form",
+                    organization=org,
+                    notify_emails="tenant@example.com",
+                )
+                field = FormField.all_objects.create(
+                    form=form,
+                    organization=org,
+                    field_type=FormField.FieldType.TEXT,
+                    label="Message",
+                    name="message",
+                    order=1,
+                )
+                sub = FormSubmission.all_objects.create(
+                    form=form,
+                    organization=org,
+                    ip_address="10.0.0.1",
+                )
+                FormFieldValue.all_objects.create(
+                    submission=sub,
+                    organization=org,
+                    field=field,
+                    field_name="message",
+                    field_label="Message",
+                    value="Tenant-scoped content",
+                )
 
-            # Call notify_submission inside the org_scope block — this is the
-            # production path; without the active scope the FK traversal through
-            # TenantManager would RLS-filter and produce empty content.
-            notify_submission(sub)
+                # Call notify_submission inside the org_scope block — this is
+                # the production path; without the active scope the FK traversal
+                # through TenantManager would RLS-filter and produce empty
+                # content.
+                notify_submission(sub)
 
         assert len(mail.outbox) == 1, "Notification email must be sent"
         body = mail.outbox[0].body
@@ -226,7 +238,9 @@ class TestNotifySubmissionOrgScope:
             "Label-value pair must be rendered in the email"
         )
 
-    def test_notification_subject_includes_name_within_org_scope(self, db):
+    def test_notification_subject_includes_name_within_org_scope(
+        self, db, django_capture_on_commit_callbacks
+    ):
         """Submitter-name suffix in subject is resolved within org_scope."""
         from quickscale_modules_forms.models import (
             Form,
@@ -239,36 +253,37 @@ class TestNotifySubmissionOrgScope:
 
         org = Organization.objects.create(name="Name Org", slug="name-org")
 
-        with org_scope(org):
-            form = Form.all_objects.create(
-                title="Name Form",
-                slug="name-form",
-                organization=org,
-                notify_emails="name@example.com",
-            )
-            field = FormField.all_objects.create(
-                form=form,
-                organization=org,
-                field_type=FormField.FieldType.TEXT,
-                label="Full Name",
-                name="full_name",
-                order=1,
-            )
-            sub = FormSubmission.all_objects.create(
-                form=form,
-                organization=org,
-                ip_address="10.0.0.2",
-            )
-            FormFieldValue.all_objects.create(
-                submission=sub,
-                organization=org,
-                field=field,
-                field_name="full_name",
-                field_label="Full Name",
-                value="Alice Tenant",
-            )
+        with django_capture_on_commit_callbacks(execute=True):
+            with org_scope(org):
+                form = Form.all_objects.create(
+                    title="Name Form",
+                    slug="name-form",
+                    organization=org,
+                    notify_emails="name@example.com",
+                )
+                field = FormField.all_objects.create(
+                    form=form,
+                    organization=org,
+                    field_type=FormField.FieldType.TEXT,
+                    label="Full Name",
+                    name="full_name",
+                    order=1,
+                )
+                sub = FormSubmission.all_objects.create(
+                    form=form,
+                    organization=org,
+                    ip_address="10.0.0.2",
+                )
+                FormFieldValue.all_objects.create(
+                    submission=sub,
+                    organization=org,
+                    field=field,
+                    field_name="full_name",
+                    field_label="Full Name",
+                    value="Alice Tenant",
+                )
 
-            notify_submission(sub)
+                notify_submission(sub)
 
         assert len(mail.outbox) == 1
         # Subject should include "from Alice Tenant" — this proves the
@@ -294,7 +309,9 @@ class TestNotifySubmissionNoContext:
     or active transaction.atomic() block at call time.
     """
 
-    def test_content_rendered_without_org_context_or_atomic(self, db):
+    def test_content_rendered_without_org_context_or_atomic(
+        self, db, django_capture_on_commit_callbacks
+    ):
         """Calling notify_submission with no ContextVar and no atomic block
         still produces correctly rendered field values."""
         from quickscale_modules_forms.models import (
@@ -351,7 +368,8 @@ class TestNotifySubmissionNoContext:
         )
 
         # Call notify_submission with no org context and no ambient atomic
-        notify_submission(sub)
+        with django_capture_on_commit_callbacks(execute=True):
+            notify_submission(sub)
 
         assert len(mail.outbox) == 1, "Notification email must be sent"
         body = mail.outbox[0].body
@@ -440,7 +458,7 @@ class TestNotifySubmissionTransactionTrue:
         assert get_current_org_id() is None, "setup org_scope must not leak"
 
         # Call the REAL notify_submission (not monkeypatched).
-        from quickscale_modules_forms.notifications import notify_submission
+        from quickscale_modules_forms._email import notify_submission
 
         result = notify_submission(submission=sub)
 
@@ -465,7 +483,7 @@ class TestNotifySubmissionTransactionTrue:
         assert alternatives, "Email must have HTML alternative"
         html_body, mimetype = alternatives[0]
         assert mimetype == "text/html"
-        assert "<h2>New submission:" in html_body
+        assert "New submission: REV-003 Form" in html_body
 
         # Verify no context leak after notification dispatch.
         assert get_current_org_id() is None, "notification must not leak org context"
@@ -556,7 +574,7 @@ class TestNotifySubmissionFormFkInScope:
 
         # Call notify_submission with no ambient org context.
         # _enqueue_notification must wrap its own org_scope.
-        from quickscale_modules_forms.notifications import notify_submission
+        from quickscale_modules_forms._email import notify_submission
 
         notify_submission(fresh_sub)
 
