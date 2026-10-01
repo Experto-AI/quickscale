@@ -143,18 +143,24 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Context:** `make quality` (`scripts/check_quality.sh`) measures radon complexity and file
   length against a ratchet baseline (`scripts/quality_baseline.json`), but it only warns: no CI
-  stage or registered gate runs it. The last report shows 198 functions at CC ≥ 11 (36 at ≥ 21),
-  26 critical and 63 warning regressions against the baseline, and 24 files of 800 lines or more
-  (the largest are `beta_migration.py`, billing `services.py`, `apply_command.py`, and
-  `dr_engine/orchestration.py`, at 2,900–4,700 lines). File length is not in the baseline at all.
+  stage or registered gate runs it. The last report shows 188 functions at CC ≥ 11 (40 at ≥ 21),
+  22 critical and 70 warning regressions against the baseline, and 23 files of 800 lines or more
+  (the largest are billing `services.py`, `apply_command.py`, and `dr_engine/orchestration.py`,
+  at 2,900–4,600 lines). File length is not in the baseline at all.
 
   **Scope:** behavior-preserving batches, each a package-sized slice through the serialized merge
-  queue, merging `v89` before each one: (1) Track 1 surfaces (`beta_migration.py`, core contracts,
+  queue, merging `v89` before each one: (1) Track 1 surfaces (`beta_migration/`, core contracts,
   manifest, `project_state`, `git_utils`); (2) CLI commands; (3) `dr_engine`; (4) modules, each
   only after the convention ticket editing it has merged. Public import paths stay put (re-export
   where a file splits), existing tests pass unchanged, functions move toward CC < 11, and each
   batch re-tightens the baseline for its files. The final batch adds file length to the baseline
   ratchet and registers `make quality` as a failing gate.
+
+  **Landed (batch 1, first slice):** `beta_migration.py` is a 15-module package, each module under
+  800 lines, with its public import surface re-exported; its two accepted complexity entries are
+  relocated and tightened, while its unaccepted per-function debt stays visible as regressions. Batch
+  1 remains open on `manifest/loader.py`, `manifest/resolver.py`, `project_state.py`,
+  `utils/git_utils.py`, and `contracts/`; no function has been reduced yet.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
@@ -398,7 +404,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - A decision records who owns a pre-facade donor `production.py` (today donor-owned by policy
     and refused at preflight).
 
-  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, its tests and smoke gate; the migration
+  **Surfaces:** `quickscale_devtools/.../beta_migration/`, its tests and smoke gate; the migration
   playbook and gap ledger; the `showcase_react` theme, generator, and
   `generated_file_ownership.md` (design layer); decisions.
 

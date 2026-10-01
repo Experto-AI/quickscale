@@ -1717,7 +1717,7 @@ Implementation detail: [organizations.md §Operator Debug Mode](./organizations.
 ### Generated-File Ownership (Beta-Migration Taxonomy) {#generated-file-ownership-taxonomy}
 
 **Rule:** The beta-migration maintainer tooling
-(``quickscale_devtools/beta_migration.py``) carries a file taxonomy that
+(``quickscale_devtools/beta_migration/``) carries a file taxonomy that
 classifies every generator-emitted file by its migration path. The taxonomy
 combines explicit path tuples with operation-derived directory selectors; a conformance gate
 (``test_beta_migration_ownership_conformance.py``) derives the expected file
@@ -1783,8 +1783,8 @@ and asserts every emitted file is classified.
 7. **``MODE_REQUIRED_SPECS`` entries are classification sources, not mutation
    authority.**
    The beta-migration preflight validation specs
-   (``COMMON_REQUIRED_SPECS`` and ``MODE_REQUIRED_SPECS`` in
-   ``beta_migration.py``) define files and directories that must exist
+   (``COMMON_REQUIRED_SPECS`` and ``MODE_REQUIRED_SPECS`` in the
+   ``quickscale_devtools.beta_migration`` package) define files and directories that must exist
    before a migration step can proceed. Some of these specs (notably
    ``frontend/src/App.tsx``) independently appear in an executor-owned
    replacement or merge disposition, but merely being required does not make
@@ -1833,7 +1833,7 @@ configuration, or inspecting/patching their donor-owned `settings/production.py`
 — is **permanently out of scope for this monorepo's automated tooling and for
 any coding-agent session operating inside it.** Neither site's repository nor
 its Railway deployment is reachable from here; this is a structural property
-of the two-repo maintainer workflow (`quickscale_devtools/beta_migration.py`,
+of the two-repo maintainer workflow (`quickscale_devtools/beta_migration/`,
 [beta-site-migration.md](../planning/beta-site-migration.md)), not a
 credentials gap expected to close.
 

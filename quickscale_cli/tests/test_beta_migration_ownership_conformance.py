@@ -3,7 +3,7 @@
 SA66 (Finding 7 first step).  The generator template tree at
 ``quickscale_core/generator/templates/`` is the authoritative inventory of
 files QuickScale emits into a generated project.  The beta-migration file
-taxonomy in ``quickscale_devtools/beta_migration.py`` classifies those
+taxonomy in ``quickscale_devtools/beta_migration/`` classifies those
 emitted files by migration path (fresh-first donor, fresh-first recipient,
 intentionally unmanaged, etc.).
 
