@@ -1042,7 +1042,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
-    @override_settings(QUICKSCALE_MODE="solo")
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_dashboard_deals_by_stage_shows_only_personal_org_deals(
         self, client, staff_user, org_a
     ):
@@ -1103,7 +1103,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
-    @override_settings(QUICKSCALE_MODE="solo")
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_dashboard_recent_contacts_shows_personal_org_company_name(
         self, client, staff_user
     ):
