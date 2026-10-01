@@ -147,8 +147,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `QUICKSCALE_<MODULE>_ENABLED`; undeclared settings are declared or removed.
     **Landed:** blog, CRM, forms, and listings are renamed off their bare families (settings and
     option keys), blog's undeclared upload/format settings are declared, notifications' `provider`
-    is declared, and billing's `billing_currency` key is `currency`. **Open:** `QUICKSCALE_MODE` →
-    `QUICKSCALE_ORGS_MODE` (it rides the generator templates), every module's
+    is declared, billing's `billing_currency` key is `currency`, and orgs' mode is
+    `QUICKSCALE_ORGS_MODE` across the manifest, generator and theme templates, module code, tests,
+    and docs, with the retired `QUICKSCALE_MODE` refused at startup. **Landed:** blog, CRM, forms,
+    and listings also declare `QUICKSCALE_<MODULE>_ENABLED`; off keeps the installed app, drops
+    their own public URL mounts, keeps their staff-guarded Markdownx editor mount for the retained
+    admin, turns their theme flags false, and stops forms' scheduled retention command. **Open:**
+    auth, backups, orgs, social, and storage's
     `QUICKSCALE_<MODULE>_ENABLED`, and the backups fallback deletion.
   - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
     check refuses retired settings, each naming the replacement. Generated templates, docs, and
@@ -177,18 +182,26 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
 
-  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. orgs still names
-  feature modules by string in its purge path and boundary table, and several modules have no
-  declared service surface.
+  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. orgs' purge path
+  and boundary table no longer name another module, and the rule's import-graph test landed as
+  `quickscale_core/tests/test_module_import_graph.py`; several modules' service surfaces remain.
 
   **Scope:**
-  - *References by name* (rule 34). the purge command's billing steps and
-    `removal.BOUNDARY_GUARDED_OBLIGATIONS` become billing's removal declarations, and its blog and
-    crm label prefixes come from those modules' declarations; orgs' `checks.py` boundary table is
-    declared by each boundary's owner (auth declares account deletion); `TENANT_TABLE_REGISTRY`
-    moves into test code.
+  - *References by name* (rule 34). **Landed:** the purge command's billing steps and
+    `removal.BOUNDARY_GUARDED_OBLIGATIONS` are billing's declared removal hooks, blog's and crm's
+    label prefixes come from those modules' declarations, orgs' `checks.py` boundary table is
+    declared by each boundary's owner (auth declares account deletion), and orgs' post-create
+    billing handoff is billing's declared `organization_pricing_url_hooks` capability, which
+    activates the new organization first, so orgs names no billing route, and
+    `TENANT_TABLE_REGISTRY` is test-owned (`orgs/tests/_tenant_table_registry.py`), so shipped
+    source carries no parity oracle.
   - *Service surface.* Every module gains `services.py`; every `services.py` gains `__all__`,
     keyword-only signatures, and `<Module>Error` on failure, with `test_services.py`.
+    **Landed:** blog and listings publish their publish and upload operations through
+    `services.py` (keyword-only after the leading subject, `BlogError`/`ListingsError`
+    re-exported), with `test_services.py`. **Open:** `services.py` for auth and orgs; `__all__`
+    for backups, CRM, and notifications; keyword-only signatures in analytics, billing, and
+    backups; forms' `test_services.py`.
 
   **Acceptance:** an import-graph test matches the D6 layers,
   counting references by name as well as imports; no module reads another module's settings; no

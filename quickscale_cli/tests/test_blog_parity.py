@@ -22,6 +22,7 @@ from quickscale_core.manifest.option_validation import (
 from quickscale_core.schema.config_schema import ConfigValidationError, validate_config
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
+    "enabled": True,
     "posts_per_page": 10,
     "rss_enabled": True,
     "api_rate_limit": "5/hour",

@@ -23,6 +23,7 @@ from quickscale_core.manifest.option_validation import (
 from quickscale_core.schema.config_schema import ConfigValidationError, validate_config
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
+    "enabled": True,
     "api_enabled": True,
     "deals_per_page": 25,
     "contacts_per_page": 50,
@@ -274,6 +275,7 @@ class TestCrmConfigurator:
         config = entry.configure(non_interactive=False)
 
         assert config == {
+            "enabled": False,
             "api_enabled": False,
             "deals_per_page": 30,
             "contacts_per_page": 100,

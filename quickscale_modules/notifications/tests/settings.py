@@ -22,7 +22,7 @@ ALLOWED_HOSTS = ["*"]
 
 # Required by quickscale_modules_orgs; saas is the correct mode for
 # orgs-dependent module test suites (forms, blog, listings, crm, social).
-QUICKSCALE_MODE = "saas"
+QUICKSCALE_ORGS_MODE = "saas"
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
 # required forms settings; forms AppConfig.ready() will fail
 # startup otherwise.
+QUICKSCALE_FORMS_ENABLED = True
 QUICKSCALE_FORMS_API_ENABLED = True
 QUICKSCALE_FORMS_RATE_LIMIT = "5/hour"
 QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED = True

@@ -37,7 +37,7 @@ class TestCrmPostHook:
                 "QUICKSCALE_CRM_API_ENABLED": 1,
             },
         )
-        result = _crm_post_hook(spec, {})
+        result = _crm_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] == 25
         assert isinstance(result.settings["QUICKSCALE_CRM_DEALS_PER_PAGE"], int)
 
@@ -50,7 +50,7 @@ class TestCrmPostHook:
                 "QUICKSCALE_CRM_API_ENABLED": 0,
             },
         )
-        result = _crm_post_hook(spec, {})
+        result = _crm_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] == 20
         assert isinstance(result.settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"], int)
 
@@ -63,7 +63,7 @@ class TestCrmPostHook:
                 "QUICKSCALE_CRM_API_ENABLED": 1,
             },
         )
-        result = _crm_post_hook(spec, {})
+        result = _crm_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_CRM_API_ENABLED"] is True
 
     def test_coerces_enable_api_to_false(self) -> None:
@@ -75,7 +75,7 @@ class TestCrmPostHook:
                 "QUICKSCALE_CRM_API_ENABLED": 0,
             },
         )
-        result = _crm_post_hook(spec, {})
+        result = _crm_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_CRM_API_ENABLED"] is False
 
     def test_preserves_non_setting_fields(self) -> None:
@@ -89,9 +89,31 @@ class TestCrmPostHook:
                 "QUICKSCALE_CRM_API_ENABLED": True,
             },
         )
-        result = _crm_post_hook(spec, {})
+        result = _crm_post_hook(spec, {"enabled": True})
         assert result.apps == ("quickscale_modules_crm",)
         assert result.middleware == ()
+
+    def test_disabled_module_drops_url_mounts_and_keeps_apps(self) -> None:
+        """Rule 1 (D3): off keeps the app and settings but mounts no URLs."""
+        spec = ModuleWiringSpec(
+            apps=("rest_framework", "django_filters", "quickscale_modules_crm"),
+            settings={
+                "QUICKSCALE_CRM_DEALS_PER_PAGE": 25,
+                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": 50,
+                "QUICKSCALE_CRM_API_ENABLED": True,
+            },
+            pre_home_url_includes=(),
+            url_includes=(("crm/", "quickscale_modules_crm.urls"),),
+        )
+        result = _crm_post_hook(spec, {"enabled": False})
+        assert result.url_includes == ()
+        assert result.pre_home_url_includes == ()
+        assert result.apps == (
+            "rest_framework",
+            "django_filters",
+            "quickscale_modules_crm",
+        )
+        assert result.settings["QUICKSCALE_CRM_API_ENABLED"] is True
 
 
 class TestCrmManifestAdapter:

@@ -7,6 +7,13 @@ description: "Markdown-powered blog module"
 
 config:
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_BLOG_ENABLED
+      description: "Enable the blog module. Off keeps the module installed with its data intact and mounts none of its public URLs."
+      validation: {}
+
     posts_per_page:
       type: integer
       default: 10
@@ -99,8 +106,8 @@ derivation:
           - - blog/
             - quickscale_modules_blog.urls
           - - markdownx/
-            - markdownx.urls
-      description: "Blog URL includes"
+            - quickscale_modules_blog.markdownx_urls
+      description: "Blog URL includes; the Markdownx editor mount is staff-guarded"
 
   option_derivations:
     api_rate_limit:

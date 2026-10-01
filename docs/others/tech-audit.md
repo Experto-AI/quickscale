@@ -16,7 +16,7 @@ finding names one:
 
 - **R1 — the generator/CLI**, run on a developer or CI machine. Local trust boundary.
 - **R2 — the generated Django application**, deployed to Railway (or any container host) behind a
-  reverse proxy, internet-facing, multi-tenant when `QUICKSCALE_MODE=saas`. The generator's
+  reverse proxy, internet-facing, multi-tenant when `QUICKSCALE_ORGS_MODE=saas`. The generator's
   templates and the modules it installs are audited as the code they produce. Severity
   concentrates here.
 - **R3 — the release pipeline** (`.github/workflows/publish.yml`), OIDC trusted publishing to PyPI.

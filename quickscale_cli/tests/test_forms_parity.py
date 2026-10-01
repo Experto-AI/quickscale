@@ -24,6 +24,7 @@ from quickscale_core.manifest.option_validation import (
 from quickscale_core.schema.config_schema import ConfigValidationError, validate_config
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
+    "enabled": True,
     "submissions_per_page": 25,
     "spam_protection_enabled": True,
     "rate_limit": "5/hour",
@@ -224,6 +225,7 @@ class TestFormsProjection:
 
     def test_declared_defaults_project_to_settings(self) -> None:
         assert build_generic_manifest_spec("forms", None).settings == {
+            "QUICKSCALE_FORMS_ENABLED": True,
             "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
             "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
             "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
@@ -242,6 +244,7 @@ class TestFormsProjection:
                 "api_enabled": False,
             },
         ).settings == {
+            "QUICKSCALE_FORMS_ENABLED": True,
             "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 50,
             "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": False,
             "QUICKSCALE_FORMS_RATE_LIMIT": "10/minute",
@@ -289,13 +292,14 @@ class TestFormsConfigurator:
     def test_interactive_values_are_returned_canonical(
         self, mock_confirm, mock_prompt
     ) -> None:
-        mock_confirm.side_effect = [False, False]
+        mock_confirm.side_effect = [False, False, False]
         mock_prompt.side_effect = [40, "  10/minute  ", 30]
 
         entry = MODULE_CONFIGURATOR_REGISTRY["forms"]
         config = entry.configure(non_interactive=False)
 
         assert config == {
+            "enabled": False,
             "submissions_per_page": 40,
             "spam_protection_enabled": False,
             "rate_limit": "10/minute",
@@ -309,7 +313,7 @@ class TestFormsConfigurator:
         self, mock_confirm, mock_prompt
     ) -> None:
         """The planner's own output carries the canonical rate limit."""
-        mock_confirm.side_effect = [True, True]
+        mock_confirm.side_effect = [True, True, True]
         mock_prompt.side_effect = [40, "  10/minute  ", 30]
 
         configured = _configure_selected_modules(

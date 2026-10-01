@@ -148,3 +148,16 @@ steps:
       - "Compare and manually adopt the current frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useFormSchema.ts, and frontend/src/components/forms/FormRenderer.tsx forms API paths: the forms JSON API moved from /api/forms/... to /forms/api/... under the module's /forms/ mount, and the staff admin API moved from /api/admin/forms/... to /forms/api/admin/forms/..., so custom frontend code that calls the retired paths updates them; the forms HTML pages keep their existing /forms/... URLs."
       - "Audit project-owned Django templates and Python code that reverse crm routes (a copied templates/quickscale_crm/*.html, or project code calling reverse('quickscale_crm:...')) for the retired kebab-case crm route names (api-root, tag-list, tag-detail, company-list, company-detail, contact-list, contact-detail, contact-notes, stage-list, stage-detail, deal-list, deal-detail, deal-notes, deal-bulk-update-stage, deal-mark-won, deal-mark-lost, contact-note-list, contact-note-detail, deal-note-list, deal-note-detail) and forms routes (form-list, form-page, form-schema, form-submit, admin-form-list, admin-submission-list, admin-submission-detail, admin-submission-export), and rename them to their snake_case forms under quickscale_crm: and quickscale_forms:. The crm HTML dashboard and JSON API keep their existing /crm/dashboard/ and /crm/api/... URLs."
       - "Audit project-owned Django templates and Python code that reverse the retired analytics-dashboard route name and rename it to quickscale_analytics:dashboard; the analytics page URL is unchanged at /analytics/."
+  - id: sa219-orgs-mode-setting
+    minimum: "0.89.0"
+    title: "Adopt the QUICKSCALE_ORGS_MODE rename in project templates"
+    adoption_steps:
+      - "Compare and manually adopt the current <package>/context_processors.py: the billing dashboard URL reads the deployment mode from QUICKSCALE_ORGS_MODE instead of the retired QUICKSCALE_MODE, so a project still reading the old name sends a saas request to the solo billing path without any error."
+      - "Compare and manually adopt the current templates/index.html: window.__QUICKSCALE__.owner.mode reads settings.QUICKSCALE_ORGS_MODE, so the React shell reports the deployment mode the settings actually declare."
+      - "Remove QUICKSCALE_MODE from the project's settings and run `quickscale apply`: the orgs startup check refuses the retired name with the replacement named, and the managed settings/modules.py then carries QUICKSCALE_ORGS_MODE from the module's manifest."
+  - id: sa219-module-enabled-flags
+    minimum: "0.89.0"
+    title: "Adopt per-module enabled awareness in the React module flags"
+    adoption_steps:
+      - "Compare and manually adopt the current templates/index.html: the blog, crm, forms, and listings entries in window.__QUICKSCALE__.modules are true only while the module is installed and its QUICKSCALE_<MODULE>_ENABLED setting is on, so a module switched off in quickscale.yml leaves the shell navigation instead of linking to URLs apply no longer mounts."
+      - "Run `quickscale apply` for a project whose settings/modules.py predates the enabled option: the managed file then carries QUICKSCALE_<MODULE>_ENABLED for each of the four modules and its urls.py drops the mounts of any module switched off."

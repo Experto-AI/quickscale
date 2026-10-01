@@ -19,6 +19,7 @@ from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.db.models import F, Q
 from django.http import HttpRequest, HttpResponse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from quickscale_modules_orgs.current_org import org_scope
@@ -981,6 +982,70 @@ def reconcile_purchase_checkouts_for_removal(
             f"blank status for {checkout_session_id}."
         )
     return tuple(expired_checkout_ids)
+
+
+def guard_organization_removal_provider_state(
+    organization: Any,
+    *,
+    provider_expired_checkout_id: str = "",
+) -> str:
+    """Return the reason an organization purge must refuse, or an empty string.
+
+    The purge boundary declares this hook on billing's obligation
+    ``boundary_guarded_hooks`` and calls it while the organization row lock and
+    the RLS context are held.  Billing's provider state is live while a current
+    subscription carries no provider id to reconcile, while a current
+    subscription has not reached a provider-terminal state, or while an
+    incomplete subscription checkout Stripe has not confirmed expired is
+    pending.  A checkout id the caller reconciled to a provider-confirmed
+    expiry is excluded from the pending check.  An empty string means the purge
+    may proceed; a non-empty string is the operator-facing refusal.
+    """
+    current_statuses = Subscription.current_statuses()
+    queryset = Subscription.all_objects.filter(organization=organization)
+    stripe_subscription_ids = sorted(
+        str(subscription_id)
+        for subscription_id in queryset.filter(
+            status__in=current_statuses,
+            stripe_subscription_id__isnull=False,
+        )
+        .exclude(stripe_subscription_id="")
+        .values_list("stripe_subscription_id", flat=True)
+    )
+    ambiguous_current_subscription = (
+        queryset.filter(status__in=current_statuses)
+        .exclude(status=Subscription.Status.INCOMPLETE)
+        .filter(Q(stripe_subscription_id__isnull=True) | Q(stripe_subscription_id=""))
+        .exists()
+    )
+    pending_checkout_queryset = queryset.filter(
+        status=Subscription.Status.INCOMPLETE,
+    ).filter(Q(stripe_subscription_id__isnull=True) | Q(stripe_subscription_id=""))
+    if provider_expired_checkout_id:
+        pending_checkout_queryset = pending_checkout_queryset.exclude(
+            stripe_checkout_session_id=provider_expired_checkout_id
+        )
+
+    if ambiguous_current_subscription:
+        return (
+            f"Cannot purge organization {organization.pk} while it has a current "
+            "Stripe subscription with no provider id. Reconcile the subscription "
+            "before retrying."
+        )
+    if stripe_subscription_ids:
+        joined_ids = ", ".join(stripe_subscription_ids)
+        return (
+            f"Cannot purge organization {organization.pk} while it has current "
+            f"Stripe subscriptions: {joined_ids}. Cancel these subscriptions in "
+            "Stripe before retrying."
+        )
+    if pending_checkout_queryset.exists():
+        return (
+            f"Cannot purge organization {organization.pk} while a Stripe "
+            "subscription checkout is pending. Complete or expire the checkout "
+            "before retrying."
+        )
+    return ""
 
 
 def detach_account_deletion_user_references(
@@ -4371,6 +4436,27 @@ def _get_active_org_subscription(organization: Any) -> Subscription | None:
     )
 
 
+def organization_pricing_page_url(organization: Any) -> str:
+    """Return billing's pricing-page URL for the organization-creation handoff.
+
+    Module Conventions rule 4: billing declares this function on its
+    ``AppConfig`` as the ``organization_pricing_url_hooks`` capability and
+    the orgs create flow collects it, so no lower-layer module names
+    billing's route, label, or settings.  ``organization`` is the hook
+    contract's context argument; billing's pricing page is module-wide.
+    An enabled billing whose URLconf does not mount the pricing route is
+    misconfigured, so the reversal failure raises ``BillingConfigurationError``
+    (rule 23) instead of answering a false negative.
+    """
+    try:
+        return reverse("quickscale_billing:pricing_page")
+    except NoReverseMatch as exc:
+        raise BillingConfigurationError(
+            "Billing is enabled but its pricing route is not mounted; "
+            "run `quickscale apply` to restore the module's URL wiring."
+        ) from exc
+
+
 __all__ = [
     "account_deletion_user_reference_organization_ids",
     "cancel_current_subscription",
@@ -4393,8 +4479,10 @@ __all__ = [
     "credit_user",
     "get_or_create_stripe_customer",
     "get_stripe_client",
+    "guard_organization_removal_provider_state",
     "handle_stripe_event",
     "InsufficientCreditsError",
+    "organization_pricing_page_url",
     "OrgSelectionRequiredError",
     "resume_current_subscription",
     "reconcile_account_deletion_subscription_checkout",

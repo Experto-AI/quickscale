@@ -275,7 +275,7 @@ class TestMiddlewareDebugOverride:
     @pytest.mark.django_db
     def test_debug_org_overrides_saas_session(self, settings) -> None:
         """When debug-as is set, it takes priority over the normal session org."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-mw",
             email="super-mw@example.com",
@@ -305,7 +305,7 @@ class TestMiddlewareDebugOverride:
     @pytest.mark.django_db
     def test_debug_org_works_in_solo_mode(self, settings) -> None:
         """Debug override works even in solo mode."""
-        settings.QUICKSCALE_MODE = "solo"
+        settings.QUICKSCALE_ORGS_MODE = "solo"
         user = get_user_model().objects.create_superuser(
             username="super-solo-debug",
             email="super-solo-debug@example.com",
@@ -326,7 +326,7 @@ class TestMiddlewareDebugOverride:
     @pytest.mark.django_db
     def test_non_superuser_debug_session_is_ignored(self, settings) -> None:
         """Non-superuser debug session is cleared and normal flow applies."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_user(
             username="regular-mw",
             email="regular-mw@example.com",
@@ -349,7 +349,7 @@ class TestMiddlewareDebugOverride:
     @pytest.mark.django_db
     def test_admin_path_stays_exempt_with_debug_session(self, settings) -> None:
         """/admin/ must remain exempt even when a debug session exists."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-admin-exempt",
             email="super-admin-exempt@example.com",
@@ -369,7 +369,7 @@ class TestMiddlewareDebugOverride:
     @pytest.mark.django_db
     def test_debug_org_bypasses_membership_check(self, settings) -> None:
         """Superuser with debug-as bypasses the normal membership check."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-no-membership",
             email="super-no-membership@example.com",
@@ -398,7 +398,7 @@ class TestDebugAsOrgView:
 
     @pytest.mark.django_db
     def test_activates_debug_for_superuser(self, client, settings) -> None:
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-view-as",
             email="super-view-as@example.com",
@@ -418,7 +418,7 @@ class TestDebugAsOrgView:
 
     @pytest.mark.django_db
     def test_returns_404_for_non_superuser(self, client, settings) -> None:
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_user(
             username="regular-view-as",
             email="regular-view-as@example.com",
@@ -435,7 +435,7 @@ class TestDebugAsOrgView:
 
     @pytest.mark.django_db
     def test_returns_404_for_missing_org(self, client, settings) -> None:
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-missing",
             email="super-missing@example.com",
@@ -452,7 +452,7 @@ class TestDebugAsOrgView:
     @pytest.mark.django_db
     def test_get_returns_405(self, client, settings) -> None:
         """DebugAsOrgView is POST-only."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-get",
             email="super-get@example.com",
@@ -472,7 +472,7 @@ class TestDebugAsOrgView:
     @pytest.mark.django_db
     def test_with_valid_next_redirects_to_next(self, client, settings) -> None:
         """A valid same-host next parameter is followed."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-next-valid",
             email="super-next-valid@example.com",
@@ -495,7 +495,7 @@ class TestDebugAsOrgView:
         self, client, settings
     ) -> None:
         """An off-site next parameter falls back to the org detail redirect."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-next-offsite",
             email="super-next-offsite@example.com",
@@ -518,7 +518,7 @@ class TestDebugAsOrgView:
     @pytest.mark.django_db
     def test_with_disallowed_scheme_next_falls_back(self, client, settings) -> None:
         """A disallowed-scheme next parameter falls back to the org detail."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-next-scheme",
             email="super-next-scheme@example.com",
@@ -544,7 +544,7 @@ class TestExitDebugModeView:
 
     @pytest.mark.django_db
     def test_exits_debug_for_superuser(self, client, settings) -> None:
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-exit",
             email="super-exit@example.com",
@@ -565,7 +565,7 @@ class TestExitDebugModeView:
 
     @pytest.mark.django_db
     def test_returns_404_for_non_superuser(self, client, settings) -> None:
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_user(
             username="regular-exit",
             email="regular-exit@example.com",
@@ -581,7 +581,7 @@ class TestExitDebugModeView:
     @pytest.mark.django_db
     def test_get_returns_405(self, client, settings) -> None:
         """ExitDebugModeView is POST-only."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-exit-get",
             email="super-exit-get@example.com",
@@ -599,7 +599,7 @@ class TestExitDebugModeView:
     @pytest.mark.django_db
     def test_with_valid_next_redirects_to_next(self, client, settings) -> None:
         """A valid same-host next parameter is followed on exit."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-exit-next",
             email="super-exit-next@example.com",
@@ -623,7 +623,7 @@ class TestExitDebugModeView:
     @pytest.mark.django_db
     def test_with_off_site_next_falls_back_to_admin(self, client, settings) -> None:
         """An off-site next parameter falls back to /admin/ on exit."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-exit-offsite",
             email="super-exit-offsite@example.com",
@@ -649,7 +649,7 @@ class TestExitDebugModeView:
     @pytest.mark.django_db
     def test_with_disallowed_scheme_next_falls_back(self, client, settings) -> None:
         """A disallowed-scheme next parameter falls back to /admin/ on exit."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-exit-scheme",
             email="super-exit-scheme@example.com",
@@ -686,7 +686,7 @@ class TestDebugRouteOrdering:
         self, client, settings
     ) -> None:
         """A POST to /orgs/<slug>/debug/view-as/ hits the debug view."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-route",
             email="super-route@example.com",
@@ -719,7 +719,7 @@ class TestDebugRouteOrdering:
         self, client, settings
     ) -> None:
         """A POST to /orgs/<slug>/debug/exit/ hits the exit view."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-exit-route",
             email="super-exit-route@example.com",
@@ -746,7 +746,7 @@ class TestDebugRouteOrdering:
         self, client, settings
     ) -> None:
         """Org dashboard remains reachable through its own route."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-dashboard",
             email="super-dashboard@example.com",
@@ -774,7 +774,7 @@ class TestDebugBanner:
 
     @pytest.mark.django_db
     def test_banner_present_when_debug_active(self, client, settings) -> None:
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-banner",
             email="super-banner@example.com",
@@ -826,7 +826,7 @@ class TestDebugBanner:
 
     @pytest.mark.django_db
     def test_banner_absent_when_debug_inactive(self, client, settings) -> None:
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-no-banner",
             email="super-no-banner@example.com",
@@ -911,7 +911,7 @@ class TestAdminAffordances:
         self, admin_client, settings
     ) -> None:
         """The admin view-as URL sets the debug session and redirects to the org dashboard."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         organization = Organization.objects.create(
             name="AdminViewAs", slug="admin-view-as"
         )
@@ -928,7 +928,7 @@ class TestAdminAffordances:
     @pytest.mark.django_db
     def test_admin_exit_debug_clears_session(self, admin_client, settings) -> None:
         """The admin exit-debug URL clears the debug session and redirects to the admin."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         organization = Organization.objects.create(name="AdminExit", slug="admin-exit")
 
         # First set debug session
@@ -945,7 +945,7 @@ class TestAdminAffordances:
     @pytest.mark.django_db
     def test_admin_view_as_blocks_non_superuser(self, client, settings) -> None:
         """Non-superusers get an error and are redirected back to the change list."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_user(
             username="regular-admin-as",
             email="regular-admin-as@example.com",
@@ -966,7 +966,7 @@ class TestAdminAffordances:
     @pytest.mark.django_db
     def test_admin_exit_debug_blocks_non_superuser(self, client, settings) -> None:
         """Non-superusers get an error on exit too."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_user(
             username="regular-admin-exit",
             email="regular-admin-exit@example.com",
@@ -990,7 +990,7 @@ class TestAdminAffordances:
     @pytest.mark.django_db
     def test_admin_view_as_end_to_end_flow(self, client, settings) -> None:
         """Full end-to-end flow: activate VIEW-AS from admin → dashboard banner → exit."""
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         user = get_user_model().objects.create_superuser(
             username="super-e2e",
             email="super-e2e@example.com",

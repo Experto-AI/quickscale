@@ -14,7 +14,7 @@ from quickscale_core.manifest.settings_schema import load_settings_schema
 SECRET_KEY = "test-secret-key-for-forms-module"
 DEBUG = True
 
-QUICKSCALE_MODE = "saas"
+QUICKSCALE_ORGS_MODE = "saas"
 
 # The notifications webhook signing secret must resolve because the suite
 # installs notifications enabled; its rule 35 startup check reads the env var.
@@ -34,6 +34,7 @@ INSTALLED_APPS = [
 ]
 
 # required settings; AppConfig.ready() will fail startup otherwise.
+QUICKSCALE_FORMS_ENABLED = True
 QUICKSCALE_FORMS_API_ENABLED = True
 QUICKSCALE_FORMS_RATE_LIMIT = "5/hour"
 QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED = True

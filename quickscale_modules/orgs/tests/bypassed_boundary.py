@@ -21,6 +21,13 @@ class BypassingPurgeBoundary:
         """Bypass the shared coordinator entirely."""
 
 
+class BypassingAccountDeleteBoundary:
+    """An account-deletion boundary whose entry point never discharges."""
+
+    def handle(self) -> None:
+        """Bypass the shared coordinator entirely."""
+
+
 class DeadBranchPurgeBoundary:
     """A boundary whose coordinator calls sit behind a dead branch."""
 

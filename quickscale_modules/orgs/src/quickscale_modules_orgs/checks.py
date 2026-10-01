@@ -7,7 +7,7 @@ configuration and invariant checks below to
 error-level check fails) and registers them as ``quickscale_orgs`` system
 checks.
 
-The declared options (``QUICKSCALE_MODE`` and its type/choices) are validated
+The declared options (``QUICKSCALE_ORGS_MODE`` and its type/choices) are validated
 by rule 3's generic settings check, registered from ``ready()`` before these.
 
 The checks:
@@ -56,7 +56,7 @@ import ast
 import importlib
 import inspect
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 
 from django.apps import apps
 from django.core.checks import CheckMessage, Error, Warning, register
@@ -64,6 +64,7 @@ from django.db import connection
 
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL,
+    REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE,
     ExternalProviderField,
     OrganizationRemovalObligation,
     RemovalAction,
@@ -71,6 +72,7 @@ from quickscale_modules_orgs.removal import (
     coordinator_discharge_actions,
     external_provider_obligation_mismatches,
     organization_removal_obligations,
+    removal_boundary_implementations,
 )
 from quickscale_modules_orgs.tenancy import (
     _is_implicit_m2m_through,
@@ -85,6 +87,18 @@ from quickscale_modules_orgs.tenancy import (
 # Keep it aligned with the independent fail-closed declarations in the production
 # settings validator, CLI producer, and generated start.sh launcher; none is a SSOT.
 _PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})
+
+#: Retired setting names refused at startup, each naming its replacement
+#: (rule 6).  The declaration lives here, with the module's other checks,
+#: because the refusal must work before the project is re-applied: the
+#: settings a previous release wrote are exactly the ones still carrying
+#: these names.
+RETIRED_SETTINGS: Mapping[str, str] = {
+    "QUICKSCALE_MODE": (
+        "Legacy setting 'QUICKSCALE_MODE' is no longer supported. "
+        "Use 'QUICKSCALE_ORGS_MODE' instead."
+    ),
+}
 
 
 def _is_privileged_command() -> bool:
@@ -129,7 +143,7 @@ def check_rls_role(
 ) -> list[CheckMessage]:
     """Verify the connected PostgreSQL role does not have BYPASSRLS or SUPERUSER.
 
-    SA2.1: The guard is always active (regardless of ``QUICKSCALE_MODE``
+    SA2.1: The guard is always active (regardless of ``QUICKSCALE_ORGS_MODE``
     or ``DEBUG``) with two narrow exemptions:
 
     1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned value
@@ -418,22 +432,14 @@ def check_provider_id_conformance(app_configs: object, **kwargs: object) -> list
 # ---------------------------------------------------------------------------
 
 
-#: Boundary implementations that must route their stages through the shared
-#: coordinator: ``boundary -> (shipping app name, implementation module, entry
-#: function every removal path reaches)``.  A boundary whose shipping app is
-#: not installed has no implementation here.
-_BOUNDARY_IMPLEMENTATIONS: dict[RemovalBoundary, tuple[str, str, str]] = {
-    RemovalBoundary.PURGE: (
-        "quickscale_modules_orgs",
-        "quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization",
-        "Command.handle",
-    ),
-    RemovalBoundary.ACCOUNT_DELETE: (
-        "quickscale_modules_auth",
-        "quickscale_modules_auth.views",
-        "AccountDeleteView.form_valid",
-    ),
-}
+# Boundary implementations that must route their stages through the shared
+# coordinator are declared by each boundary's owner on its own ``AppConfig``
+# as ``boundary -> (shipping app name, implementation module, entry function
+# every removal path reaches)``.  A boundary whose shipping app is not
+# installed has no implementation here.
+def _boundary_implementations() -> dict[RemovalBoundary, tuple[str, str, str]]:
+    """Return the removal boundary implementations declared by installed apps."""
+    return removal_boundary_implementations()
 
 
 def _constant_value(node: ast.AST) -> tuple[bool, object]:
@@ -623,7 +629,20 @@ def _boundary_wiring_messages() -> list:
     closed when a routed stage or the completeness guard is missing from it.
     """
     messages: list = []
-    for boundary, implementation in _BOUNDARY_IMPLEMENTATIONS.items():
+    try:
+        implementations = _boundary_implementations()
+    except (TypeError, ValueError) as exc:
+        return [
+            Error(
+                f"Failed to read the declared removal-boundary implementations: {exc}",
+                hint=(
+                    "Declare each boundary implementation on its owner's AppConfig "
+                    f"as a '{REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE}' mapping."
+                ),
+                id="quickscale_orgs.E002",
+            )
+        ]
+    for boundary, implementation in implementations.items():
         app_name, module_path, entry_name = implementation
         if not apps.is_installed(app_name):
             continue

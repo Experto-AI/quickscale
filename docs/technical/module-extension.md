@@ -68,7 +68,7 @@ Every module does **not** need to implement every surface.
 ### Project-Owned Tenant Models
 
 A generated project may add tenant-scoped models in its own Django app without
-editing a vendored QuickScale module or adding an entry to
+editing a vendored QuickScale module or adding an entry to the test-owned
 `TENANT_TABLE_REGISTRY`. Runtime classification is marker-derived: a concrete
 model is enrolled when it inherits the tenant contract (`TenantModel` directly
 or through a module's abstract base), while an explicit reason string on
@@ -105,8 +105,8 @@ policy metadata is absent or ambiguous.
 The resulting project-owned model participates in the same W003/W004 system
 check and `check_tenant_isolation` command as shipped module models. Their
 human-readable output and JSON results should include the model. The shipped
-literal registry remains a CI parity oracle for shipped modules only; it is not
-an enrollment API for project-owned extensions.
+module registry is a test-owned CI parity oracle for shipped modules only; it
+is not an enrollment API for project-owned extensions.
 
 A project-owned model also classifies each of its non-relational `*_id` fields
 as provider-backed or not, from its own code:
@@ -171,12 +171,23 @@ tombstone (`RECORD`), and organization-scoped cache invalidation
 (`RECONCILE`); `SKIP` records an obligation a boundary deliberately does not
 execute. A declared provider field refuses the purge while it carries a value;
 a module whose own guard decides provider liveness marks the field
-`boundary_guarded=True` instead. The app-owned stages name their executor: an
+`boundary_guarded=True` and declares the `BoundaryGuardedHooks` its guarded
+fields run: a `guard` hook the purge boundary calls inside its transaction
+(returning an empty string to allow removal, else the refusal message), an
+optional `reconcile` hook that runs before the transaction and returns a
+provider-confirmed expired checkout id, and an optional `mutation_lock` hook
+whose context manager the boundary holds across both. The app-owned stages name
+their executor: an
 `INVALIDATE` declaration needs the declaring app's
 `invalidate_organization_cache` hook and a `RECONCILE` declaration needs its
 `reconcile_account_deletion_provider_state` hook, so the boundary runs the
 declaring app's own work instead of marking a declaration discharged for
-nothing. A removal that finishes while a declared obligation was not discharged
+nothing. A module may also declare `removal_label_prefix` to name how its
+models appear in the purge summary, and each removal boundary's owner declares
+where its implementation lives through `removal_boundary_implementations`, so
+the check follows the owner's declaration instead of a hardcoded table and
+refuses a declaration whose shipping app is not installed. A
+removal that finishes while a declared obligation was not discharged
 fails closed, and the orgs system check (`quickscale_modules_orgs.E002`) fails
 a declaration whose action no boundary performs, a declaration without its
 executor hook, a boundary that stops routing its stages through the

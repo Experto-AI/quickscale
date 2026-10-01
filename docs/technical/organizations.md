@@ -9,7 +9,7 @@ The organizations module enables a QuickScale-generated app to be sold as a SaaS
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes, the `quickscale_orgs_promote_to_saas` command, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped module surface contains **22 ENROLLED models** across CRM (7), Forms (4), Billing (4), Blog (4), Listings (1), and Social (2); each inherits `TenantModel`, and so carries a direct `organization_id` plus the shared `TenantManager` / `TenantManager(super_scope=True)` pair, and ships with the exact two-policy FORCE-RLS pair rendered by `apply_force_rls()`. `TenantMiddleware` plus the execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract by design. Runtime tenant classification and FORCE-RLS refresh are marker-derived across installed concrete models; the shipped `TENANT_TABLE_REGISTRY` is retained only as a CI parity oracle for shipped modules. Project-owned tenant models join this runtime set by inheriting `TenantModel` (directly or through a module's abstract base) and install the same tenant-only `FOR ALL` plus operator-read `FOR SELECT` pair from their initial migration, without editing the shipped literal.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes, the `quickscale_orgs_promote_to_saas` command, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped module surface contains **22 ENROLLED models** across CRM (7), Forms (4), Billing (4), Blog (4), Listings (1), and Social (2); each inherits `TenantModel`, and so carries a direct `organization_id` plus the shared `TenantManager` / `TenantManager(super_scope=True)` pair, and ships with the exact two-policy FORCE-RLS pair rendered by `apply_force_rls()`. `TenantMiddleware` plus the execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract by design. Runtime tenant classification and FORCE-RLS refresh are marker-derived across installed concrete models; the test-owned `TENANT_TABLE_REGISTRY` remains only a CI parity oracle for shipped modules. Project-owned tenant models join this runtime set by inheriting `TenantModel` (directly or through a module's abstract base) and install the same tenant-only `FOR ALL` plus operator-read `FOR SELECT` pair from their initial migration, without editing the shipped literal.
 
 ---
 
@@ -47,7 +47,7 @@ However, runtime resolution is preferable for QuickScale because:
 
 ```python
 # settings.py
-QUICKSCALE_MODE = "solo"  # or 'saas'
+QUICKSCALE_ORGS_MODE = "solo"  # or 'saas'
 ```
 
 `TenantMiddleware` reads this setting and changes two behaviours:
@@ -67,13 +67,13 @@ The same org views serve both modes. Org-management pages keep `org_slug` where 
 
 ```bash
 # 1. Change setting
-QUICKSCALE_MODE = 'saas'
+QUICKSCALE_ORGS_MODE = 'saas'
 
 # 2. Run once after deploy
 python manage.py quickscale_orgs_promote_to_saas
 ```
 
-`quickscale_orgs_promote_to_saas` ships as part of the org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_MODE = 'saas'` settings change instead of mutating settings files directly.
+`quickscale_orgs_promote_to_saas` ships as part of the org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_ORGS_MODE = 'saas'` settings change instead of mutating settings files directly.
 
 ---
 
@@ -162,7 +162,7 @@ A user account is global (one email, one login). A user's role is org-scoped. Re
 
 ### Architecture
 
-One Railway project: one application service and one PostgreSQL 18 service. All organizations share the same database and the same schema. `TenantMiddleware` resolves the active org, the execute-wrapper derives `app.current_org_id` from the current-org ContextVar, and marker-derived discovery identifies the installed concrete tenant models. The shipped module surface contains **22 ENROLLED models** across CRM, Forms, Billing, Blog, Listings, and Social; each enrolled table has a direct `organization_id` column and the exact two-policy FORCE-RLS pair rendered by `apply_force_rls()`. Reviewed exclusions (org control-plane models, system-wide billing metadata, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract intentionally. The authoritative human-readable overview of the shipped tenant-table surface is the marker-based derived registry view (:func:`get_derived_registry_overview` in ``quickscale_modules_orgs.tenancy``). The derived view is purely marker-driven — every excluded concrete model carries an explicit ``tenant_excluded`` class attribute. Runtime refresh binds each existing table to its unique live `FOR ALL` policy from `pg_policies` before changing RLS state, while conformance checks require that base policy and its matching `<base>_select` operator-read policy match the rendered predicates exactly. The literal ``TENANT_TABLE_REGISTRY`` is retained only as a shipped-module parity oracle; project-owned tenant models do not edit it.
+One Railway project: one application service and one PostgreSQL 18 service. All organizations share the same database and the same schema. `TenantMiddleware` resolves the active org, the execute-wrapper derives `app.current_org_id` from the current-org ContextVar, and marker-derived discovery identifies the installed concrete tenant models. The shipped module surface contains **22 ENROLLED models** across CRM, Forms, Billing, Blog, Listings, and Social; each enrolled table has a direct `organization_id` column and the exact two-policy FORCE-RLS pair rendered by `apply_force_rls()`. Reviewed exclusions (org control-plane models, system-wide billing metadata, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract intentionally. The authoritative human-readable overview of the shipped tenant-table surface is the marker-based derived registry view (:func:`get_derived_registry_overview` in ``quickscale_modules_orgs.tenancy``). The derived view is purely marker-driven — every excluded concrete model carries an explicit ``tenant_excluded`` class attribute. Runtime refresh binds each existing table to its unique live `FOR ALL` policy from `pg_policies` before changing RLS state, while conformance checks require that base policy and its matching `<base>_select` operator-read policy match the rendered predicates exactly. The literal ``TENANT_TABLE_REGISTRY`` is a test-owned shipped-module parity oracle; project-owned tenant models do not edit it.
 
 ```
 Railway project
@@ -457,7 +457,7 @@ and uses the first one that answers, so `orgs` never subclasses or imports the a
 def post_login_redirect(request) -> str | None:
     if not request.user.is_authenticated:
         return None
-    saas = settings.QUICKSCALE_MODE == "saas"
+    saas = settings.QUICKSCALE_ORGS_MODE == "saas"
     has_membership = OrganizationMembership.objects.filter(user=request.user).exists()
     if not saas and not has_membership:
         Organization.objects.create_personal_for(request.user)
@@ -670,7 +670,7 @@ All open questions from the original design were resolved before implementation 
 |----------|----------|-----------|
 | Multi-org membership? | **No** — regular SaaS users belong to exactly one org | Eliminates the dual-source-of-truth problem (session is sole authority); removes need for explicit-org API contract. Multi-org membership at the DB level is not precluded but is not exposed in the UI. VIEW-AS handles operator debug needs. |
 | `Organization` model location? | **`quickscale_modules_orgs`** | Auth stays minimal and standalone; orgs depends on auth, not the reverse |
-| Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
+| Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_ORGS_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
 | Billing migration path? | **Current installs require organization ownership** | The retired recovery command `migrate_billing_to_orgs` is deleted; no supported install holds the nullable shape it repaired |
 | Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | The enrolled tenant-table surface now runs under the per-org runtime-role admin contract (explicit per-org selection → session → fail-closed); no operator bypass or `BYPASSRLS` deployed |
 | Active org routing? | **Session-based in SaaS; personal-org resolution in Solo** | Org-management pages stay under `/orgs/...`; shipped server content routes are flat for CRM, blog, forms, listings, and billing; fresh `showcase_react` SaaS pages keep org-slug blog/listings routes with flat redirect shims. Solo mode resolves the personal org transparently. |
@@ -691,7 +691,7 @@ This section records the current repository slice, not the eventual end-state de
 | `Organization`, `OrganizationMembership`, `OrganizationInvitation` models | ✅ implemented |
 | Django admin registration for core org models | ✅ implemented |
 | `TenantModel` abstract base class with `organization` FK | ✅ implemented |
-| `QUICKSCALE_MODE` setting with Solo / SaaS behaviour | ✅ implemented |
+| `QUICKSCALE_ORGS_MODE` setting with Solo / SaaS behaviour | ✅ implemented |
 | `TenantMiddleware` (Solo/SaaS org resolution, `request.org`, `app.current_org_id`) | ✅ implemented |
 | Middleware caller-parity coverage for bootstrap/exempt vs org-scoped paths | ✅ implemented |
 | `require_org_role` decorator + `OrgRoleMixin` | ✅ implemented |
@@ -769,8 +769,8 @@ Use `Model.all_objects.all()` in:
 For a generated project that already exists and is adding structural isolation:
 
 1. **Add `quickscale_modules_orgs` to `INSTALLED_APPS`** and run its migrations.
-2. **Add `TenantMiddleware`** to the middleware stack and configure `QUICKSCALE_MODE` (see [Deployment Mode](#deployment-mode-solo-vs-saas-organizations) above).
-3. **Wire URL routing** — load org-scoped or solo URL patterns conditionally based on `QUICKSCALE_MODE`.
+2. **Add `TenantMiddleware`** to the middleware stack and configure `QUICKSCALE_ORGS_MODE` (see [Deployment Mode](#deployment-mode-solo-vs-saas-organizations) above).
+3. **Wire URL routing** — load org-scoped or solo URL patterns conditionally based on `QUICKSCALE_ORGS_MODE`.
 4. **Inherit `TenantModel`** (directly or through a module's abstract base) on every tenant-scoped model. The base provides the `objects` / `all_objects` `TenantManager` pair; a `TenantManager` on a model that does not inherit `TenantModel` fails startup (see [TenantModel Abstract Base](#tenantmodel-abstract-base)).
 5. **Backfill `organization_id`** on existing rows — the FK is required for new rows; existing rows may need a data migration to assign an org.
 6. **Switch views and services** — remove `.for_org(...)` chaining and rely on middleware-established org context for request paths; for non-request paths, enter scope explicitly with `org_scope(...)` / `tenant_context(...)` / `set_current_org_for_context(...)` before using `objects`.

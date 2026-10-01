@@ -49,7 +49,7 @@ MIDDLEWARE = [
 ]
 
 # SaaS mode for org-scoped route testing
-QUICKSCALE_MODE = "saas"
+QUICKSCALE_ORGS_MODE = "saas"
 
 ROOT_URLCONF = "tests.urls"
 
@@ -97,6 +97,7 @@ LOGGING_CONFIG = None
 LOGGING: dict[str, object] = {}
 
 # Listings module settings
+QUICKSCALE_LISTINGS_ENABLED = True
 QUICKSCALE_LISTINGS_PER_PAGE = 12
 
 # Rule 3: the compiled option schema the generic startup check reads.  The

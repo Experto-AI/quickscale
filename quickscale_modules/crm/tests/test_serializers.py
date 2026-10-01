@@ -675,7 +675,7 @@ class TestF115Phase2SerializerHelperOrgScoping:
         assert "Org-A-Deal-Tag" in serializer.data["tag_names"]
         assert "Org-B-Deal-Tag" not in serializer.data["tag_names"]
 
-    @override_settings(QUICKSCALE_MODE="solo")
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_route_serializer_helpers_scope_to_personal_org(
         self, staff_user, org_a
     ):
@@ -1108,7 +1108,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         assert not serializer.is_valid()
         assert "stage_id" in serializer.errors
 
-    @override_settings(QUICKSCALE_MODE="solo")
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_route_contact_update_rejects_foreign_org_company(
         self, staff_user, org_b
     ):
@@ -1151,7 +1151,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         assert not serializer.is_valid()
         assert "company_id" in serializer.errors
 
-    @override_settings(QUICKSCALE_MODE="solo")
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_route_deal_update_rejects_foreign_org_contact(
         self, staff_user, org_b
     ):
@@ -1210,7 +1210,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         assert not serializer.is_valid()
         assert "contact_id" in serializer.errors
 
-    @override_settings(QUICKSCALE_MODE="solo")
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_route_deal_update_rejects_foreign_org_stage(self, staff_user, org_b):
         """DealDetailSerializer rejects foreign-org stage_id on solo-route update."""
         from decimal import Decimal
@@ -1458,7 +1458,7 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         assert not serializer.is_valid()
         assert "tag_ids" in serializer.errors
 
-    @override_settings(QUICKSCALE_MODE="solo")
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_route_rejects_foreign_org_related_ids_on_create(
         self, staff_user, org_a, org_b
     ):
@@ -1697,7 +1697,7 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         assert not serializer.is_valid()
         assert "stage_id" in serializer.errors
 
-    @override_settings(QUICKSCALE_MODE="solo")
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_route_rejects_foreign_org_stage(self, staff_user, org_b):
         """BulkUpdateStageSerializer rejects foreign-org stage_id on solo route (Phase 2)."""
         from rest_framework.test import APIRequestFactory

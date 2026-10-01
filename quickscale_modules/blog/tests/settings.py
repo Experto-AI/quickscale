@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     "quickscale_modules_blog",
 ]
 
-QUICKSCALE_MODE = "saas"
+QUICKSCALE_ORGS_MODE = "saas"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -95,6 +95,7 @@ MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="qs_blog_test_media_"))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Blog module required settings (fail-hard defaults)
+QUICKSCALE_BLOG_ENABLED = True
 QUICKSCALE_BLOG_RSS_ENABLED = True
 QUICKSCALE_BLOG_API_RATE_LIMIT = "5/hour"
 QUICKSCALE_BLOG_POSTS_PER_PAGE = 10

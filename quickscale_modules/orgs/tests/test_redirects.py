@@ -32,7 +32,7 @@ def _attach_session(request) -> None:
 
 @pytest.mark.django_db
 def test_solo_signup_redirect_creates_personal_org(settings) -> None:
-    settings.QUICKSCALE_MODE = "solo"
+    settings.QUICKSCALE_ORGS_MODE = "solo"
     user = get_user_model().objects.create_user(
         username="alice.org",
         email="alice@example.com",
@@ -54,7 +54,7 @@ def test_solo_signup_redirect_creates_personal_org(settings) -> None:
 
 @pytest.mark.django_db
 def test_saas_signup_redirect_without_membership_goes_to_org_creation(settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="bob",
         email="bob@example.com",
@@ -70,7 +70,7 @@ def test_saas_signup_redirect_without_membership_goes_to_org_creation(settings) 
 
 @pytest.mark.django_db
 def test_saas_signup_redirect_prefers_pending_invitation_accept_path(settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="alix",
         email="alix@example.com",
@@ -103,7 +103,7 @@ def test_saas_signup_redirect_prefers_pending_invitation_accept_path(settings) -
 
 @pytest.mark.django_db
 def test_login_redirect_stays_root_when_membership_exists(settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     settings.LOGIN_REDIRECT_URL = "/dashboard/"
     user = get_user_model().objects.create_user(
         username="carol",
@@ -123,7 +123,7 @@ def test_login_redirect_stays_root_when_membership_exists(settings) -> None:
 def test_login_redirect_sends_saas_users_without_memberships_to_org_creation(
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     settings.LOGIN_REDIRECT_URL = "/dashboard/"
     user = get_user_model().objects.create_user(
         username="dana",
@@ -140,7 +140,7 @@ def test_login_redirect_sends_saas_users_without_memberships_to_org_creation(
 
 @pytest.mark.django_db
 def test_login_redirect_prefers_pending_invitation_accept_path(settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     settings.LOGIN_REDIRECT_URL = "/dashboard/"
     inviter = get_user_model().objects.create_user(
         username="cato",
@@ -176,7 +176,7 @@ def test_login_redirect_prefers_pending_invitation_accept_path(settings) -> None
 def test_login_redirect_prefers_pending_invitation_even_when_membership_exists(
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     settings.LOGIN_REDIRECT_URL = "/dashboard/"
     inviter = get_user_model().objects.create_user(
         username="existing-member-inviter",
@@ -221,7 +221,7 @@ def test_post_auth_redirect_falls_back_to_org_creation_when_pending_invitation_i
     redirect_method,
     state,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     settings.LOGIN_REDIRECT_URL = "/dashboard/"
     inviter = get_user_model().objects.create_user(
         username=f"{state}-inviter",
@@ -260,7 +260,7 @@ def test_post_auth_redirect_falls_back_to_org_creation_when_pending_invitation_i
 def test_solo_login_redirect_creates_personal_org_and_keeps_base_redirect(
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "solo"
+    settings.QUICKSCALE_ORGS_MODE = "solo"
     settings.LOGIN_REDIRECT_URL = "/accounts/profile/"
     user = get_user_model().objects.create_user(
         username="erin",

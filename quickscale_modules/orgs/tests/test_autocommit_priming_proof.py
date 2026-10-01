@@ -47,7 +47,7 @@ class TestAf9AutocommitRequestPathProof:
 
     @pytest.fixture(autouse=True)
     def _setup(self, settings) -> None:
-        settings.QUICKSCALE_MODE = "saas"
+        settings.QUICKSCALE_ORGS_MODE = "saas"
         self.user = get_user_model().objects.create_user(
             username="af9-probe",
             email="af9-probe@example.com",

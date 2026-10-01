@@ -915,7 +915,7 @@ class TestModuleWiringSpecs:
 
         assert specs["listings"].url_includes == (
             ("listings/", "quickscale_modules_listings.urls"),
-            ("markdownx/", "markdownx.urls"),
+            ("markdownx/", "quickscale_modules_listings.markdownx_urls"),
         )
 
     def test_blog_wiring_without_rss_still_includes_markdownx_urls(self):
@@ -935,7 +935,7 @@ class TestModuleWiringSpecs:
         assert settings["QUICKSCALE_BLOG_RSS_ENABLED"] is False
         assert settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "15/minute"
         assert ("blog/", "quickscale_modules_blog.urls") in urls
-        assert ("markdownx/", "markdownx.urls") in urls
+        assert ("markdownx/", "quickscale_modules_blog.markdownx_urls") in urls
 
     def test_storage_wiring_local_keeps_filesystem_defaults(self):
         """Storage wiring should not force STORAGES override for local backend."""
@@ -1249,12 +1249,13 @@ class TestFormsModuleConfig:
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
     def test_configure_forms_interactive(self, mock_confirm, mock_prompt):
-        mock_confirm.side_effect = [False, False]
+        mock_confirm.side_effect = [False, False, False]
         mock_prompt.side_effect = [40, "10/minute", 30]
 
         config = MODULE_CONFIGURATOR_REGISTRY["forms"].configure(non_interactive=False)
 
         assert config == {
+            "enabled": False,
             "submissions_per_page": 40,
             "spam_protection_enabled": False,
             "rate_limit": "10/minute",

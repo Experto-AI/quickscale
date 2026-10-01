@@ -29,9 +29,10 @@ Contract rules enforced by this command:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections import Counter
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from heapq import heappop, heappush
 from typing import Any, cast
 
@@ -52,9 +53,12 @@ from quickscale_modules_orgs.models import (
 )
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL,
+    REMOVAL_LABEL_PREFIX_ATTRIBUTE,
+    DeclaredBoundaryGuard,
     RemovalAction,
     RemovalBoundary,
     RemovalCoordinator,
+    declared_boundary_guards,
     declared_provider_backed_fields,
     declared_refusal_fields,
     organization_removal_obligations,
@@ -64,14 +68,29 @@ from quickscale_modules_orgs.tenancy import (
     has_organization_id_field,
 )
 
+logger = logging.getLogger(__name__)
+
 # Additional child-before-parent constraints belong here only when installed FK
 # metadata cannot represent them. Each pair is ``(before_label, after_label)``.
 _PURGE_ORDER_OVERRIDES: tuple[tuple[str, str], ...] = ()
 
-_LABEL_PREFIXES = {
-    "quickscale_blog": "Blog",
-    "quickscale_crm": "CRM",
-}
+
+def _removal_label_prefixes() -> dict[str, str]:
+    """Return each installed app's declared removal display prefix."""
+    prefixes: dict[str, str] = {}
+    for app_config in apps.get_app_configs():
+        prefix = getattr(app_config, REMOVAL_LABEL_PREFIX_ATTRIBUTE, "")
+        if prefix:
+            prefixes[app_config.label] = str(prefix)
+    return prefixes
+
+
+def _model_label(model: type[models.Model]) -> str:
+    plural = str(model._meta.verbose_name_plural)
+    prefix = _removal_label_prefixes().get(model._meta.app_label)
+    if prefix:
+        return f"{prefix} {plural[:1].lower()}{plural[1:]}"
+    return f"{plural[:1].upper()}{plural[1:]}"
 
 
 def _model_key(model: type[models.Model]) -> str:
@@ -168,14 +187,6 @@ def _topologically_order_models(
             f"blocking cycle involving: {', '.join(cyclic)}"
         )
     return [models_by_key[key] for key in ordered_keys]
-
-
-def _model_label(model: type[models.Model]) -> str:
-    plural = str(model._meta.verbose_name_plural)
-    prefix = _LABEL_PREFIXES.get(model._meta.app_label)
-    if prefix:
-        return f"{prefix} {plural[:1].lower()}{plural[1:]}"
-    return f"{plural[:1].upper()}{plural[1:]}"
 
 
 def _disambiguated_model_labels(
@@ -356,18 +367,18 @@ class Command(BaseCommand):
         coordinator = RemovalCoordinator(RemovalBoundary.PURGE)
         self._require_dischargeable_obligations(coordinator)
         self._guard_provider_reconciliation_target(org_id)
-        with self._billing_provider_mutation_lock(org_id):
+        with self._provider_mutation_lock(org_id):
             if dry_run:
-                provider_expired_checkout_id = self._reconcile_billing_provider_state(
+                provider_expired_checkouts = self._reconcile_provider_states(
                     org_id,
                     persist=False,
                 )
                 return self._dry_run_by_uuid(
                     org_id,
                     coordinator=coordinator,
-                    provider_expired_checkout_id=provider_expired_checkout_id,
+                    provider_expired_checkouts=provider_expired_checkouts,
                 )
-            self._reconcile_billing_provider_state(org_id, persist=True)
+            self._reconcile_provider_states(org_id, persist=True)
             return self._purge_by_uuid(org_id, coordinator=coordinator)
 
     # ------------------------------------------------------------------
@@ -405,7 +416,7 @@ class Command(BaseCommand):
         org_id: uuid.UUID,
         *,
         coordinator: RemovalCoordinator,
-        provider_expired_checkout_id: str = "",
+        provider_expired_checkouts: dict[str, str] | None = None,
     ) -> str | None:
         """Show ownership counts for an organization without deleting.
 
@@ -419,9 +430,9 @@ class Command(BaseCommand):
                 self._guard_reserved_org(organization)
                 set_current_org_for_context(org_id=organization.pk)
                 try:
-                    self._guard_live_stripe_subscriptions(
+                    self._guard_boundary_provider_state(
                         organization,
-                        provider_expired_checkout_id=provider_expired_checkout_id,
+                        provider_expired_checkouts=provider_expired_checkouts or {},
                     )
                     self._guard_provider_backed_fields(organization)
                     coordinator.discharge_stage(RemovalAction.REFUSE)
@@ -481,7 +492,7 @@ class Command(BaseCommand):
                 # app.current_org_id set.
                 set_current_org_for_context(org_id=organization.pk)
                 try:
-                    self._guard_live_stripe_subscriptions(organization)
+                    self._guard_boundary_provider_state(organization)
                     self._guard_provider_backed_fields(organization)
                     coordinator.discharge_stage(RemovalAction.REFUSE)
 
@@ -664,125 +675,107 @@ class Command(BaseCommand):
         if organization is not None:
             self._guard_reserved_org(organization)
 
-    def _reconcile_billing_provider_state(
+    def _declared_boundary_guards(self) -> tuple[DeclaredBoundaryGuard, ...]:
+        """Return the declared boundary guards, refusing an unreadable declaration."""
+        try:
+            return declared_boundary_guards()
+        except (TypeError, ValueError, RuntimeError) as exc:
+            raise CommandError(
+                f"Could not read the declared provider-state guards: {exc}. "
+                "Purge was refused."
+            ) from exc
+
+    def _reconcile_provider_states(
         self,
         org_id: object,
         *,
         persist: bool,
-    ) -> str:
-        """Run billing's provider adapter before opening the purge transaction."""
-        if not apps.is_installed("quickscale_modules_billing"):
-            return ""
-        app_config = apps.get_app_config("quickscale_billing")
-        reconcile = getattr(
-            app_config,
-            "reconcile_organization_removal_provider_state",
-            None,
-        )
-        if not callable(reconcile):
-            raise CommandError(
-                "Billing is installed without its organization-removal provider "
-                "adapter; purge was refused."
-            )
-        try:
-            return str(reconcile(org_id, persist=persist) or "").strip()
-        except Exception as exc:
-            raise CommandError(
-                "Could not establish terminal Stripe checkout state before "
-                f"organization removal: {exc}"
-            ) from exc
+    ) -> dict[str, str]:
+        """Run every declared provider-state hook before the purge transaction.
 
-    def _billing_provider_mutation_lock(self, org_id: object) -> Any:
-        """Hold billing's provider mutex through reconciliation and purge."""
-        if not apps.is_installed("quickscale_modules_billing"):
+        Each declaring app owns the pre-transaction reconciliation its
+        boundary-guarded obligation names.  The returned map carries the
+        provider-confirmed expired checkout id per obligation, so the refusal
+        guard does not read a checkout the reconciliation certified as pending.
+        """
+        expired_checkouts: dict[str, str] = {}
+        for declared in self._declared_boundary_guards():
+            if declared.reconcile is None:
+                continue
+            try:
+                result = declared.reconcile(org_id, persist=persist)
+            except Exception as exc:
+                raise CommandError(
+                    "Could not establish terminal provider state before "
+                    f"organization removal: {exc}"
+                ) from exc
+            expired_checkouts[declared.obligation.name] = str(result or "").strip()
+        return expired_checkouts
+
+    def _provider_mutation_lock(self, org_id: object) -> Any:
+        """Hold every declared provider mutex through reconciliation and purge.
+
+        Every lock acquired before an acquisition failure is released before
+        the error propagates — declared, unexpected, or an interrupt.  If
+        releasing an acquired lock also fails, its failure is logged and the
+        acquisition failure is the one that propagates.
+        """
+        lock_factories = [
+            declared.mutation_lock
+            for declared in self._declared_boundary_guards()
+            if declared.mutation_lock is not None
+        ]
+        if not lock_factories:
             return nullcontext()
-        app_config = apps.get_app_config("quickscale_billing")
-        lock_factory = getattr(
-            app_config,
-            "organization_removal_provider_mutation_lock",
-            None,
-        )
-        if not callable(lock_factory):
-            raise CommandError(
-                "Billing is installed without its organization-removal provider "
-                "mutex; purge was refused."
-            )
-        return lock_factory(org_id)
+        stack = ExitStack()
+        try:
+            for lock_factory in lock_factories:
+                stack.enter_context(lock_factory(org_id))
+        except BaseException:
+            try:
+                stack.close()
+            except BaseException:
+                logger.exception(
+                    "Provider-lock cleanup failed after an acquisition failure; "
+                    "re-raising the acquisition failure."
+                )
+            raise
+        return stack
 
     def _lock_organization(self, org_id: object) -> Organization:
         """Acquire the organization-first mutex shared with billing writers."""
         return Organization.objects.select_for_update().get(pk=org_id)
 
-    def _guard_live_stripe_subscriptions(
+    def _guard_boundary_provider_state(
         self,
         organization: Organization,
         *,
-        provider_expired_checkout_id: str = "",
+        provider_expired_checkouts: dict[str, str] | None = None,
     ) -> None:
-        """Refuse live subscriptions or an in-progress checkout reservation.
+        """Run every declared boundary guard and refuse with its own reason.
 
         The caller holds the organization row lock and has established the
-        RLS context for the surrounding transaction.
+        RLS context for the surrounding transaction, so each declaring app's
+        guard observes the state the purge is about to remove.
         """
-        try:
-            subscription_model = apps.get_model("quickscale_billing", "Subscription")
-        except LookupError:
-            return
-
-        current_statuses = subscription_model.current_statuses()  # type: ignore[attr-defined]
-        queryset = _get_qs(subscription_model, {"organization": organization})
-        stripe_subscription_ids = sorted(
-            str(subscription_id)
-            for subscription_id in queryset.filter(  # type: ignore[attr-defined]
-                status__in=current_statuses,
-                stripe_subscription_id__isnull=False,
-            )
-            .exclude(stripe_subscription_id="")
-            .values_list("stripe_subscription_id", flat=True)
-        )
-        ambiguous_current_subscription = (
-            queryset.filter(status__in=current_statuses)
-            .exclude(status=subscription_model.Status.INCOMPLETE)  # type: ignore[attr-defined]
-            .filter(
-                models.Q(stripe_subscription_id__isnull=True)
-                | models.Q(stripe_subscription_id="")
-            )
-            .exists()
-        )
-        pending_checkout_queryset = queryset.filter(  # type: ignore[attr-defined]
-            status=subscription_model.Status.INCOMPLETE,  # type: ignore[attr-defined]
-        )
-        pending_checkout_queryset = pending_checkout_queryset.filter(
-            models.Q(stripe_subscription_id__isnull=True)
-            | models.Q(stripe_subscription_id="")
-        )
-        if provider_expired_checkout_id:
-            pending_checkout_queryset = pending_checkout_queryset.exclude(
-                stripe_checkout_session_id=provider_expired_checkout_id
-            )
-        pending_checkout = pending_checkout_queryset.exists()
-
-        if ambiguous_current_subscription:
-            raise CommandError(
-                f"Cannot purge organization {organization.pk} while it has a current "
-                "Stripe subscription with no provider id. Reconcile the subscription "
-                "before retrying."
-            )
-
-        if stripe_subscription_ids:
-            joined_ids = ", ".join(stripe_subscription_ids)
-            raise CommandError(
-                f"Cannot purge organization {organization.pk} while it has current "
-                f"Stripe subscriptions: {joined_ids}. Cancel these subscriptions "
-                "in Stripe before retrying."
-            )
-
-        if pending_checkout:
-            raise CommandError(
-                f"Cannot purge organization {organization.pk} while a Stripe "
-                "subscription checkout is pending. Complete or expire the "
-                "checkout before retrying."
-            )
+        expired_checkouts = provider_expired_checkouts or {}
+        for declared in self._declared_boundary_guards():
+            try:
+                reason = declared.guard(
+                    organization,
+                    provider_expired_checkout_id=expired_checkouts.get(
+                        declared.obligation.name, ""
+                    ),
+                )
+            except CommandError:
+                raise
+            except Exception as exc:
+                raise CommandError(
+                    "Could not verify provider state before organization "
+                    f"removal: {exc}"
+                ) from exc
+            if str(reason or "").strip():
+                raise CommandError(str(reason))
 
     def _guard_provider_backed_fields(self, organization: Organization) -> None:
         """Refuse a purge while a row carries provider-backed state (SA208/SA213).

@@ -83,12 +83,16 @@ class TestCompileSettingsSchema:
 
     def test_immutable_option_is_excluded(self) -> None:
         manifest = _manifest(
-            _option("mode", setting="QUICKSCALE_MODE"),
+            _option("mode", setting="QUICKSCALE_ORGS_MODE"),
             _option("private_media_enabled", option_type="boolean"),
         )
 
         assert compile_settings_schema(manifest) == {
-            "mode": {"setting": "QUICKSCALE_MODE", "type": "string", "validation": {}}
+            "mode": {
+                "setting": "QUICKSCALE_ORGS_MODE",
+                "type": "string",
+                "validation": {},
+            }
         }
 
     def test_mutable_option_without_a_setting_is_refused(self) -> None:
@@ -165,7 +169,7 @@ class TestCollectSettingIssues:
                 ),
                 _option(
                     "mode",
-                    setting="QUICKSCALE_MODE",
+                    setting="QUICKSCALE_ORGS_MODE",
                     validation={"choices": ["solo", "saas"]},
                 ),
             )

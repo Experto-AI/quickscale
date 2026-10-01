@@ -14,7 +14,7 @@ has two narrow exemptions:
 
 All other startup paths (including ``manage.py runserver``,
 gunicorn, and WSGI) remain fail-closed regardless of
-``QUICKSCALE_MODE`` or ``DEBUG``.
+``QUICKSCALE_ORGS_MODE`` or ``DEBUG``.
 
 AF9 Phase 1 — installs the connection-layer GUC priming execute wrapper
 on every Django ``DatabaseWrapper`` so that ``SET LOCAL app.current_org_id``
@@ -41,6 +41,7 @@ from quickscale_modules_orgs.removal import (
     SOCIAL_CACHE_STATE,
     OrganizationRemovalObligation,
     RemovalAction,
+    RemovalBoundary,
 )
 
 
@@ -107,6 +108,23 @@ class QuickscaleOrgsConfig(AppConfig):
             ),
         )
 
+    def removal_boundary_implementations(
+        self,
+    ) -> dict[RemovalBoundary, tuple[str, str, str]]:
+        """Declare orgs' purge boundary implementation (Module Conventions rule 34).
+
+        Each removal boundary's owner declares where its implementation lives,
+        so the discharge check holds no other module's label or module path.
+        """
+        return {
+            RemovalBoundary.PURGE: (
+                self.name,
+                "quickscale_modules_orgs.management.commands."
+                "quickscale_orgs_purge_organization",
+                "Command.handle",
+            ),
+        }
+
     def post_login_redirect_hooks(self) -> tuple[Callable[[Any], str | None], ...]:
         """Declare orgs' post-login redirect hook (Module Conventions rule 4).
 
@@ -153,7 +171,7 @@ class QuickscaleOrgsConfig(AppConfig):
         # WSGI server all refuse to start on an error-level failure, and it
         # registers the same callables as ``quickscale_orgs`` system checks
         # for ``manage.py check``.  Order matters: rule 3's generic check
-        # validates QUICKSCALE_MODE before the BYPASSRLS/SUPERUSER role guard.
+        # validates QUICKSCALE_ORGS_MODE before the BYPASSRLS/SUPERUSER role guard.
         #
         # SA203: a privileged command exempts *only* the role check, inside
         # check_rls_role.  The installations below stay unconditional, so a
@@ -168,6 +186,7 @@ class QuickscaleOrgsConfig(AppConfig):
         # not passed to the eager runner because one of them reads live
         # database catalog state and neither may block startup.
         from quickscale_modules_orgs.checks import (
+            RETIRED_SETTINGS,
             check_provider_id_conformance,
             check_removal_obligation_discharge,
             check_rls_role,
@@ -175,8 +194,9 @@ class QuickscaleOrgsConfig(AppConfig):
         )
 
         # Rule 3 first: the declared mode is validated (presence, choices)
-        # before the BYPASSRLS/SUPERUSER role guard reads it.
-        register_module_settings_check(self, "orgs")
+        # and any retired setting name is refused before the
+        # BYPASSRLS/SUPERUSER role guard reads it.
+        register_module_settings_check(self, "orgs", retired_settings=RETIRED_SETTINGS)
         register_module_checks(
             self,
             [

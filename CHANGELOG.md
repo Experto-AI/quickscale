@@ -302,11 +302,24 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `quickscale_modules_orgs.permissions` to `quickscale_modules_billing.services`, where it
     reads billing's own active subscription, and orgs publishes `resolve_request_org` for the
     request-organization lookup the gate reuses.
+  - **Organization purge runs each module's declared provider-state code.** Billing declares the
+    reconciliation, provider mutex, and live-subscription guard its guarded provider fields name,
+    blog and CRM declare their removal summary prefixes, and each removal boundary's owner
+    declares where its implementation lives, so orgs' purge path and boundary check name no other
+    module.
+  - **The shipped-module tenant-table registry is test-owned.** `TENANT_TABLE_REGISTRY` and its
+    derived lookup move out of `quickscale_modules_orgs.tenancy` into the module's tests, so
+    runtime tenant classification is marker-only and shipped source names no other module's tables.
   - **Module settings follow one naming family.** The blog, CRM, forms, and listings settings are
     renamed to `QUICKSCALE_<MODULE>_<NAME>` (for example `QUICKSCALE_BLOG_RSS_ENABLED`,
     `QUICKSCALE_FORMS_RETENTION_DAYS`), blog's upload limits are declared manifest options,
     notifications declares `provider`, and billing's option key is `currency`. A `quickscale.yml`
     or `.quickscale/state.yml` that still uses an old option key fails naming its replacement.
+  - **A module can be switched off without uninstalling it.** Blog, CRM, forms, and listings gain
+    `QUICKSCALE_<MODULE>_ENABLED`; when off, the module keeps its app, data, and admin, no
+    module-owned URL is mounted, the React shell flag is false, and the forms retention job refuses
+    to run. The Markdownx editor mount is staff-guarded in every state, so blog and listings keep a
+    working editor without an anonymous preview or upload surface.
   - **Write effects follow their commit.** A form-submission email, an organization-invitation
     email, CRM default-stage seeding, and social cache purges run only after their database write
     commits, so a rolled-back write sends no email and fires no effect.
@@ -316,6 +329,18 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Retired module setting names fail startup.** A module declares the setting names its renames
     retired, and the startup settings check refuses a project that still defines one, naming the
     replacement instead of leaving the old value silently unused.
+  - **The organizations mode setting follows the module family.** `QUICKSCALE_MODE` is renamed to
+    `QUICKSCALE_ORGS_MODE` in the manifest, the generator and theme templates, module code, tests,
+    and docs, and a project that still defines the retired name fails startup naming the
+    replacement.
+  - **Organization creation hands off to billing's declared pricing URL.** The orgs create flow
+    collects billing's declared `organization_pricing_url_hooks` capability instead of reversing
+    a billing route name and activates the new organization before the handoff, so an enabled
+    billing opens `billing/pricing/` under the new organization and a switched-off or absent
+    billing keeps the new organization's dashboard fallback.
+  - **Blog and listings publish their operations as a service surface.** Each module's publish
+    and upload operations live in its `services.py` under a declared `__all__` with keyword-only
+    arguments, so callers import the module's public surface rather than its views.
   - **Module conventions are enforced by a registered gate.** `make check-module-conventions` runs
     one conformance check over every module manifest and module source tree; each covered rule has a
     control case proving it rejects a violation, and rules whose convention work is still pending

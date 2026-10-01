@@ -20,6 +20,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_CRM_ENABLED` | Mount the module's dashboard and API. Off keeps the app and its data installed but serves none of its URLs. |
 | `api_enabled` | boolean | `true` | `QUICKSCALE_CRM_API_ENABLED` | Enable REST API endpoints at `crm/api/`. |
 | `deals_per_page` | integer | `25` | `QUICKSCALE_CRM_DEALS_PER_PAGE` | Number of deals per page in list views. |
 | `contacts_per_page` | integer | `50` | `QUICKSCALE_CRM_CONTACTS_PER_PAGE` | Number of contacts per page in list views. |

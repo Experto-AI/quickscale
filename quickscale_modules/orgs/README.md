@@ -27,7 +27,7 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
-| `mode` | string | `solo` | `QUICKSCALE_MODE` | Organization runtime mode: `solo` or `saas`. |
+| `mode` | string | `solo` | `QUICKSCALE_ORGS_MODE` | Organization runtime mode: `solo` or `saas`. |
 
 In `solo` mode the module creates and serves each user's personal organization; the
 organization API and the leaf organization pages answer `404`. In `saas` mode organizations are
@@ -61,8 +61,9 @@ org-scoped views and APIs:
 
 `tenancy.py` publishes the migration and runtime helpers tenant modules use:
 `tenant_org_fk()`, `apply_force_rls()`, `revert_force_rls()`, `refresh_force_rls_policies()`,
-`get_tenant_models()`, and the `TENANT_TABLE_REGISTRY`. The module also installs the
-always-on RLS boot guard through its `checks.py`.
+and `get_tenant_models()`. The module also installs the always-on RLS boot guard through its
+`checks.py`; the shipped-module parity registry `TENANT_TABLE_REGISTRY` is test-owned
+(Module Conventions rule 34).
 
 ### Current organization
 
@@ -135,7 +136,7 @@ for the module's API: creating or renaming an organization to it is refused.
   Stripe-backed subscription, a pending subscription checkout, or a preparing/open one-time
   purchase checkout exists.
 - `quickscale_orgs_promote_to_saas` — normalize every personal organization to a valid unique
-  slug and print the required `QUICKSCALE_MODE` SaaS setting change.
+  slug and print the required `QUICKSCALE_ORGS_MODE` SaaS setting change.
 - `quickscale_orgs_check_tenant_isolation` — discover tenant models by `TenantModel`
   inheritance across all installed apps and verify each has `organization_id` plus conformant
   FORCE RLS policies.
@@ -179,7 +180,7 @@ connection except for the guarded one-shot `migrate` command; serve under a rest
 ### Mode changes
 
 Promote a solo project to saas with `quickscale_orgs_promote_to_saas`, then set
-`QUICKSCALE_MODE` to `saas` as the command's output directs. Purging an organization is the
+`QUICKSCALE_ORGS_MODE` to `saas` as the command's output directs. Purging an organization is the
 supported removal path; organization data cannot be silently dropped.
 
 ## Extending

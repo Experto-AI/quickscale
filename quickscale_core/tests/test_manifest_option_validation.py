@@ -84,13 +84,13 @@ class TestOptionValidationEngine:
             _option(
                 "mode",
                 default="solo",
-                setting="QUICKSCALE_MODE",
+                setting="QUICKSCALE_ORGS_MODE",
                 validation={"choices": ["solo", "saas"]},
             )
         )
         issues = validate_module_options(manifest, {"mode": "team"})
         assert issues == [
-            "QUICKSCALE_MODE (modules.demo.mode) must be one of: solo, saas"
+            "QUICKSCALE_ORGS_MODE (modules.demo.mode) must be one of: solo, saas"
         ]
 
     def test_range_enforces_minimum_and_maximum(self) -> None:

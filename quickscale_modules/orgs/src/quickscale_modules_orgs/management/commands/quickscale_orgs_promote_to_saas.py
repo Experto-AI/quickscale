@@ -65,7 +65,7 @@ def _iter_slug_candidates(organization: Organization) -> Iterator[str]:
 class Command(BaseCommand):
     help = (
         "Ensure every personal organization has a valid unique slug and print the "
-        "required QUICKSCALE_MODE SaaS setting change."
+        "required QUICKSCALE_ORGS_MODE SaaS setting change."
     )
 
     def add_arguments(self, parser: Any) -> None:
@@ -134,4 +134,4 @@ class Command(BaseCommand):
                 f"{updated_count} personal organizations."
             )
         self.stdout.write(self.style.SUCCESS(summary))
-        self.stdout.write("Required settings change: QUICKSCALE_MODE = 'saas'")
+        self.stdout.write("Required settings change: QUICKSCALE_ORGS_MODE = 'saas'")

@@ -5,6 +5,7 @@ SA17.2 — fail-hard billing enabled-flag setting: requires
 instead of silently defaulting to ``True``.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from django.apps import AppConfig
@@ -15,6 +16,7 @@ from quickscale_core.runtime import (
 )
 from quickscale_modules_orgs.removal import (
     BILLING_PROVIDER_STATE,
+    BoundaryGuardedHooks,
     ExternalProviderField,
     OrganizationRemovalObligation,
     RemovalAction,
@@ -99,6 +101,15 @@ class QuickscaleBillingConfig(AppConfig):
                         boundary_guarded=True,
                     ),
                 ),
+                # Billing ships the hooks its guarded fields name, so the purge
+                # boundary runs billing's own provider-state code and names no
+                # billing label: a pre-transaction reconciliation, the provider
+                # mutex held across it, and the in-transaction refusal guard.
+                boundary_guarded_hooks=BoundaryGuardedHooks(
+                    guard="guard_organization_removal_provider_state",
+                    reconcile="reconcile_organization_removal_provider_state",
+                    mutation_lock="organization_removal_provider_mutation_lock",
+                ),
             ),
         )
 
@@ -161,6 +172,22 @@ class QuickscaleBillingConfig(AppConfig):
 
         return subscription_provider_mutation_lock(organization_id)
 
+    def guard_organization_removal_provider_state(
+        self,
+        organization: Any,
+        *,
+        provider_expired_checkout_id: str = "",
+    ) -> str:
+        """Return billing's purge refusal for live provider state, or an empty string."""
+        from quickscale_modules_billing.services import (
+            guard_organization_removal_provider_state as guard,
+        )
+
+        return guard(
+            organization,
+            provider_expired_checkout_id=provider_expired_checkout_id,
+        )
+
     def detach_account_deletion_user_references(
         self,
         user_id: Any,
@@ -183,6 +210,25 @@ class QuickscaleBillingConfig(AppConfig):
         )
 
         return account_deletion_user_reference_organization_ids(user_id)
+
+    def organization_pricing_url_hooks(
+        self,
+    ) -> tuple[Callable[[Any], str | None], ...]:
+        """Declare billing's pricing page for the org-creation handoff (rule 4).
+
+        The orgs create flow collects this capability and uses the first
+        declared URL as its post-create handoff, so no consumer names
+        billing's route, label, or settings.  A switched-off billing declares
+        nothing: its public pages answer as disabled (rule 1), so the
+        consumer keeps its own fallback page.
+        """
+        from django.conf import settings
+
+        if not bool(settings.QUICKSCALE_BILLING_ENABLED):
+            return ()
+        from quickscale_modules_billing.services import organization_pricing_page_url
+
+        return (organization_pricing_page_url,)
 
     def account_deletion_handlers(self) -> tuple[Any, ...]:
         """Declare billing's account-deletion handler (Module Conventions rule 4).

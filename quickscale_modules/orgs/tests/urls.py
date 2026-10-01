@@ -154,6 +154,10 @@ urlpatterns = [
         name="sa41-org-dashboard",
     ),
     path("orgs/", include("quickscale_modules_orgs.urls")),
+    # The org-creation handoff resolves billing's declared pricing URL, so the
+    # harness mounts billing with the same ``billing/`` prefix a generated
+    # project uses.
+    path("billing/", include("quickscale_modules_billing.urls")),
     # AccountDeleteView needs auth URL routing in the test harness
     # so view-level survivor regression can reach it.
     # Use the same explicit namespace tuple pattern as the auth test harness

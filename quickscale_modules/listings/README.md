@@ -23,9 +23,15 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_LISTINGS_ENABLED` | Mount the module's pages and API. Off keeps the app, its data, and the admin Markdownx editor (behind a staff check) but serves none of the module's own public URLs. |
 | `per_page` | integer | `12` | `QUICKSCALE_LISTINGS_PER_PAGE` | Number of listings per page. |
 
 ## Public surface
+
+Module-to-module use goes through `services.py` (Module Conventions rule 4):
+`create_published_listing_from_payload()` and the `ListingsError` base are its declared
+`__all__` surface, and every argument after the leading payload subject is keyword-only
+(rule 23).
 
 ### AbstractListing model
 
