@@ -7,7 +7,7 @@ configuration and invariant checks below to
 error-level check fails) and registers them as ``quickscale_orgs`` system
 checks.
 
-The declared options (``QUICKSCALE_MODE`` and its type/choices) are validated
+The declared options (``QUICKSCALE_ORGS_MODE`` and its type/choices) are validated
 by rule 3's generic settings check, registered from ``ready()`` before these.
 
 The checks:
@@ -56,7 +56,7 @@ import ast
 import importlib
 import inspect
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 
 from django.apps import apps
 from django.core.checks import CheckMessage, Error, Warning, register
@@ -87,6 +87,18 @@ from quickscale_modules_orgs.tenancy import (
 # Keep it aligned with the independent fail-closed declarations in the production
 # settings validator, CLI producer, and generated start.sh launcher; none is a SSOT.
 _PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})
+
+#: Retired setting names refused at startup, each naming its replacement
+#: (rule 6).  The declaration lives here, with the module's other checks,
+#: because the refusal must work before the project is re-applied: the
+#: settings a previous release wrote are exactly the ones still carrying
+#: these names.
+RETIRED_SETTINGS: Mapping[str, str] = {
+    "QUICKSCALE_MODE": (
+        "Legacy setting 'QUICKSCALE_MODE' is no longer supported. "
+        "Use 'QUICKSCALE_ORGS_MODE' instead."
+    ),
+}
 
 
 def _is_privileged_command() -> bool:
@@ -131,7 +143,7 @@ def check_rls_role(
 ) -> list[CheckMessage]:
     """Verify the connected PostgreSQL role does not have BYPASSRLS or SUPERUSER.
 
-    SA2.1: The guard is always active (regardless of ``QUICKSCALE_MODE``
+    SA2.1: The guard is always active (regardless of ``QUICKSCALE_ORGS_MODE``
     or ``DEBUG``) with two narrow exemptions:
 
     1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned value

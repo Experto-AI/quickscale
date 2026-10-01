@@ -113,7 +113,7 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 LOGIN_REDIRECT_URL = "/"
-QUICKSCALE_MODE = "solo"
+QUICKSCALE_ORGS_MODE = "solo"
 USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
 

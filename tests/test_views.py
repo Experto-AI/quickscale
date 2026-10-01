@@ -36,7 +36,7 @@ class DummyOrganizationContextView(org_views.OrganizationContextMixin):
 def test_saas_org_create_post_creates_org_and_redirects_to_billing(
     client, settings, monkeypatch
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="builder",
         email="builder@example.com",
@@ -66,7 +66,7 @@ def test_saas_org_create_post_creates_org_and_redirects_to_billing(
 def test_saas_org_create_post_falls_back_to_org_dashboard_without_billing(
     client, settings, monkeypatch
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="fallback-builder",
         email="fallback-builder@example.com",
@@ -86,7 +86,7 @@ def test_saas_org_create_post_falls_back_to_org_dashboard_without_billing(
 def test_saas_org_create_uses_suffixed_slug_when_name_is_taken(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="suffix-builder",
         email="suffix-builder@example.com",
@@ -104,7 +104,7 @@ def test_saas_org_create_uses_suffixed_slug_when_name_is_taken(
 @pytest.mark.django_db
 def test_saas_org_create_skips_the_reserved_api_slug(client, settings) -> None:
     """An organization named "API" must not take the slug the module's API owns."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="api-builder",
         email="api-builder@example.com",
@@ -123,7 +123,7 @@ def test_saas_org_create_skips_the_reserved_api_slug(client, settings) -> None:
 def test_saas_org_create_truncates_overlong_slug_and_reserves_suffix_room(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="long-builder",
         email="long-builder@example.com",
@@ -146,7 +146,7 @@ def test_saas_org_create_truncates_overlong_slug_and_reserves_suffix_room(
 def test_saas_org_create_retries_after_insert_collision(
     client, settings, monkeypatch
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="race-builder",
         email="race-builder@example.com",
@@ -463,7 +463,7 @@ def test_organization_context_superuser_has_no_acting_membership(rf) -> None:
 
 @pytest.mark.django_db
 def test_saas_org_create_rejects_non_slugifiable_name(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="invalid-builder",
         email="invalid-builder@example.com",
@@ -483,7 +483,7 @@ def test_saas_org_create_rejects_non_slugifiable_name(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_member_list_requires_admin_role(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Northwind", slug="northwind")
     admin_user = get_user_model().objects.create_user(
         username="northwind-admin",
@@ -520,7 +520,7 @@ def test_member_list_requires_admin_role(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_member_list_renders_pending_invitations(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Northwind", slug="northwind")
     admin_user = get_user_model().objects.create_user(
         username="northwind-admin",
@@ -557,7 +557,7 @@ def test_invite_view_creates_invitation_and_dispatches_notification(
     monkeypatch,
     django_capture_on_commit_callbacks,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
     admin_user = get_user_model().objects.create_user(
         username="helios-admin",
@@ -621,7 +621,7 @@ def test_rolled_back_invitation_sends_no_email(
     """Rule 21: an invitation email is sent only if the invitation commits."""
     from django.db import transaction
 
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
     admin_user = get_user_model().objects.create_user(
         username="helios-rollback-admin",
@@ -680,7 +680,7 @@ def test_invite_view_rejects_existing_member_without_sending_notification(
     settings,
     monkeypatch,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Nova", slug="nova")
     admin_user = get_user_model().objects.create_user(
         username="nova-admin",
@@ -728,7 +728,7 @@ def test_invite_view_rejects_save_time_validation_without_sending_notification(
     settings,
     monkeypatch,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Pioneer", slug="pioneer")
     admin_user = get_user_model().objects.create_user(
         username="pioneer-admin",
@@ -772,7 +772,7 @@ def test_invitation_accept_view_redeems_matching_authenticated_user_and_clears_s
     client,
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="accept-inviter",
         email="accept-inviter@example.com",
@@ -816,7 +816,7 @@ def test_invitation_accept_view_is_idempotent_for_existing_member_with_matching_
     client,
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="idempotent-inviter",
         email="idempotent-inviter@example.com",
@@ -868,7 +868,7 @@ def test_invitation_accept_view_redirects_anonymous_user_to_login_and_stores_ses
     client,
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="anon-inviter",
         email="anon-inviter@example.com",
@@ -900,7 +900,7 @@ def test_invitation_accept_view_rejects_authenticated_email_mismatch_and_clears_
     client,
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="mismatch-inviter",
         email="mismatch-inviter@example.com",
@@ -946,7 +946,7 @@ def test_invitation_accept_view_returns_410_and_clears_session_for_expired_invit
     client,
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="expired-inviter",
         email="expired-inviter@example.com",
@@ -992,7 +992,7 @@ def test_invitation_accept_view_returns_410_and_clears_session_for_used_invitati
     client,
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="used-inviter",
         email="used-inviter@example.com",
@@ -1036,7 +1036,7 @@ def test_invitation_accept_view_fails_closed_for_persisted_owner_invitation(
     client,
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="owner-gap-inviter",
         email="owner-gap-inviter@example.com",
@@ -1086,7 +1086,7 @@ def test_invitation_accept_view_returns_404_and_clears_session_for_revoked_invit
     client,
     settings,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="revoked-inviter",
         email="revoked-inviter@example.com",
@@ -1124,7 +1124,7 @@ def test_invitation_accept_view_returns_404_and_clears_session_for_revoked_invit
 
 @pytest.mark.django_db
 def test_revoke_invitation_view_deletes_pending_invitation(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Summit", slug="summit")
     admin_user = get_user_model().objects.create_user(
         username="summit-admin",
@@ -1156,7 +1156,7 @@ def test_revoke_invitation_view_deletes_pending_invitation(client, settings) -> 
 
 @pytest.mark.django_db
 def test_member_list_allows_superuser_without_membership(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Summit", slug="summit")
     owner = get_user_model().objects.create_user(
         username="summit-owner",
@@ -1188,7 +1188,7 @@ def test_member_list_blocks_last_owner_demotion_but_allows_removal_when_sole_mem
     """Last-owner demotion is blocked (model-level invariant) but
     removal is now permitted when the owner is the sole member —
     nobody is stranded."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Orbit", slug="orbit")
     owner = get_user_model().objects.create_user(
         username="orbit-owner",
@@ -1235,7 +1235,7 @@ def test_member_list_blocks_last_owner_removal_when_other_members_exist(
 ) -> None:
     """Last-owner removal is blocked when other members would be
     stranded ownerless."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Vega", slug="vega")
     owner = get_user_model().objects.create_user(
         username="vega-owner",
@@ -1280,7 +1280,7 @@ def test_member_role_updates_translate_save_time_validation_errors(
     monkeypatch,
     json_request,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Aster", slug="aster")
     acting_owner = get_user_model().objects.create_user(
         username=f"aster-acting-{json_request}",
@@ -1348,7 +1348,7 @@ def test_member_role_updates_translate_save_time_validation_errors(
 
 @pytest.mark.django_db
 def test_member_list_changes_role_and_redirects_on_success(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
     owner = get_user_model().objects.create_user(
         username="helios-owner",
@@ -1389,7 +1389,7 @@ def test_member_list_changes_role_and_redirects_on_success(client, settings) -> 
 
 @pytest.mark.django_db
 def test_member_list_removes_members_and_redirects_on_success(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Nova", slug="nova")
     admin_user = get_user_model().objects.create_user(
         username="nova-admin",
@@ -1428,7 +1428,7 @@ def test_member_list_removes_members_and_redirects_on_success(client, settings) 
 
 @pytest.mark.django_db
 def test_member_list_rejects_unknown_actions(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Quasar", slug="quasar")
     admin_user = get_user_model().objects.create_user(
         username="quasar-admin",
@@ -1456,7 +1456,7 @@ def test_member_list_rejects_unknown_actions(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_member_list_rejects_malformed_membership_id(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Nebula", slug="nebula")
     admin_user = get_user_model().objects.create_user(
         username="nebula-admin",
@@ -1485,7 +1485,7 @@ def test_member_list_rejects_malformed_membership_id(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_member_list_rejects_oversized_numeric_membership_id(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Pulsar", slug="pulsar")
     admin_user = get_user_model().objects.create_user(
         username="pulsar-admin",
@@ -1514,7 +1514,7 @@ def test_member_list_rejects_oversized_numeric_membership_id(client, settings) -
 
 @pytest.mark.django_db
 def test_member_list_rejects_negative_overflow_membership_id(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Zenith", slug="zenith")
     admin_user = get_user_model().objects.create_user(
         username="zenith-admin",
@@ -1545,7 +1545,7 @@ def test_member_list_rejects_negative_overflow_membership_id(client, settings) -
 def test_member_list_blocks_second_owner_assignment_without_transfer(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Atlas", slug="atlas")
     owner = get_user_model().objects.create_user(
         username="atlas-owner",
@@ -1597,7 +1597,7 @@ def test_org_settings_rejects_invalid_and_duplicate_slugs(
     slug,
     expected_error,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Delta", slug="delta")
     Organization.objects.create(name="Taken", slug="taken")
     admin_user = get_user_model().objects.create_user(
@@ -1625,7 +1625,7 @@ def test_org_settings_rejects_invalid_and_duplicate_slugs(
 
 @pytest.mark.django_db
 def test_org_settings_requires_admin_and_updates_slug(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Beacon", slug="beacon")
     admin_user = get_user_model().objects.create_user(
         username="beacon-admin",
@@ -1669,7 +1669,7 @@ def test_org_settings_requires_admin_and_updates_slug(client, settings) -> None:
 @pytest.mark.django_db
 def test_org_settings_rejects_the_reserved_api_slug(client, settings) -> None:
     """Renaming an organization to the module's API slug is refused."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Beacon", slug="beacon")
     admin_user = get_user_model().objects.create_user(
         username="beacon-api-admin",
@@ -1698,7 +1698,7 @@ def test_org_settings_rejects_the_reserved_api_slug(client, settings) -> None:
 # Both overrides ride the decorator: mutating the ``settings`` fixture while a
 # decorator override is active leaks ROOT_URLCONF past the test (the fixture
 # restores the decorator's holder after the decorator disabled it).
-@override_settings(ROOT_URLCONF="tests.urls_pre_home", QUICKSCALE_MODE="saas")
+@override_settings(ROOT_URLCONF="tests.urls_pre_home", QUICKSCALE_ORGS_MODE="saas")
 def test_saas_pre_home_root_redirects_to_org_index(client) -> None:
     user = get_user_model().objects.create_user(
         username="saas-owner",
@@ -1723,7 +1723,7 @@ def test_saas_pre_home_root_redirects_to_org_index(client) -> None:
 # Both overrides ride the decorator: mutating the ``settings`` fixture while a
 # decorator override is active leaks ROOT_URLCONF past the test (the fixture
 # restores the decorator's holder after the decorator disabled it).
-@override_settings(ROOT_URLCONF="tests.urls_pre_home", QUICKSCALE_MODE="solo")
+@override_settings(ROOT_URLCONF="tests.urls_pre_home", QUICKSCALE_ORGS_MODE="solo")
 def test_solo_pre_home_mount_keeps_project_root(client) -> None:
     user = get_user_model().objects.create_user(
         username="solo-owner",
@@ -1746,7 +1746,7 @@ def test_solo_pre_home_mount_keeps_project_root(client) -> None:
 
 @pytest.mark.django_db
 def test_saas_org_api_create_requires_authentication(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
 
     response = client.post(
         "/orgs/api/",
@@ -1767,7 +1767,7 @@ def test_saas_org_api_create_requires_authentication(client, settings) -> None:
 def test_saas_org_api_create_post_creates_org_and_returns_json(
     client, settings, monkeypatch
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="api-builder",
         email="api-builder@example.com",
@@ -1812,7 +1812,7 @@ def test_saas_org_api_create_post_creates_org_and_returns_json(
 def test_saas_org_api_create_falls_back_to_org_dashboard_without_billing(
     client, settings, monkeypatch
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="api-fallback-builder",
         email="api-fallback-builder@example.com",
@@ -1835,7 +1835,7 @@ def test_saas_org_api_create_falls_back_to_org_dashboard_without_billing(
 
 @pytest.mark.django_db
 def test_saas_org_api_list_returns_memberships(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="erin-api",
         email="erin-api@example.com",
@@ -1870,7 +1870,7 @@ def test_saas_org_api_list_returns_memberships(client, settings) -> None:
 def test_saas_org_api_list_returns_empty_state_without_memberships(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="frank-api",
         email="frank-api@example.com",
@@ -1886,7 +1886,7 @@ def test_saas_org_api_list_returns_empty_state_without_memberships(
 
 @pytest.mark.django_db
 def test_saas_org_api_detail_returns_org_payload(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="harper-api",
         email="harper-api@example.com",
@@ -1922,7 +1922,7 @@ def test_saas_org_api_detail_returns_org_payload(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_saas_org_api_detail_returns_403_for_non_member(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="harper-api-403",
         email="harper-api-403@example.com",
@@ -1940,7 +1940,7 @@ def test_saas_org_api_detail_returns_403_for_non_member(client, settings) -> Non
 def test_org_api_members_returns_members_and_pending_invitations(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Northwind", slug="northwind")
     admin_user = get_user_model().objects.create_user(
         username="northwind-admin-api",
@@ -2012,7 +2012,7 @@ def test_org_api_invite_creates_invitation_and_dispatches_notification(
     monkeypatch,
     django_capture_on_commit_callbacks,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
     admin_user = get_user_model().objects.create_user(
         username="helios-admin-api",
@@ -2064,7 +2064,7 @@ def test_org_api_invite_creates_invitation_and_dispatches_notification(
 
 @pytest.mark.django_db
 def test_org_api_member_role_update_returns_json(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
     owner = get_user_model().objects.create_user(
         username="helios-owner-api",
@@ -2103,7 +2103,7 @@ def test_org_api_member_role_update_returns_json(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_org_api_member_remove_returns_json(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Nova", slug="nova")
     admin_user = get_user_model().objects.create_user(
         username="nova-admin-api",
@@ -2146,7 +2146,7 @@ def test_member_removals_translate_delete_time_validation_errors(
     monkeypatch,
     json_request,
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Lyra", slug="lyra")
     acting_owner = get_user_model().objects.create_user(
         username=f"lyra-acting-{json_request}",
@@ -2217,7 +2217,7 @@ def test_member_removals_translate_delete_time_validation_errors(
 
 @pytest.mark.django_db
 def test_org_api_revoke_invitation_returns_json(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Summit", slug="summit")
     admin_user = get_user_model().objects.create_user(
         username="summit-admin-api",
@@ -2254,7 +2254,7 @@ def test_org_api_revoke_invitation_returns_json(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_org_api_settings_updates_slug_and_returns_json(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Beacon", slug="beacon")
     admin_user = get_user_model().objects.create_user(
         username="beacon-admin-api",
@@ -2317,7 +2317,7 @@ def test_org_api_missing_slug_returns_403_not_404(client, settings, path) -> Non
     missing slug -> 404, unauthorized access to existing org -> 403.
     Both now return 403, matching the HTML view's 403 gate.
     """
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="missing-slug-test",
         email="missing-slug@example.com",
@@ -2353,7 +2353,7 @@ def test_org_api_unauthorized_slug_and_missing_slug_return_same_403(
 ) -> None:
     """Unauthorized (non-member on existing org) and missing-slug return
     identical 403 responses — no way to distinguish them from the response."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="parity-test-user",
         email="parity@example.com",
