@@ -696,12 +696,18 @@ class InvitationNotificationMixin:
         try:
             with transaction.atomic():
                 invitation = form.save()
-                sender(
-                    template_key=_ORG_INVITATION_TEMPLATE_KEY,
-                    recipients=[invitation.email],
-                    context=self.get_notification_context(invitation),
-                    tags=["auth"],
-                    metadata={"workflow": "org-invitation"},
+                recipients = [invitation.email]
+                notification_context = self.get_notification_context(invitation)
+                # Rule 21: the invitation email is an effect of the write and
+                # runs only if that write commits.
+                transaction.on_commit(
+                    lambda: sender(
+                        template_key=_ORG_INVITATION_TEMPLATE_KEY,
+                        recipients=recipients,
+                        context=notification_context,
+                        tags=["auth"],
+                        metadata={"workflow": "org-invitation"},
+                    )
                 )
         except ValidationError as error:
             if hasattr(error, "error_dict"):
