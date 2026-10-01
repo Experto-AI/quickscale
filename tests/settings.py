@@ -84,6 +84,7 @@ QUICKSCALE_ORGS_MODE = "saas"
 LOGIN_URL = "/accounts/login/"
 
 # Required CRM settings (fail-hard: no silent defaults)
+QUICKSCALE_CRM_ENABLED = True
 QUICKSCALE_CRM_API_ENABLED = True
 QUICKSCALE_CRM_DEALS_PER_PAGE = 25
 QUICKSCALE_CRM_CONTACTS_PER_PAGE = 50

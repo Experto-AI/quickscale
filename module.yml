@@ -10,6 +10,13 @@ config:
   # Mutable options - can be changed after embed via quickscale apply
   # These update Django settings.py automatically
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_CRM_ENABLED
+      description: "Enable the CRM module. Off keeps the module installed with its data intact and mounts none of its public URLs."
+      validation: {}
+
     api_enabled:
       type: boolean
       default: true
