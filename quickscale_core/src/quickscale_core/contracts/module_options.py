@@ -24,8 +24,6 @@ ANALYTICS_POSTHOG_DEFAULT_HOST: Final[str] = "https://us.i.posthog.com"
 ANALYTICS_POSTHOG_EU_HOST: Final[str] = "https://eu.i.posthog.com"
 
 ANALYTICS_EVENT_PAGEVIEW: Final[str] = "$pageview"
-ANALYTICS_EVENT_FORM_SUBMIT: Final[str] = "form_submit"
-ANALYTICS_EVENT_SOCIAL_LINK_CLICK: Final[str] = "social_link_click"
 
 
 # ---------------------------------------------------------------------------
@@ -381,9 +379,7 @@ def _raise_for_retired_module_options(
 
 __all__ = [
     # Analytics constants
-    "ANALYTICS_EVENT_FORM_SUBMIT",
     "ANALYTICS_EVENT_PAGEVIEW",
-    "ANALYTICS_EVENT_SOCIAL_LINK_CLICK",
     "ANALYTICS_POSTHOG_DEFAULT_HOST",
     "ANALYTICS_POSTHOG_EU_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",

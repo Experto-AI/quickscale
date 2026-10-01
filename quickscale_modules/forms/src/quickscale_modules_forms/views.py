@@ -34,6 +34,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_modules_forms._email import notify_submission
 from quickscale_modules_forms.models import (
     Form,
     FormField,
@@ -42,7 +43,6 @@ from quickscale_modules_forms.models import (
     HONEYPOT_FIELD_NAME,
     is_form_spam_protection_enabled,
 )
-from quickscale_modules_forms.notifications import notify_submission
 from quickscale_modules_forms.serializers import (
     AdminFormListSerializer,
     FormSchemaSerializer,
@@ -88,24 +88,28 @@ def _neutralize_csv_cell(value: Any) -> str:
 
 
 def _capture_submission_analytics(submission: FormSubmission, request: Request) -> None:
-    """Best-effort analytics hook for successful public form submissions.
+    """Schedule the forms-submitted event on the write's commit (rule 21).
 
-    Analytics helpers are imported lazily inside the function body, after
-    the ``apps.is_installed`` guard, so forms remains importable without
-    analytics on the Python path.  Once analytics IS available at runtime
-    the imports resolve normally — no soft degradation path is restored.
+    Analytics helpers are imported lazily inside the emission body, after the
+    ``apps.is_installed`` guard, so forms remains importable without analytics
+    on the Python path.  An absent or disabled analytics module registers no
+    callback at all.
     """
     if not apps.is_installed("quickscale_modules_analytics"):
         return
     if not bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", True)):
         return
 
-    # Lazy import — analytics is assembled (confirmed by is_installed above)
+    transaction.on_commit(lambda: _emit_submission_event(submission, request))
+
+
+def _emit_submission_event(submission: FormSubmission, request: Request) -> None:
+    """Best-effort emission of the forms-owned submission event (rule 22)."""
+    # Lazy import — analytics is assembled (confirmed by the caller's guard)
     # so these symbols resolve at runtime, not at module load time.
-    from quickscale_modules_analytics.services import (
-        capture_form_submit,
-        get_distinct_id,
-    )
+    from quickscale_modules_analytics.services import capture_event, get_distinct_id
+
+    from quickscale_modules_forms.services import FORMS_SUBMITTED_EVENT
 
     django_request = getattr(request, "_request", request)
 
@@ -118,12 +122,15 @@ def _capture_submission_analytics(submission: FormSubmission, request: Request) 
         if form_id is None:
             return
 
-        capture_form_submit(
-            distinct_id,
-            form_id,
-            submission.form.title,
-            extra={"form_slug": submission.form.slug},
+        properties: dict[str, Any] = {"form_slug": submission.form.slug}
+        properties.update(
+            {
+                "module": "forms",
+                "form_id": str(form_id),
+                "form_name": submission.form.title.strip(),
+            }
         )
+        capture_event(distinct_id, FORMS_SUBMITTED_EVENT, properties)
     except Exception:
         logger.warning(
             "Failed to capture analytics event for submission #%s (form: %s)",
@@ -334,11 +341,13 @@ class FormSubmitAPIView(CreateAPIView):
                 )
                 self._create_field_values(submission, form, data)
 
-        # CR-P3-006: side effects run AFTER the atomic commits.  They are
-        # already exception-safe (never raise) so they cannot roll back the
-        # submission transaction.
-        notification_status = notify_submission(submission)
-        _capture_submission_analytics(submission, request)
+            # CR-P3-006 / rule 21: both helpers schedule their effect on the
+            # write's commit, never inline — a rolled-back submission sends no
+            # email and fires no analytics event.  Both are already
+            # exception-safe (never raise) so they cannot roll back the
+            # submission transaction.
+            notification_status = notify_submission(submission)
+            _capture_submission_analytics(submission, request)
 
         return Response(
             {

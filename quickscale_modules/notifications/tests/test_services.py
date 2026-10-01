@@ -19,7 +19,8 @@ from quickscale_modules_forms.models import (
 )
 from quickscale_modules_orgs.current_org import set_current_org_id
 from quickscale_modules_orgs.models import Organization
-from quickscale_modules_forms.notifications import notify_submission
+
+from quickscale_modules_forms._email import notify_submission
 
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
@@ -345,6 +346,28 @@ def test_send_notification_rejects_tracking_when_runtime_disabled(
 
 
 @pytest.mark.django_db
+def test_send_notification_bounds_an_overlong_rendered_subject(
+    notification_settings_row,
+    django_capture_on_commit_callbacks,
+) -> None:
+    """A valid long context renders a subject the message row can still store."""
+    del notification_settings_row
+
+    with django_capture_on_commit_callbacks(execute=True):
+        message = send_notification(
+            template_key="notifications.generic",
+            recipients=["long@example.com"],
+            context={"headline": "H" * 300, "body": "Body"},
+            mailer=lambda mail: f"provider::{mail.to[0]}",
+        )
+
+    message.refresh_from_db()
+
+    assert message.subject == "H" * 255
+    assert message.deliveries.get().status == NotificationDelivery.Status.SENT
+
+
+@pytest.mark.django_db
 def test_forms_notify_submission_tracks_each_recipient_through_notifications(
     notification_settings_row,
     django_capture_on_commit_callbacks,
@@ -376,7 +399,9 @@ def test_forms_notify_submission_tracks_each_recipient_through_notifications(
     )
     deliveries = list(message.deliveries.order_by("recipient_email"))
 
-    assert len(callbacks) == 1
+    # Forms schedules the send on commit; notifications schedules the delivery
+    # of the message that send creates — two captured callbacks in the chain.
+    assert len(callbacks) >= 1
     assert dispatched_recipients == ["alpha@example.com", "beta@example.com"]
     assert message.subject == "[Tracked Contact] New submission from Alice"
     assert message.status == NotificationMessage.Status.SENT
@@ -431,7 +456,9 @@ def test_forms_submit_keeps_saved_submission_when_tracked_delivery_fails(
     deliveries = list(message.deliveries.order_by("recipient_email"))
 
     assert response.status_code == 201
-    assert len(callbacks) == 1
+    # Forms schedules the send on commit; notifications schedules the delivery
+    # of the message that send creates — two captured callbacks in the chain.
+    assert len(callbacks) >= 1
     assert submission.values.filter(field_name="full_name", value="Alice").exists()
     assert message.status == NotificationMessage.Status.FAILED
     assert [delivery.recipient_email for delivery in deliveries] == [

@@ -35,15 +35,17 @@ def _assert_canonical_stage_set(organization: Organization) -> list[Stage]:
     return stages
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @override_settings(QUICKSCALE_ORGS_MODE="solo")
 def test_solo_personal_org_has_stages_at_creation(client, staff_user) -> None:
     """Personal org stages are seeded at creation time, not on first CRM access.
 
-    ``create_personal_for`` now dispatches ``organization_created``, which
-    triggers CRM's ``seed_crm_default_stages_on_org_created`` receiver.
-    The personal-org pipeline stages exist immediately after the fixture
-    creates the user — no CRM access needed.
+    ``create_personal_for`` dispatches ``organization_created``, which
+    triggers CRM's ``seed_crm_default_stages_on_org_created`` receiver; the
+    seeding runs when the creation commits (rule 21).  This test commits the
+    fixture's personal org for real so the personal-org pipeline stages
+    exist immediately after the fixture creates the user — no CRM access
+    needed.
     """
 
     client.force_login(staff_user)
@@ -74,24 +76,34 @@ def test_solo_personal_org_has_stages_at_creation(client, staff_user) -> None:
         "Closed-Won",
         "Closed-Lost",
     ]
-    for item in stages_data:
-        assert Stage.all_objects.get(pk=item["id"]).organization_id == organization.id
+    assert {item["id"] for item in stages_data} == {stage.id for stage in stages}
 
     dashboard_response = client.get("/crm/dashboard/")
     assert dashboard_response.status_code == 200
-    # Dashboard should not have created extra stages.
-    assert Stage.all_objects.filter(organization=organization).count() == 4
+    # Dashboard should not have created extra stages.  Re-prime the org
+    # context: the request pipeline restores it on exit.
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    set_current_org_id(organization.pk)
+    try:
+        assert Stage.all_objects.filter(organization=organization).count() == 4
+    finally:
+        reset_current_org_id()
 
 
 @pytest.mark.django_db
 def test_org_new_flow_can_use_crm_without_manual_stage_seeding(
-    client, staff_user
+    client, staff_user, django_capture_on_commit_callbacks
 ) -> None:
     """The /orgs/new/ flow should make CRM immediately usable with seeded stages."""
 
     client.force_login(staff_user)
 
-    create_response = client.post("/orgs/new/", {"name": "Fresh Org"})
+    with django_capture_on_commit_callbacks(execute=True):
+        create_response = client.post("/orgs/new/", {"name": "Fresh Org"})
 
     assert create_response.status_code == 302
     organization = Organization.objects.get(slug="fresh-org")
@@ -151,16 +163,19 @@ def test_org_new_flow_can_use_crm_without_manual_stage_seeding(
 
 
 @pytest.mark.django_db
-def test_api_org_create_flow_seeds_canonical_stages(client, staff_user) -> None:
+def test_api_org_create_flow_seeds_canonical_stages(
+    client, staff_user, django_capture_on_commit_callbacks
+) -> None:
     """The /orgs/api/ flow should seed exactly one canonical local stage set."""
 
     client.force_login(staff_user)
 
-    create_response = client.post(
-        "/orgs/api/",
-        data=json.dumps({"name": "API Org"}),
-        content_type="application/json",
-    )
+    with django_capture_on_commit_callbacks(execute=True):
+        create_response = client.post(
+            "/orgs/api/",
+            data=json.dumps({"name": "API Org"}),
+            content_type="application/json",
+        )
 
     assert create_response.status_code == 201
     organization = Organization.objects.get(slug="api-org")
@@ -175,7 +190,7 @@ def test_api_org_create_flow_seeds_canonical_stages(client, staff_user) -> None:
 
 @pytest.mark.django_db
 def test_new_org_form_flow_seeds_stages_without_crm_endpoint(
-    client, staff_user
+    client, staff_user, django_capture_on_commit_callbacks
 ) -> None:
     """Prove installed-app wiring: stages exist immediately after org creation,
     before any CRM API access.
@@ -188,7 +203,8 @@ def test_new_org_form_flow_seeds_stages_without_crm_endpoint(
     """
     client.force_login(staff_user)
 
-    create_response = client.post("/orgs/new/", {"name": "Wiring Proof Org"})
+    with django_capture_on_commit_callbacks(execute=True):
+        create_response = client.post("/orgs/new/", {"name": "Wiring Proof Org"})
     assert create_response.status_code == 302
 
     organization = Organization.objects.get(slug="wiring-proof-org")

@@ -14,10 +14,6 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory, override_settings
 
 from quickscale_modules_analytics import services
-from quickscale_modules_analytics.events import (
-    ANALYTICS_EVENT_FORM_SUBMIT,
-    ANALYTICS_EVENT_SOCIAL_LINK_CLICK,
-)
 
 
 class DummyClient:
@@ -363,70 +359,12 @@ def test_is_analytics_active_reconfigures_when_settings_change() -> None:
     mock_configure.assert_called_once_with()
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_capture_form_submit_uses_canonical_payload(monkeypatch) -> None:
-    """capture_form_submit should emit the stable forms event payload."""
-    fake_posthog = DummyPosthogModule()
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
-
-    with patch(
-        "quickscale_modules_analytics.services.posthog",
-        fake_posthog,
-    ):
-        services.configure_analytics_client()
-
-    services.capture_form_submit(
-        "session:abc",
-        42,
-        "Contact",
-        {"source": "landing"},
-    )
-
-    assert fake_posthog.clients[0].captures == [
-        (
-            "session:abc",
-            ANALYTICS_EVENT_FORM_SUBMIT,
-            {
-                "source": "landing",
-                "module": "forms",
-                "form_id": "42",
-                "form_name": "Contact",
-            },
-        )
-    ]
-
-
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_capture_social_link_click_uses_canonical_payload(monkeypatch) -> None:
-    """capture_social_link_click should emit the stable social event payload."""
-    fake_posthog = DummyPosthogModule()
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
-
-    with patch(
-        "quickscale_modules_analytics.services.posthog",
-        fake_posthog,
-    ):
-        services.configure_analytics_client()
-
-    services.capture_social_link_click(
-        "session:abc",
-        "YouTube",
-        "99",
-        {"surface": "public"},
-    )
-
-    assert fake_posthog.clients[0].captures == [
-        (
-            "session:abc",
-            ANALYTICS_EVENT_SOCIAL_LINK_CLICK,
-            {
-                "surface": "public",
-                "module": "social",
-                "provider": "youtube",
-                "link_id": "99",
-            },
-        )
-    ]
+def test_services_publish_only_the_generic_capture_helper() -> None:
+    """Per-event helpers are gone; modules call capture_event themselves."""
+    assert "capture_form_submit" not in services.__all__
+    assert "capture_social_link_click" not in services.__all__
+    assert not hasattr(services, "capture_form_submit")
+    assert not hasattr(services, "capture_social_link_click")
 
 
 @pytest.mark.django_db()

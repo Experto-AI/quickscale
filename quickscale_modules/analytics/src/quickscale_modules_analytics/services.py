@@ -12,10 +12,6 @@ import posthog
 from django.conf import settings
 from django.http import HttpRequest
 
-from quickscale_modules_analytics.events import (
-    ANALYTICS_EVENT_FORM_SUBMIT,
-    ANALYTICS_EVENT_SOCIAL_LINK_CLICK,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -311,50 +307,12 @@ def capture_event(
         )
 
 
-def capture_form_submit(
-    distinct_id: str,
-    form_id: int | str,
-    form_name: str = "",
-    extra: dict[str, Any] | None = None,
-) -> None:
-    """Capture the canonical forms submission event payload."""
-    properties = dict(extra or {})
-    properties.update(
-        {
-            "module": "forms",
-            "form_id": str(form_id),
-            "form_name": form_name.strip(),
-        }
-    )
-    capture_event(distinct_id, ANALYTICS_EVENT_FORM_SUBMIT, properties)
-
-
-def capture_social_link_click(
-    distinct_id: str,
-    provider: str,
-    link_id: int | str,
-    extra: dict[str, Any] | None = None,
-) -> None:
-    """Capture the canonical social link click event payload."""
-    properties = dict(extra or {})
-    properties.update(
-        {
-            "module": "social",
-            "provider": str(provider).strip().lower(),
-            "link_id": str(link_id),
-        }
-    )
-    capture_event(distinct_id, ANALYTICS_EVENT_SOCIAL_LINK_CLICK, properties)
-
-
 __all__ = [
     "ANALYTICS_POSTHOG_DEFAULT_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
     "AnalyticsRuntimeSettingsSnapshot",
     "analytics_enabled_for_request",
     "capture_event",
-    "capture_form_submit",
-    "capture_social_link_click",
     "configure_analytics_client",
     "get_analytics_runtime_settings",
     "get_distinct_id",

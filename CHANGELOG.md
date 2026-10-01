@@ -307,6 +307,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `QUICKSCALE_FORMS_RETENTION_DAYS`), blog's upload limits are declared manifest options,
     notifications declares `provider`, and billing's option key is `currency`. A `quickscale.yml`
     or `.quickscale/state.yml` that still uses an old option key fails naming its replacement.
+  - **Write effects follow their commit.** A form-submission email, an organization-invitation
+    email, CRM default-stage seeding, and social cache purges run only after their database write
+    commits, so a rolled-back write sends no email and fires no effect.
+  - **One email sender and module-owned analytics events.** Forms requires notifications and sends
+    through `send_notification` only, and analytics publishes just `capture_event`; forms emits
+    `quickscale_forms_submitted` (renamed from `form_submit`) for dashboards.
   - **Retired module setting names fail startup.** A module declares the setting names its renames
     retired, and the startup settings check refuses a project that still defines one, naming the
     replacement instead of leaving the old value silently unused.

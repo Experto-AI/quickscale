@@ -49,6 +49,10 @@ for validation errors), produced by `quickscale_core.runtime.conventions.excepti
 the handler `quickscale apply` installs in `REST_FRAMEWORK`; a manual installation must install
 it the same way (see Operations).
 
+Forms emits the `quickscale_forms_submitted` analytics event for each accepted submission
+through analytics' generic `capture_event`, guarded on the analytics module being installed and
+enabled. The module's public service surface (`services.py`) names that event.
+
 ### Built-in form presets
 
 | Slug | Fields |
@@ -69,10 +73,11 @@ enumeration. If either switch is off, `_hp_name` is ignored. Rate limiting
 ### Email notifications
 
 Set `notify_emails` on a `Form` to receive an email on every legitimate (non-spam) submission.
-When the notifications module is installed and enabled, the message is dispatched through its
-`send_notification` service (tagged `forms`, workflow `form-submission`) so delivery is
-tracked; otherwise the module sends an `EmailMultiAlternatives` message through the configured
-email backend. Delivery failures are logged and never block submission processing.
+The message is dispatched through the notifications module's `send_notification` service
+(tagged `forms`, workflow `form-submission`) so delivery is tracked; the module declares
+`notifications` in `required_modules` and carries no fallback sender. The send runs only after
+the submission commits, so a rolled-back submission sends nothing; delivery failures are logged
+and never block submission processing.
 
 ### Staff access model
 
@@ -121,8 +126,9 @@ quickscale plan --add forms
 quickscale apply
 ```
 
-A manual installation adds `rest_framework`, `django_filters`, and `quickscale_modules_forms`
-to `INSTALLED_APPS`, mounts the module's URLs, sets `REST_FRAMEWORK["EXCEPTION_HANDLER"]` to
+A manual installation adds `rest_framework`, `django_filters`, `quickscale_modules_notifications`
+(forms requires it), and `quickscale_modules_forms` to `INSTALLED_APPS`, mounts the module's
+URLs, sets `REST_FRAMEWORK["EXCEPTION_HANDLER"]` to
 `quickscale_core.runtime.conventions.exception_handler`, and runs `python manage.py migrate`. A fresh
 `migrate` on a clean database creates the four built-in presets as part of the initial data
 migration — no separate seed step is needed on first install. Run
