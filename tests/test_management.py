@@ -72,7 +72,7 @@ class TestFormsSeedPresets:
         with operator_access(reason="test: verify idempotent count"):
             assert Form.all_objects.filter(slug="contact").count() == 1
 
-    @override_settings(FORMS_DATA_RETENTION_DAYS=730)
+    @override_settings(QUICKSCALE_FORMS_RETENTION_DAYS=730)
     def test_seed_presets_use_settings_backed_data_retention_default(self):
         """Preset-created forms should inherit the configured retention default."""
         from quickscale_modules_orgs.current_org import (
@@ -96,7 +96,7 @@ class TestFormsSeedPresets:
                 )
             ) == {730}
 
-    @override_settings(FORMS_DATA_RETENTION_DAYS=730)
+    @override_settings(QUICKSCALE_FORMS_RETENTION_DAYS=730)
     def test_seed_presets_preserve_existing_form_data_retention_days(self):
         """Existing forms should keep their stored retention days when presets rerun."""
         from quickscale_modules_orgs.current_org import (

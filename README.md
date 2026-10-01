@@ -21,15 +21,15 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
-| `forms_per_page` | integer | `25` | `FORMS_PER_PAGE` | Number of submissions shown per page in the staff submissions API. |
-| `spam_protection_enabled` | boolean | `true` | `FORMS_SPAM_PROTECTION` | Enable honeypot spam protection globally for forms that also keep their per-form flag enabled. |
-| `rate_limit` | string | `5/hour` | `FORMS_RATE_LIMIT` | Throttle rate for form submissions, per IP. Format: `<count>/<period>`. |
-| `data_retention_days` | integer | `365` | `FORMS_DATA_RETENTION_DAYS` | Default days assigned to newly created forms before anonymization (`0` = keep forever); existing forms keep their stored value. |
-| `submissions_api_enabled` | boolean | `true` | `FORMS_SUBMISSIONS_API` | Enable REST API endpoints for staff submission management. |
+| `submissions_per_page` | integer | `25` | `QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE` | Number of submissions shown per page in the staff submissions API. |
+| `spam_protection_enabled` | boolean | `true` | `QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED` | Enable honeypot spam protection globally for forms that also keep their per-form flag enabled. |
+| `rate_limit` | string | `5/hour` | `QUICKSCALE_FORMS_RATE_LIMIT` | Throttle rate for form submissions, per IP. Format: `<count>/<period>`. |
+| `retention_days` | integer | `365` | `QUICKSCALE_FORMS_RETENTION_DAYS` | Default days assigned to newly created forms before anonymization (`0` = keep forever); existing forms keep their stored value. |
+| `api_enabled` | boolean | `true` | `QUICKSCALE_FORMS_API_ENABLED` | Enable REST API endpoints for staff submission management. |
 
 A manual installation must set these settings explicitly; generated projects have them rendered
 by `quickscale apply`. The public schema and submit endpoints stay available regardless of
-`FORMS_SUBMISSIONS_API`.
+`QUICKSCALE_FORMS_API_ENABLED`.
 
 ## Public surface
 
@@ -60,11 +60,11 @@ it the same way (see Operations).
 
 ### Spam protection
 
-When both the global `FORMS_SPAM_PROTECTION` setting and a form's `spam_protection_enabled`
+When both the global `QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED` setting and a form's `spam_protection_enabled`
 flag are true, the public schema includes a honeypot field (`_hp_name`) and submission
 handling treats a populated value as spam while still returning success — preventing bot
 enumeration. If either switch is off, `_hp_name` is ignored. Rate limiting
-(`ScopedRateThrottle` with `FORMS_RATE_LIMIT`) adds a second layer of protection.
+(`ScopedRateThrottle` with `QUICKSCALE_FORMS_RATE_LIMIT`) adds a second layer of protection.
 
 ### Email notifications
 
@@ -86,7 +86,7 @@ selection is required for regular staff to see any data.
 | Regular staff | None | Fail-closed: `TenantMiddleware` redirects to `/orgs/` before view execution (302). View-unit tests without middleware show an empty list or 404. No data is leaked. |
 | Anonymous | N/A | Denied (`403 Forbidden`). |
 
-The `FORMS_SUBMISSIONS_API` setting is checked on every admin request before any role-specific
+The `QUICKSCALE_FORMS_API_ENABLED` setting is checked on every admin request before any role-specific
 logic — a disabled API returns 404 for both superuser and regular staff.
 
 ## URLs
@@ -130,7 +130,7 @@ deleted or to recover presets in an older database that was not created by the c
 migration.
 
 New `Form` rows created after migrations complete — including those created by a manual
-`quickscale_forms_seed_presets` run — inherit `FORMS_DATA_RETENTION_DAYS` when
+`quickscale_forms_seed_presets` run — inherit `QUICKSCALE_FORMS_RETENTION_DAYS` when
 `data_retention_days` is omitted. Fresh-install preset rows created by the initial seed
 migration hardcode the historical 365-day default and do not inherit the runtime setting.
 Existing forms always keep their stored per-row retention window regardless of how they were
