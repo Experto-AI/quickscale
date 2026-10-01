@@ -161,7 +161,7 @@ class TestCRMAPIPermissions:
         authenticated_client,
     ):
         """The CRM API root should only allow staff users."""
-        url = reverse("quickscale_crm:api-root")
+        url = reverse("quickscale_crm:api_root")
 
         _assert_staff_only_route(
             api_client,
@@ -180,7 +180,7 @@ class TestCRMAPIPermissions:
         authenticated_client,
     ):
         """The CRM API root should stay hidden when the API toggle is off."""
-        url = reverse("quickscale_crm:api-root")
+        url = reverse("quickscale_crm:api_root")
 
         _assert_api_hidden_for_all_callers(
             api_client,
@@ -193,13 +193,13 @@ class TestCRMAPIPermissions:
     @pytest.mark.parametrize(
         "route_name",
         [
-            "tag-list",
-            "company-list",
-            "contact-list",
-            "stage-list",
-            "deal-list",
-            "contact-note-list",
-            "deal-note-list",
+            "tag_list",
+            "company_list",
+            "contact_list",
+            "stage_list",
+            "deal_list",
+            "contact_note_list",
+            "deal_note_list",
         ],
     )
     def test_primary_resource_routes_require_staff(
@@ -225,32 +225,32 @@ class TestCRMAPIPermissions:
         ("route_name", "method", "payload", "expected_staff_status"),
         [
             pytest.param(
-                "contact-notes",
+                "contact_notes",
                 "get",
                 None,
                 status.HTTP_200_OK,
-                id="contact-notes-list",
+                id="contact_notes-list",
             ),
             pytest.param(
-                "contact-notes",
+                "contact_notes",
                 "post",
                 {"text": "Staff contact note"},
                 status.HTTP_201_CREATED,
-                id="contact-notes-create",
+                id="contact_notes-create",
             ),
             pytest.param(
-                "deal-notes",
+                "deal_notes",
                 "get",
                 None,
                 status.HTTP_200_OK,
-                id="deal-notes-list",
+                id="deal_notes-list",
             ),
             pytest.param(
-                "deal-notes",
+                "deal_notes",
                 "post",
                 {"text": "Staff deal note"},
                 status.HTTP_201_CREATED,
-                id="deal-notes-create",
+                id="deal_notes-create",
             ),
         ],
     )
@@ -267,7 +267,7 @@ class TestCRMAPIPermissions:
         expected_staff_status,
     ):
         """Nested CRM note actions should only allow staff users."""
-        object_id = contact.id if route_name == "contact-notes" else deal.id
+        object_id = contact.id if route_name == "contact_notes" else deal.id
         url = reverse(f"quickscale_crm:{route_name}", args=[object_id])
 
         _assert_staff_only_route(
@@ -284,7 +284,7 @@ class TestCRMAPIPermissions:
         ("route_name", "payload_factory"),
         [
             pytest.param(
-                "deal-bulk-update-stage",
+                "deal_bulk_update_stage",
                 lambda deal, closed_won_stage: {
                     "deal_ids": [deal.id],
                     "stage_id": closed_won_stage.id,
@@ -292,12 +292,12 @@ class TestCRMAPIPermissions:
                 id="bulk-update-stage",
             ),
             pytest.param(
-                "deal-mark-won",
+                "deal_mark_won",
                 lambda deal, closed_won_stage: {"deal_ids": [deal.id]},
                 id="mark-won",
             ),
             pytest.param(
-                "deal-mark-lost",
+                "deal_mark_lost",
                 lambda deal, closed_won_stage: {"deal_ids": [deal.id]},
                 id="mark-lost",
             ),
@@ -331,13 +331,13 @@ class TestCRMAPIPermissions:
     @pytest.mark.parametrize(
         "route_name",
         [
-            "tag-list",
-            "company-list",
-            "contact-list",
-            "stage-list",
-            "deal-list",
-            "contact-note-list",
-            "deal-note-list",
+            "tag_list",
+            "company_list",
+            "contact_list",
+            "stage_list",
+            "deal_list",
+            "contact_note_list",
+            "deal_note_list",
         ],
     )
     def test_primary_resource_routes_return_404_when_api_disabled(
@@ -362,19 +362,19 @@ class TestCRMAPIPermissions:
     @pytest.mark.parametrize(
         ("route_name", "method", "payload"),
         [
-            pytest.param("contact-notes", "get", None, id="contact-notes-list"),
+            pytest.param("contact_notes", "get", None, id="contact_notes-list"),
             pytest.param(
-                "contact-notes",
+                "contact_notes",
                 "post",
                 {"text": "Hidden contact note"},
-                id="contact-notes-create",
+                id="contact_notes-create",
             ),
-            pytest.param("deal-notes", "get", None, id="deal-notes-list"),
+            pytest.param("deal_notes", "get", None, id="deal_notes-list"),
             pytest.param(
-                "deal-notes",
+                "deal_notes",
                 "post",
                 {"text": "Hidden deal note"},
-                id="deal-notes-create",
+                id="deal_notes-create",
             ),
         ],
     )
@@ -390,7 +390,7 @@ class TestCRMAPIPermissions:
         payload,
     ):
         """Nested note actions should stay hidden when the API toggle is off."""
-        object_id = contact.id if route_name == "contact-notes" else deal.id
+        object_id = contact.id if route_name == "contact_notes" else deal.id
         url = reverse(f"quickscale_crm:{route_name}", args=[object_id])
 
         _assert_api_hidden_for_all_callers(
@@ -407,7 +407,7 @@ class TestCRMAPIPermissions:
         ("route_name", "payload_factory"),
         [
             pytest.param(
-                "deal-bulk-update-stage",
+                "deal_bulk_update_stage",
                 lambda deal, closed_won_stage: {
                     "deal_ids": [deal.id],
                     "stage_id": closed_won_stage.id,
@@ -415,12 +415,12 @@ class TestCRMAPIPermissions:
                 id="bulk-update-stage",
             ),
             pytest.param(
-                "deal-mark-won",
+                "deal_mark_won",
                 lambda deal, closed_won_stage: {"deal_ids": [deal.id]},
                 id="mark-won",
             ),
             pytest.param(
-                "deal-mark-lost",
+                "deal_mark_lost",
                 lambda deal, closed_won_stage: {"deal_ids": [deal.id]},
                 id="mark-lost",
             ),
@@ -479,14 +479,14 @@ class TestTagViewSet:
 
     def test_list_tags(self, authenticated_client, tag):
         """Test listing tags"""
-        response = authenticated_client.get(reverse("quickscale_crm:tag-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:tag_list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
     def test_create_tag(self, authenticated_client):
         """Test creating a tag"""
         response = authenticated_client.post(
-            reverse("quickscale_crm:tag-list"), {"name": "New Tag"}
+            reverse("quickscale_crm:tag_list"), {"name": "New Tag"}
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "New Tag"
@@ -494,7 +494,7 @@ class TestTagViewSet:
     def test_create_duplicate_tag_returns_4xx(self, authenticated_client, tag):
         """Creating a duplicate tag name returns a controlled 4xx, not a 500."""
         response = authenticated_client.post(
-            reverse("quickscale_crm:tag-list"), {"name": "VIP"}
+            reverse("quickscale_crm:tag_list"), {"name": "VIP"}
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "name" in response.data
@@ -507,7 +507,7 @@ class TestTagViewSet:
 
         Tag.objects.create(name="Hot Lead", organization=staff_personal_org)
         response = authenticated_client.patch(
-            reverse("quickscale_crm:tag-detail", args=[tag.id]),
+            reverse("quickscale_crm:tag_detail", args=[tag.id]),
             {"name": "Hot Lead"},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -516,7 +516,7 @@ class TestTagViewSet:
     def test_update_tag_same_name_is_valid(self, authenticated_client, tag):
         """Updating a tag without changing its name succeeds (self-exclusion)."""
         response = authenticated_client.patch(
-            reverse("quickscale_crm:tag-detail", args=[tag.id]),
+            reverse("quickscale_crm:tag_detail", args=[tag.id]),
             {"name": "VIP"},
         )
         assert response.status_code == status.HTTP_200_OK
@@ -524,7 +524,7 @@ class TestTagViewSet:
     def test_delete_tag(self, authenticated_client, tag):
         """Test deleting a tag"""
         response = authenticated_client.delete(
-            reverse("quickscale_crm:tag-detail", args=[tag.id])
+            reverse("quickscale_crm:tag_detail", args=[tag.id])
         )
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
@@ -535,7 +535,7 @@ class TestCompanyViewSet:
 
     def test_list_companies(self, authenticated_client, company):
         """Test listing companies"""
-        response = authenticated_client.get(reverse("quickscale_crm:company-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:company_list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
@@ -547,7 +547,7 @@ class TestCompanyViewSet:
             "website": "https://newcorp.com",
         }
         response = authenticated_client.post(
-            reverse("quickscale_crm:company-list"), data
+            reverse("quickscale_crm:company_list"), data
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "New Corp"
@@ -555,7 +555,7 @@ class TestCompanyViewSet:
     def test_search_companies(self, authenticated_client, company):
         """Test searching companies by name"""
         response = authenticated_client.get(
-            f"{reverse('quickscale_crm:company-list')}?search=Acme"
+            f"{reverse('quickscale_crm:company_list')}?search=Acme"
         )
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
@@ -567,7 +567,7 @@ class TestContactViewSet:
 
     def test_list_contacts(self, authenticated_client, contact):
         """Test listing contacts"""
-        response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:contact_list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
@@ -580,7 +580,7 @@ class TestContactViewSet:
             "company_id": company.id,
         }
         response = authenticated_client.post(
-            reverse("quickscale_crm:contact-list"), data
+            reverse("quickscale_crm:contact_list"), data
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["first_name"] == "Jane"
@@ -588,7 +588,7 @@ class TestContactViewSet:
     def test_retrieve_contact(self, authenticated_client, contact):
         """Test retrieving a contact"""
         response = authenticated_client.get(
-            reverse("quickscale_crm:contact-detail", args=[contact.id])
+            reverse("quickscale_crm:contact_detail", args=[contact.id])
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["first_name"] == "John"
@@ -596,21 +596,21 @@ class TestContactViewSet:
     def test_filter_contacts_by_status(self, authenticated_client, contact):
         """Test filtering contacts by status"""
         response = authenticated_client.get(
-            f"{reverse('quickscale_crm:contact-list')}?status=new"
+            f"{reverse('quickscale_crm:contact_list')}?status=new"
         )
         assert response.status_code == status.HTTP_200_OK
 
     def test_contact_notes_endpoint(self, authenticated_client, contact):
         """Test listing contact notes"""
         response = authenticated_client.get(
-            reverse("quickscale_crm:contact-notes", args=[contact.id])
+            reverse("quickscale_crm:contact_notes", args=[contact.id])
         )
         assert response.status_code == status.HTTP_200_OK
 
     def test_create_contact_note_via_nested(self, authenticated_client, contact):
         """Test creating a contact note via nested endpoint"""
         response = authenticated_client.post(
-            reverse("quickscale_crm:contact-notes", args=[contact.id]),
+            reverse("quickscale_crm:contact_notes", args=[contact.id]),
             {"text": "New note"},
             format="json",
         )
@@ -622,7 +622,7 @@ class TestContactViewSet:
         self, api_client
     ):
         """Explicit module auth should not depend on host DRF defaults."""
-        response = api_client.get(reverse("quickscale_crm:contact-list"))
+        response = api_client.get(reverse("quickscale_crm:contact_list"))
 
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED,
@@ -635,7 +635,7 @@ class TestContactViewSet:
     ):
         """Explicit CRM auth should still reject non-staff users without global DRF settings."""
         response = non_staff_authenticated_client.get(
-            reverse("quickscale_crm:contact-list")
+            reverse("quickscale_crm:contact_list")
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -645,7 +645,7 @@ class TestContactViewSet:
         self, authenticated_client, contact
     ):
         """Staff CRM access should remain available without global DRF settings."""
-        response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:contact_list"))
 
         assert response.status_code == status.HTTP_200_OK
 
@@ -654,7 +654,7 @@ class TestContactViewSet:
         self, authenticated_client, contact
     ):
         """Disabling the CRM API should hide the router endpoints."""
-        response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:contact_list"))
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -665,7 +665,7 @@ class TestContactViewSet:
         assert contact.last_contacted_at is None
 
         response = authenticated_client.post(
-            reverse("quickscale_crm:contact-notes", args=[contact.id]),
+            reverse("quickscale_crm:contact_notes", args=[contact.id]),
             {"text": "Followed up about the proposal"},
             format="json",
         )
@@ -683,14 +683,14 @@ class TestStageViewSet:
 
     def test_list_stages(self, authenticated_client, stage):
         """Test listing stages"""
-        response = authenticated_client.get(reverse("quickscale_crm:stage-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:stage_list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
     def test_create_stage(self, authenticated_client):
         """Test creating a stage"""
         data = {"name": "Proposal", "order": 2}
-        response = authenticated_client.post(reverse("quickscale_crm:stage-list"), data)
+        response = authenticated_client.post(reverse("quickscale_crm:stage_list"), data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "Proposal"
 
@@ -701,7 +701,7 @@ class TestDealViewSet:
 
     def test_list_deals(self, authenticated_client, deal):
         """Test listing deals"""
-        response = authenticated_client.get(reverse("quickscale_crm:deal-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:deal_list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
@@ -714,14 +714,14 @@ class TestDealViewSet:
             "amount": "25000.00",
             "probability": 50,
         }
-        response = authenticated_client.post(reverse("quickscale_crm:deal-list"), data)
+        response = authenticated_client.post(reverse("quickscale_crm:deal_list"), data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["title"] == "New Deal"
 
     def test_retrieve_deal(self, authenticated_client, deal):
         """Test retrieving a deal"""
         response = authenticated_client.get(
-            reverse("quickscale_crm:deal-detail", args=[deal.id])
+            reverse("quickscale_crm:deal_detail", args=[deal.id])
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["title"] == "Enterprise Deal"
@@ -729,21 +729,21 @@ class TestDealViewSet:
     def test_filter_deals_by_stage(self, authenticated_client, deal, stage):
         """Test filtering deals by stage"""
         response = authenticated_client.get(
-            f"{reverse('quickscale_crm:deal-list')}?stage={stage.id}"
+            f"{reverse('quickscale_crm:deal_list')}?stage={stage.id}"
         )
         assert response.status_code == status.HTTP_200_OK
 
     def test_deal_notes_endpoint(self, authenticated_client, deal):
         """Test listing deal notes"""
         response = authenticated_client.get(
-            reverse("quickscale_crm:deal-notes", args=[deal.id])
+            reverse("quickscale_crm:deal_notes", args=[deal.id])
         )
         assert response.status_code == status.HTTP_200_OK
 
     def test_create_deal_note_via_nested(self, authenticated_client, deal):
         """Test creating a deal note via nested endpoint"""
         response = authenticated_client.post(
-            reverse("quickscale_crm:deal-notes", args=[deal.id]),
+            reverse("quickscale_crm:deal_notes", args=[deal.id]),
             {"text": "New deal note"},
             format="json",
         )
@@ -757,7 +757,7 @@ class TestDealViewSet:
             "stage_id": closed_won_stage.id,
         }
         response = authenticated_client.post(
-            reverse("quickscale_crm:deal-bulk-update-stage"), data
+            reverse("quickscale_crm:deal_bulk_update_stage"), data
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
@@ -793,7 +793,7 @@ class TestDealViewSet:
 
         data = {"deal_ids": [deal.id]}
         response = authenticated_client.post(
-            reverse("quickscale_crm:deal-mark-won"), data, format="json"
+            reverse("quickscale_crm:deal_mark_won"), data, format="json"
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
@@ -833,7 +833,7 @@ class TestDealViewSet:
 
         data = {"deal_ids": [deal.id]}
         response = authenticated_client.post(
-            reverse("quickscale_crm:deal-mark-lost"), data, format="json"
+            reverse("quickscale_crm:deal_mark_lost"), data, format="json"
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
@@ -867,7 +867,7 @@ class TestDealViewSet:
         )
 
         response = authenticated_client.post(
-            reverse("quickscale_crm:deal-mark-won"),
+            reverse("quickscale_crm:deal_mark_won"),
             {"deal_ids": [deal.id]},
             format="json",
         )
@@ -902,7 +902,7 @@ class TestDealViewSet:
         )
 
         response = authenticated_client.post(
-            reverse("quickscale_crm:deal-mark-lost"),
+            reverse("quickscale_crm:deal_mark_lost"),
             {"deal_ids": [deal.id]},
             format="json",
         )
@@ -941,7 +941,7 @@ class TestCRMPageSizeSettings:
             organization=staff_personal_org,
         )
 
-        response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:contact_list"))
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
@@ -970,7 +970,7 @@ class TestCRMPageSizeSettings:
             organization=staff_personal_org,
         )
 
-        response = authenticated_client.get(reverse("quickscale_crm:deal-list"))
+        response = authenticated_client.get(reverse("quickscale_crm:deal_list"))
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1

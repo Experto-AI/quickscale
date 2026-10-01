@@ -69,6 +69,6 @@ derivation:
       derivation_type: static
       expression:
         value:
-          - - ""
+          - - crm/
             - quickscale_modules_crm.urls
       description: "CRM URL includes"
