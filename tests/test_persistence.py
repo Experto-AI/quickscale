@@ -452,6 +452,57 @@ class TestPolicyProviderLoadDefault:
 
 
 @pytest.mark.django_db
+class TestPolicyProviderSettingsSnapshot:
+    """settings_policy_snapshot behavior — the engine's settings-derived snapshot."""
+
+    @override_settings(
+        QUICKSCALE_BACKUPS_RETENTION_DAYS="7",
+        QUICKSCALE_BACKUPS_NAMING_PREFIX=" app ",
+        QUICKSCALE_BACKUPS_TARGET_MODE="private_remote",
+        QUICKSCALE_BACKUPS_LOCAL_DIRECTORY="backups",
+        QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME="bucket",
+        QUICKSCALE_BACKUPS_REMOTE_PREFIX="prefix",
+        QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL="endpoint",
+        QUICKSCALE_BACKUPS_REMOTE_REGION_NAME="",
+        QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR="ACCESS",
+        QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR="SECRET",
+        QUICKSCALE_BACKUPS_AUTOMATION_ENABLED=True,
+        QUICKSCALE_BACKUPS_SCHEDULE="schedule",
+    )
+    def test_settings_snapshot_applies_module_settings_and_coercion(
+        self,
+        policy_provider: _BackupPolicyPersistenceProvider,
+    ) -> None:
+        """The provider builds the engine snapshot from backups' own settings."""
+        result = policy_provider.settings_policy_snapshot()
+
+        assert result.retention_days == 7
+        assert result.naming_prefix == " app "
+        assert result.target_mode == "private_remote"
+        assert result.local_directory == "backups"
+        assert result.remote_bucket_name == "bucket"
+        assert result.remote_prefix == "prefix"
+        assert result.remote_endpoint_url == "endpoint"
+        assert result.remote_region_name == ""
+        assert result.remote_access_key_id_env_var == "ACCESS"
+        assert result.remote_secret_access_key_env_var == "SECRET"
+        assert result.automation_enabled is True
+        assert result.schedule == "schedule"
+
+    @override_settings(QUICKSCALE_BACKUPS_RETENTION_DAYS=45)
+    def test_settings_snapshot_prefers_settings_over_persisted_row(
+        self,
+        policy_provider: _BackupPolicyPersistenceProvider,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        """A persisted row does not override the managed settings snapshot."""
+        result = policy_provider.settings_policy_snapshot()
+
+        assert result.retention_days == 45
+        assert result.retention_days != backup_policy.retention_days
+
+
+@pytest.mark.django_db
 class TestPolicyProviderEnsureDefault:
     """ensure_default_policy behavior — return identity and no-policy cases."""
 
