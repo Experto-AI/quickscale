@@ -23,6 +23,11 @@ def test_app_config_exposes_expected_metadata() -> None:
     assert QuickscaleBlogConfig.default_auto_field == "django.db.models.BigAutoField"
 
 
+def test_app_config_declares_its_removal_label_prefix() -> None:
+    """Rule 34: the purge summary takes blog's display prefix from here."""
+    assert QuickscaleBlogConfig.removal_label_prefix == "Blog"
+
+
 def test_app_config_ready_is_safe_to_call() -> None:
     """AppConfig.ready() should not raise when all required settings are present."""
     config = QuickscaleBlogConfig(
