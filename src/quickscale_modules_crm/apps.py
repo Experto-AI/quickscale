@@ -24,4 +24,6 @@ class QuickscaleCrmConfig(AppConfig):
         # the module is sufficient.
         import quickscale_modules_crm.receivers  # noqa: F401
 
-        register_module_settings_check(self, "crm")
+        from quickscale_modules_crm.checks import RETIRED_SETTINGS
+
+        register_module_settings_check(self, "crm", retired_settings=RETIRED_SETTINGS)
