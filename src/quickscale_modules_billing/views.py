@@ -113,11 +113,11 @@ def _json_object_payload(request: Request) -> Mapping[str, Any]:
 
 
 def _dashboard_url(*, organization: Any | None) -> str:
-    return reverse("quickscale_billing:billing-dashboard")
+    return reverse("quickscale_billing:dashboard")
 
 
 def _pricing_url(*, organization: Any | None) -> str:
-    return reverse("quickscale_billing:pricing-page")
+    return reverse("quickscale_billing:pricing_page")
 
 
 _ZERO_DECIMAL_PRICE_CURRENCIES = frozenset({"jpy"})
@@ -242,8 +242,8 @@ class CreateCheckoutSessionView(_RenderedAPIView):
         checkout_url = create_checkout_session(
             request.user,
             serializer.validated_data["plan"],
-            reverse("quickscale_billing:purchase-success"),
-            reverse("quickscale_billing:purchase-cancel"),
+            reverse("quickscale_billing:purchase_success"),
+            reverse("quickscale_billing:purchase_cancel"),
             organization=organization,
         )
         return Response({"checkout_url": checkout_url})
@@ -270,8 +270,8 @@ class CreateSubscriptionCheckoutView(_RenderedAPIView):
         checkout_url = create_subscription_checkout_session(
             request.user,
             serializer.validated_data["plan"],
-            reverse("quickscale_billing:subscription-success"),
-            reverse("quickscale_billing:subscription-cancel"),
+            reverse("quickscale_billing:subscription_success"),
+            reverse("quickscale_billing:subscription_cancel"),
             organization=organization,
         )
         return Response({"checkout_url": checkout_url})
@@ -322,7 +322,7 @@ class CreateBillingPortalSessionView(_RenderedAPIView):
 
         portal_url = create_billing_portal_session(
             request.user,
-            reverse("quickscale_billing:portal-return"),
+            reverse("quickscale_billing:portal_return"),
             organization=organization,
         )
         return Response({"portal_url": portal_url})
@@ -424,7 +424,7 @@ class BillingDashboardView(LoginRequiredMixin, TemplateView):
             require_owner=True,
         )
         if organization is None:
-            return redirect("quickscale_billing:pricing-page")
+            return redirect("quickscale_billing:pricing_page")
         if access_denied:
             return HttpResponse(status=403)
         return super().dispatch(request, *args, **kwargs)

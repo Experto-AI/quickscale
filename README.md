@@ -26,9 +26,9 @@ Boundaries:
   billing install without those foundations.
 - Planner/apply auto-materializes `orgs` when billing is selected, and `orgs` auto-materializes
   `notifications`; auth remains an explicit prerequisite.
-- All billing pages and APIs use flat routes (`billing/...`, `api/billing/...`) in both Solo and
+- All billing pages and APIs use flat routes (`billing/...`, `billing/api/...`) in both Solo and
   SaaS modes; no org-scoped billing URL tree exists.
-- `GET /api/billing/plans/` is intentionally recurring-only; one-time credit packs are
+- `GET /billing/api/plans/` is intentionally recurring-only; one-time credit packs are
   purchaseable but do not ship through a public catalog endpoint.
 - Checkout success, cancel, and portal return URLs are server-owned; callers may not supply
   them in API requests.
@@ -96,7 +96,7 @@ consumer imports billing's services or names its label.
 
 ### API contract
 
-All billing API routes are flat (`api/billing/...`) and used in both Solo and SaaS modes. The
+All billing API routes are flat (`billing/api/...`) and used in both Solo and SaaS modes. The
 organization is resolved from the session / `request.org` contract established by middleware,
 not from a URL slug. Every error answers the shared
 `{"error": {"code", "message", "fields"}}` shape (`fields` only for validation errors), and a
@@ -104,15 +104,15 @@ disabled billing runtime answers `404`.
 
 | Route | Method | Auth | Request | Success contract | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `api/billing/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": {"code": "configuration_error", "message": "Stripe publishable key is not configured in the runtime environment."}}` when missing. |
-| `api/billing/plans/` | `GET` | Public | None | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. |
-| `api/billing/balance/` | `GET` | Session auth | None | `{"balance": 0, "updated_at": null}` | A missing balance is returned as a read-only zero snapshot without creating a row. Persisted balances include their `updated_at` timestamp. |
-| `api/billing/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Fixed page size of `25`; client `page_size` overrides are ignored. |
-| `api/billing/purchase/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "credits-pack"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. |
-| `api/billing/subscription/` | `GET` | Session auth | None | `{"plan": {...}, "status": "active", "checkout_expires_at": null, "current_period_start": "...", "current_period_end": "..."}` | Returns `404` with `{"error": {"code": "not_found", "message": "Current subscription not found."}}` when no current recurring row exists. |
-| `api/billing/subscription/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "starter-monthly"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. Blocks if a current recurring subscription already exists. |
-| `api/billing/subscription/cancel/` | `POST` | Session auth + CSRF | `{}` | `204 No Content` | Rejects caller-supplied `return_url`. Schedules `cancel_at_period_end=True`. |
-| `api/billing/portal/` | `POST` | Session auth + CSRF | `{}` | `{"portal_url": "https://billing.stripe.com/..."}` | Rejects caller-supplied `return_url`. Uses the module-owned `billing/portal/return/` route. |
+| `billing/api/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": {"code": "configuration_error", "message": "Stripe publishable key is not configured in the runtime environment."}}` when missing. |
+| `billing/api/plans/` | `GET` | Public | None | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. |
+| `billing/api/balance/` | `GET` | Session auth | None | `{"balance": 0, "updated_at": null}` | A missing balance is returned as a read-only zero snapshot without creating a row. Persisted balances include their `updated_at` timestamp. |
+| `billing/api/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Fixed page size of `25`; client `page_size` overrides are ignored. |
+| `billing/api/purchase/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "credits-pack"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. |
+| `billing/api/subscription/` | `GET` | Session auth | None | `{"plan": {...}, "status": "active", "checkout_expires_at": null, "current_period_start": "...", "current_period_end": "..."}` | Returns `404` with `{"error": {"code": "not_found", "message": "Current subscription not found."}}` when no current recurring row exists. |
+| `billing/api/subscription/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "starter-monthly"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. Blocks if a current recurring subscription already exists. |
+| `billing/api/subscription/cancel/` | `POST` | Session auth + CSRF | `{}` | `204 No Content` | Rejects caller-supplied `return_url`. Schedules `cancel_at_period_end=True`. |
+| `billing/api/portal/` | `POST` | Session auth + CSRF | `{}` | `{"portal_url": "https://billing.stripe.com/..."}` | Rejects caller-supplied `return_url`. Uses the module-owned `billing/portal/return/` route. |
 
 ### Module-owned billing pages
 
@@ -233,7 +233,7 @@ export async function loadBillingRuntimeConfig(): Promise<{
   VITE_STRIPE_PUBLISHABLE_KEY: string;
 }> {
   const { publishable_key } = await billingFetch<BillingConfig>(
-    "/api/billing/config/",
+    "/billing/api/config/",
   );
   return { VITE_STRIPE_PUBLISHABLE_KEY: publishable_key };
 }
@@ -250,20 +250,20 @@ export async function getStripe(): Promise<Stripe | null> {
 }
 
 export function fetchBalance() {
-  return billingFetch<BillingBalance>("/api/billing/balance/");
+  return billingFetch<BillingBalance>("/billing/api/balance/");
 }
 
 export function fetchRecurringPlans() {
-  return billingFetch<BillingPlan[]>("/api/billing/plans/");
+  return billingFetch<BillingPlan[]>("/billing/api/plans/");
 }
 
 export function fetchTransactions(page = 1) {
-  return billingFetch<CreditTransaction[]>(`/api/billing/transactions/?page=${page}`);
+  return billingFetch<CreditTransaction[]>(`/billing/api/transactions/?page=${page}`);
 }
 
 export async function fetchCurrentSubscription() {
   try {
-    return await billingFetch<BillingSubscription>("/api/billing/subscription/");
+    return await billingFetch<BillingSubscription>("/billing/api/subscription/");
   } catch (error) {
     if (error instanceof Error && error.message === "Current subscription not found.") {
       return null;
@@ -273,7 +273,7 @@ export async function fetchCurrentSubscription() {
 }
 
 export async function createPurchaseCheckout(planSlug: string) {
-  return billingFetch<{ checkout_url: string }>("/api/billing/purchase/checkout/", {
+  return billingFetch<{ checkout_url: string }>("/billing/api/purchase/checkout/", {
     method: "POST",
     body: JSON.stringify({ plan_slug: planSlug }),
   });
@@ -281,7 +281,7 @@ export async function createPurchaseCheckout(planSlug: string) {
 
 export async function createSubscriptionCheckout(planSlug: string) {
   return billingFetch<{ checkout_url: string }>(
-    "/api/billing/subscription/checkout/",
+    "/billing/api/subscription/checkout/",
     {
       method: "POST",
       body: JSON.stringify({ plan_slug: planSlug }),
@@ -290,14 +290,14 @@ export async function createSubscriptionCheckout(planSlug: string) {
 }
 
 export async function cancelCurrentSubscription() {
-  return billingFetch<void>("/api/billing/subscription/cancel/", {
+  return billingFetch<void>("/billing/api/subscription/cancel/", {
     method: "POST",
     body: JSON.stringify({}),
   });
 }
 
 export async function createBillingPortalSession() {
-  return billingFetch<{ portal_url: string }>("/api/billing/portal/", {
+  return billingFetch<{ portal_url: string }>("/billing/api/portal/", {
     method: "POST",
     body: JSON.stringify({}),
   });
@@ -392,13 +392,13 @@ Component patterns and the recommended shadcn/ui surfaces:
 - **Credit balance widget**: a `Card` with a `Skeleton` fallback; poll the balance query because
   webhook-driven credit changes can happen outside the current tab.
 - **Pricing page**: `Tabs`, `Card`, `Badge`, and `Button`; fetch recurring plans from
-  `api/billing/plans/` and optionally merge project-owned one-time pack metadata on the same
+  `billing/api/plans/` and optionally merge project-owned one-time pack metadata on the same
   screen.
 - **Purchase button**: a `Button` with spinner state; it only needs a `planSlug` because the
   backend owns both redirect URLs.
 - **Subscription status**: `Card`, `Badge`, `Alert`, and `Button`; render `null` when there is
-  no active recurring row, use `api/billing/portal/` for billing management, and
-  `api/billing/subscription/cancel/` to schedule period-end cancellation.
+  no active recurring row, use `billing/api/portal/` for billing management, and
+  `billing/api/subscription/cancel/` to schedule period-end cancellation.
 - **Transaction history**: `Table`, `ScrollArea`, and `Button`; the API returns a plain list
   without total-count metadata, so use page-number state and infer whether another page exists
   from the fixed page size.
@@ -440,7 +440,7 @@ export function CreditBalanceCard() {
 
 #### 2. PricingPage
 
-Use shadcn/ui `Tabs`, `Card`, `Badge`, and `Button`. Fetch recurring plans from `/api/billing/plans/`, then optionally merge project-owned one-time pack metadata if you want purchase cards on the same screen.
+Use shadcn/ui `Tabs`, `Card`, `Badge`, and `Button`. Fetch recurring plans from `/billing/api/plans/`, then optionally merge project-owned one-time pack metadata if you want purchase cards on the same screen.
 
 ```tsx
 import { useQuery } from "@tanstack/react-query";
@@ -552,7 +552,7 @@ export function PurchaseButton({
 
 #### 4. SubscriptionStatus
 
-Use a shadcn/ui `Card`, `Badge`, `Alert`, and `Button`. Render `null` when there is no active recurring row, call `/api/billing/portal/` for billing management, and call `/api/billing/subscription/cancel/` to schedule period-end cancellation.
+Use a shadcn/ui `Card`, `Badge`, `Alert`, and `Button`. Render `null` when there is no active recurring row, call `/billing/api/portal/` for billing management, and call `/billing/api/subscription/cancel/` to schedule period-end cancellation.
 
 ```tsx
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -679,34 +679,35 @@ export function TransactionHistory() {
 }
 ```
 
-Frontend runtime wiring: load `api/billing/config/` after the user is authenticated, map the
+Frontend runtime wiring: load `billing/api/config/` after the user is authenticated, map the
 returned `publishable_key` into your runtime config shape as `VITE_STRIPE_PUBLISHABLE_KEY` if
 you want one consistent frontend config name, and feed that runtime value into `loadStripe()`
 rather than storing a checked-in `.env` value.
 
 ## URLs
 
-`quickscale apply` mounts the module at the project root; the module's paths are:
+`quickscale apply` mounts the module at `billing/` (its manifest `url_includes` entry); the
+module's paths are:
 
 | URL name | Path | Purpose |
 |----------|------|---------|
-| `quickscale_billing:billing-config` | `api/billing/config/` | Publishable-key discovery |
-| `quickscale_billing:subscription-plans` | `api/billing/plans/` | Active recurring plan catalog |
-| `quickscale_billing:credit-balance` | `api/billing/balance/` | Credit balance |
-| `quickscale_billing:credit-transactions` | `api/billing/transactions/` | Credit transactions (paged) |
-| `quickscale_billing:purchase-checkout` | `api/billing/purchase/checkout/` | One-time purchase Checkout |
-| `quickscale_billing:subscription-detail` | `api/billing/subscription/` | Current subscription |
-| `quickscale_billing:subscription-checkout` | `api/billing/subscription/checkout/` | Recurring Checkout |
-| `quickscale_billing:subscription-cancel-current` | `api/billing/subscription/cancel/` | Schedule period-end cancellation |
-| `quickscale_billing:billing-portal-session` | `api/billing/portal/` | Stripe billing portal session |
-| `quickscale_billing:billing-dashboard` | `billing/dashboard/` | Billing dashboard page |
-| `quickscale_billing:pricing-page` | `billing/pricing/` | Pricing page |
-| `quickscale_billing:purchase-success` | `billing/purchase/success/` | Purchase return (success) |
-| `quickscale_billing:purchase-cancel` | `billing/purchase/cancel/` | Purchase return (cancel) |
-| `quickscale_billing:subscription-success` | `billing/subscription/success/` | Subscription return (success) |
-| `quickscale_billing:subscription-cancel` | `billing/subscription/cancel/` | Subscription return (cancel) |
-| `quickscale_billing:portal-return` | `billing/portal/return/` | Billing portal return |
-| `quickscale_billing:stripe-webhook` | `billing/webhooks/stripe/` | Stripe webhook endpoint |
+| `quickscale_billing:config` | `billing/api/config/` | Publishable-key discovery |
+| `quickscale_billing:subscription_plans` | `billing/api/plans/` | Active recurring plan catalog |
+| `quickscale_billing:credit_balance` | `billing/api/balance/` | Credit balance |
+| `quickscale_billing:credit_transactions` | `billing/api/transactions/` | Credit transactions (paged) |
+| `quickscale_billing:purchase_checkout` | `billing/api/purchase/checkout/` | One-time purchase Checkout |
+| `quickscale_billing:subscription_detail` | `billing/api/subscription/` | Current subscription |
+| `quickscale_billing:subscription_checkout` | `billing/api/subscription/checkout/` | Recurring Checkout |
+| `quickscale_billing:subscription_cancel_current` | `billing/api/subscription/cancel/` | Schedule period-end cancellation |
+| `quickscale_billing:portal_session` | `billing/api/portal/` | Stripe billing portal session |
+| `quickscale_billing:dashboard` | `billing/dashboard/` | Billing dashboard page |
+| `quickscale_billing:pricing_page` | `billing/pricing/` | Pricing page |
+| `quickscale_billing:purchase_success` | `billing/purchase/success/` | Purchase return (success) |
+| `quickscale_billing:purchase_cancel` | `billing/purchase/cancel/` | Purchase return (cancel) |
+| `quickscale_billing:subscription_success` | `billing/subscription/success/` | Subscription return (success) |
+| `quickscale_billing:subscription_cancel` | `billing/subscription/cancel/` | Subscription return (cancel) |
+| `quickscale_billing:portal_return` | `billing/portal/return/` | Billing portal return |
+| `quickscale_billing:stripe_webhook` | `billing/webhooks/stripe/` | Stripe webhook endpoint |
 
 ## Management commands
 
