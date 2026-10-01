@@ -326,6 +326,53 @@ def test_account_deletion_adapter_delegates_cancellation() -> None:
     )
 
 
+def test_app_config_declares_organization_pricing_url_capability() -> None:
+    """Rule 4: billing declares the org-creation pricing URL on its config."""
+    from quickscale_core.runtime import collect_capabilities
+    from quickscale_modules_billing.apps import QuickscaleBillingConfig
+    from quickscale_modules_billing.services import organization_pricing_page_url
+
+    config = QuickscaleBillingConfig(
+        "quickscale_modules_billing",
+        import_module("quickscale_modules_billing"),
+    )
+
+    assert config.organization_pricing_url_hooks() == (organization_pricing_page_url,)
+    assert organization_pricing_page_url in collect_capabilities(
+        "organization_pricing_url_hooks"
+    )
+
+
+def test_app_config_declares_no_pricing_url_when_switched_off(settings) -> None:
+    """A switched-off billing declares no handoff; the consumer falls back."""
+    from quickscale_modules_billing.apps import QuickscaleBillingConfig
+
+    settings.QUICKSCALE_BILLING_ENABLED = False
+    config = QuickscaleBillingConfig(
+        "quickscale_modules_billing",
+        import_module("quickscale_modules_billing"),
+    )
+
+    assert config.organization_pricing_url_hooks() == ()
+
+
+def test_organization_pricing_page_url_resolves_the_pricing_route() -> None:
+    """The published hook answers billing's real flat pricing route."""
+    from quickscale_modules_billing.services import organization_pricing_page_url
+
+    assert organization_pricing_page_url(None) == "/billing/pricing/"
+
+
+@pytest.mark.urls("tests.urls_without_billing")
+def test_organization_pricing_page_url_raises_when_route_is_not_mounted() -> None:
+    """Rule 23: an enabled billing that cannot answer raises, never ``None``."""
+    from quickscale_modules_billing.exceptions import BillingConfigurationError
+    from quickscale_modules_billing.services import organization_pricing_page_url
+
+    with pytest.raises(BillingConfigurationError, match="pricing route"):
+        organization_pricing_page_url(None)
+
+
 def test_account_deletion_adapter_delegates_resumption() -> None:
     from unittest.mock import patch
 

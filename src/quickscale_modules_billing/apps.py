@@ -5,6 +5,7 @@ SA17.2 — fail-hard billing enabled-flag setting: requires
 instead of silently defaulting to ``True``.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from django.apps import AppConfig
@@ -209,6 +210,25 @@ class QuickscaleBillingConfig(AppConfig):
         )
 
         return account_deletion_user_reference_organization_ids(user_id)
+
+    def organization_pricing_url_hooks(
+        self,
+    ) -> tuple[Callable[[Any], str | None], ...]:
+        """Declare billing's pricing page for the org-creation handoff (rule 4).
+
+        The orgs create flow collects this capability and uses the first
+        declared URL as its post-create handoff, so no consumer names
+        billing's route, label, or settings.  A switched-off billing declares
+        nothing: its public pages answer as disabled (rule 1), so the
+        consumer keeps its own fallback page.
+        """
+        from django.conf import settings
+
+        if not bool(settings.QUICKSCALE_BILLING_ENABLED):
+            return ()
+        from quickscale_modules_billing.services import organization_pricing_page_url
+
+        return (organization_pricing_page_url,)
 
     def account_deletion_handlers(self) -> tuple[Any, ...]:
         """Declare billing's account-deletion handler (Module Conventions rule 4).

@@ -102,6 +102,15 @@ resolves the organization through `quickscale_modules_orgs.permissions.resolve_r
 reads billing's own active `Subscription` row, so orgs and other consumers do not name a
 higher-layer module.
 
+### Organization pricing handoff
+
+`organization_pricing_page_url(organization)` answers billing's public `billing/pricing/` page.
+`QuickscaleBillingConfig` declares it through the Module Conventions rule 4
+`organization_pricing_url_hooks` capability, which the orgs create flow collects for its
+post-create handoff after activating the new organization; a switched-off billing declares
+nothing, so orgs keeps its organization-dashboard fallback. An enabled billing whose pricing
+route is not mounted raises `BillingConfigurationError` rather than answering a false negative.
+
 ### API contract
 
 All billing API routes are flat (`billing/api/...`) and used in both Solo and SaaS modes. The
