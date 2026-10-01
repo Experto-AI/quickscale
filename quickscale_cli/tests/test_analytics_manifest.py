@@ -12,9 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from quickscale_core.contracts.module_options import (
-    ANALYTICS_EVENT_FORM_SUBMIT,
     ANALYTICS_EVENT_PAGEVIEW,
-    ANALYTICS_EVENT_SOCIAL_LINK_CLICK,
     ANALYTICS_POSTHOG_DEFAULT_HOST,
     ANALYTICS_POSTHOG_EU_HOST,
     ANALYTICS_PROVIDER_POSTHOG,
@@ -139,5 +137,10 @@ class TestAnalyticsPublicConstants:
 
     def test_event_name_constants_are_stable(self) -> None:
         assert ANALYTICS_EVENT_PAGEVIEW == "$pageview"
-        assert ANALYTICS_EVENT_FORM_SUBMIT == "form_submit"
-        assert ANALYTICS_EVENT_SOCIAL_LINK_CLICK == "social_link_click"
+
+    def test_core_contract_names_no_feature_events(self) -> None:
+        """Feature event names belong to their sending modules (rule 22)."""
+        from quickscale_core.contracts import module_options
+
+        assert "ANALYTICS_EVENT_FORM_SUBMIT" not in module_options.__all__
+        assert "ANALYTICS_EVENT_SOCIAL_LINK_CLICK" not in module_options.__all__

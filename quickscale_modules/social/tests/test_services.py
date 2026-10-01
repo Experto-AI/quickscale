@@ -82,17 +82,19 @@ def test_get_social_runtime_settings_reads_declared_values_directly() -> None:
 @django_db
 def test_list_published_social_links_uses_canonical_urls_and_invalidates_cache(
     org,
+    django_capture_on_commit_callbacks,
 ) -> None:
     """Published link payloads should normalize URLs and refresh after admin writes."""
     _activate_org_context(org.id)
     try:
-        SocialLink.objects.create(
-            title="QuickScale on LinkedIn",
-            provider_name="",
-            url="https://www.linkedin.com/company/quickscale/?utm_source=share",
-            display_order=20,
-            organization=org,
-        )
+        with django_capture_on_commit_callbacks(execute=True):
+            SocialLink.objects.create(
+                title="QuickScale on LinkedIn",
+                provider_name="",
+                url="https://www.linkedin.com/company/quickscale/?utm_source=share",
+                display_order=20,
+                organization=org,
+            )
 
         initial_records = list_published_social_links()
 
@@ -101,13 +103,14 @@ def test_list_published_social_links_uses_canonical_urls_and_invalidates_cache(
         ]
         assert initial_records[0].url == "https://www.linkedin.com/company/quickscale"
 
-        SocialLink.objects.create(
-            title="QuickScale on YouTube",
-            provider_name="youtube",
-            url="https://youtu.be/abc123?si=share",
-            display_order=10,
-            organization=org,
-        )
+        with django_capture_on_commit_callbacks(execute=True):
+            SocialLink.objects.create(
+                title="QuickScale on YouTube",
+                provider_name="youtube",
+                url="https://youtu.be/abc123?si=share",
+                display_order=10,
+                organization=org,
+            )
 
         refreshed_records = list_published_social_links()
 
@@ -439,23 +442,28 @@ def test_contract_helpers_normalize_urls_and_raise_specific_errors() -> None:
 
 
 @django_db
-def test_social_models_enforce_guardrails_and_invalidate_cache(org) -> None:
+def test_social_models_enforce_guardrails_and_invalidate_cache(
+    org,
+    django_capture_on_commit_callbacks,
+) -> None:
     """Social models should validate runtime guardrails and clear their cache keys."""
     _activate_org_context(org.id)
     try:
         cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
-        link = SocialLink.objects.create(
-            title="QuickScale on YouTube",
-            provider_name="youtube",
-            url="https://youtu.be/abc123?si=share",
-            display_order=10,
-            organization=org,
-        )
+        with django_capture_on_commit_callbacks(execute=True):
+            link = SocialLink.objects.create(
+                title="QuickScale on YouTube",
+                provider_name="youtube",
+                url="https://youtu.be/abc123?si=share",
+                display_order=10,
+                organization=org,
+            )
 
         assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
 
         cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
-        link.delete()
+        with django_capture_on_commit_callbacks(execute=True):
+            link.delete()
 
         assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
     finally:
@@ -498,6 +506,46 @@ def test_invalidate_social_cache_is_not_exported_as_public_bulk_api() -> None:
     """The bare-key cache helper should not be advertised as tenant-aware API."""
     assert hasattr(social_services, "invalidate_social_cache")
     assert "invalidate_social_cache" not in social_services.__all__
+
+
+@pytest.mark.django_db(transaction=True)
+def test_rolled_back_save_keeps_the_cache_entry(org) -> None:
+    """Rule 21: a rolled-back write does not purge the cache; a commit does."""
+    from django.db import transaction
+
+    _activate_org_context(org.id)
+    try:
+        cache.set(SOCIAL_LINKS_CACHE_KEY, ["fresh"], timeout=300)
+
+        class _Rollback(Exception):
+            pass
+
+        with pytest.raises(_Rollback):
+            with transaction.atomic():
+                SocialLink.objects.create(
+                    title="Rolled Back Link",
+                    provider_name="youtube",
+                    url="https://youtu.be/abc123?si=share",
+                    display_order=10,
+                    organization=org,
+                )
+                raise _Rollback
+
+        assert cache.get(SOCIAL_LINKS_CACHE_KEY) == ["fresh"], (
+            "a rolled-back save must not purge the cache"
+        )
+
+        # Positive control: the same write without a rollback purges.
+        SocialLink.objects.create(
+            title="Committed Link",
+            provider_name="youtube",
+            url="https://youtu.be/abc123?si=share",
+            display_order=20,
+            organization=org,
+        )
+        assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
+    finally:
+        _reset_org_context()
 
 
 def test_build_social_link_tree_payload_freezes_disabled_semantics() -> None:
@@ -762,7 +810,9 @@ def test_social_link_cache_is_partitioned_by_org() -> None:
 
 
 @django_db
-def test_social_cache_invalidates_old_org_partition_on_reassignment() -> None:
+def test_social_cache_invalidates_old_org_partition_on_reassignment(
+    django_capture_on_commit_callbacks,
+) -> None:
     """When a social item moves from org A to org B, org A's stale cache is cleared.
 
     Regression for CR-T1-9-001: _keys_to_clear() only cleared the current
@@ -811,14 +861,15 @@ def test_social_cache_invalidates_old_org_partition_on_reassignment() -> None:
         set_current_org_id(org_a.id)
 
         # Create a link owned by Org A.
-        link = SocialLink.objects.create(
-            title="Shared Link",
-            provider_name="",
-            url="https://www.linkedin.com/company/quickscale/",
-            display_order=10,
-            is_published=True,
-            organization=org_a,
-        )
+        with django_capture_on_commit_callbacks(execute=True):
+            link = SocialLink.objects.create(
+                title="Shared Link",
+                provider_name="",
+                url="https://www.linkedin.com/company/quickscale/",
+                display_order=10,
+                is_published=True,
+                organization=org_a,
+            )
 
         # Query from Org A — populates org A's cache partition.
         org_a_links_before = list_published_social_links()
@@ -833,20 +884,22 @@ def test_social_cache_invalidates_old_org_partition_on_reassignment() -> None:
         # Step 1: Delete from Org A's context.  FOR ALL USING matches
         # (current_org_id = org_a), cache is cleared for the old partition.
         set_current_org_id(org_a.id)
-        link.delete()
+        with django_capture_on_commit_callbacks(execute=True):
+            link.delete()
 
         # Step 2: Create the link under Org B's context.  INSERT passes
         # WITH CHECK (current_org_id = org_b), and save() populates the
         # new org's cache partition.
         set_current_org_id(org_b.id)
-        SocialLink.objects.create(
-            title="Shared Link",
-            provider_name="",
-            url="https://www.linkedin.com/company/quickscale/",
-            display_order=10,
-            is_published=True,
-            organization=org_b,
-        )
+        with django_capture_on_commit_callbacks(execute=True):
+            SocialLink.objects.create(
+                title="Shared Link",
+                provider_name="",
+                url="https://www.linkedin.com/company/quickscale/",
+                display_order=10,
+                is_published=True,
+                organization=org_b,
+            )
 
         # ---- Cross-org read verification via operator_access ---------------
         # operator_access enables cross-tenant SELECT by extending the

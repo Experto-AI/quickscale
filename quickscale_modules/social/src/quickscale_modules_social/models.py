@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from quickscale_modules_social.contracts import (
@@ -143,17 +143,19 @@ class BaseSocialItem(TenantModel):
         self._prepare_for_save()
         super().save(*args, **kwargs)
 
+        # Rule 21: compute the partitions eagerly, purge only if the write
+        # commits — a rolled-back save must not clear a live cache entry.
         keys_to_clear = self._org_cache_keys(self.cache_keys, self.organization_id)
         if previous_org_id is not None and previous_org_id != self.organization_id:
             keys_to_clear.extend(self._org_cache_keys(self.cache_keys, previous_org_id))
         if keys_to_clear:
-            cache.delete_many(keys_to_clear)
+            transaction.on_commit(lambda: cache.delete_many(keys_to_clear))
 
     def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
         result = super().delete(*args, **kwargs)
         keys_to_clear = self._org_cache_keys(self.cache_keys, self.organization_id)
         if keys_to_clear:
-            cache.delete_many(keys_to_clear)
+            transaction.on_commit(lambda: cache.delete_many(keys_to_clear))
         return result
 
 

@@ -7,9 +7,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.conf import settings
-from django.core.cache import cache
 from django.core import mail
-from django.db import connection
+from django.core.cache import cache
+from django.db import connection, transaction
 from django.test import RequestFactory, override_settings
 from django.urls import reverse
 
@@ -265,15 +265,21 @@ class TestFormSubmitAPIView:
 
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
     def test_submission_captures_analytics_when_available(
-        self, api_client, form, form_field, email_field, monkeypatch
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
     ):
-        """Successful submissions should call the guarded analytics helper when present."""
+        """Successful submissions emit the forms-owned event on commit."""
 
         def analytics_is_installed(app_label: str) -> bool:
             return app_label == "quickscale_modules_analytics"
 
         mock_get_distinct_id = Mock(return_value="session:test-visitor")
-        mock_capture_form_submit = Mock()
+        mock_capture_event = Mock()
 
         monkeypatch.setattr(
             "quickscale_modules_forms.views.apps.is_installed",
@@ -284,24 +290,29 @@ class TestFormSubmitAPIView:
             mock_get_distinct_id,
         )
         monkeypatch.setattr(
-            "quickscale_modules_analytics.services.capture_form_submit",
-            mock_capture_form_submit,
+            "quickscale_modules_analytics.services.capture_event",
+            mock_capture_event,
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
-        response = api_client.post(url, data=data, format="json")
+        with django_capture_on_commit_callbacks(execute=True):
+            response = api_client.post(url, data=data, format="json")
         cache.clear()
 
         assert response.status_code == 201
         mock_get_distinct_id.assert_called_once()
-        mock_capture_form_submit.assert_called_once_with(
+        mock_capture_event.assert_called_once_with(
             "session:test-visitor",
-            form.pk,
-            form.title,
-            extra={"form_slug": form.slug},
+            "quickscale_forms_submitted",
+            {
+                "form_slug": form.slug,
+                "module": "forms",
+                "form_id": str(form.pk),
+                "form_name": form.title,
+            },
         )
 
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=False)
@@ -325,7 +336,7 @@ class TestFormSubmitAPIView:
             analytics_is_installed,
         )
         monkeypatch.setattr(
-            "quickscale_modules_analytics.services.capture_form_submit",
+            "quickscale_modules_analytics.services.capture_event",
             mock_capture,
         )
 
@@ -410,7 +421,13 @@ class TestFormSubmitAPIView:
 
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
     def test_submission_stays_non_blocking_when_analytics_capture_fails(
-        self, api_client, form, form_field, email_field, monkeypatch
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
     ):
         """Analytics capture failure must not block the public success response."""
         from quickscale_modules_orgs.current_org import org_scope
@@ -419,7 +436,7 @@ class TestFormSubmitAPIView:
             return app_label == "quickscale_modules_analytics"
 
         mock_get_distinct_id = Mock(return_value="session:test-visitor")
-        mock_capture_form_submit = Mock(side_effect=RuntimeError("posthog unavailable"))
+        mock_capture_event = Mock(side_effect=RuntimeError("posthog unavailable"))
 
         monkeypatch.setattr(
             "quickscale_modules_forms.views.apps.is_installed",
@@ -430,15 +447,16 @@ class TestFormSubmitAPIView:
             mock_get_distinct_id,
         )
         monkeypatch.setattr(
-            "quickscale_modules_analytics.services.capture_form_submit",
-            mock_capture_form_submit,
+            "quickscale_modules_analytics.services.capture_event",
+            mock_capture_event,
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
-        response = api_client.post(url, data=data, format="json")
+        with django_capture_on_commit_callbacks(execute=True):
+            response = api_client.post(url, data=data, format="json")
         cache.clear()
 
         assert response.status_code == 201
@@ -446,16 +464,22 @@ class TestFormSubmitAPIView:
             assert FormSubmission.all_objects.filter(form=form).count() == 1
 
     def test_submission_persists_when_notification_delivery_fails(
-        self, api_client, form, form_field, email_field, monkeypatch
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
     ):
         """Delivery failure stays non-blocking and does not roll back persistence"""
         from quickscale_modules_orgs.current_org import org_scope
 
-        def failing_send(*args, **kwargs):
+        def failing_send(message):
             raise Exception("SMTP connection refused")
 
         monkeypatch.setattr(
-            "quickscale_modules_forms.notifications.EmailMultiAlternatives.send",
+            "quickscale_modules_notifications.services._send_email_message",
             failing_send,
         )
 
@@ -464,7 +488,8 @@ class TestFormSubmitAPIView:
 
         cache.clear()
 
-        response = api_client.post(url, data=data, format="json")
+        with django_capture_on_commit_callbacks(execute=True):
+            response = api_client.post(url, data=data, format="json")
 
         cache.clear()
 
@@ -479,46 +504,29 @@ class TestFormSubmitAPIView:
             ).exists()
 
     @override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False)
-    def test_submission_uses_untracked_email_when_notifications_installed_but_disabled(
+    def test_submission_persists_when_notifications_disabled(
         self,
         api_client,
         form,
         form_field,
         email_field,
-        monkeypatch,
+        django_capture_on_commit_callbacks,
     ):
-        """Disabled tracked notifications fall back to untracked email after submit"""
+        """Runtime-disabled notifications never block submission and send nothing."""
         from quickscale_modules_orgs.current_org import org_scope
-
-        def notifications_are_installed(app_label: str) -> bool:
-            return app_label == "quickscale_modules_notifications"
-
-        def fail_import(module_path: str):
-            raise AssertionError(
-                "tracked notifications service should not load when disabled"
-            )
-
-        monkeypatch.setattr(
-            "quickscale_modules_forms.notifications.apps.is_installed",
-            notifications_are_installed,
-        )
-        monkeypatch.setattr(
-            "quickscale_modules_forms.notifications.import_module",
-            fail_import,
-        )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
-        response = api_client.post(url, data=data, format="json")
+        with django_capture_on_commit_callbacks(execute=True):
+            response = api_client.post(url, data=data, format="json")
         cache.clear()
 
         assert response.status_code == 201
         with org_scope(form.organization):
             assert FormSubmission.all_objects.filter(form=form).count() == 1
-        assert len(mail.outbox) == 1
-        assert "admin@example.com" in mail.outbox[0].recipients()
+        assert mail.outbox == []
 
     def test_returns_429_when_rate_limit_exceeded(
         self, api_client, form, form_field, email_field
@@ -1793,47 +1801,30 @@ class TestFormCallerParity:
             sub = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
         assert sub.is_spam is True
 
-    def test_side_effects_dispatch_after_submission_committed(
-        self, api_client, form, form_field, email_field, monkeypatch
+    def test_side_effects_dispatch_on_the_write_commit(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        django_capture_on_commit_callbacks,
     ):
-        """CR-P3-006: notify_submission and analytics run AFTER the outer
-        atomic commits.  If they were inside the atomic, a notification
-        failure would roll back the submission transaction, or the response
-        would be delayed until side effects complete.
+        """Rule 21: the notification is scheduled, never sent, during the write.
 
-        This test monkeypatches notify_submission to verify it runs at all,
-        and that the submission already exists when notification fires.
+        Nothing leaves before the submission's transaction commits; the
+        tracked send fires only when the scheduled callback executes.
         """
-        from quickscale_modules_orgs.current_org import org_scope
-
-        notified_submission_pk = [None]
-
-        def _track_notification(submission):
-            notified_submission_pk[0] = submission.pk
-            return "queued"
-
-        monkeypatch.setattr(
-            "quickscale_modules_forms.views.notify_submission",
-            _track_notification,
-        )
-
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
-        response = api_client.post(url, data=data, format="json")
+        with django_capture_on_commit_callbacks(execute=True) as callbacks:
+            response = api_client.post(url, data=data, format="json")
 
-        assert response.status_code == 201
-        assert notified_submission_pk[0] is not None, (
-            "notify_submission must be called after the submission is persisted"
-        )
-        # Verify the persisted submission exists in the DB — read inside
-        # org_scope so FORCE RLS allows the query.
-        with org_scope(form.organization):
-            assert FormSubmission.all_objects.filter(
-                pk=notified_submission_pk[0]
-            ).exists(), (
-                "The submission must exist in the DB before notify_submission runs"
-            )
+            assert response.status_code == 201
+            assert mail.outbox == [], "no email may leave before the commit"
+
+        assert len(callbacks) >= 1, "the tracked send is scheduled on commit"
+        assert len(mail.outbox) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1848,17 +1839,23 @@ class TestNotificationContentAfterPostCommit:
     values after tenant_context() exits on the anonymous path."""
 
     def test_anonymous_notification_includes_field_values_in_email(
-        self, api_client, form, form_field, email_field
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        django_capture_on_commit_callbacks,
     ):
         """Anonymous public submit dispatches a notification email that
         includes the submitted field label and value — proving that
-        _build_submission_notification_content reads field values via
+        _build_submission_notification_context reads field values via
         FormFieldValue.all_objects (not the TenantManager) after the
         tenant_context() window has closed."""
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
-        response = api_client.post(url, data=data, format="json")
+        with django_capture_on_commit_callbacks(execute=True):
+            response = api_client.post(url, data=data, format="json")
 
         assert response.status_code == 201
         # The notification email should contain the submitted field content
@@ -1966,20 +1963,18 @@ class TestPostCommitTransactionBoundary:
             "setup org_scope must not leak — ContextVar must be None"
         )
 
-        # ---- Collect assertions from monkeypatched callbacks -------------
+        # ---- Collect assertions from the scheduled effects ----------------
         notification_calls: list[dict] = []
         analytics_calls: list[dict] = []
 
-        def _tracking_notify(submission: Any) -> str:
-            nonlocal notification_calls
+        def _recording_send(**kwargs: Any) -> None:
             call_info: dict = {
                 "in_atomic_block": connection.in_atomic_block,
-                "submission_pk": submission.pk,
+                "template_key": kwargs["template_key"],
             }
             # Open fresh org scope to observe committed rows.
-            # The submission lives under system_org — use that scope.
             with org_scope(system_org):
-                sub = FormSubmission.all_objects.get(pk=submission.pk)
+                sub = FormSubmission.all_objects.get(form=test_form)
                 fvs = list(FormFieldValue.all_objects.filter(submission=sub))
                 call_info["field_values"] = [
                     {"name": fv.field_name, "value": fv.value} for fv in fvs
@@ -1989,10 +1984,9 @@ class TestPostCommitTransactionBoundary:
                 "notification callback must not leak org context"
             )
             notification_calls.append(call_info)
-            return "queued"
 
-        def _tracking_analytics(submission: Any, request: Any) -> None:
-            nonlocal analytics_calls
+        def _recording_emit(submission: Any, request: Any) -> None:
+            del request
             call_info: dict = {
                 "in_atomic_block": connection.in_atomic_block,
                 "submission_pk": submission.pk,
@@ -2013,13 +2007,22 @@ class TestPostCommitTransactionBoundary:
             )
             analytics_calls.append(call_info)
 
+        from django.apps import apps as django_apps
+
+        real_is_installed = django_apps.is_installed
         monkeypatch.setattr(
-            "quickscale_modules_forms.views.notify_submission",
-            _tracking_notify,
+            "quickscale_modules_forms.views.apps.is_installed",
+            lambda label: (
+                label == "quickscale_modules_analytics" or real_is_installed(label)
+            ),
         )
         monkeypatch.setattr(
-            "quickscale_modules_forms.views._capture_submission_analytics",
-            _tracking_analytics,
+            "quickscale_modules_forms.views._emit_submission_event",
+            _recording_emit,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_forms._email.send_notification",
+            _recording_send,
         )
 
         # ---- POST — triggers the view's org_scope + transaction.atomic() --
@@ -2030,15 +2033,15 @@ class TestPostCommitTransactionBoundary:
         assert response.status_code == 201, f"Expected 201, got {response.status_code}"
         assert response.data["notification_status"] == "queued"
 
-        # ---- Verify notification callback --------------------------------
+        # ---- Verify the scheduled notification effect --------------------
         assert len(notification_calls) == 1, (
-            "notify_submission must be called exactly once"
+            "the tracked send must run exactly once, after commit"
         )
         nf = notification_calls[0]
         assert nf["in_atomic_block"] is False, (
-            "notify_submission must run outside any database transaction"
+            "the tracked send must run outside any database transaction"
         )
-        assert nf["submission_pk"] is not None
+        assert nf["template_key"] == "notifications.forms_submission"
         fv_names = {fv["name"] for fv in nf["field_values"]}
         assert "full_name" in fv_names, (
             "Committed field_value 'full_name' must be observable "
@@ -2057,9 +2060,9 @@ class TestPostCommitTransactionBoundary:
             "Notification callback must read the correct committed email value"
         )
 
-        # ---- Verify analytics callback -----------------------------------
+        # ---- Verify the scheduled analytics effect -----------------------
         assert len(analytics_calls) == 1, (
-            "analytics capture must be called exactly once"
+            "analytics capture must run exactly once, after commit"
         )
         af = analytics_calls[0]
         assert af["in_atomic_block"] is False, (
@@ -2076,3 +2079,100 @@ class TestPostCommitTransactionBoundary:
         assert get_current_org_id() is None, (
             "no org context leak after full request lifecycle"
         )
+
+
+# ---------------------------------------------------------------------------
+# Rule 21: a rolled-back write fires no effect
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestSubmissionRollbackEffects:
+    """A rolled-back submission sends no email and fires no analytics event."""
+
+    def test_rolled_back_submission_fires_no_effect(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        monkeypatch,
+    ):
+        from quickscale_modules_notifications.models import NotificationMessage
+
+        def analytics_is_installed(app_label: str) -> bool:
+            return app_label == "quickscale_modules_analytics"
+
+        mock_get_distinct_id = Mock(return_value="session:test-visitor")
+        mock_capture_event = Mock()
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.apps.is_installed",
+            analytics_is_installed,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.get_distinct_id",
+            mock_get_distinct_id,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.capture_event",
+            mock_capture_event,
+        )
+
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        class _Rollback(Exception):
+            pass
+
+        with pytest.raises(_Rollback):
+            with transaction.atomic():
+                response = api_client.post(url, data=data, format="json")
+                assert response.status_code == 201
+                raise _Rollback
+
+        assert mail.outbox == [], "a rolled-back submission sends no email"
+        assert not NotificationMessage.objects.exists(), (
+            "a rolled-back submission records no tracked notification"
+        )
+        # get_distinct_id is reachable, so the capture assertion is not vacuous:
+        # an inline (pre-rollback) emission would call both mocks.
+        mock_get_distinct_id.assert_not_called()
+        mock_capture_event.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Rule 20: a valid long subject must not lose the tracked notification
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestLongSubjectSubmission:
+    """A form title and submitter name that compose past the subject column."""
+
+    def test_long_subject_submission_still_sends_tracked_email(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        django_capture_on_commit_callbacks,
+    ):
+        from quickscale_modules_notifications.models import NotificationMessage
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            form.title = "T" * 200
+            form.save(update_fields=["title"])
+
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "N" * 40, "email": "alice@example.com"}
+
+        with django_capture_on_commit_callbacks(execute=True):
+            response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        message = NotificationMessage.objects.get(
+            template_key="notifications.forms_submission"
+        )
+        assert len(message.subject) == 255, "the subject must fit its column"
+        assert len(mail.outbox) == 1, "the tracked email must still be sent"

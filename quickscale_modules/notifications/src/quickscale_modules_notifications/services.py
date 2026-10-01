@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 from email.utils import formataddr
@@ -38,6 +39,8 @@ from quickscale_modules_notifications.models import (
     NotificationMessage,
     NotificationSettings,
 )
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_ALLOWED_TAGS = (
     "quickscale",
@@ -400,7 +403,7 @@ def send_notification(
     with transaction.atomic():
         message = NotificationMessage.objects.create(
             template_key=template_key,
-            subject=rendered.subject,
+            subject=_bounded_subject(rendered.subject),
             from_email=settings_snapshot.formatted_from_email(),
             reply_to_email=settings_snapshot.reply_to_email,
             rendered_text=rendered.text_body,
@@ -426,6 +429,27 @@ def send_notification(
         else:
             dispatch_notification_message(message.pk, mailer=mailer)
     return message
+
+
+def _bounded_subject(subject: str) -> str:
+    """Clamp a rendered subject to the storage field's length contract.
+
+    Each context value is stored on its own row, but the rendered subject
+    composes them, so a valid long title or name can exceed
+    ``NotificationMessage.subject``'s length.  A rejected insert would drop a
+    valid notification silently, so the subject is truncated at the
+    persistence boundary; the full content stays in the rendered body.
+    """
+    max_length = getattr(
+        NotificationMessage._meta.get_field("subject"), "max_length", None
+    )
+    if isinstance(max_length, int) and len(subject) > max_length:
+        logger.warning(
+            "Notification subject exceeded %s characters and was truncated.",
+            max_length,
+        )
+        return subject[:max_length]
+    return subject
 
 
 def dispatch_notification_message(

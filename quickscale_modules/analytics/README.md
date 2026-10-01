@@ -10,8 +10,7 @@ Django boot, exposes server-side capture helpers with a stable event vocabulary,
 template tags for manual server-rendered adoption without a context processor.
 
 - A flat `QUICKSCALE_ANALYTICS_*` settings surface owned by the module manifest.
-- Server-side capture helpers for generic events plus the first-party `form_submit` and
-  `social_link_click` vocabulary.
+- One generic server-side capture helper; feature modules own and emit their own event names.
 - A module-owned overview page at `analytics/`.
 
 ## Configuration
@@ -50,13 +49,12 @@ modules:
 - `get_analytics_runtime_settings()` returns an `AnalyticsRuntimeSettingsSnapshot`;
   `is_analytics_active()` and `analytics_enabled_for_request(request)` answer whether capture
   runs for the current process and request.
-- `configure_analytics_client()` initializes the PostHog client; `capture_event()`,
-  `capture_form_submit()`, and `capture_social_link_click()` send the first-party events;
-  `get_distinct_id()` resolves the active distinct ID.
+- `configure_analytics_client()` initializes the PostHog client; `capture_event()` sends an event
+  the sending module names; `get_distinct_id()` resolves the active distinct ID.
 - `get_template_analytics_context()` builds the dictionary the template tags render.
-- `events.py` holds the stable event vocabulary: `ANALYTICS_EVENT_PAGEVIEW`
-  (`$pageview`), `ANALYTICS_EVENT_FORM_SUBMIT` (`form_submit`), and
-  `ANALYTICS_EVENT_SOCIAL_LINK_CLICK` (`social_link_click`).
+- `events.py` holds PostHog's pageview name: `ANALYTICS_EVENT_PAGEVIEW` (`$pageview`). Feature
+  modules name their own events in their `services.py` under the `quickscale_<module>_<event>`
+  stem — forms, for example, emits `quickscale_forms_submitted`.
 - Template tags, loaded with `{% load quickscale_analytics %}`:
   `analytics_public_config` returns the resolved runtime config dictionary for the current
   request, and `analytics_public_config_json` returns the same payload as JSON for inline

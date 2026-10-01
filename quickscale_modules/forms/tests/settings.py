@@ -16,6 +16,10 @@ DEBUG = True
 
 QUICKSCALE_MODE = "saas"
 
+# The notifications webhook signing secret must resolve because the suite
+# installs notifications enabled; its rule 35 startup check reads the env var.
+os.environ.setdefault("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET", "whsec_forms_suite")
+
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
@@ -26,6 +30,7 @@ INSTALLED_APPS = [
     "django_filters",
     "quickscale_modules_orgs",
     "quickscale_modules_forms",
+    "quickscale_modules_notifications",
 ]
 
 # required settings; AppConfig.ready() will fail startup otherwise.
@@ -40,8 +45,31 @@ QUICKSCALE_FORMS_RETENTION_DAYS = 365
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
 MODULE_SETTINGS_SCHEMA = {
     name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("forms", "orgs")
+    for name in ("forms", "notifications", "orgs")
 }
+
+# notifications (forms requires it; every declared value is a complete stub)
+QUICKSCALE_NOTIFICATIONS_ENABLED = True
+QUICKSCALE_NOTIFICATIONS_PROVIDER = "resend"
+QUICKSCALE_NOTIFICATIONS_SENDER_NAME = "QuickScale"
+QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL = "noreply@quickscale.example"
+QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL = "support@example.com"
+QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN = "mg.example.com"
+QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR = "RESEND_API_KEY"
+QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR = (
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+)
+QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS = ["quickscale", "transactional"]
+QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
+    "quickscale",
+    "transactional",
+    "notifications",
+    "auth",
+    "forms",
+    "ops",
+    "testing",
+]
+QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS = 300
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

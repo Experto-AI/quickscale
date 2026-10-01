@@ -170,6 +170,14 @@ names (`quickscale_crm:api-root`, `quickscale_crm:tag-list`, `quickscale_forms:f
 rest) to their snake_case forms under `quickscale_crm:`, `quickscale_forms:`, and
 `quickscale_analytics:`.
 
+**Analytics events and email.** Forms' submission event is renamed from `form_submit` to
+`quickscale_forms_submitted`, and analytics no longer exposes per-event helpers
+(`capture_form_submit`, `capture_social_link_click`). The operator step is to update PostHog
+dashboards, funnels, and custom capture calls keyed on the retired event name; analytics itself
+publishes only the generic `capture_event`. Forms also stops sending its own fallback email:
+notifications is a required module for forms, and every module email goes through its
+`send_notification` service after the triggering write commits.
+
 ## Delivery provenance
 
 The SA195/SA192 delivery was synchronized with `v89` at

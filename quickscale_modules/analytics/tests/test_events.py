@@ -1,14 +1,11 @@
 """Tests for analytics event vocabulary constants."""
 
-from quickscale_modules_analytics.events import (
-    ANALYTICS_EVENT_FORM_SUBMIT,
-    ANALYTICS_EVENT_PAGEVIEW,
-    ANALYTICS_EVENT_SOCIAL_LINK_CLICK,
-)
+from quickscale_modules_analytics.events import ANALYTICS_EVENT_PAGEVIEW
 
 
-def test_event_constants_match_the_v080_contract() -> None:
-    """The first-party analytics event vocabulary should remain stable."""
+def test_analytics_keeps_only_the_posthog_pageview_event() -> None:
+    """Feature events are owned by their sending modules (rule 22)."""
+    from quickscale_modules_analytics import events
+
     assert ANALYTICS_EVENT_PAGEVIEW == "$pageview"
-    assert ANALYTICS_EVENT_FORM_SUBMIT == "form_submit"
-    assert ANALYTICS_EVENT_SOCIAL_LINK_CLICK == "social_link_click"
+    assert events.__all__ == ["ANALYTICS_EVENT_PAGEVIEW"]

@@ -27,8 +27,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | — | Deferred |
 | SA228 | Break import cycles and cross-module settings reads; give every `services.py` its public surface | post-v88 | 1 | — | Deferred |
 | SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219, SA228 | Deferred |
-| SA229 | Tie write effects to commit, send email only through notifications, and move feature events to their owners | post-v88 | 3 | — | Deferred |
-| SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220, SA229 | Deferred |
+| SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
 | SA230 | Build the conformance-test harness with the rules already met | post-v88 | 1 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA226, SA230 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
@@ -43,7 +42,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA228 ──► SA230 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA219 ──► SA220
-Track 3: SA229 ──► SA226 ──► SA216 (after SA215)
+Track 3: SA226 ──► SA216 (after SA215)
      critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
@@ -56,10 +55,9 @@ authorization needs SA220's capabilities and the standardized DRF views SA223 de
 freezes migration history
 before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA228 (Track 1) and the delivered SA223 (Track 3) filled the wait for
-SA219; SA229 follows because it edits forms, crm, and social; SA230 is the harness SA215 adds
-rules to; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
-user-referencing models.
+**Off the critical path.** SA228 (Track 1) and the delivered SA223 and SA229 (Track 3) filled the
+wait for SA219; SA226 waits for SA220, and SA230 is the harness SA215 adds rules to; SA216 waits
+for SA215 because both change auth's views, orgs' removal path, and the user-referencing models.
 
 ### Track states
 
@@ -69,7 +67,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA228 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA219 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA229 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA226 | no | no | no | no | **yes** |
 
 ### Ownership and merge coordination
 
@@ -232,21 +230,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
-- [ ] **SA229 — Tie write effects to commit, send email only through notifications, and move feature events to their owners.**
-
-  **Context:** inventory §§ 22–24, 35; D23–D25, D36; rules 20–22 and 33. A second email sender
-  lives in forms, write effects are not tied to commit, analytics owns feature events.
-
-  **Scope:** forms' fallback email sender goes and forms and orgs require notifications; write
-  effects (forms' submission effects, orgs' invitation, crm's bootstrap receiver, social's cache
-  purge) move to `transaction.on_commit` with a rollback test each; analytics keeps only
-  `capture_event`, forms owns `quickscale_forms_submitted` (release note: renames `form_submit`),
-  and the unused `capture_social_link_click` goes.
-
-  **Acceptance:** a rolled-back write sends no email and fires no effect; only notifications sends
-  email; no analytics helper names a feature event.
-
-  **Surfaces:** forms, orgs, crm, social, analytics, notifications.
+- [x] **SA229 — Tie write effects to commit, send email only through notifications, and move feature events to their owners.**
 
 - [ ] **SA226 — Authorize tenant modules by org role.**
 
