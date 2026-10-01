@@ -286,6 +286,7 @@ _SETTINGS_SCHEMA_ATTRIBUTE = "MODULE_SETTINGS_SCHEMA"
 _SETTINGS_SCHEMA_MISSING_ID = "quickscale_settings.E001"
 _SETTINGS_MISSING_ID = "quickscale_settings.E002"
 _SETTINGS_INVALID_ID = "quickscale_settings.E003"
+_SETTINGS_RETIRED_ID = "quickscale_settings.E004"
 
 #: The operator fix every settings failure names.
 _SETTINGS_APPLY_HINT = "Run `quickscale apply` to regenerate the managed settings."
@@ -294,6 +295,8 @@ _SETTINGS_APPLY_HINT = "Run `quickscale apply` to regenerate the managed setting
 def register_module_settings_check(
     app_config: AppConfig,
     module_name: str,
+    *,
+    retired_settings: Mapping[str, str] | None = None,
 ) -> None:
     """Run and register rule 3's generic settings check for *module_name*.
 
@@ -306,29 +309,62 @@ def register_module_settings_check(
     Every failure names the setting, the rule, and the ``quickscale apply``
     fix.
 
+    A module whose settings were renamed hands in *retired_settings* — a
+    mapping of each retired setting name to the message naming its
+    replacement.  A retired name still defined in the project's settings is
+    refused with that message (rule 6), independently of the managed schema:
+    a dead setting left in a project's configuration must fail loudly rather
+    than disappear silently.
+
     Args:
         app_config: The module's app config; its label tags the registered
             system check and names the module in aggregated failures.
         module_name: The module's name — the key its schema is stored under
             in ``MODULE_SETTINGS_SCHEMA``.
+        retired_settings: Optional mapping of retired setting names to the
+            messages naming their replacements.
 
     Raises:
-        ValueError: when *module_name* is not a non-empty string.
+        ValueError: when *module_name* is not a non-empty string, or when
+            *retired_settings* is not a mapping of non-empty names to
+            non-empty messages.
         ImproperlyConfigured: when the project's schema or any declared
-            setting is missing or invalid.
+            setting is missing or invalid, or a retired setting is present.
     """
     if not isinstance(module_name, str) or not module_name:
         raise ValueError(
             "register_module_settings_check() requires a non-empty module name."
         )
-    register_module_checks(app_config, [_module_settings_check(module_name)])
+    if retired_settings is not None:
+        if not isinstance(retired_settings, Mapping):
+            raise ValueError(
+                "register_module_settings_check() requires retired_settings to "
+                "be a mapping of retired setting names to replacement messages."
+            )
+        for retired_name, message in retired_settings.items():
+            if not isinstance(retired_name, str) or not retired_name:
+                raise ValueError(
+                    "register_module_settings_check() requires non-empty retired "
+                    "setting names."
+                )
+            if not isinstance(message, str) or not message:
+                raise ValueError(
+                    "register_module_settings_check() requires a non-empty "
+                    f"replacement message for retired setting {retired_name!r}."
+                )
+    register_module_checks(
+        app_config, [_module_settings_check(module_name, retired_settings)]
+    )
 
 
-def _module_settings_check(module_name: str) -> CheckCallable:
+def _module_settings_check(
+    module_name: str,
+    retired_settings: Mapping[str, str] | None = None,
+) -> CheckCallable:
     """Return the generic settings check bound to *module_name*."""
 
     def check(app_configs: object = None, **kwargs: object) -> list[CheckMessage]:
-        return _module_settings_issues(module_name)
+        return _module_settings_issues(module_name, retired_settings)
 
     return check
 
@@ -354,31 +390,54 @@ def _declared_setting_is_supplied(setting_name: str) -> bool:
     return bool(hasattr(settings, setting_name) and is_overridden(setting_name))
 
 
-def _module_settings_issues(module_name: str) -> list[CheckMessage]:
+def _retired_setting_issues(
+    retired_settings: Mapping[str, str] | None,
+) -> list[CheckMessage]:
+    """Refuse every retired setting name the project's settings still define.
+
+    The map is the module's own declaration, so the refusal works before the
+    project is re-applied: the settings a previous release wrote are exactly
+    the ones that must disappear.
+    """
+    if not retired_settings:
+        return []
+    return [
+        Error(message, id=_SETTINGS_RETIRED_ID)
+        for retired_name, message in sorted(retired_settings.items())
+        if hasattr(settings, retired_name)
+    ]
+
+
+def _module_settings_issues(
+    module_name: str,
+    retired_settings: Mapping[str, str] | None = None,
+) -> list[CheckMessage]:
     """Validate the project's declared settings for *module_name*."""
+    issues: list[CheckMessage] = _retired_setting_issues(retired_settings)
     schema_all = getattr(settings, _SETTINGS_SCHEMA_ATTRIBUTE, None)
     if not isinstance(schema_all, Mapping):
-        return [
+        issues.append(
             Error(
                 f"settings.{_SETTINGS_SCHEMA_ATTRIBUTE} is missing or malformed; "
                 f"the managed module settings wiring is out of date. "
                 f"{_SETTINGS_APPLY_HINT}",
                 id=_SETTINGS_SCHEMA_MISSING_ID,
             )
-        ]
+        )
+        return issues
     module_schema = schema_all.get(module_name)
     if not isinstance(module_schema, Mapping) or not module_schema:
-        return [
+        issues.append(
             Error(
                 f"No settings schema for module {module_name!r}; the module is "
                 f"installed but the managed module settings wiring does not "
                 f"declare it. {_SETTINGS_APPLY_HINT}",
                 id=_SETTINGS_SCHEMA_MISSING_ID,
             )
-        ]
+        )
+        return issues
 
     values: dict[str, object] = {}
-    issues: list[CheckMessage] = []
     for option_name, entry in sorted(module_schema.items()):
         if not isinstance(entry, Mapping):
             raise ValueError(
