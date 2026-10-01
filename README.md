@@ -28,6 +28,11 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 
 ## Public surface
 
+Module-to-module use goes through `services.py` (Module Conventions rule 4):
+`create_published_listing_from_payload()` and the `ListingsError` base are its declared
+`__all__` surface, and every argument after the leading payload subject is keyword-only
+(rule 23).
+
 ### AbstractListing model
 
 | Field | Type | Description |
