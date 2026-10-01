@@ -31,7 +31,7 @@ class TestOrgsManifestAdapter:
             "quickscale_modules_orgs.middleware.TenantMiddleware",
         )
         assert spec.settings == {
-            "QUICKSCALE_MODE": "solo",
+            "QUICKSCALE_ORGS_MODE": "solo",
         }
         assert spec.pre_home_url_includes == (
             ("orgs/", "quickscale_modules_orgs.urls"),
@@ -42,7 +42,7 @@ class TestOrgsManifestAdapter:
         """SaaS mode keeps the org mount after the project's home route."""
         spec = _orgs_manifest_adapter({"mode": "saas"})
 
-        assert spec.settings["QUICKSCALE_MODE"] == "saas"
+        assert spec.settings["QUICKSCALE_ORGS_MODE"] == "saas"
         assert spec.pre_home_url_includes == ()
         assert spec.url_includes == (("orgs/", "quickscale_modules_orgs.urls"),)
 
@@ -71,7 +71,7 @@ class TestOrgsManifestAdapter:
         expected_mode = raw_mode.strip().lower()
         spec = _orgs_manifest_adapter({"mode": raw_mode})
 
-        assert spec.settings["QUICKSCALE_MODE"] == expected_mode
+        assert spec.settings["QUICKSCALE_ORGS_MODE"] == expected_mode
         if expected_mode == "solo":
             assert spec.pre_home_url_includes
             assert not spec.url_includes

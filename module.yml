@@ -7,7 +7,7 @@ config:
     mode:
       type: string
       default: "solo"
-      django_setting: QUICKSCALE_MODE
+      django_setting: QUICKSCALE_ORGS_MODE
       description: "Organization runtime mode (solo or saas)"
       validation:
         choices: ["solo", "saas"]
@@ -31,7 +31,7 @@ middleware:
   - quickscale_modules_orgs.middleware.TenantMiddleware
 
 settings:
-  QUICKSCALE_MODE: solo
+  QUICKSCALE_ORGS_MODE: solo
 
 derivation:
   wiring_projections:

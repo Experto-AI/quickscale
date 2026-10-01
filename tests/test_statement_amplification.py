@@ -295,7 +295,7 @@ def _call_org_dashboard(
         return response
 
     with override_settings(
-        QUICKSCALE_MODE="saas",
+        QUICKSCALE_ORGS_MODE="saas",
         SESSION_ENGINE="django.contrib.sessions.backends.signed_cookies",
     ):
         response: HttpResponse = TenantMiddleware(_view_call)(request)

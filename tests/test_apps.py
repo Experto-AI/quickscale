@@ -87,12 +87,43 @@ def test_invalidate_organization_cache_collects_declared_keys(monkeypatch) -> No
 
 def test_startup_check_refuses_a_missing_mode(settings) -> None:
     """Rule 3: the generic settings check refuses a missing declared setting."""
-    del settings.QUICKSCALE_MODE
+    del settings.QUICKSCALE_ORGS_MODE
 
     config = QuickscaleOrgsConfig(
         "quickscale_modules_orgs",
         import_module("quickscale_modules_orgs"),
     )
 
-    with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_MODE"):
+    with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_ORGS_MODE"):
         config.ready()
+
+
+def test_startup_check_refuses_a_retired_setting(settings) -> None:
+    """Rule 6: a retired orgs setting fails startup naming the replacement."""
+    settings.QUICKSCALE_MODE = "solo"
+
+    config = QuickscaleOrgsConfig(
+        "quickscale_modules_orgs",
+        import_module("quickscale_modules_orgs"),
+    )
+
+    with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_ORGS_MODE"):
+        config.ready()
+
+
+def test_startup_check_refuses_every_declared_retired_setting(settings) -> None:
+    """Rule 6: every declared retired orgs name fails startup."""
+    from quickscale_modules_orgs.checks import RETIRED_SETTINGS
+
+    config = QuickscaleOrgsConfig(
+        "quickscale_modules_orgs",
+        import_module("quickscale_modules_orgs"),
+    )
+
+    for retired_name in RETIRED_SETTINGS:
+        setattr(settings, retired_name, "legacy")
+        try:
+            with pytest.raises(ImproperlyConfigured, match=retired_name):
+                config.ready()
+        finally:
+            delattr(settings, retired_name)
