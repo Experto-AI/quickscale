@@ -27,11 +27,10 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | — | Deferred |
 | SA228 | Break import cycles and cross-module settings reads; give every `services.py` its public surface | post-v88 | 1 | — | Deferred |
 | SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219, SA228 | Deferred |
-| SA223 | Standardize URLs, HTTP APIs, and inbound webhooks | post-v88 | 3 | — | Deferred |
 | SA229 | Tie write effects to commit, send email only through notifications, and move feature events to their owners | post-v88 | 3 | — | Deferred |
-| SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220, SA223, SA229 | Deferred |
+| SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220, SA229 | Deferred |
 | SA230 | Build the conformance-test harness with the rules already met | post-v88 | 1 | — | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA223, SA226, SA230 | Deferred |
+| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA226, SA230 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -44,7 +43,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA228 ──► SA230 ──► SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA219 ──► SA220
-Track 3: SA223 ──► SA229 ──► SA226 ──► SA216 (after SA215)
+Track 3: SA229 ──► SA226 ──► SA216 (after SA215)
      critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
@@ -53,11 +52,13 @@ Arrows within a track are queue order; the table holds the actual dependency edg
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
 ported, and SA204 has not frozen the migration history. SA219's renames and refusals run through
 the startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's org-role
-authorization needs SA220's capabilities and SA223's DRF views. SA204 freezes migration history
+authorization needs SA220's capabilities and the standardized DRF views SA223 delivered. SA204
+freezes migration history
 before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA228 (Track 1) and SA223 (Track 3) fill the wait for SA219; SA229
-follows SA223 because both edit forms, crm, and social; SA230 is the harness SA215 adds rules to; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
+**Off the critical path.** SA228 (Track 1) and the delivered SA223 (Track 3) filled the wait for
+SA219; SA229 follows because it edits forms, crm, and social; SA230 is the harness SA215 adds
+rules to; SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
 user-referencing models.
 
 ### Track states
@@ -68,7 +69,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA228 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA219 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA223 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA229 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -229,20 +230,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** every `services.py` and manifest; the import-graph test.
 
-- [ ] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
-
-  **Context:** inventory §§ 9, 11, 28, 32, 34; D10, D12, D29, D33, D35; rules 7, 9, 26, 30, and 32.
-  URL prefixes still live in `urls.py` for crm and forms.
-
-  **Scope:** mounts move from `urls.py` and `adapter.py` into manifest `url_includes`; APIs to
-  `<mount>api/`, webhooks to `<mount>webhooks/`; route names become snake_case without the module
-  name, in crm and forms.
-
-  **Acceptance:** a list of every moved public URL, with its operator step, is ready for SA215's
-  release notes; every throttle scope has the stem and its rate from a setting.
-
-  **Surfaces:** every module's `urls.py`, `adapter.py`, manifest; billing and notifications
-  webhooks; the theme's React API client; the CSRF gate script.
+- [x] **SA223 — Standardize URLs, HTTP APIs, and inbound webhooks.**
 
 - [ ] **SA229 — Tie write effects to commit, send email only through notifications, and move feature events to their owners.**
 

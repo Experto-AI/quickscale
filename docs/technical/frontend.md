@@ -232,7 +232,7 @@ Each module surface is in one of three states, and **this is the most important 
 
 | State | Meaning | Examples |
 | --- | --- | --- |
-| **API-backed SPA** | React page reads the module's DRF endpoints and renders the real UI | `crm` (`/crm/api/` via `useApiData`), `forms` (`/api/forms/<slug>/`), `orgs` (saas mode) |
+| **API-backed SPA** | React page reads the module's DRF endpoints and renders the real UI | `crm` (`/crm/api/` via `useApiData`), `forms` (`/forms/api/<slug>/`), `orgs` (saas mode) |
 | **Launcher** | React page is a description and a set of links out to the server-rendered surface and Django admin | `blog`, `listings` |
 | **Server-only** | No SPA page; Django templates are the whole UI | `billing`, `auth`, `orgs` (solo mode), `backups` |
 

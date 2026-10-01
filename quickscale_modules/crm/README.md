@@ -48,8 +48,9 @@ stage.
 
 ### API
 
-All staff-authenticated API endpoints are available under `crm/api/` when `QUICKSCALE_CRM_API_ENABLED` is
-`true`:
+All staff-authenticated API endpoints are available under `crm/api/` when
+`QUICKSCALE_CRM_API_ENABLED` is `true` (route names are snake_case under
+`quickscale_crm:`):
 
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
@@ -93,20 +94,21 @@ Search:
 
 ## URLs
 
-`quickscale apply` mounts the module at the project root; the module's own paths are:
+`quickscale apply` mounts the module at `crm/` (its manifest `url_includes` entry); the
+module's paths are:
 
 | URL name | Path | View |
 |----------|------|------|
 | `quickscale_crm:dashboard` | `crm/dashboard/` | Staff-only CRM dashboard |
-| `quickscale_crm:api-root` | `crm/api/` | Staff-only API root with endpoint links |
-| `quickscale_crm:tag-list`, `quickscale_crm:tag-detail` | `crm/api/tags/` and `crm/api/tags/<id>/` | Tag API |
-| `quickscale_crm:company-list`, `quickscale_crm:company-detail` | `crm/api/companies/` and detail | Company API |
-| `quickscale_crm:contact-list`, `quickscale_crm:contact-detail`, `quickscale_crm:contact-notes` | `crm/api/contacts/`, detail, and `crm/api/contacts/<id>/notes/` | Contact API |
-| `quickscale_crm:stage-list`, `quickscale_crm:stage-detail` | `crm/api/stages/` and detail | Stage API |
-| `quickscale_crm:deal-list`, `quickscale_crm:deal-detail`, `quickscale_crm:deal-notes` | `crm/api/deals/`, detail, and `crm/api/deals/<id>/notes/` | Deal API |
-| `quickscale_crm:deal-bulk-update-stage`, `quickscale_crm:deal-mark-won`, `quickscale_crm:deal-mark-lost` | `crm/api/deals/bulk-update-stage/`, `mark-won/`, `mark-lost/` | Deal bulk actions |
-| `quickscale_crm:contact-note-list`, `quickscale_crm:contact-note-detail` | `crm/api/contact-notes/` and detail | Standalone contact-note API |
-| `quickscale_crm:deal-note-list`, `quickscale_crm:deal-note-detail` | `crm/api/deal-notes/` and detail | Standalone deal-note API |
+| `quickscale_crm:api_root` | `crm/api/` | Staff-only API root with endpoint links |
+| `quickscale_crm:tag_list`, `quickscale_crm:tag_detail` | `crm/api/tags/` and `crm/api/tags/<id>/` | Tag API |
+| `quickscale_crm:company_list`, `quickscale_crm:company_detail` | `crm/api/companies/` and detail | Company API |
+| `quickscale_crm:contact_list`, `quickscale_crm:contact_detail`, `quickscale_crm:contact_notes` | `crm/api/contacts/`, detail, and `crm/api/contacts/<id>/notes/` | Contact API |
+| `quickscale_crm:stage_list`, `quickscale_crm:stage_detail` | `crm/api/stages/` and detail | Stage API |
+| `quickscale_crm:deal_list`, `quickscale_crm:deal_detail`, `quickscale_crm:deal_notes` | `crm/api/deals/`, detail, and `crm/api/deals/<id>/notes/` | Deal API |
+| `quickscale_crm:deal_bulk_update_stage`, `quickscale_crm:deal_mark_won`, `quickscale_crm:deal_mark_lost` | `crm/api/deals/bulk-update-stage/`, `mark-won/`, `mark-lost/` | Deal bulk actions |
+| `quickscale_crm:contact_note_list`, `quickscale_crm:contact_note_detail` | `crm/api/contact-notes/` and detail | Standalone contact-note API |
+| `quickscale_crm:deal_note_list`, `quickscale_crm:deal_note_detail` | `crm/api/deal-notes/` and detail | Standalone deal-note API |
 
 ## Management commands
 

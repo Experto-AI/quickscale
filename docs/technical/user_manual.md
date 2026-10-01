@@ -414,7 +414,7 @@ a canonical HTTP(S) origin with no path, query, fragment, or user information.
 
 **Keeping the frontend separate from updates.** It already is: `frontend/` is your code and no
 QuickScale command rewrites it. What can still change under it is the backend it calls — module API
-responses such as `/orgs/api/`, `/api/forms/<slug>/`, and the CRM API, and the page configuration
+responses such as `/orgs/api/`, `/forms/api/<slug>/`, and the CRM API, and the page configuration
 Django passes to the React bundle through `window.__QUICKSCALE__`. Keep the frontend in the same
 repository and deploy: the Dockerfile builds it into `static/frontend/` and Django serves it on the
 same domain, so session cookies and CSRF work without configuration. Moving it to a separate

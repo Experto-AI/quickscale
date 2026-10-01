@@ -54,7 +54,7 @@ def test_superuser_can_see_cross_tenant_submissions(
         )
 
     url = reverse(
-        "quickscale_forms:admin-submission-list",
+        "quickscale_forms:admin_submission_list",
         kwargs={"pk": form_a.pk},
     )
     response = superuser_client.get(url)
@@ -87,7 +87,7 @@ def test_staff_without_org_fails_closed_on_admin_list(
     from django.urls import reverse
 
     url = reverse(
-        "quickscale_forms:admin-form-list",
+        "quickscale_forms:admin_form_list",
     )
     response = staff_client.get(url)
     assert response.status_code == 200, (

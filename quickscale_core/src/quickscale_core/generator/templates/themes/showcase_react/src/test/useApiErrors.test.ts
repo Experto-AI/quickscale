@@ -87,7 +87,7 @@ describe('QuickScale API error parsing', () => {
     fetchMock.mockResolvedValue(
       jsonResponse(400, { error: 'Invalid JSON payload' }),
     )
-    const stringError = await apiRequest('/api/forms/example/').catch(
+    const stringError = await apiRequest('/forms/api/example/').catch(
       (caught: unknown) => caught,
     )
     expect(getApiErrorMessage(stringError)).toBe('Invalid JSON payload')
@@ -95,7 +95,7 @@ describe('QuickScale API error parsing', () => {
     fetchMock.mockResolvedValue(
       jsonResponse(400, { errors: { title: ['This field is required.'] } }),
     )
-    const fieldsError = await apiRequest('/api/forms/example/').catch(
+    const fieldsError = await apiRequest('/forms/api/example/').catch(
       (caught: unknown) => caught,
     )
     expect(getApiFieldErrors(fieldsError)).toEqual({
