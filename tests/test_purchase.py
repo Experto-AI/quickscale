@@ -1187,7 +1187,7 @@ def test_purchase_webhook_view_accepts_checkout_session_completed_event(
     )
 
     response = client.post(
-        reverse("quickscale_billing:stripe-webhook"),
+        reverse("quickscale_billing:stripe_webhook"),
         data=b'{"id":"evt_view_purchase"}',
         content_type="application/json",
         HTTP_STRIPE_SIGNATURE="t=1,v1=view-purchase-signature",
@@ -1209,7 +1209,7 @@ def test_purchase_webhook_view_maps_processing_errors_to_400(
     )
 
     response = client.post(
-        reverse("quickscale_billing:stripe-webhook"),
+        reverse("quickscale_billing:stripe_webhook"),
         data=b"{}",
         content_type="application/json",
         HTTP_STRIPE_SIGNATURE="t=1,v1=view-purchase-error",
