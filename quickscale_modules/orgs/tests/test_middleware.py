@@ -36,11 +36,11 @@ from tests.urls import home_view
 
 
 @pytest.mark.django_db
-@override_settings(ROOT_URLCONF="tests.urls_pre_home")
-def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
-    client, settings
-) -> None:
-    settings.QUICKSCALE_ORGS_MODE = "solo"
+# Both overrides ride the decorator: mutating the ``settings`` fixture while a
+# decorator override is active leaks ROOT_URLCONF past the test (the fixture
+# restores the decorator's holder after the decorator disabled it).
+@override_settings(ROOT_URLCONF="tests.urls_pre_home", QUICKSCALE_ORGS_MODE="solo")
+def test_solo_mode_auto_creates_personal_org_and_sets_request_org(client) -> None:
     user = get_user_model().objects.create_user(
         username="alice",
         email="alice@example.com",

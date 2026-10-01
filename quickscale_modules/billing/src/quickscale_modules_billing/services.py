@@ -19,6 +19,7 @@ from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.db.models import F, Q
 from django.http import HttpRequest, HttpResponse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from quickscale_modules_orgs.current_org import org_scope
@@ -4435,6 +4436,27 @@ def _get_active_org_subscription(organization: Any) -> Subscription | None:
     )
 
 
+def organization_pricing_page_url(organization: Any) -> str:
+    """Return billing's pricing-page URL for the organization-creation handoff.
+
+    Module Conventions rule 4: billing declares this function on its
+    ``AppConfig`` as the ``organization_pricing_url_hooks`` capability and
+    the orgs create flow collects it, so no lower-layer module names
+    billing's route, label, or settings.  ``organization`` is the hook
+    contract's context argument; billing's pricing page is module-wide.
+    An enabled billing whose URLconf does not mount the pricing route is
+    misconfigured, so the reversal failure raises ``BillingConfigurationError``
+    (rule 23) instead of answering a false negative.
+    """
+    try:
+        return reverse("quickscale_billing:pricing_page")
+    except NoReverseMatch as exc:
+        raise BillingConfigurationError(
+            "Billing is enabled but its pricing route is not mounted; "
+            "run `quickscale apply` to restore the module's URL wiring."
+        ) from exc
+
+
 __all__ = [
     "account_deletion_user_reference_organization_ids",
     "cancel_current_subscription",
@@ -4460,6 +4482,7 @@ __all__ = [
     "guard_organization_removal_provider_state",
     "handle_stripe_event",
     "InsufficientCreditsError",
+    "organization_pricing_page_url",
     "OrgSelectionRequiredError",
     "resume_current_subscription",
     "reconcile_account_deletion_subscription_checkout",

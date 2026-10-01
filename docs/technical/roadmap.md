@@ -192,16 +192,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
 
   **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. orgs' purge path
-  and boundary table no longer name another module; the test-owned registry, orgs' billing route
-  lookup, the rule's import-graph test, and several modules' service surfaces remain.
+  and boundary table no longer name another module; the test-owned registry, the rule's
+  import-graph test, and several modules' service surfaces remain.
 
   **Scope:**
   - *References by name* (rule 34). **Landed:** the purge command's billing steps and
     `removal.BOUNDARY_GUARDED_OBLIGATIONS` are billing's declared removal hooks, blog's and crm's
-    label prefixes come from those modules' declarations, and orgs' `checks.py` boundary table is
-    declared by each boundary's owner (auth declares account deletion). **Open:**
-    `TENANT_TABLE_REGISTRY` moves into test code, and `orgs/views.py` still reverses billing's
-    org-pricing route name.
+    label prefixes come from those modules' declarations, orgs' `checks.py` boundary table is
+    declared by each boundary's owner (auth declares account deletion), and orgs' post-create
+    billing handoff is billing's declared `organization_pricing_url_hooks` capability, which
+    activates the new organization first, so orgs names no billing route. **Open:**
+    `TENANT_TABLE_REGISTRY` moves into test code.
   - *Service surface.* Every module gains `services.py`; every `services.py` gains `__all__`,
     keyword-only signatures, and `<Module>Error` on failure, with `test_services.py`.
 
