@@ -49,6 +49,42 @@ def test_ready_raises_improperly_configured_when_crm_enable_api_missing(
         config.ready()
 
 
+def test_ready_raises_improperly_configured_when_retired_setting_present(
+    settings,
+) -> None:
+    """Rule 6: a retired CRM setting fails startup naming the replacement."""
+    settings.CRM_DEALS_PER_PAGE = 25
+
+    config = QuickscaleCrmConfig(
+        "quickscale_modules_crm",
+        import_module("quickscale_modules_crm"),
+    )
+
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="QUICKSCALE_CRM_DEALS_PER_PAGE",
+    ):
+        config.ready()
+
+
+def test_ready_refuses_every_declared_retired_setting(settings) -> None:
+    """Rule 6: every declared retired CRM name fails startup."""
+    from quickscale_modules_crm.checks import RETIRED_SETTINGS
+
+    config = QuickscaleCrmConfig(
+        "quickscale_modules_crm",
+        import_module("quickscale_modules_crm"),
+    )
+
+    for retired_name in RETIRED_SETTINGS:
+        setattr(settings, retired_name, "legacy")
+        try:
+            with pytest.raises(ImproperlyConfigured, match=retired_name):
+                config.ready()
+        finally:
+            delattr(settings, retired_name)
+
+
 @pytest.mark.django_db
 def test_missing_setting_fails_check_migrate_and_runserver(settings) -> None:
     """The registered CRM check fails check, migrate, and runserver alike."""
