@@ -1,11 +1,11 @@
-"""Stable event vocabulary for QuickScale analytics."""
+"""Stable event vocabulary for QuickScale analytics.
+
+Feature modules own their event names; analytics publishes only the generic
+``capture_event`` and keeps PostHog's ``$pageview`` name here (rule 22).
+"""
 
 ANALYTICS_EVENT_PAGEVIEW = "$pageview"
-ANALYTICS_EVENT_FORM_SUBMIT = "form_submit"
-ANALYTICS_EVENT_SOCIAL_LINK_CLICK = "social_link_click"
 
 __all__ = [
-    "ANALYTICS_EVENT_FORM_SUBMIT",
     "ANALYTICS_EVENT_PAGEVIEW",
-    "ANALYTICS_EVENT_SOCIAL_LINK_CLICK",
 ]
