@@ -29,54 +29,54 @@ class TestCrmPostHook:
     """_crm_post_hook — int/bool coercions."""
 
     def test_coerces_deals_per_page_to_int(self) -> None:
-        """CRM_DEALS_PER_PAGE must be coerced to int."""
+        """QUICKSCALE_CRM_DEALS_PER_PAGE must be coerced to int."""
         spec = ModuleWiringSpec(
             settings={
-                "CRM_DEALS_PER_PAGE": "25",
-                "CRM_CONTACTS_PER_PAGE": "50",
-                "CRM_ENABLE_API": 1,
+                "QUICKSCALE_CRM_DEALS_PER_PAGE": "25",
+                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "50",
+                "QUICKSCALE_CRM_API_ENABLED": 1,
             },
         )
         result = _crm_post_hook(spec, {})
-        assert result.settings["CRM_DEALS_PER_PAGE"] == 25
-        assert isinstance(result.settings["CRM_DEALS_PER_PAGE"], int)
+        assert result.settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] == 25
+        assert isinstance(result.settings["QUICKSCALE_CRM_DEALS_PER_PAGE"], int)
 
     def test_coerces_contacts_per_page_to_int(self) -> None:
-        """CRM_CONTACTS_PER_PAGE must be coerced to int."""
+        """QUICKSCALE_CRM_CONTACTS_PER_PAGE must be coerced to int."""
         spec = ModuleWiringSpec(
             settings={
-                "CRM_DEALS_PER_PAGE": "10",
-                "CRM_CONTACTS_PER_PAGE": "20",
-                "CRM_ENABLE_API": 0,
+                "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
+                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "20",
+                "QUICKSCALE_CRM_API_ENABLED": 0,
             },
         )
         result = _crm_post_hook(spec, {})
-        assert result.settings["CRM_CONTACTS_PER_PAGE"] == 20
-        assert isinstance(result.settings["CRM_CONTACTS_PER_PAGE"], int)
+        assert result.settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] == 20
+        assert isinstance(result.settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"], int)
 
     def test_coerces_enable_api_to_bool(self) -> None:
-        """CRM_ENABLE_API must be coerced to bool."""
+        """QUICKSCALE_CRM_API_ENABLED must be coerced to bool."""
         spec = ModuleWiringSpec(
             settings={
-                "CRM_DEALS_PER_PAGE": "10",
-                "CRM_CONTACTS_PER_PAGE": "10",
-                "CRM_ENABLE_API": 1,
+                "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
+                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "10",
+                "QUICKSCALE_CRM_API_ENABLED": 1,
             },
         )
         result = _crm_post_hook(spec, {})
-        assert result.settings["CRM_ENABLE_API"] is True
+        assert result.settings["QUICKSCALE_CRM_API_ENABLED"] is True
 
     def test_coerces_enable_api_to_false(self) -> None:
         """Falsy values produce False for the API flag."""
         spec = ModuleWiringSpec(
             settings={
-                "CRM_DEALS_PER_PAGE": "5",
-                "CRM_CONTACTS_PER_PAGE": "5",
-                "CRM_ENABLE_API": 0,
+                "QUICKSCALE_CRM_DEALS_PER_PAGE": "5",
+                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "5",
+                "QUICKSCALE_CRM_API_ENABLED": 0,
             },
         )
         result = _crm_post_hook(spec, {})
-        assert result.settings["CRM_ENABLE_API"] is False
+        assert result.settings["QUICKSCALE_CRM_API_ENABLED"] is False
 
     def test_preserves_non_setting_fields(self) -> None:
         """Fields other than settings must pass through unchanged."""
@@ -84,9 +84,9 @@ class TestCrmPostHook:
             apps=("quickscale_modules_crm",),
             middleware=(),
             settings={
-                "CRM_DEALS_PER_PAGE": "10",
-                "CRM_CONTACTS_PER_PAGE": "20",
-                "CRM_ENABLE_API": True,
+                "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
+                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "20",
+                "QUICKSCALE_CRM_API_ENABLED": True,
             },
         )
         result = _crm_post_hook(spec, {})

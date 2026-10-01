@@ -172,7 +172,7 @@ class TestCRMAPIPermissions:
             status.HTTP_200_OK,
         )
 
-    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    @override_settings(QUICKSCALE_CRM_API_ENABLED=False, REST_FRAMEWORK={})
     def test_api_root_returns_404_when_api_disabled(
         self,
         api_client,
@@ -327,7 +327,7 @@ class TestCRMAPIPermissions:
             payload,
         )
 
-    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    @override_settings(QUICKSCALE_CRM_API_ENABLED=False, REST_FRAMEWORK={})
     @pytest.mark.parametrize(
         "route_name",
         [
@@ -358,7 +358,7 @@ class TestCRMAPIPermissions:
             url,
         )
 
-    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    @override_settings(QUICKSCALE_CRM_API_ENABLED=False, REST_FRAMEWORK={})
     @pytest.mark.parametrize(
         ("route_name", "method", "payload"),
         [
@@ -402,7 +402,7 @@ class TestCRMAPIPermissions:
             payload,
         )
 
-    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    @override_settings(QUICKSCALE_CRM_API_ENABLED=False, REST_FRAMEWORK={})
     @pytest.mark.parametrize(
         ("route_name", "payload_factory"),
         [
@@ -449,7 +449,7 @@ class TestCRMAPIPermissions:
             payload,
         )
 
-    @override_settings(CRM_ENABLE_API=False)
+    @override_settings(QUICKSCALE_CRM_API_ENABLED=False)
     @override_settings(
         MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
@@ -649,7 +649,7 @@ class TestContactViewSet:
 
         assert response.status_code == status.HTTP_200_OK
 
-    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    @override_settings(QUICKSCALE_CRM_API_ENABLED=False, REST_FRAMEWORK={})
     def test_contact_list_returns_404_when_api_disabled(
         self, authenticated_client, contact
     ):
@@ -919,7 +919,7 @@ class TestDealViewSet:
 class TestCRMPageSizeSettings:
     """Tests for CRM module-owned page size settings."""
 
-    @override_settings(CRM_CONTACTS_PER_PAGE=1, REST_FRAMEWORK={})
+    @override_settings(QUICKSCALE_CRM_CONTACTS_PER_PAGE=1, REST_FRAMEWORK={})
     def test_contact_list_respects_contacts_per_page_setting(
         self, authenticated_client, company, staff_personal_org
     ):
@@ -946,7 +946,7 @@ class TestCRMPageSizeSettings:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
 
-    @override_settings(CRM_DEALS_PER_PAGE=1, REST_FRAMEWORK={})
+    @override_settings(QUICKSCALE_CRM_DEALS_PER_PAGE=1, REST_FRAMEWORK={})
     def test_deal_list_respects_deals_per_page_setting(
         self, authenticated_client, contact, stage, user, staff_personal_org
     ):
@@ -983,13 +983,13 @@ class TestCRMPageSizeReadsDeclaredSetting:
     before a request runs, so the paginators carry no validation of their own.
     """
 
-    @override_settings(CRM_CONTACTS_PER_PAGE=33)
+    @override_settings(QUICKSCALE_CRM_CONTACTS_PER_PAGE=33)
     def test_contact_page_size_reads_the_setting(self) -> None:
         from quickscale_modules_crm.views import ContactPagination
 
         assert ContactPagination().get_page_size(None) == 33
 
-    @override_settings(CRM_DEALS_PER_PAGE=44)
+    @override_settings(QUICKSCALE_CRM_DEALS_PER_PAGE=44)
     def test_deal_page_size_reads_the_setting(self) -> None:
         from quickscale_modules_crm.views import DealPagination
 
