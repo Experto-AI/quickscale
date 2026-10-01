@@ -64,6 +64,35 @@ def test_disabled_notifications_leave_email_backend_unmanaged() -> None:
     assert "DEFAULT_FROM_EMAIL" not in spec.settings
 
 
+def test_adapter_projects_secret_settings_from_env_var_names() -> None:
+    spec = _notifications_manifest_adapter({})
+
+    assert (
+        spec.settings["QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY"]
+        == "__QS_ENV__:RESEND_API_KEY"
+    )
+    assert (
+        spec.settings["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"]
+        == "__QS_ENV__:QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+    )
+
+
+def test_adapter_projects_configured_resend_key_env_var_name() -> None:
+    spec = _notifications_manifest_adapter(
+        {
+            "sender_name": "Ops",
+            "sender_email": "ops@example.com",
+            "resend_domain": "mg.example.com",
+            "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+        }
+    )
+
+    assert (
+        spec.settings["QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY"]
+        == "__QS_ENV__:OPS_RESEND_API_KEY"
+    )
+
+
 def test_required_derived_reads_fail_hard() -> None:
     with pytest.raises(KeyError, match="enabled"):
         _notifications_derived_settings({})

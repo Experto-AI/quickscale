@@ -111,9 +111,16 @@ def _notifications_derived_settings(resolved: dict[str, Any]) -> dict[str, Any]:
     A null string option reads as blank rather than the literal ``"None"``, so
     a state entry written as ``reply_to_email: null`` still wires an empty
     value.
+
+    Rule 35: each secret is projected as a setting that renders the environment
+    variable its ``_ENV_VAR`` option names (core's ``__QS_ENV__`` mechanism),
+    so module code reads the setting instead of calling ``os.getenv``.
     """
+    enabled = bool(resolved["enabled"])
+    resend_api_key_env_var = str(resolved["resend_api_key_env_var"] or "").strip()
+    webhook_secret_env_var = str(resolved["webhook_secret_env_var"] or "").strip()
     settings: dict[str, Any] = {
-        "QUICKSCALE_NOTIFICATIONS_ENABLED": bool(resolved["enabled"]),
+        "QUICKSCALE_NOTIFICATIONS_ENABLED": enabled,
         "QUICKSCALE_NOTIFICATIONS_SENDER_NAME": str(
             resolved["sender_name"] or ""
         ).strip(),
@@ -126,12 +133,14 @@ def _notifications_derived_settings(resolved: dict[str, Any]) -> dict[str, Any]:
         "QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN": str(
             resolved["resend_domain"] or ""
         ).strip(),
-        "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR": str(
-            resolved["resend_api_key_env_var"] or ""
-        ).strip(),
-        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR": str(
-            resolved["webhook_secret_env_var"] or ""
-        ).strip(),
+        "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR": resend_api_key_env_var,
+        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR": webhook_secret_env_var,
+        "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY": (
+            f"__QS_ENV__:{resend_api_key_env_var}" if resend_api_key_env_var else ""
+        ),
+        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+            f"__QS_ENV__:{webhook_secret_env_var}" if webhook_secret_env_var else ""
+        ),
         "QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS": list(resolved["default_tags"]),
         "QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS": list(resolved["allowed_tags"]),
         "QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS": int(

@@ -92,8 +92,10 @@ This module ships no management commands.
 
 - **Sender identity:** override `sender_email` before configuring live delivery; the default
   placeholder is refused by validation when live Resend delivery is configured.
-- **Secrets:** the API key and webhook secret are read from the environment variables named by
-  `resend_api_key_env_var` and `webhook_secret_env_var`; set the real values in the deployment
+- **Secrets:** the API key and webhook secret reach module code as the
+  `QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY` and `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET` settings;
+  `quickscale apply` renders each one from the environment variable its `resend_api_key_env_var`
+  or `webhook_secret_env_var` option names (rule 35), so set the real values in the deployment
   environment, never in `quickscale.yml`.
 - **Webhook endpoint:** point the Resend webhook at `notifications/webhooks/resend/` and use
   the same signing secret the `webhook_secret_env_var` names. Events outside

@@ -82,14 +82,11 @@ class Migration(migrations.Migration):
                 ("resend_domain", models.CharField(blank=True, max_length=255)),
                 (
                     "resend_api_key_env_var",
-                    models.CharField(default="RESEND_API_KEY", max_length=255),
+                    models.CharField(max_length=255),
                 ),
                 (
                     "webhook_secret_env_var",
-                    models.CharField(
-                        default="QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
-                        max_length=255,
-                    ),
+                    models.CharField(max_length=255),
                 ),
                 ("default_tags", models.JSONField(blank=True, default=list)),
                 ("allowed_tags", models.JSONField(blank=True, default=list)),

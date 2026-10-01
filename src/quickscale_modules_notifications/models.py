@@ -25,11 +25,8 @@ class NotificationSettings(models.Model):
     sender_email = models.EmailField(max_length=255)
     reply_to_email = models.EmailField(max_length=255, blank=True)
     resend_domain = models.CharField(max_length=255, blank=True)
-    resend_api_key_env_var = models.CharField(max_length=255, default="RESEND_API_KEY")
-    webhook_secret_env_var = models.CharField(
-        max_length=255,
-        default="QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
-    )
+    resend_api_key_env_var = models.CharField(max_length=255)
+    webhook_secret_env_var = models.CharField(max_length=255)
     default_tags = models.JSONField(default=list, blank=True)
     allowed_tags = models.JSONField(default=list, blank=True)
     webhook_ttl_seconds = models.PositiveIntegerField(default=300)

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 
 import pytest
+from django.conf import settings
 from django.test import Client
 from django.test import override_settings
 from django.urls import reverse
@@ -43,7 +43,7 @@ def test_webhook_view_rejects_signed_invalid_json_payload(client: Client) -> Non
     body = b"{bad-json"
     headers = build_webhook_signature_headers(
         body,
-        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
         timestamp=int(time.time()),
     )
 
@@ -79,7 +79,7 @@ def test_webhook_view_rejects_invalid_recipient_email(client: Client) -> None:
     body = json.dumps(payload).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
-        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
         timestamp=int(time.time()),
     )
 
@@ -176,7 +176,7 @@ def test_webhook_view_rejects_when_runtime_disabled(
     body = json.dumps(payload).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
-        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
         timestamp=int(time.time()),
     )
 
@@ -220,7 +220,7 @@ def test_webhook_view_accepts_valid_signed_event(
     body = json.dumps(payload).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
-        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
         timestamp=int(time.time()),
     )
 
