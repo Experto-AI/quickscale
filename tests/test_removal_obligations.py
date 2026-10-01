@@ -22,6 +22,7 @@ from quickscale_modules_orgs.current_org import (
 from quickscale_modules_orgs.models import Organization, OrganizationTombstone
 from quickscale_modules_orgs.removal import (
     BILLING_PROVIDER_STATE,
+    BoundaryGuardedHooks,
     ExternalProviderField,
     OrganizationRemovalObligation,
     RemovalAction,
@@ -428,6 +429,54 @@ def test_purge_fails_closed_on_an_unknown_declared_label(
     assert Organization.objects.filter(pk=org_id).exists()
 
 
+def test_provider_mutation_lock_releases_acquired_locks_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later failed acquisition cannot leak an already-held provider lock."""
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from quickscale_modules_orgs.management.commands import (
+        quickscale_orgs_purge_organization as purge_module,
+    )
+
+    events: list[str] = []
+
+    @contextmanager
+    def first_lock(organization_id: object):
+        events.append("first acquired")
+        try:
+            yield
+        finally:
+            events.append("first released")
+
+    @contextmanager
+    def failing_lock(organization_id: object):
+        events.append("second acquiring")
+        raise RuntimeError("second acquisition failed")
+        yield  # pragma: no cover - unreachable by construction
+
+    def declared(name: str, lock: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            mutation_lock=lock,
+            obligation=SimpleNamespace(name=name),
+        )
+
+    monkeypatch.setattr(
+        purge_module,
+        "declared_boundary_guards",
+        lambda: (declared("first", first_lock), declared("second", failing_lock)),
+    )
+
+    command = purge_module.Command()
+
+    with pytest.raises(RuntimeError, match="second acquisition failed"):
+        with command._provider_mutation_lock("org-1"):
+            pass  # pragma: no cover - the second acquisition fails first
+
+    assert events == ["first acquired", "second acquiring", "first released"]
+
+
 def test_structured_values_that_are_not_mappings_fail_closed() -> None:
     """A declared structured field with a non-mapping value reads as carried."""
     from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
@@ -450,6 +499,11 @@ GUARDED_UNKNOWN_LABEL_DECLARATION = OrganizationRemovalObligation(
             "stripe_event_id",
             boundary_guarded=True,
         ),
+    ),
+    boundary_guarded_hooks=BoundaryGuardedHooks(
+        guard="guard_organization_removal_provider_state",
+        reconcile="reconcile_organization_removal_provider_state",
+        mutation_lock="organization_removal_provider_mutation_lock",
     ),
 )
 
