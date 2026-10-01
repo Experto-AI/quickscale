@@ -5,6 +5,7 @@ receiver of the ``organization_created`` signal from the orgs module,
 replacing the old reverse-import pattern in ``crm_bootstrap.py``.
 """
 
+from django.db import transaction
 from django.dispatch import receiver
 
 from quickscale_modules_crm.services import ensure_org_default_stages
@@ -21,6 +22,8 @@ def seed_crm_default_stages_on_org_created(
     """Seed CRM default pipeline stages for a newly created organization.
 
     Connected in ``QuickscaleCrmConfig.ready()`` so that this receiver
-    is only active when the CRM module is installed.
+    is only active when the CRM module is installed.  The seeding is
+    scheduled with ``transaction.on_commit`` (rule 21) so a rolled-back
+    organization creation seeds nothing.
     """
-    ensure_org_default_stages(organization)
+    transaction.on_commit(lambda: ensure_org_default_stages(organization))
