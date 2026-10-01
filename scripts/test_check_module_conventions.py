@@ -991,6 +991,164 @@ def test_registration_after_terminal_try_control() -> None:
     )
 
 
+def test_registration_in_short_circuited_expression_control() -> None:
+    module = _golden_module()
+    dead = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        if False and register_module_checks(self, [check_demo]):\n            pass\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, dead)
+    )
+    short_circuit = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        True or register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, short_circuit)
+    )
+
+
+def test_registration_with_static_boolop_test_control() -> None:
+    module = _golden_module()
+    dead = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        if False and True:\n            register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, dead)
+    )
+    terminal = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        if True or False:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, terminal)
+    )
+    executed = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        if True and True:\n            register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, executed) == []
+
+
+def test_registration_in_uncalled_lambda_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        unused = lambda: register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+
+
+def test_registration_in_later_handler_control() -> None:
+    module = _golden_module()
+    good = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        self.setup_checks()\n"
+            "\n"
+            "    def setup_checks(self) -> None:\n"
+            "        try:\n"
+            "            raise ValueError('boom')\n"
+            "        except TypeError:\n"
+            "            pass\n"
+            "        except ValueError:\n"
+            "            register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, good) == []
+
+
+def test_registration_after_return_inside_loop_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        while True:\n"
+            "            return\n"
+            "            register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+
+
+def test_registration_in_conditional_expression_control() -> None:
+    module = _golden_module()
+    good = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        value = 1 if (register_module_checks(self, [check_demo]) or True) else 2\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, good) == []
+
+
+def test_registration_context_expression_control() -> None:
+    module = _golden_module()
+    good = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        with nullcontext(register_module_checks(self, [check_demo])):\n"
+            "            pass\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, good) == []
+
+
+def test_registration_after_caught_raise_control() -> None:
+    module = _golden_module()
+    good = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        self.setup_checks()\n"
+            "\n"
+            "    def setup_checks(self) -> None:\n"
+            "        try:\n"
+            "            raise ValueError('boom')\n"
+            "        except ValueError:\n"
+            "            pass\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, good) == []
+
+
 def test_registration_in_evaluated_condition_control() -> None:
     module = _golden_module()
     good = _with_files(
@@ -2181,6 +2339,136 @@ def test_webhook_sdk_wrong_signature_slot_control() -> None:
     assert any(
         "does not verify a signature" in violation
         for violation in _violations(checker.rule_26_webhooks, broken)
+    )
+
+
+def test_webhook_sdk_conditional_signature_control() -> None:
+    dead_branch = _webhook_module(
+        "import stripe\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    return stripe.Webhook.construct_event(\n"
+        "        body, signature if False else 'fixed', 'secret'\n"
+        "    )\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, dead_branch)
+    )
+    unknown = _webhook_module(
+        "import stripe\n\n\n"
+        "def handle(*, body, signature, flag):\n"
+        "    return stripe.Webhook.construct_event(\n"
+        "        body, signature if flag else 'fixed', 'secret'\n"
+        "    )\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, unknown)
+    )
+    selected = _webhook_module(
+        "import stripe\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    return stripe.Webhook.construct_event(\n"
+        "        body, signature if True else 'fixed', 'secret'\n"
+        "    )\n"
+    )
+    assert _violations(checker.rule_26_webhooks, selected) == []
+
+
+def test_webhook_derived_signature_control() -> None:
+    good = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    expected = 'expected'.encode('utf-8')\n"
+        "    if not hmac.compare_digest((signature or '').encode('utf-8'), expected):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert _violations(checker.rule_26_webhooks, good) == []
+    masked = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    if not hmac.compare_digest(signature and 'expected', 'expected'):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, masked)
+    )
+    masked_falsy = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    if not hmac.compare_digest(signature and '', ''):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, masked_falsy)
+    )
+    constant_prefix = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    if not hmac.compare_digest('' and signature, ''):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, constant_prefix)
+    )
+
+
+def test_webhook_discarding_call_control() -> None:
+    broken = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    if not hmac.compare_digest((lambda ignored: 'expected')(signature), 'expected'):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, broken)
+    )
+    derived = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    if not hmac.compare_digest(signature.strip().encode('utf-8'), b'expected'):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert _violations(checker.rule_26_webhooks, derived) == []
+    constant = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    if not hmac.compare_digest(str('expected'), 'expected'):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, constant)
+    )
+    constructed = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    if not hmac.compare_digest(str(signature), 'expected'):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert _violations(checker.rule_26_webhooks, constructed) == []
+    discarding_method = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    if not hmac.compare_digest(signature.join(['expected']), 'expected'):\n"
+        "        raise ValueError('bad signature')\n"
+        "    return body\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, discarding_method)
     )
 
 

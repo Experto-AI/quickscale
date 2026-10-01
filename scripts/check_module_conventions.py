@@ -92,6 +92,12 @@ SETTING_NAME_EXCEPTIONS: dict[str, dict[str, str]] = {
 SNAKE_CASE = re.compile(r"^[a-z][a-z0-9_]*$")
 TICKET_IN_TEST = re.compile(r"(?<![A-Za-z0-9])(?:SA|AF)\d+|CR-SA\d+")
 RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
+# Rule 26: method calls whose value preserves signature dependence.  A method
+# outside this list could discard its receiver (``signature.join([...])``), so
+# it earns no verification credit.
+SIGNATURE_METHOD_DERIVATIONS = frozenset(
+    {"casefold", "decode", "encode", "lower", "lstrip", "rstrip", "strip", "upper"}
+)
 
 Skipped = (".pytest_cache", ".ruff_cache", "__pycache__", ".mypy_cache")
 
@@ -1022,6 +1028,38 @@ def rule_9_http_apis(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _static_truth(node: ast.expr) -> bool | None:
+    """Return the statically known truth of an expression, or None when unknown."""
+    if isinstance(node, ast.Constant):
+        return bool(node.value)
+    if isinstance(node, ast.IfExp):
+        test = _static_truth(node.test)
+        if test is True:
+            return _static_truth(node.body)
+        if test is False:
+            return _static_truth(node.orelse)
+        return None
+    if isinstance(node, ast.BoolOp):
+        if isinstance(node.op, ast.Or):
+            result: bool | None = False
+            for operand in node.values:
+                truth = _static_truth(operand)
+                if truth is True:
+                    return True
+                if truth is None:
+                    result = None
+            return result
+        result = True
+        for operand in node.values:
+            truth = _static_truth(operand)
+            if truth is False:
+                return False
+            if truth is None:
+                result = None
+        return result
+    return None
+
+
 def _calls_within(node: ast.AST) -> list[ast.Call]:
     """Return calls reachable in a node, skipping statically dead branches."""
     calls: list[ast.Call] = []
@@ -1030,15 +1068,44 @@ def _calls_within(node: ast.AST) -> list[ast.Call]:
         current = pending.pop()
         if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             continue
-        if isinstance(current, ast.If) and isinstance(current.test, ast.Constant):
-            pending.extend(current.body if current.test.value else current.orelse)
+        if isinstance(current, ast.Lambda):
+            # The body is deferred; only default arguments evaluate at definition.
+            for default in [*current.args.defaults, *current.args.kw_defaults]:
+                if default is not None:
+                    pending.append(default)
             continue
-        if (
-            isinstance(current, ast.While)
-            and isinstance(current.test, ast.Constant)
-            and current.test.value is False
-        ):
+        if isinstance(current, ast.If):
+            truth = _static_truth(current.test)
+            if truth is True:
+                pending.append(current.test)
+                pending.extend(current.body)
+                continue
+            if truth is False:
+                pending.append(current.test)
+                pending.extend(current.orelse)
+                continue
+        if isinstance(current, ast.While) and _static_truth(current.test) is False:
+            pending.append(current.test)
             pending.extend(current.orelse)
+            continue
+        if isinstance(current, ast.IfExp):
+            truth = _static_truth(current.test)
+            if truth is True:
+                pending.append(current.test)
+                pending.append(current.body)
+                continue
+            if truth is False:
+                pending.append(current.test)
+                pending.append(current.orelse)
+                continue
+        if isinstance(current, ast.BoolOp):
+            for operand in current.values:
+                pending.append(operand)
+                truth = _static_truth(operand)
+                if (isinstance(current.op, ast.And) and truth is False) or (
+                    isinstance(current.op, ast.Or) and truth is True
+                ):
+                    break
             continue
         if isinstance(current, ast.Call):
             calls.append(current)
@@ -1065,8 +1132,9 @@ def _collect_direct_calls(statements: list[ast.stmt], calls: list[ast.Call]) -> 
         if isinstance(statement, ast.If):
             test = statement.test
             calls.extend(_calls_within(test))
-            if isinstance(test, ast.Constant):
-                branch = statement.body if test.value else statement.orelse
+            truth = _static_truth(test)
+            if truth is not None:
+                branch = statement.body if truth else statement.orelse
                 if _collect_direct_calls(branch, calls):
                     return True
             else:
@@ -1076,20 +1144,38 @@ def _collect_direct_calls(statements: list[ast.stmt], calls: list[ast.Call]) -> 
                     return True
             continue
         if isinstance(statement, (ast.With, ast.AsyncWith)):
+            for item in statement.items:
+                calls.extend(_calls_within(item.context_expr))
             if _collect_direct_calls(statement.body, calls):
+                return True
+            continue
+        if isinstance(statement, (ast.For, ast.While)):
+            iterable = statement.test if isinstance(statement, ast.While) else statement.iter
+            calls.extend(_calls_within(iterable))
+            if isinstance(statement, ast.While) and _static_truth(statement.test) is False:
+                if _collect_direct_calls(statement.orelse, calls):
+                    return True
+                continue
+            _collect_direct_calls(statement.body, calls)
+            if _collect_direct_calls(statement.orelse, calls):
                 return True
             continue
         if isinstance(statement, ast.Try):
             body_terminates = _collect_direct_calls(statement.body, calls)
-            handlers_terminate = bool(statement.handlers) and all(
+            handler_results = [
                 _collect_direct_calls(handler.body, calls) for handler in statement.handlers
-            )
+            ]
+            handlers_terminate = bool(handler_results) and all(handler_results)
             else_terminates = False
             if not body_terminates:
                 else_terminates = _collect_direct_calls(statement.orelse, calls)
             final_terminates = _collect_direct_calls(statement.finalbody, calls)
             raise_path_terminates = (not statement.handlers) or handlers_terminate
-            if body_terminates or final_terminates or (else_terminates and raise_path_terminates):
+            if final_terminates:
+                return True
+            if body_terminates and raise_path_terminates:
+                return True
+            if else_terminates and raise_path_terminates:
                 return True
             continue
         calls.extend(_calls_within(statement))
@@ -2008,14 +2094,71 @@ def _rejects_failure(branch: list[ast.stmt]) -> bool:
     return False
 
 
+def _evaluated_signature_value(expr: ast.expr, names: set[str]) -> bool:
+    """
+    Return True when the expression's evaluated value derives from the incoming signature.
+
+    Statically selected branches are followed, so a dead branch cannot launder
+    trust: ``signature if False else "fixed"`` evaluates to a constant and is
+    rejected, while ``signature`` and derived values such as
+    ``(signature or "").encode("utf-8")`` are accepted.
+    """
+    if isinstance(expr, ast.Name):
+        return expr.id in names
+    if isinstance(expr, ast.Attribute):
+        return _evaluated_signature_value(expr.value, names)
+    if isinstance(expr, ast.IfExp):
+        truth = _static_truth(expr.test)
+        if truth is True:
+            return _evaluated_signature_value(expr.body, names)
+        if truth is False:
+            return _evaluated_signature_value(expr.orelse, names)
+        return _evaluated_signature_value(expr.body, names) and _evaluated_signature_value(
+            expr.orelse, names
+        )
+    if isinstance(expr, ast.BoolOp):
+        operands = expr.values
+        if not operands:
+            return False
+        if isinstance(expr.op, ast.And):
+            # Any operand can supply the value (the first falsy one, else the
+            # last), so every operand must itself derive from the signature.
+            return all(_evaluated_signature_value(operand, names) for operand in operands)
+        # Or: the first operand supplies the value while it is truthy; later
+        # operands are reached only when it is falsy, so only falsy constants
+        # may stand in for it.
+        if not _evaluated_signature_value(operands[0], names):
+            return False
+        return all(
+            (isinstance(operand, ast.Constant) and not operand.value)
+            or _evaluated_signature_value(operand, names)
+            for operand in operands[1:]
+        )
+    if isinstance(expr, ast.Call):
+        func = expr.func
+        if isinstance(func, ast.Attribute):
+            # Only a known value-preserving method, on a trusted receiver.
+            return func.attr in SIGNATURE_METHOD_DERIVATIONS and _evaluated_signature_value(
+                func.value, names
+            )
+        if isinstance(func, ast.Name) and func.id in {"bytes", "str"} and expr.args:
+            return any(
+                _evaluated_signature_value(argument, names) for argument in expr.args
+            ) and all(
+                isinstance(argument, ast.Constant) or _evaluated_signature_value(argument, names)
+                for argument in expr.args
+            )
+        return False
+    return False
+
+
 def _consumes_names(call: ast.Call, names: set[str]) -> bool:
-    """Return True when a comparison argument references a trusted signature name."""
+    """Return True when a comparison argument's evaluated value derives from the signature."""
     if not names:
         return False
     return any(
-        isinstance(node, ast.Name) and node.id in names
+        _evaluated_signature_value(argument, names)
         for argument in [*call.args, *(keyword.value for keyword in call.keywords)]
-        for node in ast.walk(argument)
     )
 
 
@@ -2055,11 +2198,11 @@ def _calls_construct_event(value: ast.expr | None, signature_names: set[str]) ->
     if not signature_names:
         return False
     for keyword in value.keywords:
-        if keyword.arg in {"sig_header", "signature"} and _references_names(
+        if keyword.arg in {"sig_header", "signature"} and _evaluated_signature_value(
             keyword.value, signature_names
         ):
             return True
-    return len(value.args) >= 2 and _references_names(value.args[1], signature_names)
+    return len(value.args) >= 2 and _evaluated_signature_value(value.args[1], signature_names)
 
 
 def _may_return_any(statements: list[ast.stmt]) -> bool:
@@ -2296,10 +2439,6 @@ def _executed_local_calls(
     return calls
 
 
-def _references_names(node: ast.expr, names: set[str]) -> bool:
-    return any(isinstance(child, ast.Name) and child.id in names for child in ast.walk(node))
-
-
 def _callee_signature_binding(
     call: ast.Call, caller_names: set[str], callee: ast.FunctionDef
 ) -> set[str]:
@@ -2316,7 +2455,7 @@ def _callee_signature_binding(
     return {
         name
         for name, value in mapping.items()
-        if "signature" in name.lower() and _references_names(value, caller_names)
+        if "signature" in name.lower() and _evaluated_signature_value(value, caller_names)
     }
 
 
