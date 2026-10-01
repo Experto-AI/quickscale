@@ -15,6 +15,7 @@ from quickscale_core.runtime import (
 )
 from quickscale_modules_orgs.removal import (
     BILLING_PROVIDER_STATE,
+    BoundaryGuardedHooks,
     ExternalProviderField,
     OrganizationRemovalObligation,
     RemovalAction,
@@ -99,6 +100,15 @@ class QuickscaleBillingConfig(AppConfig):
                         boundary_guarded=True,
                     ),
                 ),
+                # Billing ships the hooks its guarded fields name, so the purge
+                # boundary runs billing's own provider-state code and names no
+                # billing label: a pre-transaction reconciliation, the provider
+                # mutex held across it, and the in-transaction refusal guard.
+                boundary_guarded_hooks=BoundaryGuardedHooks(
+                    guard="guard_organization_removal_provider_state",
+                    reconcile="reconcile_organization_removal_provider_state",
+                    mutation_lock="organization_removal_provider_mutation_lock",
+                ),
             ),
         )
 
@@ -160,6 +170,22 @@ class QuickscaleBillingConfig(AppConfig):
         )
 
         return subscription_provider_mutation_lock(organization_id)
+
+    def guard_organization_removal_provider_state(
+        self,
+        organization: Any,
+        *,
+        provider_expired_checkout_id: str = "",
+    ) -> str:
+        """Return billing's purge refusal for live provider state, or an empty string."""
+        from quickscale_modules_billing.services import (
+            guard_organization_removal_provider_state as guard,
+        )
+
+        return guard(
+            organization,
+            provider_expired_checkout_id=provider_expired_checkout_id,
+        )
 
     def detach_account_deletion_user_references(
         self,
