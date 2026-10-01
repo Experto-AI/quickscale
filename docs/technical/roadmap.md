@@ -65,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA215 | no | no | no | no | **yes** |
 | 2 | SA219 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA230 | yes | yes | yes | **yes** | no |
+| 3 | SA230 (in progress) | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -76,7 +76,7 @@ A track is **truly green** only when all three states are yes.
   extension documentation, and, for the conventions, module identities, models and their
   `0001_initial`, module READMEs, and module templates, static files, and template tags, with the
   module page templates and the generated `base.html`, and cross-module imports and settings reads,
-  and the `services.py` public surface (SA228).
+  and the `services.py` public surface.
 - Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
   every package, `ruff.toml`, the test-settings stubs, the CLI apply/deploy/update commands and
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
@@ -94,7 +94,7 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, and the conformance harness with its registry row (SA230, SA226).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
-  SA219, SA220, SA226, SA228, SA230) touch every module and cross every track, so each lands in
+  SA219, SA220, SA226, SA230) touch every module and cross every track, so each lands in
   module-sized slices through that queue, merging `v89` before each slice; a slice edits another
   convention ticket's surface only where its own rule forces it (a rename's callers, for example).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
@@ -121,6 +121,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [module-conventions-inventory.md](../planning/module-conventions-inventory.md), the rules in
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
+
+  **Start early:** once SA230 merges, the first slice adds the import-graph, cross-module, and
+  `services.py` rules (already met on `v89`); the rest waits for SA219, SA220, and SA226.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
@@ -153,60 +156,26 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Context:** inventory §§ 1, 2, 4, 33, 37, 41; D1–D3, D8, D34, D38, D42; rules 1, 6, 31, 35, and
   39. Two settings families and three spellings of a boolean flag.
 
-  **Scope:**
-  - *Settings names.* Every first-party setting and option key follows rules 1 and 6 (the
-    inventory's D1 table, including `QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`); every module gains
-    `QUICKSCALE_<MODULE>_ENABLED`; undeclared settings are declared or removed.
-    **Landed:** blog, CRM, forms, and listings are renamed off their bare families (settings and
-    option keys), blog's undeclared upload/format settings are declared, notifications' `provider`
-    is declared, billing's `billing_currency` key is `currency`, and orgs' mode is
-    `QUICKSCALE_ORGS_MODE` across the manifest, generator and theme templates, module code, tests,
-    and docs, with the retired `QUICKSCALE_MODE` refused at startup. **Landed:** every module
-    declares `QUICKSCALE_<MODULE>_ENABLED`; with it off a module keeps the installed app — data,
-    admin, and its own wiring such as the allauth backend, orgs' middleware, and social's managed
-    files — drops its own public URL mounts (blog and listings keep their staff-guarded Markdownx
-    editor mount), turns its theme flag false, and stops its scheduled jobs: the forms retention
-    command and the backups create/prune runs. Backups' and storage's rule-35 credential checks
-    stay silent while off, `apply` refuses to switch off a module an installed module requires,
-    and the backups remote env-var fallbacks are deleted. **Open:** the `{% url %}`-derived
-    `modulePaths` and the discovery-rendered seam producer (rule 31), and the Secrets bullet.
-  - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
-    check refuses retired settings, each naming the replacement. Generated templates, docs, and
-    `.env.example` use only the new names.
-    **Landed:** every renamed option key is refused by name, and each renamed module's startup
-    check refuses its retired setting names with the replacement named.
-  - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
-    option (core's `__QS_ENV__` projection, as storage does). **Landed:** analytics and
-    notifications project `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY`, `…_HOST_OVERRIDE`,
-    `QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY`, and `…_WEBHOOK_SECRET` through `__QS_ENV__`, their
-    services read those settings, their checks report a missing projected setting, and
-    notifications' in-code env-var defaults are gone. **Open:** billing's `os.getenv` reads
-    (rule 35).
+  **Open scope:**
+  - *Seam producer (rule 31).* The generator renders the theme's seam producer (`index.html.j2`)
+    from the discovered module set: a flag is true only when its module is installed and enabled,
+    and `modulePaths` come from `{% url %}`. The generated `templates/index.html` is user-owned
+    (U3), so existing projects need a release-note step.
+  - *Secrets (rule 35).* Billing's `os.getenv` reads become settings `apply` renders from their
+    `_ENV_VAR` options through core's `__QS_ENV__` projection, as analytics and notifications do.
 
-  Off means installed, data untouched, and public surfaces (URLs, pages, API, scheduled jobs)
-  disabled, admin kept; `apply` refuses to switch off a module another installed module lists in
-  `required_modules`. The generator renders the theme's seam producer (`index.html.j2`) from the
-  discovered module set, and a flag is true only when its module is installed and enabled, with
-  paths from `{% url %}` (rule 31). The generated `templates/index.html` is user-owned (U3), so
-  existing projects need a release-note step.
+  **Acceptance:** a switched-off or uninstalled module's theme flag is false and its paths come from
+  `{% url %}`; no module calls `os.getenv`; the release notes carry the `index.html` step.
 
-  **Acceptance:** every row of the D1 table is applied; each module's `_ENABLED = False` has a test
-  that its public surfaces answer as disabled; a `quickscale.yml` or environment with a
-  retired name fails with the replacement named; no generated file or doc uses a retired name; no
-  module calls `os.getenv`; a switched-off module's theme flag is false.
-
-  **Surfaces:** every manifest and module settings read; `quickscale_cli` plan and apply;
-  `.env.example`; the generated settings templates (Track 3); the theme's `index.html.j2`;
-  core's manifest loader and required-module resolver; railway.md and user docs.
-
-- [x] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
+  **Surfaces:** the generator and the theme's `index.html.j2`; billing settings, manifest, and
+  `.env.example` block; core's `__QS_ENV__` projection.
 
 - [ ] **SA220 — Give every module `is_enabled()` and make `required_modules` cover every import.**
 
   **Context:** the part of the dependency convention that needs SA219's `_ENABLED` settings.
 
   **Scope:** every `services.py` gains `is_enabled()` reading SA219's `_ENABLED`; `required_modules`
-  covers every import SA228 leaves (including `blog` → `storage`), and the import-graph test checks
+  covers every remaining cross-module import (including `blog` → `storage`), and the import-graph test checks
   them against it.
 
   **Acceptance:** each module's `is_enabled()` has a test for both settings; the import-graph test
