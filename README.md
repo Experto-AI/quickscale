@@ -39,6 +39,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_STORAGE_ENABLED` | Keep the module's vendor-credential startup check active. Off keeps the app, its settings, and its data untouched (the storage backend stays projected) and skips the check, so a project switching storage off is not refused startup by a half-configured credential pair. |
 | `backend` | string | `local` | `QUICKSCALE_STORAGE_BACKEND` | Storage backend: `local`, `s3`, or `r2`. |
 | `media_url` | string | `/media/` | `MEDIA_URL` | Base media URL for local/public delivery. |
 | `public_base_url` | string | `""` | `QUICKSCALE_STORAGE_PUBLIC_BASE_URL` | Optional absolute CDN/base URL used as the canonical source for helper-built public media URLs. |

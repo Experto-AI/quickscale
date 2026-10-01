@@ -36,6 +36,7 @@ MEDIA_URL = "/media/"
 # so the generic startup check and the rule 35 vendor check both run against a
 # complete stub.  The credential values mirror what apply writes for unset
 # environment variables (empty strings from the env-var projection).
+QUICKSCALE_STORAGE_ENABLED = True
 QUICKSCALE_STORAGE_BACKEND = "local"
 QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
 AWS_STORAGE_BUCKET_NAME = ""
