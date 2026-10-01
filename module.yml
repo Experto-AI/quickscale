@@ -11,6 +11,15 @@ config:
       description: "Enable the notifications module runtime. Safe local backends remain valid when live delivery is not configured."
       validation: {}
 
+    provider:
+      type: string
+      default: "resend"
+      django_setting: QUICKSCALE_NOTIFICATIONS_PROVIDER
+      description: "Transactional email provider backing the notifications runtime."
+      validation:
+        not_empty: true
+        choices: ["resend"]
+
     sender_name:
       type: string
       default: "QuickScale"

@@ -82,7 +82,7 @@ def test_snapshot_from_settings_uses_explicit_runtime_values(settings: Any) -> N
 
 
 def test_ready_raises_when_provider_missing(settings: Any) -> None:
-    """The applied provider setting is required until SA219 declares it."""
+    """The declared provider setting is enforced by the generic settings check."""
     delattr(settings, "QUICKSCALE_NOTIFICATIONS_PROVIDER")
 
     with pytest.raises(
