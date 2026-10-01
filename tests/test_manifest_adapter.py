@@ -75,6 +75,18 @@ class TestAuthManifestAdapter:
             "quickscale_modules_auth.forms.SignupForm"
         )
 
+    def test_disabled_module_drops_the_accounts_mount(self) -> None:
+        """Rule 1 (D3): off keeps the installed app and settings and mounts
+        none of the module's public account URLs."""
+        spec = _auth_manifest_adapter({"enabled": False})
+
+        assert spec.settings["QUICKSCALE_AUTH_ENABLED"] is False
+        assert "quickscale_modules_auth" in spec.apps
+        assert spec.url_includes == ()
+        assert spec.pre_home_url_includes == ()
+        assert spec.middleware == ("allauth.account.middleware.AccountMiddleware",)
+        assert spec.settings["AUTH_USER_MODEL"] == "quickscale_auth.User"
+
     def test_manifest_owns_the_accounts_mount(self) -> None:
         """Rule 7: the manifest's url_includes is the mount's only home."""
         spec = build_generic_manifest_spec("auth", {"authentication_method": "email"})

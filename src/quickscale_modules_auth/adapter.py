@@ -69,12 +69,20 @@ def _auth_post_hook(
         }
     )
 
+    if not bool(resolved["enabled"]):
+        # Rule 1 (D3): off keeps the module installed — apps, middleware,
+        # settings, and the retained admin — and mounts none of its public
+        # account URLs.
+        url_includes: tuple[tuple[str, str], ...] = ()
+    else:
+        url_includes = spec.url_includes
+
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=("allauth.account.middleware.AccountMiddleware",),
         settings=settings,
         pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
+        url_includes=url_includes,
         managed_files=spec.managed_files,
     )
 
