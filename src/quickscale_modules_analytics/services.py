@@ -130,6 +130,7 @@ def _request_is_staff(request: HttpRequest | None) -> bool:
 
 def analytics_enabled_for_request(
     request: HttpRequest | None,
+    *,
     runtime_settings: AnalyticsRuntimeSettingsSnapshot | None = None,
 ) -> bool:
     """Return whether analytics should be exposed for the current request."""
@@ -224,7 +225,7 @@ def get_template_analytics_context(
 ) -> dict[str, object]:
     """Return template-safe analytics config for manual template adoption."""
     snapshot = get_analytics_runtime_settings()
-    enabled = analytics_enabled_for_request(request, snapshot)
+    enabled = analytics_enabled_for_request(request, runtime_settings=snapshot)
     return {
         "enabled": enabled,
         "provider": snapshot.provider,
@@ -274,11 +275,17 @@ def get_distinct_id(request: HttpRequest) -> str:
 
 
 def capture_event(
+    *,
     distinct_id: str,
     event: str,
     properties: dict[str, Any] | None = None,
 ) -> None:
-    """Capture an analytics event safely, never raising to callers."""
+    """Capture an analytics event safely, never raising to callers.
+
+    Rule 22: this is the module's only capture entry point, so the sending
+    module names its own event; rule 23's listed exception keeps it
+    best-effort, because a vendor outage must not fail a request.
+    """
     if not distinct_id or not event or not is_analytics_active():
         return
 
