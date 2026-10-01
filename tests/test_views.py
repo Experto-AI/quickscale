@@ -293,6 +293,10 @@ class TestFormSubmitAPIView:
             "quickscale_modules_analytics.services.capture_event",
             mock_capture_event,
         )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
+            Mock(return_value=Mock(enabled=True)),
+        )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
@@ -305,9 +309,9 @@ class TestFormSubmitAPIView:
         assert response.status_code == 201
         mock_get_distinct_id.assert_called_once()
         mock_capture_event.assert_called_once_with(
-            "session:test-visitor",
-            "quickscale_forms_submitted",
-            {
+            distinct_id="session:test-visitor",
+            event="quickscale_forms_submitted",
+            properties={
                 "form_slug": form.slug,
                 "module": "forms",
                 "form_id": str(form.pk),
@@ -323,6 +327,7 @@ class TestFormSubmitAPIView:
         form_field,
         email_field,
         monkeypatch,
+        django_capture_on_commit_callbacks,
     ):
         """Disabled analytics must not call services even when the package remains installed."""
         from quickscale_modules_orgs.current_org import org_scope
@@ -339,12 +344,17 @@ class TestFormSubmitAPIView:
             "quickscale_modules_analytics.services.capture_event",
             mock_capture,
         )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
+            Mock(return_value=Mock(enabled=False)),
+        )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
-        response = api_client.post(url, data=data, format="json")
+        with django_capture_on_commit_callbacks(execute=True):
+            response = api_client.post(url, data=data, format="json")
         cache.clear()
 
         assert response.status_code == 201
@@ -449,6 +459,10 @@ class TestFormSubmitAPIView:
         monkeypatch.setattr(
             "quickscale_modules_analytics.services.capture_event",
             mock_capture_event,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
+            Mock(return_value=Mock(enabled=True)),
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
@@ -2017,6 +2031,10 @@ class TestPostCommitTransactionBoundary:
             ),
         )
         monkeypatch.setattr(
+            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
+            Mock(return_value=Mock(enabled=True)),
+        )
+        monkeypatch.setattr(
             "quickscale_modules_forms.views._emit_submission_event",
             _recording_emit,
         )
@@ -2116,6 +2134,10 @@ class TestSubmissionRollbackEffects:
         monkeypatch.setattr(
             "quickscale_modules_analytics.services.capture_event",
             mock_capture_event,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
+            Mock(return_value=Mock(enabled=True)),
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
