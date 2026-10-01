@@ -405,11 +405,13 @@ Plan
 Views check feature access via a decorator:
 
 ```python
+from quickscale_modules_billing.services import require_org_feature
+
 @require_org_feature("crm")
 def crm_index(request): ...
 ```
 
-This decorator resolves the current organization's active subscription through the billing ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent. It ships in orgs' `permissions` today; [decisions.md § Module Conventions](decisions.md#module-conventions) rule 34 moves it to billing's published surface (SA220), because orgs must not name billing, a higher-layer module.
+This decorator resolves the current organization's active subscription through billing's ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent. It is published by `quickscale_modules_billing.services`; orgs must not name billing, a higher-layer module ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 34).
 
 ### Migration Path from User-Scoped Billing
 
@@ -693,13 +695,12 @@ This section records the current repository slice, not the eventual end-state de
 | `TenantMiddleware` (Solo/SaaS org resolution, `request.org`, `app.current_org_id`) | ✅ implemented |
 | Middleware caller-parity coverage for bootstrap/exempt vs org-scoped paths | ✅ implemented |
 | `require_org_role` decorator + `OrgRoleMixin` | ✅ implemented |
-| `require_org_feature` decorator | ✅ implemented with ORM-backed active-subscription lookup and `Plan.features` entitlement checks |
 | Post-signup: auto-create personal org (Solo) or redirect to `/orgs/new/` (SaaS) | ✅ implemented |
 | PostgreSQL RLS migration for downstream tenant tables | ✅ implemented for the shipped repo surface — 22 enrolled tenant models across CRM, Forms, Billing, Blog, Listings, and Social |
 | PostgreSQL cross-org isolation test suite | ✅ implemented — restricted-role proofs plus the `isolation-conformance` CI job cover the enrolled tenant-table surface on PostgreSQL |
 | Server-rendered self-service org creation, dashboard, members, settings, and import-compatible org URL surfaces | ✅ implemented |
 | Server-rendered invitation flow: invite send/revoke on org admin surfaces, notifications registry-backed email, and slugless public accept continuation under `/orgs` | ✅ implemented |
-| Org-authoritative billing bridge (organization ownership fields, canonical org billing routes, flat compatibility shims, and ORM-backed feature gating) | ✅ implemented |
+| Org-authoritative billing bridge (organization ownership fields, canonical org billing routes, and flat compatibility shims) | ✅ implemented |
 | `quickscale_orgs_promote_to_saas` management command | ✅ implemented |
 | Marker-derived organization purge and shared removal obligations | ✅ implemented — installed tenant models are FK-ordered child-before-parent; purge and account deletion discharge the removal obligations each app declares on its own `AppConfig` through one shared coordinator, and a provider-ID system check with per-model `provider_id_classification` refuses the purge while a provider-backed project value remains |
 | React org-management UI surfaces | ✅ implemented for fresh `showcase_react` generations (`OrgListPage`, `OrgCreatePage`, `OrgLayout`, `OrgDashboardPage`, `OrgMembersPage`, `OrgSettingsPage`) |

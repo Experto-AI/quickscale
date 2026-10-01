@@ -170,6 +170,11 @@ names (`quickscale_crm:api-root`, `quickscale_crm:tag-list`, `quickscale_forms:f
 rest) to their snake_case forms under `quickscale_crm:`, `quickscale_forms:`, and
 `quickscale_analytics:`.
 
+**Moved Python surface.** `require_org_feature` moves from `quickscale_modules_orgs.permissions`
+to `quickscale_modules_billing.services`; project code that imports the decorator updates its
+import path. `quickscale_modules_orgs.permissions.resolve_request_org` is the public name of the
+request-organization resolver the gate uses, replacing the private `_resolve_request_org`.
+
 ## Delivery provenance
 
 The SA195/SA192 delivery was synchronized with `v89` at

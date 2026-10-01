@@ -195,18 +195,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
 
-  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. Modules reading
-  other modules' settings, core reading `backups` settings, and orgs naming feature modules by
-  string.
+  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. orgs still names
+  feature modules by string in its purge path and boundary table, and several modules have no
+  declared service surface.
 
   **Scope:**
-  - *References by name* (rule 34). orgs' `require_org_feature` moves to billing's published
-    surface; the purge command's billing steps and `removal.BOUNDARY_GUARDED_OBLIGATIONS` become
-    billing's removal declarations, and its blog and crm label prefixes come from those modules'
-    declarations; orgs' `checks.py`
-    boundary table is declared by each boundary's owner (auth declares account deletion);
-    `TENANT_TABLE_REGISTRY` moves into test code. `require_org_feature` is public, so its move is a
-    release-note item.
+  - *References by name* (rule 34). the purge command's billing steps and
+    `removal.BOUNDARY_GUARDED_OBLIGATIONS` become billing's removal declarations, and its blog and
+    crm label prefixes come from those modules' declarations; orgs' `checks.py` boundary table is
+    declared by each boundary's owner (auth declares account deletion); `TENANT_TABLE_REGISTRY`
+    moves into test code.
   - *Service surface.* Every module gains `services.py`; every `services.py` gains `__all__`,
     keyword-only signatures, and `<Module>Error` on failure, with `test_services.py`.
 
