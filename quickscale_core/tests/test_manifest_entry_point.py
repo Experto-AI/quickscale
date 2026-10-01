@@ -921,7 +921,7 @@ class TestManagedAdapterProvenance:
                 assert "QUICKSCALE_BILLING_ENABLED" in spec.settings
             elif name == "crm":
                 assert "quickscale_modules_crm" in spec.apps
-                assert "CRM_DEALS_PER_PAGE" in spec.settings
+                assert "QUICKSCALE_CRM_DEALS_PER_PAGE" in spec.settings
 
     def test_managed_adapter_origins_refect_registered_modules(self) -> None:
         """MANAGED_ADAPTER_ORIGINS contains exactly the managed modules."""
@@ -2112,195 +2112,195 @@ class TestBlogPostHookFailHard:
     """Missing/empty blog post-hook settings raise instead of defaulting (SA42)."""
 
     def test_missing_posts_per_page_raises_key_error(self) -> None:
-        """A missing BLOG_POSTS_PER_PAGE raises KeyError."""
+        """A missing QUICKSCALE_BLOG_POSTS_PER_PAGE raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
-                "BLOG_ENABLE_RSS": True,
-                "BLOG_API_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_BLOG_RSS_ENABLED": True,
+                "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="BLOG_POSTS_PER_PAGE"):
+        with pytest.raises(KeyError, match="QUICKSCALE_BLOG_POSTS_PER_PAGE"):
             _blog_post_hook(spec, resolved)
 
     def test_missing_enable_rss_raises_key_error(self) -> None:
-        """A missing BLOG_ENABLE_RSS raises KeyError."""
+        """A missing QUICKSCALE_BLOG_RSS_ENABLED raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
-                "BLOG_POSTS_PER_PAGE": 10,
-                "BLOG_API_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
+                "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="BLOG_ENABLE_RSS"):
+        with pytest.raises(KeyError, match="QUICKSCALE_BLOG_RSS_ENABLED"):
             _blog_post_hook(spec, resolved)
 
     def test_missing_rate_limit_raises_key_error(self) -> None:
-        """A missing BLOG_API_RATE_LIMIT raises KeyError."""
+        """A missing QUICKSCALE_BLOG_API_RATE_LIMIT raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
-                "BLOG_POSTS_PER_PAGE": 10,
-                "BLOG_ENABLE_RSS": True,
+                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
+                "QUICKSCALE_BLOG_RSS_ENABLED": True,
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="BLOG_API_RATE_LIMIT"):
+        with pytest.raises(KeyError, match="QUICKSCALE_BLOG_API_RATE_LIMIT"):
             _blog_post_hook(spec, resolved)
 
     def test_empty_rate_limit_raises_manifest_error(self) -> None:
-        """An empty BLOG_API_RATE_LIMIT raises ManifestError instead of defaulting."""
+        """An empty QUICKSCALE_BLOG_API_RATE_LIMIT raises ManifestError instead of defaulting."""
         from quickscale_core.manifest import ManifestError
 
         spec = ModuleWiringSpec(
             settings={
-                "BLOG_POSTS_PER_PAGE": 10,
-                "BLOG_ENABLE_RSS": True,
-                "BLOG_API_RATE_LIMIT": "",
+                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
+                "QUICKSCALE_BLOG_RSS_ENABLED": True,
+                "QUICKSCALE_BLOG_API_RATE_LIMIT": "",
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(ManifestError, match="BLOG_API_RATE_LIMIT"):
+        with pytest.raises(ManifestError, match="QUICKSCALE_BLOG_API_RATE_LIMIT"):
             _blog_post_hook(spec, resolved)
 
     def test_blog_whitespace_only_rate_limit_raises_manifest_error(self) -> None:
-        """A whitespace-only BLOG_API_RATE_LIMIT raises ManifestError."""
+        """A whitespace-only QUICKSCALE_BLOG_API_RATE_LIMIT raises ManifestError."""
         from quickscale_core.manifest import ManifestError
 
         spec = ModuleWiringSpec(
             settings={
-                "BLOG_POSTS_PER_PAGE": 10,
-                "BLOG_ENABLE_RSS": True,
-                "BLOG_API_RATE_LIMIT": "   ",
+                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
+                "QUICKSCALE_BLOG_RSS_ENABLED": True,
+                "QUICKSCALE_BLOG_API_RATE_LIMIT": "   ",
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(ManifestError, match="BLOG_API_RATE_LIMIT"):
+        with pytest.raises(ManifestError, match="QUICKSCALE_BLOG_API_RATE_LIMIT"):
             _blog_post_hook(spec, resolved)
 
     def test_blog_all_settings_present_passes(self) -> None:
         """All blog settings present and valid pass through without error."""
         spec = ModuleWiringSpec(
             settings={
-                "BLOG_POSTS_PER_PAGE": 10,
-                "BLOG_ENABLE_RSS": True,
-                "BLOG_API_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
+                "QUICKSCALE_BLOG_RSS_ENABLED": True,
+                "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
             }
         )
         resolved: dict[str, Any] = {}
         result = _blog_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
-        assert result.settings["BLOG_POSTS_PER_PAGE"] == 10
-        assert result.settings["BLOG_ENABLE_RSS"] is True
-        assert result.settings["BLOG_API_RATE_LIMIT"] == "5/hour"
+        assert result.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
+        assert result.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
+        assert result.settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "5/hour"
 
 
 class TestListingsPostHookFailHard:
     """Missing listings post-hook settings raise instead of defaulting (SA42)."""
 
     def test_missing_listings_per_page_raises_key_error(self) -> None:
-        """A missing LISTINGS_PER_PAGE raises KeyError."""
+        """A missing QUICKSCALE_LISTINGS_PER_PAGE raises KeyError."""
         spec = ModuleWiringSpec(settings={})
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="LISTINGS_PER_PAGE"):
+        with pytest.raises(KeyError, match="QUICKSCALE_LISTINGS_PER_PAGE"):
             _listings_post_hook(spec, resolved)
 
     def test_listings_setting_present_passes(self) -> None:
-        """A valid LISTINGS_PER_PAGE passes through without error."""
-        spec = ModuleWiringSpec(settings={"LISTINGS_PER_PAGE": 24})
+        """A valid QUICKSCALE_LISTINGS_PER_PAGE passes through without error."""
+        spec = ModuleWiringSpec(settings={"QUICKSCALE_LISTINGS_PER_PAGE": 24})
         resolved: dict[str, Any] = {}
         result = _listings_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
-        assert result.settings["LISTINGS_PER_PAGE"] == 24
+        assert result.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 24
 
 
 class TestFormsPostHookFailHard:
     """Missing forms post-hook settings raise instead of defaulting (SA42)."""
 
     def test_missing_forms_per_page_raises_key_error(self) -> None:
-        """A missing FORMS_PER_PAGE raises KeyError."""
+        """A missing QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
-                "FORMS_SPAM_PROTECTION": True,
-                "FORMS_RATE_LIMIT": "5/hour",
-                "FORMS_DATA_RETENTION_DAYS": 365,
-                "FORMS_SUBMISSIONS_API": True,
+                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
+                "QUICKSCALE_FORMS_API_ENABLED": True,
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="FORMS_PER_PAGE"):
+        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"):
             _forms_post_hook(spec, resolved)
 
     def test_missing_spam_protection_raises_key_error(self) -> None:
-        """A missing FORMS_SPAM_PROTECTION raises KeyError."""
+        """A missing QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
-                "FORMS_PER_PAGE": 25,
-                "FORMS_RATE_LIMIT": "5/hour",
-                "FORMS_DATA_RETENTION_DAYS": 365,
-                "FORMS_SUBMISSIONS_API": True,
+                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
+                "QUICKSCALE_FORMS_API_ENABLED": True,
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="FORMS_SPAM_PROTECTION"):
+        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"):
             _forms_post_hook(spec, resolved)
 
     def test_missing_rate_limit_raises_key_error(self) -> None:
-        """A missing FORMS_RATE_LIMIT raises KeyError."""
+        """A missing QUICKSCALE_FORMS_RATE_LIMIT raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
-                "FORMS_PER_PAGE": 25,
-                "FORMS_SPAM_PROTECTION": True,
-                "FORMS_DATA_RETENTION_DAYS": 365,
-                "FORMS_SUBMISSIONS_API": True,
+                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
+                "QUICKSCALE_FORMS_API_ENABLED": True,
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="FORMS_RATE_LIMIT"):
+        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_RATE_LIMIT"):
             _forms_post_hook(spec, resolved)
 
-    def test_missing_data_retention_days_raises_key_error(self) -> None:
-        """A missing FORMS_DATA_RETENTION_DAYS raises KeyError."""
+    def test_missing_retention_days_raises_key_error(self) -> None:
+        """A missing QUICKSCALE_FORMS_RETENTION_DAYS raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
-                "FORMS_PER_PAGE": 25,
-                "FORMS_SPAM_PROTECTION": True,
-                "FORMS_RATE_LIMIT": "5/hour",
-                "FORMS_SUBMISSIONS_API": True,
+                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_FORMS_API_ENABLED": True,
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="FORMS_DATA_RETENTION_DAYS"):
+        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_RETENTION_DAYS"):
             _forms_post_hook(spec, resolved)
 
     def test_missing_submissions_api_raises_key_error(self) -> None:
-        """A missing FORMS_SUBMISSIONS_API raises KeyError."""
+        """A missing QUICKSCALE_FORMS_API_ENABLED raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
-                "FORMS_PER_PAGE": 25,
-                "FORMS_SPAM_PROTECTION": True,
-                "FORMS_RATE_LIMIT": "5/hour",
-                "FORMS_DATA_RETENTION_DAYS": 365,
+                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="FORMS_SUBMISSIONS_API"):
+        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_API_ENABLED"):
             _forms_post_hook(spec, resolved)
 
     def test_forms_all_settings_present_passes(self) -> None:
         """All forms settings present and valid pass through without error."""
         spec = ModuleWiringSpec(
             settings={
-                "FORMS_PER_PAGE": 25,
-                "FORMS_SPAM_PROTECTION": True,
-                "FORMS_RATE_LIMIT": "5/hour",
-                "FORMS_DATA_RETENTION_DAYS": 365,
-                "FORMS_SUBMISSIONS_API": True,
+                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
+                "QUICKSCALE_FORMS_API_ENABLED": True,
             }
         )
         resolved: dict[str, Any] = {}
         result = _forms_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
-        assert result.settings["FORMS_PER_PAGE"] == 25
+        assert result.settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 25
 
 
 _SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {

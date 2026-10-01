@@ -80,10 +80,10 @@ class TestResolveManifestModuleOptions:
     @patch(_MANIFEST_PATCH_PATH)
     def test_overrides_replace_defaults(self, mock_load: MagicMock) -> None:
         mock_load.return_value = _make_mock_manifest(
-            "billing", {"enabled": True, "billing_currency": "usd"}
+            "billing", {"enabled": True, "currency": "usd"}
         )
         result = resolve_manifest_module_options("billing", {"enabled": False})
-        assert result == {"enabled": False, "billing_currency": "usd"}
+        assert result == {"enabled": False, "currency": "usd"}
 
     def test_improperly_configured_base_path_propagates(self) -> None:
         """An unresolvable modules base path fails hard, never defaults."""

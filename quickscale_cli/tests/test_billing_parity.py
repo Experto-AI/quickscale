@@ -29,7 +29,7 @@ _EXPECTED_DEFAULTS: dict[str, object] = {
     "publishable_key_env_var": "STRIPE_PUBLISHABLE_KEY",
     "secret_key_env_var": "STRIPE_SECRET_KEY",
     "webhook_secret_env_var": "QUICKSCALE_BILLING_WEBHOOK_SECRET",
-    "billing_currency": "usd",
+    "currency": "usd",
     "api_rate_limit": "30/hour",
 }
 
@@ -75,12 +75,12 @@ class TestSupportedCurrenciesDeclaration:
     """The manifest's currency choices are the module's supported set."""
 
     def test_manifest_choices_match_the_supported_set(self) -> None:
-        option = _manifest().get_option("billing_currency")
+        option = _manifest().get_option("currency")
         assert option is not None
         assert option.validation.get("choices") == list(_SUPPORTED_CURRENCIES)
 
     def test_supported_set_has_25_lowercase_codes(self) -> None:
-        option = _manifest().get_option("billing_currency")
+        option = _manifest().get_option("currency")
         assert option is not None
         choices = option.validation.get("choices") or []
         assert len(choices) == 25
@@ -111,7 +111,7 @@ class TestBillingValidation:
                     "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
                     "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
                     "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
-                    "billing_currency": "eur",
+                    "currency": "eur",
                 },
             )
             == []
@@ -134,16 +134,13 @@ class TestBillingValidation:
             assert validate_module_options(_manifest(), {option_name: ""}) == []
 
     def test_uppercase_currency_is_canonicalized_before_the_check(self) -> None:
-        assert validate_module_options(_manifest(), {"billing_currency": "USD"}) == []
+        assert validate_module_options(_manifest(), {"currency": "USD"}) == []
 
     @pytest.mark.parametrize("bad_value", ["credits", "", "   "])
     def test_unsupported_or_blank_currency_is_refused(self, bad_value: str) -> None:
-        issues = collect_option_validation_issues(
-            _manifest(), {"billing_currency": bad_value}
-        )
+        issues = collect_option_validation_issues(_manifest(), {"currency": bad_value})
         assert any(
-            issue.option_name == "billing_currency"
-            and "must be one of" in issue.message
+            issue.option_name == "currency" and "must be one of" in issue.message
             for issue in issues
         )
 
@@ -175,7 +172,7 @@ class TestBillingValidation:
             _manifest(),
             {
                 "publishable_key_env_var": "stripe-publishable-key",
-                "billing_currency": "credits",
+                "currency": "credits",
             },
         )
         assert len(issues) >= 2
@@ -205,7 +202,7 @@ class TestBillingResolution:
                 "publishable_key_env_var": "  OPS_STRIPE_PUBLISHABLE_KEY  ",
                 "secret_key_env_var": " OPS_STRIPE_SECRET_KEY ",
                 "webhook_secret_env_var": "  OPS_BILLING_WEBHOOK_SECRET ",
-                "billing_currency": " EUR ",
+                "currency": " EUR ",
             },
         )
         assert resolved == {
@@ -213,7 +210,7 @@ class TestBillingResolution:
             "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
             "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
             "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
-            "billing_currency": "eur",
+            "currency": "eur",
             "api_rate_limit": "30/hour",
         }
 
@@ -222,10 +219,32 @@ class TestBillingResolution:
             "billing",
             {
                 "publishable_key_env_var": "  OPS_STRIPE_PUBLISHABLE_KEY  ",
-                "billing_currency": " EUR ",
+                "currency": " EUR ",
             },
         )
         assert resolve_manifest_module_options("billing", resolved) == resolved
+
+
+class TestBillingRetiredOption:
+    """``billing_currency`` is refused from its manifest declaration."""
+
+    _RETIRED_MESSAGE = (
+        "Legacy config key 'billing_currency' is no longer supported. Use "
+        "'currency' instead."
+    )
+
+    def test_manifest_declares_the_retired_key(self) -> None:
+        assert _manifest().retired_options == {
+            "billing_currency": self._RETIRED_MESSAGE
+        }
+
+    def test_engine_reports_the_retired_key_with_the_declared_message(self) -> None:
+        issues = collect_option_validation_issues(
+            _manifest(), {"billing_currency": "usd"}
+        )
+        assert [(issue.option_name, issue.message) for issue in issues] == [
+            ("billing_currency", self._RETIRED_MESSAGE)
+        ]
 
 
 # ===========================================================================
@@ -248,10 +267,10 @@ class TestBillingConfigurator:
         entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
         config = entry.configure(
             non_interactive=True,
-            existing_config={"enabled": False, "billing_currency": "eur"},
+            existing_config={"enabled": False, "currency": "eur"},
         )
         assert config["enabled"] is False
-        assert config["billing_currency"] == "eur"
+        assert config["currency"] == "eur"
         assert config["secret_key_env_var"] == "STRIPE_SECRET_KEY"
 
     def test_undeclared_existing_keys_are_dropped(self) -> None:
@@ -269,11 +288,11 @@ class TestBillingConfigurator:
             non_interactive=True,
             existing_config={
                 "publishable_key_env_var": "  OPS_STRIPE_PUBLISHABLE_KEY  ",
-                "billing_currency": " GBP ",
+                "currency": " GBP ",
             },
         )
         assert config["publishable_key_env_var"] == "OPS_STRIPE_PUBLISHABLE_KEY"
-        assert config["billing_currency"] == "gbp"
+        assert config["currency"] == "gbp"
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
@@ -296,5 +315,5 @@ class TestBillingConfigurator:
         assert config["publishable_key_env_var"] == "OPS_KEY"
         assert config["secret_key_env_var"] == "OPS_SECRET"
         assert config["webhook_secret_env_var"] == "OPS_HOOK"
-        assert config["billing_currency"] == "eur"
+        assert config["currency"] == "eur"
         assert config["api_rate_limit"] == "10/hour"

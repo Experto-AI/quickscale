@@ -3530,7 +3530,7 @@ class TestBillingEnvExampleSync:
                     "publishable_key_env_var": " OPS_STRIPE_PUBLISHABLE_KEY ",
                     "secret_key_env_var": " OPS_STRIPE_SECRET_KEY ",
                     "webhook_secret_env_var": " OPS_BILLING_WEBHOOK_SECRET ",
-                    "billing_currency": " EUR ",
+                    "currency": " EUR ",
                 }
             )
         }
@@ -3563,7 +3563,7 @@ class TestBillingEnvExampleSync:
                     "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
                     "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
                     "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
-                    "billing_currency": "EUR",
+                    "currency": "EUR",
                 }
             )
         }

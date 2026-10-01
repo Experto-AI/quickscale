@@ -20,7 +20,7 @@ def test_get_manifest_adapter_returns_callable() -> None:
 
 
 def test_missing_required_setting_raises_key_error() -> None:
-    with pytest.raises(KeyError, match="FORMS_PER_PAGE"):
+    with pytest.raises(KeyError, match="QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"):
         _forms_post_hook(ModuleWiringSpec(), {})
 
 
@@ -28,21 +28,21 @@ def test_post_hook_coerces_all_settings() -> None:
     result = _forms_post_hook(
         ModuleWiringSpec(
             settings={
-                "FORMS_PER_PAGE": "25",
-                "FORMS_SPAM_PROTECTION": 1,
-                "FORMS_RATE_LIMIT": 5,
-                "FORMS_DATA_RETENTION_DAYS": "365",
-                "FORMS_SUBMISSIONS_API": 0,
+                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": "25",
+                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": 1,
+                "QUICKSCALE_FORMS_RATE_LIMIT": 5,
+                "QUICKSCALE_FORMS_RETENTION_DAYS": "365",
+                "QUICKSCALE_FORMS_API_ENABLED": 0,
             }
         ),
         {},
     )
     assert result.settings == {
-        "FORMS_PER_PAGE": 25,
-        "FORMS_SPAM_PROTECTION": True,
-        "FORMS_RATE_LIMIT": "5",
-        "FORMS_DATA_RETENTION_DAYS": 365,
-        "FORMS_SUBMISSIONS_API": False,
+        "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+        "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+        "QUICKSCALE_FORMS_RATE_LIMIT": "5",
+        "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
+        "QUICKSCALE_FORMS_API_ENABLED": False,
         "REST_FRAMEWORK": {
             "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "5"},
         },

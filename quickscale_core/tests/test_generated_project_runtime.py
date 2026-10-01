@@ -1342,7 +1342,7 @@ def _source_module_inventory(embedded_root: Path) -> dict[str, Any]:
             for option_name, setting_name in mapping.items()
         }
     assert set(options) == set(names), "Module options do not cover authoritative names"
-    assert sum(len(settings) for settings in expected_settings.values()) == 69
+    assert sum(len(settings) for settings in expected_settings.values()) == 74
 
     model_modules: set[str] = set()
     service_modules: set[str] = set()

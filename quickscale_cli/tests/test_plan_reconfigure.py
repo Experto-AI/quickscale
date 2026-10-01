@@ -192,7 +192,7 @@ class TestPlanReconfigureWithState:
                             "listings": {
                                 "version": None,
                                 "embedded_at": "2025-12-01T11:00:00",
-                                "options": {"listings_per_page": 0},
+                                "options": {"per_page": 0},
                             }
                         },
                     },
@@ -203,7 +203,7 @@ class TestPlanReconfigureWithState:
             result = runner.invoke(plan, ["--reconfigure"], input="n\nn\n")
 
             assert result.exit_code != 0
-            assert "LISTINGS_PER_PAGE" in result.output
+            assert "QUICKSCALE_LISTINGS_PER_PAGE" in result.output
             assert not Path("quickscale.yml").exists()
 
 

@@ -62,25 +62,25 @@ def crm_manifest() -> ModuleManifest:
         name="crm",
         version="0.73.0",
         mutable_options={
-            "enable_api": ConfigOption(
-                name="enable_api",
+            "api_enabled": ConfigOption(
+                name="api_enabled",
                 option_type="boolean",
                 default=True,
-                django_setting="CRM_ENABLE_API",
+                django_setting="QUICKSCALE_CRM_API_ENABLED",
                 mutability="mutable",
             ),
             "deals_per_page": ConfigOption(
                 name="deals_per_page",
                 option_type="integer",
                 default=25,
-                django_setting="CRM_DEALS_PER_PAGE",
+                django_setting="QUICKSCALE_CRM_DEALS_PER_PAGE",
                 mutability="mutable",
             ),
             "contacts_per_page": ConfigOption(
                 name="contacts_per_page",
                 option_type="integer",
                 default=50,
-                django_setting="CRM_CONTACTS_PER_PAGE",
+                django_setting="QUICKSCALE_CRM_CONTACTS_PER_PAGE",
                 mutability="mutable",
             ),
         },
@@ -295,7 +295,7 @@ class TestComputeDeltaWithManifests:
                 "crm": ModuleConfig(
                     name="crm",
                     options={
-                        "enable_api": True,
+                        "api_enabled": True,
                         "deals_per_page": 25,
                         "contacts_per_page": 50,
                     },
@@ -318,7 +318,7 @@ class TestComputeDeltaWithManifests:
                     version="0.73.0",
                     embedded_at="2024-01-01T00:00:00",
                     options={
-                        "enable_api": True,
+                        "api_enabled": True,
                         "deals_per_page": 25,
                         "contacts_per_page": 50,
                     },

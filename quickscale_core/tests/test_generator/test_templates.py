@@ -1336,8 +1336,8 @@ class TestProductionReadyFeatures:
         )
         schema = {
             "listings": {
-                "listings_per_page": {
-                    "setting": "LISTINGS_PER_PAGE",
+                "per_page": {
+                    "setting": "QUICKSCALE_LISTINGS_PER_PAGE",
                     "type": "integer",
                     "validation": {"min": 1},
                 }
@@ -1351,12 +1351,12 @@ class TestProductionReadyFeatures:
             target_output=base_output,
             target_module_name="base",
             config_values={},
-            module_settings={"LISTINGS_PER_PAGE": 12},
+            module_settings={"QUICKSCALE_LISTINGS_PER_PAGE": 12},
             module_settings_schema=schema,
         )
 
         assert namespace["MODULE_SETTINGS_SCHEMA"] == schema
-        assert namespace["LISTINGS_PER_PAGE"] == 12
+        assert namespace["QUICKSCALE_LISTINGS_PER_PAGE"] == 12
 
     def test_local_settings_preserve_default_storage_backend(
         self, jinja_env: Environment, test_context: dict[str, str]

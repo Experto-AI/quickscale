@@ -33,28 +33,6 @@ _RUNTIME_SETTINGS = (
 )
 
 
-def check_runtime_settings(
-    app_configs: object = None,
-    **kwargs: object,
-) -> list[CheckMessage]:
-    """Fail startup when an applied-but-undeclared runtime setting is absent.
-
-    ``QUICKSCALE_NOTIFICATIONS_PROVIDER`` is projected by the module's adapter
-    and read directly by the runtime snapshot, but the manifest does not
-    declare it yet — so rule 3's generic settings check cannot cover it.
-    When SA219 declares it, the generic check takes over and this check goes.
-    """
-    if hasattr(settings, "QUICKSCALE_NOTIFICATIONS_PROVIDER"):
-        return []
-    return [
-        Error(
-            "The QUICKSCALE_NOTIFICATIONS_PROVIDER setting is required. "
-            "Set it to the configured provider name in your Django settings.",
-            id="quickscale_notifications.E001",
-        )
-    ]
-
-
 def check_vendor_secrets(
     app_configs: object = None,
     **kwargs: object,

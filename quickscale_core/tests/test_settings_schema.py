@@ -66,16 +66,16 @@ class TestCompileSettingsSchema:
     def test_mutable_option_compiles_with_type_and_validation(self) -> None:
         manifest = _manifest(
             _option(
-                "listings_per_page",
+                "per_page",
                 option_type="integer",
-                setting="LISTINGS_PER_PAGE",
+                setting="QUICKSCALE_LISTINGS_PER_PAGE",
                 validation={"min": 1},
             )
         )
 
         assert compile_settings_schema(manifest) == {
-            "listings_per_page": {
-                "setting": "LISTINGS_PER_PAGE",
+            "per_page": {
+                "setting": "QUICKSCALE_LISTINGS_PER_PAGE",
                 "type": "integer",
                 "validation": {"min": 1},
             }
@@ -148,7 +148,7 @@ class TestCompileSettingsSchema:
             REPO_ROOT / "quickscale_modules" / "listings" / "module.yml"
         )
 
-        assert schema["listings_per_page"]["setting"] == "LISTINGS_PER_PAGE"
+        assert schema["per_page"]["setting"] == "QUICKSCALE_LISTINGS_PER_PAGE"
 
 
 class TestCollectSettingIssues:
@@ -160,7 +160,7 @@ class TestCollectSettingIssues:
                 _option(
                     "per_page",
                     option_type="integer",
-                    setting="LISTINGS_PER_PAGE",
+                    setting="QUICKSCALE_LISTINGS_PER_PAGE",
                     validation={"min": 1},
                 ),
                 _option(
@@ -184,14 +184,14 @@ class TestCollectSettingIssues:
         issues = collect_setting_issues("demo", self._schema(), {"per_page": "12"})
 
         assert [issue.message for issue in issues] == [
-            "LISTINGS_PER_PAGE (modules.demo.per_page) must be an integer"
+            "QUICKSCALE_LISTINGS_PER_PAGE (modules.demo.per_page) must be an integer"
         ]
 
     def test_minimum_violation_names_the_rule(self) -> None:
         issues = collect_setting_issues("demo", self._schema(), {"per_page": 0})
 
         assert [issue.message for issue in issues] == [
-            "LISTINGS_PER_PAGE (modules.demo.per_page) must be >= 1"
+            "QUICKSCALE_LISTINGS_PER_PAGE (modules.demo.per_page) must be >= 1"
         ]
 
     def _list_schema(self) -> dict[str, dict[str, object]]:
@@ -280,8 +280,8 @@ class TestRenderSettingsSchema:
 
     def test_schema_is_rendered_under_its_module_name(self) -> None:
         schema = {
-            "listings_per_page": {
-                "setting": "LISTINGS_PER_PAGE",
+            "per_page": {
+                "setting": "QUICKSCALE_LISTINGS_PER_PAGE",
                 "type": "integer",
                 "validation": {"min": 1},
             }
@@ -294,8 +294,8 @@ class TestRenderSettingsSchema:
             "MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {"
             in content
         )
-        assert "'listings': {'listings_per_page': {" in content
-        assert "'setting': 'LISTINGS_PER_PAGE'" in content
+        assert "'listings': {'per_page': {" in content
+        assert "'setting': 'QUICKSCALE_LISTINGS_PER_PAGE'" in content
 
     def test_empty_specs_render_an_empty_schema(self) -> None:
         content = render_settings_modules_py({})
@@ -311,7 +311,11 @@ class TestModuleWiringSpecSchema:
 
     def test_no_schema_contributes_nothing(self) -> None:
         content = render_settings_modules_py(
-            {"listings": ModuleWiringSpec(settings={"LISTINGS_PER_PAGE": 12})}
+            {
+                "listings": ModuleWiringSpec(
+                    settings={"QUICKSCALE_LISTINGS_PER_PAGE": 12}
+                )
+            }
         )
 
         assert (

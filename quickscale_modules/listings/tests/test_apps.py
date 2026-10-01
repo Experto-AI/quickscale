@@ -17,7 +17,7 @@ def test_listings_app_config_matches_packaged_module_contract() -> None:
 
 def test_startup_check_refuses_a_wrong_typed_setting(settings) -> None:
     """Rule 3: a wrong-typed declared setting fails startup naming the setting."""
-    settings.LISTINGS_PER_PAGE = "12"
+    settings.QUICKSCALE_LISTINGS_PER_PAGE = "12"
 
-    with pytest.raises(ImproperlyConfigured, match="LISTINGS_PER_PAGE"):
+    with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_LISTINGS_PER_PAGE"):
         apps.get_app_config("quickscale_listings").ready()

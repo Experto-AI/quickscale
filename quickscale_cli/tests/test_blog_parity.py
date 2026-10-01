@@ -19,12 +19,21 @@ from quickscale_core.manifest.option_validation import (
     collect_option_validation_issues,
     validate_module_options,
 )
+from quickscale_core.schema.config_schema import ConfigValidationError, validate_config
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
     "posts_per_page": 10,
-    "enable_rss": True,
+    "rss_enabled": True,
     "api_rate_limit": "5/hour",
+    "api_upload_max_bytes": 10485760,
+    "api_upload_max_width": 4096,
+    "api_upload_max_height": 4096,
+    "api_allowed_image_formats": ["PNG", "JPEG", "WEBP", "GIF"],
 }
+
+_RETIRED_ENABLE_RSS_MESSAGE = (
+    "Legacy config key 'enable_rss' is no longer supported. Use 'rss_enabled' instead."
+)
 
 
 def _manifest():
@@ -49,19 +58,42 @@ class TestBlogManifestContract:
         manifest = _manifest()
         assert (
             manifest.get_option("posts_per_page").django_setting
-            == "BLOG_POSTS_PER_PAGE"
+            == "QUICKSCALE_BLOG_POSTS_PER_PAGE"
         )
-        assert manifest.get_option("enable_rss").django_setting == "BLOG_ENABLE_RSS"
+        assert (
+            manifest.get_option("rss_enabled").django_setting
+            == "QUICKSCALE_BLOG_RSS_ENABLED"
+        )
         assert (
             manifest.get_option("api_rate_limit").django_setting
-            == "BLOG_API_RATE_LIMIT"
+            == "QUICKSCALE_BLOG_API_RATE_LIMIT"
         )
 
     def test_manifest_declares_the_option_types(self) -> None:
         manifest = _manifest()
         assert manifest.get_option("posts_per_page").option_type == "integer"
-        assert manifest.get_option("enable_rss").option_type == "boolean"
+        assert manifest.get_option("rss_enabled").option_type == "boolean"
         assert manifest.get_option("api_rate_limit").option_type == "string"
+
+    def test_manifest_declares_the_upload_option_types(self) -> None:
+        manifest = _manifest()
+        assert manifest.get_option("api_upload_max_bytes").option_type == "integer"
+        assert manifest.get_option("api_upload_max_width").option_type == "integer"
+        assert manifest.get_option("api_upload_max_height").option_type == "integer"
+        assert manifest.get_option("api_allowed_image_formats").option_type == "list"
+        assert (
+            manifest.get_option("api_allowed_image_formats").django_setting
+            == "QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS"
+        )
+
+    def test_unsupported_or_blank_image_format_is_refused(self) -> None:
+        for bad_value in ([""], ["PNG", ""], ["TIFF"]):
+            issues = collect_option_validation_issues(
+                _manifest(), {"api_allowed_image_formats": bad_value}
+            )
+            assert any(
+                issue.option_name == "api_allowed_image_formats" for issue in issues
+            ), bad_value
 
 
 # ===========================================================================
@@ -81,7 +113,7 @@ class TestBlogValidation:
                 _manifest(),
                 {
                     "posts_per_page": 20,
-                    "enable_rss": False,
+                    "rss_enabled": False,
                     "api_rate_limit": "10/minute",
                 },
             )
@@ -95,7 +127,7 @@ class TestBlogValidation:
         )
         assert any(
             issue.option_name == "posts_per_page"
-            and "BLOG_POSTS_PER_PAGE" in issue.message
+            and "QUICKSCALE_BLOG_POSTS_PER_PAGE" in issue.message
             for issue in issues
         )
 
@@ -109,13 +141,45 @@ class TestBlogValidation:
     def test_non_boolean_enable_rss_is_refused(self) -> None:
         issues = collect_option_validation_issues(
             _manifest(),
-            {"enable_rss": "yes"},
-            supplied={"enable_rss": "yes"},
+            {"rss_enabled": "yes"},
+            supplied={"rss_enabled": "yes"},
         )
         assert any(
-            issue.option_name == "enable_rss" and "boolean" in issue.message
+            issue.option_name == "rss_enabled" and "boolean" in issue.message
             for issue in issues
         )
+
+
+class TestBlogRetiredOption:
+    """``enable_rss`` is refused from its manifest declaration."""
+
+    def test_manifest_declares_the_retired_key(self) -> None:
+        assert _manifest().retired_options == {
+            "enable_rss": _RETIRED_ENABLE_RSS_MESSAGE
+        }
+
+    def test_engine_reports_the_retired_key_with_the_declared_message(self) -> None:
+        issues = collect_option_validation_issues(_manifest(), {"enable_rss": True})
+        assert [(issue.option_name, issue.message) for issue in issues] == [
+            ("enable_rss", _RETIRED_ENABLE_RSS_MESSAGE)
+        ]
+
+    def test_config_load_refuses_the_retired_key(self) -> None:
+        yaml_content = (
+            'version: "1"\n'
+            "project:\n"
+            "  slug: demo\n"
+            "  package: demo\n"
+            "modules:\n"
+            "  blog:\n"
+            "    enable_rss: true\n"
+        )
+
+        with pytest.raises(ConfigValidationError) as excinfo:
+            validate_config(yaml_content)
+
+        assert "enable_rss" in str(excinfo.value)
+        assert "rss_enabled" in str(excinfo.value)
 
 
 # ===========================================================================
@@ -138,10 +202,10 @@ class TestBlogConfigurator:
         entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
         config = entry.configure(
             non_interactive=True,
-            existing_config={"posts_per_page": 20, "enable_rss": False},
+            existing_config={"posts_per_page": 20, "rss_enabled": False},
         )
         assert config["posts_per_page"] == 20
-        assert config["enable_rss"] is False
+        assert config["rss_enabled"] is False
         assert config["api_rate_limit"] == "5/hour"
 
     def test_undeclared_existing_keys_are_dropped(self) -> None:
@@ -169,7 +233,14 @@ class TestBlogConfigurator:
     ) -> None:
         """A padded interactive answer is stored in its canonical form."""
         mock_confirm.return_value = True
-        mock_prompt.side_effect = [20, "  10/minute  "]
+        mock_prompt.side_effect = [
+            20,
+            "  10/minute  ",
+            10485760,
+            4096,
+            4096,
+            "PNG, JPEG, WEBP, GIF",
+        ]
 
         entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
         config = entry.configure(non_interactive=False)
@@ -184,7 +255,14 @@ class TestBlogConfigurator:
     ) -> None:
         """The planner's own output carries the canonical rate limit."""
         mock_confirm.return_value = True
-        mock_prompt.side_effect = [20, "  10/minute  "]
+        mock_prompt.side_effect = [
+            20,
+            "  10/minute  ",
+            10485760,
+            4096,
+            4096,
+            "PNG, JPEG, WEBP, GIF",
+        ]
 
         configured = _configure_selected_modules(
             ["blog"],

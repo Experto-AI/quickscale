@@ -1,7 +1,7 @@
 """Tests for CRM AppConfig startup behavior.
 
 Fail-hard CRM API-enable flag: ``AppConfig.ready()`` must raise
-``ImproperlyConfigured`` when ``CRM_ENABLE_API`` is missing from Django settings.
+``ImproperlyConfigured`` when ``QUICKSCALE_CRM_API_ENABLED`` is missing from Django settings.
 """
 
 from importlib import import_module
@@ -33,9 +33,9 @@ def test_app_config_ready_is_safe_to_call() -> None:
 def test_ready_raises_improperly_configured_when_crm_enable_api_missing(
     settings,
 ) -> None:
-    """Missing CRM_ENABLE_API must raise at startup."""
+    """Missing QUICKSCALE_CRM_API_ENABLED must raise at startup."""
     # Remove the setting to simulate a misconfigured project
-    del settings.CRM_ENABLE_API
+    del settings.QUICKSCALE_CRM_API_ENABLED
 
     config = QuickscaleCrmConfig(
         "quickscale_modules_crm",
@@ -44,7 +44,7 @@ def test_ready_raises_improperly_configured_when_crm_enable_api_missing(
 
     with pytest.raises(
         ImproperlyConfigured,
-        match="CRM_ENABLE_API",
+        match="QUICKSCALE_CRM_API_ENABLED",
     ):
         config.ready()
 
@@ -56,11 +56,11 @@ def test_missing_setting_fails_check_migrate_and_runserver(settings) -> None:
     from django.core.management.base import SystemCheckError
     from django.core.management.commands import migrate, runserver
 
-    del settings.CRM_ENABLE_API
+    del settings.QUICKSCALE_CRM_API_ENABLED
 
-    with pytest.raises(SystemCheckError, match="CRM_ENABLE_API"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_CRM_API_ENABLED"):
         call_command("check")
-    with pytest.raises(SystemCheckError, match="CRM_ENABLE_API"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_CRM_API_ENABLED"):
         migrate.Command().check()
-    with pytest.raises(SystemCheckError, match="CRM_ENABLE_API"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_CRM_API_ENABLED"):
         runserver.Command().check()

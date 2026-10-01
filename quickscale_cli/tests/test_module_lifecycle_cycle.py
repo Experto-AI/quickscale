@@ -405,7 +405,7 @@ def _write_backups_quickscale_config(
     )
 
 
-def _write_blog_quickscale_config(base_path: Path, *, enable_rss: bool) -> None:
+def _write_blog_quickscale_config(base_path: Path, *, rss_enabled: bool) -> None:
     """Write a quickscale.yml containing the blog module configuration."""
     config_data = {
         "version": "1",
@@ -414,7 +414,7 @@ def _write_blog_quickscale_config(base_path: Path, *, enable_rss: bool) -> None:
             "package": "myproject",
             "theme": "showcase_react",
         },
-        "modules": {"blog": {"enable_rss": enable_rss}},
+        "modules": {"blog": {"rss_enabled": rss_enabled}},
         "docker": {"start": False},
     }
     (base_path / "quickscale.yml").write_text(
@@ -422,7 +422,7 @@ def _write_blog_quickscale_config(base_path: Path, *, enable_rss: bool) -> None:
     )
 
 
-def _write_blog_state(project_path: Path, *, enable_rss: bool) -> None:
+def _write_blog_state(project_path: Path, *, rss_enabled: bool) -> None:
     """Write .quickscale/state.yml with blog installed and configured."""
     state_data = {
         "version": "1",
@@ -439,7 +439,7 @@ def _write_blog_state(project_path: Path, *, enable_rss: bool) -> None:
                 "version": "0.73.0",
                 "commit_sha": "abc123",
                 "embedded_at": "2025-01-01T00:00:00",
-                "options": {"enable_rss": enable_rss},
+                "options": {"rss_enabled": rss_enabled},
             }
         },
     }
@@ -854,7 +854,7 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
 
 
 def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
-    """Repeat apply should treat blog.enable_rss as mutable and avoid re-embed."""
+    """Repeat apply should treat blog.rss_enabled as mutable and avoid re-embed."""
     cli_runner = CliRunner()
 
     with cli_runner.isolated_filesystem():
@@ -881,7 +881,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         inventory = _write_complete_module_manifest_inventory(project_path)
         _assert_physical_module_manifest_names(project_path, inventory)
 
-        # quickscale.yml: blog with enable_rss=False; auth and orgs are
+        # quickscale.yml: blog with rss_enabled=False; auth and orgs are
         # installed.  Orgs requires notifications which is materialized
         # by _load_and_validate_config.
         config_data = {
@@ -894,7 +894,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
             "modules": {
                 "auth": {},
                 "orgs": {},
-                "blog": {"enable_rss": False},
+                "blog": {"rss_enabled": False},
             },
             "docker": {"start": False},
         }
@@ -903,7 +903,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         )
 
         # State: auth, orgs, notifications (required by orgs), and blog with
-        # enable_rss=True so the delta shows one mutable change.
+        # rss_enabled=True so the delta shows one mutable change.
         state_data = {
             "version": "1",
             "project": {
@@ -949,7 +949,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
                     "version": "0.73.0",
                     "commit_sha": "abc123",
                     "embedded_at": "2025-01-01T00:00:00",
-                    "options": {"enable_rss": True},
+                    "options": {"rss_enabled": True},
                 },
             },
             "managed_files": {},
@@ -1036,7 +1036,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
 
         assert result.exit_code == 0
         assert "Mutable config changes (1)" in result.output
-        assert "blog.enable_rss:" in result.output
+        assert "blog.rss_enabled:" in result.output
         assert "Immutable config changes" not in result.output
         assert "No new modules to embed" in result.output
         assert mock_embed_modules_step.call_args.args[1] == []
@@ -1051,10 +1051,10 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         )
 
         settings_modules = (package_dir / "settings" / "modules.py").read_text()
-        assert "'BLOG_ENABLE_RSS': False" in settings_modules
+        assert "'QUICKSCALE_BLOG_RSS_ENABLED': False" in settings_modules
 
         state = yaml.safe_load((project_path / ".quickscale" / "state.yml").read_text())
-        assert state["modules"]["blog"]["options"]["enable_rss"] is False
+        assert state["modules"]["blog"]["options"]["rss_enabled"] is False
 
 
 def test_update_after_removal_only_targets_remaining_modules(

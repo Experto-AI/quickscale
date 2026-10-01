@@ -899,10 +899,10 @@ class TestModuleWiringSpecs:
             {
                 "blog": {
                     "posts_per_page": 10,
-                    "enable_rss": True,
+                    "rss_enabled": True,
                     "api_rate_limit": "5/hour",
                 },
-                "listings": {"listings_per_page": 12},
+                "listings": {"per_page": 12},
             }
         )
         _, _, settings, _ = collect_wiring(specs)
@@ -911,7 +911,7 @@ class TestModuleWiringSpecs:
 
     def test_listings_wiring_includes_markdownx_urls(self):
         """Listings wiring should include markdownx URLs for admin uploads"""
-        specs = _build_specs({"listings": {"listings_per_page": 12}})
+        specs = _build_specs({"listings": {"per_page": 12}})
 
         assert specs["listings"].url_includes == (
             ("listings/", "quickscale_modules_listings.urls"),
@@ -924,7 +924,7 @@ class TestModuleWiringSpecs:
             {
                 "blog": {
                     "posts_per_page": 10,
-                    "enable_rss": False,
+                    "rss_enabled": False,
                     "api_rate_limit": "15/minute",
                 }
             }
@@ -932,8 +932,8 @@ class TestModuleWiringSpecs:
 
         _, _, settings, urls = collect_wiring(specs)
 
-        assert settings["BLOG_ENABLE_RSS"] is False
-        assert settings["BLOG_API_RATE_LIMIT"] == "15/minute"
+        assert settings["QUICKSCALE_BLOG_RSS_ENABLED"] is False
+        assert settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "15/minute"
         assert ("blog/", "quickscale_modules_blog.urls") in urls
         assert ("markdownx/", "markdownx.urls") in urls
 
@@ -1096,22 +1096,22 @@ class TestModuleWiringSpecs:
         specs = _build_specs(
             {
                 "forms": {
-                    "forms_per_page": 15,
+                    "submissions_per_page": 15,
                     "spam_protection_enabled": False,
                     "rate_limit": "10/minute",
-                    "data_retention_days": 14,
-                    "submissions_api_enabled": False,
+                    "retention_days": 14,
+                    "api_enabled": False,
                 }
             }
         )
 
         _, _, settings, _ = collect_wiring(specs)
 
-        assert settings["FORMS_PER_PAGE"] == 15
-        assert settings["FORMS_SPAM_PROTECTION"] is False
-        assert settings["FORMS_RATE_LIMIT"] == "10/minute"
-        assert settings["FORMS_DATA_RETENTION_DAYS"] == 14
-        assert settings["FORMS_SUBMISSIONS_API"] is False
+        assert settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 15
+        assert settings["QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"] is False
+        assert settings["QUICKSCALE_FORMS_RATE_LIMIT"] == "10/minute"
+        assert settings["QUICKSCALE_FORMS_RETENTION_DAYS"] == 14
+        assert settings["QUICKSCALE_FORMS_API_ENABLED"] is False
         assert settings["REST_FRAMEWORK"] == {
             "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
         }
@@ -1121,16 +1121,16 @@ class TestModuleWiringSpecs:
         specs = _build_specs(
             {
                 "crm": {
-                    "enable_api": True,
+                    "api_enabled": True,
                     "deals_per_page": 10,
                     "contacts_per_page": 20,
                 },
                 "forms": {
-                    "forms_per_page": 15,
+                    "submissions_per_page": 15,
                     "spam_protection_enabled": True,
                     "rate_limit": "10/minute",
-                    "data_retention_days": 14,
-                    "submissions_api_enabled": True,
+                    "retention_days": 14,
+                    "api_enabled": True,
                 },
             }
         )
@@ -1139,11 +1139,11 @@ class TestModuleWiringSpecs:
 
         assert "rest_framework" in apps
         assert "django_filters" in apps
-        assert settings["CRM_ENABLE_API"] is True
-        assert settings["CRM_DEALS_PER_PAGE"] == 10
-        assert settings["CRM_CONTACTS_PER_PAGE"] == 20
-        assert settings["FORMS_PER_PAGE"] == 15
-        assert settings["FORMS_SUBMISSIONS_API"] is True
+        assert settings["QUICKSCALE_CRM_API_ENABLED"] is True
+        assert settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] == 10
+        assert settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] == 20
+        assert settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 15
+        assert settings["QUICKSCALE_FORMS_API_ENABLED"] is True
         assert settings["REST_FRAMEWORK"] == {
             "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
         }
@@ -1224,9 +1224,7 @@ class TestModuleWiringSpecs:
         original = dict(MANIFEST_ADAPTER_REGISTRY)
         try:
             MANIFEST_ADAPTER_REGISTRY.clear()
-            specs = _build_specs(
-                {"billing": {"enabled": True, "billing_currency": "usd"}}
-            )
+            specs = _build_specs({"billing": {"enabled": True, "currency": "usd"}})
             apps, _, settings, _ = collect_wiring(specs)
             assert "quickscale_modules_billing" in apps
             assert settings["QUICKSCALE_BILLING_ENABLED"] is True
@@ -1257,11 +1255,11 @@ class TestFormsModuleConfig:
         config = MODULE_CONFIGURATOR_REGISTRY["forms"].configure(non_interactive=False)
 
         assert config == {
-            "forms_per_page": 40,
+            "submissions_per_page": 40,
             "spam_protection_enabled": False,
             "rate_limit": "10/minute",
-            "data_retention_days": 30,
-            "submissions_api_enabled": False,
+            "retention_days": 30,
+            "api_enabled": False,
         }
 
 
@@ -1409,7 +1407,7 @@ class TestBillingModuleConfig:
         assert config["publishable_key_env_var"] == "STRIPE_PUBLISHABLE_KEY"
         assert config["secret_key_env_var"] == "STRIPE_SECRET_KEY"
         assert config["webhook_secret_env_var"] == "QUICKSCALE_BILLING_WEBHOOK_SECRET"
-        assert config["billing_currency"] == "usd"
+        assert config["currency"] == "usd"
         assert config["api_rate_limit"] == "30/hour"
 
     def test_billing_in_module_configurators(self):
@@ -1418,7 +1416,7 @@ class TestBillingModuleConfig:
         config = MODULE_CONFIGURATOR_REGISTRY["billing"].configure(non_interactive=True)
 
         assert config["enabled"] is True
-        assert config["billing_currency"] == "usd"
+        assert config["currency"] == "usd"
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
@@ -1445,7 +1443,7 @@ class TestBillingModuleConfig:
             "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
             "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
             "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
-            "billing_currency": "eur",
+            "currency": "eur",
             "api_rate_limit": "10/hour",
         }
 
@@ -1840,7 +1838,7 @@ class TestCRMModuleConfig:
     def test_get_default_crm_config(self):
         """Test default CRM configuration"""
         config = MODULE_CONFIGURATOR_REGISTRY["crm"].get_defaults()
-        assert config["enable_api"] is True
+        assert config["api_enabled"] is True
         assert config["deals_per_page"] == 25
         assert config["contacts_per_page"] == 50
         assert "default_pipeline_stages" not in config
@@ -1848,7 +1846,7 @@ class TestCRMModuleConfig:
     def test_configure_crm_non_interactive(self):
         """Test non-interactive CRM configuration"""
         config = MODULE_CONFIGURATOR_REGISTRY["crm"].configure(non_interactive=True)
-        assert config["enable_api"] is True
+        assert config["api_enabled"] is True
         assert config["deals_per_page"] == 25
         assert config["contacts_per_page"] == 50
 
@@ -1873,7 +1871,7 @@ class TestCRMModuleConfig:
         mock_prompt.side_effect = [30, 100]
 
         config = MODULE_CONFIGURATOR_REGISTRY["crm"].configure(non_interactive=False)
-        assert config["enable_api"] is False
+        assert config["api_enabled"] is False
         assert config["deals_per_page"] == 30
         assert config["contacts_per_page"] == 100
 
@@ -1882,7 +1880,7 @@ class TestCRMModuleConfig:
         assert "crm" in MODULE_CONFIGURATOR_REGISTRY
         entry = MODULE_CONFIGURATOR_REGISTRY["crm"]
         config = entry.configure(non_interactive=True)
-        assert "enable_api" in config
+        assert "api_enabled" in config
 
 
 # SA9.1-REV-001: repin_existing mode and _update_dependency_entries

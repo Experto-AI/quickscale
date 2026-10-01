@@ -76,7 +76,7 @@ project:
   theme: showcase_react
 modules:
   crm:
-    enable_api: true
+    api_enabled: true
     deals_per_page: 30
     contacts_per_page: 60
     default_pipeline_stages:
@@ -459,7 +459,7 @@ modules:
                 "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
             ),
             (
-                "billing_currency",
+                "currency",
                 '"credits"',
                 "QUICKSCALE_BILLING_CURRENCY",
             ),
@@ -748,7 +748,7 @@ class TestGenerateYaml:
                 "crm": ModuleConfig(
                     name="crm",
                     options={
-                        "enable_api": True,
+                        "api_enabled": True,
                         "deals_per_page": 25,
                         "contacts_per_page": 50,
                     },
@@ -762,7 +762,7 @@ class TestGenerateYaml:
         assert "default_pipeline_stages" not in yaml_output
         parsed = validate_config(yaml_output)
         assert parsed.modules["crm"].options == {
-            "enable_api": True,
+            "api_enabled": True,
             "deals_per_page": 25,
             "contacts_per_page": 50,
         }

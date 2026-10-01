@@ -12,16 +12,26 @@ def _forms_post_hook(
 ) -> ModuleWiringSpec:
     """Apply forms-specific int/bool/str coercions and DRF throttle scope."""
     settings = dict(spec.settings)
-    settings["FORMS_PER_PAGE"] = int(settings["FORMS_PER_PAGE"])
-    settings["FORMS_SPAM_PROTECTION"] = bool(settings["FORMS_SPAM_PROTECTION"])
-    settings["FORMS_RATE_LIMIT"] = str(settings["FORMS_RATE_LIMIT"])
-    settings["FORMS_DATA_RETENTION_DAYS"] = int(settings["FORMS_DATA_RETENTION_DAYS"])
-    settings["FORMS_SUBMISSIONS_API"] = bool(settings["FORMS_SUBMISSIONS_API"])
+    settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] = int(
+        settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"]
+    )
+    settings["QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"] = bool(
+        settings["QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"]
+    )
+    settings["QUICKSCALE_FORMS_RATE_LIMIT"] = str(
+        settings["QUICKSCALE_FORMS_RATE_LIMIT"]
+    )
+    settings["QUICKSCALE_FORMS_RETENTION_DAYS"] = int(
+        settings["QUICKSCALE_FORMS_RETENTION_DAYS"]
+    )
+    settings["QUICKSCALE_FORMS_API_ENABLED"] = bool(
+        settings["QUICKSCALE_FORMS_API_ENABLED"]
+    )
     # Rule 32 — the form submission scope carries the module stem and its rate
     # is the rate_limit option, contributed here for rule 30's merge.
     settings["REST_FRAMEWORK"] = {
         "DEFAULT_THROTTLE_RATES": {
-            "quickscale_forms_submit": settings["FORMS_RATE_LIMIT"],
+            "quickscale_forms_submit": settings["QUICKSCALE_FORMS_RATE_LIMIT"],
         },
     }
     return ModuleWiringSpec(

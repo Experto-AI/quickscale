@@ -162,9 +162,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *Settings names.* Every first-party setting and option key follows rules 1 and 6 (the
     inventory's D1 table, including `QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`); every module gains
     `QUICKSCALE_<MODULE>_ENABLED`; undeclared settings are declared or removed.
+    **Landed:** blog, CRM, forms, and listings are renamed off their bare families (settings and
+    option keys), blog's undeclared upload/format settings are declared, notifications' `provider`
+    is declared, and billing's `billing_currency` key is `currency`. **Open:** `QUICKSCALE_MODE` →
+    `QUICKSCALE_ORGS_MODE` (it rides the generator templates), every module's
+    `QUICKSCALE_<MODULE>_ENABLED`, and the backups fallback deletion.
   - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
     check refuses retired settings, each naming the replacement. Generated templates, docs, and
     `.env.example` use only the new names.
+    **Landed:** every renamed option key is refused by name. **Open:** the startup check's
+    retired-setting refusal.
   - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
     option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
     notifications' `os.getenv` reads and in-code default variable names go (rule 35).

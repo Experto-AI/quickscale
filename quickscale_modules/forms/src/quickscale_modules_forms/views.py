@@ -144,7 +144,7 @@ class FormsAdminApiMixin:
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
         # Rule 3: the startup check has validated the declared value, so the
         # view reads it directly (and is never reached while it is missing).
-        if not settings.FORMS_SUBMISSIONS_API:
+        if not settings.QUICKSCALE_FORMS_API_ENABLED:
             raise Http404
         APIView.initial(self, request, *args, **kwargs)
 
@@ -215,7 +215,7 @@ class FormsSubmissionPagination(PageNumberPagination):
         del request
         # Rule 3: read the declared setting directly; the startup check has
         # already refused a missing or invalid value.
-        return settings.FORMS_PER_PAGE
+        return settings.QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE
 
     def get_paginated_response(self, data: list[Any]) -> Response:
         return Response(data)
