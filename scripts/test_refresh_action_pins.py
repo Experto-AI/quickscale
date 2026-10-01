@@ -98,7 +98,7 @@ def test_catalog_pins_move_through_the_generator(
     setup_python = _release_for("actions/setup-python")
     poetry = _release_for("snok/install-poetry")
     assert CHECKOUT_SHA not in text
-    assert text.count(f"actions/checkout@{checkout.sha}") == 21
+    assert text.count(f"actions/checkout@{checkout.sha}") == 22
     assert f"actions/setup-python@{setup_python.sha}" in text
     assert f"snok/install-poetry@{poetry.sha}" in text
     catalog_text = generator.read_text(encoding="utf-8")

@@ -33,6 +33,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make check-generated-deploy-posture` - Run Django's deployment checks on a freshly generated project in both forwarding cells and fail on a new warning.
 - `make security-negative-probes` - Prove scanner, checksum, archive-safety, and stale-database failures remain fail-closed.
 - `make isolation-conformance` - Run the PostgreSQL isolation-conformance suites through the repository-owned runner.
+- `make check-module-conventions` - Run the rule 40 Module Conventions conformance check over every module manifest and source tree, recording the rules whose convention ticket has not landed.
 - `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input. The ordered release sequence that invokes it, and the pre-publish quality gate, live in [publish_procedure.md](publish_procedure.md).
 
 **Assistant guidance:**
@@ -203,10 +204,11 @@ validated resources; preserve the runners' exact-scope cleanup contracts.
 
 ### Registered script-gate and isolation execution
 
-The registry-derived local and hosted conformance flow includes fifteen registered hosted
+The registry-derived local and hosted conformance flow includes sixteen registered hosted
 gates, including the CSRF-exempt contract, behavioural-commit testimony, generated-project
 contract-vintage coupling, blocking Trivy dependency-vulnerability, Bandit static-security,
-zizmor workflow-security, and gitleaks secret-scanning gates. `make check-gate-suites` is the owning execution context for all current
+zizmor workflow-security, gitleaks secret-scanning, and module-conventions rule 40 conformance
+gates. `make check-gate-suites` is the owning execution context for all current
 `scripts/test_*.py` suites and invokes exactly:
 
 ```text
@@ -215,7 +217,7 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains seven
-separately justified unowned jobs, for twenty-two jobs total. Fourteen registered gates run
+separately justified unowned jobs, for twenty-three jobs total. Fifteen registered gates run
 locally across stages 3–7. `isolation-conformance`
 and the reusable `bypassrls` suite are hosted-unowned jobs: Make exposes both runners for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by

@@ -171,6 +171,10 @@ jobs:
         run: |
           make check-secret-scanning
 
+      - name: Run module conventions conformance check
+        run: |
+          make check-module-conventions
+
       - name: Run rendered frontend proof
         run: |
           make frontend-proof

@@ -55,6 +55,7 @@ RETAINED_CLOSED_TICKETS = {
     "SA227",
     "SA223",
     "SA229",
+    "SA230",
 }
 COLUMNS = [
     "Ticket",
