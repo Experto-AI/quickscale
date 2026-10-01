@@ -1,9 +1,8 @@
 """Views for QuickScale blog module."""
 
 import logging
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from importlib import import_module
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -28,6 +27,7 @@ from rest_framework.views import APIView
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 from quickscale_modules_orgs.sanitization import sanitize_rendered_html
 
+from . import _storage
 from .exceptions import (
     BlogMediaUploadValidationError,
     BlogPublishConflictError,
@@ -37,22 +37,6 @@ from .exceptions import (
 from .models import BlogMediaAsset, Category, Post, Tag
 from .permissions import IsStaffUser
 from .throttles import BlogApiThrottle
-
-storage_build_public_media_url: Callable[..., str] | None = None
-storage_validate_file_upload: Callable[..., Any] | None = None
-storage_helpers: Any | None
-try:
-    storage_helpers = import_module("quickscale_modules_storage.helpers")
-except ModuleNotFoundError:
-    storage_helpers = None
-
-if storage_helpers is not None:
-    storage_build_public_media_url = getattr(
-        storage_helpers, "build_public_media_url", None
-    )
-    storage_validate_file_upload = getattr(
-        storage_helpers, "validate_file_upload", None
-    )
 
 
 logger = logging.getLogger(__name__)
@@ -136,19 +120,15 @@ def _upload_limit_setting(setting_name: str, default: int) -> int:
 def _build_media_response_url(
     request: Request | HttpRequest, stored_reference: str
 ) -> str:
-    """Build a public media URL using storage helper when available, with local fallback."""
-    public_base_url = str(
-        getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
-    ).strip()
-    media_url = str(settings.MEDIA_URL).strip()
+    """Build a public media URL through storage's services, with a local fallback.
 
-    if storage_build_public_media_url is not None:
-        return storage_build_public_media_url(
-            stored_reference,
-            request=request,
-            public_base_url=public_base_url,
-            media_url=media_url,
-        )
+    Storage's service resolves storage's own settings (rules 3, 4, and 34);
+    without storage installed, the fallback uses only the project's
+    ``MEDIA_URL`` and reads no storage setting.
+    """
+    services = _storage.storage_services()
+    if services is not None:
+        return services.build_public_media_url(stored_reference, request=request)
 
     reference = (stored_reference or "").strip()
     if not reference:
@@ -158,13 +138,10 @@ def _build_media_response_url(
     if parsed.scheme and parsed.netloc:
         return reference
 
-    if public_base_url:
-        return f"{public_base_url.rstrip('/')}/{reference.lstrip('/')}"
-
     if reference.startswith("/"):
         return request.build_absolute_uri(reference)
 
-    normalized_media_url = media_url
+    normalized_media_url = str(settings.MEDIA_URL).strip()
     if not normalized_media_url.startswith("/") and not normalized_media_url.startswith(
         "http"
     ):
@@ -236,16 +213,17 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
             {"file": f"File exceeds maximum upload size of {max_upload_bytes} bytes"}
         )
 
-    if storage_validate_file_upload is not None:
+    services = _storage.storage_services()
+    if services is not None:
         try:
-            validated = storage_validate_file_upload(
+            validated = services.validate_file_upload(
                 uploaded_file,
                 max_size_bytes=max_upload_bytes,
                 allowed_image_formats=allowed_formats,
                 max_width=max_upload_width,
                 max_height=max_upload_height,
             )
-        except ValueError as exc:
+        except services.StorageError as exc:
             raise BlogMediaUploadValidationError({"file": str(exc)}) from None
         return validated.width, validated.height
 

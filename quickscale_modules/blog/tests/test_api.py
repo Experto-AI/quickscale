@@ -24,29 +24,39 @@ from quickscale_modules_blog.views import (
     _build_media_response_url,
 )
 from quickscale_modules_orgs.current_org import get_client_ip
-from quickscale_modules_storage.helpers import (
-    validate_file_upload as storage_validate_file_upload,
-)
 
 BLOG_API_SCOPE = "quickscale_blog_api"
 
-UPLOAD_VALIDATION_PATHS = (
-    pytest.param(storage_validate_file_upload, id="helper-backed"),
-    pytest.param(None, id="helper-absent"),
+#: The blog suite installs storage, so the service-backed cases below exercise
+#: the real storage services; the "storage-absent" cases patch the guarded
+#: seam to simulate an installation without the module.
+STORAGE_PATHS = (
+    pytest.param(False, id="storage-installed"),
+    pytest.param(True, id="storage-absent"),
 )
 
 DECOMPRESSION_BOMB_PATHS = (
     pytest.param(
-        storage_validate_file_upload,
+        False,
         "quickscale_modules_storage.helpers.Image.open",
-        id="helper-backed",
+        id="storage-installed",
     ),
     pytest.param(
-        None,
+        True,
         "quickscale_modules_blog.views.Image.open",
-        id="helper-absent",
+        id="storage-absent",
     ),
 )
+
+
+@contextmanager
+def without_storage_services(missing: bool):
+    """Simulate storage's absence at the blog seam for one test block."""
+    if not missing:
+        yield
+        return
+    with patch("quickscale_modules_blog._storage.storage_services", return_value=None):
+        yield
 
 
 _MISSING = object()
@@ -1025,53 +1035,18 @@ class TestPublishPostApi:
 class TestUploadMediaApi:
     """Tests for blog media upload API."""
 
-    def test_build_media_response_url_without_helper_uses_public_base_url(
+    def test_build_media_response_url_without_storage_uses_media_url(
         self,
         rf,
         settings,
     ):
-        """Fallback URL builder should use the canonical public base when configured."""
+        """Without storage, the fallback uses MEDIA_URL and reads no storage setting."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+        settings.MEDIA_URL = "/media/"
 
         request = rf.get(reverse("quickscale_blog:api_upload_media"))
 
-        with patch(
-            "quickscale_modules_blog.views.storage_build_public_media_url", None
-        ):
-            assert (
-                _build_media_response_url(
-                    request, "blog/uploads/2026/03/hero-image.png"
-                )
-                == "https://cdn.example.com/media/blog/uploads/2026/03/hero-image.png"
-            )
-
-    def test_build_media_response_url_without_helper_preserves_absolute_reference(
-        self,
-        rf,
-    ):
-        """Fallback URL builder should return already-absolute references unchanged."""
-        request = rf.get(reverse("quickscale_blog:api_upload_media"))
-        absolute_url = "https://cdn.example.com/blog/uploads/2026/03/hero-image.png"
-
-        with patch(
-            "quickscale_modules_blog.views.storage_build_public_media_url", None
-        ):
-            assert _build_media_response_url(request, absolute_url) == absolute_url
-
-    def test_build_media_response_url_without_helper_normalizes_relative_media_url(
-        self,
-        rf,
-        settings,
-    ):
-        """Fallback URL builder should normalize relative `MEDIA_URL` prefixes."""
-        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
-        settings.MEDIA_URL = "media"
-
-        request = rf.get(reverse("quickscale_blog:api_upload_media"))
-
-        with patch(
-            "quickscale_modules_blog.views.storage_build_public_media_url", None
-        ):
+        with without_storage_services(True):
             assert (
                 _build_media_response_url(
                     request, "blog/uploads/2026/03/hero-image.png"
@@ -1079,19 +1054,43 @@ class TestUploadMediaApi:
                 == "http://testserver/media/blog/uploads/2026/03/hero-image.png"
             )
 
-    def test_build_media_response_url_without_helper_uses_leading_slash_path(
+    def test_build_media_response_url_without_storage_preserves_absolute_reference(
+        self,
+        rf,
+    ):
+        """Fallback URL builder should return already-absolute references unchanged."""
+        request = rf.get(reverse("quickscale_blog:api_upload_media"))
+        absolute_url = "https://cdn.example.com/blog/uploads/2026/03/hero-image.png"
+
+        with without_storage_services(True):
+            assert _build_media_response_url(request, absolute_url) == absolute_url
+
+    def test_build_media_response_url_without_storage_normalizes_relative_media_url(
         self,
         rf,
         settings,
     ):
-        """Fallback URL builder should preserve leading-slash media references."""
-        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+        """Fallback URL builder should normalize relative `MEDIA_URL` prefixes."""
+        settings.MEDIA_URL = "media"
 
         request = rf.get(reverse("quickscale_blog:api_upload_media"))
 
-        with patch(
-            "quickscale_modules_blog.views.storage_build_public_media_url", None
-        ):
+        with without_storage_services(True):
+            assert (
+                _build_media_response_url(
+                    request, "blog/uploads/2026/03/hero-image.png"
+                )
+                == "http://testserver/media/blog/uploads/2026/03/hero-image.png"
+            )
+
+    def test_build_media_response_url_without_storage_uses_leading_slash_path(
+        self,
+        rf,
+    ):
+        """Fallback URL builder should preserve leading-slash media references."""
+        request = rf.get(reverse("quickscale_blog:api_upload_media"))
+
+        with without_storage_services(True):
             assert (
                 _build_media_response_url(
                     request, "/media/blog/uploads/2026/03/hero-image.png"
@@ -1130,7 +1129,7 @@ class TestUploadMediaApi:
 
         assert response.status_code == 403
 
-    @pytest.mark.parametrize("storage_validator", UPLOAD_VALIDATION_PATHS)
+    @pytest.mark.parametrize("storage_missing", STORAGE_PATHS)
     def test_upload_media_api_valid_png_returns_metadata(
         self,
         client,
@@ -1138,7 +1137,7 @@ class TestUploadMediaApi:
         staff_org,
         tmp_path,
         settings,
-        storage_validator,
+        storage_missing,
         blog_org_scope,
     ):
         """Test upload API stores the file and returns stable metadata."""
@@ -1147,10 +1146,7 @@ class TestUploadMediaApi:
         settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
         _login_with_org(client, staff_user)
 
-        with patch(
-            "quickscale_modules_blog.views.storage_validate_file_upload",
-            storage_validator,
-        ):
+        with without_storage_services(storage_missing):
             response = client.post(
                 reverse("quickscale_blog:api_upload_media"),
                 data={
@@ -1172,23 +1168,20 @@ class TestUploadMediaApi:
             # Media asset should be stamped with the user's personal org
             assert asset.organization is not None
 
-    @pytest.mark.parametrize("storage_validator", UPLOAD_VALIDATION_PATHS)
+    @pytest.mark.parametrize("storage_missing", STORAGE_PATHS)
     def test_upload_media_api_rejects_excessive_width_with_or_without_helper(
         self,
         client,
         staff_user,
         settings,
-        storage_validator,
+        storage_missing,
     ):
         """Upload API should apply the same width ceiling in both validation paths."""
         settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
         settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
         _login_with_org(client, staff_user)
 
-        with patch(
-            "quickscale_modules_blog.views.storage_validate_file_upload",
-            storage_validator,
-        ):
+        with without_storage_services(storage_missing):
             response = client.post(
                 reverse("quickscale_blog:api_upload_media"),
                 data={"file": make_uploaded_test_image(size=(1601, 900))},
@@ -1199,23 +1192,20 @@ class TestUploadMediaApi:
             "file": ["Image width exceeds maximum of 1600 pixels"]
         }
 
-    @pytest.mark.parametrize("storage_validator", UPLOAD_VALIDATION_PATHS)
+    @pytest.mark.parametrize("storage_missing", STORAGE_PATHS)
     def test_upload_media_api_rejects_excessive_height_with_or_without_helper(
         self,
         client,
         staff_user,
         settings,
-        storage_validator,
+        storage_missing,
     ):
         """Upload API should apply the same height ceiling in both validation paths."""
         settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
         settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
         _login_with_org(client, staff_user)
 
-        with patch(
-            "quickscale_modules_blog.views.storage_validate_file_upload",
-            storage_validator,
-        ):
+        with without_storage_services(storage_missing):
             response = client.post(
                 reverse("quickscale_blog:api_upload_media"),
                 data={"file": make_uploaded_test_image(size=(1600, 901))},
@@ -1331,7 +1321,7 @@ class TestUploadMediaApi:
             == "http://testserver/media/blog/uploads/2026/03/hero-image.png"
         )
 
-    def test_build_media_response_url_uses_local_media_fallback_when_no_public_base_url(
+    def test_build_media_response_url_uses_local_media_url_when_public_base_url_is_unset(
         self,
         rf,
         settings,
@@ -1373,7 +1363,7 @@ class TestUploadMediaApi:
         }
 
     @pytest.mark.parametrize(
-        ("storage_validator", "image_open_target"),
+        ("storage_missing", "image_open_target"),
         DECOMPRESSION_BOMB_PATHS,
     )
     def test_upload_media_api_rejects_decompression_bombs_with_or_without_helper(
@@ -1381,17 +1371,14 @@ class TestUploadMediaApi:
         client,
         staff_user,
         settings,
-        storage_validator,
+        storage_missing,
         image_open_target,
     ):
         """Upload API should normalize Pillow bomb protection failures in both paths."""
         _login_with_org(client, staff_user)
 
         with (
-            patch(
-                "quickscale_modules_blog.views.storage_validate_file_upload",
-                storage_validator,
-            ),
+            without_storage_services(storage_missing),
             patch(
                 image_open_target,
                 side_effect=Image.DecompressionBombError("too many pixels"),

@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
+from quickscale_modules_blog import _storage
 from quickscale_modules_blog.models import (
     _build_public_media_url,
     _prepare_thumbnail_image,
@@ -98,6 +99,49 @@ class TestModelHelpers:
         prepared = _prepare_thumbnail_image(image, "PNG")
 
         assert prepared.mode == "RGBA"
+
+
+class TestStorageSeam:
+    """The blog module reaches storage only through its guarded service seam."""
+
+    def test_storage_services_resolves_the_installed_module(self):
+        """The blog suite installs storage, so the real service module resolves."""
+        services = _storage.storage_services()
+
+        assert services is not None
+        assert services.__name__ == "quickscale_modules_storage.services"
+
+    def test_storage_services_is_none_without_the_installed_app(self):
+        """Without the app, the seam resolves to None instead of failing an import."""
+        with patch.object(_storage.django_apps, "is_installed", return_value=False):
+            assert _storage.storage_services() is None
+
+    def test_build_public_media_url_falls_back_to_media_url_without_storage(
+        self, settings
+    ):
+        """Without storage, the model helper uses MEDIA_URL and no storage setting."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+        settings.MEDIA_URL = "/media/"
+
+        with patch.object(_storage, "storage_services", return_value=None):
+            assert (
+                _build_public_media_url("blog/images/example.png")
+                == "/media/blog/images/example.png"
+            )
+
+    def test_build_public_media_url_keeps_absolute_reference_without_storage(self):
+        """Without storage, absolute references pass through unchanged."""
+        absolute = "https://cdn.example.com/blog/images/example.png"
+
+        with patch.object(_storage, "storage_services", return_value=None):
+            assert _build_public_media_url(absolute) == absolute
+
+    def test_build_public_media_url_keeps_leading_slash_without_storage(self):
+        """Without storage, leading-slash references pass through unchanged."""
+        reference = "/media/blog/images/example.png"
+
+        with patch.object(_storage, "storage_services", return_value=None):
+            assert _build_public_media_url(reference) == reference
 
 
 @pytest.mark.django_db
