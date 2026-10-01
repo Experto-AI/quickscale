@@ -922,16 +922,27 @@ class TestReactThemeModuleActivationMatrix:
 
     @staticmethod
     def _extract_template_module_app_map(index_html: str) -> dict[str, str]:
-        """Extract module->Django app mapping from generated index.html template."""
+        """Extract module->Django app mapping from generated index.html template.
+
+        Every shipped module flag carries an
+        ``and settings.QUICKSCALE_<MODULE>_ENABLED`` clause (rule 31), so the
+        pattern accepts it and asserts the enabled-setting name it matches.
+        """
         mapping: dict[str, str] = {}
         for module in TestReactThemeModuleActivationMatrix.APP_BACKED_MODULES:
             pattern = (
-                rf"{module}:\s*\{{%\s*if\s*'([^']+)'\s*in\s*settings\.INSTALLED_APPS\s*%\}}"
+                rf"{module}:\s*\{{%\s*if\s*'([^']+)'\s*in\s*settings\.INSTALLED_APPS"
+                rf"(?:\s*and\s*settings\.([A-Z0-9_]+))?\s*%\}}"
                 rf"true\{{%\s*else\s*%\}}false\{{%\s*endif\s*%\}}"
             )
             match = re.search(pattern, index_html)
             assert match is not None, (
                 f"Missing module activation condition for '{module}' in templates/index.html"
+            )
+            expected_setting = f"QUICKSCALE_{module.upper()}_ENABLED"
+            assert match.group(2) == expected_setting, (
+                f"Module '{module}' must require installed-and-enabled; expected "
+                f"{expected_setting!r} in templates/index.html"
             )
             mapping[module] = match.group(1)
         return mapping
@@ -1024,8 +1035,8 @@ class TestReactThemeModuleActivationMatrix:
         index_html = (output_path / "templates" / "index.html").read_text()
 
         activation_pattern = re.compile(
-            r"social:\s*\{% if settings\.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED "
-            r"or settings\.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %\}true"
+            r"social:\s*\{% if 'quickscale_modules_social' in settings\.INSTALLED_APPS "
+            r"and settings\.QUICKSCALE_SOCIAL_ENABLED %\}true"
             r"\{% else %\}false\{% endif %\}"
         )
         path_pattern = re.compile(
@@ -1049,8 +1060,8 @@ class TestReactThemeModuleActivationMatrix:
         )[0]
 
         assert (
-            "billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}"
-            "true{% else %}false{% endif %},"
+            "billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS "
+            "and settings.QUICKSCALE_BILLING_ENABLED %}true{% else %}false{% endif %},"
         ) in window_config
         # D1 Option B: modulePaths.billing is removed until session-sync contract exists
         module_paths_section = (
@@ -1351,8 +1362,8 @@ class TestReactThemeModuleActivationMatrix:
         assert "Social module not active" in link_tree_template
         assert "{% load static %}" in link_tree_template
         assert (
-            "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or "
-            "settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
+            "{% if 'quickscale_modules_social' in settings.INSTALLED_APPS and "
+            "settings.QUICKSCALE_SOCIAL_ENABLED %}"
         ) in link_tree_template
         assert "frontend/assets/index.css" not in link_tree_template
         assert "frontend/assets/index.js" in link_tree_template
@@ -1362,8 +1373,8 @@ class TestReactThemeModuleActivationMatrix:
         assert "Social module not active" in embeds_template
         assert "{% load static %}" in embeds_template
         assert (
-            "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or "
-            "settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
+            "{% if 'quickscale_modules_social' in settings.INSTALLED_APPS and "
+            "settings.QUICKSCALE_SOCIAL_ENABLED %}"
         ) in embeds_template
         assert "frontend/assets/index.css" not in embeds_template
         assert "frontend/assets/index.js" in embeds_template
@@ -1415,6 +1426,8 @@ class TestReactThemeModuleActivationMatrix:
                 {
                     "messages": [],
                     "settings": types.SimpleNamespace(
+                        INSTALLED_APPS=["quickscale_modules_social"],
+                        QUICKSCALE_SOCIAL_ENABLED=True,
                         QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=True,
                         QUICKSCALE_SOCIAL_EMBEDS_ENABLED=True,
                     ),
@@ -1425,6 +1438,81 @@ class TestReactThemeModuleActivationMatrix:
         assert 'href="/static/frontend/assets/index.css"' in rendered
         assert 'src="/static/frontend/assets/index.js"' in rendered
         assert "/social/static/" not in rendered
+
+    def test_react_public_social_pages_do_not_hydrate_when_social_disabled(
+        self, tmp_path, monkeypatch
+    ):
+        """Rule 1 (D3)/rule 31: a switched-off social module leaves both public
+        pages on the disabled branch instead of hydrating against the transport
+        apply no longer mounts."""
+        from django.conf import settings as django_settings
+        from django.template import Context, Engine, Library
+
+        project_name = "react_social_disabled_pages"
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / project_name
+        generator.generate(project_name, output_path)
+
+        if not django_settings.configured:
+            django_settings.configure(
+                DEBUG=False,
+                SECRET_KEY="quickscale-test-key",
+                USE_I18N=False,
+                USE_TZ=False,
+            )
+
+        static_tags = Library()
+
+        @static_tags.simple_tag
+        def static(path):
+            return f"/static/{path}"
+
+        static_module = types.ModuleType("_quickscale_test_static_tags_disabled")
+        static_module.register = static_tags
+        monkeypatch.setitem(sys.modules, static_module.__name__, static_module)
+
+        engine = Engine(
+            dirs=[str(output_path / "templates")],
+            libraries={"static": static_module.__name__},
+        )
+
+        for template_name in ("social/link_tree.html", "social/embeds.html"):
+            disabled = engine.get_template(template_name).render(
+                Context(
+                    {
+                        "messages": [],
+                        "settings": types.SimpleNamespace(
+                            INSTALLED_APPS=["quickscale_modules_social"],
+                            QUICKSCALE_SOCIAL_ENABLED=False,
+                            QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=True,
+                            QUICKSCALE_SOCIAL_EMBEDS_ENABLED=True,
+                        ),
+                    }
+                )
+            )
+            assert "Social module not active" in disabled
+            assert 'id="root" class="qs-social-react-shell"' not in disabled
+            assert "window.__QUICKSCALE__" not in disabled
+            assert "frontend/assets/index.js" not in disabled
+            assert 'href="/social"' not in disabled
+
+            enabled = engine.get_template(template_name).render(
+                Context(
+                    {
+                        "messages": [],
+                        "settings": types.SimpleNamespace(
+                            INSTALLED_APPS=["quickscale_modules_social"],
+                            QUICKSCALE_SOCIAL_ENABLED=True,
+                            QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=True,
+                            QUICKSCALE_SOCIAL_EMBEDS_ENABLED=True,
+                        ),
+                    }
+                )
+            )
+            assert 'id="root" class="qs-social-react-shell"' in enabled
+            assert "window.__QUICKSCALE__" in enabled
+            assert "social: true" in enabled
+            assert 'href="/social"' in enabled
 
     def test_react_routes_cover_all_module_navigation_targets(self, tmp_path):
         """React router should include routes for every module link exposed by the UI."""

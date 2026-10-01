@@ -724,26 +724,16 @@ def _resolve_private_remote_credentials(
     secret_access_key = policy.resolve_remote_secret_access_key()
 
     if not access_key_id:
-        from quickscale_core.dr_engine.primitives import (
-            _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR as _DEFAULT_ACCESS_KEY_ENV,
-        )
-
-        env_var_name = (
-            policy.remote_access_key_id_env_var.strip() or _DEFAULT_ACCESS_KEY_ENV
-        )
         raise BackupConfigurationError(
-            f"Environment variable '{env_var_name}' is required for private_remote backups"
+            "Environment variable "
+            f"'{policy.remote_access_key_id_env_var.strip()}' is required for "
+            "private_remote backups"
         )
     if not secret_access_key:
-        from quickscale_core.dr_engine.primitives import (
-            _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR as _DEFAULT_SECRET_ENV,
-        )
-
-        env_var_name = (
-            policy.remote_secret_access_key_env_var.strip() or _DEFAULT_SECRET_ENV
-        )
         raise BackupConfigurationError(
-            f"Environment variable '{env_var_name}' is required for private_remote backups"
+            "Environment variable "
+            f"'{policy.remote_secret_access_key_env_var.strip()}' is required for "
+            "private_remote backups"
         )
 
     return access_key_id, secret_access_key

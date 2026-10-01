@@ -19,7 +19,7 @@ from quickscale_core.contracts.resolvers import (
 )
 from quickscale_core.manifest.option_validation import validate_module_options
 
-_EXPECTED_DEFAULTS: dict[str, object] = {"mode": "solo"}
+_EXPECTED_DEFAULTS: dict[str, object] = {"enabled": True, "mode": "solo"}
 _MODES = ["solo", "saas"]
 
 
@@ -62,22 +62,28 @@ class TestOrgResolution:
 
     def test_saas_mode_override(self) -> None:
         assert resolve_manifest_module_options("orgs", {"mode": "saas"}) == {
-            "mode": "saas"
+            "enabled": True,
+            "mode": "saas",
         }
 
     def test_mode_is_stripped_and_lowercased(self) -> None:
         assert resolve_manifest_module_options("orgs", {"mode": "  SaaS  "}) == {
-            "mode": "saas"
+            "enabled": True,
+            "mode": "saas",
         }
 
     def test_invalid_mode_passes_through_resolution(self) -> None:
         """SA27: resolution does not coerce an invalid mode; validation refuses."""
         assert resolve_manifest_module_options("orgs", {"mode": "team"}) == {
-            "mode": "team"
+            "enabled": True,
+            "mode": "team",
         }
 
     def test_blank_mode_resolves_to_empty(self) -> None:
-        assert resolve_manifest_module_options("orgs", {"mode": "   "}) == {"mode": ""}
+        assert resolve_manifest_module_options("orgs", {"mode": "   "}) == {
+            "enabled": True,
+            "mode": "",
+        }
 
     def test_resolution_is_idempotent(self) -> None:
         resolved = resolve_manifest_module_options("orgs", {"mode": " SaaS "})
@@ -140,16 +146,20 @@ class TestOrgConfigurator:
         config = entry.configure(
             non_interactive=True, existing_config={"mode": "  SaaS  "}
         )
-        assert config == {"mode": "saas"}
+        assert config == {"enabled": True, "mode": "saas"}
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
-    def test_interactive_prompt_reads_the_manifest(self, mock_prompt) -> None:
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_interactive_prompt_reads_the_manifest(
+        self, mock_confirm, mock_prompt
+    ) -> None:
+        mock_confirm.return_value = True
         mock_prompt.return_value = "saas"
 
         entry = MODULE_CONFIGURATOR_REGISTRY["orgs"]
         config = entry.configure(non_interactive=False)
 
-        assert config == {"mode": "saas"}
+        assert config == {"enabled": True, "mode": "saas"}
         _, kwargs = mock_prompt.call_args
         choice = kwargs["type"]
         assert list(choice.choices) == _MODES

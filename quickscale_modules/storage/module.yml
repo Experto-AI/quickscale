@@ -4,6 +4,13 @@ description: "Shared media storage infrastructure with local and S3-compatible b
 
 config:
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_STORAGE_ENABLED
+      description: "Enable the storage module. Off keeps the module installed with its data intact and skips the vendor-credential startup check."
+      validation: {}
+
     backend:
       type: string
       default: "local"

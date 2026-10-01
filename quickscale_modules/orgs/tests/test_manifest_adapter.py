@@ -31,6 +31,7 @@ class TestOrgsManifestAdapter:
             "quickscale_modules_orgs.middleware.TenantMiddleware",
         )
         assert spec.settings == {
+            "QUICKSCALE_ORGS_ENABLED": True,
             "QUICKSCALE_ORGS_MODE": "solo",
         }
         assert spec.pre_home_url_includes == (
@@ -64,6 +65,19 @@ class TestOrgsManifestAdapter:
 
         assert spec.pre_home_url_includes == pre_home
         assert spec.url_includes == post_home
+
+    @pytest.mark.parametrize("mode", ["solo", "saas"])
+    def test_disabled_module_drops_the_orgs_mount(self, mode: str) -> None:
+        """Rule 1 (D3): off drops the mount in either mode and keeps the app."""
+        spec = _orgs_manifest_adapter({"enabled": False, "mode": mode})
+
+        assert spec.settings["QUICKSCALE_ORGS_ENABLED"] is False
+        assert "quickscale_modules_orgs" in spec.apps
+        assert spec.pre_home_url_includes == ()
+        assert spec.url_includes == ()
+        assert spec.middleware == (
+            "quickscale_modules_orgs.middleware.TenantMiddleware",
+        )
 
     @pytest.mark.parametrize("raw_mode", [" SaaS ", "SAAS", " solo ", "SOLO"])
     def test_mode_is_normalized(self, raw_mode: str) -> None:

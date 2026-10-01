@@ -4,6 +4,13 @@ description: "Private operational database backups with admin workflows and guar
 
 config:
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_BACKUPS_ENABLED
+      description: "Enable the backups module. Off keeps the module installed with its data intact and stops its scheduled backup and retention runs."
+      validation: {}
+
     retention_days:
       type: integer
       default: 14

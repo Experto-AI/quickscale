@@ -4,6 +4,13 @@ description: "Organizations and multi-tenant foundations with memberships and in
 
 config:
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_ORGS_ENABLED
+      description: "Enable the orgs module. Off keeps the module installed with its data intact and mounts none of its organization URLs."
+      validation: {}
+
     mode:
       type: string
       default: "solo"

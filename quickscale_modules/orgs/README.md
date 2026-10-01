@@ -27,6 +27,7 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_ORGS_ENABLED` | Mount the module's organization pages and API. Off keeps the app, its data, the tenant middleware, and the admin installed but mounts none of its organization URLs in either mode; an installed module that lists `orgs` in `required_modules` (auth, billing, blog, crm, listings, social) makes `apply` refuse the switch. |
 | `mode` | string | `solo` | `QUICKSCALE_ORGS_MODE` | Organization runtime mode: `solo` or `saas`. |
 
 In `solo` mode the module creates and serves each user's personal organization; the

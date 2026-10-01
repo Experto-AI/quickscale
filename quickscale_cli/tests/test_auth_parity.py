@@ -26,6 +26,7 @@ from quickscale_core.manifest.option_validation import (
 from quickscale_core.schema.config_schema import ConfigValidationError
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
+    "enabled": True,
     "registration_enabled": True,
     "email_verification": "none",
     "authentication_method": "email",
@@ -154,6 +155,7 @@ class TestAuthResolution:
             },
         )
         assert resolved == {
+            "enabled": True,
             "registration_enabled": False,
             "email_verification": "mandatory",
             "authentication_method": "username",
@@ -210,13 +212,14 @@ class TestAuthConfigurator:
         self, mock_confirm, mock_prompt
     ) -> None:
         """Every manifest option is prompted once, in declaration order."""
-        mock_confirm.side_effect = [False]
+        mock_confirm.side_effect = [False, False]
         mock_prompt.side_effect = ["optional", 3600, "username"]
 
         entry = MODULE_CONFIGURATOR_REGISTRY["auth"]
         config = entry.configure(non_interactive=False)
 
         assert config == {
+            "enabled": False,
             "registration_enabled": False,
             "email_verification": "optional",
             "session_cookie_age": 3600,

@@ -231,6 +231,19 @@ class TestPrivateRemoteCredentialCheck:
         ):
             assert check_private_remote_credentials() == []
 
+    def test_check_is_silent_when_the_module_is_switched_off(self, settings) -> None:
+        """Rule 1 (D3): a switched-off module has no switched-on feature, so
+        its credential requirement does not apply."""
+        import os
+        from unittest.mock import patch
+
+        from quickscale_modules_backups.checks import check_private_remote_credentials
+
+        settings.QUICKSCALE_BACKUPS_ENABLED = False
+        settings.QUICKSCALE_BACKUPS_TARGET_MODE = "private_remote"
+        with patch.dict(os.environ, {}, clear=True):
+            assert check_private_remote_credentials() == []
+
     def test_missing_credentials_fail_check_migrate_and_runserver(
         self, settings
     ) -> None:

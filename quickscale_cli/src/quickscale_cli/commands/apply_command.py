@@ -1167,13 +1167,70 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
         raise click.Abort()
 
 
+def _abort_for_disabled_required_modules(qs_config: QuickScaleConfig) -> None:
+    """Refuse a module switched off while an installed module requires it.
+
+    Rule 1 (D3): ``apply`` refuses to switch a module off while an installed
+    module lists it in ``required_modules``; wiring a dependent module against
+    a switched-off foundation would leave its own URLs and runtime calls
+    pointing at disabled surfaces.
+    """
+    installed_modules = set(qs_config.modules)
+    offenders: list[tuple[str, str]] = []
+    manifests: dict[str, Any] = {}
+    for module_name in sorted(installed_modules):
+        try:
+            resolved = _resolved_module_options(
+                module_name, qs_config.modules[module_name].options or {}
+            )
+        except ConfigValidationError:
+            # A retired option key is refused by the existing prerequisite
+            # checks with its authored message; this check only reads the
+            # enabled flag.
+            continue
+        if bool(resolved.get("enabled", True)):
+            continue
+        for dependant in sorted(installed_modules - {module_name}):
+            manifest = manifests.get(dependant)
+            if manifest is None:
+                manifest = load_module_manifest_with_fallback(dependant)
+                manifests[dependant] = manifest
+            if module_name in manifest.required_modules:
+                offenders.append((module_name, dependant))
+
+    if not offenders:
+        return
+
+    click.secho(
+        "\n❌ Some configured modules are switched off while other installed "
+        "modules require them:",
+        fg="red",
+        err=True,
+    )
+    for module_name, dependant in offenders:
+        click.echo(
+            f"  • '{module_name}' is switched off (enabled: false) but "
+            f"'{dependant}' requires it.",
+            err=True,
+        )
+    click.echo(
+        "\n💡 Re-enable the switched-off module in quickscale.yml or remove "
+        "the modules that require it.",
+        err=True,
+    )
+    raise click.Abort()
+
+
 def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     """Validate actionable module-specific prerequisites before apply proceeds.
 
-    A module's required modules were already materialized into the config,
-    so the prerequisite checks here cover option values and module readiness,
-    not dependency selection.
+    A module's required modules were already materialized into the config, so
+    the prerequisite checks here cover option values, module readiness, and
+    the rule-1 refusal of a module switched off while an installed module
+    requires it.
     """
+    _abort_for_disabled_required_modules(qs_config)
+
     if "orgs" in qs_config.modules:
         orgs_issues = validate_module_options(
             load_module_manifest_with_fallback("orgs"),

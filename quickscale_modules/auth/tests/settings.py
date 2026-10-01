@@ -14,6 +14,8 @@ SECRET_KEY = "test-secret-key-for-auth-module"
 os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_auth_suite")
 os.environ.setdefault("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_auth_suite")
 
+QUICKSCALE_AUTH_ENABLED = True
+QUICKSCALE_ORGS_ENABLED = True
 QUICKSCALE_ORGS_MODE = "solo"
 
 INSTALLED_APPS = [

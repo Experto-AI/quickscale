@@ -253,6 +253,7 @@ class TestSocialManifestEntryPoint:
             "social", {}, project_package=self._PROJECT_PACKAGE
         )
         expected_keys = {
+            "QUICKSCALE_SOCIAL_ENABLED",
             "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED",
             "QUICKSCALE_SOCIAL_LAYOUT_VARIANT",
             "QUICKSCALE_SOCIAL_EMBEDS_ENABLED",
@@ -747,16 +748,27 @@ _DISABLED_MODULE_OPTIONS: dict[str, dict[str, object]] = {
         "api_enabled": True,
     },
     "listings": {"enabled": False, "per_page": 12},
+    "auth": {"enabled": False},
+    "backups": {"enabled": False},
+    "orgs": {"enabled": False},
+    "social": {"enabled": False},
+    "storage": {"enabled": False},
 }
 
 
 _DISABLED_EDITOR_INCLUDES: dict[str, tuple[tuple[str, str], ...]] = {
     # Blog and listings keep a staff-guarded copy of the Markdownx endpoints
-    # their installed admin editors call; crm and forms have no shared editor.
+    # their installed admin editors call; crm and forms have no shared editor,
+    # and the five foundation modules keep no URL mount at all while off.
     "blog": (("markdownx/", "quickscale_modules_blog.markdownx_urls"),),
     "crm": (),
     "forms": (),
     "listings": (("markdownx/", "quickscale_modules_listings.markdownx_urls"),),
+    "auth": (),
+    "backups": (),
+    "orgs": (),
+    "social": (),
+    "storage": (),
 }
 
 
@@ -797,8 +809,11 @@ class TestModuleDisabledSwitch:
     def test_disabled_module_keeps_apps_and_drops_public_url_mounts(
         self, module_name: str
     ) -> None:
+        extra_kwargs = (
+            {"project_package": "testproject"} if module_name == "social" else {}
+        )
         spec = build_manifest_wiring_spec(
-            module_name, _DISABLED_MODULE_OPTIONS[module_name]
+            module_name, _DISABLED_MODULE_OPTIONS[module_name], **extra_kwargs
         )
         assert spec.settings[f"QUICKSCALE_{module_name.upper()}_ENABLED"] is False
         assert f"quickscale_modules_{module_name}" in spec.apps

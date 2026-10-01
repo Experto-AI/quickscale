@@ -95,8 +95,6 @@ from quickscale_core.dr_engine.primitives import (  # noqa: F401
     BackupConfigurationError,
     BackupPolicySnapshot,
     ShellCommandRunner,
-    _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     _ENV_VAR_MANIFEST_FILENAME,
     _MEDIA_SYNC_MANIFEST_FILENAME,
     _PROMOTION_VERIFICATION_FILENAME,

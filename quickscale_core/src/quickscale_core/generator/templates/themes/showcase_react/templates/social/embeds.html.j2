@@ -29,7 +29,7 @@
 {% endblock %}
 
 {% block content %}
-{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+{% if 'quickscale_modules_social' in settings.INSTALLED_APPS and settings.QUICKSCALE_SOCIAL_ENABLED %}
 <div id="root" class="qs-social-react-shell"></div>
 <noscript>
     <div class="qs-alert qs-alert-info">
@@ -41,14 +41,15 @@
   <h1>Social module not active</h1>
   <p>
     This theme reserves <code>/social/embeds</code>, but the managed public embed gallery only
-    hydrates when the social module is installed and at least one public social setting is enabled.
+    hydrates when the social module is installed and its <code>QUICKSCALE_SOCIAL_ENABLED</code>
+    setting is on.
   </p>
 </section>
 {% endif %}
 {% endblock %}{% endraw %}
 
 {% raw %}{% block extra_js %}
-{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+{% if 'quickscale_modules_social' in settings.INSTALLED_APPS and settings.QUICKSCALE_SOCIAL_ENABLED %}
 <script>
   window.__QUICKSCALE__ = {
     projectName: "{% endraw %}{{ project_name }}{% raw %}",
@@ -63,7 +64,7 @@
       notifications: false,
       analytics: false,
       billing: false,
-      social: {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}true{% else %}false{% endif %},
+      social: {% if 'quickscale_modules_social' in settings.INSTALLED_APPS and settings.QUICKSCALE_SOCIAL_ENABLED %}true{% else %}false{% endif %},
     },
     modulePaths: {
       crm: "/crm/",

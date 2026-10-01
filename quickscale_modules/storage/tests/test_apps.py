@@ -29,6 +29,17 @@ def test_s3_backend_reports_a_half_configured_pair(settings) -> None:
     assert "AWS_SECRET_ACCESS_KEY" in messages[0].msg
 
 
+def test_switched_off_module_skips_the_vendor_check(settings) -> None:
+    """Rule 1 (D3): a switched-off module has no switched-on feature, so a
+    half-configured credential pair is not reported while it is off."""
+    settings.QUICKSCALE_STORAGE_ENABLED = False
+    settings.QUICKSCALE_STORAGE_BACKEND = "s3"
+    settings.AWS_ACCESS_KEY_ID = "key-id"
+    settings.AWS_SECRET_ACCESS_KEY = ""
+
+    assert check_vendor_secrets() == []
+
+
 def test_s3_backend_reports_a_missing_projected_credential(settings) -> None:
     """A projected credential missing entirely is reported, not skipped."""
     settings.QUICKSCALE_STORAGE_BACKEND = "s3"
