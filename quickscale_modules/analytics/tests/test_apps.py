@@ -17,13 +17,13 @@ from quickscale_modules_analytics.checks import check_analytics_settings
 
 
 @patch("quickscale_modules_analytics.apps.configure_analytics_client")
+@override_settings(QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key")
 def test_ready_configures_analytics_client(
-    mock_configure_analytics_client, monkeypatch
+    mock_configure_analytics_client,
 ) -> None:
     """App startup should delegate to the analytics client configurator."""
     # pytest-django runs tests with DEBUG=False, so the startup check needs a
     # non-empty key before ready() reaches the configurator.
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
     config = QuickscaleAnalyticsConfig(
         "quickscale_modules_analytics",
         import_module("quickscale_modules_analytics"),
@@ -38,11 +38,11 @@ def test_ready_configures_analytics_client(
     "quickscale_modules_analytics.apps.configure_analytics_client",
     side_effect=RuntimeError("boom"),
 )
+@override_settings(QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key")
 def test_ready_never_raises_when_configuration_fails(
-    mock_configure_analytics_client, monkeypatch
+    mock_configure_analytics_client,
 ) -> None:
     """Unexpected startup exceptions must not block Django app loading."""
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
     config = QuickscaleAnalyticsConfig(
         "quickscale_modules_analytics",
         import_module("quickscale_modules_analytics"),
@@ -93,11 +93,11 @@ def test_ready_refuses_unsupported_provider(
     mock_configure_analytics_client.assert_not_called()
 
 
-def test_check_reports_empty_api_key_for_live_analytics(settings, monkeypatch) -> None:
+def test_check_reports_empty_api_key_for_live_analytics(settings) -> None:
     """Analytics without the DEBUG exclusion needs a non-empty PostHog key."""
     settings.DEBUG = False
     settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = False
-    monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
+    settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY = ""
 
     messages = check_analytics_settings()
 
@@ -116,14 +116,12 @@ def test_check_reports_empty_api_key_for_live_analytics(settings, monkeypatch) -
         "https://example.com:65536",
     ],
 )
-def test_check_reports_malformed_posthog_host(
-    settings, monkeypatch, malformed_host
-) -> None:
+def test_check_reports_malformed_posthog_host(settings, malformed_host) -> None:
     """A host that is not an absolute http(s) URL with a hostname is invalid."""
     settings.DEBUG = False
     settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = False
     settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST = malformed_host
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
+    settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY = "test-posthog-key"
 
     messages = check_analytics_settings()
 
@@ -131,13 +129,43 @@ def test_check_reports_malformed_posthog_host(
     assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST" in messages[0].msg
 
 
-def test_check_skips_empty_api_key_when_debug_excluded(settings, monkeypatch) -> None:
+def test_check_skips_empty_api_key_when_debug_excluded(settings) -> None:
     """A DEBUG-excluded runtime never resolves the key, so it is not required."""
     settings.DEBUG = True
     settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = True
-    monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
+    settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY = ""
 
     assert check_analytics_settings() == []
+
+
+def test_check_reports_missing_projected_settings(settings) -> None:
+    """An older managed wiring without the projected secret settings fails loudly."""
+    settings.DEBUG = False
+    settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = False
+    del settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY
+    del settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE
+
+    messages = check_analytics_settings()
+
+    assert len(messages) == 1
+    assert "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY" in messages[0].msg
+    assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE" in messages[0].msg
+    assert "quickscale apply" in messages[0].msg
+
+
+def test_check_reports_missing_projected_settings_when_debug_is_excluded(
+    settings,
+) -> None:
+    """DEBUG exclusion skips capture, not the settings the dashboard path reads."""
+    settings.DEBUG = True
+    settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = True
+    del settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY
+    del settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE
+
+    messages = check_analytics_settings()
+
+    assert len(messages) == 1
+    assert "quickscale apply" in messages[0].msg
 
 
 @override_settings()

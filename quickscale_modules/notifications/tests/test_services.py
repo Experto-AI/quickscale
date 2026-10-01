@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 
 import pytest
+from django.conf import settings
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -489,13 +489,11 @@ def test_render_notification_rejects_unknown_template_key() -> None:
 @pytest.mark.django_db
 def test_dispatch_notification_message_fails_loudly_for_live_backend_without_api_key(
     queued_message,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("RESEND_API_KEY", raising=False)
-
     with override_settings(
         EMAIL_BACKEND="anymail.backends.resend.EmailBackend",
         QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL="noreply@example.com",
+        QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY="",
     ):
         dispatch_notification_message(queued_message.pk)
 
@@ -513,13 +511,11 @@ def test_dispatch_notification_message_fails_loudly_for_live_backend_without_api
 @pytest.mark.django_db
 def test_dispatch_notification_message_fails_loudly_for_live_backend_with_placeholder_sender(
     queued_message,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("RESEND_API_KEY", "configured-live-key")
-
     with override_settings(
         EMAIL_BACKEND="anymail.backends.resend.EmailBackend",
         QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL="noreply@example.com",
+        QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY="configured-live-key",
     ):
         dispatch_notification_message(queued_message.pk)
 
@@ -583,7 +579,7 @@ def test_webhook_ingestion_rejects_when_runtime_disabled(delivery_for_webhook) -
     body = json.dumps(payload).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
-        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
         timestamp=int(time.time()),
     )
 
@@ -633,7 +629,7 @@ def test_webhook_signature_rejects_expired_timestamps(delivery_for_webhook) -> N
     body = json.dumps(payload).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
-        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
         timestamp=int(time.time()) - 1_000,
     )
 
@@ -655,7 +651,7 @@ def test_webhook_ingestion_requires_provider_message_id(delivery_for_webhook) ->
     body = json.dumps(payload).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
-        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
         timestamp=int(time.time()),
     )
 
@@ -680,7 +676,7 @@ def test_webhook_ingestion_is_replay_safe_and_updates_delivery_status(
     body = json.dumps(payload).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
-        secret=os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"],
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
         timestamp=int(time.time()),
     )
 

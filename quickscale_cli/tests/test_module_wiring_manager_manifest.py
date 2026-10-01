@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 from dataclasses import replace
 from pathlib import Path
+import re
 import sys
 import types
 from typing import Any
@@ -137,10 +138,17 @@ def _read_emitted_module_settings_schema(project_path: Path) -> dict[str, Any]:
     return _read_emitted_assignment(project_path, "MODULE_SETTINGS_SCHEMA")
 
 
+#: Rule 35 renders a projected secret as ``os.environ.get("NAME", "")``;
+#: the placeholder keeps ``ast.literal_eval`` able to parse the assignment
+#: without executing the generated project code.
+_ENV_READ_PATTERN = re.compile(r'os\.environ\.get\("([^"]+)", ""\)')
+
+
 def _read_emitted_assignment(project_path: Path, target_name: str) -> dict[str, Any]:
     """Literal-eval one annotated dict assignment from the generated file."""
     settings_path = project_path / "myapp" / "settings" / "modules.py"
-    tree = ast.parse(settings_path.read_text(), filename=str(settings_path))
+    source = _ENV_READ_PATTERN.sub(r'"__QS_ENV__:\1"', settings_path.read_text())
+    tree = ast.parse(source, filename=str(settings_path))
     assignments = [
         node
         for node in tree.body

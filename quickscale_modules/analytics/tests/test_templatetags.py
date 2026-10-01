@@ -22,15 +22,17 @@ def _request_with_session(rf: RequestFactory):
     return request
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+)
 @pytest.mark.django_db()
 def test_analytics_public_config_tag_returns_runtime_config(
-    monkeypatch,
     rf: RequestFactory,
 ) -> None:
     """Template tag should expose the resolved analytics config dictionary."""
     services._ANALYTICS_LAST_SETTINGS = None
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
     request = _request_with_session(rf)
 
     template = Template(
@@ -43,15 +45,17 @@ def test_analytics_public_config_tag_returns_runtime_config(
     assert rendered == "posthog|True|test-posthog-key"
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+)
 @pytest.mark.django_db()
 def test_analytics_public_config_json_tag_serializes_runtime_config(
-    monkeypatch,
     rf: RequestFactory,
 ) -> None:
     """JSON template tag should serialize the same public runtime config payload."""
     services._ANALYTICS_LAST_SETTINGS = None
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
     request = _request_with_session(rf)
 
     template = Template(
@@ -92,13 +96,14 @@ def test_analytics_public_config_json_tag_escapes_html_sensitive_chars(
     assert json.loads(rendered) == payload
 
 
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_analytics_public_config_tag_accepts_missing_request_context(
-    monkeypatch,
-) -> None:
+@override_settings(
+    DEBUG=False,
+    QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
+    QUICKSCALE_ANALYTICS_POSTHOG_API_KEY="test-posthog-key",
+)
+def test_analytics_public_config_tag_accepts_missing_request_context() -> None:
     """Template tags should degrade cleanly when no request object is present."""
     services._ANALYTICS_LAST_SETTINGS = None
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     template = Template(
         "{% load quickscale_analytics %}{% analytics_public_config as config %}"

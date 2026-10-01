@@ -350,6 +350,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Modules stop reading each other's settings.** Forms asks analytics' runtime snapshot and
     orgs asks notifications' settings snapshot, so one module's configuration never leaks into
     another's code.
+  - **Module secrets reach module code as applied settings.** Analytics and notifications read
+    their PostHog key and host, Resend API key, and webhook secret from projected Django settings
+    that `quickscale apply` renders from each module's `_env_var` option, and a switched-on module
+    whose required secret is empty fails startup.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
