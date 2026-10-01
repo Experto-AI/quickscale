@@ -455,52 +455,16 @@
         "symbol": "StateManager.save",
         "type": "method"
       },
-      "quickscale_devtools/src/quickscale_devtools/beta_migration.py::_check_clean_git_worktree": {
-        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration.py",
+      "quickscale_devtools/src/quickscale_devtools/beta_migration/planning.py::_prepare_beta_migration_report": {
+        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration/planning.py",
         "max_complexity": 11,
-        "symbol": "_check_clean_git_worktree",
-        "type": "function"
-      },
-      "quickscale_devtools/src/quickscale_devtools/beta_migration.py::_execute_copy_post_apply_react_surfaces": {
-        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration.py",
-        "max_complexity": 12,
-        "symbol": "_execute_copy_post_apply_react_surfaces",
-        "type": "function"
-      },
-      "quickscale_devtools/src/quickscale_devtools/beta_migration.py::_execute_identity_reconciliation": {
-        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration.py",
-        "max_complexity": 14,
-        "symbol": "_execute_identity_reconciliation",
-        "type": "function"
-      },
-      "quickscale_devtools/src/quickscale_devtools/beta_migration.py::_execute_merge_pyproject_and_frontend_package": {
-        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration.py",
-        "max_complexity": 19,
-        "symbol": "_execute_merge_pyproject_and_frontend_package",
-        "type": "function"
-      },
-      "quickscale_devtools/src/quickscale_devtools/beta_migration.py::_execute_quickscale_apply": {
-        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration.py",
-        "max_complexity": 11,
-        "symbol": "_execute_quickscale_apply",
-        "type": "function"
-      },
-      "quickscale_devtools/src/quickscale_devtools/beta_migration.py::_locate_toml_section_bounds": {
-        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration.py",
-        "max_complexity": 13,
-        "symbol": "_locate_toml_section_bounds",
-        "type": "function"
-      },
-      "quickscale_devtools/src/quickscale_devtools/beta_migration.py::_prepare_beta_migration_report": {
-        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration.py",
-        "max_complexity": 45,
         "symbol": "_prepare_beta_migration_report",
         "type": "function"
       },
-      "quickscale_devtools/src/quickscale_devtools/beta_migration.py::render_report_summary": {
-        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration.py",
-        "max_complexity": 21,
-        "symbol": "render_report_summary",
+      "quickscale_devtools/src/quickscale_devtools/beta_migration/toml_editing.py::_locate_toml_section_bounds": {
+        "file": "quickscale_devtools/src/quickscale_devtools/beta_migration/toml_editing.py",
+        "max_complexity": 13,
+        "symbol": "_locate_toml_section_bounds",
         "type": "function"
       },
       "quickscale_modules/analytics/src/quickscale_modules_analytics/services.py::configure_analytics_client": {
@@ -707,6 +671,18 @@
         "symbol": "get_client_ip",
         "type": "function"
       },
+      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py::Command": {
+        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py",
+        "max_complexity": 16,
+        "symbol": "Command",
+        "type": "class"
+      },
+      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py::Command.handle": {
+        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py",
+        "max_complexity": 42,
+        "symbol": "Command.handle",
+        "type": "method"
+      },
       "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py::Command": {
         "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py",
         "max_complexity": 11,
@@ -766,18 +742,6 @@
         "max_complexity": 12,
         "symbol": "validate_file_upload",
         "type": "function"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py::Command": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py",
-        "max_complexity": 16,
-        "symbol": "Command",
-        "type": "class"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py::Command.handle": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py",
-        "max_complexity": 42,
-        "symbol": "Command.handle",
-        "type": "method"
       }
     }
   },
