@@ -14,6 +14,7 @@ from quickscale_core.manifest.settings_schema import load_settings_schema
 SECRET_KEY = "test-secret-key-for-forms-module"
 DEBUG = True
 
+QUICKSCALE_ORGS_ENABLED = True
 QUICKSCALE_ORGS_MODE = "saas"
 
 # The notifications webhook signing secret must resolve because the suite

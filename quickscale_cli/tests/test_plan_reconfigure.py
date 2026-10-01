@@ -820,6 +820,7 @@ docker:
                 input=(
                     "n\n"
                     "y\n"
+                    "y\n"
                     "s3\n"
                     "/media/\n"
                     "https://cdn.example.com/media\n"

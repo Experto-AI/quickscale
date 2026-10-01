@@ -47,6 +47,14 @@ def check_vendor_secrets(
     manifest options — ``apply`` writes them alongside the declared settings —
     so a missing one is reported here rather than silently skipped.
     """
+    if not hasattr(settings, "QUICKSCALE_STORAGE_ENABLED"):
+        # Pre-apply: the generic settings check reports the missing declared
+        # setting, and the credential pair is not evaluated yet.
+        return []
+    if not bool(settings.QUICKSCALE_STORAGE_ENABLED):
+        # Rule 1 (D3): a module switched off has no switched-on feature, so
+        # its credential requirement does not apply while it is off.
+        return []
     if any(not hasattr(settings, name) for name in _DECLARED_SETTINGS):
         return []
 

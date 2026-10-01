@@ -4,9 +4,15 @@ from quickscale_core.contracts.module_catalog import (
     get_discovered_module_names,
     get_module_entry,
 )
+from quickscale_core.manifest import refresh_managed_adapters
 from quickscale_core.manifest.entry_point import build_manifest_wiring_spec
 from quickscale_core.schema.config_schema import validate_config
 from quickscale_core.module_wiring import collect_wiring
+
+# Module-owned adapters register at import time; refresh them here so this
+# file passes regardless of collection order (matching
+# test_manifest_entry_point_integration.py).
+refresh_managed_adapters()
 
 
 def test_orgs_catalog_entry_is_public_ready() -> None:
@@ -67,6 +73,7 @@ def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
         "quickscale_modules_orgs.middleware.TenantMiddleware",
     )
     assert orgs_spec.settings == {
+        "QUICKSCALE_ORGS_ENABLED": True,
         "QUICKSCALE_ORGS_MODE": "solo",
     }
     assert orgs_spec.pre_home_url_includes == (

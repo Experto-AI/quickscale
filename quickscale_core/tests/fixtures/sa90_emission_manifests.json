@@ -1,504 +1,505 @@
 {
   "_provenance": {
-    "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded — it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
+    "baseline_evidence": {
+      "compose-frontend-install-retries": "Regenerated 2026-09-25 \u2014 docker-compose.yml frontend startup raises pnpm's fetch retry budget (--config.fetch-retries=5) so a single stalled registry request does not abort the dev install and leave `quickscale up` with a failed-to-start frontend. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa105": "Regenerated 2026-07-20 \u2014 all frontend/src module files are now unconditionally emitted as dormant files (SA105). All three variants carry identical frontend/src trees. Recorded deltas: App.tsx,j2\u2192static, main.tsx.j2\u2192static, App.test.tsx.j2\u2192static, PublicSocialPages.test.tsx.j2\u2192static, useModules.ts.j2 all-modules-unconditional, Sidebar.tsx.j2 all-nav-unconditional, Dashboard.tsx.j2 all-cards-unconditional, templates/index.html.j2 all-module-flags-unconditional.",
+      "sa106": "Regenerated 2026-07-20 \u2014 three identity-bearing frontend source templates converted from .j2 to static verbatim-copy files (SA106). projectName reads from window.__QUICKSCALE__.projectName at runtime via useProjectConfig. defaultConfig.projectName set to empty string. Deltas: useModules.ts.j2\u2192static, Dashboard.tsx.j2\u2192static, Sidebar.tsx.j2\u2192static. 3 fixture hashes updated: useModules.ts, Dashboard.tsx, Sidebar.tsx.",
+      "sa107": "Regenerated 2026-07-20 \u2014 added validateQuickScaleSeam.ts and validateQuickScaleSeam.test.ts; updated useModules.ts, main.tsx, renderQuickScaleRoot.tsx hashes for fail-hard seam validation (SA107). defaultConfig removed from useModules.ts.",
+      "sa107-cr-002-final-fix": "Regenerated 2026-07-20 \u2014 inherited/non-enumerable required-flag regression fix (SA107-CR-002): key in seam.modules replaced with Object.prototype.hasOwnProperty.call; typeof boolean check collapsed into same required-key loop. 4 inherited/non-enumerable regression tests added to validateQuickScaleSeam.test.ts. 2 fixture hashes updated: validateQuickScaleSeam.ts, validateQuickScaleSeam.test.ts (all 3 variants).",
+      "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 \u2014 added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants).",
+      "sa107-cr-002-pass": "Regenerated 2026-07-20 \u2014 all 11 required module keys now enforced in validateQuickScaleSeam.ts (SA107-CR-002); renderQuickScaleRoot.tsx `?? false` fallback removed; parameterized and partial-module rejection tests added to validateQuickScaleSeam.test.ts; RootDispatch.test.tsx callsites updated for strict modules shape. 4 fixture hashes updated: validateQuickScaleSeam.ts, renderQuickScaleRoot.tsx, validateQuickScaleSeam.test.ts, RootDispatch.test.tsx (all 3 variants).",
+      "sa107-fix-pass": "Regenerated 2026-07-20 \u2014 owner/modulePaths validation added to validateQuickScaleSeam.ts; templates/social/{embeds,link_tree}.html.j2 inject owner and full modulePaths; RootDispatch.test.tsx and validateQuickScaleSeam.test.ts expanded for production-shaped public-social boot coverage and wrong-type/enum validation. 5 fixture hashes updated: validateQuickScaleSeam.ts, RootDispatch.test.tsx, validateQuickScaleSeam.test.ts, templates/social/embeds.html, templates/social/link_tree.html (all 3 variants).",
+      "sa112d": "Regenerated 2026-08-18 \u2014 Dockerfile collectstatic now sets one-shot QUICKSCALE_ALLOW_BYPASSRLS=1 alongside QUICKSCALE_NON_DB_COMMAND so the orgs startup guard does not probe the deliberately absent build-time database. 1 fixture hash updated: Dockerfile (all 3 variants).",
+      "sa142": "Regenerated 2026-08-25 \u2014 Dockerfile: added fixed QuickScale owner/SA142 contract/bound-digest final-image labels and their digest/contract build args; docker-compose.yml: added stable backend image/direct-Compose fallback, validated resource-prefix interpolation, and fixed owner/lifecycle/scope labels for every generated service, named volume, and default network. Only these two generated files changed; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa160": "Regenerated 2026-09-10 \u2014 terminal remediation preserves the HttpOnly production CSRF cookie, injects Django's masked token through testproject/views.py and templates/index.html, makes frontend/src/lib/csrf.ts prefer that server token and otherwise match Django's last duplicate-cookie value, and extends frontend/src/test/csrf.test.tsx across the helper, apiRequest, and FormRenderer callers. These four changed generated paths supersede the 2026-09-09 first-match hashes in react_default, react_empty, and react_selected; the prior useApi.ts, FormRenderer.tsx, base.py, and production.py corrections remain authoritative.",
+      "sa170-c-correct": "Regenerated 2026-09-04 \u2014 db/init.sql now records the quickscale.init_complete database sentinel after every required initialization statement succeeds; docker-compose.yml now probes that sentinel instead of accepting PostgreSQL connection readiness alone. Only these two generated files changed in all three variants; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa188": "Regenerated 2026-09-16 \u2014 start.sh removes the retired migrate_billing_to_orgs argv mode and rejects every supplied argv with exit 2; production.py returns the privileged-command contract to migrate/createcachetable. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa189": "Regenerated 2026-09-17 \u2014 the generator and Railway deploy share the quickscale_runtime role name, while db/init.sql, start.sh, and OPERATIONS.md render one canonical grant set including database CONNECT. The role-name context also updates .env.example, docker-compose.yml, and settings/base.py. Only these six generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa192": "Regenerated 2026-09-17 \u2014 templates/base.html and templates/index.html load one Vite-served live token stylesheet through the configurable browser-visible frontend origin in DEBUG and compiled React CSS in production; templates/social/{embeds,link_tree}.html inherit that shell choice without overriding it; frontend/vite.config.ts reserves /static/frontend/ for Vite while proxying other Django static paths, loads the generated root environment with process overrides, rejects non-canonical origins, and compares the raw configured Host before Vite's localhost/IP exceptions; frontend/src/test/viteAssetRouting.test.ts proves stylesheet routing, absent and preconfigured .env restoration, exact HTTP/WebSocket Host handling including normalized-alias rejection, and the canonical origin corpus shared with Django settings; docker-compose.yml builds the Django-served SPA JavaScript, probes Vite with the configured Host, and passes both frontend port and origin to Django; testproject/settings/local.py validates the configurable frontend port and full origin against that corpus; .env, .env.example, and README.md document the local defaults and remote/tunnel override. Only these eleven generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa193": "Regenerated 2026-09-23 \u2014 the static notifications managed block left `.env.example.j2`. `quickscale apply` now renders one managed block per enabled credential-bearing module from that module's declared `*_env_var` options (notifications, analytics, billing, storage, backups); a fresh generation carries no module-managed block until apply syncs it.",
+      "sa200": "Regenerated 2026-09-23 \u2014 generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py.",
+      "sa206": "Regenerated 2026-09-23 \u2014 the generated settings import the executable runtime contracts (middleware, proxy-trust derivation, privileged-command/runtime-database selection, SECRET_KEY guard) from the versioned quickscale_core.runtime settings facade; pyproject.toml declares the bounded quickscale-core lockstep pin (SA206). Hashes updated per variant: pyproject.toml, testproject/settings/base.py, testproject/settings/production.py.",
+      "sa210": "Regenerated 2026-09-24 \u2014 pyproject.toml.j2 emits a bounded poetry-core build requirement (poetry-core>=2.0,<3.0) into every generated project (SA210). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa217": "Regenerated 2026-09-30 \u2014 the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644.",
+      "sa218": "Regenerated 2026-09-28 \u2014 generated settings install quickscale_core.runtime.conventions.exception_handler as REST_FRAMEWORK[EXCEPTION_HANDLER] (SA218). 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa219-foundation-enabled-flags": "Regenerated 2026-10-01 \u2014 every remaining React module flag requires installed-and-enabled: auth, storage, backups, notifications, analytics, and billing gained the `and settings.QUICKSCALE_<MODULE>_ENABLED` clause and social's flag now requires installed-and-enabled instead of its feature pair (SA219, rule 31). The five foundation modules (auth, backups, orgs, social, storage) declare `enabled`, their public URL mounts drop when off, the backups scheduled runs refuse, the backups/storage rule-35 checks stay silent, and apply refuses to switch off a module an installed module requires. templates/index.html, templates/base.html, templates/social/link_tree.html, templates/social/embeds.html, testproject/settings/modules.py, testproject/urls.py, and testproject/context_processors.py changed where those surfaces render; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa219-orgs-mode-setting": "Regenerated 2026-10-01 \u2014 the orgs runtime mode setting renamed QUICKSCALE_MODE to QUICKSCALE_ORGS_MODE, so templates/index.html (owner.mode) and testproject/context_processors.py (billing dashboard URL) were re-hashed in all three variants. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa221": "Regenerated 2026-09-28 \u2014 module identity rename (SA221): admin templates, React admin links, and generated Makefile/ci.yml now use the quickscale_<module> app labels.",
+      "sa223": "Regenerated 2026-09-30 \u2014 the React theme's useApi.ts parses the one QuickScale error shape and a new src/test/useApiErrors.test.ts pins it; both emitted paths were re-hashed in all three variants.",
+      "sa223-billing-url-mount": "Regenerated 2026-10-01 \u2014 the billing module declares its mount (billing/) in its manifest and the theme's billing API client calls /billing/api/... instead of /api/billing/... . frontend/src/hooks/useOrgs.ts was re-hashed in all three variants.",
+      "sa223-crm-forms-url-mount": "Regenerated 2026-10-01 \u2014 the crm and forms modules declare their mounts (crm/, forms/) in their manifests, the theme's forms API client calls /forms/api/... instead of /api/forms/..., and their route names are snake_case under quickscale_crm: and quickscale_forms:. frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useFormSchema.ts, frontend/src/components/forms/FormRenderer.tsx, frontend/src/test/useApiErrors.test.ts, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants.",
+      "sa223-forms-error-shape": "Regenerated 2026-09-30 \u2014 the theme form client (FormRenderer.tsx) submits through the shared apiRequest client and renders the one QuickScale error shape, useFormSchema.ts surfaces that shape's message for a failed schema fetch, and the new src/test/FormRenderer.test.tsx pins the field-error, non-field-error, shaped-message, and network-failure behavior; csrf.test.tsx's FormRenderer mock now answers a JSON content type. FormRenderer.tsx, useFormSchema.ts, csrf.test.tsx, and FormRenderer.test.tsx were re-hashed in all three variants.",
+      "sa223-orgs-url-mount": "Regenerated 2026-09-30 \u2014 the orgs module declares its mount (orgs/) in its manifest, the generated urls.py keeps /orgs/api/ out of both React org shell route patterns (the slug route and the org subpage route) so the module's JSON API reaches Django, and the theme's org API client calls /orgs/api/... instead of /api/orgs/... . testproject/urls.py, frontend/src/hooks/useOrgs.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants.",
+      "sa223-social-page": "Regenerated 2026-09-30 \u2014 useApi.ts exports the shared payload-message reader and usePublicSocialSurface.ts uses it to surface the one QuickScale error shape for a non-managed payload; PublicSocialPages.test.tsx pins the message and first-field-message cases. useApi.ts, usePublicSocialSurface.ts, and PublicSocialPages.test.tsx were re-hashed in all three variants.",
+      "sa225": "Regenerated 2026-09-28 \u2014 docker-compose.yml backend environment forwards the default vendor credential variables (Stripe, Resend, PostHog, AWS, backups remote) from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa225-build-placeholders": "Regenerated 2026-09-28 \u2014 the Dockerfile collectstatic step carries command-scoped placeholder credentials for the enabled modules' empty-secret startup checks, so an all-module image build succeeds while runtime still requires the real secrets. 1 fixture hash updated per variant: Dockerfile. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa225-skip-guard": "Regenerated 2026-09-28 \u2014 docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
+    },
+    "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
+    "normalization_notes": [
+      "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
+      "poetry.lock is absent from every variant (dynamic artifact, not checked in).",
+      "Executable modes (mode: \"775\") reflect actual os.stat after generation: manage.py and scripts/lint.sh are executable.",
+      "start.sh is intentionally non-executable (mode: \"664\") \u2014 see _EXECUTABLE_EMITTED exclusion in test_generator.py.",
+      "html_default (showcase_html) variant removed in SA94 Phase 4.",
+      "SA105: selected_modules no longer filters frontend/src output. All module files are always emitted as dormant. Runtime gating uses window.__QUICKSCALE__ flags."
+    ],
     "variants": {
       "react_default": {
-        "theme": "showcase_react",
+        "project_name": "testproject",
         "selected_modules": null,
-        "project_name": "testproject"
+        "theme": "showcase_react"
       },
       "react_empty": {
-        "theme": "showcase_react",
+        "project_name": "testproject",
         "selected_modules": [],
-        "project_name": "testproject"
+        "theme": "showcase_react"
       },
       "react_selected": {
-        "theme": "showcase_react",
+        "project_name": "testproject",
         "selected_modules": [
           "blog",
           "forms",
           "social"
         ],
-        "project_name": "testproject"
+        "theme": "showcase_react"
       }
-    },
-    "baseline_evidence": {
-      "sa105": "Regenerated 2026-07-20 — all frontend/src module files are now unconditionally emitted as dormant files (SA105). All three variants carry identical frontend/src trees. Recorded deltas: App.tsx,j2→static, main.tsx.j2→static, App.test.tsx.j2→static, PublicSocialPages.test.tsx.j2→static, useModules.ts.j2 all-modules-unconditional, Sidebar.tsx.j2 all-nav-unconditional, Dashboard.tsx.j2 all-cards-unconditional, templates/index.html.j2 all-module-flags-unconditional.",
-      "sa106": "Regenerated 2026-07-20 — three identity-bearing frontend source templates converted from .j2 to static verbatim-copy files (SA106). projectName reads from window.__QUICKSCALE__.projectName at runtime via useProjectConfig. defaultConfig.projectName set to empty string. Deltas: useModules.ts.j2→static, Dashboard.tsx.j2→static, Sidebar.tsx.j2→static. 3 fixture hashes updated: useModules.ts, Dashboard.tsx, Sidebar.tsx.",
-      "sa107": "Regenerated 2026-07-20 — added validateQuickScaleSeam.ts and validateQuickScaleSeam.test.ts; updated useModules.ts, main.tsx, renderQuickScaleRoot.tsx hashes for fail-hard seam validation (SA107). defaultConfig removed from useModules.ts.",
-      "sa107-fix-pass": "Regenerated 2026-07-20 — owner/modulePaths validation added to validateQuickScaleSeam.ts; templates/social/{embeds,link_tree}.html.j2 inject owner and full modulePaths; RootDispatch.test.tsx and validateQuickScaleSeam.test.ts expanded for production-shaped public-social boot coverage and wrong-type/enum validation. 5 fixture hashes updated: validateQuickScaleSeam.ts, RootDispatch.test.tsx, validateQuickScaleSeam.test.ts, templates/social/embeds.html, templates/social/link_tree.html (all 3 variants).",
-      "sa107-cr-002-pass": "Regenerated 2026-07-20 — all 11 required module keys now enforced in validateQuickScaleSeam.ts (SA107-CR-002); renderQuickScaleRoot.tsx `?? false` fallback removed; parameterized and partial-module rejection tests added to validateQuickScaleSeam.test.ts; RootDispatch.test.tsx callsites updated for strict modules shape. 4 fixture hashes updated: validateQuickScaleSeam.ts, renderQuickScaleRoot.tsx, validateQuickScaleSeam.test.ts, RootDispatch.test.tsx (all 3 variants).",
-      "sa107-cr-002-final-fix": "Regenerated 2026-07-20 — inherited/non-enumerable required-flag regression fix (SA107-CR-002): key in seam.modules replaced with Object.prototype.hasOwnProperty.call; typeof boolean check collapsed into same required-key loop. 4 inherited/non-enumerable regression tests added to validateQuickScaleSeam.test.ts. 2 fixture hashes updated: validateQuickScaleSeam.ts, validateQuickScaleSeam.test.ts (all 3 variants).",
-      "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 — added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants).",
-      "sa112d": "Regenerated 2026-08-18 — Dockerfile collectstatic now sets one-shot QUICKSCALE_ALLOW_BYPASSRLS=1 alongside QUICKSCALE_NON_DB_COMMAND so the orgs startup guard does not probe the deliberately absent build-time database. 1 fixture hash updated: Dockerfile (all 3 variants).",
-      "sa142": "Regenerated 2026-08-25 — Dockerfile: added fixed QuickScale owner/SA142 contract/bound-digest final-image labels and their digest/contract build args; docker-compose.yml: added stable backend image/direct-Compose fallback, validated resource-prefix interpolation, and fixed owner/lifecycle/scope labels for every generated service, named volume, and default network. Only these two generated files changed; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa170-c-correct": "Regenerated 2026-09-04 — db/init.sql now records the quickscale.init_complete database sentinel after every required initialization statement succeeds; docker-compose.yml now probes that sentinel instead of accepting PostgreSQL connection readiness alone. Only these two generated files changed in all three variants; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa160": "Regenerated 2026-09-10 — terminal remediation preserves the HttpOnly production CSRF cookie, injects Django's masked token through testproject/views.py and templates/index.html, makes frontend/src/lib/csrf.ts prefer that server token and otherwise match Django's last duplicate-cookie value, and extends frontend/src/test/csrf.test.tsx across the helper, apiRequest, and FormRenderer callers. These four changed generated paths supersede the 2026-09-09 first-match hashes in react_default, react_empty, and react_selected; the prior useApi.ts, FormRenderer.tsx, base.py, and production.py corrections remain authoritative.",
-      "v88-privileged-command": "Regenerated 2026-09-13 — the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-runtime-role": "Regenerated 2026-09-14 — Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-dockerfile-start-sh": "Regenerated 2026-09-14 — Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa188": "Regenerated 2026-09-16 — start.sh removes the retired migrate_billing_to_orgs argv mode and rejects every supplied argv with exit 2; production.py returns the privileged-command contract to migrate/createcachetable. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa189": "Regenerated 2026-09-17 — the generator and Railway deploy share the quickscale_runtime role name, while db/init.sql, start.sh, and OPERATIONS.md render one canonical grant set including database CONNECT. The role-name context also updates .env.example, docker-compose.yml, and settings/base.py. Only these six generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa192": "Regenerated 2026-09-17 — templates/base.html and templates/index.html load one Vite-served live token stylesheet through the configurable browser-visible frontend origin in DEBUG and compiled React CSS in production; templates/social/{embeds,link_tree}.html inherit that shell choice without overriding it; frontend/vite.config.ts reserves /static/frontend/ for Vite while proxying other Django static paths, loads the generated root environment with process overrides, rejects non-canonical origins, and compares the raw configured Host before Vite's localhost/IP exceptions; frontend/src/test/viteAssetRouting.test.ts proves stylesheet routing, absent and preconfigured .env restoration, exact HTTP/WebSocket Host handling including normalized-alias rejection, and the canonical origin corpus shared with Django settings; docker-compose.yml builds the Django-served SPA JavaScript, probes Vite with the configured Host, and passes both frontend port and origin to Django; testproject/settings/local.py validates the configurable frontend port and full origin against that corpus; .env, .env.example, and README.md document the local defaults and remote/tunnel override. Only these eleven generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa193": "Regenerated 2026-09-23 — the static notifications managed block left `.env.example.j2`. `quickscale apply` now renders one managed block per enabled credential-bearing module from that module's declared `*_env_var` options (notifications, analytics, billing, storage, backups); a fresh generation carries no module-managed block until apply syncs it.",
-      "sa200": "Regenerated 2026-09-23 — generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py.",
-      "sa206": "Regenerated 2026-09-23 — the generated settings import the executable runtime contracts (middleware, proxy-trust derivation, privileged-command/runtime-database selection, SECRET_KEY guard) from the versioned quickscale_core.runtime settings facade; pyproject.toml declares the bounded quickscale-core lockstep pin (SA206). Hashes updated per variant: pyproject.toml, testproject/settings/base.py, testproject/settings/production.py.",
-      "sa210": "Regenerated 2026-09-24 — pyproject.toml.j2 emits a bounded poetry-core build requirement (poetry-core>=2.0,<3.0) into every generated project (SA210). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative.",
-      "compose-frontend-install-retries": "Regenerated 2026-09-25 — docker-compose.yml frontend startup raises pnpm's fetch retry budget (--config.fetch-retries=5) so a single stalled registry request does not abort the dev install and leave `quickscale up` with a failed-to-start frontend. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa221": "Regenerated 2026-09-28 — module identity rename (SA221): admin templates, React admin links, and generated Makefile/ci.yml now use the quickscale_<module> app labels.",
-      "sa218": "Regenerated 2026-09-28 — generated settings install quickscale_core.runtime.conventions.exception_handler as REST_FRAMEWORK[EXCEPTION_HANDLER] (SA218). 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa225": "Regenerated 2026-09-28 — docker-compose.yml backend environment forwards the default vendor credential variables (Stripe, Resend, PostHog, AWS, backups remote) from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa225-build-placeholders": "Regenerated 2026-09-28 — the Dockerfile collectstatic step carries command-scoped placeholder credentials for the enabled modules' empty-secret startup checks, so an all-module image build succeeds while runtime still requires the real secrets. 1 fixture hash updated per variant: Dockerfile. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa225-skip-guard": "Regenerated 2026-09-28 — docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa223": "Regenerated 2026-09-30 — the React theme's useApi.ts parses the one QuickScale error shape and a new src/test/useApiErrors.test.ts pins it; both emitted paths were re-hashed in all three variants.",
-      "sa223-social-page": "Regenerated 2026-09-30 — useApi.ts exports the shared payload-message reader and usePublicSocialSurface.ts uses it to surface the one QuickScale error shape for a non-managed payload; PublicSocialPages.test.tsx pins the message and first-field-message cases. useApi.ts, usePublicSocialSurface.ts, and PublicSocialPages.test.tsx were re-hashed in all three variants.",
-      "sa217": "Regenerated 2026-09-30 — the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644.",
-      "sa223-forms-error-shape": "Regenerated 2026-09-30 — the theme form client (FormRenderer.tsx) submits through the shared apiRequest client and renders the one QuickScale error shape, useFormSchema.ts surfaces that shape's message for a failed schema fetch, and the new src/test/FormRenderer.test.tsx pins the field-error, non-field-error, shaped-message, and network-failure behavior; csrf.test.tsx's FormRenderer mock now answers a JSON content type. FormRenderer.tsx, useFormSchema.ts, csrf.test.tsx, and FormRenderer.test.tsx were re-hashed in all three variants.",
-      "sa223-orgs-url-mount": "Regenerated 2026-09-30 — the orgs module declares its mount (orgs/) in its manifest, the generated urls.py keeps /orgs/api/ out of both React org shell route patterns (the slug route and the org subpage route) so the module's JSON API reaches Django, and the theme's org API client calls /orgs/api/... instead of /api/orgs/... . testproject/urls.py, frontend/src/hooks/useOrgs.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants.",
-      "sa223-billing-url-mount": "Regenerated 2026-10-01 — the billing module declares its mount (billing/) in its manifest and the theme's billing API client calls /billing/api/... instead of /api/billing/... . frontend/src/hooks/useOrgs.ts was re-hashed in all three variants.",
-      "sa223-crm-forms-url-mount": "Regenerated 2026-10-01 — the crm and forms modules declare their mounts (crm/, forms/) in their manifests, the theme's forms API client calls /forms/api/... instead of /api/forms/..., and their route names are snake_case under quickscale_crm: and quickscale_forms:. frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useFormSchema.ts, frontend/src/components/forms/FormRenderer.tsx, frontend/src/test/useApiErrors.test.ts, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants.",
-      "sa219-orgs-mode-setting": "Regenerated 2026-10-01 — the orgs runtime mode setting renamed QUICKSCALE_MODE to QUICKSCALE_ORGS_MODE, so templates/index.html (owner.mode) and testproject/context_processors.py (billing dashboard URL) were re-hashed in all three variants. All unrelated paths, hashes, and modes remain authoritative."
-    },
-    "normalization_notes": [
-      "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
-      "poetry.lock is absent from every variant (dynamic artifact, not checked in).",
-      "Executable modes (mode: \"775\") reflect actual os.stat after generation: manage.py and scripts/lint.sh are executable.",
-      "start.sh is intentionally non-executable (mode: \"664\") — see _EXECUTABLE_EMITTED exclusion in test_generator.py.",
-      "html_default (showcase_html) variant removed in SA94 Phase 4.",
-      "SA105: selected_modules no longer filters frontend/src output. All module files are always emitted as dormant. Runtime gating uses window.__QUICKSCALE__ flags."
-    ]
+    }
   },
   "react_default": {
     ".dockerignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "fcdbc08af6f071a6d442d300efd1c6151554aba60017f411e843b557f46e2d05"
     },
     ".editorconfig": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "37d5024d9b24b97197aa28d9c1783aa228a961b8e53ebb94687ccb8817034632"
     },
     ".env": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "04da07b92d64dc5c800229b93b2dfc9904e0a529d9e403fafe4a00a25fe79d9b"
     },
     ".env.example": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
     ".github/workflows/ci.yml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "1f9fd6afea3992dcdccaa3bfada4b00a4c5ef64f08172aebd47389f1f584356b"
     },
     ".gitignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "3176f845c89d33d1231f707ac046e8888d75aa6eab8faeeb100729adbd516fd1"
     },
     "Dockerfile": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
     },
     "Makefile": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "40ba0de63f9f0c52ceef81afe9dcabed481e8d3fe4a8ac721b8110a3456b4738"
     },
     "OPERATIONS.md": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387"
     },
     "db/init.sql": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9132cda77fd48562637a6dd30b1f868127b2fcbd1cfdf7ed3b17edce3579f220"
     },
     "docker-compose.yml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
     },
     "frontend/.prettierignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "11035dbae13c6b4e3795c3cc5bbe358f564c100638292f1b6e3869449212a22b"
     },
     "frontend/.prettierrc": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a95f967be8df69f743af8ed207ca4fd5b0a8b55578efedea05e0a12ce3d2a5d0"
     },
     "frontend/components.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9766ddc53e447165b4e8f8ae98883f4bfc5119501f84ab38bea8f4b216051f65"
     },
     "frontend/e2e/home.spec.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7775a474730218499691f30a44c837b33536580ab2c52de9558f395c62a5e197"
     },
     "frontend/eslint.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "438187eb155b03b2f21d716bb620bdba95ab1f47455726969ddb6b4bea1c8e9d"
     },
     "frontend/index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f6fce24a0744ae285ed079a3f45f900b1c4e3a30623afff7bc61df7c6e980968"
     },
     "frontend/package.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
     },
     "frontend/playwright.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
     },
     "frontend/pnpm-workspace.yaml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "01b5d3ea42061dc46513d5c5a905fcce9c489b635a917ce22f15a468f8bf1d14"
     },
     "frontend/postcss.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "190c877db466995bf1482f4a16abd06e04a89ede3119341e2a86ff96e1737b27"
     },
     "frontend/public/favicon.svg": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9bcfc5e60e59fe99bc16a87041aa32fe9e6c57514fde83939dcb0dfe452a9a05"
     },
     "frontend/src/App.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e08fc3a1c7e2504b4d71349e9e41ed6b009497d5966f4aecef75779c8fcd6890"
     },
     "frontend/src/components/forms/FormFieldRenderer.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d0ecc4b71bf32f8b9e7afb2363e872b12e22d75929914b6a531c4fbb5d70dd8b"
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "3361a632ecfb78fe7a8f7fcd88122b0099fabf59ef64830bdb8948596984b303"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "ae4c9bbdd499b076917699963fdf4bc7c37e47d36b05b6fdc482461acd47785e"
     },
     "frontend/src/components/layout/Header.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "098524b43e4240d66bff8a09bef71f16d69d3a880ae1fbf924da857dca888d56"
     },
     "frontend/src/components/layout/Layout.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d00e9e87e333ee125716067f7dc0fc0653d7bd748977e32325f56a6072a572f9"
     },
     "frontend/src/components/layout/Sidebar.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2b9ebfeba1c53c6fb2ad22872a7dff2b956de41c8950b5b1b953ddee8aef50de"
     },
     "frontend/src/components/orgs/OrgStatePanel.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7efeda90548c4fac8a4d33a8573052c845155a97eab121a9e4b2a57c49eaf2ff"
     },
     "frontend/src/components/orgs/OrgSwitcher.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "8caa566ccb977d80682ccd441874e1dd26d37841a1c1b3eca0288e416e77e59f"
     },
     "frontend/src/components/social/PublicSocialShell.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0282dd6ba09ac1909f3bbd60a080a8a6cfc571d74b5557b8a35239e75713f7b1"
     },
     "frontend/src/components/ui/badge.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d978a2e83373f04c54d69a0fc46e775ffc93fc6bd476f174437419e88990b8c0"
     },
     "frontend/src/components/ui/button.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "95dfb3feb5d8113d37425ba9363efac7957f0284d38f92955fd84765d1d7b197"
     },
     "frontend/src/components/ui/card.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "815e6c6b4c5d4dbe1bae67d5ab527dbf9b5caff0d273e8e2391f20c68bd0c636"
     },
     "frontend/src/components/ui/checkbox.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "99a57d2da3f84712e9b87c70cc46aae3bf5eebd44f0614b731f2140c00fa714a"
     },
     "frontend/src/components/ui/form.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cd6ca9a393f5f6821ad603c53d176fe93925ee2e66f799eb4e9a74363f41c682"
     },
     "frontend/src/components/ui/input.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "35c1c07f1a41b3ceff3c43e0b405cdbaa43465e651155461fa4db70dc8244cc8"
     },
     "frontend/src/components/ui/label.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "49beaaf5d88706f1cffdbb81bbd4921df164cb2d5b9606b0c7a78c4bec255ad4"
     },
     "frontend/src/components/ui/radio-group.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e5f9236cb8242b83ee5ddcb3512c5a8b288e420b84e72faa3addb3c40a4c98c9"
     },
     "frontend/src/components/ui/select.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d9e99621414b4c2a09cc0f9d7c65be148794238c503cabc86fd2ee0844a8bb6a"
     },
     "frontend/src/components/ui/separator.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d0e77112b6113ade73da3c882149ddd678a73cd00f580fc1c808fc7af2850154"
     },
     "frontend/src/components/ui/textarea.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "4f0078925782ecf3a322652fdfca49904fe7cb1250c59dcf2c6cdc820f382d0f"
     },
     "frontend/src/components/ui/tooltip.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d7aea9092ffc4c61e31b5360c85015da090e987b3a03d744bc2b0401342ce8a4"
     },
     "frontend/src/hooks/useApi.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "048ca404586b1ec6d0e84d3827cd36fce168b7b8cacaf0d7cdadb36e90eae2db"
     },
     "frontend/src/hooks/useFormSchema.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "918f43bfbf2175fa57aceb6b4f1c9836418a4c2202f4c37c7dc3ed789591697f"
     },
     "frontend/src/hooks/useModules.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7608d7b30ecb8dde36c4a18100acc1715c971fbf03931a208d9052d245694c8d"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9e73584c29f36007ba0d8bc9144f80629666fff86632209fdadfa6e37cea5e1e"
     },
     "frontend/src/hooks/useOrgs.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a2f070d1e3495dd99a03300b2908a55954caafc397b0b44d163bb059b159b057"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "53ad0b23bae007c8c54e0962e6b4a40b8f12021fd851cb1910c5245156df7e43"
     },
     "frontend/src/index.css": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7a5463db4088894cfd6aec1ecf11e0718ba19036d16ab54a86575a9bc7260982"
     },
     "frontend/src/lib/analytics.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "72e6495f33f96104895a3401539d4a66ad8560924c5f479bd00d606db5bdaec9"
     },
     "frontend/src/lib/csrf.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0b38e88346e5f1f19ccbbe354549cbb72d267f3262d8697adbd6f5b0d8b8581b"
     },
     "frontend/src/lib/utils.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e46429536f43f5910f5b2b0c50bb2769b510a4558bb4b5d20a3b0a9091dbf7c3"
     },
     "frontend/src/lib/validateQuickScaleSeam.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "049bc5e11d41f86f94f7bec05f6fa39f8ea7dca41346fc411131cf34888826c5"
     },
     "frontend/src/main.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "86c71459a137a8b866880f5e26b121dd13a6ee4f80bc2d76d7ac6eab6d8403b3"
     },
     "frontend/src/pages/CrmPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "701b8fa901f9395d542f8fd35b14bfea3354760206c5cdf0923f640495e7bc37"
     },
     "frontend/src/pages/Dashboard.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "011f25936e936b3b4df7ca1299b2eab8a6262154f43611f409091481596093e3"
     },
     "frontend/src/pages/FormsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f24d7dddf1a84d947f177189488d3da5dac9ae2f3c71d7778a0688bba8e56aff"
     },
     "frontend/src/pages/ListingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7dc3035b2af5c60b50c4db460b5d712e75b3d653275dca2d3f060c6dad243184"
     },
     "frontend/src/pages/NotFound.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "bf86c661d38973735e183783533900a9a277aab7c9699de69ba152e124d1ec9d"
     },
     "frontend/src/pages/ProfilePage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "304eae103701a08a19259394a71385a0a2ebd5a7cde8b5a2f497f28098445f03"
     },
     "frontend/src/pages/SettingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "53cab5e737b65bd2102a99ca52eebce891cb22890bfae4bcb33ea9aebbbe275c"
     },
     "frontend/src/pages/SocialEmbedsPublicPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e40201bb0a1a7660c631e17bed6ef5bb4501599c2fd55e9682678f7054ea6cf9"
     },
     "frontend/src/pages/SocialLinkTreePublicPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6d8dc77ee6b34d3fde1a58678aa3e384db0f72566be61871b502a3b618c9cb0b"
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6d8667fbe3ac8aae295094518aab7122992b6c435d62aa2f4abaed52f3cdfb19"
     },
     "frontend/src/pages/orgs/OrgDashboardPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "299964c0cab41aec93026b11678d9d1b3ef3b98de716a4b1f48d4c1fa4c75845"
     },
     "frontend/src/pages/orgs/OrgLayout.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "167b1471ae6873022a6db16d10b4a1f2f4a4e4f54774d040e5a9d6caf9aea79f"
     },
     "frontend/src/pages/orgs/OrgListPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9cb57744ff72cfb2b56120b9c7f33e220b62e0794a54d09a3afae1a83518ea1c"
     },
     "frontend/src/pages/orgs/OrgMembersPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5dd2c55323e4a564258bc8b04319e4387fd7149541f785afcdad4826a5eb2926"
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "15451cf4848e1095f494d239af650b47d0f3aaf5fd1a5d138c4f6f9b95132b6b"
     },
     "frontend/src/posthog-js.d.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
     },
     "frontend/src/renderQuickScaleRoot.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
     },
     "frontend/src/stores/themeStore.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cc3fab3de66286036ff9054a99267b0882fb843723e07d9de9b25533e551ebd9"
     },
     "frontend/src/test/App.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0ea8bca9e90e625443a5cdf8ced4915455746f028dbd293314bccfd681aaff0b"
     },
     "frontend/src/test/FormRenderer.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "50bf92c42e8c596526576c11abcb866ccca5c2e657a23f369638e3c8dc4cc3e4"
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
     },
     "frontend/src/test/csrf.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b6fbcd0605f729ae0b9c50f2ca5b09f02e5a6cc2a6e7232d73bcccaaf42de431"
     },
     "frontend/src/test/setup.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
     },
     "frontend/src/test/useApiErrors.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d357566072e28d48d0dd295009dc83d303d93e7a5fd8a66c7adc530e1f10ff05"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
     "frontend/src/test/viteAssetRouting.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016"
     },
     "frontend/src/vite-env.d.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "ce69993800ff581ee24bca8cf09315cf46a3075de8bf78e653e4afcee3096ee3"
     },
     "frontend/tailwind.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b293006473d7ad3ee9034d647eb88d26d7db09bdef68795dd0c1cefc66d08f20"
     },
     "frontend/tsconfig.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9aaae682d5e2df06d1375bc66e738ab372a9cd42106353752f42cdda2d875d99"
     },
     "frontend/vite.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e"
     },
     "frontend/vitest.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "810118c8359a3f6b16f09e89c1d813d8460f098356397c062f09d83b7123018a"
     },
     "manage.py": {
-      "mode": "775",
+      "mode": "755",
       "sha256": "189e769f429a8771484025641b731ae40ee19b8ef3201f32eff987bd7732db19"
     },
     "pyproject.toml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "afd1d32ea1692126dc08e311dfb80e4dd05d763047ad5874e610389d874c459c"
     },
     "railway.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "49b638e8e76569556ece0b31806570802f809c90b00d04c9d2fb1a4c4f9ca70e"
     },
     "scripts/lint.sh": {
-      "mode": "775",
+      "mode": "755",
       "sha256": "dd3fd6f657358e601778812c9adda6c37497cc99eb33a4fe0d4a1563a41cd269"
     },
     "start.sh": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
     },
     "templates/404.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "56e8e586a57fe99f9c577dcc62ba355a0a286199565529225015865c1c7f1061"
     },
     "templates/500.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "919268fa0c9742970c8874b5e536059e86cf64e4b5a244d6ca554ed326e42dfa"
     },
     "templates/admin/app_index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
     },
     "templates/admin/index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
     },
     "templates/base.html": {
-      "mode": "664",
-      "sha256": "dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668"
+      "mode": "644",
+      "sha256": "3898d9b34402ffba01246e2978f63fe3acfeab96de2440f768001f892f96b643"
     },
     "templates/index.html": {
-      "mode": "664",
-      "sha256": "78999622d77afd224ac0e4fbbe03bbce9e14febea15a02bd2a5c6fb37d3728e7"
+      "mode": "644",
+      "sha256": "3044206087a4ec8fded1f8b1ee70ebad52221be1260230b42d198969e00ec51b"
     },
     "templates/social/embeds.html": {
-      "mode": "664",
-      "sha256": "72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82"
+      "mode": "644",
+      "sha256": "240fe1bfc9adfec11b4e9f745b4c4daf383e78cf2fba61a2d001f8f23a545756"
     },
     "templates/social/link_tree.html": {
-      "mode": "664",
-      "sha256": "2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb"
+      "mode": "644",
+      "sha256": "6cd776f1fd174262af7a9ef63b980d05d1cac9ae63702531a41f29d652c059f7"
     },
     "testproject/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2beb99c082e6fb5a9050e3af97126e6b9a6d4495df624c28bd02610a9805286b"
     },
     "testproject/asgi.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5ae84d756c5ee43499fa3976830ea1fb981a51f126808e57c832f4a1f23f7d3d"
     },
     "testproject/context_processors.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
     },
     "testproject/settings/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c8c9c4f7977a8f9ddc6e552d974d4cce1dabd811a36e3dc5b977419043d5db4c"
     },
     "testproject/settings/base.py": {
@@ -506,7 +507,7 @@
       "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
     },
     "testproject/settings/local.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
@@ -514,469 +515,469 @@
       "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
     },
     "testproject/settings/production.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
     },
     "testproject/urls.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
     },
     "testproject/urls_modules.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2ec1b29c982773cc901fd4a4b2593133917efd475a45d3da8bbf26d2e7ff0c18"
     },
     "testproject/views.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
     },
     "testproject/wsgi.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "4182c4a8da6d994db632b8115eb0983fbceb3a6d35d866b185fa64a57ba50b56"
     },
     "tests/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "tests/conftest.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "27ca6a3a5f2773a95d423ac4bb6a574c432c883b25f83e1d2b387789ee4d13c7"
     },
     "tests/test_example.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
     }
   },
   "react_empty": {
     ".dockerignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "fcdbc08af6f071a6d442d300efd1c6151554aba60017f411e843b557f46e2d05"
     },
     ".editorconfig": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "37d5024d9b24b97197aa28d9c1783aa228a961b8e53ebb94687ccb8817034632"
     },
     ".env": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "04da07b92d64dc5c800229b93b2dfc9904e0a529d9e403fafe4a00a25fe79d9b"
     },
     ".env.example": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
     ".github/workflows/ci.yml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f25f72b4e15557882dd69429dc4555496a4c1c0f89cb9b39ad96c28f09004e73"
     },
     ".gitignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "3176f845c89d33d1231f707ac046e8888d75aa6eab8faeeb100729adbd516fd1"
     },
     "Dockerfile": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
     },
     "Makefile": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b4d6d439a9ebcac915fb114dc21fc0d5b53239c2ed5a3da6c61b3a145bb739fc"
     },
     "OPERATIONS.md": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387"
     },
     "db/init.sql": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9132cda77fd48562637a6dd30b1f868127b2fcbd1cfdf7ed3b17edce3579f220"
     },
     "docker-compose.yml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
     },
     "frontend/.prettierignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "11035dbae13c6b4e3795c3cc5bbe358f564c100638292f1b6e3869449212a22b"
     },
     "frontend/.prettierrc": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a95f967be8df69f743af8ed207ca4fd5b0a8b55578efedea05e0a12ce3d2a5d0"
     },
     "frontend/components.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9766ddc53e447165b4e8f8ae98883f4bfc5119501f84ab38bea8f4b216051f65"
     },
     "frontend/e2e/home.spec.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7775a474730218499691f30a44c837b33536580ab2c52de9558f395c62a5e197"
     },
     "frontend/eslint.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "438187eb155b03b2f21d716bb620bdba95ab1f47455726969ddb6b4bea1c8e9d"
     },
     "frontend/index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f6fce24a0744ae285ed079a3f45f900b1c4e3a30623afff7bc61df7c6e980968"
     },
     "frontend/package.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
     },
     "frontend/playwright.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
     },
     "frontend/pnpm-workspace.yaml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "01b5d3ea42061dc46513d5c5a905fcce9c489b635a917ce22f15a468f8bf1d14"
     },
     "frontend/postcss.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "190c877db466995bf1482f4a16abd06e04a89ede3119341e2a86ff96e1737b27"
     },
     "frontend/public/favicon.svg": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9bcfc5e60e59fe99bc16a87041aa32fe9e6c57514fde83939dcb0dfe452a9a05"
     },
     "frontend/src/App.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e08fc3a1c7e2504b4d71349e9e41ed6b009497d5966f4aecef75779c8fcd6890"
     },
     "frontend/src/components/forms/FormFieldRenderer.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d0ecc4b71bf32f8b9e7afb2363e872b12e22d75929914b6a531c4fbb5d70dd8b"
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "3361a632ecfb78fe7a8f7fcd88122b0099fabf59ef64830bdb8948596984b303"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "ae4c9bbdd499b076917699963fdf4bc7c37e47d36b05b6fdc482461acd47785e"
     },
     "frontend/src/components/layout/Header.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "098524b43e4240d66bff8a09bef71f16d69d3a880ae1fbf924da857dca888d56"
     },
     "frontend/src/components/layout/Layout.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d00e9e87e333ee125716067f7dc0fc0653d7bd748977e32325f56a6072a572f9"
     },
     "frontend/src/components/layout/Sidebar.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2b9ebfeba1c53c6fb2ad22872a7dff2b956de41c8950b5b1b953ddee8aef50de"
     },
     "frontend/src/components/orgs/OrgStatePanel.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7efeda90548c4fac8a4d33a8573052c845155a97eab121a9e4b2a57c49eaf2ff"
     },
     "frontend/src/components/orgs/OrgSwitcher.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "8caa566ccb977d80682ccd441874e1dd26d37841a1c1b3eca0288e416e77e59f"
     },
     "frontend/src/components/social/PublicSocialShell.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0282dd6ba09ac1909f3bbd60a080a8a6cfc571d74b5557b8a35239e75713f7b1"
     },
     "frontend/src/components/ui/badge.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d978a2e83373f04c54d69a0fc46e775ffc93fc6bd476f174437419e88990b8c0"
     },
     "frontend/src/components/ui/button.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "95dfb3feb5d8113d37425ba9363efac7957f0284d38f92955fd84765d1d7b197"
     },
     "frontend/src/components/ui/card.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "815e6c6b4c5d4dbe1bae67d5ab527dbf9b5caff0d273e8e2391f20c68bd0c636"
     },
     "frontend/src/components/ui/checkbox.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "99a57d2da3f84712e9b87c70cc46aae3bf5eebd44f0614b731f2140c00fa714a"
     },
     "frontend/src/components/ui/form.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cd6ca9a393f5f6821ad603c53d176fe93925ee2e66f799eb4e9a74363f41c682"
     },
     "frontend/src/components/ui/input.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "35c1c07f1a41b3ceff3c43e0b405cdbaa43465e651155461fa4db70dc8244cc8"
     },
     "frontend/src/components/ui/label.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "49beaaf5d88706f1cffdbb81bbd4921df164cb2d5b9606b0c7a78c4bec255ad4"
     },
     "frontend/src/components/ui/radio-group.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e5f9236cb8242b83ee5ddcb3512c5a8b288e420b84e72faa3addb3c40a4c98c9"
     },
     "frontend/src/components/ui/select.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d9e99621414b4c2a09cc0f9d7c65be148794238c503cabc86fd2ee0844a8bb6a"
     },
     "frontend/src/components/ui/separator.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d0e77112b6113ade73da3c882149ddd678a73cd00f580fc1c808fc7af2850154"
     },
     "frontend/src/components/ui/textarea.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "4f0078925782ecf3a322652fdfca49904fe7cb1250c59dcf2c6cdc820f382d0f"
     },
     "frontend/src/components/ui/tooltip.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d7aea9092ffc4c61e31b5360c85015da090e987b3a03d744bc2b0401342ce8a4"
     },
     "frontend/src/hooks/useApi.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "048ca404586b1ec6d0e84d3827cd36fce168b7b8cacaf0d7cdadb36e90eae2db"
     },
     "frontend/src/hooks/useFormSchema.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "918f43bfbf2175fa57aceb6b4f1c9836418a4c2202f4c37c7dc3ed789591697f"
     },
     "frontend/src/hooks/useModules.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7608d7b30ecb8dde36c4a18100acc1715c971fbf03931a208d9052d245694c8d"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9e73584c29f36007ba0d8bc9144f80629666fff86632209fdadfa6e37cea5e1e"
     },
     "frontend/src/hooks/useOrgs.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a2f070d1e3495dd99a03300b2908a55954caafc397b0b44d163bb059b159b057"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "53ad0b23bae007c8c54e0962e6b4a40b8f12021fd851cb1910c5245156df7e43"
     },
     "frontend/src/index.css": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7a5463db4088894cfd6aec1ecf11e0718ba19036d16ab54a86575a9bc7260982"
     },
     "frontend/src/lib/analytics.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "72e6495f33f96104895a3401539d4a66ad8560924c5f479bd00d606db5bdaec9"
     },
     "frontend/src/lib/csrf.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0b38e88346e5f1f19ccbbe354549cbb72d267f3262d8697adbd6f5b0d8b8581b"
     },
     "frontend/src/lib/utils.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e46429536f43f5910f5b2b0c50bb2769b510a4558bb4b5d20a3b0a9091dbf7c3"
     },
     "frontend/src/lib/validateQuickScaleSeam.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "049bc5e11d41f86f94f7bec05f6fa39f8ea7dca41346fc411131cf34888826c5"
     },
     "frontend/src/main.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "86c71459a137a8b866880f5e26b121dd13a6ee4f80bc2d76d7ac6eab6d8403b3"
     },
     "frontend/src/pages/CrmPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "701b8fa901f9395d542f8fd35b14bfea3354760206c5cdf0923f640495e7bc37"
     },
     "frontend/src/pages/Dashboard.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "011f25936e936b3b4df7ca1299b2eab8a6262154f43611f409091481596093e3"
     },
     "frontend/src/pages/FormsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f24d7dddf1a84d947f177189488d3da5dac9ae2f3c71d7778a0688bba8e56aff"
     },
     "frontend/src/pages/ListingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7dc3035b2af5c60b50c4db460b5d712e75b3d653275dca2d3f060c6dad243184"
     },
     "frontend/src/pages/NotFound.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "bf86c661d38973735e183783533900a9a277aab7c9699de69ba152e124d1ec9d"
     },
     "frontend/src/pages/ProfilePage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "304eae103701a08a19259394a71385a0a2ebd5a7cde8b5a2f497f28098445f03"
     },
     "frontend/src/pages/SettingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "53cab5e737b65bd2102a99ca52eebce891cb22890bfae4bcb33ea9aebbbe275c"
     },
     "frontend/src/pages/SocialEmbedsPublicPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e40201bb0a1a7660c631e17bed6ef5bb4501599c2fd55e9682678f7054ea6cf9"
     },
     "frontend/src/pages/SocialLinkTreePublicPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6d8dc77ee6b34d3fde1a58678aa3e384db0f72566be61871b502a3b618c9cb0b"
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6d8667fbe3ac8aae295094518aab7122992b6c435d62aa2f4abaed52f3cdfb19"
     },
     "frontend/src/pages/orgs/OrgDashboardPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "299964c0cab41aec93026b11678d9d1b3ef3b98de716a4b1f48d4c1fa4c75845"
     },
     "frontend/src/pages/orgs/OrgLayout.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "167b1471ae6873022a6db16d10b4a1f2f4a4e4f54774d040e5a9d6caf9aea79f"
     },
     "frontend/src/pages/orgs/OrgListPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9cb57744ff72cfb2b56120b9c7f33e220b62e0794a54d09a3afae1a83518ea1c"
     },
     "frontend/src/pages/orgs/OrgMembersPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5dd2c55323e4a564258bc8b04319e4387fd7149541f785afcdad4826a5eb2926"
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "15451cf4848e1095f494d239af650b47d0f3aaf5fd1a5d138c4f6f9b95132b6b"
     },
     "frontend/src/posthog-js.d.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
     },
     "frontend/src/renderQuickScaleRoot.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
     },
     "frontend/src/stores/themeStore.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cc3fab3de66286036ff9054a99267b0882fb843723e07d9de9b25533e551ebd9"
     },
     "frontend/src/test/App.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0ea8bca9e90e625443a5cdf8ced4915455746f028dbd293314bccfd681aaff0b"
     },
     "frontend/src/test/FormRenderer.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "50bf92c42e8c596526576c11abcb866ccca5c2e657a23f369638e3c8dc4cc3e4"
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
     },
     "frontend/src/test/csrf.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b6fbcd0605f729ae0b9c50f2ca5b09f02e5a6cc2a6e7232d73bcccaaf42de431"
     },
     "frontend/src/test/setup.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
     },
     "frontend/src/test/useApiErrors.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d357566072e28d48d0dd295009dc83d303d93e7a5fd8a66c7adc530e1f10ff05"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
     "frontend/src/test/viteAssetRouting.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016"
     },
     "frontend/src/vite-env.d.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "ce69993800ff581ee24bca8cf09315cf46a3075de8bf78e653e4afcee3096ee3"
     },
     "frontend/tailwind.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b293006473d7ad3ee9034d647eb88d26d7db09bdef68795dd0c1cefc66d08f20"
     },
     "frontend/tsconfig.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9aaae682d5e2df06d1375bc66e738ab372a9cd42106353752f42cdda2d875d99"
     },
     "frontend/vite.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e"
     },
     "frontend/vitest.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "810118c8359a3f6b16f09e89c1d813d8460f098356397c062f09d83b7123018a"
     },
     "manage.py": {
-      "mode": "775",
+      "mode": "755",
       "sha256": "189e769f429a8771484025641b731ae40ee19b8ef3201f32eff987bd7732db19"
     },
     "pyproject.toml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "afd1d32ea1692126dc08e311dfb80e4dd05d763047ad5874e610389d874c459c"
     },
     "railway.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "49b638e8e76569556ece0b31806570802f809c90b00d04c9d2fb1a4c4f9ca70e"
     },
     "scripts/lint.sh": {
-      "mode": "775",
+      "mode": "755",
       "sha256": "dd3fd6f657358e601778812c9adda6c37497cc99eb33a4fe0d4a1563a41cd269"
     },
     "start.sh": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
     },
     "templates/404.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "56e8e586a57fe99f9c577dcc62ba355a0a286199565529225015865c1c7f1061"
     },
     "templates/500.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "919268fa0c9742970c8874b5e536059e86cf64e4b5a244d6ca554ed326e42dfa"
     },
     "templates/admin/app_index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
     },
     "templates/admin/index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
     },
     "templates/base.html": {
-      "mode": "664",
-      "sha256": "dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668"
+      "mode": "644",
+      "sha256": "3898d9b34402ffba01246e2978f63fe3acfeab96de2440f768001f892f96b643"
     },
     "templates/index.html": {
-      "mode": "664",
-      "sha256": "78999622d77afd224ac0e4fbbe03bbce9e14febea15a02bd2a5c6fb37d3728e7"
+      "mode": "644",
+      "sha256": "3044206087a4ec8fded1f8b1ee70ebad52221be1260230b42d198969e00ec51b"
     },
     "templates/social/embeds.html": {
-      "mode": "664",
-      "sha256": "72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82"
+      "mode": "644",
+      "sha256": "240fe1bfc9adfec11b4e9f745b4c4daf383e78cf2fba61a2d001f8f23a545756"
     },
     "templates/social/link_tree.html": {
-      "mode": "664",
-      "sha256": "2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb"
+      "mode": "644",
+      "sha256": "6cd776f1fd174262af7a9ef63b980d05d1cac9ae63702531a41f29d652c059f7"
     },
     "testproject/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2beb99c082e6fb5a9050e3af97126e6b9a6d4495df624c28bd02610a9805286b"
     },
     "testproject/asgi.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5ae84d756c5ee43499fa3976830ea1fb981a51f126808e57c832f4a1f23f7d3d"
     },
     "testproject/context_processors.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
     },
     "testproject/settings/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c8c9c4f7977a8f9ddc6e552d974d4cce1dabd811a36e3dc5b977419043d5db4c"
     },
     "testproject/settings/base.py": {
@@ -984,7 +985,7 @@
       "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
     },
     "testproject/settings/local.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
@@ -992,469 +993,469 @@
       "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
     },
     "testproject/settings/production.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
     },
     "testproject/urls.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
     },
     "testproject/urls_modules.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2ec1b29c982773cc901fd4a4b2593133917efd475a45d3da8bbf26d2e7ff0c18"
     },
     "testproject/views.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
     },
     "testproject/wsgi.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "4182c4a8da6d994db632b8115eb0983fbceb3a6d35d866b185fa64a57ba50b56"
     },
     "tests/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "tests/conftest.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "27ca6a3a5f2773a95d423ac4bb6a574c432c883b25f83e1d2b387789ee4d13c7"
     },
     "tests/test_example.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
     }
   },
   "react_selected": {
     ".dockerignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "fcdbc08af6f071a6d442d300efd1c6151554aba60017f411e843b557f46e2d05"
     },
     ".editorconfig": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "37d5024d9b24b97197aa28d9c1783aa228a961b8e53ebb94687ccb8817034632"
     },
     ".env": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "04da07b92d64dc5c800229b93b2dfc9904e0a529d9e403fafe4a00a25fe79d9b"
     },
     ".env.example": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
     ".github/workflows/ci.yml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f25f72b4e15557882dd69429dc4555496a4c1c0f89cb9b39ad96c28f09004e73"
     },
     ".gitignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "3176f845c89d33d1231f707ac046e8888d75aa6eab8faeeb100729adbd516fd1"
     },
     "Dockerfile": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
     },
     "Makefile": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b4d6d439a9ebcac915fb114dc21fc0d5b53239c2ed5a3da6c61b3a145bb739fc"
     },
     "OPERATIONS.md": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
     },
     "README.md": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387"
     },
     "db/init.sql": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9132cda77fd48562637a6dd30b1f868127b2fcbd1cfdf7ed3b17edce3579f220"
     },
     "docker-compose.yml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
     },
     "frontend/.prettierignore": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "11035dbae13c6b4e3795c3cc5bbe358f564c100638292f1b6e3869449212a22b"
     },
     "frontend/.prettierrc": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a95f967be8df69f743af8ed207ca4fd5b0a8b55578efedea05e0a12ce3d2a5d0"
     },
     "frontend/components.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9766ddc53e447165b4e8f8ae98883f4bfc5119501f84ab38bea8f4b216051f65"
     },
     "frontend/e2e/home.spec.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7775a474730218499691f30a44c837b33536580ab2c52de9558f395c62a5e197"
     },
     "frontend/eslint.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "438187eb155b03b2f21d716bb620bdba95ab1f47455726969ddb6b4bea1c8e9d"
     },
     "frontend/index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f6fce24a0744ae285ed079a3f45f900b1c4e3a30623afff7bc61df7c6e980968"
     },
     "frontend/package.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
     },
     "frontend/playwright.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
     },
     "frontend/pnpm-workspace.yaml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "01b5d3ea42061dc46513d5c5a905fcce9c489b635a917ce22f15a468f8bf1d14"
     },
     "frontend/postcss.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "190c877db466995bf1482f4a16abd06e04a89ede3119341e2a86ff96e1737b27"
     },
     "frontend/public/favicon.svg": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9bcfc5e60e59fe99bc16a87041aa32fe9e6c57514fde83939dcb0dfe452a9a05"
     },
     "frontend/src/App.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e08fc3a1c7e2504b4d71349e9e41ed6b009497d5966f4aecef75779c8fcd6890"
     },
     "frontend/src/components/forms/FormFieldRenderer.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d0ecc4b71bf32f8b9e7afb2363e872b12e22d75929914b6a531c4fbb5d70dd8b"
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "3361a632ecfb78fe7a8f7fcd88122b0099fabf59ef64830bdb8948596984b303"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "ae4c9bbdd499b076917699963fdf4bc7c37e47d36b05b6fdc482461acd47785e"
     },
     "frontend/src/components/layout/Header.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "098524b43e4240d66bff8a09bef71f16d69d3a880ae1fbf924da857dca888d56"
     },
     "frontend/src/components/layout/Layout.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d00e9e87e333ee125716067f7dc0fc0653d7bd748977e32325f56a6072a572f9"
     },
     "frontend/src/components/layout/Sidebar.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2b9ebfeba1c53c6fb2ad22872a7dff2b956de41c8950b5b1b953ddee8aef50de"
     },
     "frontend/src/components/orgs/OrgStatePanel.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7efeda90548c4fac8a4d33a8573052c845155a97eab121a9e4b2a57c49eaf2ff"
     },
     "frontend/src/components/orgs/OrgSwitcher.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "8caa566ccb977d80682ccd441874e1dd26d37841a1c1b3eca0288e416e77e59f"
     },
     "frontend/src/components/social/PublicSocialShell.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0282dd6ba09ac1909f3bbd60a080a8a6cfc571d74b5557b8a35239e75713f7b1"
     },
     "frontend/src/components/ui/badge.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d978a2e83373f04c54d69a0fc46e775ffc93fc6bd476f174437419e88990b8c0"
     },
     "frontend/src/components/ui/button.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "95dfb3feb5d8113d37425ba9363efac7957f0284d38f92955fd84765d1d7b197"
     },
     "frontend/src/components/ui/card.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "815e6c6b4c5d4dbe1bae67d5ab527dbf9b5caff0d273e8e2391f20c68bd0c636"
     },
     "frontend/src/components/ui/checkbox.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "99a57d2da3f84712e9b87c70cc46aae3bf5eebd44f0614b731f2140c00fa714a"
     },
     "frontend/src/components/ui/form.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cd6ca9a393f5f6821ad603c53d176fe93925ee2e66f799eb4e9a74363f41c682"
     },
     "frontend/src/components/ui/input.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "35c1c07f1a41b3ceff3c43e0b405cdbaa43465e651155461fa4db70dc8244cc8"
     },
     "frontend/src/components/ui/label.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "49beaaf5d88706f1cffdbb81bbd4921df164cb2d5b9606b0c7a78c4bec255ad4"
     },
     "frontend/src/components/ui/radio-group.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e5f9236cb8242b83ee5ddcb3512c5a8b288e420b84e72faa3addb3c40a4c98c9"
     },
     "frontend/src/components/ui/select.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d9e99621414b4c2a09cc0f9d7c65be148794238c503cabc86fd2ee0844a8bb6a"
     },
     "frontend/src/components/ui/separator.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d0e77112b6113ade73da3c882149ddd678a73cd00f580fc1c808fc7af2850154"
     },
     "frontend/src/components/ui/textarea.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "4f0078925782ecf3a322652fdfca49904fe7cb1250c59dcf2c6cdc820f382d0f"
     },
     "frontend/src/components/ui/tooltip.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d7aea9092ffc4c61e31b5360c85015da090e987b3a03d744bc2b0401342ce8a4"
     },
     "frontend/src/hooks/useApi.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "048ca404586b1ec6d0e84d3827cd36fce168b7b8cacaf0d7cdadb36e90eae2db"
     },
     "frontend/src/hooks/useFormSchema.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "918f43bfbf2175fa57aceb6b4f1c9836418a4c2202f4c37c7dc3ed789591697f"
     },
     "frontend/src/hooks/useModules.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7608d7b30ecb8dde36c4a18100acc1715c971fbf03931a208d9052d245694c8d"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9e73584c29f36007ba0d8bc9144f80629666fff86632209fdadfa6e37cea5e1e"
     },
     "frontend/src/hooks/useOrgs.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "a2f070d1e3495dd99a03300b2908a55954caafc397b0b44d163bb059b159b057"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "53ad0b23bae007c8c54e0962e6b4a40b8f12021fd851cb1910c5245156df7e43"
     },
     "frontend/src/index.css": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7a5463db4088894cfd6aec1ecf11e0718ba19036d16ab54a86575a9bc7260982"
     },
     "frontend/src/lib/analytics.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "72e6495f33f96104895a3401539d4a66ad8560924c5f479bd00d606db5bdaec9"
     },
     "frontend/src/lib/csrf.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0b38e88346e5f1f19ccbbe354549cbb72d267f3262d8697adbd6f5b0d8b8581b"
     },
     "frontend/src/lib/utils.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e46429536f43f5910f5b2b0c50bb2769b510a4558bb4b5d20a3b0a9091dbf7c3"
     },
     "frontend/src/lib/validateQuickScaleSeam.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "049bc5e11d41f86f94f7bec05f6fa39f8ea7dca41346fc411131cf34888826c5"
     },
     "frontend/src/main.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "86c71459a137a8b866880f5e26b121dd13a6ee4f80bc2d76d7ac6eab6d8403b3"
     },
     "frontend/src/pages/CrmPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "701b8fa901f9395d542f8fd35b14bfea3354760206c5cdf0923f640495e7bc37"
     },
     "frontend/src/pages/Dashboard.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "011f25936e936b3b4df7ca1299b2eab8a6262154f43611f409091481596093e3"
     },
     "frontend/src/pages/FormsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f24d7dddf1a84d947f177189488d3da5dac9ae2f3c71d7778a0688bba8e56aff"
     },
     "frontend/src/pages/ListingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "7dc3035b2af5c60b50c4db460b5d712e75b3d653275dca2d3f060c6dad243184"
     },
     "frontend/src/pages/NotFound.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "bf86c661d38973735e183783533900a9a277aab7c9699de69ba152e124d1ec9d"
     },
     "frontend/src/pages/ProfilePage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "304eae103701a08a19259394a71385a0a2ebd5a7cde8b5a2f497f28098445f03"
     },
     "frontend/src/pages/SettingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "53cab5e737b65bd2102a99ca52eebce891cb22890bfae4bcb33ea9aebbbe275c"
     },
     "frontend/src/pages/SocialEmbedsPublicPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e40201bb0a1a7660c631e17bed6ef5bb4501599c2fd55e9682678f7054ea6cf9"
     },
     "frontend/src/pages/SocialLinkTreePublicPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6d8dc77ee6b34d3fde1a58678aa3e384db0f72566be61871b502a3b618c9cb0b"
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6d8667fbe3ac8aae295094518aab7122992b6c435d62aa2f4abaed52f3cdfb19"
     },
     "frontend/src/pages/orgs/OrgDashboardPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "299964c0cab41aec93026b11678d9d1b3ef3b98de716a4b1f48d4c1fa4c75845"
     },
     "frontend/src/pages/orgs/OrgLayout.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "167b1471ae6873022a6db16d10b4a1f2f4a4e4f54774d040e5a9d6caf9aea79f"
     },
     "frontend/src/pages/orgs/OrgListPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9cb57744ff72cfb2b56120b9c7f33e220b62e0794a54d09a3afae1a83518ea1c"
     },
     "frontend/src/pages/orgs/OrgMembersPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5dd2c55323e4a564258bc8b04319e4387fd7149541f785afcdad4826a5eb2926"
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "15451cf4848e1095f494d239af650b47d0f3aaf5fd1a5d138c4f6f9b95132b6b"
     },
     "frontend/src/posthog-js.d.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
     },
     "frontend/src/renderQuickScaleRoot.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
     },
     "frontend/src/stores/themeStore.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cc3fab3de66286036ff9054a99267b0882fb843723e07d9de9b25533e551ebd9"
     },
     "frontend/src/test/App.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "0ea8bca9e90e625443a5cdf8ced4915455746f028dbd293314bccfd681aaff0b"
     },
     "frontend/src/test/FormRenderer.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "50bf92c42e8c596526576c11abcb866ccca5c2e657a23f369638e3c8dc4cc3e4"
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
     },
     "frontend/src/test/csrf.test.tsx": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b6fbcd0605f729ae0b9c50f2ca5b09f02e5a6cc2a6e7232d73bcccaaf42de431"
     },
     "frontend/src/test/setup.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
     },
     "frontend/src/test/useApiErrors.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d357566072e28d48d0dd295009dc83d303d93e7a5fd8a66c7adc530e1f10ff05"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
     "frontend/src/test/viteAssetRouting.test.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016"
     },
     "frontend/src/vite-env.d.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "ce69993800ff581ee24bca8cf09315cf46a3075de8bf78e653e4afcee3096ee3"
     },
     "frontend/tailwind.config.js": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b293006473d7ad3ee9034d647eb88d26d7db09bdef68795dd0c1cefc66d08f20"
     },
     "frontend/tsconfig.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "9aaae682d5e2df06d1375bc66e738ab372a9cd42106353752f42cdda2d875d99"
     },
     "frontend/vite.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e"
     },
     "frontend/vitest.config.ts": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "810118c8359a3f6b16f09e89c1d813d8460f098356397c062f09d83b7123018a"
     },
     "manage.py": {
-      "mode": "775",
+      "mode": "755",
       "sha256": "189e769f429a8771484025641b731ae40ee19b8ef3201f32eff987bd7732db19"
     },
     "pyproject.toml": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "afd1d32ea1692126dc08e311dfb80e4dd05d763047ad5874e610389d874c459c"
     },
     "railway.json": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "49b638e8e76569556ece0b31806570802f809c90b00d04c9d2fb1a4c4f9ca70e"
     },
     "scripts/lint.sh": {
-      "mode": "775",
+      "mode": "755",
       "sha256": "dd3fd6f657358e601778812c9adda6c37497cc99eb33a4fe0d4a1563a41cd269"
     },
     "start.sh": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
     },
     "templates/404.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "56e8e586a57fe99f9c577dcc62ba355a0a286199565529225015865c1c7f1061"
     },
     "templates/500.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "919268fa0c9742970c8874b5e536059e86cf64e4b5a244d6ca554ed326e42dfa"
     },
     "templates/admin/app_index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
     },
     "templates/admin/index.html": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
     },
     "templates/base.html": {
-      "mode": "664",
-      "sha256": "dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668"
+      "mode": "644",
+      "sha256": "3898d9b34402ffba01246e2978f63fe3acfeab96de2440f768001f892f96b643"
     },
     "templates/index.html": {
-      "mode": "664",
-      "sha256": "78999622d77afd224ac0e4fbbe03bbce9e14febea15a02bd2a5c6fb37d3728e7"
+      "mode": "644",
+      "sha256": "3044206087a4ec8fded1f8b1ee70ebad52221be1260230b42d198969e00ec51b"
     },
     "templates/social/embeds.html": {
-      "mode": "664",
-      "sha256": "72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82"
+      "mode": "644",
+      "sha256": "240fe1bfc9adfec11b4e9f745b4c4daf383e78cf2fba61a2d001f8f23a545756"
     },
     "templates/social/link_tree.html": {
-      "mode": "664",
-      "sha256": "2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb"
+      "mode": "644",
+      "sha256": "6cd776f1fd174262af7a9ef63b980d05d1cac9ae63702531a41f29d652c059f7"
     },
     "testproject/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2beb99c082e6fb5a9050e3af97126e6b9a6d4495df624c28bd02610a9805286b"
     },
     "testproject/asgi.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "5ae84d756c5ee43499fa3976830ea1fb981a51f126808e57c832f4a1f23f7d3d"
     },
     "testproject/context_processors.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
     },
     "testproject/settings/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c8c9c4f7977a8f9ddc6e552d974d4cce1dabd811a36e3dc5b977419043d5db4c"
     },
     "testproject/settings/base.py": {
@@ -1462,7 +1463,7 @@
       "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
     },
     "testproject/settings/local.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9"
     },
     "testproject/settings/modules.py": {
@@ -1470,35 +1471,35 @@
       "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
     },
     "testproject/settings/production.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
     },
     "testproject/urls.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
     },
     "testproject/urls_modules.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "2ec1b29c982773cc901fd4a4b2593133917efd475a45d3da8bbf26d2e7ff0c18"
     },
     "testproject/views.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
     },
     "testproject/wsgi.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "4182c4a8da6d994db632b8115eb0983fbceb3a6d35d866b185fa64a57ba50b56"
     },
     "tests/__init__.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "tests/conftest.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "27ca6a3a5f2773a95d423ac4bb6a574c432c883b25f83e1d2b387789ee4d13c7"
     },
     "tests/test_example.py": {
-      "mode": "664",
+      "mode": "644",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
     }
   }
