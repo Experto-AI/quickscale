@@ -21,6 +21,7 @@ from quickscale_modules_billing.models import (
     WebhookEvent,
 )
 from quickscale_modules_billing.services import (
+    BillingError,
     BillingValidationError,
     BillingWebhookError,
     StripeClient,
@@ -312,9 +313,9 @@ def test_create_subscription_checkout_session_retries_blank_reservation_idempote
     with pytest.raises(RuntimeError, match="session creation failed"):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -328,9 +329,9 @@ def test_create_subscription_checkout_session_retries_blank_reservation_idempote
     with pytest.raises(RuntimeError, match="session creation failed"):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -376,9 +377,9 @@ def test_subscription_checkout_retry_rejects_a_different_owner(
     with pytest.raises(RuntimeError, match="session creation failed"):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -397,9 +398,9 @@ def test_subscription_checkout_retry_rejects_a_different_owner(
     with pytest.raises(BillingValidationError, match="current recurring subscription"):
         create_subscription_checkout_session(
             other_owner,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -438,9 +439,9 @@ def test_create_subscription_checkout_session_retries_after_customer_lookup_fail
     with pytest.raises(RuntimeError, match="customer lookup failed"):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -452,9 +453,9 @@ def test_create_subscription_checkout_session_retries_after_customer_lookup_fail
     monkeypatch.setattr(fake_client, "search_customers", provider_search)
     checkout_url = create_subscription_checkout_session(
         user,
-        plan,
-        "https://app.example.com/billing/subscription/success",
-        "https://app.example.com/billing/subscription/cancel",
+        plan=plan,
+        success_url="https://app.example.com/billing/subscription/success",
+        cancel_url="https://app.example.com/billing/subscription/cancel",
         organization=organization,
         stripe_client=fake_client,
     )
@@ -515,9 +516,9 @@ def test_response_lost_subscription_checkout_reconciles_exact_reservation(
     with pytest.raises(RuntimeError, match="response lost"):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -605,9 +606,9 @@ def test_create_subscription_checkout_session_reuses_live_checkout_session_url(
 
     checkout_url = create_subscription_checkout_session(
         user,
-        plan,
-        "https://app.example.com/billing/subscription/success",
-        "https://app.example.com/billing/subscription/cancel",
+        plan=plan,
+        success_url="https://app.example.com/billing/subscription/success",
+        cancel_url="https://app.example.com/billing/subscription/cancel",
         organization=organization,
         stripe_client=fake_client,
     )
@@ -652,9 +653,9 @@ def test_create_subscription_checkout_session_expires_stale_reservation_and_recr
 
     checkout_url = create_subscription_checkout_session(
         user,
-        plan,
-        "https://app.example.com/billing/subscription/success",
-        "https://app.example.com/billing/subscription/cancel",
+        plan=plan,
+        success_url="https://app.example.com/billing/subscription/success",
+        cancel_url="https://app.example.com/billing/subscription/cancel",
         organization=organization,
         stripe_client=fake_client,
     )
@@ -732,9 +733,9 @@ def test_create_subscription_checkout_session_rejects_price_parity_mismatches(
     with pytest.raises(BillingValidationError, match=message):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -776,9 +777,9 @@ def test_create_subscription_checkout_session_reuses_customer_on_recreated_reser
 
     checkout_url = create_subscription_checkout_session(
         user,
-        plan,
-        "https://app.example.com/billing/subscription/success",
-        "https://app.example.com/billing/subscription/cancel",
+        plan=plan,
+        success_url="https://app.example.com/billing/subscription/success",
+        cancel_url="https://app.example.com/billing/subscription/cancel",
         organization=organization,
         stripe_client=fake_client,
     )
@@ -837,9 +838,9 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_crea
 
     checkout_url = create_subscription_checkout_session(
         user,
-        plan,
-        "https://app.example.com/billing/subscription/success",
-        "https://app.example.com/billing/subscription/cancel",
+        plan=plan,
+        success_url="https://app.example.com/billing/subscription/success",
+        cancel_url="https://app.example.com/billing/subscription/cancel",
         organization=organization,
         stripe_client=fake_client,
     )
@@ -903,9 +904,9 @@ def test_create_subscription_checkout_session_raises_validation_error_after_crea
     ):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -957,9 +958,9 @@ def test_create_subscription_checkout_session_blocks_completed_reservation(
     with pytest.raises(BillingValidationError, match="checkout completed"):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -1016,9 +1017,9 @@ def test_completed_checkout_retrieval_rejects_customer_identity_conflict(
     with pytest.raises(BillingWebhookError, match="provider identity conflicts"):
         create_subscription_checkout_session(
             user,
-            plan,
-            "https://app.example.com/billing/subscription/success",
-            "https://app.example.com/billing/subscription/cancel",
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
             organization=organization,
             stripe_client=fake_client,
         )
@@ -1812,3 +1813,35 @@ def test_stripe_client_retrieve_checkout_session_returns_normalized_mapping() ->
         "status": "open",
     }
     assert stripe_module.api_key == "sk_test"
+
+
+@pytest.mark.django_db
+def test_create_subscription_checkout_session_translates_provider_errors(
+    user, organization, org_context
+) -> None:
+    """Rule 23: a provider failure answers through the module's BillingError base."""
+    plan = _create_recurring_plan()
+    fake_client = FakeSubscriptionStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "recurring",
+                "recurring": {"interval": "month"},
+            }
+        },
+        create_subscription_checkout_error=stripe.StripeError("network down"),
+    )
+
+    with pytest.raises(
+        BillingError, match="Stripe subscription checkout session creation failed"
+    ):
+        create_subscription_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )

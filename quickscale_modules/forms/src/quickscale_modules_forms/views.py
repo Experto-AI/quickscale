@@ -97,7 +97,12 @@ def _capture_submission_analytics(submission: FormSubmission, request: Request) 
     """
     if not apps.is_installed("quickscale_modules_analytics"):
         return
-    if not bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", True)):
+
+    from quickscale_modules_analytics.services import (
+        get_analytics_runtime_settings,
+    )
+
+    if not get_analytics_runtime_settings().enabled:
         return
 
     transaction.on_commit(lambda: _emit_submission_event(submission, request))
@@ -130,7 +135,11 @@ def _emit_submission_event(submission: FormSubmission, request: Request) -> None
                 "form_name": submission.form.title.strip(),
             }
         )
-        capture_event(distinct_id, FORMS_SUBMITTED_EVENT, properties)
+        capture_event(
+            distinct_id=distinct_id,
+            event=FORMS_SUBMITTED_EVENT,
+            properties=properties,
+        )
     except Exception:
         logger.warning(
             "Failed to capture analytics event for submission #%s (form: %s)",

@@ -12,7 +12,7 @@ from importlib import import_module
 import json
 import logging
 import os
-from typing import Any, Final, cast
+from typing import Any, Final, ParamSpec, TypeVar, cast
 
 from django.apps import apps
 from django.conf import settings
@@ -500,6 +500,45 @@ def get_stripe_client(
     return StripeClient(stripe_module=stripe_module, api_key=secret_key)
 
 
+def _stripe_error_classes() -> tuple[type[BaseException], ...]:
+    """The Stripe SDK's error base, or ``()`` when the SDK is not importable.
+
+    The SDK is an optional runtime dependency, so the class is resolved at
+    the service boundary; an empty tuple simply matches nothing.
+    """
+    try:
+        stripe_module = import_module("stripe")
+    except ImportError:
+        return ()
+    error_class = getattr(stripe_module, "StripeError", None)
+    if not isinstance(error_class, type) or not issubclass(error_class, BaseException):
+        return ()
+    return (error_class,)
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def _translate_stripe_errors(
+    message: str,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    """Translate Stripe SDK failures into the module's error surface (rule 23)."""
+
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
+        @wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            try:
+                return func(*args, **kwargs)
+            except _stripe_error_classes() as exc:
+                raise BillingError(message) from exc
+
+        return wrapper
+
+    return decorator
+
+
+@_translate_stripe_errors("Stripe customer resolution failed.")
 def get_or_create_stripe_customer(
     user: Any,
     *,
@@ -550,29 +589,32 @@ def get_or_create_stripe_customer(
 
 def create_checkout_session(
     user: Any,
+    *,
     plan: Plan,
     success_url: str,
     cancel_url: str,
-    *,
     organization: Any,
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> str:
     """Serialize one-time Checkout creation with destructive org boundaries."""
-    with subscription_provider_mutation_lock(organization):
-        user, organization = _require_owner_provider_mutation_authorization(
-            user,
-            organization,
-        )
-        return _create_checkout_session(
-            user,
-            plan,
-            success_url,
-            cancel_url,
-            organization=organization,
-            stripe_client=stripe_client,
-            settings_snapshot=settings_snapshot,
-        )
+    try:
+        with subscription_provider_mutation_lock(organization):
+            user, organization = _require_owner_provider_mutation_authorization(
+                user,
+                organization,
+            )
+            return _create_checkout_session(
+                user,
+                plan,
+                success_url,
+                cancel_url,
+                organization=organization,
+                stripe_client=stripe_client,
+                settings_snapshot=settings_snapshot,
+            )
+    except _stripe_error_classes() as exc:
+        raise BillingError("Stripe checkout session creation failed.") from exc
 
 
 def _create_checkout_session(
@@ -686,29 +728,34 @@ def _create_checkout_session(
 
 def create_subscription_checkout_session(
     user: Any,
+    *,
     plan: Plan,
     success_url: str,
     cancel_url: str,
-    *,
     organization: Any,
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> str:
     """Serialize recurring Checkout creation with account deletion mutations."""
-    with subscription_provider_mutation_lock(organization):
-        user, organization = _require_owner_provider_mutation_authorization(
-            user,
-            organization,
-        )
-        return _create_subscription_checkout_session(
-            user,
-            plan,
-            success_url,
-            cancel_url,
-            organization=organization,
-            stripe_client=stripe_client,
-            settings_snapshot=settings_snapshot,
-        )
+    try:
+        with subscription_provider_mutation_lock(organization):
+            user, organization = _require_owner_provider_mutation_authorization(
+                user,
+                organization,
+            )
+            return _create_subscription_checkout_session(
+                user,
+                plan,
+                success_url,
+                cancel_url,
+                organization=organization,
+                stripe_client=stripe_client,
+                settings_snapshot=settings_snapshot,
+            )
+    except _stripe_error_classes() as exc:
+        raise BillingError(
+            "Stripe subscription checkout session creation failed."
+        ) from exc
 
 
 def _create_subscription_checkout_session(
@@ -856,6 +903,7 @@ def _create_subscription_checkout_session(
     return checkout_url
 
 
+@_translate_stripe_errors("Stripe subscription checkout reconciliation failed.")
 def reconcile_elapsed_subscription_checkout(
     organization_id: Any,
     *,
@@ -873,6 +921,7 @@ def reconcile_elapsed_subscription_checkout(
     return result.stripe_customer_id
 
 
+@_translate_stripe_errors("Stripe subscription checkout reconciliation failed.")
 def reconcile_organization_removal_subscription_checkout(
     organization_id: Any,
     *,
@@ -890,6 +939,7 @@ def reconcile_organization_removal_subscription_checkout(
     )
 
 
+@_translate_stripe_errors("Stripe subscription checkout reconciliation failed.")
 def reconcile_account_deletion_subscription_checkout(
     organization_id: Any,
     *,
@@ -906,6 +956,7 @@ def reconcile_account_deletion_subscription_checkout(
     )
 
 
+@_translate_stripe_errors("Stripe purchase checkout reconciliation failed.")
 def reconcile_purchase_checkouts_for_removal(
     organization_id: Any,
     *,
@@ -1050,6 +1101,7 @@ def guard_organization_removal_provider_state(
 
 def detach_account_deletion_user_references(
     user_id: Any,
+    *,
     organization_ids: list[Any],
 ) -> int:
     """Null billing provenance under each organization's FORCE-RLS context."""
@@ -1239,8 +1291,8 @@ def _reconcile_subscription_checkout(
 
 def create_billing_portal_session(
     user: Any,
-    return_url: str,
     *,
+    return_url: str,
     organization: Any,
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
@@ -1254,29 +1306,33 @@ def create_billing_portal_session(
         raise BillingValidationError("Billing portal return URL is required.")
 
     resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
-    with subscription_provider_mutation_lock(organization):
-        user, organization = _require_owner_provider_mutation_authorization(
-            user,
-            organization,
-        )
-        customer_id, _ = get_or_create_stripe_customer(
-            user,
-            organization=organization,
-            stripe_client=resolved_client,
-            settings_snapshot=snapshot,
-        )
-        portal_session = resolved_client.create_billing_portal_session(
-            customer_id=customer_id,
-            return_url=normalized_return_url,
-        )
-        portal_url = str(portal_session.get("url") or "").strip()
-        if not portal_url:
-            raise BillingError(
-                "Stripe billing portal session creation did not return a hosted URL."
+    try:
+        with subscription_provider_mutation_lock(organization):
+            user, organization = _require_owner_provider_mutation_authorization(
+                user,
+                organization,
             )
+            customer_id, _ = get_or_create_stripe_customer(
+                user,
+                organization=organization,
+                stripe_client=resolved_client,
+                settings_snapshot=snapshot,
+            )
+            portal_session = resolved_client.create_billing_portal_session(
+                customer_id=customer_id,
+                return_url=normalized_return_url,
+            )
+            portal_url = str(portal_session.get("url") or "").strip()
+            if not portal_url:
+                raise BillingError(
+                    "Stripe billing portal session creation did not return a hosted URL."
+                )
+    except _stripe_error_classes() as exc:
+        raise BillingError("Stripe billing portal session creation failed.") from exc
     return portal_url
 
 
+@_translate_stripe_errors("Stripe subscription cancellation failed.")
 def cancel_current_subscription(
     user: Any,
     *,
@@ -1305,6 +1361,7 @@ def cancel_current_subscription(
         )
 
 
+@_translate_stripe_errors("Stripe subscription resumption failed.")
 def resume_current_subscription(
     user: Any,
     *,
@@ -1737,9 +1794,9 @@ def credit_user(
 
 def debit_user(
     user: Any,
+    *,
     amount: int,
     description: str = "",
-    *,
     organization: Any,
 ) -> CreditTransaction:
     """Debit credits from an organization and record the usage transaction."""
@@ -1797,6 +1854,7 @@ def _apply_locked_credit_balance_delta(*, balance: CreditBalance, delta: int) ->
     return int(balance.balance)
 
 
+@_translate_stripe_errors("Stripe webhook handling failed.")
 def handle_stripe_event(
     *,
     body: bytes,

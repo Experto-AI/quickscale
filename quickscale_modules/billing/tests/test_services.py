@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
@@ -740,7 +741,7 @@ def test_create_billing_portal_session_returns_stripe_url(
 
     portal_url = create_billing_portal_session(
         user,
-        " https://app.example.com/billing/portal/return/ ",
+        return_url=" https://app.example.com/billing/portal/return/ ",
         organization=organization,
         stripe_client=fake_client,
     )
@@ -767,7 +768,7 @@ def test_create_billing_portal_session_requires_return_url(
     with pytest.raises(BillingValidationError, match="return URL"):
         create_billing_portal_session(
             user,
-            " ",
+            return_url=" ",
             organization=organization,
             stripe_client=FakeStripeClient(),
         )
@@ -790,7 +791,7 @@ def test_create_billing_portal_session_rejects_missing_hosted_url(
     with pytest.raises(BillingError, match="hosted URL"):
         create_billing_portal_session(
             user,
-            "https://app.example.com/billing/portal/return/",
+            return_url="https://app.example.com/billing/portal/return/",
             organization=organization,
             stripe_client=FakeStripeClient(portal_session={}),
         )
@@ -840,9 +841,9 @@ def test_subscription_checkout_creation_holds_provider_mutation_lock(
         try:
             return billing_services.create_subscription_checkout_session(
                 user,
-                plan,
-                "https://app.example.com/success",
-                "https://app.example.com/cancel",
+                plan=plan,
+                success_url="https://app.example.com/success",
+                cancel_url="https://app.example.com/cancel",
                 organization=organization,
             )
         finally:
@@ -1484,7 +1485,7 @@ def test_account_deletion_discovers_and_detaches_every_billing_user_reference(
         )
     detached_count = billing_services.detach_account_deletion_user_references(
         user.pk,
-        organization_ids,
+        organization_ids=organization_ids,
     )
 
     balance.refresh_from_db()
@@ -3368,4 +3369,111 @@ def test_stripe_client_construct_event_maps_generic_sdk_errors() -> None:
             body=b"{}",
             signature="t=1,v1=bad",
             webhook_secret="whsec_test",
+        )
+
+
+def test_public_checkout_and_credit_services_are_keyword_only_after_subject() -> None:
+    """Rule 23: at most one leading subject; every other argument keyword-only."""
+    for service in (
+        billing_services.create_checkout_session,
+        billing_services.create_subscription_checkout_session,
+        billing_services.create_billing_portal_session,
+        billing_services.detach_account_deletion_user_references,
+        billing_services.debit_user,
+    ):
+        parameters = list(inspect.signature(service).parameters.values())
+
+        assert parameters[0].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+        assert all(
+            parameter.kind is inspect.Parameter.KEYWORD_ONLY
+            for parameter in parameters[1:]
+        ), service.__name__
+
+
+@pytest.mark.django_db
+def test_create_billing_portal_session_translates_provider_errors(
+    user, organization
+) -> None:
+    """Rule 23: a provider failure answers through the module's BillingError base."""
+    fake_client = FakeStripeClient()
+
+    def failing_portal_session(*, customer_id: str, return_url: str) -> dict[str, Any]:
+        del customer_id, return_url
+        raise stripe.StripeError("network down")
+
+    fake_client.create_billing_portal_session = failing_portal_session  # type: ignore[method-assign]
+
+    with pytest.raises(
+        BillingError, match="Stripe billing portal session creation failed"
+    ):
+        create_billing_portal_session(
+            user,
+            return_url="https://app.example.com/billing/portal/return/",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+
+@pytest.mark.django_db
+def test_get_or_create_stripe_customer_translates_provider_errors(
+    user, organization, org_context
+) -> None:
+    """Rule 23: a provider failure answers through the module's BillingError base."""
+    fake_client = FakeStripeClient()
+
+    def failing_search(
+        *, user_reference: str = "", organization_reference: str = ""
+    ) -> list[dict[str, Any]]:
+        del user_reference, organization_reference
+        raise stripe.StripeError("network down")
+
+    fake_client.search_customers = failing_search  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="Stripe customer resolution failed"):
+        get_or_create_stripe_customer(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+
+@pytest.mark.django_db
+def test_cancel_current_subscription_translates_provider_errors(
+    user, organization, org_context
+) -> None:
+    """Rule 23: a provider failure answers through the module's BillingError base."""
+    plan = _create_plan(price_id="price_cancel_error")
+    Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_cancel_error",
+        stripe_customer_id="cus_cancel_error",
+        status=Subscription.Status.ACTIVE,
+        current_period_start=billing_services._stripe_timestamp_to_datetime(1713225600),
+        current_period_end=billing_services._stripe_timestamp_to_datetime(1715817600),
+    )
+    fake_client = FakeStripeClient(
+        subscriptions={
+            "sub_cancel_error": subscription_object(
+                subscription_id="sub_cancel_error",
+                customer_id="cus_cancel_error",
+                status=Subscription.Status.ACTIVE,
+                item_periods=[(1713225600, 1715817600)],
+                cancel_at_period_end=False,
+            )
+        }
+    )
+
+    def failing_cancel(*, stripe_subscription_id: str) -> dict[str, Any]:
+        del stripe_subscription_id
+        raise stripe.StripeError("network down")
+
+    fake_client.cancel_subscription = failing_cancel  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="Stripe subscription cancellation failed"):
+        cancel_current_subscription(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
         )

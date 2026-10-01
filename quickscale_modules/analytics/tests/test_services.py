@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import warnings
 from types import SimpleNamespace
@@ -160,10 +161,15 @@ def test_analytics_enabled_for_request_rejects_disabled_and_unsupported_snapshot
 ):
     """Disabled runtimes and unsupported providers must stay template-inactive."""
     assert (
-        services.analytics_enabled_for_request(None, _snapshot(enabled=False)) is False
+        services.analytics_enabled_for_request(
+            None, runtime_settings=_snapshot(enabled=False)
+        )
+        is False
     )
     assert (
-        services.analytics_enabled_for_request(None, _snapshot(provider="plausible"))
+        services.analytics_enabled_for_request(
+            None, runtime_settings=_snapshot(provider="plausible")
+        )
         is False
     )
 
@@ -172,7 +178,9 @@ def test_analytics_enabled_for_request_rejects_disabled_and_unsupported_snapshot
 def test_analytics_enabled_for_request_rejects_debug_requests_when_excluded() -> None:
     """DEBUG exclusion should suppress analytics exposure even with valid config."""
     assert (
-        services.analytics_enabled_for_request(None, _snapshot(exclude_debug=True))
+        services.analytics_enabled_for_request(
+            None, runtime_settings=_snapshot(exclude_debug=True)
+        )
         is False
     )
 
@@ -333,7 +341,11 @@ def test_capture_event_uses_active_client(monkeypatch) -> None:
     ):
         assert services.configure_analytics_client() is True
 
-    services.capture_event("session:abc", "custom_event", {"source": "test"})
+    services.capture_event(
+        distinct_id="session:abc",
+        event="custom_event",
+        properties={"source": "test"},
+    )
 
     assert fake_posthog.clients[0].captures == [
         ("session:abc", "custom_event", {"source": "test"})
@@ -365,6 +377,26 @@ def test_services_publish_only_the_generic_capture_helper() -> None:
     assert "capture_social_link_click" not in services.__all__
     assert not hasattr(services, "capture_form_submit")
     assert not hasattr(services, "capture_social_link_click")
+
+
+def test_services_public_signatures_are_keyword_only_after_one_subject() -> None:
+    """Rule 23: keyword-only parameters follow at most one leading subject."""
+    capture_parameters = list(
+        inspect.signature(services.capture_event).parameters.values()
+    )
+    assert all(
+        parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        for parameter in capture_parameters
+    )
+
+    enabled_parameters = list(
+        inspect.signature(services.analytics_enabled_for_request).parameters.values()
+    )
+    assert enabled_parameters[0].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert all(
+        parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        for parameter in enabled_parameters[1:]
+    )
 
 
 @pytest.mark.django_db()
@@ -516,7 +548,11 @@ def test_capture_event_returns_early_when_runtime_is_inactive() -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=False,
     ):
-        services.capture_event("session:abc", "custom_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="custom_event",
+            properties={"source": "test"},
+        )
 
     assert client.captures == []
 
@@ -529,7 +565,11 @@ def test_capture_event_ignores_non_callable_client_capture() -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=True,
     ):
-        services.capture_event("session:abc", "custom_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="custom_event",
+            properties={"source": "test"},
+        )
 
 
 def test_capture_event_falls_back_to_legacy_positional_signature() -> None:
@@ -541,7 +581,11 @@ def test_capture_event_falls_back_to_legacy_positional_signature() -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=True,
     ):
-        services.capture_event("session:abc", "legacy_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="legacy_event",
+            properties={"source": "test"},
+        )
 
     assert client.calls == [("session:abc", "legacy_event", {"source": "test"})]
 
@@ -555,7 +599,11 @@ def test_capture_event_logs_when_legacy_fallback_fails(caplog) -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=True,
     ):
-        services.capture_event("session:abc", "broken_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="broken_event",
+            properties={"source": "test"},
+        )
 
     assert "failed to capture event 'broken_event'" in caplog.text
 
@@ -569,6 +617,10 @@ def test_capture_event_logs_generic_client_errors(caplog) -> None:
         "quickscale_modules_analytics.services.is_analytics_active",
         return_value=True,
     ):
-        services.capture_event("session:abc", "broken_event", {"source": "test"})
+        services.capture_event(
+            distinct_id="session:abc",
+            event="broken_event",
+            properties={"source": "test"},
+        )
 
     assert "failed to capture event 'broken_event'" in caplog.text
