@@ -104,8 +104,8 @@ def mock_org_resolution(monkeypatch, organization):
 @pytest.mark.parametrize(
     ("url_name", "view_class"),
     [
-        ("quickscale_billing:purchase-checkout", CreateCheckoutSessionView),
-        ("quickscale_billing:billing-portal-session", CreateBillingPortalSessionView),
+        ("quickscale_billing:purchase_checkout", CreateCheckoutSessionView),
+        ("quickscale_billing:portal_session", CreateBillingPortalSessionView),
     ],
 )
 def test_billing_views_return_429_past_their_scope_rate(
@@ -152,7 +152,7 @@ def test_billing_checkout_refuses_the_thirty_first_request_in_an_hour(
     """
     cache.clear()
     client.force_login(user)
-    url = reverse("quickscale_billing:purchase-checkout")
+    url = reverse("quickscale_billing:purchase_checkout")
     payload = json.dumps({"plan_slug": "not-a-plan"})
 
     with (

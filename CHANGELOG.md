@@ -277,6 +277,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     declares an account-deletion handler on its own app config — billing declares the Stripe
     reconciliation, cancellation with compensation, and provenance-detachment operations — and
     auth collects it, so account deletion names no provider module.
+  - **Billing's JSON API moves under its module mount.** Billing API paths are now
+    `/billing/api/...` (was `/api/billing/...`) and its route names are snake_case under
+    `quickscale_billing:` (`subscription_plans`, `purchase_checkout`), while the Stripe webhook stays at
+    `/billing/webhooks/stripe/` and the Django pages keep their `/billing/...` URLs; project-owned
+    templates that reverse the retired kebab-case names must be updated.
   - **Blog reaches storage through its public services.** Blog media URLs, upload validation,
     and upload paths call `quickscale_modules_storage.services`, which resolves storage's own
     `public_base_url` and `media_url` settings, so blog no longer reads a storage setting or
