@@ -11,12 +11,24 @@ from django.core.management.base import SystemCheckError
 from django.core.management.commands import migrate, runserver
 
 from quickscale_modules_auth.apps import QuickscaleAuthConfig
+from quickscale_modules_orgs.removal import RemovalBoundary
 
 
 def _auth_config() -> QuickscaleAuthConfig:
     return QuickscaleAuthConfig(
         "quickscale_modules_auth",
         import_module("quickscale_modules_auth"),
+    )
+
+
+def test_app_config_declares_its_account_deletion_boundary_implementation() -> None:
+    """Auth owns the account-deletion boundary and declares its implementation."""
+    implementations = _auth_config().removal_boundary_implementations()
+
+    assert implementations[RemovalBoundary.ACCOUNT_DELETE] == (
+        "quickscale_modules_auth",
+        "quickscale_modules_auth.views",
+        "AccountDeleteView.form_valid",
     )
 
 
