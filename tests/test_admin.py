@@ -175,7 +175,7 @@ class TestAdminCsvExportCoverage:
     ):
         """CSV export response includes attachment content disposition"""
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
 
@@ -189,7 +189,7 @@ class TestAdminCsvExportCoverage:
     ):
         """CSV export contains base columns and dynamic field columns"""
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
 
@@ -313,7 +313,7 @@ class TestAdminSubmissionAPIPrefetch:
     ):
         """Verify admin submission detail returns values (proves prefetch works)."""
         url = reverse(
-            "quickscale_forms:admin-submission-detail",
+            "quickscale_forms:admin_submission_detail",
             kwargs={"pk": form.pk, "sub_pk": submission.pk},
         )
         response = superuser_client.get(url)
@@ -338,7 +338,7 @@ class TestAdminSubmissionExportViewAllObjects:
     ):
         """Export view builds CSV field values via all_objects (proven by cross-org access)."""
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
         assert response.status_code == 200
@@ -428,7 +428,7 @@ class TestAdminSubmissionExportViewAllObjects:
 
         # Export form_a — should see Engineering
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form_a.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form_a.pk}
         )
         response = superuser_client.get(url)
         assert response.status_code == 200
@@ -439,7 +439,7 @@ class TestAdminSubmissionExportViewAllObjects:
 
         # Export form_b — should see Marketing
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form_b.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form_b.pk}
         )
         response = superuser_client.get(url)
         assert response.status_code == 200
@@ -489,7 +489,7 @@ class TestAdminSubmissionExportViewAllObjects:
             )
 
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
         assert response.status_code == 200, "CSV export should return 200"
@@ -578,7 +578,7 @@ class TestAdminSubmissionExportViewAllObjects:
             )
 
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
         # Restore org context before assertions so failure diagnostics
@@ -717,7 +717,7 @@ class TestAdminSubmissionExportViewAllObjects:
             )
 
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
 
