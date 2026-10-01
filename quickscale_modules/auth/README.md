@@ -30,6 +30,7 @@ Mutable options can be changed at any time with `quickscale apply`.
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_AUTH_ENABLED` | Mount the module's public account pages (signup, login, profile). Off keeps the app, its data, the allauth backend, and the settings installed but serves none of its account URLs; an installed module that lists `auth` in `required_modules` makes `apply` refuse the switch. |
 | `registration_enabled` | boolean | `true` | `ACCOUNT_ALLOW_REGISTRATION` | Allow new user signups. |
 | `email_verification` | string | `none` | `ACCOUNT_EMAIL_VERIFICATION` | Email verification requirement: `none`, `optional`, or `mandatory`. |
 | `session_cookie_age` | integer | `1209600` | `SESSION_COOKIE_AGE` | Session cookie lifetime in seconds (default: 2 weeks). |

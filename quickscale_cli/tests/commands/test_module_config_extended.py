@@ -1336,7 +1336,7 @@ class TestStorageModuleConfig:
     @patch("quickscale_cli.commands.module_config.click.confirm")
     def test_configure_storage_interactive_defaults(self, mock_confirm, mock_prompt):
         """Interactive prompts default to the manifest's declared values."""
-        mock_confirm.return_value = False
+        mock_confirm.side_effect = lambda message, **kwargs: kwargs.get("default")
         mock_prompt.side_effect = lambda message, **kwargs: kwargs.get("default")
 
         config = MODULE_CONFIGURATOR_REGISTRY["storage"].configure(
@@ -1818,7 +1818,7 @@ class TestSocialModuleConfig:
         mock_confirm,
         mock_prompt,
     ):
-        mock_confirm.side_effect = [True, True]
+        mock_confirm.side_effect = [True, True, True]
         mock_prompt.side_effect = ["cards", "Twitter, YouTube", 600, 18, 9]
 
         config = configure_module_from_manifest("social", non_interactive=False)

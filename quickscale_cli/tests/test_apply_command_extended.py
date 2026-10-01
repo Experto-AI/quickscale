@@ -1130,6 +1130,54 @@ class TestLoadAndValidateConfig:
 
         assert result.modules["backups"].options == {}
 
+    def test_disabled_module_required_by_an_installed_module_aborts(
+        self, tmp_path, capsys
+    ):
+        """Rule 1 (D3): apply refuses to switch off a module another installed
+        module lists in required_modules."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_react\n"
+            "modules:\n"
+            "  blog:\n"
+            "    enabled: true\n"
+            "  orgs:\n"
+            "    enabled: false\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
+
+        captured = capsys.readouterr()
+        assert "'orgs' is switched off" in captured.err
+        assert "'blog' requires it" in captured.err
+
+    def test_disabled_module_without_dependants_loads(self, tmp_path):
+        """A module no installed module requires may be switched off."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_react\n"
+            "modules:\n"
+            "  backups:\n"
+            "    enabled: false\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+
+        assert result.modules["backups"].options["enabled"] is False
+
     def test_deleted_teams_module_is_rejected_on_load(self, tmp_path):
         """Apply should reject modules absent from the catalog even if hand-edited in."""
         config = tmp_path / "quickscale.yml"

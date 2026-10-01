@@ -1093,8 +1093,6 @@ class TestCallerParityPassEagerSurface:
         via quickscale_core.runtime."""
         # These are the complete set of imports from services.py lines 20-128
         services_imports = [
-            "_DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR",
-            "_DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
             "_ENV_VAR_MANIFEST_FILENAME",
             "_MEDIA_SYNC_MANIFEST_FILENAME",
             "_PROMOTION_VERIFICATION_FILENAME",

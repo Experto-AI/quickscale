@@ -61,6 +61,7 @@ class TestStorageManifestAdapter:
         assert spec.pre_home_url_includes == ()
         assert spec.url_includes == ()
         assert spec.settings == {
+            "QUICKSCALE_STORAGE_ENABLED": True,
             "QUICKSCALE_STORAGE_BACKEND": "local",
             "MEDIA_URL": "/media/",
             "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": "",
@@ -74,6 +75,7 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
         }
         assert list(spec.settings) == [
+            "QUICKSCALE_STORAGE_ENABLED",
             "QUICKSCALE_STORAGE_BACKEND",
             "MEDIA_URL",
             "QUICKSCALE_STORAGE_PUBLIC_BASE_URL",
@@ -125,6 +127,7 @@ class TestStorageManifestAdapter:
             },
         }
         assert list(spec.settings) == [
+            "QUICKSCALE_STORAGE_ENABLED",
             "QUICKSCALE_STORAGE_BACKEND",
             "MEDIA_URL",
             "QUICKSCALE_STORAGE_PUBLIC_BASE_URL",
@@ -268,6 +271,7 @@ class TestStorageManifestAdapter:
 
         assert s3.settings["QUICKSCALE_STORAGE_BACKEND"] == "s3"
         assert local.settings == {
+            "QUICKSCALE_STORAGE_ENABLED": True,
             "QUICKSCALE_STORAGE_BACKEND": "local",
             "MEDIA_URL": "/media/",
             "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": "",

@@ -18,6 +18,7 @@ def test_get_manifest_adapter_returns_callable() -> None:
 def test_local_defaults_carry_conventional_credential_references() -> None:
     spec = _backups_manifest_adapter({})
 
+    assert spec.settings["QUICKSCALE_BACKUPS_ENABLED"] is True
     assert spec.settings["QUICKSCALE_BACKUPS_TARGET_MODE"] == "local"
     assert (
         spec.settings["QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR"]
@@ -58,6 +59,18 @@ def test_integer_and_boolean_settings_are_coerced() -> None:
 def test_unsupported_target_mode_is_rejected(target_mode: object) -> None:
     with pytest.raises(ManifestError, match="modules.backups.target_mode"):
         _backups_manifest_adapter({"target_mode": target_mode})
+
+
+def test_disabled_module_keeps_apps_and_settings() -> None:
+    """Rule 1 (D3): off keeps the installed app and its settings; the module
+    owns no public URL mount, so the switch is enforced by its commands and
+    checks."""
+    spec = _backups_manifest_adapter({"enabled": False})
+
+    assert spec.settings["QUICKSCALE_BACKUPS_ENABLED"] is False
+    assert spec.apps == ("quickscale_modules_backups",)
+    assert spec.url_includes == ()
+    assert spec.pre_home_url_includes == ()
 
 
 @pytest.mark.parametrize("target_mode", ["LOCAL", " local "])

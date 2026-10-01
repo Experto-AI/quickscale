@@ -33,6 +33,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_SOCIAL_ENABLED` | Mount the module's public `/social` surfaces. Off keeps the app, its data, the admin, and the managed files installed but mounts none of its public URLs; the link-tree/embeds flags still shape the surfaces while it is on. |
 | `link_tree_enabled` | boolean | `true` | `QUICKSCALE_SOCIAL_LINK_TREE_ENABLED` | Enable the public link-tree surface at the fixed `/social` route. |
 | `layout_variant` | string | `list` | `QUICKSCALE_SOCIAL_LAYOUT_VARIANT` | Default link-tree presentation variant: `list`, `cards`, or `grid`. |
 | `embeds_enabled` | boolean | `true` | `QUICKSCALE_SOCIAL_EMBEDS_ENABLED` | Enable the public embed gallery surface at the fixed `/social/embeds` route. |

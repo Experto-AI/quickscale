@@ -74,11 +74,6 @@ class ShellCommandRunner(Protocol):
 # Shared dataclasses
 # ---------------------------------------------------------------------------
 
-_DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
-_DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
-    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"  # noqa: S105 - environment-variable name constant, not a credential
-)
-
 
 @dataclass(frozen=True)
 class BackupPolicySnapshot:
@@ -98,20 +93,20 @@ class BackupPolicySnapshot:
     schedule: str
 
     def resolve_remote_access_key_id(self) -> str:
-        """Return the runtime private-remote access key id from the environment."""
-        env_var_name = (
-            self.remote_access_key_id_env_var.strip()
-            or _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR
-        )
-        return os.getenv(env_var_name, "").strip()
+        """Return the runtime private-remote access key id from the environment.
+
+        The environment-variable name is the declared setting's value; the
+        manifest default is the only default (Module Conventions rule 3).
+        """
+        return os.getenv(self.remote_access_key_id_env_var.strip(), "").strip()
 
     def resolve_remote_secret_access_key(self) -> str:
-        """Return the runtime private-remote secret access key from the environment."""
-        env_var_name = (
-            self.remote_secret_access_key_env_var.strip()
-            or _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-        )
-        return os.getenv(env_var_name, "").strip()
+        """Return the runtime private-remote secret access key from the environment.
+
+        The environment-variable name is the declared setting's value; the
+        manifest default is the only default (Module Conventions rule 3).
+        """
+        return os.getenv(self.remote_secret_access_key_env_var.strip(), "").strip()
 
 
 # ---------------------------------------------------------------------------

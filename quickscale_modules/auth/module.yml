@@ -10,6 +10,13 @@ config:
   # Mutable options - can be changed after embed via quickscale apply
   # These update Django settings.py automatically
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_AUTH_ENABLED
+      description: "Enable the auth module. Off keeps the module installed with its data intact and mounts none of its public account URLs."
+      validation: {}
+
     registration_enabled:
       type: boolean
       default: true

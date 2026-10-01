@@ -22,6 +22,7 @@ from quickscale_core.contracts.resolvers import (
 from quickscale_core.manifest.option_validation import validate_module_options
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
+    "enabled": True,
     "retention_days": 14,
     "naming_prefix": "db",
     "target_mode": "local",

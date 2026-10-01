@@ -464,3 +464,90 @@ def test_backups_pin_command_clears_rollback_pin() -> None:
         "Rollback pin expires at: none\n"
         "Rollback pin reason: none\n"
     )
+
+
+def test_backups_create_refuses_scheduled_runs_when_disabled(settings) -> None:
+    """Rule 1 (D3): a module switched off runs none of its scheduled jobs."""
+    settings.QUICKSCALE_BACKUPS_ENABLED = False
+
+    with pytest.raises(CommandError, match="scheduled backup runs do not run"):
+        call_command(
+            "quickscale_backups_create",
+            "--scheduled",
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+
+
+def test_backups_create_keeps_manual_runs_when_disabled(settings) -> None:
+    """Operator invocations stay available while off, like the retained admin."""
+    settings.QUICKSCALE_BACKUPS_ENABLED = False
+    report = {
+        "snapshot_id": "snap-manual",
+        "status": "ready",
+        "local_root_path": "/tmp/backups/snap-manual",
+        "failure_note": "",
+        "authoritative_dump": {
+            "artifact_id": 1,
+            "filename": "db.dump",
+            "local_path": "/tmp/db.dump",
+            "remote_key": "",
+        },
+    }
+    mock_capture = MagicMock(return_value=report)
+
+    with patch.dict(
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
+        {"capture_snapshot": mock_capture},
+    ):
+        call_command("quickscale_backups_create", stdout=StringIO(), stderr=StringIO())
+
+    mock_capture.assert_called_once_with(trigger="manual")
+
+
+def test_backups_prune_refuses_scheduled_runs_when_disabled(settings) -> None:
+    """Rule 1 (D3): a bare prune is the scheduled run and refuses while off."""
+    settings.QUICKSCALE_BACKUPS_ENABLED = False
+
+    with pytest.raises(CommandError, match="scheduled pruning runs do not run"):
+        call_command("quickscale_backups_prune", stdout=StringIO(), stderr=StringIO())
+
+
+def test_backups_prune_keeps_admin_runs_when_disabled(settings) -> None:
+    """The retained admin action keeps working while the module is off."""
+    settings.QUICKSCALE_BACKUPS_ENABLED = False
+    mock_prune = MagicMock(return_value={"deleted_count": 0})
+
+    with patch.dict(
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
+        {"prune_backups": mock_prune},
+    ):
+        call_command(
+            "quickscale_backups_prune",
+            "--trigger",
+            "admin",
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+
+    mock_prune.assert_called_once_with(dry_run=False)
+
+
+def test_backups_prune_keeps_manual_runs_when_disabled(settings) -> None:
+    """An explicit operator run stays available while the module is off."""
+    settings.QUICKSCALE_BACKUPS_ENABLED = False
+    mock_prune = MagicMock(return_value={"deleted_count": 0})
+
+    with patch.dict(
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
+        {"prune_backups": mock_prune},
+    ):
+        call_command(
+            "quickscale_backups_prune",
+            "--trigger",
+            "manual",
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+
+    mock_prune.assert_called_once_with(dry_run=False)
