@@ -2031,6 +2031,10 @@ class TestPostCommitTransactionBoundary:
             ),
         )
         monkeypatch.setattr(
+            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
+            Mock(return_value=Mock(enabled=True)),
+        )
+        monkeypatch.setattr(
             "quickscale_modules_forms.views._emit_submission_event",
             _recording_emit,
         )
@@ -2130,6 +2134,10 @@ class TestSubmissionRollbackEffects:
         monkeypatch.setattr(
             "quickscale_modules_analytics.services.capture_event",
             mock_capture_event,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
+            Mock(return_value=Mock(enabled=True)),
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
