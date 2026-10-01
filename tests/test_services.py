@@ -193,13 +193,15 @@ def test_seeds_without_ambient_org_context() -> None:
 
 
 @pytest.mark.django_db
-def test_organization_created_receiver_calls_ensure_org_default_stages(org_a) -> None:
-    """The CRM receiver for organization_created delegates to ensure_org_default_stages.
+def test_organization_created_receiver_calls_ensure_org_default_stages(
+    org_a, django_capture_on_commit_callbacks
+) -> None:
+    """The CRM receiver for organization_created schedules the seed on commit.
 
-    Establishes the signal/receiver seam. This test verifies the
-    CRM-side receiver is correctly wired: firing the signal from orgs
-    must trigger the same ``ensure_org_default_stages`` call that the
-    old ``crm_bootstrap.maybe_seed_crm_default_stages`` used to make.
+    Establishes the signal/receiver seam: firing the signal from orgs must
+    schedule exactly the ``ensure_org_default_stages`` call the old
+    ``crm_bootstrap.maybe_seed_crm_default_stages`` used to make, and the
+    scheduled call must fire when the write commits (rule 21).
     """
     # Ensure the receiver is connected by importing the receivers module.
     # (In production this happens via QuickscaleCrmConfig.ready().)
@@ -208,12 +210,47 @@ def test_organization_created_receiver_calls_ensure_org_default_stages(org_a) ->
     from quickscale_modules_orgs.models import Organization
     from quickscale_modules_orgs.signals import organization_created
 
-    with mock.patch(
-        "quickscale_modules_crm.receivers.ensure_org_default_stages"
-    ) as mock_ensure:
+    with (
+        mock.patch(
+            "quickscale_modules_crm.receivers.ensure_org_default_stages"
+        ) as mock_ensure,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
         organization_created.send(sender=Organization, organization=org_a)
 
     mock_ensure.assert_called_once_with(org_a)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_rolled_back_organization_creation_seeds_no_stages() -> None:
+    """Rule 21: the receiver seeds stages only after the creation commits."""
+    import quickscale_modules_crm.receivers  # noqa: F401
+    from quickscale_modules_orgs.models import Organization
+    from quickscale_modules_orgs.signals import organization_created
+
+    class _Rollback(Exception):
+        pass
+
+    with mock.patch(
+        "quickscale_modules_crm.receivers.ensure_org_default_stages"
+    ) as mock_ensure:
+        with pytest.raises(_Rollback):
+            with transaction.atomic():
+                rolled_back = Organization.objects.create(
+                    name="Rolled Back Org", slug="rolled-back-org"
+                )
+                organization_created.send(sender=Organization, organization=rolled_back)
+                raise _Rollback
+
+        # Inline seeding would have invoked the mock before the rollback.
+        mock_ensure.assert_not_called()
+
+        # Positive control: a committed send schedules exactly one seed.
+        committed = Organization.objects.create(
+            name="Committed Org", slug="committed-org"
+        )
+        organization_created.send(sender=Organization, organization=committed)
+        mock_ensure.assert_called_once_with(committed)
 
 
 @pytest.mark.django_db(transaction=True)
