@@ -481,7 +481,11 @@ class TestIsClassifiedInRegistryWithImplicitM2M:
 
 
 def test_project_tenant_listing_is_marker_classified_without_registry() -> None:
-    """A project-owned ``AbstractListing`` subclass needs no registry entry."""
+    """A project-owned ``AbstractListing`` subclass needs no registry entry.
+
+    The shipped-module registry oracle is test-owned (rule 34 / D37), so the
+    runtime classification path structurally cannot consult it.
+    """
     import quickscale_modules_orgs.tenancy as tenancy_mod
 
     from tests.project_tenant_app.models import ProjectListing
@@ -491,14 +495,12 @@ def test_project_tenant_listing_is_marker_classified_without_registry() -> None:
         is_tenant_model,
     )
 
-    original_lookup = tenancy_mod.REGISTRY_LOOKUP
-    try:
-        tenancy_mod.REGISTRY_LOOKUP = {}
-        assert is_tenant_model(ProjectListing) is True
-        assert is_classified_in_registry(ProjectListing) is True
-        assert ProjectListing not in get_unclassified_concrete_models()
-    finally:
-        tenancy_mod.REGISTRY_LOOKUP = original_lookup
+    assert not hasattr(tenancy_mod, "TENANT_TABLE_REGISTRY")
+    assert not hasattr(tenancy_mod, "REGISTRY_LOOKUP")
+
+    assert is_tenant_model(ProjectListing) is True
+    assert is_classified_in_registry(ProjectListing) is True
+    assert ProjectListing not in get_unclassified_concrete_models()
 
 
 def test_project_tenant_excluded_wins_over_tenant_manager(

@@ -307,6 +307,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     blog and CRM declare their removal summary prefixes, and each removal boundary's owner
     declares where its implementation lives, so orgs' purge path and boundary check name no other
     module.
+  - **The shipped-module tenant-table registry is test-owned.** `TENANT_TABLE_REGISTRY` and its
+    derived lookup move out of `quickscale_modules_orgs.tenancy` into the module's tests, so
+    runtime tenant classification is marker-only and shipped source names no other module's tables.
   - **Module settings follow one naming family.** The blog, CRM, forms, and listings settings are
     renamed to `QUICKSCALE_<MODULE>_<NAME>` (for example `QUICKSCALE_BLOG_RSS_ENABLED`,
     `QUICKSCALE_FORMS_RETENTION_DAYS`), blog's upload limits are declared manifest options,
