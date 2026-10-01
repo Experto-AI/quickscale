@@ -213,6 +213,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     source carries no parity oracle.
   - *Service surface.* Every module gains `services.py`; every `services.py` gains `__all__`,
     keyword-only signatures, and `<Module>Error` on failure, with `test_services.py`.
+    **Landed:** blog and listings publish their publish and upload operations through
+    `services.py` (keyword-only after the leading subject, `BlogError`/`ListingsError`
+    re-exported), with `test_services.py`. **Open:** `services.py` for auth and orgs; `__all__`
+    for backups, CRM, and notifications; keyword-only signatures in analytics, billing, and
+    backups; forms' `test_services.py`.
 
   **Acceptance:** an import-graph test matches the D6 layers,
   counting references by name as well as imports; no module reads another module's settings; no
