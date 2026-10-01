@@ -321,6 +321,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Retired module setting names fail startup.** A module declares the setting names its renames
     retired, and the startup settings check refuses a project that still defines one, naming the
     replacement instead of leaving the old value silently unused.
+  - **The organizations mode setting follows the module family.** `QUICKSCALE_MODE` is renamed to
+    `QUICKSCALE_ORGS_MODE` in the manifest, the generator and theme templates, module code, tests,
+    and docs, and a project that still defines the retired name fails startup naming the
+    replacement.
   - **Organization creation hands off to billing's declared pricing URL.** The orgs create flow
     collects billing's declared `organization_pricing_url_hooks` capability instead of reversing
     a billing route name and activates the new organization before the handoff, so an enabled

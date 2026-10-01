@@ -71,7 +71,7 @@ def test_billing_pricing_path_returns_none_without_a_declared_provider(
 def test_saas_org_create_redirects_to_the_declared_billing_pricing_url(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="handoff-builder",
         email="handoff-builder@example.com",
@@ -98,7 +98,7 @@ def test_saas_org_create_redirects_to_the_declared_billing_pricing_url(
 def test_org_api_create_returns_the_declared_billing_pricing_url(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="api-handoff-builder",
         email="api-handoff-builder@example.com",
@@ -130,7 +130,7 @@ def test_org_api_create_returns_the_declared_billing_pricing_url(
 def test_saas_org_create_activates_the_new_organization_over_a_stale_session(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="stale-builder",
         email="stale-builder@example.com",
@@ -155,7 +155,7 @@ def test_saas_org_create_activates_the_new_organization_over_a_stale_session(
 def test_saas_org_create_falls_back_when_billing_is_switched_off(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     settings.QUICKSCALE_BILLING_ENABLED = False
     user = get_user_model().objects.create_user(
         username="off-builder",
@@ -175,7 +175,7 @@ def test_saas_org_create_falls_back_when_billing_is_switched_off(
 def test_org_api_create_returns_null_pricing_url_when_switched_off(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     settings.QUICKSCALE_BILLING_ENABLED = False
     user = get_user_model().objects.create_user(
         username="api-off-builder",

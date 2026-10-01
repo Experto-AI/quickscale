@@ -67,7 +67,7 @@ def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
         "quickscale_modules_orgs.middleware.TenantMiddleware",
     )
     assert orgs_spec.settings == {
-        "QUICKSCALE_MODE": "solo",
+        "QUICKSCALE_ORGS_MODE": "solo",
     }
     assert orgs_spec.pre_home_url_includes == (
         ("orgs/", "quickscale_modules_orgs.urls"),
@@ -81,7 +81,7 @@ def test_orgs_wiring_spec_registers_saas_runtime_surface() -> None:
         "orgs", {"mode": "saas"}, project_package="myapp"
     )
 
-    assert orgs_spec.settings["QUICKSCALE_MODE"] == "saas"
+    assert orgs_spec.settings["QUICKSCALE_ORGS_MODE"] == "saas"
     assert orgs_spec.pre_home_url_includes == ()
     assert orgs_spec.url_includes == (("orgs/", "quickscale_modules_orgs.urls"),)
 

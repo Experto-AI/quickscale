@@ -24,7 +24,7 @@ def _billing_dashboard_url(request: HttpRequest) -> str:
     user = getattr(request, "user", None)
     if user is None or not getattr(user, "is_authenticated", False):
         return "/billing/pricing/"
-    mode = getattr(django_settings, "QUICKSCALE_MODE", "solo")
+    mode = getattr(django_settings, "QUICKSCALE_ORGS_MODE", "solo")
     if mode == "saas":
         org = getattr(request, "org", None)
         org_slug = getattr(org, "slug", None) if org else None

@@ -56,7 +56,8 @@
       "sa223-forms-error-shape": "Regenerated 2026-09-30 — the theme form client (FormRenderer.tsx) submits through the shared apiRequest client and renders the one QuickScale error shape, useFormSchema.ts surfaces that shape's message for a failed schema fetch, and the new src/test/FormRenderer.test.tsx pins the field-error, non-field-error, shaped-message, and network-failure behavior; csrf.test.tsx's FormRenderer mock now answers a JSON content type. FormRenderer.tsx, useFormSchema.ts, csrf.test.tsx, and FormRenderer.test.tsx were re-hashed in all three variants.",
       "sa223-orgs-url-mount": "Regenerated 2026-09-30 — the orgs module declares its mount (orgs/) in its manifest, the generated urls.py keeps /orgs/api/ out of both React org shell route patterns (the slug route and the org subpage route) so the module's JSON API reaches Django, and the theme's org API client calls /orgs/api/... instead of /api/orgs/... . testproject/urls.py, frontend/src/hooks/useOrgs.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants.",
       "sa223-billing-url-mount": "Regenerated 2026-10-01 — the billing module declares its mount (billing/) in its manifest and the theme's billing API client calls /billing/api/... instead of /api/billing/... . frontend/src/hooks/useOrgs.ts was re-hashed in all three variants.",
-      "sa223-crm-forms-url-mount": "Regenerated 2026-10-01 — the crm and forms modules declare their mounts (crm/, forms/) in their manifests, the theme's forms API client calls /forms/api/... instead of /api/forms/..., and their route names are snake_case under quickscale_crm: and quickscale_forms:. frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useFormSchema.ts, frontend/src/components/forms/FormRenderer.tsx, frontend/src/test/useApiErrors.test.ts, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants."
+      "sa223-crm-forms-url-mount": "Regenerated 2026-10-01 — the crm and forms modules declare their mounts (crm/, forms/) in their manifests, the theme's forms API client calls /forms/api/... instead of /api/forms/..., and their route names are snake_case under quickscale_crm: and quickscale_forms:. frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useFormSchema.ts, frontend/src/components/forms/FormRenderer.tsx, frontend/src/test/useApiErrors.test.ts, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants.",
+      "sa219-orgs-mode-setting": "Regenerated 2026-10-01 — the orgs runtime mode setting renamed QUICKSCALE_MODE to QUICKSCALE_ORGS_MODE, so templates/index.html (owner.mode) and testproject/context_processors.py (billing dashboard URL) were re-hashed in all three variants. All unrelated paths, hashes, and modes remain authoritative."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -474,7 +475,7 @@
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "c1023de5db28e87a76cb48635f4f03a05332f946e5541a785134fb24a33a34f0"
+      "sha256": "4f3945e1e94cdd32d33221c87e8ba53175ebf265501d60cb70d7017922a5998f"
     },
     "templates/social/embeds.html": {
       "mode": "664",
@@ -494,7 +495,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "664",
-      "sha256": "502f5f2207754d1adf2befb4446df19f91d91ef912d59194c0137f66379aa8cf"
+      "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
     },
     "testproject/settings/__init__.py": {
       "mode": "664",
@@ -952,7 +953,7 @@
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "c1023de5db28e87a76cb48635f4f03a05332f946e5541a785134fb24a33a34f0"
+      "sha256": "4f3945e1e94cdd32d33221c87e8ba53175ebf265501d60cb70d7017922a5998f"
     },
     "templates/social/embeds.html": {
       "mode": "664",
@@ -972,7 +973,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "664",
-      "sha256": "502f5f2207754d1adf2befb4446df19f91d91ef912d59194c0137f66379aa8cf"
+      "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
     },
     "testproject/settings/__init__.py": {
       "mode": "664",
@@ -1430,7 +1431,7 @@
     },
     "templates/index.html": {
       "mode": "664",
-      "sha256": "c1023de5db28e87a76cb48635f4f03a05332f946e5541a785134fb24a33a34f0"
+      "sha256": "4f3945e1e94cdd32d33221c87e8ba53175ebf265501d60cb70d7017922a5998f"
     },
     "templates/social/embeds.html": {
       "mode": "664",
@@ -1450,7 +1451,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "664",
-      "sha256": "502f5f2207754d1adf2befb4446df19f91d91ef912d59194c0137f66379aa8cf"
+      "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
     },
     "testproject/settings/__init__.py": {
       "mode": "664",

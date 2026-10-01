@@ -22,7 +22,7 @@ ALLOWED_HOSTS = ["*"]
 
 # Required by quickscale_modules_orgs; saas is the correct mode for
 # orgs-dependent module test suites (forms, blog, listings, crm, social).
-QUICKSCALE_MODE = "saas"
+QUICKSCALE_ORGS_MODE = "saas"
 
 INSTALLED_APPS = [
     "django.contrib.admin",

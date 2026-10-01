@@ -65,9 +65,9 @@ def post_login_redirect(request: Any) -> str | None:
     if user is None or not getattr(user, "is_authenticated", False):
         return None
 
-    # SA14.6: QUICKSCALE_MODE is guaranteed by the boot guard —
+    # SA14.6: QUICKSCALE_ORGS_MODE is guaranteed by the boot guard —
     # direct access, no fallback.
-    saas_mode = settings.QUICKSCALE_MODE == "saas"
+    saas_mode = settings.QUICKSCALE_ORGS_MODE == "saas"
     has_membership = OrganizationMembership.objects.filter(user=user).exists()
     if not saas_mode and not has_membership:
         Organization.objects.create_personal_for(user)
@@ -94,9 +94,9 @@ def post_signup_redirect(request: Any) -> str | None:
     if user is None or not getattr(user, "is_authenticated", False):
         return None
 
-    # SA14.6: QUICKSCALE_MODE is guaranteed by the boot guard —
+    # SA14.6: QUICKSCALE_ORGS_MODE is guaranteed by the boot guard —
     # direct access, no fallback.
-    saas_mode = settings.QUICKSCALE_MODE == "saas"
+    saas_mode = settings.QUICKSCALE_ORGS_MODE == "saas"
     if not saas_mode:
         Organization.objects.create_personal_for(user)
         return "/"
