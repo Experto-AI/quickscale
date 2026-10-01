@@ -46,7 +46,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | `publishable_key_env_var` | string | `STRIPE_PUBLISHABLE_KEY` | `QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR` | Environment-variable name containing the Stripe publishable key used by billing checkout flows. |
 | `secret_key_env_var` | string | `STRIPE_SECRET_KEY` | `QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR` | Environment-variable name containing the Stripe secret key for server-side API calls. |
 | `webhook_secret_env_var` | string | `QUICKSCALE_BILLING_WEBHOOK_SECRET` | `QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR` | Environment-variable name containing the Stripe webhook signing secret. |
-| `billing_currency` | string | `usd` | `QUICKSCALE_BILLING_CURRENCY` | ISO 4217 billing currency code used for plan metadata and Checkout validation. |
+| `currency` | string | `usd` | `QUICKSCALE_BILLING_CURRENCY` | ISO 4217 billing currency code used for plan metadata and Checkout validation. |
 | `api_rate_limit` | string | `30/hour` | `QUICKSCALE_BILLING_API_RATE_LIMIT` | Throttle rate per client for billing's Stripe-calling checkout and portal endpoints. Format: `<count>/<period>`. |
 
 Backend environment variables:
