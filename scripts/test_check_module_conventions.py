@@ -1088,6 +1088,392 @@ def test_registration_in_later_handler_control() -> None:
     assert _violations(checker.rule_10_checks_errors, good) == []
 
 
+def test_registration_after_break_bypasses_else_control() -> None:
+    module = _golden_module()
+    good = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, good) == []
+    broken = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            pass\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+    nested_break = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            for inner in [1]:\n"
+            "                break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, nested_break)
+    )
+    dead_break = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            if False:\n"
+            "                break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, dead_break)
+    )
+    try_star = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            try:\n"
+            "                break\n"
+            "            except* Exception:\n"
+            "                pass\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, try_star) == []
+    unreachable_break = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            return\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, unreachable_break)
+    )
+    terminal_try = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            try:\n"
+            "                return\n"
+            "            finally:\n"
+            "                pass\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, terminal_try)
+    )
+    terminal_match = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            match 1:\n"
+            "                case _:\n"
+            "                    return\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, terminal_match)
+    )
+    finally_override = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            try:\n"
+            "                break\n"
+            "            finally:\n"
+            "                return\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, finally_override)
+    )
+
+
+def test_registration_loop_termination_controls() -> None:
+    module = _golden_module()
+    nested_terminal_loop = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            for inner in []:\n"
+            "                pass\n"
+            "            else:\n"
+            "                return\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, nested_terminal_loop)
+    )
+    nested_terminal_match = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            if True:\n"
+            "                match 1:\n"
+            "                    case _:\n"
+            "                        return\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, nested_terminal_match)
+    )
+    continue_before_break = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            continue\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, continue_before_break)
+    )
+    finally_continue = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            try:\n"
+            "                break\n"
+            "            finally:\n"
+            "                continue\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, finally_continue)
+    )
+    caught_raise = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        self.setup_checks()\n"
+            "\n"
+            "    def setup_checks(self) -> None:\n"
+            "        for _ in [1]:\n"
+            "            try:\n"
+            "                raise ValueError('boom')\n"
+            "            except ValueError:\n"
+            "                pass\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, caught_raise) == []
+    guarded_match = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        self.setup_checks()\n"
+            "\n"
+            "    def setup_checks(self) -> None:\n"
+            "        for _ in [1]:\n"
+            "            match 1:\n"
+            "                case _ if False:\n"
+            "                    return\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, guarded_match) == []
+    compound_continue = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            if True:\n"
+            "                continue\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, compound_continue)
+    )
+    match_subject = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        match register_module_checks(self, [check_demo]):\n"
+            "            case _:\n"
+            "                pass\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, match_subject) == []
+    match_guard = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        match 1:\n"
+            "            case _ if register_module_checks(self, [check_demo]) is None:\n"
+            "                pass\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, match_guard) == []
+    conditional_finally = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        flag = False\n"
+            "        for _ in [1]:\n"
+            "            try:\n"
+            "                break\n"
+            "            finally:\n"
+            "                if flag:\n"
+            "                    continue\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, conditional_finally) == []
+    compound_continue_suffix = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            if True:\n"
+            "                if flag:\n"
+            "                    pass\n"
+            "                continue\n"
+            "            break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, compound_continue_suffix)
+    )
+    finally_suffix = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            try:\n"
+            "                break\n"
+            "            finally:\n"
+            "                if flag:\n"
+            "                    pass\n"
+            "                continue\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, finally_suffix)
+    )
+    wrapped_continue_call = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            if True:\n"
+            "                continue\n"
+            "            register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, wrapped_continue_call)
+    )
+    dead_match = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        for _ in [1]:\n"
+            "            match 1:\n"
+            "                case _ if False:\n"
+            "                    break\n"
+            "        else:\n"
+            "            return\n"
+            "        register_module_checks(self, [check_demo])\n",
+        ),
+    )
+    assert any(
+        "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, dead_match)
+    )
+
+
 def test_registration_after_return_inside_loop_control() -> None:
     module = _golden_module()
     broken = _with_files(
@@ -2968,6 +3354,24 @@ def test_registration_outside_ready_control() -> None:
     )
     assert any(
         "registers nothing" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+
+
+def test_swallowed_registration_in_except_star_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "        register_module_checks(self, [check_demo])\n",
+            "        try:\n"
+            "            register_module_checks(self, [check_demo])\n"
+            "        except* Exception:\n"
+            "            pass\n",
+        ),
+    )
+    assert any(
+        "catches a registration failure" in violation
         for violation in _violations(checker.rule_10_checks_errors, broken)
     )
 
