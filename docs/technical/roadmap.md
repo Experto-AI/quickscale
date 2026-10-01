@@ -192,8 +192,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
 
   **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. orgs' purge path
-  and boundary table no longer name another module; the rule's import-graph test and several
-  modules' service surfaces remain.
+  and boundary table no longer name another module, and the rule's import-graph test landed as
+  `quickscale_core/tests/test_module_import_graph.py`; several modules' service surfaces remain.
 
   **Scope:**
   - *References by name* (rule 34). **Landed:** the purge command's billing steps and
