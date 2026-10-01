@@ -719,3 +719,91 @@ class TestNotificationsProviderOption:
             {"provider": "postmark"},
         )
         assert any(issue.option_name == "provider" for issue in issues)
+
+
+_DISABLED_MODULE_OPTIONS: dict[str, dict[str, object]] = {
+    "blog": {
+        "enabled": False,
+        "posts_per_page": 10,
+        "api_rate_limit": "5/hour",
+        "rss_enabled": True,
+        "api_upload_max_bytes": 10485760,
+        "api_upload_max_width": 4096,
+        "api_upload_max_height": 4096,
+        "api_allowed_image_formats": ["PNG", "JPEG", "WEBP", "GIF"],
+    },
+    "crm": {
+        "enabled": False,
+        "api_enabled": True,
+        "deals_per_page": 25,
+        "contacts_per_page": 50,
+    },
+    "forms": {
+        "enabled": False,
+        "submissions_per_page": 25,
+        "spam_protection_enabled": True,
+        "rate_limit": "5/hour",
+        "retention_days": 365,
+        "api_enabled": True,
+    },
+    "listings": {"enabled": False, "per_page": 12},
+}
+
+
+_DISABLED_EDITOR_INCLUDES: dict[str, tuple[tuple[str, str], ...]] = {
+    # Blog and listings keep a staff-guarded copy of the Markdownx endpoints
+    # their installed admin editors call; crm and forms have no shared editor.
+    "blog": (("markdownx/", "quickscale_modules_blog.markdownx_urls"),),
+    "crm": (),
+    "forms": (),
+    "listings": (("markdownx/", "quickscale_modules_listings.markdownx_urls"),),
+}
+
+
+class TestMarkdownxEditorMountIsAlwaysGuarded:
+    """The Markdownx editor mount is staff-guarded in every combination."""
+
+    @pytest.mark.parametrize(
+        ("blog_enabled", "listings_enabled"),
+        [(True, True), (True, False), (False, True), (False, False)],
+    )
+    def test_no_unguarded_markdownx_mount(
+        self, blog_enabled: bool, listings_enabled: bool
+    ) -> None:
+        specs = {
+            "blog": build_manifest_wiring_spec(
+                "blog",
+                {**_DISABLED_MODULE_OPTIONS["blog"], "enabled": blog_enabled},
+            ),
+            "listings": build_manifest_wiring_spec(
+                "listings",
+                {**_DISABLED_MODULE_OPTIONS["listings"], "enabled": listings_enabled},
+            ),
+        }
+        _, _, _, urls = collect_wiring(specs)
+        markdownx_targets = [
+            target for prefix, target in urls if prefix == "markdownx/"
+        ]
+        assert markdownx_targets, "the editor mount must exist while installed"
+        assert "markdownx.urls" not in markdownx_targets
+        assert all(target.endswith(".markdownx_urls") for target in markdownx_targets)
+
+
+class TestModuleDisabledSwitch:
+    """Rule 1 (D3): off keeps the installed app and its admin, drops the
+    module's own public URLs, and keeps only installed-admin editor mounts."""
+
+    @pytest.mark.parametrize("module_name", sorted(_DISABLED_MODULE_OPTIONS))
+    def test_disabled_module_keeps_apps_and_drops_public_url_mounts(
+        self, module_name: str
+    ) -> None:
+        spec = build_manifest_wiring_spec(
+            module_name, _DISABLED_MODULE_OPTIONS[module_name]
+        )
+        assert spec.settings[f"QUICKSCALE_{module_name.upper()}_ENABLED"] is False
+        assert f"quickscale_modules_{module_name}" in spec.apps
+        assert spec.url_includes == _DISABLED_EDITOR_INCLUDES[module_name]
+        assert (f"{module_name}/", f"quickscale_modules_{module_name}.urls") not in (
+            spec.url_includes
+        )
+        assert spec.pre_home_url_includes == ()

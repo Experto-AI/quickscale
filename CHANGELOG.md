@@ -315,6 +315,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `QUICKSCALE_FORMS_RETENTION_DAYS`), blog's upload limits are declared manifest options,
     notifications declares `provider`, and billing's option key is `currency`. A `quickscale.yml`
     or `.quickscale/state.yml` that still uses an old option key fails naming its replacement.
+  - **A module can be switched off without uninstalling it.** Blog, CRM, forms, and listings gain
+    `QUICKSCALE_<MODULE>_ENABLED`; when off, the module keeps its app, data, and admin, no
+    module-owned URL is mounted, the React shell flag is false, and the forms retention job refuses
+    to run. The Markdownx editor mount is staff-guarded in every state, so blog and listings keep a
+    working editor without an anonymous preview or upload surface.
   - **Write effects follow their commit.** A form-submission email, an organization-invitation
     email, CRM default-stage seeding, and social cache purges run only after their database write
     commits, so a rolled-back write sends no email and fires no effect.

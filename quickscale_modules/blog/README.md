@@ -26,6 +26,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_BLOG_ENABLED` | Mount the module's pages, API, and RSS routes. Off keeps the app, its data, and the admin Markdownx editor (behind a staff check) but serves none of the module's own public URLs. |
 | `posts_per_page` | integer | `10` | `QUICKSCALE_BLOG_POSTS_PER_PAGE` | Number of posts per page. |
 | `api_rate_limit` | string | `5/hour` | `QUICKSCALE_BLOG_API_RATE_LIMIT` | Throttle rate for authenticated blog API requests, per IP. Format: `<count>/<period>`. |
 | `rss_enabled` | boolean | `true` | `QUICKSCALE_BLOG_RSS_ENABLED` | Enable the RSS route at runtime. |
@@ -127,14 +128,14 @@ A manual installation embeds the orgs baseline first, then adds `rest_framework`
 `quickscale_modules_orgs.middleware.TenantMiddleware` after the session and authentication
 middleware, sets the required `MEDIA_URL` (non-trivial) and `QUICKSCALE_BLOG_RSS_ENABLED` settings,
 configures Markdownx and DRF (the shared error handler and the `quickscale_blog_api` throttle
-rate shown under Configuration), mounts the module at `blog/` with the sibling `markdownx/`
-include, and runs `python manage.py migrate quickscale_blog` plus
+rate shown under Configuration), mounts the module at `blog/` with the staff-guarded Markdownx
+editor include, and runs `python manage.py migrate quickscale_blog` plus
 `python manage.py collectstatic`.
 
 ```python
 urlpatterns = [
     path("blog/", include("quickscale_modules_blog.urls")),
-    path("markdownx/", include("markdownx.urls")),
+    path("markdownx/", include("quickscale_modules_blog.markdownx_urls")),
 ]
 ```
 

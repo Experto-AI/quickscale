@@ -34,6 +34,17 @@ def _forms_post_hook(
             "quickscale_forms_submit": settings["QUICKSCALE_FORMS_RATE_LIMIT"],
         },
     }
+    if not bool(resolved["enabled"]):
+        # Rule 1 (D3): off keeps the module installed — app, migrations,
+        # admin, and settings — and mounts none of its public URLs.
+        return ModuleWiringSpec(
+            apps=spec.apps,
+            middleware=spec.middleware,
+            settings=settings,
+            pre_home_url_includes=(),
+            url_includes=(),
+            managed_files=spec.managed_files,
+        )
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,

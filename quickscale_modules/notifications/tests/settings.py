@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
 # required forms settings; forms AppConfig.ready() will fail
 # startup otherwise.
+QUICKSCALE_FORMS_ENABLED = True
 QUICKSCALE_FORMS_API_ENABLED = True
 QUICKSCALE_FORMS_RATE_LIMIT = "5/hour"
 QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED = True

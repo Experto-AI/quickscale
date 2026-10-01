@@ -2186,7 +2186,7 @@ class TestBlogPostHookFailHard:
                 "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
             }
         )
-        resolved: dict[str, Any] = {}
+        resolved: dict[str, Any] = {"enabled": True}
         result = _blog_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
@@ -2207,7 +2207,7 @@ class TestListingsPostHookFailHard:
     def test_listings_setting_present_passes(self) -> None:
         """A valid QUICKSCALE_LISTINGS_PER_PAGE passes through without error."""
         spec = ModuleWiringSpec(settings={"QUICKSCALE_LISTINGS_PER_PAGE": 24})
-        resolved: dict[str, Any] = {}
+        resolved: dict[str, Any] = {"enabled": True}
         result = _listings_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 24
@@ -2297,7 +2297,7 @@ class TestFormsPostHookFailHard:
                 "QUICKSCALE_FORMS_API_ENABLED": True,
             }
         )
-        resolved: dict[str, Any] = {}
+        resolved: dict[str, Any] = {"enabled": True}
         result = _forms_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 25

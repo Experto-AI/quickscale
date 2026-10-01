@@ -1049,6 +1049,7 @@ class TestEmbedModule:
         assert mock_regenerate.call_args.kwargs["module_names"] == ["blog"]
         assert mock_regenerate.call_args.kwargs["option_overrides"] == {
             "blog": {
+                "enabled": True,
                 "posts_per_page": 10,
                 "rss_enabled": True,
                 "api_rate_limit": "5/hour",

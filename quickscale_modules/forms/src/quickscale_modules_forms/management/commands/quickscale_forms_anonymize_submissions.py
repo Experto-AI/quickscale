@@ -3,7 +3,8 @@
 from datetime import timedelta
 from typing import Any
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from quickscale_modules_forms.models import Form, FormSubmission
@@ -28,6 +29,14 @@ class Command(BaseCommand):
         from django.db import transaction
 
         from quickscale_modules_orgs.current_org import operator_access, org_scope
+
+        if not bool(settings.QUICKSCALE_FORMS_ENABLED):
+            # Rule 1 (D3): a module switched off runs none of its scheduled
+            # jobs; the retention anonymizer is the forms module's only one.
+            raise CommandError(
+                "The forms module is disabled (QUICKSCALE_FORMS_ENABLED is "
+                "False); the retention job does not run."
+            )
 
         dry_run = bool(options.get("dry_run", False))
         total_anonymized = 0
