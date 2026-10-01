@@ -28,6 +28,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219 | Deferred |
 | SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
 | SA230 | Build the conformance-test harness with the rules already met | post-v88 | 3 | — | Deferred |
+| SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA226, SA230 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
@@ -39,7 +40,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA231 (while blocked) · SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA219 ──► SA220
 Track 3: SA230 ──► SA226 ──► SA216 (after SA215)
      critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
@@ -55,7 +56,8 @@ module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA230 (Track 3) runs while SA219 and SA220 land; it is the harness
 SA215 adds rules to. SA216 waits for SA215 because both change auth's views,
-orgs' removal path, and the user-referencing models.
+orgs' removal path, and the user-referencing models. SA231 (Track 1) fills the track while SA215
+is blocked and pauses once SA215 can start.
 
 ### Track states
 
@@ -63,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA215 | no | no | no | no | **yes** |
+| 1 | SA231 | yes | yes | yes | **yes** | no |
 | 2 | SA219 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA230 (in progress) | yes | yes | yes | **yes** | no |
 
@@ -150,6 +152,30 @@ suite, and merge only the reviewed delivery through the serialized queue.
   control case and passes on `v89`; SA215 only adds rules to it.
 
   **Surfaces:** the conformance test, its registry row, and gate documentation.
+
+- [ ] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
+
+  **Context:** `make quality` (`scripts/check_quality.sh`) measures radon complexity and file
+  length against a ratchet baseline (`scripts/quality_baseline.json`), but it only warns: no CI
+  stage or registered gate runs it. The last report shows 198 functions at CC ≥ 11 (36 at ≥ 21),
+  26 critical and 63 warning regressions against the baseline, and 24 files of 800 lines or more
+  (the largest are `beta_migration.py`, billing `services.py`, `apply_command.py`, and
+  `dr_engine/orchestration.py`, at 2,900–4,700 lines). File length is not in the baseline at all.
+
+  **Scope:** behavior-preserving batches, each a package-sized slice through the serialized merge
+  queue, merging `v89` before each one: (1) Track 1 surfaces (`beta_migration.py`, core contracts,
+  manifest, `project_state`, `git_utils`); (2) CLI commands; (3) `dr_engine`; (4) modules, each
+  only after the convention ticket editing it has merged. Public import paths stay put (re-export
+  where a file splits), existing tests pass unchanged, functions move toward CC < 11, and each
+  batch re-tightens the baseline for its files. The final batch adds file length to the baseline
+  ratchet and registers `make quality` as a failing gate.
+
+  **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
+  lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
+  a regression, which a control case proves; the gate is registered and runs in local CI.
+
+  **Surfaces:** each batch's files; `scripts/quality_baseline.json`, `scripts/check_quality.sh`;
+  the gate registry and gate documentation.
 
 - [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
