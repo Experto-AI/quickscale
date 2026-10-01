@@ -9,7 +9,13 @@ declarations of every installed app, so the aggregate names no module's labels
 or fields; an app may still declare provider state stored on another installed
 model.  An app-owned stage (``INVALIDATE``, ``RECONCILE``) needs the matching
 executor hook on the declaring app's config, so no declaration is discharged
-without work to run.
+without work to run.  An obligation whose provider fields are
+``boundary_guarded`` names the declaring app's guard, reconciliation, and
+mutation-lock hooks in its ``boundary_guarded_hooks`` declaration, so the
+boundary runs the declaring module's own provider-state code.  Each removal
+boundary's owner declares where its implementation lives through the
+``removal_boundary_implementations`` declaration, so the discharge check holds
+no other module's label or module path.
 
 Both removal boundaries discharge that discovered set through one shared entry
 point, :class:`RemovalCoordinator`.  A boundary calls
@@ -25,9 +31,10 @@ could satisfy it.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from django.apps import AppConfig, apps
 from django.db import models
@@ -58,11 +65,34 @@ class ExternalProviderField:
     model_label: str
     field_name: str
     structured_keys: tuple[str, ...] = ()
-    #: True when a boundary-specific guard decides whether this field's state
-    #: blocks removal; the declaring module asserts that guard exists.  False
-    #: (the default) means the shared boundary guard refuses while the field
-    #: carries a value, so the declaration is enforced without bespoke code.
+    #: True when the declaring app's own boundary guard decides whether this
+    #: field's state blocks removal; the obligation names those executor hooks
+    #: in its ``boundary_guarded_hooks`` declaration.  False (the default)
+    #: means the shared boundary guard refuses while the field carries a
+    #: value, so the declaration is enforced without bespoke code.
     boundary_guarded: bool = False
+
+
+@dataclass(frozen=True)
+class BoundaryGuardedHooks:
+    """AppConfig hooks an obligation's boundary-guarded fields declare.
+
+    A declaration whose provider fields carry ``boundary_guarded=True`` names
+    the executor hooks on the declaring app's ``AppConfig``, so the boundary
+    runs the declaring module's own provider-state code:
+
+    * ``guard`` (required): called inside the removal transaction with the
+      organization and any provider-confirmed expired checkout id; returns an
+      empty string when removal may proceed, else the refusal message.
+    * ``reconcile``: called before the removal transaction; returns a
+      provider-confirmed expired checkout id, or an empty string.
+    * ``mutation_lock``: called to obtain the context manager the boundary
+      holds across reconciliation and removal.
+    """
+
+    guard: str
+    reconcile: str = ""
+    mutation_lock: str = ""
 
 
 @dataclass(frozen=True)
@@ -74,6 +104,7 @@ class OrganizationRemovalObligation:
     account_delete_action: RemovalAction
     account_delete_skip_reason: str = ""
     external_provider_fields: tuple[ExternalProviderField, ...] = ()
+    boundary_guarded_hooks: BoundaryGuardedHooks | None = None
 
     def action_for(self, boundary: RemovalBoundary) -> RemovalAction:
         """Return the action declared for *boundary*."""
@@ -136,15 +167,15 @@ STAGE_EXECUTOR_HOOKS: dict[RemovalAction, str] = {
     RemovalAction.RECONCILE: "reconcile_account_deletion_provider_state",
 }
 
-#: Obligations whose provider fields the purge boundary guards with its own
-#: refusal code instead of the shared value check, mapped to the module that
-#: may declare them.  This is the boundary's own declaration about the code it
-#: runs, so a field may carry ``boundary_guarded=True`` only inside one of
-#: these obligations and only for the listed declaring module; any other app
-#: would be claiming a boundary guard that does not exist.
-BOUNDARY_GUARDED_OBLIGATIONS: dict[str, str] = {
-    BILLING_PROVIDER_STATE: "quickscale_billing",
-}
+#: AppConfig attribute through which an app declares the removal boundary
+#: implementations it ships: a mapping of :class:`RemovalBoundary` to
+#: ``(shipping app name, implementation module path, entry function)``.
+REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE: str = "removal_boundary_implementations"
+
+#: AppConfig attribute through which a module declares the display prefix its
+#: models take in removal summaries (for example ``"CRM"``).  A module that
+#: declares none keeps Django's capitalized plural.
+REMOVAL_LABEL_PREFIX_ATTRIBUTE: str = "removal_label_prefix"
 
 
 def coordinator_discharge_actions(
@@ -212,15 +243,40 @@ def _validate_declared_obligations(
                     f"{action.value!r} action for the {boundary.value!r} boundary "
                     f"but exposes no {hook!r} hook to execute it."
                 )
-        if (
-            any(field.boundary_guarded for field in obligation.external_provider_fields)
-            and BOUNDARY_GUARDED_OBLIGATIONS.get(obligation.name) != owner
-        ):
+        guarded_fields = tuple(
+            field
+            for field in obligation.external_provider_fields
+            if field.boundary_guarded
+        )
+        hooks = obligation.boundary_guarded_hooks
+        if guarded_fields and hooks is None:
             raise ValueError(
                 f"{owner} declares boundary-guarded provider fields on "
-                f"{obligation.name!r}, but the boundary's bespoke guard for that "
-                "obligation belongs to another module."
+                f"{obligation.name!r} without boundary_guarded_hooks; the "
+                "declaring app must name the hooks that decide them."
             )
+        if hooks is not None and not guarded_fields:
+            raise ValueError(
+                f"{owner} declares boundary_guarded_hooks on {obligation.name!r} "
+                "without any boundary-guarded provider field."
+            )
+        if hooks is not None:
+            for attribute in ("guard", "reconcile", "mutation_lock"):
+                hook = getattr(hooks, attribute)
+                if attribute == "guard" and not hook:
+                    raise ValueError(
+                        f"{owner} declares boundary_guarded_hooks on "
+                        f"{obligation.name!r} without a guard hook."
+                    )
+                if not hook:
+                    continue
+                if not isinstance(hook, str) or not callable(
+                    getattr(app_config, hook, None)
+                ):
+                    raise ValueError(
+                        f"{owner} declares the {attribute!r} hook {hook!r} on "
+                        f"{obligation.name!r} but exposes no such hook."
+                    )
 
 
 def declared_removal_obligations(
@@ -280,6 +336,120 @@ def organization_removal_obligations() -> tuple[OrganizationRemovalObligation, .
             declared_by[obligation.name] = app_config.label
             discovered.append(obligation)
     return tuple(discovered)
+
+
+@dataclass(frozen=True)
+class DeclaredBoundaryGuard:
+    """One installed app's declared boundary-guarded provider-state executors.
+
+    The declaration names the hooks; this record carries the declaring app's
+    resolved callables so the boundary never reads a hook name itself.
+    """
+
+    app_config: AppConfig
+    obligation: OrganizationRemovalObligation
+    guard: Callable[..., str]
+    reconcile: Callable[..., str] | None
+    mutation_lock: Callable[..., Any] | None
+
+
+def declared_boundary_guards() -> tuple[DeclaredBoundaryGuard, ...]:
+    """Return every installed app's declared boundary-guarded provider state.
+
+    Entries follow app-label order.  The declarations are validated before
+    their hooks are resolved, so a malformed or duplicate declaration fails
+    closed instead of being read as an app with nothing to guard.
+    """
+    organization_removal_obligations()
+    guards: list[DeclaredBoundaryGuard] = []
+    for app_config in sorted(apps.get_app_configs(), key=lambda config: config.label):
+        for obligation in declared_removal_obligations(app_config):
+            hooks = obligation.boundary_guarded_hooks
+            if hooks is None:
+                continue
+            guards.append(
+                DeclaredBoundaryGuard(
+                    app_config=app_config,
+                    obligation=obligation,
+                    guard=getattr(app_config, hooks.guard),
+                    reconcile=(
+                        getattr(app_config, hooks.reconcile)
+                        if hooks.reconcile
+                        else None
+                    ),
+                    mutation_lock=(
+                        getattr(app_config, hooks.mutation_lock)
+                        if hooks.mutation_lock
+                        else None
+                    ),
+                )
+            )
+    return tuple(guards)
+
+
+def removal_boundary_implementations() -> dict[RemovalBoundary, tuple[str, str, str]]:
+    """Collect the removal boundary implementations declared by installed apps.
+
+    Each boundary's owner declares where its implementation lives, so a
+    discharge check holds no other module's label, module path, or entry name.
+    A boundary declared by more than one app, a declaration that is not a
+    complete boundary-to-implementation mapping, and a shipping app that is not
+    installed all fail closed instead of being read as nothing to check.
+    """
+    implementations: dict[RemovalBoundary, tuple[str, str, str]] = {}
+    declared_by: dict[RemovalBoundary, str] = {}
+    for app_config in sorted(apps.get_app_configs(), key=lambda config: config.label):
+        declaration = getattr(
+            app_config, REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE, None
+        )
+        if declaration is None:
+            continue
+        if callable(declaration):
+            declaration = declaration()
+        try:
+            entries = dict(declaration)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{app_config.label!r} declares a non-mapping "
+                f"{REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE}; expected "
+                "RemovalBoundary-to-implementation entries."
+            ) from exc
+        for boundary, implementation in entries.items():
+            if not isinstance(boundary, RemovalBoundary):
+                raise ValueError(
+                    f"{app_config.label!r} declares an implementation for "
+                    f"{boundary!r}, which is not a RemovalBoundary."
+                )
+            try:
+                app_name, module_path, entry_name = implementation
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"{app_config.label!r} declares the {boundary.value!r} boundary "
+                    "implementation without its (app name, module path, entry) "
+                    "parts."
+                ) from exc
+            if not all(
+                isinstance(part, str) and part
+                for part in (app_name, module_path, entry_name)
+            ):
+                raise ValueError(
+                    f"{app_config.label!r} declares the {boundary.value!r} boundary "
+                    "implementation with an empty or non-string part."
+                )
+            if not apps.is_installed(app_name):
+                raise ValueError(
+                    f"{app_config.label!r} declares the {boundary.value!r} boundary "
+                    f"implementation in {app_name!r}, which is not installed."
+                )
+            owner = declared_by.get(boundary)
+            if owner is not None:
+                raise ValueError(
+                    f"Removal boundary {boundary.value!r} is declared by both "
+                    f"{owner!r} and {app_config.label!r}."
+                )
+            declared_by[boundary] = app_config.label
+            implementations[boundary] = (app_name, module_path, entry_name)
+    return implementations
 
 
 def declared_refusal_fields(

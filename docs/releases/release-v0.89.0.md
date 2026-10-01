@@ -26,8 +26,10 @@ tenant-model graph, including project-owned extension models. Each app declares 
 obligations it owns on its own `AppConfig`, and purge and account deletion discharge the discovered
 set through one shared coordinator that fails closed when a boundary skips a declared obligation; a
 declared provider field refuses the purge while it carries a value unless the declaring module marks
-it boundary-guarded and decides liveness itself, an app-owned stage runs the declaring app's own
-hook, and account deletion records the data-removal steps it deliberately skips when an organization
+it boundary-guarded and declares the guard, reconciliation, and provider-mutex hooks that decide its
+liveness itself; an app-owned stage runs the declaring app's own hook; each removal boundary's owner
+declares where its implementation lives; blog and CRM declare their purge-summary prefixes; and
+account deletion records the data-removal steps it deliberately skips when an organization
 survives.
 
 Server-rendered auth, billing, blog, listings, and CRM pages now share the generated React theme's
