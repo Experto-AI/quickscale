@@ -8,15 +8,11 @@ credentials a switched-on feature needs must not be empty.
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
 #: The target mode whose backup operations upload through the remote provider.
 _REMOTE_TARGET_MODE = "private_remote"
-
-
-def _resolve_env_var_name(configured_name: str, manifest_default: str) -> str:
-    """Return the environment-variable name the credential resolves from."""
-    return configured_name.strip() or manifest_default
 
 
 def check_private_remote_credentials(
@@ -29,6 +25,11 @@ def check_private_remote_credentials(
     snapshot the backup commands use, so the check and the command agree on
     which environment variable an empty value comes from.
     """
+    if not bool(settings.QUICKSCALE_BACKUPS_ENABLED):
+        # Rule 1 (D3): a module switched off has no switched-on feature, so
+        # its credential requirement does not apply while it is off.
+        return []
+
     from quickscale_modules_backups.services import (
         _build_policy_snapshot_from_settings,
     )
@@ -39,27 +40,21 @@ def check_private_remote_credentials(
 
     messages: list[CheckMessage] = []
     if not snapshot.resolve_remote_access_key_id():
-        env_var_name = _resolve_env_var_name(
-            snapshot.remote_access_key_id_env_var,
-            "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID",
-        )
         messages.append(
             Error(
                 "QUICKSCALE_BACKUPS_TARGET_MODE is 'private_remote' but the "
-                f"remote access key id environment variable {env_var_name!r} "
+                f"remote access key id environment variable "
+                f"{snapshot.remote_access_key_id_env_var.strip()!r} "
                 "is empty. Set the credential or switch the target mode.",
                 id="quickscale_backups.E001",
             )
         )
     if not snapshot.resolve_remote_secret_access_key():
-        env_var_name = _resolve_env_var_name(
-            snapshot.remote_secret_access_key_env_var,
-            "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY",
-        )
         messages.append(
             Error(
                 "QUICKSCALE_BACKUPS_TARGET_MODE is 'private_remote' but the "
-                f"remote secret access key environment variable {env_var_name!r} "
+                f"remote secret access key environment variable "
+                f"{snapshot.remote_secret_access_key_env_var.strip()!r} "
                 "is empty. Set the credential or switch the target mode.",
                 id="quickscale_backups.E002",
             )
