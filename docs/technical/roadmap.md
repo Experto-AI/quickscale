@@ -27,9 +27,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | — | Deferred |
 | SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219 | Deferred |
 | SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
-| SA230 | Build the conformance-test harness with the rules already met | post-v88 | 3 | — | Deferred |
 | SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA226, SA230 | Deferred |
+| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA226 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -42,7 +41,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA231 (while blocked) · SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA219 ──► SA220
-Track 3: SA230 ──► SA226 ──► SA216 (after SA215)
+Track 3: SA226 ──► SA216 (after SA215)
      critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
@@ -54,10 +53,9 @@ the startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's 
 authorization needs SA220's capabilities. SA204 freezes migration history before any post-SA153
 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA230 (Track 3) runs while SA219 and SA220 land; it is the harness
-SA215 adds rules to. SA216 waits for SA215 because both change auth's views,
-orgs' removal path, and the user-referencing models. SA231 (Track 1) fills the track while SA215
-is blocked and pauses once SA215 can start.
+**Off the critical path.** SA230's landed harness is the one SA215 adds rules to. SA231 (Track 1)
+fills the track while SA215 is blocked and pauses once SA215 can start. SA216 waits for SA215
+because both change auth's views, orgs' removal path, and the user-referencing models.
 
 ### Track states
 
@@ -67,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA231 | yes | yes | yes | **yes** | no |
 | 2 | SA219 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA230 (in progress) | yes | yes | yes | **yes** | no |
+| 3 | SA226 | no | no | no | no | no |
 
 ### Ownership and merge coordination
 
@@ -139,19 +137,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the conformance test; release notes; decisions; the inventory.
 
-- [ ] **SA230 — Build the conformance-test harness with the rules already met.**
-
-  **Context:** the harness and the rules the shipped code already meets can land now, so each
-  convention ticket's rules drop into a running gate.
-
-  **Scope:** the rule 40 conformance test and its registry row; a check with a control case for
-  each rule that `v89` already satisfies; a recorded list of the rules still open, each naming the
-  ticket that closes it.
-
-  **Acceptance:** the harness runs as a registered gate; each covered rule's check fails on its
-  control case and passes on `v89`; SA215 only adds rules to it.
-
-  **Surfaces:** the conformance test, its registry row, and gate documentation.
+- [x] **SA230 — Build the conformance-test harness with the rules already met.**
 
 - [ ] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
 

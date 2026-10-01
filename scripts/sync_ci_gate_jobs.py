@@ -73,6 +73,7 @@ HOSTED_GATE_ORDER = (
     "check-generated-deploy-posture",
     "check-workflow-security",
     "check-secret-scanning",
+    "check-module-conventions",
 )
 
 # SA202 pins every generated job's third-party action to a full commit SHA with
@@ -206,6 +207,10 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     "check-secret-scanning": HostedJobSpec(
         "Secret Scanning Gate (SA202)",
         "Run secret scanning gate",
+    ),
+    "check-module-conventions": HostedJobSpec(
+        "Module Conventions Gate (rule 40)",
+        "Run module conventions conformance check",
     ),
 }
 
@@ -371,7 +376,7 @@ def _locate_hosted_jobs(
     jobs: dict[str, Any], label: str, *, allow_missing: bool = False
 ) -> dict[str, str]:
     """
-    Locate the fifteen hosted jobs by their static catalog display names.
+    Locate the sixteen hosted jobs by their static catalog display names.
 
     Display metadata is helper-owned and static, so the generated job IDs may
     be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
@@ -748,7 +753,7 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
 
 def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
     """
-    Locate the fifteen hosted job header lines by their display names.
+    Locate the sixteen hosted job header lines by their display names.
 
     Use static display metadata to find the (possibly stale) hosted job IDs;
     this permits a registry ``ci_job`` (F-005) or Make-target edit while

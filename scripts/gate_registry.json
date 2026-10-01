@@ -349,6 +349,23 @@
             },
             "depends_on": [],
             "trigger_inputs": []
+        },
+        {
+            "id": "check-module-conventions",
+            "description": "Module Conventions rule 40 conformance check over every manifest and module source",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-module-conventions",
+                "ci_job": "module-conventions-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
         }
     ]
 }
