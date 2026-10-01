@@ -97,7 +97,7 @@ LOGGING_CONFIG = None
 LOGGING: dict[str, object] = {}
 
 # Listings module settings
-LISTINGS_PER_PAGE = 12
+QUICKSCALE_LISTINGS_PER_PAGE = 12
 
 # Rule 3: the compiled option schema the generic startup check reads.  The
 # test settings generate it from the module's own manifest, the form rule 3

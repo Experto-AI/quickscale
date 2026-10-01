@@ -31,8 +31,8 @@ class TestListingListView:
         listing_factory,
         settings,
     ):
-        """Test list pagination reads LISTINGS_PER_PAGE at runtime."""
-        settings.LISTINGS_PER_PAGE = 2
+        """Test list pagination reads QUICKSCALE_LISTINGS_PER_PAGE at runtime."""
+        settings.QUICKSCALE_LISTINGS_PER_PAGE = 2
         for index in range(3):
             listing_factory(title=f"Listing {index}", status="published")
 
@@ -43,7 +43,7 @@ class TestListingListView:
         assert len(response.context["page_obj"].object_list) == 2
         assert response.context["is_paginated"] is True
 
-    # An invalid LISTINGS_PER_PAGE is refused by the generic startup check
+    # An invalid QUICKSCALE_LISTINGS_PER_PAGE is refused by the generic startup check
     # (rule 3) before a request runs; that behavior is covered by the core
     # check tests and by test_apps.py's registration test.
 

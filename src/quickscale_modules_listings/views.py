@@ -240,7 +240,7 @@ class ListingListView(ListingsPublicReadMixin, ListView):
         schema, so there is no fallback here.
         """
         del queryset
-        return settings.LISTINGS_PER_PAGE
+        return settings.QUICKSCALE_LISTINGS_PER_PAGE
 
     def get_filterset_class(self) -> type[Any]:
         """Resolve the filterset class, defaulting to the shared factory."""

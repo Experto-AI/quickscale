@@ -20,15 +20,15 @@ def test_get_manifest_adapter_returns_callable() -> None:
 
 
 def test_missing_per_page_setting_raises_key_error() -> None:
-    with pytest.raises(KeyError, match="LISTINGS_PER_PAGE"):
+    with pytest.raises(KeyError, match="QUICKSCALE_LISTINGS_PER_PAGE"):
         _listings_post_hook(ModuleWiringSpec(), {})
 
 
 def test_post_hook_coerces_and_adds_static_settings() -> None:
     result = _listings_post_hook(
-        ModuleWiringSpec(settings={"LISTINGS_PER_PAGE": "24"}), {}
+        ModuleWiringSpec(settings={"QUICKSCALE_LISTINGS_PER_PAGE": "24"}), {}
     )
-    assert result.settings["LISTINGS_PER_PAGE"] == 24
+    assert result.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 24
     assert result.settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] == [
         "markdown.extensions.fenced_code",
         "markdown.extensions.tables",

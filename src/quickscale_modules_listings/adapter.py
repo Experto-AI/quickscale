@@ -12,7 +12,9 @@ def _listings_post_hook(
 ) -> ModuleWiringSpec:
     """Apply listings-specific int coercion and static markdownx settings."""
     settings = dict(spec.settings)
-    settings["LISTINGS_PER_PAGE"] = int(settings["LISTINGS_PER_PAGE"])
+    settings["QUICKSCALE_LISTINGS_PER_PAGE"] = int(
+        settings["QUICKSCALE_LISTINGS_PER_PAGE"]
+    )
     settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
         "markdown.extensions.fenced_code",
         "markdown.extensions.tables",

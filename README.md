@@ -23,7 +23,7 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
-| `listings_per_page` | integer | `12` | `LISTINGS_PER_PAGE` | Number of listings per page. |
+| `per_page` | integer | `12` | `QUICKSCALE_LISTINGS_PER_PAGE` | Number of listings per page. |
 
 ## Public surface
 
