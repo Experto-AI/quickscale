@@ -86,9 +86,10 @@ def _normalize_email(value: Any) -> str:
 def _load_invitation_notification_sender() -> Any | None:
     if not apps.is_installed("quickscale_modules_notifications"):
         return None
-    if not bool(getattr(settings, "QUICKSCALE_NOTIFICATIONS_ENABLED", True)):
-        return None
     notifications_services = import_module("quickscale_modules_notifications.services")
+    snapshot = notifications_services.NotificationSettingsSnapshot.from_settings()
+    if not snapshot.enabled:
+        return None
     return getattr(notifications_services, "send_notification", None)
 
 

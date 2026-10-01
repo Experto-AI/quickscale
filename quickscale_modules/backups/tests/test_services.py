@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 import shutil
@@ -4345,6 +4346,32 @@ class TestGetManagePySA52:
         assert postgresql_backup_artifact.status != BackupArtifact.Status.RESTORING
         assert postgresql_backup_artifact.restore_started_at is None
 
+    def test_dispatch_background_restore_translates_spawn_failure(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """A spawn failure rolls the claim back and answers through BackupError."""
+        with (
+            patch.object(
+                backup_services,
+                "_get_manage_py",
+                return_value="/tmp/manage.py",
+            ),
+            patch.object(
+                backup_services.subprocess,
+                "Popen",
+                side_effect=OSError("spawn failed"),
+            ),
+        ):
+            with pytest.raises(BackupError, match="spawn failed"):
+                backup_services.dispatch_background_restore(
+                    postgresql_backup_artifact,
+                    confirmation=postgresql_backup_artifact.filename,
+                )
+
+        postgresql_backup_artifact.refresh_from_db()
+        assert postgresql_backup_artifact.status != BackupArtifact.Status.RESTORING
+
     def test_dispatch_background_create_fails_hard_when_unresolvable(
         self,
     ) -> None:
@@ -4477,7 +4504,7 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
 
         monkeypatch.setattr(os, "write", failing_write)
 
-        with pytest.raises(OSError, match="disk full"):
+        with pytest.raises(BackupError, match="disk full"):
             backup_services.prepare_admin_uploaded_restore_artifact(
                 SimpleUploadedFile("upload.dump", b"data"),
                 confirmation=backup_artifact.filename,
@@ -4488,6 +4515,104 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
 
         # The staging cleanup must have been called (proves the finally
         # block executed despite the copy failure).
+        assert len(cleanup_calls) >= 1
+
+    def test_staging_directory_creation_failure_answers_module_error(
+        self,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A failed staging directory answers through BackupError (rule 23)."""
+
+        def failing_mkdtemp(*args: Any, **kwargs: Any) -> str:
+            raise OSError("no space left on device")
+
+        monkeypatch.setattr(backup_services, "mkdtemp", failing_mkdtemp)
+
+        with pytest.raises(BackupError, match="no space left on device"):
+            backup_services.prepare_admin_uploaded_restore_artifact(
+                SimpleUploadedFile("upload.dump", b"data"),
+                confirmation=backup_artifact.filename,
+            )
+
+    def test_target_directory_creation_failure_answers_module_error(
+        self,
+        tmp_path: Path,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An unwritable backup directory answers through BackupError (rule 23)."""
+        backup_artifact.status = BackupArtifact.Status.READY
+        backup_artifact.save(update_fields=["status", "updated_at"])
+
+        staged_file = tmp_path / "staged" / "upload.dump"
+        staged_file.parent.mkdir(parents=True, exist_ok=True)
+        staged_file.write_bytes(b"staged upload content")
+        staged = backup_services.StagedAdminRestoreUpload(
+            local_path=staged_file,
+            checksum_sha256=backup_artifact.checksum_sha256,
+            size_bytes=backup_artifact.size_bytes,
+        )
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TargetMode.LOCAL,
+            local_directory=str(tmp_path / "unwritable"),
+            remote_bucket_name="",
+            remote_prefix="",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "_stage_admin_restore_upload",
+            lambda uploaded_file, staging_directory: staged,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "_resolve_admin_uploaded_restore_artifact",
+            lambda checksum_sha256, size_bytes: backup_artifact,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "load_policy_snapshot",
+            lambda: policy,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "get_local_backup_directory",
+            lambda policy: Path(policy.local_directory),
+        )
+
+        cleanup_calls: list[Path] = []
+        original_cleanup = backup_services._cleanup_admin_restore_upload_directory
+
+        def track_cleanup(directory: Path) -> None:
+            cleanup_calls.append(directory)
+            original_cleanup(directory)
+
+        monkeypatch.setattr(
+            backup_services,
+            "_cleanup_admin_restore_upload_directory",
+            track_cleanup,
+        )
+
+        def failing_mkdir(self: Path, *args: Any, **kwargs: Any) -> None:
+            raise PermissionError("permission denied")
+
+        monkeypatch.setattr(Path, "mkdir", failing_mkdir)
+
+        with pytest.raises(BackupError, match="permission denied"):
+            backup_services.prepare_admin_uploaded_restore_artifact(
+                SimpleUploadedFile("upload.dump", b"data"),
+                confirmation=backup_artifact.filename,
+            )
+
+        # The staging cleanup must still run when the target directory fails.
         assert len(cleanup_calls) >= 1
 
     def test_copy_success_uses_atomic_replace(
@@ -4840,3 +4965,69 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         assert target_file.exists()
         assert target_file.is_file()
         assert target_file.read_bytes() == staged_content
+
+
+def test_services_publishes_exactly_the_declared_surface() -> None:
+    """Rule 23: ``__all__`` is the module's declared public service surface."""
+    assert backup_services.__all__ == [
+        "ArtifactLike",
+        "BackupConfigurationError",
+        "BackupError",
+        "BackupLockError",
+        "BackupPolicySnapshot",
+        "BackupRestoreBlocked",
+        "RemoteDeleter",
+        "RemoteMaterializer",
+        "RemoteUploader",
+        "ResolvedRestoreSource",
+        "RestoreResult",
+        "RestoreSourceResolutionMode",
+        "RestoreWarning",
+        "STALE_RESTORE_THRESHOLD_MINUTES",
+        "ShellCommandRunner",
+        "StagedAdminRestoreUpload",
+        "StorageBackendSelectionLike",
+        "StorageHelpersModule",
+        "build_backup_filename",
+        "build_backup_snapshot_report",
+        "clear_backup_snapshot_rollback_pin",
+        "create_backup",
+        "delete_artifact_files",
+        "dispatch_background_create",
+        "dispatch_background_prune",
+        "dispatch_background_restore",
+        "download_backup_path",
+        "ensure_default_policy",
+        "get_backup_snapshot",
+        "get_local_backup_directory",
+        "is_restore_stale",
+        "load_policy_snapshot",
+        "prepare_admin_uploaded_restore_artifact",
+        "prune_expired_backups",
+        "record_backup_snapshot_verification",
+        "report_backup_snapshot",
+        "reset_stale_restore",
+        "restore_admin_uploaded_backup",
+        "restore_backup_artifact",
+        "restore_backup_source",
+        "set_backup_snapshot_rollback_pin",
+        "sync_backup_snapshot_media",
+        "validate_backup_artifact",
+        "validate_policy_snapshot",
+    ]
+    for name in backup_services.__all__:
+        assert hasattr(backup_services, name)
+
+
+def test_restore_prepare_service_takes_one_subject_then_keyword_only() -> None:
+    """Rule 23: at most one leading subject; every other argument keyword-only."""
+    parameters = list(
+        inspect.signature(
+            backup_services.prepare_admin_uploaded_restore_artifact
+        ).parameters.values()
+    )
+
+    assert parameters[0].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert all(
+        parameter.kind is inspect.Parameter.KEYWORD_ONLY for parameter in parameters[1:]
+    )

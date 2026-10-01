@@ -22,6 +22,7 @@ from quickscale_modules_orgs.models import Organization
 
 from quickscale_modules_forms._email import notify_submission
 
+from quickscale_modules_notifications import services
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
     NotificationDeliveryEvent,
@@ -29,8 +30,10 @@ from quickscale_modules_notifications.models import (
 )
 from quickscale_modules_notifications.services import (
     NotificationDisabledError,
+    NotificationError,
     NotificationSettingsSnapshot,
     NotificationTemplateError,
+    NotificationValidationError,
     NotificationWebhookSignatureError,
     build_webhook_signature_headers,
     dispatch_notification_message,
@@ -703,3 +706,49 @@ def test_webhook_ingestion_is_replay_safe_and_updates_delivery_status(
         NotificationDeliveryEvent.objects.filter(delivery=delivery_for_webhook).count()
         == 1
     )
+
+
+def test_services_publishes_exactly_the_declared_surface() -> None:
+    """Rule 23: ``__all__`` is the module's declared public service surface."""
+    assert services.__all__ == [
+        "DeliveryMailer",
+        "NotificationConfigurationError",
+        "NotificationDisabledError",
+        "NotificationError",
+        "NotificationSettingsSnapshot",
+        "NotificationTemplateDefinition",
+        "NotificationTemplateError",
+        "NotificationValidationError",
+        "NotificationWebhookError",
+        "NotificationWebhookSignatureError",
+        "RenderedNotification",
+        "WebhookIngestionResult",
+        "build_webhook_signature_headers",
+        "dispatch_notification_message",
+        "ensure_default_settings",
+        "ingest_webhook_event",
+        "load_settings_snapshot",
+        "render_notification",
+        "sanitize_provider_metadata",
+        "sanitize_provider_tags",
+        "send_notification",
+    ]
+    for name in services.__all__:
+        assert hasattr(services, name)
+
+
+def test_send_notification_rejects_invalid_recipients_with_module_error() -> None:
+    """Rule 23: invalid input answers through the module's NotificationError base."""
+    with pytest.raises(NotificationValidationError, match="Invalid recipient"):
+        services.send_notification(
+            template_key="notifications.generic",
+            recipients=["not-an-email"],
+            context={"headline": "Hi", "body": "Body"},
+        )
+
+
+@pytest.mark.django_db
+def test_dispatch_notification_message_translates_missing_message() -> None:
+    """Rule 23: a stale message id answers through the module's error base."""
+    with pytest.raises(NotificationError, match="does not exist"):
+        services.dispatch_notification_message(999999)
