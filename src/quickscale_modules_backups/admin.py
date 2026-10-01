@@ -713,7 +713,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         """Dispatch background backup pruning from the admin surface."""
         self._require_change_permission(request)
         try:
-            dispatch_background_prune()
+            dispatch_background_prune(trigger="admin")
         except BackupError as exc:
             self.message_user(
                 request,
