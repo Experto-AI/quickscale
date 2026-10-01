@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     "quickscale_modules_blog",
 ]
 
-QUICKSCALE_MODE = "saas"
+QUICKSCALE_ORGS_MODE = "saas"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

@@ -32,7 +32,7 @@
           social: {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}true{% else %}false{% endif %}
         },
         owner: {
-          mode: "{% if settings.QUICKSCALE_MODE == 'saas' %}saas{% else %}solo{% endif %}",
+          mode: "{% if settings.QUICKSCALE_ORGS_MODE == 'saas' %}saas{% else %}solo{% endif %}",
           currentOrgSlug: {% if request.org and request.org.slug %}"{{ request.org.slug|escapejs }}"{% else %}null{% endif %}
         },
         modulePaths: {

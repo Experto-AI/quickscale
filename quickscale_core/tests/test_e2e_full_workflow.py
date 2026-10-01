@@ -1037,7 +1037,7 @@ class TestFullE2EWorkflow:
             f'"""E2E conformance test settings — includes orgs + unprotected test app."""\n'
             f"from .base import *\n"
             f"\n"
-            f"QUICKSCALE_MODE = 'solo'\n"
+            f"QUICKSCALE_ORGS_MODE = 'solo'\n"
             f"\n"
             f"INSTALLED_APPS += [\n"
             f'    "quickscale_modules_orgs",\n'

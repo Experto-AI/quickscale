@@ -40,7 +40,7 @@ from tests.urls import home_view
 def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "solo"
+    settings.QUICKSCALE_ORGS_MODE = "solo"
     user = get_user_model().objects.create_user(
         username="alice",
         email="alice@example.com",
@@ -60,7 +60,7 @@ def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
 @pytest.mark.django_db
 def test_solo_mode_sets_current_org_id_in_contextvar(settings) -> None:
     """Solo mode sets the ContextVar (no DB-level SET LOCAL)."""
-    settings.QUICKSCALE_MODE = "solo"
+    settings.QUICKSCALE_ORGS_MODE = "solo"
     user = get_user_model().objects.create_user(
         username="solo-current-org",
         email="solo-current-org@example.com",
@@ -89,7 +89,7 @@ def test_solo_mode_sets_current_org_id_in_contextvar(settings) -> None:
     ],
 )
 def test_solo_mode_hides_org_namespace_routes(client, settings, path) -> None:
-    settings.QUICKSCALE_MODE = "solo"
+    settings.QUICKSCALE_ORGS_MODE = "solo"
     user = get_user_model().objects.create_user(
         username="alice-hidden",
         email="alice-hidden@example.com",
@@ -107,7 +107,7 @@ def test_saas_mode_redirects_to_org_index_without_active_session_org(
     client, settings
 ) -> None:
     """Saas without a session active org redirects to /orgs/."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="bob",
         email="bob@example.com",
@@ -125,7 +125,7 @@ def test_saas_mode_redirects_to_org_index_without_active_session_org(
 def test_saas_mode_allows_org_api_bootstrap_without_membership(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="bob-api",
         email="bob-api@example.com",
@@ -143,7 +143,7 @@ def test_saas_mode_allows_org_api_bootstrap_without_membership(
 def test_saas_mode_allows_public_invitation_accept_without_membership(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     inviter = get_user_model().objects.create_user(
         username="beck",
         email="beck@example.com",
@@ -172,7 +172,7 @@ def test_saas_mode_allows_public_invitation_accept_without_membership(
 @pytest.mark.django_db
 def test_saas_mode_unmatched_org_management_paths_return_404(client, settings) -> None:
     """Unmatched org management paths return 404 under the session contract."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="blake",
         email="blake@example.com",
@@ -192,7 +192,7 @@ def test_saas_mode_returns_403_for_non_member_org_dashboard(client, settings) ->
     The middleware passes through on management paths; the views own access
     control.
     """
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="carol",
         email="carol@example.com",
@@ -209,7 +209,7 @@ def test_saas_mode_returns_403_for_non_member_org_dashboard(client, settings) ->
 @pytest.mark.django_db
 @pytest.mark.parametrize("path", ["/healthcheck/", "/accounts/profile/"])
 def test_request_org_is_none_for_exempt_routes(client, settings, path) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="dave",
         email="dave@example.com",
@@ -231,7 +231,7 @@ def test_request_org_is_none_for_exempt_routes(client, settings, path) -> None:
 
 def test_admin_path_is_exempt_and_does_not_attach_org_context(settings) -> None:
     """/admin/ must remain an unscoped operator path after the middleware refactor."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     request = RequestFactory().get("/admin/")
     request.user = SimpleNamespace(is_authenticated=True, is_superuser=True)
 
@@ -252,7 +252,7 @@ def test_admin_path_is_exempt_and_does_not_attach_org_context(settings) -> None:
 @pytest.mark.django_db
 @pytest.mark.parametrize("path", ["/orgs/", "/orgs/new/", "/orgs/{slug}/"])
 def test_anonymous_saas_org_routes_redirect_to_login(client, settings, path) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Delta", slug="delta")
 
     response = client.get(path.format(slug=organization.slug))
@@ -263,7 +263,7 @@ def test_anonymous_saas_org_routes_redirect_to_login(client, settings, path) -> 
 
 @pytest.mark.django_db
 def test_saas_mode_org_index_lists_memberships(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="erin",
         email="erin@example.com",
@@ -288,7 +288,7 @@ def test_saas_mode_org_index_lists_memberships(client, settings) -> None:
 def test_saas_mode_org_index_shows_empty_state_without_memberships(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="frank",
         email="frank@example.com",
@@ -306,7 +306,7 @@ def test_saas_mode_org_index_shows_empty_state_without_memberships(
 def test_saas_mode_org_new_is_available_to_authenticated_users(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="grace",
         email="grace@example.com",
@@ -322,7 +322,7 @@ def test_saas_mode_org_new_is_available_to_authenticated_users(
 
 @pytest.mark.django_db
 def test_saas_mode_org_detail_renders_dashboard(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="harper",
         email="harper@example.com",
@@ -352,7 +352,7 @@ def test_saas_mode_returns_403_for_unknown_org_slug(client, settings) -> None:
     paths; the view's OrgRoleMixin cannot resolve the org and returns 403
     (instead of the old middleware's 404).
     """
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="irene",
         email="irene@example.com",
@@ -370,7 +370,7 @@ def test_saas_content_route_resolves_org_from_session(
     settings,
 ) -> None:
     """A content route resolves the session active org and populates contextvar."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="ivy",
         email="ivy@example.com",
@@ -399,7 +399,7 @@ def test_api_org_management_path_passes_through_middleware(
     settings,
 ) -> None:
     """API org management paths pass through without middleware org resolution."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="ivy-api",
         email="ivy-api@example.com",
@@ -427,7 +427,7 @@ def test_api_org_management_path_passes_through_middleware(
 def test_saas_mode_superusers_can_access_org_routes_without_membership(
     client, settings
 ) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_superuser(
         username="jules",
         email="jules@example.com",
@@ -452,7 +452,7 @@ def test_saas_mode_superusers_can_access_org_routes_without_membership(
     ],
 )
 def test_org_views_raise_404_in_solo_mode(settings, view, path, kwargs) -> None:
-    settings.QUICKSCALE_MODE = "solo"
+    settings.QUICKSCALE_ORGS_MODE = "solo"
     request = RequestFactory().get(path)
     request.user = SimpleNamespace(is_authenticated=True)
 
@@ -482,7 +482,7 @@ def test_switching_mode_changes_route_behaviour_without_model_changes(
     client.force_login(user)
 
     with override_settings(
-        QUICKSCALE_MODE="solo",
+        QUICKSCALE_ORGS_MODE="solo",
         ROOT_URLCONF="tests.urls_pre_home",
     ):
         solo_response = client.get("/")
@@ -492,7 +492,7 @@ def test_switching_mode_changes_route_behaviour_without_model_changes(
     request.user = user
     request.session = {ACTIVE_ORG_SESSION_KEY: str(organization.pk)}
 
-    with override_settings(QUICKSCALE_MODE="saas"):
+    with override_settings(QUICKSCALE_ORGS_MODE="saas"):
         saas_response = TenantMiddleware(home_view)(request)
 
     assert solo_response.status_code == 200
@@ -514,7 +514,7 @@ def test_postgres_content_route_does_not_set_db_current_org_id(
     if connection.vendor != "postgresql":
         pytest.skip("current_setting validation requires PostgreSQL")
 
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="gina",
         email="gina@example.com",
@@ -562,7 +562,7 @@ def test_postgres_content_route_does_not_set_db_current_org_id(
 
 def test_middleware_clears_org_via_helper_at_start_of_request(settings) -> None:
     """Middleware must use clear_current_org to reset request.org at entry."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     request = RequestFactory().get("/healthcheck/")
     request.user = SimpleNamespace(is_authenticated=False)
     # Pre-set a stale org to confirm it gets cleared
@@ -587,7 +587,7 @@ def test_middleware_sets_org_via_helper_for_authenticated_saas_content_route(
     client, settings
 ) -> None:
     """Middleware uses set_current_org on a content route with session org."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="helper-set-user",
         email="helper-set@example.com",
@@ -1022,7 +1022,7 @@ def test_middleware_resets_contextvar_at_request_start(settings) -> None:
     stale_id = uuid.uuid4()
     set_current_org_id(stale_id)
 
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     request = RequestFactory().get("/healthcheck/")
     request.user = SimpleNamespace(is_authenticated=True, is_superuser=True)
 
@@ -1050,7 +1050,7 @@ def test_middleware_sets_contextvar_for_org_scoped_request(client, settings) -> 
         reset_current_org_id,
     )
 
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="ctxvar-user",
         email="ctxvar-user@example.com",
@@ -1082,7 +1082,7 @@ def test_middleware_contextvar_stays_none_on_exempt_path(client, settings) -> No
         reset_current_org_id,
     )
 
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="exempt-user",
         email="exempt-user@example.com",
@@ -1108,7 +1108,7 @@ def test_middleware_sets_contextvar_in_solo_mode(settings) -> None:
         reset_current_org_id,
     )
 
-    settings.QUICKSCALE_MODE = "solo"
+    settings.QUICKSCALE_ORGS_MODE = "solo"
     user = get_user_model().objects.create_user(
         username="solo-ctxvar",
         email="solo-ctxvar@example.com",
@@ -1137,7 +1137,7 @@ def test_middleware_sets_contextvar_in_solo_mode(settings) -> None:
 @pytest.mark.django_db
 def test_saas_content_route_with_active_session_org(settings) -> None:
     """Saas content route with valid session org resolves and sets request.org."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="session-org-user",
         email="session-org@example.com",
@@ -1163,7 +1163,7 @@ def test_saas_content_route_with_active_session_org(settings) -> None:
 @pytest.mark.django_db
 def test_saas_content_route_non_member_org_in_session(settings) -> None:
     """Non-member org in session clears the key and returns 403."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="non-member-session",
         email="non-member-session@example.com",
@@ -1183,7 +1183,7 @@ def test_saas_content_route_non_member_org_in_session(settings) -> None:
 @pytest.mark.django_db
 def test_saas_content_route_stale_org_id_in_session(settings) -> None:
     """Deleted/stale org in session clears the key and redirects."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="stale-session",
         email="stale-session@example.com",
@@ -1204,7 +1204,7 @@ def test_saas_content_route_stale_org_id_in_session(settings) -> None:
 @pytest.mark.django_db
 def test_saas_content_route_invalid_session_org_format(settings) -> None:
     """Invalid (non-UUID) session org value clears the key and redirects."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="bad-format-session",
         email="bad-format-session@example.com",
@@ -1225,7 +1225,7 @@ def test_saas_content_route_invalid_session_org_format(settings) -> None:
 @pytest.mark.django_db
 def test_saas_content_route_superuser_without_membership(settings) -> None:
     """Superuser bypasses the non-member session org check."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_superuser(
         username="super-session",
         email="super-session@example.com",
@@ -1246,7 +1246,7 @@ def test_saas_content_route_superuser_without_membership(settings) -> None:
 @pytest.mark.django_db
 def test_org_management_paths_accessible_without_session_org(client, settings) -> None:
     """Org management paths (/orgs/, /orgs/api/) work without a session org."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="mgmt-no-session",
         email="mgmt-no-session@example.com",
@@ -1268,7 +1268,7 @@ def test_org_management_paths_accessible_without_session_org(client, settings) -
 @pytest.mark.django_db
 def test_org_dashboard_sets_session_org(client, settings) -> None:
     """OrgDashboardView.get() sets the session active org after access."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="dashboard-setter",
         email="dashboard-setter@example.com",
@@ -1292,7 +1292,7 @@ def test_org_dashboard_sets_session_org(client, settings) -> None:
 @pytest.mark.django_db
 def test_org_switcher_updates_session_org(client, settings) -> None:
     """Navigating between org dashboards updates the session active org."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="switcher",
         email="switcher@example.com",
@@ -1401,7 +1401,7 @@ def test_downstream_module_path_resolves_from_session_when_org_set(
     """A downstream module path (/orgs/<slug>/crm/...) resolves the org
     from the session when a valid session org is set.
     """
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="downstream-session",
         email="downstream-session@example.com",
@@ -1434,7 +1434,7 @@ def test_saas_generic_content_route_still_redirects_without_session(
     settings,
 ) -> None:
     """Generic content route (/) in SaaS mode without session org redirects."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="generic-route",
         email="generic-route@example.com",
@@ -1456,7 +1456,7 @@ def test_saas_unknown_org_segment_redirects_without_session(
     settings,
 ) -> None:
     """Unknown segment under /orgs/<slug>/ without session org redirects."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="unknown-segment",
         email="unknown-segment@example.com",
@@ -1479,7 +1479,7 @@ def test_saas_unknown_org_segment_resolves_org_with_session(
     settings,
 ) -> None:
     """Unknown segment under /orgs/<slug>/ resolves the session org."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="unknown-session",
         email="unknown-session@example.com",
@@ -1548,7 +1548,7 @@ def test_middleware_context_activation_does_not_require_request_long_atomic(
     any transaction wrapper. This test verifies the request completes
     successfully through the middleware with no org-context leak.
     """
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="phase3-no-atomic-leak",
         email="phase3-no-atomic@example.com",

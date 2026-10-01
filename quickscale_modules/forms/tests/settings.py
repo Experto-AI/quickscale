@@ -14,7 +14,7 @@ from quickscale_core.manifest.settings_schema import load_settings_schema
 SECRET_KEY = "test-secret-key-for-forms-module"
 DEBUG = True
 
-QUICKSCALE_MODE = "saas"
+QUICKSCALE_ORGS_MODE = "saas"
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",

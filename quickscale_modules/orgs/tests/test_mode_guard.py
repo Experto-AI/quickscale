@@ -1,10 +1,10 @@
-"""QUICKSCALE_MODE boot guard tests.
+"""QUICKSCALE_ORGS_MODE boot guard tests.
 
 Rule 3: ``QuickscaleOrgsConfig.ready()`` registers the generic settings
-check, which validates ``QUICKSCALE_MODE`` (presence, type, choices) through
+check, which validates ``QUICKSCALE_ORGS_MODE`` (presence, type, choices) through
 ``quickscale_core.runtime`` before the BYPASSRLS guard runs.  The guard runs
 on every startup path (including migrate), so a saas-mode generated project
-cannot silently default to solo-mode tenancy when ``QUICKSCALE_MODE`` is
+cannot silently default to solo-mode tenancy when ``QUICKSCALE_ORGS_MODE`` is
 omitted.
 """
 
@@ -36,8 +36,8 @@ def _mock_non_postgres_connection() -> MagicMock:
 
 @pytest.mark.parametrize("mode", ["solo", "saas"])
 def test_ready_passes_for_a_supported_mode(settings, mode: str) -> None:
-    """``ready()`` must pass for each supported ``QUICKSCALE_MODE``."""
-    settings.QUICKSCALE_MODE = mode
+    """``ready()`` must pass for each supported ``QUICKSCALE_ORGS_MODE``."""
+    settings.QUICKSCALE_ORGS_MODE = mode
 
     with patch(
         "quickscale_modules_orgs.checks.connection",
@@ -47,14 +47,14 @@ def test_ready_passes_for_a_supported_mode(settings, mode: str) -> None:
 
 
 def test_ready_raises_when_mode_missing(settings) -> None:
-    """``ready()`` MUST raise when ``QUICKSCALE_MODE`` is unset."""
-    del settings.QUICKSCALE_MODE
+    """``ready()`` MUST raise when ``QUICKSCALE_ORGS_MODE`` is unset."""
+    del settings.QUICKSCALE_ORGS_MODE
 
     with patch(
         "quickscale_modules_orgs.checks.connection",
         _mock_non_postgres_connection(),
     ):
-        with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_MODE"):
+        with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_ORGS_MODE"):
             _orgs_config().ready()
 
 
@@ -63,14 +63,14 @@ def test_ready_raises_when_mode_missing(settings) -> None:
     ["Solo", "SAAS", "", "invalid", "multi", "hybrid"],
 )
 def test_ready_raises_for_invalid_values(settings, invalid_mode: str) -> None:
-    """Invalid ``QUICKSCALE_MODE`` values MUST raise at startup."""
-    settings.QUICKSCALE_MODE = invalid_mode
+    """Invalid ``QUICKSCALE_ORGS_MODE`` values MUST raise at startup."""
+    settings.QUICKSCALE_ORGS_MODE = invalid_mode
 
     with patch(
         "quickscale_modules_orgs.checks.connection",
         _mock_non_postgres_connection(),
     ):
-        with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_MODE"):
+        with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_ORGS_MODE"):
             _orgs_config().ready()
 
 
@@ -82,11 +82,11 @@ def test_ready_raises_for_invalid_values(settings, invalid_mode: str) -> None:
 @pytest.mark.django_db
 def test_invalid_mode_fails_check_migrate_and_runserver(settings) -> None:
     """The registered generic check fails check, migrate, and runserver alike."""
-    settings.QUICKSCALE_MODE = "invalid"
+    settings.QUICKSCALE_ORGS_MODE = "invalid"
 
-    with pytest.raises(SystemCheckError, match="QUICKSCALE_MODE"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_ORGS_MODE"):
         call_command("check")
-    with pytest.raises(SystemCheckError, match="QUICKSCALE_MODE"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_ORGS_MODE"):
         migrate.Command().check()
-    with pytest.raises(SystemCheckError, match="QUICKSCALE_MODE"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_ORGS_MODE"):
         runserver.Command().check()

@@ -72,9 +72,9 @@ _INVITATION_PAGE_COPY = {
 
 
 def _is_saas_mode() -> bool:
-    # SA14.6: QUICKSCALE_MODE is guaranteed by the boot guard in
+    # SA14.6: QUICKSCALE_ORGS_MODE is guaranteed by the boot guard in
     # QuickscaleOrgsConfig.ready() — direct access, no fallback.
-    return settings.QUICKSCALE_MODE == "saas"
+    return settings.QUICKSCALE_ORGS_MODE == "saas"
 
 
 def _normalize_email(value: Any) -> str:

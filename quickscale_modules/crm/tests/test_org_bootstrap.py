@@ -36,7 +36,7 @@ def _assert_canonical_stage_set(organization: Organization) -> list[Stage]:
 
 
 @pytest.mark.django_db
-@override_settings(QUICKSCALE_MODE="solo")
+@override_settings(QUICKSCALE_ORGS_MODE="solo")
 def test_solo_personal_org_has_stages_at_creation(client, staff_user) -> None:
     """Personal org stages are seeded at creation time, not on first CRM access.
 

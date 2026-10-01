@@ -25,7 +25,7 @@ from quickscale_modules_orgs.permissions import (
 
 @pytest.mark.django_db
 def test_require_org_role_admin_matrix(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Acme", slug="acme")
     role_to_status = {
         OrgRole.VIEWER: 403,
@@ -62,7 +62,7 @@ def test_require_org_role_admin_matrix(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_require_org_role_owner_matrix(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Beta", slug="beta")
     admin = get_user_model().objects.create_user(
         username="beta-admin",
@@ -105,7 +105,7 @@ def test_require_org_role_owner_matrix(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_org_role_mixin_uses_same_role_contract(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Gamma", slug="gamma")
     admin = get_user_model().objects.create_user(
         username="gamma-admin",
@@ -147,7 +147,7 @@ def test_org_role_mixin_uses_same_role_contract(client, settings) -> None:
 
 @pytest.mark.django_db
 def test_role_guards_forbid_anonymous_requests(client, settings) -> None:
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Epsilon", slug="epsilon")
 
     decorator_response = client.get(f"/orgs/{organization.slug}/admin-only/")
@@ -307,7 +307,7 @@ def test_require_current_org_returns_org_when_context_is_set() -> None:
 @pytest.mark.django_db
 def test_require_org_role_returns_403_when_no_org_context(client, settings) -> None:
     """require_org_role must fail closed (403) when no org context is available."""
-    settings.QUICKSCALE_MODE = "saas"
+    settings.QUICKSCALE_ORGS_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="no-context-user",
         email="no-context@example.com",

@@ -1223,7 +1223,7 @@ class TestReactThemeModuleActivationMatrix:
         assert "social: string" in use_modules
         assert "QuickScaleOwnerMode" in use_modules
         assert (
-            "mode: \"{% if settings.QUICKSCALE_MODE == 'saas' %}saas{% else %}solo{% endif %}\""
+            "mode: \"{% if settings.QUICKSCALE_ORGS_MODE == 'saas' %}saas{% else %}solo{% endif %}\""
             in index_html
         )
         assert "request.org.slug|escapejs" in index_html

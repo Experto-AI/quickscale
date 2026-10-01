@@ -47,7 +47,7 @@ However, runtime resolution is preferable for QuickScale because:
 
 ```python
 # settings.py
-QUICKSCALE_MODE = "solo"  # or 'saas'
+QUICKSCALE_ORGS_MODE = "solo"  # or 'saas'
 ```
 
 `TenantMiddleware` reads this setting and changes two behaviours:
@@ -67,13 +67,13 @@ The same org views serve both modes. Org-management pages keep `org_slug` where 
 
 ```bash
 # 1. Change setting
-QUICKSCALE_MODE = 'saas'
+QUICKSCALE_ORGS_MODE = 'saas'
 
 # 2. Run once after deploy
 python manage.py quickscale_orgs_promote_to_saas
 ```
 
-`quickscale_orgs_promote_to_saas` ships as part of the org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_MODE = 'saas'` settings change instead of mutating settings files directly.
+`quickscale_orgs_promote_to_saas` ships as part of the org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_ORGS_MODE = 'saas'` settings change instead of mutating settings files directly.
 
 ---
 
@@ -457,7 +457,7 @@ and uses the first one that answers, so `orgs` never subclasses or imports the a
 def post_login_redirect(request) -> str | None:
     if not request.user.is_authenticated:
         return None
-    saas = settings.QUICKSCALE_MODE == "saas"
+    saas = settings.QUICKSCALE_ORGS_MODE == "saas"
     has_membership = OrganizationMembership.objects.filter(user=request.user).exists()
     if not saas and not has_membership:
         Organization.objects.create_personal_for(request.user)
@@ -670,7 +670,7 @@ All open questions from the original design were resolved before implementation 
 |----------|----------|-----------|
 | Multi-org membership? | **No** — regular SaaS users belong to exactly one org | Eliminates the dual-source-of-truth problem (session is sole authority); removes need for explicit-org API contract. Multi-org membership at the DB level is not precluded but is not exposed in the UI. VIEW-AS handles operator debug needs. |
 | `Organization` model location? | **`quickscale_modules_orgs`** | Auth stays minimal and standalone; orgs depends on auth, not the reverse |
-| Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
+| Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_ORGS_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
 | Billing migration path? | **Current installs require organization ownership** | The retired recovery command `migrate_billing_to_orgs` is deleted; no supported install holds the nullable shape it repaired |
 | Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | The enrolled tenant-table surface now runs under the per-org runtime-role admin contract (explicit per-org selection → session → fail-closed); no operator bypass or `BYPASSRLS` deployed |
 | Active org routing? | **Session-based in SaaS; personal-org resolution in Solo** | Org-management pages stay under `/orgs/...`; shipped server content routes are flat for CRM, blog, forms, listings, and billing; fresh `showcase_react` SaaS pages keep org-slug blog/listings routes with flat redirect shims. Solo mode resolves the personal org transparently. |
@@ -691,7 +691,7 @@ This section records the current repository slice, not the eventual end-state de
 | `Organization`, `OrganizationMembership`, `OrganizationInvitation` models | ✅ implemented |
 | Django admin registration for core org models | ✅ implemented |
 | `TenantModel` abstract base class with `organization` FK | ✅ implemented |
-| `QUICKSCALE_MODE` setting with Solo / SaaS behaviour | ✅ implemented |
+| `QUICKSCALE_ORGS_MODE` setting with Solo / SaaS behaviour | ✅ implemented |
 | `TenantMiddleware` (Solo/SaaS org resolution, `request.org`, `app.current_org_id`) | ✅ implemented |
 | Middleware caller-parity coverage for bootstrap/exempt vs org-scoped paths | ✅ implemented |
 | `require_org_role` decorator + `OrgRoleMixin` | ✅ implemented |
@@ -769,8 +769,8 @@ Use `Model.all_objects.all()` in:
 For a generated project that already exists and is adding structural isolation:
 
 1. **Add `quickscale_modules_orgs` to `INSTALLED_APPS`** and run its migrations.
-2. **Add `TenantMiddleware`** to the middleware stack and configure `QUICKSCALE_MODE` (see [Deployment Mode](#deployment-mode-solo-vs-saas-organizations) above).
-3. **Wire URL routing** — load org-scoped or solo URL patterns conditionally based on `QUICKSCALE_MODE`.
+2. **Add `TenantMiddleware`** to the middleware stack and configure `QUICKSCALE_ORGS_MODE` (see [Deployment Mode](#deployment-mode-solo-vs-saas-organizations) above).
+3. **Wire URL routing** — load org-scoped or solo URL patterns conditionally based on `QUICKSCALE_ORGS_MODE`.
 4. **Inherit `TenantModel`** (directly or through a module's abstract base) on every tenant-scoped model. The base provides the `objects` / `all_objects` `TenantManager` pair; a `TenantManager` on a model that does not inherit `TenantModel` fails startup (see [TenantModel Abstract Base](#tenantmodel-abstract-base)).
 5. **Backfill `organization_id`** on existing rows — the FK is required for new rows; existing rows may need a data migration to assign an org.
 6. **Switch views and services** — remove `.for_org(...)` chaining and rely on middleware-established org context for request paths; for non-request paths, enter scope explicitly with `org_scope(...)` / `tenant_context(...)` / `set_current_org_for_context(...)` before using `objects`.

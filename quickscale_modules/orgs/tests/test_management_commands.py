@@ -171,7 +171,7 @@ def test_promote_to_saas_fills_blank_personal_slug_from_owner_and_prints_setting
 
     assert organization.slug == "solo-owner"
     assert "personal_slug=<blank> -> solo-owner" in stdout.getvalue()
-    assert "QUICKSCALE_MODE = 'saas'" in stdout.getvalue()
+    assert "QUICKSCALE_ORGS_MODE = 'saas'" in stdout.getvalue()
 
 
 @pytest.mark.django_db
