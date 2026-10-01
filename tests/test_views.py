@@ -72,7 +72,7 @@ class TestFormSchemaAPIView:
         field_names = [field["name"] for field in response.data["fields"]]
         assert "_hp_name" in field_names
 
-    @override_settings(FORMS_SPAM_PROTECTION=False)
+    @override_settings(QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED=False)
     def test_omits_honeypot_marker_when_global_spam_protection_disabled(
         self, api_client, form, form_field
     ):
@@ -197,7 +197,7 @@ class TestFormSubmitAPIView:
             )
         assert submission.is_spam is True
 
-    @override_settings(FORMS_SPAM_PROTECTION=False)
+    @override_settings(QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED=False)
     def test_honeypot_is_ignored_when_global_spam_protection_disabled(
         self, api_client, form, form_field, email_field
     ):
@@ -531,7 +531,7 @@ class TestFormSubmitAPIView:
         data = {"full_name": "Alice", "email": "alice@example.com"}
         scope_rates = {"quickscale_forms_submit": "2/minute"}
 
-        # The forms wiring contributes the rate from FORMS_RATE_LIMIT; DRF
+        # The forms wiring contributes the rate from QUICKSCALE_FORMS_RATE_LIMIT; DRF
         # binds DEFAULT_THROTTLE_RATES onto the throttle class at import time,
         # so the test applies both bindings itself.  A wholesale REST_FRAMEWORK
         # override replaces the module settings' exception handler, so the
@@ -938,7 +938,7 @@ class TestAdminFormListAPIView:
             f"Expected Location: /orgs/, got {response['Location']}"
         )
 
-    @override_settings(FORMS_SUBMISSIONS_API=False)
+    @override_settings(QUICKSCALE_FORMS_API_ENABLED=False)
     def test_returns_404_when_admin_api_disabled(self, superuser_client, form):
         """Disabling the submissions API should hide the staff admin endpoints."""
         url = reverse("quickscale_forms:admin_form_list")
@@ -984,9 +984,9 @@ class TestAdminSubmissionListAPIView:
         response = superuser_client.get(url, {"status": "pending"})
         assert response.status_code == 200
 
-    @override_settings(FORMS_PER_PAGE=1)
+    @override_settings(QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE=1)
     def test_respects_forms_per_page_setting(self, superuser_client, form, submission):
-        """The admin submission list should page according to FORMS_PER_PAGE."""
+        """The admin submission list should page according to QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE."""
         from quickscale_modules_orgs.current_org import org_scope
 
         with org_scope(form.organization):
