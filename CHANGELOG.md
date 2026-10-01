@@ -321,6 +321,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Retired module setting names fail startup.** A module declares the setting names its renames
     retired, and the startup settings check refuses a project that still defines one, naming the
     replacement instead of leaving the old value silently unused.
+  - **Organization creation hands off to billing's declared pricing URL.** The orgs create flow
+    collects billing's declared `organization_pricing_url_hooks` capability instead of reversing
+    a billing route name and activates the new organization before the handoff, so an enabled
+    billing opens `billing/pricing/` under the new organization and a switched-off or absent
+    billing keeps the new organization's dashboard fallback.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
