@@ -131,6 +131,53 @@ from django.utils import timezone as django_timezone
 
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
 
+__all__ = [
+    "ArtifactLike",
+    "BackupConfigurationError",
+    "BackupError",
+    "BackupLockError",
+    "BackupPolicySnapshot",
+    "BackupRestoreBlocked",
+    "RemoteDeleter",
+    "RemoteMaterializer",
+    "RemoteUploader",
+    "ResolvedRestoreSource",
+    "RestoreResult",
+    "RestoreSourceResolutionMode",
+    "RestoreWarning",
+    "STALE_RESTORE_THRESHOLD_MINUTES",
+    "ShellCommandRunner",
+    "StagedAdminRestoreUpload",
+    "StorageBackendSelectionLike",
+    "StorageHelpersModule",
+    "build_backup_filename",
+    "build_backup_snapshot_report",
+    "clear_backup_snapshot_rollback_pin",
+    "create_backup",
+    "delete_artifact_files",
+    "dispatch_background_create",
+    "dispatch_background_prune",
+    "dispatch_background_restore",
+    "download_backup_path",
+    "ensure_default_policy",
+    "get_backup_snapshot",
+    "get_local_backup_directory",
+    "is_restore_stale",
+    "load_policy_snapshot",
+    "prepare_admin_uploaded_restore_artifact",
+    "prune_expired_backups",
+    "record_backup_snapshot_verification",
+    "report_backup_snapshot",
+    "reset_stale_restore",
+    "restore_admin_uploaded_backup",
+    "restore_backup_artifact",
+    "restore_backup_source",
+    "set_backup_snapshot_rollback_pin",
+    "sync_backup_snapshot_media",
+    "validate_backup_artifact",
+    "validate_policy_snapshot",
+]
+
 # ---------------------------------------------------------------------------
 # Protocols (reference BackupPolicySnapshot — defined here to avoid circular
 # imports with dr_engine which already imports from models)
@@ -312,6 +359,7 @@ def _get_manage_py() -> str:
 
 def prepare_admin_uploaded_restore_artifact(
     uploaded_file: Any,
+    *,
     confirmation: str,
 ) -> BackupArtifact:
     """Stage, resolve, materialize, and persist an admin-uploaded restore artifact.
@@ -343,7 +391,10 @@ def prepare_admin_uploaded_restore_artifact(
         When the uploaded file does not resolve to a trusted artifact
         (no match, ambiguous match, or incomplete snapshot contract).
     """
-    staging_directory = Path(mkdtemp(prefix="quickscale-backups-admin-upload-"))
+    try:
+        staging_directory = Path(mkdtemp(prefix="quickscale-backups-admin-upload-"))
+    except OSError as exc:
+        raise BackupError(f"Failed to stage the restore artifact: {exc}") from exc
     try:
         staged_upload = _stage_admin_restore_upload(
             uploaded_file,
@@ -353,6 +404,9 @@ def prepare_admin_uploaded_restore_artifact(
             checksum_sha256=staged_upload.checksum_sha256,
             size_bytes=staged_upload.size_bytes,
         )
+    except OSError as exc:
+        _cleanup_admin_restore_upload_directory(staging_directory)
+        raise BackupError(f"Failed to stage the restore artifact: {exc}") from exc
     except Exception:
         _cleanup_admin_restore_upload_directory(staging_directory)
         raise
@@ -387,7 +441,12 @@ def prepare_admin_uploaded_restore_artifact(
         # local_path — persist only after a successful copy.
         policy_snapshot = load_policy_snapshot()
         local_dir = get_local_backup_directory(policy_snapshot)
-        local_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            local_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise BackupError(
+                f"Failed to materialize the restore artifact: {exc}"
+            ) from exc
         local_path = local_dir / trusted_artifact.filename
 
         # CR-SA53 / CR-SA53-REV-001: Crash-safe copy — copy to a securely
@@ -398,7 +457,12 @@ def prepare_admin_uploaded_restore_artifact(
         # descriptor (fd) — never closed and reopened by pathname — so
         # a swap-to-symlink race between close and reopen is eliminated.
         if staged_upload.local_path.resolve() != local_path.resolve():
-            fd, tmp_path = mkstemp(dir=local_dir)
+            try:
+                fd, tmp_path = mkstemp(dir=local_dir)
+            except OSError as exc:
+                raise BackupError(
+                    f"Failed to stage the restore artifact: {exc}"
+                ) from exc
             try:
                 with open(staged_upload.local_path, "rb") as src_f:
                     while True:
@@ -413,6 +477,14 @@ def prepare_admin_uploaded_restore_artifact(
                             view = view[os.write(fd, view) :]
                 os.fsync(fd)
                 os.replace(tmp_path, local_path)
+            except OSError as exc:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise BackupError(
+                    f"Failed to materialize the restore artifact: {exc}"
+                ) from exc
             except Exception:
                 try:
                     os.unlink(tmp_path)
@@ -489,7 +561,7 @@ def dispatch_background_restore(
             ],
             close_fds=True,
         )
-    except Exception:
+    except Exception as exc:
         # Rollback: restore pre-spawn status/metadata so a spawn failure
         # never strands the artifact in Status.RESTORING or loses prior
         # failure metadata on retry.
@@ -504,7 +576,7 @@ def dispatch_background_restore(
                 "updated_at",
             ]
         )
-        raise
+        raise BackupError(f"Failed to dispatch background restore: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
