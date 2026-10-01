@@ -236,7 +236,7 @@ describe('CSRF request callers', () => {
       })
 
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/forms/contact/submit/',
+        '/forms/api/contact/submit/',
         expect.objectContaining({ method: 'POST' }),
       )
       expect(requestHeaders().get('X-CSRFToken')).toBe(secondCsrfToken)

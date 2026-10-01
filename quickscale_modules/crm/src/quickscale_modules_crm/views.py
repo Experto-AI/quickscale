@@ -403,7 +403,7 @@ class DealViewSet(OrgScopedReadMixin):
         detail=False,
         methods=["post"],
         url_path="bulk-update-stage",
-        url_name="bulk-update-stage",
+        url_name="bulk_update_stage",
     )
     def bulk_update_stage(self, request: Request, **kwargs: Any) -> Response:
         """Bulk update stage for multiple deals"""
@@ -427,7 +427,7 @@ class DealViewSet(OrgScopedReadMixin):
         detail=False,
         methods=["post"],
         url_path="mark-won",
-        url_name="mark-won",
+        url_name="mark_won",
     )
     def mark_won(self, request: Request, **kwargs: Any) -> Response:
         """Mark multiple deals as won using the terminal won stage."""
@@ -450,7 +450,7 @@ class DealViewSet(OrgScopedReadMixin):
         detail=False,
         methods=["post"],
         url_path="mark-lost",
-        url_name="mark-lost",
+        url_name="mark_lost",
     )
     def mark_lost(self, request: Request, **kwargs: Any) -> Response:
         """Mark multiple deals as lost using the terminal lost stage."""

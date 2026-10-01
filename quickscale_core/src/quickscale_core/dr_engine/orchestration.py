@@ -136,6 +136,7 @@ from quickscale_core.dr_engine.persistence import (  # noqa: E402
     resolve_admin_uploaded_restore_artifact,
     save_artifact,
     save_snapshot,
+    settings_policy_snapshot,
     update_artifact_after_restore,
 )
 
@@ -2202,7 +2203,9 @@ def _load_active_policy_snapshot(
     """Load the active runtime policy snapshot with managed settings precedence.
 
     SA89b Phase 1: policy introspection is routed through the persistence
-    provider seam.  ``ensure_default=False`` skips the default-policy
+    provider seam; the settings-derived snapshot comes from the registered
+    policy provider, which owns reading its own module's settings, so core
+    names none of them.  ``ensure_default=False`` skips the default-policy
     reconciliation so a dry run can resolve the policy without writing.
     """
     from quickscale_core.dr_engine.persistence import (
@@ -2210,7 +2213,7 @@ def _load_active_policy_snapshot(
         has_any_policy,
     )
 
-    settings_snapshot = _build_policy_snapshot_from_settings()
+    settings_snapshot = settings_policy_snapshot()
     if not has_any_policy():
         return settings_snapshot
 
@@ -2245,58 +2248,6 @@ def _build_policy_snapshot_from_model(policy: Any) -> BackupPolicySnapshot:
         remote_secret_access_key_env_var=policy.remote_secret_access_key_env_var,
         automation_enabled=policy.automation_enabled,
         schedule=policy.schedule,
-    )
-
-
-def _build_policy_snapshot_from_settings() -> BackupPolicySnapshot:
-    """Create a BackupPolicySnapshot from Django settings defaults."""
-    return BackupPolicySnapshot(
-        retention_days=int(getattr(settings, "QUICKSCALE_BACKUPS_RETENTION_DAYS", 14)),
-        naming_prefix=str(getattr(settings, "QUICKSCALE_BACKUPS_NAMING_PREFIX", "db")),
-        target_mode=str(
-            getattr(
-                settings,
-                "QUICKSCALE_BACKUPS_TARGET_MODE",
-                "local",
-            )
-        ),
-        local_directory=str(
-            getattr(
-                settings,
-                "QUICKSCALE_BACKUPS_LOCAL_DIRECTORY",
-                ".quickscale/backups",
-            )
-        ),
-        remote_bucket_name=str(
-            getattr(settings, "QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME", "")
-        ),
-        remote_prefix=str(
-            getattr(settings, "QUICKSCALE_BACKUPS_REMOTE_PREFIX", "backups/private")
-        ),
-        remote_endpoint_url=str(
-            getattr(settings, "QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL", "")
-        ),
-        remote_region_name=str(
-            getattr(settings, "QUICKSCALE_BACKUPS_REMOTE_REGION_NAME", "")
-        ),
-        remote_access_key_id_env_var=str(
-            getattr(
-                settings,
-                "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
-                "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID",
-            )
-        ),
-        remote_secret_access_key_env_var=str(
-            getattr(
-                settings,
-                "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
-                "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY",
-            )
-        ),
-        automation_enabled=bool(
-            getattr(settings, "QUICKSCALE_BACKUPS_AUTOMATION_ENABLED", False)
-        ),
-        schedule=str(getattr(settings, "QUICKSCALE_BACKUPS_SCHEDULE", "0 2 * * *")),
     )
 
 

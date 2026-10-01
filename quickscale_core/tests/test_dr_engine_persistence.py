@@ -49,6 +49,7 @@ from quickscale_core.dr_engine.persistence import (
     save_artifact,
     save_default_policy,
     save_snapshot,
+    settings_policy_snapshot,
     update_artifact_after_restore,
 )
 from quickscale_core.dr_engine.primitives import (
@@ -236,6 +237,11 @@ class TestRegisterBackupPersistence:
         with pytest.raises(BackupConfigurationError, match="not configured"):
             save_default_policy(policy)
 
+    def test_settings_policy_without_registration_raises(self) -> None:
+        """Calling settings_policy_snapshot before registering raises."""
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            settings_policy_snapshot()
+
 
 # ===================================================================
 # SA89b Phase 1 — delegator wrappers and provider edge coverage
@@ -311,6 +317,10 @@ class TestSa89bUnregisteredFailHard(TestSharedFixture):
     def test_ensure_default_policy_unregistered(self) -> None:
         with pytest.raises(BackupConfigurationError, match="not configured"):
             ensure_default_policy()
+
+    def test_settings_policy_snapshot_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            settings_policy_snapshot()
 
 
 class TestSa89bDelegation(TestSharedFixture):
@@ -439,6 +449,16 @@ class TestSa89bDelegation(TestSharedFixture):
         result = ensure_default_policy()
         assert result is mock_result
         policy_prov.ensure_default_policy.assert_called_once_with()
+
+    def test_settings_policy_snapshot_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        _, policy_prov = registered_providers
+        mock_result = MagicMock()
+        policy_prov.settings_policy_snapshot.return_value = mock_result
+        result = settings_policy_snapshot()
+        assert result is mock_result
+        policy_prov.settings_policy_snapshot.assert_called_once_with()
 
 
 class TestSa89bEdgeCases(TestSharedFixture):

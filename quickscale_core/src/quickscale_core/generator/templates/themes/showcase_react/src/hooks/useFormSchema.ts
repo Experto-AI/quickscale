@@ -54,7 +54,7 @@ export interface FormSchema {
 }
 
 function normalizeApiBasePath(apiBasePath?: string): string {
-  const basePath = apiBasePath ?? '/api/forms/'
+  const basePath = apiBasePath ?? '/forms/api/'
   return basePath.endsWith('/') ? basePath : `${basePath}/`
 }
 
@@ -75,7 +75,7 @@ async function fetchFormSchema(slug: string, apiBasePath?: string): Promise<Form
 
 export function useFormSchema(slug: string, apiBasePath?: string) {
   return useQuery<FormSchema, Error>({
-    queryKey: ['form-schema', apiBasePath ?? '/api/forms/', slug],
+    queryKey: ['form-schema', apiBasePath ?? '/forms/api/', slug],
     queryFn: () => fetchFormSchema(slug, apiBasePath),
     staleTime: 1000 * 60 * 10, // 10 minutes — schemas change rarely
     enabled: !!slug,

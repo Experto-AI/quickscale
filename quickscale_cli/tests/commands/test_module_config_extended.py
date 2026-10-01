@@ -1147,8 +1147,8 @@ class TestModuleWiringSpecs:
         assert settings["REST_FRAMEWORK"] == {
             "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
         }
-        assert ("", "quickscale_modules_crm.urls") in urls
-        assert ("", "quickscale_modules_forms.urls") in urls
+        assert ("crm/", "quickscale_modules_crm.urls") in urls
+        assert ("forms/", "quickscale_modules_forms.urls") in urls
 
     def test_manifest_entry_point_raises_for_unknown_modules(self):
         """Unknown modules should raise ManifestAdapterNotFound at the entry point."""

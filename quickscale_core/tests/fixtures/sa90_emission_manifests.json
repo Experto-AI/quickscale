@@ -55,7 +55,8 @@
       "sa217": "Regenerated 2026-09-30 — the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644.",
       "sa223-forms-error-shape": "Regenerated 2026-09-30 — the theme form client (FormRenderer.tsx) submits through the shared apiRequest client and renders the one QuickScale error shape, useFormSchema.ts surfaces that shape's message for a failed schema fetch, and the new src/test/FormRenderer.test.tsx pins the field-error, non-field-error, shaped-message, and network-failure behavior; csrf.test.tsx's FormRenderer mock now answers a JSON content type. FormRenderer.tsx, useFormSchema.ts, csrf.test.tsx, and FormRenderer.test.tsx were re-hashed in all three variants.",
       "sa223-orgs-url-mount": "Regenerated 2026-09-30 — the orgs module declares its mount (orgs/) in its manifest, the generated urls.py keeps /orgs/api/ out of both React org shell route patterns (the slug route and the org subpage route) so the module's JSON API reaches Django, and the theme's org API client calls /orgs/api/... instead of /api/orgs/... . testproject/urls.py, frontend/src/hooks/useOrgs.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants.",
-      "sa223-billing-url-mount": "Regenerated 2026-10-01 — the billing module declares its mount (billing/) in its manifest and the theme's billing API client calls /billing/api/... instead of /api/billing/... . frontend/src/hooks/useOrgs.ts was re-hashed in all three variants."
+      "sa223-billing-url-mount": "Regenerated 2026-10-01 — the billing module declares its mount (billing/) in its manifest and the theme's billing API client calls /billing/api/... instead of /api/billing/... . frontend/src/hooks/useOrgs.ts was re-hashed in all three variants.",
+      "sa223-crm-forms-url-mount": "Regenerated 2026-10-01 — the crm and forms modules declare their mounts (crm/, forms/) in their manifests, the theme's forms API client calls /forms/api/... instead of /api/forms/..., and their route names are snake_case under quickscale_crm: and quickscale_forms:. frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useFormSchema.ts, frontend/src/components/forms/FormRenderer.tsx, frontend/src/test/useApiErrors.test.ts, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -173,7 +174,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "75ecb6e3a17a408cd7cc797ade96e886c7ba4fb4719c0d06356d9b9f6d819cc8"
+      "sha256": "3361a632ecfb78fe7a8f7fcd88122b0099fabf59ef64830bdb8948596984b303"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -257,7 +258,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "3c2a549314412bc79356cc4faafde5ac9892724fb01ba62bcb37d5b9eef994c5"
+      "sha256": "918f43bfbf2175fa57aceb6b4f1c9836418a4c2202f4c37c7dc3ed789591697f"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -265,7 +266,7 @@
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
-      "sha256": "92b176bc95562ccefd9303043d5048338a2066da0d78755509ca6f77991001b7"
+      "sha256": "9e73584c29f36007ba0d8bc9144f80629666fff86632209fdadfa6e37cea5e1e"
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
@@ -393,7 +394,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "832e6ba0b8589214c2f2a58c3e306d81a187233e7be782a5ceaa701085f4bcce"
+      "sha256": "b6fbcd0605f729ae0b9c50f2ca5b09f02e5a6cc2a6e7232d73bcccaaf42de431"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -401,7 +402,7 @@
     },
     "frontend/src/test/useApiErrors.test.ts": {
       "mode": "664",
-      "sha256": "769abb3665de0b1d25c20f8c8e4e7db7ba11e0e4662c23019a93d215d5da5e22"
+      "sha256": "d357566072e28d48d0dd295009dc83d303d93e7a5fd8a66c7adc530e1f10ff05"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "664",
@@ -651,7 +652,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "75ecb6e3a17a408cd7cc797ade96e886c7ba4fb4719c0d06356d9b9f6d819cc8"
+      "sha256": "3361a632ecfb78fe7a8f7fcd88122b0099fabf59ef64830bdb8948596984b303"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -735,7 +736,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "3c2a549314412bc79356cc4faafde5ac9892724fb01ba62bcb37d5b9eef994c5"
+      "sha256": "918f43bfbf2175fa57aceb6b4f1c9836418a4c2202f4c37c7dc3ed789591697f"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -743,7 +744,7 @@
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
-      "sha256": "92b176bc95562ccefd9303043d5048338a2066da0d78755509ca6f77991001b7"
+      "sha256": "9e73584c29f36007ba0d8bc9144f80629666fff86632209fdadfa6e37cea5e1e"
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
@@ -871,7 +872,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "832e6ba0b8589214c2f2a58c3e306d81a187233e7be782a5ceaa701085f4bcce"
+      "sha256": "b6fbcd0605f729ae0b9c50f2ca5b09f02e5a6cc2a6e7232d73bcccaaf42de431"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -879,7 +880,7 @@
     },
     "frontend/src/test/useApiErrors.test.ts": {
       "mode": "664",
-      "sha256": "769abb3665de0b1d25c20f8c8e4e7db7ba11e0e4662c23019a93d215d5da5e22"
+      "sha256": "d357566072e28d48d0dd295009dc83d303d93e7a5fd8a66c7adc530e1f10ff05"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "664",
@@ -1129,7 +1130,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "75ecb6e3a17a408cd7cc797ade96e886c7ba4fb4719c0d06356d9b9f6d819cc8"
+      "sha256": "3361a632ecfb78fe7a8f7fcd88122b0099fabf59ef64830bdb8948596984b303"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -1213,7 +1214,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "3c2a549314412bc79356cc4faafde5ac9892724fb01ba62bcb37d5b9eef994c5"
+      "sha256": "918f43bfbf2175fa57aceb6b4f1c9836418a4c2202f4c37c7dc3ed789591697f"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -1221,7 +1222,7 @@
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
-      "sha256": "92b176bc95562ccefd9303043d5048338a2066da0d78755509ca6f77991001b7"
+      "sha256": "9e73584c29f36007ba0d8bc9144f80629666fff86632209fdadfa6e37cea5e1e"
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
@@ -1349,7 +1350,7 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "664",
-      "sha256": "832e6ba0b8589214c2f2a58c3e306d81a187233e7be782a5ceaa701085f4bcce"
+      "sha256": "b6fbcd0605f729ae0b9c50f2ca5b09f02e5a6cc2a6e7232d73bcccaaf42de431"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",
@@ -1357,7 +1358,7 @@
     },
     "frontend/src/test/useApiErrors.test.ts": {
       "mode": "664",
-      "sha256": "769abb3665de0b1d25c20f8c8e4e7db7ba11e0e4662c23019a93d215d5da5e22"
+      "sha256": "d357566072e28d48d0dd295009dc83d303d93e7a5fd8a66c7adc530e1f10ff05"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "664",

@@ -68,7 +68,7 @@ modules:
 
 | URL name | Path | View |
 |----------|------|------|
-| `quickscale_analytics:analytics-dashboard` | `analytics/` | Module-owned analytics overview page. |
+| `quickscale_analytics:dashboard` | `analytics/` | Module-owned analytics overview page. |
 
 ## Management commands
 

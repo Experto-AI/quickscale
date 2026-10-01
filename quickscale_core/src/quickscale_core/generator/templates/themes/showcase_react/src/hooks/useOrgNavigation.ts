@@ -60,7 +60,7 @@ export function useOrgNavigation() {
           : '/listings/',
         crmDashboard: '/crm/dashboard/',
         crmApiBase: '/crm/api/',
-        formsApiBase: '/api/forms/',
+        formsApiBase: '/forms/api/',
       },
     }
   }, [currentOrgSlug, isSaas])

@@ -25,11 +25,13 @@ def check_private_remote_credentials(
 ) -> list[CheckMessage]:
     """Fail startup when private_remote backups lack their credentials.
 
-    The credentials are resolved through the same core policy snapshot the
-    backup commands use, so the check and the command agree on which
-    environment variable an empty value comes from.
+    The credentials are resolved through the same settings-derived policy
+    snapshot the backup commands use, so the check and the command agree on
+    which environment variable an empty value comes from.
     """
-    from quickscale_core.runtime import _build_policy_snapshot_from_settings
+    from quickscale_modules_backups.services import (
+        _build_policy_snapshot_from_settings,
+    )
 
     snapshot = _build_policy_snapshot_from_settings()
     if snapshot.target_mode != _REMOTE_TARGET_MODE:
