@@ -16,6 +16,9 @@ class QuickscaleBlogConfig(AppConfig):
     label = "quickscale_blog"
     verbose_name = "QuickScale Blog"
 
+    #: Display prefix for the module's models in organization-removal summaries.
+    removal_label_prefix = "Blog"
+
     def ready(self) -> None:
         """Run the blog startup checks through the shared helpers."""
         # Late import: keep the app config importable while Django is still
