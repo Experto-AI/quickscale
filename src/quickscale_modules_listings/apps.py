@@ -15,4 +15,8 @@ class QuickscaleListingsConfig(AppConfig):
 
     def ready(self) -> None:
         """Register rule 3's generic settings check for this module."""
-        register_module_settings_check(self, "listings")
+        from quickscale_modules_listings.checks import RETIRED_SETTINGS
+
+        register_module_settings_check(
+            self, "listings", retired_settings=RETIRED_SETTINGS
+        )
