@@ -329,7 +329,7 @@ def test_blog_api_rate_limit_default_matches_manifest_contract() -> None:
     option = manifest.get_all_options()["api_rate_limit"]
     defaults = MODULE_CONFIGURATOR_REGISTRY["blog"].get_defaults()
 
-    assert option.django_setting == "BLOG_API_RATE_LIMIT"
+    assert option.django_setting == "QUICKSCALE_BLOG_API_RATE_LIMIT"
     assert option.default == defaults["api_rate_limit"] == "5/hour"
 
 

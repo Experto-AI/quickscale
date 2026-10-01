@@ -94,9 +94,13 @@ MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="qs_blog_test_media_"))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Blog module required settings (fail-hard defaults)
-BLOG_ENABLE_RSS = True
-BLOG_API_RATE_LIMIT = "5/hour"
-BLOG_POSTS_PER_PAGE = 10
+QUICKSCALE_BLOG_RSS_ENABLED = True
+QUICKSCALE_BLOG_API_RATE_LIMIT = "5/hour"
+QUICKSCALE_BLOG_POSTS_PER_PAGE = 10
+QUICKSCALE_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH = 4096
+QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
+QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS = ["PNG", "JPEG", "WEBP", "GIF"]
 
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
@@ -114,7 +118,7 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "quickscale_blog_api": BLOG_API_RATE_LIMIT,
+        "quickscale_blog_api": QUICKSCALE_BLOG_API_RATE_LIMIT,
     },
     "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
 }

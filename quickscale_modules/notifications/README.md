@@ -23,6 +23,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
 | `enabled` | boolean | `true` | `QUICKSCALE_NOTIFICATIONS_ENABLED` | Enable the notifications module runtime. Safe local backends remain valid when live delivery is not configured. |
+| `provider` | string | `resend` | `QUICKSCALE_NOTIFICATIONS_PROVIDER` | Transactional email provider backing the notifications runtime. |
 | `sender_name` | string | `QuickScale` | `QUICKSCALE_NOTIFICATIONS_SENDER_NAME` | Display name used for outbound transactional email. |
 | `sender_email` | string | `noreply@example.com` | `QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL` | Authoritative sender email address used for outbound transactional email. The default placeholder must be overridden before live delivery is configured. |
 | `reply_to_email` | string | `""` | `QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL` | Optional reply-to email address for transactional messages. |

@@ -211,7 +211,7 @@ class TestStateManager:
                 commit_sha="def456",
                 embedded_at="2025-01-01T00:00:00",
                 options={
-                    "enable_api": True,
+                    "api_enabled": True,
                     "deals_per_page": 25,
                     "contacts_per_page": 50,
                 },
@@ -226,7 +226,7 @@ class TestStateManager:
 
             saved_data = yaml.safe_load(manager.state_file.read_text())
             assert saved_data["modules"]["crm"]["options"] == {
-                "enable_api": True,
+                "api_enabled": True,
                 "deals_per_page": 25,
                 "contacts_per_page": 50,
             }
@@ -234,7 +234,7 @@ class TestStateManager:
             loaded_state = manager.load()
             assert loaded_state is not None
             assert loaded_state.modules["crm"].options == {
-                "enable_api": True,
+                "api_enabled": True,
                 "deals_per_page": 25,
                 "contacts_per_page": 50,
             }

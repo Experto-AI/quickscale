@@ -35,7 +35,7 @@ config:
       validation:
         pattern: ^(?:[A-Z][A-Z0-9_]*)?$
 
-    billing_currency:
+    currency:
       type: string
       default: "usd"
       django_setting: QUICKSCALE_BILLING_CURRENCY
@@ -85,6 +85,12 @@ dependencies:
   - djangorestframework>=3.17.2
   - stripe>=15.3.1,<16.0.0
 
+# Retired option keys are refused by name with the message declared here.
+retired_options:
+  billing_currency: >-
+    Legacy config key 'billing_currency' is no longer supported. Use 'currency'
+    instead.
+
 contract_vintage:
   id: sa209-stripe-webhook-version
   minimum: "0.89.0"
@@ -127,13 +133,13 @@ derivation:
         - source_key: webhook_secret_env_var
           target_key: webhook_secret_env_var
           rule_type: strip
-    billing_currency:
+    currency:
       normalization_rules:
-        - source_key: billing_currency
-          target_key: billing_currency
+        - source_key: currency
+          target_key: currency
           rule_type: strip
-        - source_key: billing_currency
-          target_key: billing_currency
+        - source_key: currency
+          target_key: currency
           rule_type: lowercase
     api_rate_limit:
       normalization_rules:

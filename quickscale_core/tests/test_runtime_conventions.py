@@ -424,8 +424,8 @@ class TestRegisterModuleChecks:
 
 _LISTINGS_SCHEMA = {
     "listings": {
-        "listings_per_page": {
-            "setting": "LISTINGS_PER_PAGE",
+        "per_page": {
+            "setting": "QUICKSCALE_LISTINGS_PER_PAGE",
             "type": "integer",
             "validation": {"min": 1},
         }
@@ -455,7 +455,7 @@ class TestRegisterModuleSettingsCheck:
 
         with override_settings(
             MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
-            LISTINGS_PER_PAGE=12,
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
         ):
             conventions.register_module_settings_check(self._app_config(), "listings")
 
@@ -468,7 +468,7 @@ class TestRegisterModuleSettingsCheck:
 
         with override_settings(
             MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
-            LISTINGS_PER_PAGE="12",
+            QUICKSCALE_LISTINGS_PER_PAGE="12",
         ):
             with pytest.raises(ImproperlyConfigured) as excinfo:
                 conventions.register_module_settings_check(
@@ -476,7 +476,7 @@ class TestRegisterModuleSettingsCheck:
                 )
 
         message = str(excinfo.value)
-        assert "LISTINGS_PER_PAGE" in message
+        assert "QUICKSCALE_LISTINGS_PER_PAGE" in message
         assert "must be an integer" in message
         assert "quickscale apply" in message
 
@@ -487,7 +487,7 @@ class TestRegisterModuleSettingsCheck:
 
         with override_settings(
             MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
-            LISTINGS_PER_PAGE=0,
+            QUICKSCALE_LISTINGS_PER_PAGE=0,
         ):
             with pytest.raises(ImproperlyConfigured) as excinfo:
                 conventions.register_module_settings_check(
@@ -495,7 +495,7 @@ class TestRegisterModuleSettingsCheck:
                 )
 
         message = str(excinfo.value)
-        assert "LISTINGS_PER_PAGE" in message
+        assert "QUICKSCALE_LISTINGS_PER_PAGE" in message
         assert "must be >= 1" in message
         assert "quickscale apply" in message
 
@@ -511,7 +511,7 @@ class TestRegisterModuleSettingsCheck:
                 )
 
         message = str(excinfo.value)
-        assert "LISTINGS_PER_PAGE is not set" in message
+        assert "QUICKSCALE_LISTINGS_PER_PAGE is not set" in message
         assert "quickscale apply" in message
 
     def test_missing_schema_fails_startup(self, system_check_registry) -> None:
@@ -583,8 +583,8 @@ class TestRegisterModuleSettingsCheck:
 
         with override_settings(
             MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
-            MODULE_SETTINGS={"LISTINGS_PER_PAGE": 12},
-            LISTINGS_PER_PAGE=12,
+            MODULE_SETTINGS={"QUICKSCALE_LISTINGS_PER_PAGE": 12},
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
         ):
             conventions.register_module_settings_check(self._app_config(), "listings")
 
@@ -599,14 +599,14 @@ class TestRegisterModuleSettingsCheck:
         with override_settings(
             MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
             MODULE_SETTINGS={},
-            LISTINGS_PER_PAGE=12,
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
         ):
             with pytest.raises(ImproperlyConfigured) as excinfo:
                 conventions.register_module_settings_check(
                     self._app_config(), "listings"
                 )
 
-        assert "LISTINGS_PER_PAGE is not set" in str(excinfo.value)
+        assert "QUICKSCALE_LISTINGS_PER_PAGE is not set" in str(excinfo.value)
 
     def test_library_default_does_not_satisfy_a_declared_setting(
         self, system_check_registry

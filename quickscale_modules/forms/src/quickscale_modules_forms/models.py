@@ -13,19 +13,22 @@ HONEYPOT_FIELD_NAME = "_hp_name"
 def get_default_form_data_retention_days() -> int:
     """Return the declared retention window for new forms.
 
-    Rule 3: the startup check has validated ``FORMS_DATA_RETENTION_DAYS``
+    Rule 3: the startup check has validated ``QUICKSCALE_FORMS_RETENTION_DAYS``
     against the manifest schema, so the value is read directly.
     """
-    return settings.FORMS_DATA_RETENTION_DAYS
+    return settings.QUICKSCALE_FORMS_RETENTION_DAYS
 
 
 def is_form_spam_protection_enabled(form: "Form") -> bool:
     """Return whether honeypot handling is active for the given form.
 
-    Rule 3: the startup check has validated ``FORMS_SPAM_PROTECTION`` against
+    Rule 3: the startup check has validated ``QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED`` against
     the manifest schema, so the value is read directly.
     """
-    return bool(settings.FORMS_SPAM_PROTECTION and form.spam_protection_enabled)
+    return bool(
+        settings.QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED
+        and form.spam_protection_enabled
+    )
 
 
 class Form(TenantModel):

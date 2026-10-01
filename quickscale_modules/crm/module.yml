@@ -10,17 +10,17 @@ config:
   # Mutable options - can be changed after embed via quickscale apply
   # These update Django settings.py automatically
   mutable:
-    enable_api:
+    api_enabled:
       type: boolean
       default: true
-      django_setting: CRM_ENABLE_API
+      django_setting: QUICKSCALE_CRM_API_ENABLED
       description: "Enable REST API endpoints at /crm/api/"
       validation: {}
 
     deals_per_page:
       type: integer
       default: 25
-      django_setting: CRM_DEALS_PER_PAGE
+      django_setting: QUICKSCALE_CRM_DEALS_PER_PAGE
       description: "Number of deals per page in list views"
       validation:
         min: 1
@@ -28,7 +28,7 @@ config:
     contacts_per_page:
       type: integer
       default: 50
-      django_setting: CRM_CONTACTS_PER_PAGE
+      django_setting: QUICKSCALE_CRM_CONTACTS_PER_PAGE
       description: "Number of contacts per page in list views"
       validation:
         min: 1
@@ -48,6 +48,9 @@ retired_options:
   default_pipeline_stages: >-
     Legacy config key 'default_pipeline_stages' is no longer supported. Remove
     it from the CRM module options.
+  enable_api: >-
+    Legacy config key 'enable_api' is no longer supported. Use 'api_enabled'
+    instead.
 
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)

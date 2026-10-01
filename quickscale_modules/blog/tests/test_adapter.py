@@ -21,23 +21,26 @@ def test_get_manifest_adapter_returns_callable() -> None:
 
 
 def test_missing_blog_setting_raises_key_error() -> None:
-    with pytest.raises(KeyError, match="BLOG_POSTS_PER_PAGE"):
+    with pytest.raises(KeyError, match="QUICKSCALE_BLOG_POSTS_PER_PAGE"):
         _blog_post_hook(
             ModuleWiringSpec(
-                settings={"BLOG_ENABLE_RSS": True, "BLOG_API_RATE_LIMIT": "5/hour"}
+                settings={
+                    "QUICKSCALE_BLOG_RSS_ENABLED": True,
+                    "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
+                }
             ),
             {},
         )
 
 
 def test_whitespace_only_rate_limit_raises_manifest_error() -> None:
-    with pytest.raises(ManifestError, match="BLOG_API_RATE_LIMIT"):
+    with pytest.raises(ManifestError, match="QUICKSCALE_BLOG_API_RATE_LIMIT"):
         _blog_post_hook(
             ModuleWiringSpec(
                 settings={
-                    "BLOG_POSTS_PER_PAGE": 10,
-                    "BLOG_ENABLE_RSS": True,
-                    "BLOG_API_RATE_LIMIT": "   ",
+                    "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
+                    "QUICKSCALE_BLOG_RSS_ENABLED": True,
+                    "QUICKSCALE_BLOG_API_RATE_LIMIT": "   ",
                 }
             ),
             {},
@@ -48,16 +51,16 @@ def test_post_hook_coerces_and_adds_static_settings() -> None:
     result = _blog_post_hook(
         ModuleWiringSpec(
             settings={
-                "BLOG_POSTS_PER_PAGE": "10",
-                "BLOG_ENABLE_RSS": 1,
-                "BLOG_API_RATE_LIMIT": " 5/hour ",
+                "QUICKSCALE_BLOG_POSTS_PER_PAGE": "10",
+                "QUICKSCALE_BLOG_RSS_ENABLED": 1,
+                "QUICKSCALE_BLOG_API_RATE_LIMIT": " 5/hour ",
             }
         ),
         {},
     )
-    assert result.settings["BLOG_POSTS_PER_PAGE"] == 10
-    assert result.settings["BLOG_ENABLE_RSS"] is True
-    assert result.settings["BLOG_API_RATE_LIMIT"] == "5/hour"
+    assert result.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
+    assert result.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
+    assert result.settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "5/hour"
     assert result.settings["REST_FRAMEWORK"] == {
         "DEFAULT_THROTTLE_RATES": {"quickscale_blog_api": "5/hour"}
     }

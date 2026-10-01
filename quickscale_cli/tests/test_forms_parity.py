@@ -21,13 +21,29 @@ from quickscale_core.manifest.option_validation import (
     collect_option_validation_issues,
     validate_module_options,
 )
+from quickscale_core.schema.config_schema import ConfigValidationError, validate_config
 
 _EXPECTED_DEFAULTS: dict[str, object] = {
-    "forms_per_page": 25,
+    "submissions_per_page": 25,
     "spam_protection_enabled": True,
     "rate_limit": "5/hour",
-    "data_retention_days": 365,
-    "submissions_api_enabled": True,
+    "retention_days": 365,
+    "api_enabled": True,
+}
+
+_RETIRED_OPTION_MESSAGES: dict[str, str] = {
+    "forms_per_page": (
+        "Legacy config key 'forms_per_page' is no longer supported. Use "
+        "'submissions_per_page' instead."
+    ),
+    "data_retention_days": (
+        "Legacy config key 'data_retention_days' is no longer supported. Use "
+        "'retention_days' instead."
+    ),
+    "submissions_api_enabled": (
+        "Legacy config key 'submissions_api_enabled' is no longer supported. Use "
+        "'api_enabled' instead."
+    ),
 }
 
 
@@ -51,28 +67,34 @@ class TestFormsManifestContract:
 
     def test_django_settings_are_declared(self) -> None:
         manifest = _manifest()
-        assert manifest.get_option("forms_per_page").django_setting == "FORMS_PER_PAGE"
+        assert (
+            manifest.get_option("submissions_per_page").django_setting
+            == "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"
+        )
         assert (
             manifest.get_option("spam_protection_enabled").django_setting
-            == "FORMS_SPAM_PROTECTION"
-        )
-        assert manifest.get_option("rate_limit").django_setting == "FORMS_RATE_LIMIT"
-        assert (
-            manifest.get_option("data_retention_days").django_setting
-            == "FORMS_DATA_RETENTION_DAYS"
+            == "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"
         )
         assert (
-            manifest.get_option("submissions_api_enabled").django_setting
-            == "FORMS_SUBMISSIONS_API"
+            manifest.get_option("rate_limit").django_setting
+            == "QUICKSCALE_FORMS_RATE_LIMIT"
+        )
+        assert (
+            manifest.get_option("retention_days").django_setting
+            == "QUICKSCALE_FORMS_RETENTION_DAYS"
+        )
+        assert (
+            manifest.get_option("api_enabled").django_setting
+            == "QUICKSCALE_FORMS_API_ENABLED"
         )
 
     def test_manifest_declares_the_option_types(self) -> None:
         manifest = _manifest()
-        assert manifest.get_option("forms_per_page").option_type == "integer"
+        assert manifest.get_option("submissions_per_page").option_type == "integer"
         assert manifest.get_option("spam_protection_enabled").option_type == "boolean"
         assert manifest.get_option("rate_limit").option_type == "string"
-        assert manifest.get_option("data_retention_days").option_type == "integer"
-        assert manifest.get_option("submissions_api_enabled").option_type == "boolean"
+        assert manifest.get_option("retention_days").option_type == "integer"
+        assert manifest.get_option("api_enabled").option_type == "boolean"
 
 
 # ===========================================================================
@@ -91,11 +113,11 @@ class TestFormsValidation:
             validate_module_options(
                 _manifest(),
                 {
-                    "forms_per_page": 50,
+                    "submissions_per_page": 50,
                     "spam_protection_enabled": False,
                     "rate_limit": "10/minute",
-                    "data_retention_days": 30,
-                    "submissions_api_enabled": False,
+                    "retention_days": 30,
+                    "api_enabled": False,
                 },
             )
             == []
@@ -104,26 +126,25 @@ class TestFormsValidation:
     @pytest.mark.parametrize("bad_value", [0, -5])
     def test_non_positive_forms_per_page_is_refused(self, bad_value: int) -> None:
         issues = collect_option_validation_issues(
-            _manifest(), {"forms_per_page": bad_value}
+            _manifest(), {"submissions_per_page": bad_value}
         )
         assert any(
-            issue.option_name == "forms_per_page" and "FORMS_PER_PAGE" in issue.message
+            issue.option_name == "submissions_per_page"
+            and "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE" in issue.message
             for issue in issues
         )
 
-    def test_negative_data_retention_days_is_refused(self) -> None:
-        issues = collect_option_validation_issues(
-            _manifest(), {"data_retention_days": -1}
-        )
+    def test_negative_retention_days_is_refused(self) -> None:
+        issues = collect_option_validation_issues(_manifest(), {"retention_days": -1})
         assert any(
-            issue.option_name == "data_retention_days"
-            and "FORMS_DATA_RETENTION_DAYS" in issue.message
+            issue.option_name == "retention_days"
+            and "QUICKSCALE_FORMS_RETENTION_DAYS" in issue.message
             for issue in issues
         )
 
-    def test_zero_data_retention_days_is_valid(self) -> None:
+    def test_zero_retention_days_is_valid(self) -> None:
         """0 means keep forever, which is a valid value."""
-        assert validate_module_options(_manifest(), {"data_retention_days": 0}) == []
+        assert validate_module_options(_manifest(), {"retention_days": 0}) == []
 
     @pytest.mark.parametrize("bad_value", ["invalid", "5/week", "", "  "])
     def test_invalid_rate_limit_is_refused(self, bad_value: str) -> None:
@@ -140,16 +161,49 @@ class TestFormsValidation:
         issues = collect_option_validation_issues(
             _manifest(),
             {
-                "forms_per_page": 0,
-                "data_retention_days": -1,
+                "submissions_per_page": 0,
+                "retention_days": -1,
                 "rate_limit": "bad",
             },
         )
         assert {issue.option_name for issue in issues} >= {
-            "forms_per_page",
-            "data_retention_days",
+            "submissions_per_page",
+            "retention_days",
             "rate_limit",
         }
+
+
+class TestFormsRetiredOptions:
+    """The renamed option keys are refused from their manifest declarations."""
+
+    def test_manifest_declares_the_retired_keys(self) -> None:
+        assert _manifest().retired_options == _RETIRED_OPTION_MESSAGES
+
+    @pytest.mark.parametrize("retired_key", sorted(_RETIRED_OPTION_MESSAGES))
+    def test_engine_reports_the_retired_key_with_the_declared_message(
+        self, retired_key: str
+    ) -> None:
+        issues = collect_option_validation_issues(_manifest(), {retired_key: 1})
+        assert [(issue.option_name, issue.message) for issue in issues] == [
+            (retired_key, _RETIRED_OPTION_MESSAGES[retired_key])
+        ]
+
+    def test_config_load_refuses_the_retired_retention_key(self) -> None:
+        yaml_content = (
+            'version: "1"\n'
+            "project:\n"
+            "  slug: demo\n"
+            "  package: demo\n"
+            "modules:\n"
+            "  forms:\n"
+            "    data_retention_days: 30\n"
+        )
+
+        with pytest.raises(ConfigValidationError) as excinfo:
+            validate_config(yaml_content)
+
+        assert "data_retention_days" in str(excinfo.value)
+        assert "retention_days" in str(excinfo.value)
 
 
 # ===========================================================================
@@ -170,29 +224,29 @@ class TestFormsProjection:
 
     def test_declared_defaults_project_to_settings(self) -> None:
         assert build_generic_manifest_spec("forms", None).settings == {
-            "FORMS_PER_PAGE": 25,
-            "FORMS_SPAM_PROTECTION": True,
-            "FORMS_RATE_LIMIT": "5/hour",
-            "FORMS_DATA_RETENTION_DAYS": 365,
-            "FORMS_SUBMISSIONS_API": True,
+            "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+            "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+            "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
+            "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
+            "QUICKSCALE_FORMS_API_ENABLED": True,
         }
 
     def test_overrides_project_to_settings(self) -> None:
         assert build_generic_manifest_spec(
             "forms",
             {
-                "forms_per_page": 50,
+                "submissions_per_page": 50,
                 "spam_protection_enabled": False,
                 "rate_limit": "10/minute",
-                "data_retention_days": 90,
-                "submissions_api_enabled": False,
+                "retention_days": 90,
+                "api_enabled": False,
             },
         ).settings == {
-            "FORMS_PER_PAGE": 50,
-            "FORMS_SPAM_PROTECTION": False,
-            "FORMS_RATE_LIMIT": "10/minute",
-            "FORMS_DATA_RETENTION_DAYS": 90,
-            "FORMS_SUBMISSIONS_API": False,
+            "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 50,
+            "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": False,
+            "QUICKSCALE_FORMS_RATE_LIMIT": "10/minute",
+            "QUICKSCALE_FORMS_RETENTION_DAYS": 90,
+            "QUICKSCALE_FORMS_API_ENABLED": False,
         }
 
 
@@ -216,11 +270,11 @@ class TestFormsConfigurator:
         entry = MODULE_CONFIGURATOR_REGISTRY["forms"]
         config = entry.configure(
             non_interactive=True,
-            existing_config={"forms_per_page": 40, "rate_limit": " 10/minute "},
+            existing_config={"submissions_per_page": 40, "rate_limit": " 10/minute "},
         )
-        assert config["forms_per_page"] == 40
+        assert config["submissions_per_page"] == 40
         assert config["rate_limit"] == "10/minute"
-        assert config["data_retention_days"] == 365
+        assert config["retention_days"] == 365
 
     def test_undeclared_existing_keys_are_dropped(self) -> None:
         entry = MODULE_CONFIGURATOR_REGISTRY["forms"]
@@ -242,11 +296,11 @@ class TestFormsConfigurator:
         config = entry.configure(non_interactive=False)
 
         assert config == {
-            "forms_per_page": 40,
+            "submissions_per_page": 40,
             "spam_protection_enabled": False,
             "rate_limit": "10/minute",
-            "data_retention_days": 30,
-            "submissions_api_enabled": False,
+            "retention_days": 30,
+            "api_enabled": False,
         }
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
@@ -266,4 +320,4 @@ class TestFormsConfigurator:
         )
 
         assert configured["forms"]["rate_limit"] == "10/minute"
-        assert configured["forms"]["forms_per_page"] == 40
+        assert configured["forms"]["submissions_per_page"] == 40

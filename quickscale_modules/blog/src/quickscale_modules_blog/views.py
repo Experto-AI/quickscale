@@ -57,10 +57,6 @@ if storage_helpers is not None:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
-DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
-DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH = 4096
-DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
 IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
 
 # ---------------------------------------------------------------------------
@@ -110,27 +106,6 @@ def _resolve_api_org(request: Request | HttpRequest, author: Any) -> Any:
 
     set_current_org_id(org.pk)
     return org
-
-
-def _upload_limit_setting(setting_name: str, default: int) -> int:
-    """Return an optional image-upload limit or *default*.
-
-    The upload limits are not manifest options yet, so their defaults live in
-    code; once the manifest declares them, ``apply`` writes them and this
-    helper goes.
-    """
-    value = getattr(settings, setting_name, default)
-    if isinstance(value, bool):
-        return default
-
-    try:
-        parsed_value = int(value)
-    except TypeError:
-        return default
-    except ValueError:
-        return default
-
-    return parsed_value if parsed_value > 0 else default
 
 
 def _build_media_response_url(
@@ -205,29 +180,12 @@ def _blog_org_scope(request: Request | HttpRequest, author: Any) -> Iterator[Any
 
 def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
     """Validate the uploaded image and return its dimensions."""
-    max_upload_bytes_setting = getattr(
-        settings,
-        "BLOG_API_UPLOAD_MAX_BYTES",
-        DEFAULT_BLOG_API_UPLOAD_MAX_BYTES,
-    )
-    max_upload_bytes = int(
-        max_upload_bytes_setting or DEFAULT_BLOG_API_UPLOAD_MAX_BYTES
-    )
-    max_upload_width = _upload_limit_setting(
-        "BLOG_API_UPLOAD_MAX_WIDTH",
-        DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH,
-    )
-    max_upload_height = _upload_limit_setting(
-        "BLOG_API_UPLOAD_MAX_HEIGHT",
-        DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT,
-    )
+    max_upload_bytes = int(settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_BYTES)
+    max_upload_width = int(settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH)
+    max_upload_height = int(settings.QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT)
     allowed_formats = {
         str(image_format).upper()
-        for image_format in getattr(
-            settings,
-            "BLOG_API_ALLOWED_IMAGE_FORMATS",
-            DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS,
-        )
+        for image_format in settings.QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS
     }
 
     uploaded_file_size = uploaded_file.size or 0
@@ -598,7 +556,7 @@ class PostListView(BlogPublicReadMixin, ListView):
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
         """Return the project's declared posts-per-page value (rule 3)."""
         del queryset
-        return settings.BLOG_POSTS_PER_PAGE
+        return settings.QUICKSCALE_BLOG_POSTS_PER_PAGE
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return only published posts, ordered by publish date"""
@@ -642,7 +600,7 @@ class CategoryListView(BlogPublicReadMixin, ListView):
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
         """Return the project's declared posts-per-page value (rule 3)."""
         del queryset
-        return settings.BLOG_POSTS_PER_PAGE
+        return settings.QUICKSCALE_BLOG_POSTS_PER_PAGE
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts in the specified category"""
@@ -673,7 +631,7 @@ class TagListView(BlogPublicReadMixin, ListView):
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
         """Return the project's declared posts-per-page value (rule 3)."""
         del queryset
-        return settings.BLOG_POSTS_PER_PAGE
+        return settings.QUICKSCALE_BLOG_POSTS_PER_PAGE
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts with the specified tag"""

@@ -150,12 +150,12 @@ def _analytics_prose(resolved: Mapping[str, Any]) -> list[str]:
 
 
 def _billing_prose(resolved: Mapping[str, Any]) -> list[str]:
-    billing_currency = str(resolved.get("billing_currency") or "").strip()
-    if not billing_currency:
-        billing_currency = _declared_option_default("billing", "billing_currency")
+    currency = str(resolved.get("currency") or "").strip()
+    if not currency:
+        currency = _declared_option_default("billing", "currency")
     return [
         "# Runtime Stripe variables for the backend billing module.",
-        f"# Billing currency from quickscale.yml: {billing_currency}",
+        f"# Billing currency from quickscale.yml: {currency}",
     ]
 
 

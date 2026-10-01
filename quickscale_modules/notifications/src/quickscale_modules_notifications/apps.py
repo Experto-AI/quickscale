@@ -19,15 +19,12 @@ class QuickscaleNotificationsConfig(AppConfig):
     def ready(self) -> None:
         # Late import: checks.py reads the notifications settings snapshot,
         # which touches models, so it must load after the app registry is ready.
-        from quickscale_modules_notifications.checks import (
-            check_runtime_settings,
-            check_vendor_secrets,
-        )
+        from quickscale_modules_notifications.checks import check_vendor_secrets
 
         # Rule 3 first: a missing or invalid declared setting is reported by
         # the generic check before the runtime checks read it.
         register_module_settings_check(self, "notifications")
         register_module_checks(
             self,
-            [check_runtime_settings, check_vendor_secrets],
+            [check_vendor_secrets],
         )

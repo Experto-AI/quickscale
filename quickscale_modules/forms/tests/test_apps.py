@@ -1,8 +1,8 @@
 """Tests for Forms AppConfig startup behavior.
 
 Fail-hard forms settings: ``AppConfig.ready()`` must raise
-``ImproperlyConfigured`` when any of ``FORMS_SUBMISSIONS_API``,
-``FORMS_RATE_LIMIT``, or ``FORMS_SPAM_PROTECTION`` is missing from
+``ImproperlyConfigured`` when any of ``QUICKSCALE_FORMS_API_ENABLED``,
+``QUICKSCALE_FORMS_RATE_LIMIT``, or ``QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED`` is missing from
 Django settings.
 """
 
@@ -35,8 +35,8 @@ def test_app_config_ready_is_safe_to_call() -> None:
 def test_ready_raises_improperly_configured_when_submissions_api_missing(
     settings,
 ) -> None:
-    """Missing FORMS_SUBMISSIONS_API must raise at startup."""
-    del settings.FORMS_SUBMISSIONS_API
+    """Missing QUICKSCALE_FORMS_API_ENABLED must raise at startup."""
+    del settings.QUICKSCALE_FORMS_API_ENABLED
 
     config = QuickscaleFormsConfig(
         "quickscale_modules_forms",
@@ -45,7 +45,7 @@ def test_ready_raises_improperly_configured_when_submissions_api_missing(
 
     with pytest.raises(
         ImproperlyConfigured,
-        match="FORMS_SUBMISSIONS_API",
+        match="QUICKSCALE_FORMS_API_ENABLED",
     ):
         config.ready()
 
@@ -53,8 +53,8 @@ def test_ready_raises_improperly_configured_when_submissions_api_missing(
 def test_ready_raises_improperly_configured_when_rate_limit_missing(
     settings,
 ) -> None:
-    """Missing FORMS_RATE_LIMIT must raise at startup."""
-    del settings.FORMS_RATE_LIMIT
+    """Missing QUICKSCALE_FORMS_RATE_LIMIT must raise at startup."""
+    del settings.QUICKSCALE_FORMS_RATE_LIMIT
 
     config = QuickscaleFormsConfig(
         "quickscale_modules_forms",
@@ -63,7 +63,7 @@ def test_ready_raises_improperly_configured_when_rate_limit_missing(
 
     with pytest.raises(
         ImproperlyConfigured,
-        match="FORMS_RATE_LIMIT",
+        match="QUICKSCALE_FORMS_RATE_LIMIT",
     ):
         config.ready()
 
@@ -71,8 +71,8 @@ def test_ready_raises_improperly_configured_when_rate_limit_missing(
 def test_ready_raises_improperly_configured_when_spam_protection_missing(
     settings,
 ) -> None:
-    """Missing FORMS_SPAM_PROTECTION must raise at startup."""
-    del settings.FORMS_SPAM_PROTECTION
+    """Missing QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED must raise at startup."""
+    del settings.QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED
 
     config = QuickscaleFormsConfig(
         "quickscale_modules_forms",
@@ -81,7 +81,7 @@ def test_ready_raises_improperly_configured_when_spam_protection_missing(
 
     with pytest.raises(
         ImproperlyConfigured,
-        match="FORMS_SPAM_PROTECTION",
+        match="QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED",
     ):
         config.ready()
 
@@ -93,11 +93,11 @@ def test_missing_setting_fails_check_migrate_and_runserver(settings) -> None:
     from django.core.management.base import SystemCheckError
     from django.core.management.commands import migrate, runserver
 
-    del settings.FORMS_RATE_LIMIT
+    del settings.QUICKSCALE_FORMS_RATE_LIMIT
 
-    with pytest.raises(SystemCheckError, match="FORMS_RATE_LIMIT"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_FORMS_RATE_LIMIT"):
         call_command("check")
-    with pytest.raises(SystemCheckError, match="FORMS_RATE_LIMIT"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_FORMS_RATE_LIMIT"):
         migrate.Command().check()
-    with pytest.raises(SystemCheckError, match="FORMS_RATE_LIMIT"):
+    with pytest.raises(SystemCheckError, match="QUICKSCALE_FORMS_RATE_LIMIT"):
         runserver.Command().check()

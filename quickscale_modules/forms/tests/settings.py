@@ -29,11 +29,11 @@ INSTALLED_APPS = [
 ]
 
 # required settings; AppConfig.ready() will fail startup otherwise.
-FORMS_SUBMISSIONS_API = True
-FORMS_RATE_LIMIT = "5/hour"
-FORMS_SPAM_PROTECTION = True
-FORMS_PER_PAGE = 25
-FORMS_DATA_RETENTION_DAYS = 365
+QUICKSCALE_FORMS_API_ENABLED = True
+QUICKSCALE_FORMS_RATE_LIMIT = "5/hour"
+QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED = True
+QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE = 25
+QUICKSCALE_FORMS_RETENTION_DAYS = 365
 
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
