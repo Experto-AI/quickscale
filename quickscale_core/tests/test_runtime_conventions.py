@@ -661,6 +661,94 @@ class TestRegisterModuleSettingsCheck:
         with pytest.raises(ValueError, match="non-empty module name"):
             conventions.register_module_settings_check(self._app_config(), "")
 
+    def test_retired_setting_fails_startup_naming_the_replacement(
+        self, system_check_registry
+    ) -> None:
+        """Rule 6: a retired setting left in the project fails startup."""
+        from django.test import override_settings
+
+        retired = {
+            "LISTINGS_PER_PAGE": (
+                "Legacy setting 'LISTINGS_PER_PAGE' is no longer supported. "
+                "Use 'QUICKSCALE_LISTINGS_PER_PAGE' instead."
+            )
+        }
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+            LISTINGS_PER_PAGE=12,
+        ):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(), "listings", retired_settings=retired
+                )
+
+        message = str(excinfo.value)
+        assert "Legacy setting 'LISTINGS_PER_PAGE' is no longer supported" in message
+        assert "QUICKSCALE_LISTINGS_PER_PAGE" in message
+
+    def test_absent_retired_setting_registers_the_check(
+        self, system_check_registry
+    ) -> None:
+        """A retired setting the project does not define is silent."""
+        from django.test import override_settings
+
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+        ):
+            conventions.register_module_settings_check(
+                self._app_config(),
+                "listings",
+                retired_settings={"LISTINGS_PER_PAGE": "retired"},
+            )
+
+        assert _registered_settings_checks(system_check_registry, self.label)
+
+    def test_retired_setting_fails_startup_without_a_schema(
+        self, system_check_registry
+    ) -> None:
+        """The refusal does not depend on the managed schema being present."""
+        from django.test import override_settings
+
+        retired = {
+            "LISTINGS_PER_PAGE": (
+                "Legacy setting 'LISTINGS_PER_PAGE' is no longer supported. "
+                "Use 'QUICKSCALE_LISTINGS_PER_PAGE' instead."
+            )
+        }
+        with override_settings(MODULE_SETTINGS_SCHEMA=None, LISTINGS_PER_PAGE=12):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(),
+                    "listings",
+                    retired_settings=retired,
+                )
+
+        message = str(excinfo.value)
+        assert "'LISTINGS_PER_PAGE' is no longer supported" in message
+        assert "MODULE_SETTINGS_SCHEMA is missing" in message
+
+    def test_control_malformed_retired_settings_fails_loudly(
+        self, system_check_registry
+    ) -> None:
+        with pytest.raises(ValueError, match="mapping of retired setting names"):
+            conventions.register_module_settings_check(
+                self._app_config(),
+                "listings",
+                retired_settings=["LISTINGS_PER_PAGE"],  # type: ignore[arg-type]
+            )
+        with pytest.raises(ValueError, match="non-empty retired setting names"):
+            conventions.register_module_settings_check(
+                self._app_config(), "listings", retired_settings={"": "retired"}
+            )
+        with pytest.raises(ValueError, match="replacement message"):
+            conventions.register_module_settings_check(
+                self._app_config(),
+                "listings",
+                retired_settings={"LISTINGS_PER_PAGE": ""},
+            )
+
 
 # ===================================================================
 # exception_handler — rule 9

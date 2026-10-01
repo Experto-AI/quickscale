@@ -170,8 +170,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
     check refuses retired settings, each naming the replacement. Generated templates, docs, and
     `.env.example` use only the new names.
-    **Landed:** every renamed option key is refused by name. **Open:** the startup check's
-    retired-setting refusal.
+    **Landed:** every renamed option key is refused by name, and each renamed module's startup
+    check refuses its retired setting names with the replacement named.
   - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
     option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
     notifications' `os.getenv` reads and in-code default variable names go (rule 35).

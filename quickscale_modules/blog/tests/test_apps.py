@@ -74,6 +74,42 @@ def test_ready_raises_improperly_configured_when_media_url_is_trivial(
         config.ready()
 
 
+def test_ready_raises_improperly_configured_when_retired_setting_present(
+    settings: Any,
+) -> None:
+    """Rule 6: a retired blog setting fails startup naming the replacement."""
+    settings.BLOG_POSTS_PER_PAGE = 10
+
+    config = QuickscaleBlogConfig(
+        "quickscale_modules_blog",
+        import_module("quickscale_modules_blog"),
+    )
+
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="QUICKSCALE_BLOG_POSTS_PER_PAGE",
+    ):
+        config.ready()
+
+
+def test_ready_refuses_every_declared_retired_setting(settings: Any) -> None:
+    """Rule 6: every declared retired blog name fails startup."""
+    from quickscale_modules_blog.checks import RETIRED_SETTINGS
+
+    config = QuickscaleBlogConfig(
+        "quickscale_modules_blog",
+        import_module("quickscale_modules_blog"),
+    )
+
+    for retired_name in RETIRED_SETTINGS:
+        setattr(settings, retired_name, "legacy")
+        try:
+            with pytest.raises(ImproperlyConfigured, match=retired_name):
+                config.ready()
+        finally:
+            delattr(settings, retired_name)
+
+
 @pytest.mark.django_db
 def test_missing_rss_setting_fails_check_migrate_and_runserver(settings: Any) -> None:
     """The registered blog check fails check, migrate, and runserver alike."""
