@@ -41,12 +41,22 @@ def _orgs_post_hook(
         }
     )
 
+    if not bool(resolved["enabled"]):
+        # Rule 1 (D3): off keeps the module installed — apps, middleware,
+        # settings, admin, and data — and mounts none of its organization URLs
+        # in either mode.
+        pre_home_url_includes: tuple[tuple[str, str], ...] = ()
+        url_includes: tuple[tuple[str, str], ...] = ()
+    else:
+        pre_home_url_includes = spec.pre_home_url_includes
+        url_includes = spec.url_includes
+
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=("quickscale_modules_orgs.middleware.TenantMiddleware",),
         settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
+        pre_home_url_includes=pre_home_url_includes,
+        url_includes=url_includes,
         managed_files=spec.managed_files,
     )
 
