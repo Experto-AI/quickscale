@@ -94,6 +94,14 @@ reconciliation for the organizations whose subscriptions the deletion cancels, c
 with compensation, provider mutation locking, and provenance detachment through it, so no
 consumer imports billing's services or names its label.
 
+### Plan-feature gate
+
+`require_org_feature(feature_key)` is the published view decorator that answers `402` when the
+request's organization has no active subscription or its plan does not list the feature key. It
+resolves the organization through `quickscale_modules_orgs.permissions.resolve_request_org` and
+reads billing's own active `Subscription` row, so orgs and other consumers do not name a
+higher-layer module.
+
 ### API contract
 
 All billing API routes are flat (`billing/api/...`) and used in both Solo and SaaS modes. The
