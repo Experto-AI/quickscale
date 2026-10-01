@@ -54,7 +54,8 @@
       "sa223-social-page": "Regenerated 2026-09-30 — useApi.ts exports the shared payload-message reader and usePublicSocialSurface.ts uses it to surface the one QuickScale error shape for a non-managed payload; PublicSocialPages.test.tsx pins the message and first-field-message cases. useApi.ts, usePublicSocialSurface.ts, and PublicSocialPages.test.tsx were re-hashed in all three variants.",
       "sa217": "Regenerated 2026-09-30 — the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644.",
       "sa223-forms-error-shape": "Regenerated 2026-09-30 — the theme form client (FormRenderer.tsx) submits through the shared apiRequest client and renders the one QuickScale error shape, useFormSchema.ts surfaces that shape's message for a failed schema fetch, and the new src/test/FormRenderer.test.tsx pins the field-error, non-field-error, shaped-message, and network-failure behavior; csrf.test.tsx's FormRenderer mock now answers a JSON content type. FormRenderer.tsx, useFormSchema.ts, csrf.test.tsx, and FormRenderer.test.tsx were re-hashed in all three variants.",
-      "sa223-orgs-url-mount": "Regenerated 2026-09-30 — the orgs module declares its mount (orgs/) in its manifest, the generated urls.py keeps /orgs/api/ out of both React org shell route patterns (the slug route and the org subpage route) so the module's JSON API reaches Django, and the theme's org API client calls /orgs/api/... instead of /api/orgs/... . testproject/urls.py, frontend/src/hooks/useOrgs.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants."
+      "sa223-orgs-url-mount": "Regenerated 2026-09-30 — the orgs module declares its mount (orgs/) in its manifest, the generated urls.py keeps /orgs/api/ out of both React org shell route patterns (the slug route and the org subpage route) so the module's JSON API reaches Django, and the theme's org API client calls /orgs/api/... instead of /api/orgs/... . testproject/urls.py, frontend/src/hooks/useOrgs.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, and frontend/src/test/csrf.test.tsx were re-hashed in all three variants.",
+      "sa223-billing-url-mount": "Regenerated 2026-10-01 — the billing module declares its mount (billing/) in its manifest and the theme's billing API client calls /billing/api/... instead of /api/billing/... . frontend/src/hooks/useOrgs.ts was re-hashed in all three variants."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -268,7 +269,7 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
-      "sha256": "f61c6e6e42523181a5edeb0b941b650c6e632b4780d829e75230805bf2076aa0"
+      "sha256": "a2f070d1e3495dd99a03300b2908a55954caafc397b0b44d163bb059b159b057"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",
@@ -746,7 +747,7 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
-      "sha256": "f61c6e6e42523181a5edeb0b941b650c6e632b4780d829e75230805bf2076aa0"
+      "sha256": "a2f070d1e3495dd99a03300b2908a55954caafc397b0b44d163bb059b159b057"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",
@@ -1224,7 +1225,7 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "664",
-      "sha256": "f61c6e6e42523181a5edeb0b941b650c6e632b4780d829e75230805bf2076aa0"
+      "sha256": "a2f070d1e3495dd99a03300b2908a55954caafc397b0b44d163bb059b159b057"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "664",

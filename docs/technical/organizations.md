@@ -520,7 +520,7 @@ Path routing (not subdomain). The org slug is part of the org-management surface
 /billing/dashboard/                        # Authenticated billing dashboard
 /billing/pricing/                          # Public pricing
 
-**Note**: The billing module uses flat routes exclusively in both modes (`/billing/dashboard/`, `/billing/pricing/`, `/api/billing/...`). No org-scoped billing URL tree exists — the org is resolved from `request.org` (set by middleware from session or personal-org fallback), not from a URL slug.
+**Note**: The billing module uses flat routes exclusively in both modes (`/billing/dashboard/`, `/billing/pricing/`, `/billing/api/...`). No org-scoped billing URL tree exists — the org is resolved from `request.org` (set by middleware from session or personal-org fallback), not from a URL slug.
 
 **Note**: CRM, blog, forms, listings, and billing all use flat server routes in the shipped contract. The active organization is resolved from `request.org` / the current-org ContextVar, not from a URL slug.
 ```

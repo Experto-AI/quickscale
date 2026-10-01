@@ -126,7 +126,7 @@ def test_checkout_view_returns_json_401_for_anonymous_requests() -> None:
     csrf_client = Client(enforce_csrf_checks=True)
 
     response = csrf_client.post(
-        reverse("quickscale_billing:purchase-checkout"),
+        reverse("quickscale_billing:purchase_checkout"),
         data=json.dumps({"plan_slug": "credits-pack"}),
         content_type="application/json",
     )
@@ -146,7 +146,7 @@ def test_checkout_view_answers_org_selection_and_forbidden_in_one_shape(
 ) -> None:
     """A missing or unauthorized organization context answers the one shape."""
     client.force_login(user)
-    route = reverse("quickscale_billing:purchase-checkout")
+    route = reverse("quickscale_billing:purchase_checkout")
 
     monkeypatch.setattr(
         billing_views,
@@ -202,7 +202,7 @@ def test_checkout_view_answers_disabled_runtime_with_module_off_404(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:purchase-checkout"),
+        reverse("quickscale_billing:purchase_checkout"),
         data=json.dumps({"plan_slug": "credits-pack"}),
         content_type="application/json",
     )
@@ -233,7 +233,7 @@ def test_checkout_view_answers_provider_failure_as_server_error(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:purchase-checkout"),
+        reverse("quickscale_billing:purchase_checkout"),
         data=json.dumps({"plan_slug": "credits-pack"}),
         content_type="application/json",
     )
@@ -251,7 +251,7 @@ def test_subscription_checkout_view_returns_json_401_for_anonymous_requests() ->
     csrf_client = Client(enforce_csrf_checks=True)
 
     response = csrf_client.post(
-        reverse("quickscale_billing:subscription-checkout"),
+        reverse("quickscale_billing:subscription_checkout"),
         data=json.dumps({"plan_slug": "starter-monthly"}),
         content_type="application/json",
     )
@@ -283,7 +283,7 @@ def test_cancel_subscription_view_returns_json_401_for_anonymous_requests(
     )
 
     response = csrf_client.post(
-        reverse("quickscale_billing:subscription-cancel-current"),
+        reverse("quickscale_billing:subscription_cancel_current"),
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -318,7 +318,7 @@ def test_billing_portal_session_view_returns_json_401_for_anonymous_requests(
     )
 
     response = csrf_client.post(
-        reverse("quickscale_billing:billing-portal-session"),
+        reverse("quickscale_billing:portal_session"),
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -333,10 +333,10 @@ def test_billing_portal_session_view_returns_json_401_for_anonymous_requests(
 @pytest.mark.parametrize(
     "route_name",
     [
-        "billing-config",
-        "credit-balance",
-        "credit-transactions",
-        "subscription-detail",
+        "config",
+        "credit_balance",
+        "credit_transactions",
+        "subscription_detail",
     ],
 )
 def test_billing_read_views_return_json_401_for_anonymous_requests(
@@ -376,7 +376,7 @@ def test_plan_list_view_is_public_and_returns_only_active_recurring_plans(
         name="Starter Inactive",
     )
 
-    response = client.get(reverse("quickscale_billing:subscription-plans"))
+    response = client.get(reverse("quickscale_billing:subscription_plans"))
 
     assert response.status_code == 200
     assert response.json() == [
@@ -402,7 +402,7 @@ def test_plan_list_view_is_public_and_returns_only_active_recurring_plans(
 def test_billing_dashboard_view_redirects_anonymous_users_to_login(
     client: Client,
 ) -> None:
-    dashboard_url = reverse("quickscale_billing:billing-dashboard")
+    dashboard_url = reverse("quickscale_billing:dashboard")
 
     response = client.get(dashboard_url)
 
@@ -500,7 +500,7 @@ def test_pricing_page_view_is_public_and_render(client: Client) -> None:
         price_cents=9900,
     )
 
-    response = client.get(reverse("quickscale_billing:pricing-page"))
+    response = client.get(reverse("quickscale_billing:pricing_page"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
@@ -532,7 +532,7 @@ def test_pricing_page_view_shows_dashboard_cta_for_authenticated_users(
     )
     client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:pricing-page"))
+    response = client.get(reverse("quickscale_billing:pricing_page"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
@@ -575,7 +575,7 @@ def test_pricing_page_view_formats_supported_zero_decimal_currency_without_fract
         currency="jpy",
     )
 
-    response = client.get(reverse("quickscale_billing:pricing-page"))
+    response = client.get(reverse("quickscale_billing:pricing_page"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
@@ -588,7 +588,7 @@ def test_pricing_page_view_formats_supported_zero_decimal_currency_without_fract
 def test_pricing_page_view_renders_empty_state_when_no_active_plans(
     client: Client,
 ) -> None:
-    response = client.get(reverse("quickscale_billing:pricing-page"))
+    response = client.get(reverse("quickscale_billing:pricing_page"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
@@ -607,7 +607,7 @@ def test_billing_config_view_returns_publishable_key_without_secret_key(
     monkeypatch.setenv("PHASE_6A_PUBLISHABLE_KEY", "pk_test_phase_6a")
     monkeypatch.setenv("PHASE_6A_SECRET_KEY", "sk_test_phase_6a")
 
-    request = RequestFactory().get("/api/billing/config/")
+    request = RequestFactory().get("/billing/api/config/")
     request.user = user
     request.org = organization
 
@@ -640,7 +640,7 @@ def test_billing_config_view_returns_500_for_missing_or_blank_publishable_key(
     else:
         monkeypatch.setenv("PHASE_6A_PUBLISHABLE_KEY", publishable_key_value)
 
-    request = RequestFactory().get("/api/billing/config/")
+    request = RequestFactory().get("/billing/api/config/")
     request.user = user
     request.org = organization
 
@@ -662,7 +662,7 @@ def test_checkout_view_missing_csrf_returns_403(user, mock_org_resolution) -> No
     csrf_client.force_login(user)
 
     response = csrf_client.post(
-        reverse("quickscale_billing:purchase-checkout"),
+        reverse("quickscale_billing:purchase_checkout"),
         data=json.dumps({"plan_slug": "credits-pack"}),
         content_type="application/json",
     )
@@ -677,7 +677,7 @@ def test_subscription_checkout_view_missing_csrf_returns_403(
     csrf_client.force_login(user)
 
     response = csrf_client.post(
-        reverse("quickscale_billing:subscription-checkout"),
+        reverse("quickscale_billing:subscription_checkout"),
         data=json.dumps({"plan_slug": "starter-monthly"}),
         content_type="application/json",
     )
@@ -709,7 +709,7 @@ def test_cancel_subscription_view_missing_csrf_returns_403_without_calling_servi
     )
 
     response = csrf_client.post(
-        reverse("quickscale_billing:subscription-cancel-current"),
+        reverse("quickscale_billing:subscription_cancel_current"),
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -744,7 +744,7 @@ def test_billing_portal_session_view_missing_csrf_returns_403_without_calling_se
     )
 
     response = csrf_client.post(
-        reverse("quickscale_billing:billing-portal-session"),
+        reverse("quickscale_billing:portal_session"),
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -763,7 +763,7 @@ def test_credit_balance_view_returns_zero_without_creating_balance(
 ) -> None:
     client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:credit-balance"))
+    response = client.get(reverse("quickscale_billing:credit_balance"))
 
     assert response.status_code == 200
     assert response.json()["balance"] == 0
@@ -793,7 +793,7 @@ def test_credit_balance_view_returns_only_authenticated_users_balance(
         )
     client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:credit-balance"))
+    response = client.get(reverse("quickscale_billing:credit_balance"))
 
     assert response.status_code == 200
     assert response.json()["balance"] == 125
@@ -809,7 +809,7 @@ def test_checkout_view_rejects_caller_supplied_redirect_fields(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:purchase-checkout"),
+        reverse("quickscale_billing:purchase_checkout"),
         data=json.dumps(
             {
                 "plan_slug": plan.slug,
@@ -843,7 +843,7 @@ def test_subscription_checkout_view_rejects_caller_supplied_redirect_fields(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:subscription-checkout"),
+        reverse("quickscale_billing:subscription_checkout"),
         data=json.dumps(
             {
                 "plan_slug": plan.slug,
@@ -892,7 +892,7 @@ def test_cancel_subscription_view_rejects_caller_supplied_return_url_without_cal
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:subscription-cancel-current"),
+        reverse("quickscale_billing:subscription_cancel_current"),
         data=json.dumps({"return_url": "https://app.example.com/custom/return"}),
         content_type="application/json",
     )
@@ -937,7 +937,7 @@ def test_billing_portal_session_view_rejects_caller_supplied_return_url_without_
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:billing-portal-session"),
+        reverse("quickscale_billing:portal_session"),
         data=json.dumps({"return_url": "https://app.example.com/custom/return"}),
         content_type="application/json",
     )
@@ -987,7 +987,7 @@ def test_credit_transactions_view_returns_only_authenticated_users_transactions(
         )
     client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:credit-transactions"))
+    response = client.get(reverse("quickscale_billing:credit_transactions"))
 
     assert response.status_code == 200
     assert response.json() == [
@@ -1023,11 +1023,11 @@ def test_credit_transactions_view_uses_fixed_page_size_without_client_override(
     client.force_login(user)
 
     first_page_response = client.get(
-        reverse("quickscale_billing:credit-transactions"),
+        reverse("quickscale_billing:credit_transactions"),
         {"page_size": 5},
     )
     second_page_response = client.get(
-        reverse("quickscale_billing:credit-transactions"),
+        reverse("quickscale_billing:credit_transactions"),
         {"page": 2, "page_size": 5},
     )
 
@@ -1066,9 +1066,9 @@ def test_credit_transactions_view_breaks_same_timestamp_ties_by_descending_id(
     )
     client.force_login(user)
 
-    first_page_response = client.get(reverse("quickscale_billing:credit-transactions"))
+    first_page_response = client.get(reverse("quickscale_billing:credit_transactions"))
     second_page_response = client.get(
-        reverse("quickscale_billing:credit-transactions"),
+        reverse("quickscale_billing:credit_transactions"),
         {"page": 2},
     )
 
@@ -1110,7 +1110,7 @@ def test_checkout_view_creates_session_with_server_owned_redirect_urls(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:purchase-checkout"),
+        reverse("quickscale_billing:purchase_checkout"),
         data=json.dumps({"plan_slug": plan.slug}),
         content_type="application/json",
     )
@@ -1208,7 +1208,7 @@ def test_subscription_checkout_view_creates_session_with_server_owned_redirect_u
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:subscription-checkout"),
+        reverse("quickscale_billing:subscription_checkout"),
         data=json.dumps({"plan_slug": plan.slug}),
         content_type="application/json",
     )
@@ -1266,7 +1266,7 @@ def test_subscription_checkout_view_blocks_while_current_subscription_exists(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:subscription-checkout"),
+        reverse("quickscale_billing:subscription_checkout"),
         data=json.dumps({"plan_slug": plan.slug}),
         content_type="application/json",
     )
@@ -1307,7 +1307,7 @@ def test_cancel_subscription_view_returns_204_and_calls_service(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:subscription-cancel-current"),
+        reverse("quickscale_billing:subscription_cancel_current"),
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -1367,7 +1367,7 @@ def test_cancel_subscription_view_preserves_concurrent_provider_replacement(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:subscription-cancel-current"),
+        reverse("quickscale_billing:subscription_cancel_current"),
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -1407,7 +1407,7 @@ def test_billing_portal_session_view_returns_server_owned_return_url(
     client.force_login(user)
 
     response = client.post(
-        reverse("quickscale_billing:billing-portal-session"),
+        reverse("quickscale_billing:portal_session"),
         data=json.dumps({}),
         content_type="application/json",
     )
@@ -1442,7 +1442,7 @@ def test_subscription_detail_view_returns_current_subscription(
     )
     client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:subscription-detail"))
+    response = client.get(reverse("quickscale_billing:subscription_detail"))
 
     assert response.status_code == 200
     assert response.json() == {
@@ -1478,7 +1478,7 @@ def test_subscription_detail_view_returns_404_when_current_subscription_is_missi
     )
     client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:subscription-detail"))
+    response = client.get(reverse("quickscale_billing:subscription_detail"))
 
     assert response.status_code == 404
     assert response.json() == {
@@ -1508,7 +1508,7 @@ def test_webhook_view_passes_raw_body_and_signature_header(
     body = b'{"id":"evt_view"}'
 
     response = client.post(
-        reverse("quickscale_billing:stripe-webhook"),
+        reverse("quickscale_billing:stripe_webhook"),
         data=body,
         content_type="application/json",
         HTTP_STRIPE_SIGNATURE="t=1,v1=view-signature",
@@ -1525,8 +1525,8 @@ def test_webhook_view_passes_raw_body_and_signature_header(
 @pytest.mark.parametrize(
     ("route_name", "expected_text", "expected_purchase_status"),
     [
-        ("purchase-success", "Purchase complete", "success"),
-        ("purchase-cancel", "Purchase canceled", "cancel"),
+        ("purchase_success", "Purchase complete", "success"),
+        ("purchase_cancel", "Purchase canceled", "cancel"),
     ],
 )
 def test_purchase_return_views_are_public_and_render(
@@ -1553,8 +1553,18 @@ def test_purchase_return_views_are_public_and_render(
         "expected_primary_action",
     ),
     [
-        ("subscription-success", "Subscription started", "success", "Go to dashboard"),
-        ("subscription-cancel", "Subscription not started", "cancel", "View plans"),
+        (
+            "subscription_success",
+            "Subscription started",
+            "success",
+            "Go to dashboard",
+        ),
+        (
+            "subscription_cancel",
+            "Subscription not started",
+            "cancel",
+            "View plans",
+        ),
     ],
 )
 def test_subscription_return_views_are_public_and_render(
@@ -1577,7 +1587,7 @@ def test_subscription_return_views_are_public_and_render(
 
 
 def test_billing_portal_return_view_is_public_and_render(client: Client) -> None:
-    response = client.get(reverse("quickscale_billing:portal-return"))
+    response = client.get(reverse("quickscale_billing:portal_return"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
@@ -1617,7 +1627,7 @@ def test_webhook_view_maps_signature_errors_to_400(
     )
 
     response = client.post(
-        reverse("quickscale_billing:stripe-webhook"),
+        reverse("quickscale_billing:stripe_webhook"),
         data=b"{}",
         content_type="application/json",
         HTTP_STRIPE_SIGNATURE="t=1,v1=invalid",
@@ -1644,7 +1654,7 @@ def test_webhook_view_maps_disabled_runtime_to_404(
     )
 
     response = client.post(
-        reverse("quickscale_billing:stripe-webhook"),
+        reverse("quickscale_billing:stripe_webhook"),
         data=b"{}",
         content_type="application/json",
         HTTP_STRIPE_SIGNATURE="t=1,v1=disabled",
@@ -1671,7 +1681,7 @@ def test_webhook_view_maps_processing_errors_to_400(
     )
 
     response = client.post(
-        reverse("quickscale_billing:stripe-webhook"),
+        reverse("quickscale_billing:stripe_webhook"),
         data=b"{}",
         content_type="application/json",
         HTTP_STRIPE_SIGNATURE="t=1,v1=broken",
@@ -1700,7 +1710,7 @@ def test_webhook_view_maps_configuration_errors_to_500(
     )
 
     response = client.post(
-        reverse("quickscale_billing:stripe-webhook"),
+        reverse("quickscale_billing:stripe_webhook"),
         data=b"{}",
         content_type="application/json",
         HTTP_STRIPE_SIGNATURE="t=1,v1=config",
@@ -1766,7 +1776,7 @@ class TestBillingDrfDefaultCallerParity:
             is_active=True,
         )
 
-        response = client.get(reverse("quickscale_billing:subscription-plans"))
+        response = client.get(reverse("quickscale_billing:subscription_plans"))
 
         assert response.status_code == 200
         assert len(response.json()) == 2
@@ -1776,12 +1786,12 @@ class TestBillingDrfDefaultCallerParity:
     @pytest.mark.parametrize(
         "route_name",
         [
-            "pricing-page",
-            "purchase-success",
-            "purchase-cancel",
-            "subscription-success",
-            "subscription-cancel",
-            "portal-return",
+            "pricing_page",
+            "purchase_success",
+            "purchase_cancel",
+            "subscription_success",
+            "subscription_cancel",
+            "portal_return",
         ],
     )
     def test_public_template_views_remain_public_under_drf_default(
@@ -1798,10 +1808,10 @@ class TestBillingDrfDefaultCallerParity:
     @pytest.mark.parametrize(
         "route_name",
         [
-            "billing-config",
-            "credit-balance",
-            "credit-transactions",
-            "subscription-detail",
+            "config",
+            "credit_balance",
+            "credit_transactions",
+            "subscription_detail",
         ],
     )
     def test_auth_handling_views_still_return_custom_401_for_anonymous(
