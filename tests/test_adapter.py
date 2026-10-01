@@ -56,7 +56,7 @@ def test_post_hook_coerces_and_adds_static_settings() -> None:
                 "QUICKSCALE_BLOG_API_RATE_LIMIT": " 5/hour ",
             }
         ),
-        {},
+        {"enabled": True},
     )
     assert result.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
     assert result.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
@@ -65,6 +65,36 @@ def test_post_hook_coerces_and_adds_static_settings() -> None:
         "DEFAULT_THROTTLE_RATES": {"quickscale_blog_api": "5/hour"}
     }
     assert result.settings["MARKDOWNX_MEDIA_PATH"] == "blog/markdownx/"
+
+
+def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
+    """Rule 1 (D3): off keeps the app and settings but mounts no URLs."""
+    result = _blog_post_hook(
+        ModuleWiringSpec(
+            apps=("rest_framework", "markdownx", "quickscale_modules_blog"),
+            settings={
+                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
+                "QUICKSCALE_BLOG_RSS_ENABLED": True,
+                "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
+            },
+            pre_home_url_includes=(),
+            url_includes=(
+                ("blog/", "quickscale_modules_blog.urls"),
+                ("markdownx/", "quickscale_modules_blog.markdownx_urls"),
+            ),
+        ),
+        {"enabled": False},
+    )
+    # The retained admin editor keeps its staff-guarded endpoint mount; the
+    # module's own public mount is gone.
+    assert result.url_includes == (
+        ("markdownx/", "quickscale_modules_blog.markdownx_urls"),
+    )
+    assert ("markdownx/", "markdownx.urls") not in result.url_includes
+    assert ("blog/", "quickscale_modules_blog.urls") not in result.url_includes
+    assert result.pre_home_url_includes == ()
+    assert result.apps == ("rest_framework", "markdownx", "quickscale_modules_blog")
+    assert result.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
 
 
 @patch("quickscale_modules_blog.adapter.build_generic_manifest_spec")

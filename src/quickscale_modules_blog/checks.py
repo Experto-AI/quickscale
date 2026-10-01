@@ -61,6 +61,11 @@ def check_media_url(
     """Fail startup when ``MEDIA_URL`` is not explicitly configured."""
     messages: list[CheckMessage] = []
 
+    if not bool(settings.QUICKSCALE_BLOG_ENABLED):
+        # Rule 1 (D3): a module switched off serves no media surfaces, so its
+        # MEDIA_URL requirement does not apply while it is off.
+        return messages
+
     # -- MEDIA_URL must be explicitly configured (no fallback to '/media/') --
     # Note: Django always defines MEDIA_URL (default "") and normalizes
     # empty values to "/", so we reject that trivial sentinel.
