@@ -7,6 +7,13 @@ description: "Generic listings module for marketplace-style products"
 
 config:
   mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_LISTINGS_ENABLED
+      description: "Enable the listings module. Off keeps the module installed with its data intact and mounts none of its public URLs."
+      validation: {}
+
     per_page:
       type: integer
       default: 12
@@ -53,8 +60,8 @@ derivation:
           - - listings/
             - quickscale_modules_listings.urls
           - - markdownx/
-            - markdownx.urls
-      description: "Listings URL includes"
+            - quickscale_modules_listings.markdownx_urls
+      description: "Listings URL includes; the Markdownx editor mount is staff-guarded"
 
   option_derivations:
     per_page:

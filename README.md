@@ -23,6 +23,7 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
+| `enabled` | boolean | `true` | `QUICKSCALE_LISTINGS_ENABLED` | Mount the module's pages and API. Off keeps the app, its data, and the admin Markdownx editor (behind a staff check) but serves none of the module's own public URLs. |
 | `per_page` | integer | `12` | `QUICKSCALE_LISTINGS_PER_PAGE` | Number of listings per page. |
 
 ## Public surface
