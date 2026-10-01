@@ -18,4 +18,6 @@ class QuickscaleFormsConfig(AppConfig):
     verbose_name = "QuickScale Forms"
 
     def ready(self) -> None:
-        register_module_settings_check(self, "forms")
+        from quickscale_modules_forms.checks import RETIRED_SETTINGS
+
+        register_module_settings_check(self, "forms", retired_settings=RETIRED_SETTINGS)

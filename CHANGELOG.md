@@ -298,6 +298,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **The DR engine asks backups for its policy.** The active backup policy snapshot is built
     from backups' own settings and supplied through the registered backup-persistence seam, so
     core's DR engine holds no backups setting and each module owns its configuration.
+  - **The plan-feature gate is published by billing.** `require_org_feature` moves from
+    `quickscale_modules_orgs.permissions` to `quickscale_modules_billing.services`, where it
+    reads billing's own active subscription, and orgs publishes `resolve_request_org` for the
+    request-organization lookup the gate reuses.
   - **Module settings follow one naming family.** The blog, CRM, forms, and listings settings are
     renamed to `QUICKSCALE_<MODULE>_<NAME>` (for example `QUICKSCALE_BLOG_RSS_ENABLED`,
     `QUICKSCALE_FORMS_RETENTION_DAYS`), blog's upload limits are declared manifest options,
@@ -309,6 +313,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **One email sender and module-owned analytics events.** Forms requires notifications and sends
     through `send_notification` only, and analytics publishes just `capture_event`; forms emits
     `quickscale_forms_submitted` (renamed from `form_submit`) for dashboards.
+  - **Retired module setting names fail startup.** A module declares the setting names its renames
+    retired, and the startup settings check refuses a project that still defines one, naming the
+    replacement instead of leaving the old value silently unused.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

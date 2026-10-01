@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone as dt_timezone
+from functools import wraps
 import hashlib
 from importlib import import_module
 import json
@@ -17,6 +18,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.db.models import F, Q
+from django.http import HttpRequest, HttpResponse
 from django.utils import timezone
 
 from quickscale_modules_orgs.current_org import org_scope
@@ -4308,6 +4310,67 @@ def _resolve_organization_by_customer_id(customer_id: str) -> Any | None:
     return subscription.organization
 
 
+def require_org_feature(feature_key: str) -> Callable:
+    """Return a view decorator answering 402 when the org's plan lacks the feature.
+
+    Module Conventions rule 34 publishes the plan-feature gate here: the
+    request's organization is resolved through orgs' published
+    ``resolve_request_org`` and the entitlement is read from billing's own
+    active subscription, so no lower-layer module names billing.
+    """
+    from quickscale_modules_orgs.current_org import (
+        CurrentOrgError,
+        require_current_org,
+    )
+    from quickscale_modules_orgs.permissions import resolve_request_org
+
+    def decorator(view_func: Callable) -> Callable:
+        @wraps(view_func)
+        def wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+            user = getattr(request, "user", None)
+            if not bool(user is not None and getattr(user, "is_authenticated", False)):
+                return HttpResponse(status=402)
+
+            resolve_request_org(request, kwargs)
+            try:
+                organization = require_current_org(request)
+            except CurrentOrgError:
+                return HttpResponse(status=402)
+
+            subscription = _get_active_org_subscription(organization)
+            plan = getattr(subscription, "plan", None)
+            features = getattr(plan, "features", None)
+            if subscription is None or plan is None:
+                return HttpResponse(status=402)
+            if (
+                not isinstance(features, (list, tuple, set))
+                or feature_key not in features
+            ):
+                return HttpResponse(status=402)
+            return cast(HttpResponse, view_func(request, *args, **kwargs))
+
+        return wrapped
+
+    return decorator
+
+
+def _get_active_org_subscription(organization: Any) -> Subscription | None:
+    """Return the organization's active subscription, if any.
+
+    ``all_objects`` bypasses the tenant manager's contextvar filter because
+    the query already filters by the explicit organization; the contextvar
+    scoping breaks for slug-resolved views that do not run full middleware.
+    """
+    return (
+        Subscription.all_objects.select_related("plan")
+        .filter(
+            organization=organization,
+            status=Subscription.Status.ACTIVE,
+        )
+        .first()
+    )
+
+
 __all__ = [
     "account_deletion_user_reference_organization_ids",
     "cancel_current_subscription",
@@ -4337,5 +4400,6 @@ __all__ = [
     "reconcile_account_deletion_subscription_checkout",
     "reconcile_organization_removal_subscription_checkout",
     "reconcile_purchase_checkouts_for_removal",
+    "require_org_feature",
     "subscription_provider_mutation_lock",
 ]

@@ -169,8 +169,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - *No legacy.* `apply` refuses retired option keys in `quickscale.yml` and state, and the startup
     check refuses retired settings, each naming the replacement. Generated templates, docs, and
     `.env.example` use only the new names.
-    **Landed:** every renamed option key is refused by name. **Open:** the startup check's
-    retired-setting refusal.
+    **Landed:** every renamed option key is refused by name, and each renamed module's startup
+    check refuses its retired setting names with the replacement named.
   - *Secrets.* Every secret reaches module code as a setting `apply` renders from its `_ENV_VAR`
     option (core's `__QS_ENV__` projection, as storage does); analytics', billing's, and
     notifications' `os.getenv` reads and in-code default variable names go (rule 35).
@@ -193,18 +193,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA228 — Break import cycles and cross-module settings reads; give every `services.py` its public surface.**
 
-  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. Modules reading
-  other modules' settings, core reading `backups` settings, and orgs naming feature modules by
-  string.
+  **Context:** inventory §§ 5, 25, 36; D5, D6, D26, D37; rules 4, 5, 23, and 34. orgs still names
+  feature modules by string in its purge path and boundary table, and several modules have no
+  declared service surface.
 
   **Scope:**
-  - *References by name* (rule 34). orgs' `require_org_feature` moves to billing's published
-    surface; the purge command's billing steps and `removal.BOUNDARY_GUARDED_OBLIGATIONS` become
-    billing's removal declarations, and its blog and crm label prefixes come from those modules'
-    declarations; orgs' `checks.py`
-    boundary table is declared by each boundary's owner (auth declares account deletion);
-    `TENANT_TABLE_REGISTRY` moves into test code. `require_org_feature` is public, so its move is a
-    release-note item.
+  - *References by name* (rule 34). the purge command's billing steps and
+    `removal.BOUNDARY_GUARDED_OBLIGATIONS` become billing's removal declarations, and its blog and
+    crm label prefixes come from those modules' declarations; orgs' `checks.py` boundary table is
+    declared by each boundary's owner (auth declares account deletion); `TENANT_TABLE_REGISTRY`
+    moves into test code.
   - *Service surface.* Every module gains `services.py`; every `services.py` gains `__all__`,
     keyword-only signatures, and `<Module>Error` on failure, with `test_services.py`.
 

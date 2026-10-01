@@ -178,6 +178,11 @@ publishes only the generic `capture_event`. Forms also stops sending its own fal
 notifications is a required module for forms, and every module email goes through its
 `send_notification` service after the triggering write commits.
 
+**Moved Python surface.** `require_org_feature` moves from `quickscale_modules_orgs.permissions`
+to `quickscale_modules_billing.services`; project code that imports the decorator updates its
+import path. `quickscale_modules_orgs.permissions.resolve_request_org` is the public name of the
+request-organization resolver the gate uses, replacing the private `_resolve_request_org`.
+
 ## Delivery provenance
 
 The SA195/SA192 delivery was synchronized with `v89` at
