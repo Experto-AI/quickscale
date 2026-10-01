@@ -32,13 +32,13 @@ from quickscale_modules_orgs.current_org import (
 )
 from quickscale_modules_orgs.managers import TenantManager
 from quickscale_modules_orgs.tenancy import (
-    TENANT_TABLE_REGISTRY,
     TenantTableStatus,
     _force_rls_policy_mismatches,
     apply_force_rls,
     get_tenant_models,
     table_has_force_rls,
 )
+from tests._tenant_table_registry import TENANT_TABLE_REGISTRY
 
 # ---------------------------------------------------------------------------
 # Which app labels fall under conformance-gate coverage?
@@ -138,8 +138,8 @@ def test_registry_covers_all_concrete_qs_models() -> None:
     exactly once.
 
     This is the primary coverage assertion: adding, renaming, or removing
-    a model without updating ``TENANT_TABLE_REGISTRY`` here will fail
-    the build.
+    a model without updating the test-owned ``TENANT_TABLE_REGISTRY``
+    (``tests/_tenant_table_registry.py``) will fail the build.
     """
     concrete = _concrete_qs_models()
     # Build a set of (app_label, model_name) from the registry.

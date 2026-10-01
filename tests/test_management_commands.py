@@ -2634,10 +2634,8 @@ def _expected_tenant_model_keys() -> set[tuple[str, str]]:
     """Bind command expectations to shipped entries plus the project fixtures."""
     from django.apps import apps
 
-    from quickscale_modules_orgs.tenancy import (
-        TENANT_TABLE_REGISTRY,
-        TenantTableStatus,
-    )
+    from quickscale_modules_orgs.tenancy import TenantTableStatus
+    from tests._tenant_table_registry import TENANT_TABLE_REGISTRY
 
     project_models = {
         (model._meta.app_label, model.__name__)
@@ -2904,10 +2902,10 @@ def test_check_tenant_isolation_detects_all_enrolled_models() -> None:
     entries.  EXCLUDED_REVIEWED and abstract models should not be detected.
     """
     from quickscale_modules_orgs.tenancy import (
-        TENANT_TABLE_REGISTRY,
         TenantTableStatus,
         get_tenant_models,
     )
+    from tests._tenant_table_registry import TENANT_TABLE_REGISTRY
 
     enrolled = {
         (e.app_label, e.model_name)
