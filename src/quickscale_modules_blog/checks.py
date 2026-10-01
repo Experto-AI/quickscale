@@ -12,8 +12,46 @@ module's declared options are validated by the generic settings check
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
+
+#: Retired setting names refused at startup, each naming its replacement
+#: (rule 6).  The declaration lives here, with the module's other checks,
+#: because the refusal must work before the project is re-applied: the
+#: settings a previous release wrote are exactly the ones still carrying
+#: these names.
+RETIRED_SETTINGS: Mapping[str, str] = {
+    "BLOG_API_ALLOWED_IMAGE_FORMATS": (
+        "Legacy setting 'BLOG_API_ALLOWED_IMAGE_FORMATS' is no longer supported. "
+        "Use 'QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS' instead."
+    ),
+    "BLOG_API_RATE_LIMIT": (
+        "Legacy setting 'BLOG_API_RATE_LIMIT' is no longer supported. "
+        "Use 'QUICKSCALE_BLOG_API_RATE_LIMIT' instead."
+    ),
+    "BLOG_API_UPLOAD_MAX_BYTES": (
+        "Legacy setting 'BLOG_API_UPLOAD_MAX_BYTES' is no longer supported. "
+        "Use 'QUICKSCALE_BLOG_API_UPLOAD_MAX_BYTES' instead."
+    ),
+    "BLOG_API_UPLOAD_MAX_HEIGHT": (
+        "Legacy setting 'BLOG_API_UPLOAD_MAX_HEIGHT' is no longer supported. "
+        "Use 'QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT' instead."
+    ),
+    "BLOG_API_UPLOAD_MAX_WIDTH": (
+        "Legacy setting 'BLOG_API_UPLOAD_MAX_WIDTH' is no longer supported. "
+        "Use 'QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH' instead."
+    ),
+    "BLOG_ENABLE_RSS": (
+        "Legacy setting 'BLOG_ENABLE_RSS' is no longer supported. "
+        "Use 'QUICKSCALE_BLOG_RSS_ENABLED' instead."
+    ),
+    "BLOG_POSTS_PER_PAGE": (
+        "Legacy setting 'BLOG_POSTS_PER_PAGE' is no longer supported. "
+        "Use 'QUICKSCALE_BLOG_POSTS_PER_PAGE' instead."
+    ),
+}
 
 
 def check_media_url(
