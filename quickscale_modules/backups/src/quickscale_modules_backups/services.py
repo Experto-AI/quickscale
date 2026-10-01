@@ -51,7 +51,6 @@ from quickscale_core.runtime import (  # noqa: F401
     _build_pg_dump_command,
     _build_pg_restore_command,
     _build_policy_snapshot_from_model,
-    _build_policy_snapshot_from_settings,
     _build_release_metadata,
     _build_snapshot_child_descriptor,
     _build_snapshot_full_backup_contract,
@@ -127,6 +126,7 @@ from quickscale_core.runtime import (  # noqa: F401
     validate_backup_artifact,
 )
 
+from django.conf import settings
 from django.utils import timezone as django_timezone
 
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
@@ -206,6 +206,33 @@ def validate_policy_snapshot(policy: BackupPolicySnapshot) -> list[str]:
     Delegates to the engine-owned validation core.
     """
     return cast(list[str], _validate_policy_snapshot_internal(policy))
+
+
+def _build_policy_snapshot_from_settings() -> BackupPolicySnapshot:
+    """Build the active policy snapshot from backups' own declared settings.
+
+    Rule 3: these values belong to backups and are read only here; the DR
+    engine obtains this snapshot through the policy provider registered in
+    ``AppConfig.ready()`` rather than naming a backups setting itself.
+    """
+    return BackupPolicySnapshot(
+        retention_days=int(settings.QUICKSCALE_BACKUPS_RETENTION_DAYS),
+        naming_prefix=str(settings.QUICKSCALE_BACKUPS_NAMING_PREFIX),
+        target_mode=str(settings.QUICKSCALE_BACKUPS_TARGET_MODE),
+        local_directory=str(settings.QUICKSCALE_BACKUPS_LOCAL_DIRECTORY),
+        remote_bucket_name=str(settings.QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME),
+        remote_prefix=str(settings.QUICKSCALE_BACKUPS_REMOTE_PREFIX),
+        remote_endpoint_url=str(settings.QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL),
+        remote_region_name=str(settings.QUICKSCALE_BACKUPS_REMOTE_REGION_NAME),
+        remote_access_key_id_env_var=str(
+            settings.QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+        ),
+        remote_secret_access_key_env_var=str(
+            settings.QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
+        ),
+        automation_enabled=bool(settings.QUICKSCALE_BACKUPS_AUTOMATION_ENABLED),
+        schedule=str(settings.QUICKSCALE_BACKUPS_SCHEDULE),
+    )
 
 
 # ---------------------------------------------------------------------------

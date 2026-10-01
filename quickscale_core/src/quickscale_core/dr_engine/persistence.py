@@ -47,6 +47,7 @@ __all__ = [
     "save_artifact",
     "save_default_policy",
     "save_snapshot",
+    "settings_policy_snapshot",
     "update_artifact_after_restore",
 ]
 
@@ -217,6 +218,15 @@ class BackupPolicyPersistence(Protocol):
     """
 
     def load_default_policy(self) -> BackupPolicySnapshot: ...
+
+    def settings_policy_snapshot(self) -> BackupPolicySnapshot:
+        """Return the active policy snapshot built from the module's own settings.
+
+        The module's managed settings are authoritative over any persisted
+        policy row, so the engine asks the provider for this snapshot instead
+        of reading the module's settings by name itself.
+        """
+        ...
 
     def save_default_policy(self, policy: BackupPolicySnapshot) -> None: ...
 
@@ -399,6 +409,17 @@ def load_default_policy() -> BackupPolicySnapshot:
 
     persistence = _get_policy_persistence()
     return persistence.load_default_policy()
+
+
+def settings_policy_snapshot() -> BackupPolicySnapshot:
+    """Load the active policy snapshot from the module's own settings.
+
+    The provider owns reading the module's settings, so core names none of
+    them; the managed settings are authoritative over any persisted row.
+    """
+
+    persistence = _get_policy_persistence()
+    return persistence.settings_policy_snapshot()
 
 
 def save_default_policy(policy: BackupPolicySnapshot) -> None:

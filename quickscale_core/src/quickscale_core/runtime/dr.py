@@ -34,7 +34,6 @@ from quickscale_core.dr_engine.orchestration import (  # noqa: F401
     _build_env_var_manifest,
     _build_media_sync_manifest,
     _build_policy_snapshot_from_model,
-    _build_policy_snapshot_from_settings,
     _build_release_metadata,
     _build_snapshot_full_backup_contract,
     _build_snapshot_local_root,
@@ -167,6 +166,7 @@ from quickscale_core.dr_engine.persistence import (  # noqa: F401
     save_artifact,
     save_default_policy,
     save_snapshot,
+    settings_policy_snapshot,
     update_artifact_after_restore,
 )
 
@@ -252,6 +252,7 @@ __all__ = [
     "save_artifact",
     "save_default_policy",
     "save_snapshot",
+    "settings_policy_snapshot",
     "update_artifact_after_restore",
 ]
 
