@@ -21,11 +21,11 @@ import pytest
 from django.core.exceptions import ImproperlyConfigured
 
 from quickscale_modules_orgs.tenancy import (
-    TENANT_TABLE_REGISTRY,
     TenantTableStatus,
     apply_force_rls,
     refresh_force_rls_policies,
 )
+from tests._tenant_table_registry import TENANT_TABLE_REGISTRY
 from quickscale_modules_orgs.current_org import (
     operator_access,
     reset_current_org_id,
@@ -575,7 +575,11 @@ class TestRefreshForceRlsPoliciesMissingNames:
 
 @pytest.mark.django_db(transaction=True)
 def test_project_tenant_table_refresh_uses_live_migration_policy() -> None:
-    """A project-owned table is refreshed without a registry entry."""
+    """A project-owned table is refreshed without a registry entry.
+
+    The shipped-module parity registry is test-owned (rule 34 / D37), so the
+    refresh path structurally cannot consult it.
+    """
     from django.db import connection
 
     import quickscale_modules_orgs.tenancy as tenancy_mod
@@ -597,13 +601,12 @@ def test_project_tenant_table_refresh_uses_live_migration_policy() -> None:
     assert len(policy_rows) == 1
     policy_name = policy_rows[0][0]
 
-    original_registry = tenancy_mod.TENANT_TABLE_REGISTRY
-    try:
-        tenancy_mod.TENANT_TABLE_REGISTRY = []
-        with connection.schema_editor() as schema_editor:
-            refresh_force_rls_policies(schema_editor)
-    finally:
-        tenancy_mod.TENANT_TABLE_REGISTRY = original_registry
+    assert not hasattr(tenancy_mod, "TENANT_TABLE_REGISTRY"), (
+        "The shipped-module parity registry must be test-owned "
+        "(tests/_tenant_table_registry.py); refresh must not consult it."
+    )
+    with connection.schema_editor() as schema_editor:
+        refresh_force_rls_policies(schema_editor)
 
     with connection.cursor() as cursor:
         cursor.execute(

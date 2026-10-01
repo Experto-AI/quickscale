@@ -61,8 +61,9 @@ org-scoped views and APIs:
 
 `tenancy.py` publishes the migration and runtime helpers tenant modules use:
 `tenant_org_fk()`, `apply_force_rls()`, `revert_force_rls()`, `refresh_force_rls_policies()`,
-`get_tenant_models()`, and the `TENANT_TABLE_REGISTRY`. The module also installs the
-always-on RLS boot guard through its `checks.py`.
+and `get_tenant_models()`. The module also installs the always-on RLS boot guard through its
+`checks.py`; the shipped-module parity registry `TENANT_TABLE_REGISTRY` is test-owned
+(Module Conventions rule 34).
 
 ### Current organization
 

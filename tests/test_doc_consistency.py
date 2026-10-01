@@ -1,20 +1,20 @@
 """CI doc-consistency gate.
 
 Verifies that the marker-based derived registry overview
-(:func:`get_derived_registry_overview`) agrees with the shipped-module literal
-``TENANT_TABLE_REGISTRY`` for the installed shipped concrete-model set,
-and that the documented ``TenantManager`` API surface is consistent
-with the actual code in ``quickscale_modules_orgs.managers``.
+(:func:`get_derived_registry_overview`) agrees with the test-owned
+shipped-module ``TENANT_TABLE_REGISTRY`` for the installed shipped
+concrete-model set, and that the documented ``TenantManager`` API surface is
+consistent with the actual code in ``quickscale_modules_orgs.managers``.
 
 The hand-maintained ``<!-- enrolled-models assertion: ... -->`` HTML
 comments have been removed from the technical docs in favour of the
-derived overview. The literal ``TENANT_TABLE_REGISTRY`` remains as a
+derived overview. The test-owned ``TENANT_TABLE_REGISTRY`` remains as a
 shipped-module cross-check target. Project-owned app models are validated
 separately through marker discovery and do not edit the literal.
 
 After the marker backfill, all excluded models carry explicit
 ``tenant_excluded`` class attributes, so the derived view is purely
-marker-driven with no silent fallback to ``REGISTRY_LOOKUP``.
+marker-driven with no silent fallback to any registry oracle.
 """
 
 from __future__ import annotations
@@ -23,11 +23,11 @@ import pathlib
 from collections import Counter
 
 from quickscale_modules_orgs.tenancy import (
-    TENANT_TABLE_REGISTRY,
     TenantTableStatus,
     get_derived_registry_overview,
     is_project_app,
 )
+from tests._tenant_table_registry import TENANT_TABLE_REGISTRY
 
 #: Repo root used by stale-manager-name doc-content checks.
 _REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
@@ -35,13 +35,13 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 # ---------------------------------------------------------------------------
 # Cross-check: derived marker-based registry vs literal registry
 # ---------------------------------------------------------------------------
-# The literal ``TENANT_TABLE_REGISTRY`` is a shipped-module parity oracle. The
-# derived view uses marker-based detection. These tests assert parity only for
-# app labels represented by that shipped literal; project-owned app models are
-# covered by separate marker-discovery assertions below.
+# The test-owned literal ``TENANT_TABLE_REGISTRY`` is a shipped-module parity
+# oracle. The derived view uses marker-based detection. These tests assert
+# parity only for app labels represented by that shipped literal; project-owned
+# app models are covered by separate marker-discovery assertions below.
 # ---------------------------------------------------------------------------
 
-#: App labels represented by the shipped literal registry. This keeps the
+#: App labels represented by the test-owned literal registry. This keeps the
 #: literal useful as a parity oracle without making it a runtime enrollment
 #: requirement for project-owned apps.
 _SHIPPED_APP_LABELS: frozenset[str] = frozenset(
@@ -196,62 +196,54 @@ def test_derived_registry_covers_installed_exclusions() -> None:
             )
 
 
-def test_derived_registry_works_without_registry_lookup() -> None:
-    """The derived registry overview must work when ``REGISTRY_LOOKUP`` is cleared.
+def test_shipped_tenancy_carries_no_registry_oracle() -> None:
+    """The shipped module must not carry the registry literal or lookup.
 
-    Monkeypatches ``REGISTRY_LOOKUP`` on the ``tenancy`` module to an empty
-    dict and proves :func:`get_derived_registry_overview` still produces
-    the same shipped-module overview as the literal ``TENANT_TABLE_REGISTRY``
-    for all installed shipped models. This is a regression test: if any code path in
-    the derived overview still consults ``REGISTRY_LOOKUP`` indirectly
-    (via :func:`is_classified_in_registry` or
-    :func:`_get_m2m_through_classification_marker_only`), clearing the lookup would
-    cause ENROLLED models or auto-created M2M through tables to vanish
-    from the derived view.
+    The shipped-module registry and its derived ``REGISTRY_LOOKUP`` are
+    test-owned (Module Conventions rule 34 / D37): the runtime classification
+    path is purely marker-driven and cannot fall back to a registry oracle
+    that shipped source does not contain. This guards against reintroducing
+    one.
 
-    The derived view uses the new ``_is_classified_by_marker_only`` path
-    which checks ``tenant_excluded`` markers, ``TenantModel`` inheritance,
-    and marker-only M2M through inference — never ``REGISTRY_LOOKUP``.
+    The parity assertion proves the derived overview still produces the same
+    shipped-module view as the test-owned literal for all installed shipped
+    models.
     """
-    # Use try/finally to restore REGISTRY_LOOKUP even on assertion failure.
     import quickscale_modules_orgs.tenancy as tenancy_mod
 
-    original_lookup = tenancy_mod.REGISTRY_LOOKUP
-    try:
-        tenancy_mod.REGISTRY_LOOKUP = {}
+    assert not hasattr(tenancy_mod, "TENANT_TABLE_REGISTRY")
+    assert not hasattr(tenancy_mod, "REGISTRY_LOOKUP")
 
-        derived = get_derived_registry_overview()
-        derived_set = {
-            (e.status, e.app_label, e.model_name)
-            for e in derived
-            if e.app_label in _SHIPPED_APP_LABELS
-        }
+    derived = get_derived_registry_overview()
+    derived_set = {
+        (e.status, e.app_label, e.model_name)
+        for e in derived
+        if e.app_label in _SHIPPED_APP_LABELS
+    }
 
-        from django.apps import apps
+    from django.apps import apps
 
-        installed_model_keys: set[tuple[str, str]] = {
-            (m._meta.app_label, m.__name__)
-            for m in apps.get_models(include_auto_created=True)
-        }
+    installed_model_keys: set[tuple[str, str]] = {
+        (m._meta.app_label, m.__name__)
+        for m in apps.get_models(include_auto_created=True)
+    }
 
-        literal_installed = {
-            (e.status, e.app_label, e.model_name)
-            for e in TENANT_TABLE_REGISTRY
-            if (e.app_label, e.model_name) in installed_model_keys
-        }
+    literal_installed = {
+        (e.status, e.app_label, e.model_name)
+        for e in TENANT_TABLE_REGISTRY
+        if (e.app_label, e.model_name) in installed_model_keys
+    }
 
-        missing_from_derived = literal_installed - derived_set
-        extra_in_derived = derived_set - literal_installed
+    missing_from_derived = literal_installed - derived_set
+    extra_in_derived = derived_set - literal_installed
 
-        assert not missing_from_derived and not extra_in_derived, (
-            f"With REGISTRY_LOOKUP cleared, parity mismatch:\n"
-            f"  In literal but missing from derived: {missing_from_derived}\n"
-            f"  In derived but absent from literal: {extra_in_derived}\n"
-            f"The shipped-derived view must be purely marker-driven and work "
-            f"without REGISTRY_LOOKUP."
-        )
-    finally:
-        tenancy_mod.REGISTRY_LOOKUP = original_lookup
+    assert not missing_from_derived and not extra_in_derived, (
+        f"Shipped-module overview parity mismatch:\n"
+        f"  In literal but missing from derived: {missing_from_derived}\n"
+        f"  In derived but absent from literal: {extra_in_derived}\n"
+        f"The shipped-derived view must be purely marker-driven and agree "
+        f"with the test-owned shipped-module registry."
+    )
 
 
 def test_project_tenant_model_is_derived_from_markers() -> None:
@@ -413,7 +405,7 @@ def test_no_stale_manager_names_in_organizations_doc() -> None:
 # M2M fields through ``auth.Group`` / ``auth.Permission`` (Django contrib
 # — not project-owned).  The auto-created through tables ``User_groups``
 # and ``User_user_permissions`` must still be classifiable by the
-# marker-only path without ``REGISTRY_LOOKUP``.
+# marker-only path without a registry lookup.
 #
 # This test simulates the scenario by temporarily making a project-owned
 # through model's target appear non-project-owned via mock, proving that
