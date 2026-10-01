@@ -74,10 +74,14 @@ This module ships no management commands.
 
 ## Operations
 
-- Startup is intentionally non-blocking: a missing SDK or missing environment variables
-  disable analytics safely instead of preventing app startup.
-- The module never persists raw PostHog credentials in settings, `quickscale.yml`, or state
-  files; the `_env_var` options are the authoritative references.
+- Startup is non-blocking for vendor reachability: a missing SDK, or a client that cannot
+  initialize, disables analytics safely instead of preventing app startup. A live runtime
+  (enabled and not DEBUG-excluded) with an empty `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY` is
+  invalid configuration, and the startup check refuses it.
+- The module never persists raw PostHog credentials in `quickscale.yml` or state files; the
+  `_env_var` options name the environment variables, and `quickscale apply` renders their values
+  into the `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY` and
+  `QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE` settings, which module code reads (rule 35).
 - `exclude_debug` and `exclude_staff` keep non-production and staff traffic out of capture;
   `anonymous_by_default` keeps distinct IDs session-based unless authenticated identity
   linkage is explicitly enabled.

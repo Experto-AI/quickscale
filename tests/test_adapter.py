@@ -61,6 +61,43 @@ def test_disabled_analytics_suppresses_apps_but_retains_settings() -> None:
     assert result == ModuleWiringSpec(settings=settings)
 
 
+def test_enabled_post_hook_projects_secret_settings_from_env_var_names() -> None:
+    result = _analytics_post_hook(
+        ModuleWiringSpec(settings=_settings()),
+        {"enabled": True},
+    )
+
+    assert (
+        result.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"]
+        == "__QS_ENV__:POSTHOG_API_KEY"
+    )
+    assert (
+        result.settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE"]
+        == "__QS_ENV__:POSTHOG_HOST"
+    )
+
+
+def test_enabled_post_hook_projects_configured_env_var_names() -> None:
+    result = _analytics_post_hook(
+        ModuleWiringSpec(
+            settings=_settings(
+                QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR="OPS_POSTHOG_KEY",
+                QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR="OPS_POSTHOG_HOST",
+            )
+        ),
+        {"enabled": True},
+    )
+
+    assert (
+        result.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"]
+        == "__QS_ENV__:OPS_POSTHOG_KEY"
+    )
+    assert (
+        result.settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE"]
+        == "__QS_ENV__:OPS_POSTHOG_HOST"
+    )
+
+
 def test_post_hook_coerces_settings() -> None:
     result = _analytics_post_hook(
         ModuleWiringSpec(

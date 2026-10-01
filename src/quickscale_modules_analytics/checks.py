@@ -40,6 +40,15 @@ _DECLARED_SETTINGS = (
     "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
 )
 
+#: The projected secret settings apply writes from the `_ENV_VAR` options
+#: (rule 35).  They are not manifest options, so the generic settings check
+#: does not report them; a missing one is reported here instead of raising
+#: while resolving.
+_PROJECTED_SETTINGS = (
+    "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY",
+    "QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE",
+)
+
 
 def check_analytics_settings(
     app_configs: object = None,
@@ -60,6 +69,21 @@ def check_analytics_settings(
     snapshot = AnalyticsRuntimeSettingsSnapshot.from_settings()
     if not snapshot.enabled:
         return messages
+
+    # The projected settings must exist even when DEBUG excludes capture,
+    # because the dashboard view and the public template tags resolve the
+    # host outside the capture path.
+    missing_projected = [
+        name for name in _PROJECTED_SETTINGS if not hasattr(settings, name)
+    ]
+    if missing_projected:
+        return [
+            Error(
+                f"{', '.join(missing_projected)} not set. "
+                "Run `quickscale apply` to regenerate the managed settings.",
+                id="quickscale_analytics.E001",
+            )
+        ]
 
     if snapshot.exclude_debug and bool(settings.DEBUG):
         return messages
