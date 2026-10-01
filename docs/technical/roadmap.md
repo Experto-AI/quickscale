@@ -192,9 +192,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   string.
 
   **Scope:**
-  - *Dependencies.* `blog` stops reading storage's setting and importing `storage.helpers`, and
-    `dr_engine` stops reading backups' settings, through `services.py` and the shared `AppConfig`
-    capabilities. Manifests' `required_modules` are left to SA220.
+  - *Dependencies.* `dr_engine` stops reading backups' settings, through `services.py` and the
+    shared `AppConfig` capabilities. Manifests' `required_modules` are left to SA220.
   - *References by name* (rule 34). orgs' `require_org_feature` moves to billing's published
     surface; the purge command's billing steps and `removal.BOUNDARY_GUARDED_OBLIGATIONS` become
     billing's removal declarations, and its blog and crm label prefixes come from those modules'

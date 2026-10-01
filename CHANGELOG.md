@@ -282,6 +282,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `quickscale_billing:` (`subscription_plans`, `purchase_checkout`), while the Stripe webhook stays at
     `/billing/webhooks/stripe/` and the Django pages keep their `/billing/...` URLs; project-owned
     templates that reverse the retired kebab-case names must be updated.
+  - **Blog reaches storage through its public services.** Blog media URLs, upload validation,
+    and upload paths call `quickscale_modules_storage.services`, which resolves storage's own
+    `public_base_url` and `media_url` settings, so blog no longer reads a storage setting or
+    imports `storage.helpers`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
