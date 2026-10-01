@@ -795,14 +795,16 @@ class TestCheckRemovalObligationDischargeWiringE002:
         from quickscale_modules_orgs import checks
         from quickscale_modules_orgs.removal import RemovalBoundary
 
-        monkeypatch.setitem(
-            checks._BOUNDARY_IMPLEMENTATIONS,
-            RemovalBoundary.PURGE,
-            (
-                "quickscale_modules_orgs",
-                "tests.bypassed_boundary",
-                "BypassingPurgeBoundary.handle",
-            ),
+        monkeypatch.setattr(
+            checks,
+            "_boundary_implementations",
+            lambda: {
+                RemovalBoundary.PURGE: (
+                    "quickscale_modules_orgs",
+                    "tests.bypassed_boundary",
+                    "BypassingPurgeBoundary.handle",
+                )
+            },
         )
 
         messages = checks.check_removal_obligation_discharge(app_configs=None)
@@ -817,14 +819,16 @@ class TestCheckRemovalObligationDischargeWiringE002:
         from quickscale_modules_orgs import checks
         from quickscale_modules_orgs.removal import RemovalBoundary
 
-        monkeypatch.setitem(
-            checks._BOUNDARY_IMPLEMENTATIONS,
-            RemovalBoundary.PURGE,
-            (
-                "quickscale_modules_orgs",
-                "tests.bypassed_boundary",
-                "DeadBranchPurgeBoundary.handle",
-            ),
+        monkeypatch.setattr(
+            checks,
+            "_boundary_implementations",
+            lambda: {
+                RemovalBoundary.PURGE: (
+                    "quickscale_modules_orgs",
+                    "tests.bypassed_boundary",
+                    "DeadBranchPurgeBoundary.handle",
+                )
+            },
         )
 
         messages = checks.check_removal_obligation_discharge(app_configs=None)
@@ -841,14 +845,16 @@ class TestCheckRemovalObligationDischargeWiringE002:
         from quickscale_modules_orgs import checks
         from quickscale_modules_orgs.removal import RemovalBoundary
 
-        monkeypatch.setitem(
-            checks._BOUNDARY_IMPLEMENTATIONS,
-            RemovalBoundary.PURGE,
-            (
-                "quickscale_modules_orgs",
-                "tests.bypassed_boundary",
-                "ConstantExpressionPurgeBoundary.handle",
-            ),
+        monkeypatch.setattr(
+            checks,
+            "_boundary_implementations",
+            lambda: {
+                RemovalBoundary.PURGE: (
+                    "quickscale_modules_orgs",
+                    "tests.bypassed_boundary",
+                    "ConstantExpressionPurgeBoundary.handle",
+                )
+            },
         )
 
         messages = checks.check_removal_obligation_discharge(app_configs=None)
@@ -865,14 +871,16 @@ class TestCheckRemovalObligationDischargeWiringE002:
         from quickscale_modules_orgs import checks
         from quickscale_modules_orgs.removal import RemovalBoundary
 
-        monkeypatch.setitem(
-            checks._BOUNDARY_IMPLEMENTATIONS,
-            RemovalBoundary.PURGE,
-            (
-                "quickscale_modules_orgs",
-                "tests.bypassed_boundary",
-                "OperandValuedPurgeBoundary.handle",
-            ),
+        monkeypatch.setattr(
+            checks,
+            "_boundary_implementations",
+            lambda: {
+                RemovalBoundary.PURGE: (
+                    "quickscale_modules_orgs",
+                    "tests.bypassed_boundary",
+                    "OperandValuedPurgeBoundary.handle",
+                )
+            },
         )
 
         messages = checks.check_removal_obligation_discharge(app_configs=None)
@@ -889,14 +897,16 @@ class TestCheckRemovalObligationDischargeWiringE002:
         from quickscale_modules_orgs import checks
         from quickscale_modules_orgs.removal import RemovalBoundary
 
-        monkeypatch.setitem(
-            checks._BOUNDARY_IMPLEMENTATIONS,
-            RemovalBoundary.PURGE,
-            (
-                "quickscale_modules_orgs",
-                "tests.bypassed_boundary",
-                "ShortCircuitPurgeBoundary.handle",
-            ),
+        monkeypatch.setattr(
+            checks,
+            "_boundary_implementations",
+            lambda: {
+                RemovalBoundary.PURGE: (
+                    "quickscale_modules_orgs",
+                    "tests.bypassed_boundary",
+                    "ShortCircuitPurgeBoundary.handle",
+                )
+            },
         )
 
         messages = checks.check_removal_obligation_discharge(app_configs=None)
@@ -905,6 +915,52 @@ class TestCheckRemovalObligationDischargeWiringE002:
         assert all(message.id == "quickscale_orgs.E002" for message in messages)
         joined = " ".join(message.msg for message in messages)
         assert "does not route these stages through the shared coordinator" in joined
+        assert "never calls RemovalCoordinator.finish" in joined
+
+    def test_unreadable_boundary_declaration_fails_the_check(
+        self, monkeypatch: MonkeyPatch
+    ) -> None:
+        from quickscale_modules_orgs import checks
+
+        def _unreadable() -> dict:
+            raise ValueError("Simulated declaration failure")
+
+        monkeypatch.setattr(checks, "_boundary_implementations", _unreadable)
+
+        messages = checks.check_removal_obligation_discharge(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_orgs.E002"
+        assert (
+            "Failed to read the declared removal-boundary implementations"
+            in messages[0].msg
+        )
+
+    def test_account_delete_boundary_wiring_is_checked(
+        self, monkeypatch: MonkeyPatch
+    ) -> None:
+        """The account-deletion boundary is followed like the purge one."""
+        from quickscale_modules_orgs import checks
+        from quickscale_modules_orgs.removal import RemovalBoundary
+
+        monkeypatch.setattr(
+            checks,
+            "_boundary_implementations",
+            lambda: {
+                RemovalBoundary.ACCOUNT_DELETE: (
+                    "quickscale_modules_auth",
+                    "tests.bypassed_boundary",
+                    "BypassingAccountDeleteBoundary.handle",
+                )
+            },
+        )
+
+        messages = checks.check_removal_obligation_discharge(app_configs=None)
+
+        assert messages
+        assert all(message.id == "quickscale_orgs.E002" for message in messages)
+        joined = " ".join(message.msg for message in messages)
+        assert "reconcile" in joined
         assert "never calls RemovalCoordinator.finish" in joined
 
     @patch("quickscale_modules_orgs.checks.organization_removal_obligations")

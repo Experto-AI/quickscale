@@ -302,6 +302,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `quickscale_modules_orgs.permissions` to `quickscale_modules_billing.services`, where it
     reads billing's own active subscription, and orgs publishes `resolve_request_org` for the
     request-organization lookup the gate reuses.
+  - **Organization purge runs each module's declared provider-state code.** Billing declares the
+    reconciliation, provider mutex, and live-subscription guard its guarded provider fields name,
+    blog and CRM declare their removal summary prefixes, and each removal boundary's owner
+    declares where its implementation lives, so orgs' purge path and boundary check name no other
+    module.
   - **Module settings follow one naming family.** The blog, CRM, forms, and listings settings are
     renamed to `QUICKSCALE_<MODULE>_<NAME>` (for example `QUICKSCALE_BLOG_RSS_ENABLED`,
     `QUICKSCALE_FORMS_RETENTION_DAYS`), blog's upload limits are declared manifest options,

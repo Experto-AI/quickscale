@@ -64,6 +64,7 @@ from django.db import connection
 
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL,
+    REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE,
     ExternalProviderField,
     OrganizationRemovalObligation,
     RemovalAction,
@@ -71,6 +72,7 @@ from quickscale_modules_orgs.removal import (
     coordinator_discharge_actions,
     external_provider_obligation_mismatches,
     organization_removal_obligations,
+    removal_boundary_implementations,
 )
 from quickscale_modules_orgs.tenancy import (
     _is_implicit_m2m_through,
@@ -418,22 +420,14 @@ def check_provider_id_conformance(app_configs: object, **kwargs: object) -> list
 # ---------------------------------------------------------------------------
 
 
-#: Boundary implementations that must route their stages through the shared
-#: coordinator: ``boundary -> (shipping app name, implementation module, entry
-#: function every removal path reaches)``.  A boundary whose shipping app is
-#: not installed has no implementation here.
-_BOUNDARY_IMPLEMENTATIONS: dict[RemovalBoundary, tuple[str, str, str]] = {
-    RemovalBoundary.PURGE: (
-        "quickscale_modules_orgs",
-        "quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization",
-        "Command.handle",
-    ),
-    RemovalBoundary.ACCOUNT_DELETE: (
-        "quickscale_modules_auth",
-        "quickscale_modules_auth.views",
-        "AccountDeleteView.form_valid",
-    ),
-}
+# Boundary implementations that must route their stages through the shared
+# coordinator are declared by each boundary's owner on its own ``AppConfig``
+# as ``boundary -> (shipping app name, implementation module, entry function
+# every removal path reaches)``.  A boundary whose shipping app is not
+# installed has no implementation here.
+def _boundary_implementations() -> dict[RemovalBoundary, tuple[str, str, str]]:
+    """Return the removal boundary implementations declared by installed apps."""
+    return removal_boundary_implementations()
 
 
 def _constant_value(node: ast.AST) -> tuple[bool, object]:
@@ -623,7 +617,20 @@ def _boundary_wiring_messages() -> list:
     closed when a routed stage or the completeness guard is missing from it.
     """
     messages: list = []
-    for boundary, implementation in _BOUNDARY_IMPLEMENTATIONS.items():
+    try:
+        implementations = _boundary_implementations()
+    except (TypeError, ValueError) as exc:
+        return [
+            Error(
+                f"Failed to read the declared removal-boundary implementations: {exc}",
+                hint=(
+                    "Declare each boundary implementation on its owner's AppConfig "
+                    f"as a '{REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE}' mapping."
+                ),
+                id="quickscale_orgs.E002",
+            )
+        ]
+    for boundary, implementation in implementations.items():
         app_name, module_path, entry_name = implementation
         if not apps.is_installed(app_name):
             continue
