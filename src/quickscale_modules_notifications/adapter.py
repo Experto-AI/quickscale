@@ -137,7 +137,7 @@ def _notifications_derived_settings(resolved: dict[str, Any]) -> dict[str, Any]:
         "QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS": int(
             resolved["webhook_ttl_seconds"]
         ),
-        "QUICKSCALE_NOTIFICATIONS_PROVIDER": "resend",
+        "QUICKSCALE_NOTIFICATIONS_PROVIDER": str(resolved["provider"]).strip(),
     }
     return settings
 
