@@ -78,7 +78,7 @@ function buildDefaultValues(fields: FormFieldSchema[]): FormValues {
 }
 
 function normalizeApiBasePath(apiBasePath?: string): string {
-  const basePath = apiBasePath ?? '/api/forms/'
+  const basePath = apiBasePath ?? '/forms/api/'
   return basePath.endsWith('/') ? basePath : `${basePath}/`
 }
 

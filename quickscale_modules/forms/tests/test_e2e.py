@@ -146,7 +146,7 @@ class TestContactFormE2EWorkflow:
         self, api_client, seeded_contact_form
     ):
         """Public schema endpoint returns the form structure."""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "contact"})
         response = api_client.get(url)
 
         assert response.status_code == 200
@@ -160,7 +160,7 @@ class TestContactFormE2EWorkflow:
 
     def test_schema_includes_honeypot_field(self, api_client, seeded_contact_form):
         """Schema injects the hidden honeypot marker field."""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "contact"})
         response = api_client.get(url)
 
         assert response.status_code == 200
@@ -179,7 +179,7 @@ class TestContactFormE2EWorkflow:
         """Submitting a valid contact form returns 201 and creates a submission record."""
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Alice Example",
             "email": "alice@example.com",
@@ -203,7 +203,7 @@ class TestContactFormE2EWorkflow:
         """All submitted field values are persisted as FormFieldValue records."""
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Bob Builder",
             "email": "bob@builder.com",
@@ -227,7 +227,7 @@ class TestContactFormE2EWorkflow:
 
     def test_missing_required_field_returns_400(self, api_client, seeded_contact_form):
         """Submitting without a required field returns 400 in the one QuickScale error shape."""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Alice",
             # email is required but missing
@@ -255,7 +255,7 @@ class TestContactFormE2EWorkflow:
         """Submissions with a filled honeypot field are flagged as spam in the DB."""
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Spambot",
             "email": "spam@bot.com",
@@ -286,7 +286,7 @@ class TestContactFormE2EWorkflow:
         from rest_framework.throttling import ScopedRateThrottle
 
         cache.clear()
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Rate Tester",
             "email": "ratelimit@test.com",
@@ -329,7 +329,7 @@ class TestContactFormE2EWorkflow:
     ):
         """Superuser can retrieve the list of form submissions via the admin API."""
         # Create a submission first
-        submit_url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        submit_url = reverse("quickscale_forms:form_submit", kwargs={"slug": "contact"})
         api_client.post(
             submit_url,
             data={
@@ -342,7 +342,7 @@ class TestContactFormE2EWorkflow:
         )
 
         list_url = reverse(
-            "quickscale_forms:admin-submission-list",
+            "quickscale_forms:admin_submission_list",
             kwargs={"pk": seeded_contact_form.pk},
         )
         response = superuser_client.get(list_url)
@@ -359,7 +359,7 @@ class TestContactFormE2EWorkflow:
         """View-unit defense-in-depth: force-auth staff without org gets
         empty list on admin submission list (fail-closed)."""
         url = reverse(
-            "quickscale_forms:admin-submission-list",
+            "quickscale_forms:admin_submission_list",
             kwargs={"pk": seeded_contact_form.pk},
         )
         response = staff_client.get(url)
@@ -373,7 +373,7 @@ class TestContactFormE2EWorkflow:
     ):
         """Unauthenticated requests to admin submission list return 403."""
         url = reverse(
-            "quickscale_forms:admin-submission-list",
+            "quickscale_forms:admin_submission_list",
             kwargs={"pk": seeded_contact_form.pk},
         )
         response = api_client.get(url)

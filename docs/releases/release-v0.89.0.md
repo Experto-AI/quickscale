@@ -145,6 +145,31 @@ kebab-case billing route names (`billing-dashboard`, `pricing-page`, `stripe-web
 rest), which become the namespaced snake_case names under `quickscale_billing:` (`dashboard`,
 `pricing_page`, `stripe_webhook`, and the rest).
 
+**CRM and forms URLs.** The crm module declares its `crm/` mount in its manifest and every route
+name becomes snake_case under `quickscale_crm:` (`api_root`, `tag_list`, `contact_notes`,
+`deal_bulk_update_stage`, and the rest); its Django page and JSON API keep their existing
+`/crm/dashboard/` and `/crm/api/...` URLs. The forms module declares its `forms/` mount in its
+manifest and its JSON API moves under it, path for path:
+
+| Retired path | New path |
+|---|---|
+| `/api/forms/<slug>/` | `/forms/api/<slug>/` |
+| `/api/forms/<slug>/submit/` | `/forms/api/<slug>/submit/` |
+| `/api/admin/forms/` | `/forms/api/admin/forms/` |
+| `/api/admin/forms/<id>/submissions/` | `/forms/api/admin/forms/<id>/submissions/` |
+| `/api/admin/forms/<id>/submissions/<sub_id>/` | `/forms/api/admin/forms/<id>/submissions/<sub_id>/` |
+| `/api/admin/forms/<id>/submissions/export/` | `/forms/api/admin/forms/<id>/submissions/export/` |
+
+Its HTML pages keep their existing `/forms/...` URLs. The analytics dashboard route name also
+becomes `quickscale_analytics:dashboard` (the retired `analytics-dashboard`), with the
+`/analytics/` URL unchanged. The operator step is to update custom frontend code that calls the
+retired `/api/forms/...` and `/api/admin/forms/...` paths, and to rename project-owned Django
+templates and Python code that reverse the retired kebab-case crm, forms, and analytics route
+names (`quickscale_crm:api-root`, `quickscale_crm:tag-list`, `quickscale_forms:form-submit`,
+`quickscale_forms:admin-submission-export`, `quickscale_analytics:analytics-dashboard`, and the
+rest) to their snake_case forms under `quickscale_crm:`, `quickscale_forms:`, and
+`quickscale_analytics:`.
+
 ## Delivery provenance
 
 The SA195/SA192 delivery was synchronized with `v89` at

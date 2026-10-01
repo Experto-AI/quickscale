@@ -282,6 +282,15 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `quickscale_billing:` (`subscription_plans`, `purchase_checkout`), while the Stripe webhook stays at
     `/billing/webhooks/stripe/` and the Django pages keep their `/billing/...` URLs; project-owned
     templates that reverse the retired kebab-case names must be updated.
+  - **CRM and forms standardize their URL mounts and route names.** CRM declares its `crm/` mount
+    in its manifest and its route names are snake_case under `quickscale_crm:` (`api_root`,
+    `tag_list`, `deal_bulk_update_stage`, and the rest) with its pages and API at the same
+    `/crm/...` URLs; forms declares its `forms/` mount and its JSON API moves under it
+    (`/api/forms/<slug>/` → `/forms/api/<slug>/`, staff admin `/api/admin/forms/...` →
+    `/forms/api/admin/forms/...`) with snake_case names, while its HTML pages keep their existing
+    `/forms/...` URLs. The analytics dashboard route name becomes `quickscale_analytics:dashboard`
+    with its `/analytics/` URL unchanged; project-owned templates or Python code that reverse the
+    retired kebab-case names must be updated.
   - **Blog reaches storage through its public services.** Blog media URLs, upload validation,
     and upload paths call `quickscale_modules_storage.services`, which resolves storage's own
     `public_base_url` and `media_url` settings, so blog no longer reads a storage setting or

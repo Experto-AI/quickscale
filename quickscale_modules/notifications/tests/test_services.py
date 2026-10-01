@@ -419,7 +419,7 @@ def test_forms_submit_keeps_saved_submission_when_tracked_delivery_fails(
 
     with django_capture_on_commit_callbacks(execute=True) as callbacks:
         response = client.post(
-            reverse("quickscale_forms:form-submit", kwargs={"slug": form.slug}),
+            reverse("quickscale_forms:form_submit", kwargs={"slug": form.slug}),
             {"full_name": "Alice", "email": "alice@example.com"},
             format="json",
         )

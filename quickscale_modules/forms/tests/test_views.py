@@ -31,7 +31,7 @@ def clear_forms_test_cache():
 def test_form_page_renders_inside_the_module_base(client):
     """The public form page extends the flat forms module base and shell."""
     response = client.get(
-        reverse("quickscale_forms:form-page", kwargs={"slug": "test-contact"})
+        reverse("quickscale_forms:form_page", kwargs={"slug": "test-contact"})
     )
 
     assert response.status_code == 200
@@ -43,30 +43,30 @@ def test_form_page_renders_inside_the_module_base(client):
 
 @pytest.mark.django_db
 class TestFormSchemaAPIView:
-    """Tests for the public GET /api/forms/{slug}/ endpoint"""
+    """Tests for the public GET /forms/api/{slug}/ endpoint"""
 
     def test_returns_200_for_valid_active_slug(self, api_client, form, form_field):
         """Active form returns 200 with schema data"""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "test-contact"})
         response = api_client.get(url)
         assert response.status_code == 200
         assert response.data["slug"] == "test-contact"
 
     def test_returns_404_for_unknown_slug(self, api_client):
         """Non-existent slug returns 404"""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "does-not-exist"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "does-not-exist"})
         response = api_client.get(url)
         assert response.status_code == 404
 
     def test_returns_404_for_inactive_form(self, api_client, inactive_form):
         """Inactive form returns 404 on the public endpoint"""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "inactive"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "inactive"})
         response = api_client.get(url)
         assert response.status_code == 404
 
     def test_injects_honeypot_marker_in_schema(self, api_client, form, form_field):
         """Schema response includes hidden _hp_name marker when spam protection is enabled"""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "test-contact"})
         response = api_client.get(url)
         assert response.status_code == 200
         field_names = [field["name"] for field in response.data["fields"]]
@@ -77,7 +77,7 @@ class TestFormSchemaAPIView:
         self, api_client, form, form_field
     ):
         """Schema should not advertise honeypot when global spam protection is off."""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "test-contact"})
 
         response = api_client.get(url)
 
@@ -94,7 +94,7 @@ class TestFormSchemaAPIView:
         form.spam_protection_enabled = False
         with org_scope(form.organization):
             form.save(update_fields=["spam_protection_enabled"])
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "test-contact"})
 
         response = api_client.get(url)
 
@@ -105,13 +105,13 @@ class TestFormSchemaAPIView:
 
 @pytest.mark.django_db
 class TestFormSubmitAPIView:
-    """Tests for the public POST /api/forms/{slug}/submit/ endpoint"""
+    """Tests for the public POST /forms/api/{slug}/submit/ endpoint"""
 
     def test_returns_201_on_valid_submission(
         self, api_client, form, form_field, email_field
     ):
         """Valid submission returns 201 with success message"""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 201
@@ -121,7 +121,7 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field
     ):
         """Missing required field returns 400 in the one QuickScale error shape"""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice"}  # missing email
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 400
@@ -146,7 +146,7 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field, payload, expected_error
     ):
         """Array/number/object/null payloads return 400, never 500."""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": payload, "email": payload, "company": payload}
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 400
@@ -168,7 +168,7 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field, payload, post_kwargs
     ):
         """A JSON body that is not an object returns 400 in the one shape, never 500."""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         response = api_client.post(url, data=payload, **post_kwargs)
         assert response.status_code == 400
         assert response.data == {
@@ -185,7 +185,7 @@ class TestFormSubmitAPIView:
         """Filled honeypot field is treated as spam — returns 201 silently"""
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Bot", "email": "bot@spam.com", "_hp_name": "I am a bot"}
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 201
@@ -204,7 +204,7 @@ class TestFormSubmitAPIView:
         """Submission handling should ignore honeypot when global spam protection is off."""
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com", "_hp_name": "bot"}
 
         response = api_client.post(url, data=data, format="json")
@@ -225,7 +225,7 @@ class TestFormSubmitAPIView:
         form.spam_protection_enabled = False
         with org_scope(form.organization):
             form.save(update_fields=["spam_protection_enabled"])
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com", "_hp_name": "bot"}
 
         response = api_client.post(url, data=data, format="json")
@@ -239,7 +239,7 @@ class TestFormSubmitAPIView:
 
     def test_returns_404_for_inactive_form(self, api_client, inactive_form):
         """Submit to inactive form returns 404 in the one QuickScale error shape"""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "inactive"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "inactive"})
         response = api_client.post(url, data={}, format="json")
         assert response.status_code == 404
         assert response.data["error"]["code"] == "not_found"
@@ -250,7 +250,7 @@ class TestFormSubmitAPIView:
         """Valid submission creates a FormSubmission and FormFieldValue records"""
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
         api_client.post(url, data=data, format="json")
         with org_scope(form.organization):
@@ -288,7 +288,7 @@ class TestFormSubmitAPIView:
             mock_capture_form_submit,
         )
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
@@ -329,7 +329,7 @@ class TestFormSubmitAPIView:
             mock_capture,
         )
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
@@ -397,7 +397,7 @@ class TestFormSubmitAPIView:
             lambda label: False,
         )
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
@@ -434,7 +434,7 @@ class TestFormSubmitAPIView:
             mock_capture_form_submit,
         )
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
@@ -459,7 +459,7 @@ class TestFormSubmitAPIView:
             failing_send,
         )
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
@@ -507,7 +507,7 @@ class TestFormSubmitAPIView:
             fail_import,
         )
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         cache.clear()
@@ -527,7 +527,7 @@ class TestFormSubmitAPIView:
         from rest_framework.throttling import ScopedRateThrottle
 
         cache.clear()
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
         scope_rates = {"quickscale_forms_submit": "2/minute"}
 
@@ -560,7 +560,7 @@ class TestFormSubmitAPIView:
 
 @pytest.mark.django_db
 class TestAdminFormListAPIView:
-    """Tests for the staff GET /api/admin/forms/ endpoint
+    """Tests for the staff GET /forms/api/admin/forms/ endpoint
 
     Retained-role contract:
     * Superuser: cross-tenant read via ``operator_access``.
@@ -570,19 +570,19 @@ class TestAdminFormListAPIView:
       redirect to /orgs/ before view executes.
     * Anonymous: denied (403).
 
-    /api/admin/forms/ is NON-EXEMPT from
+    /forms/api/admin/forms/ is NON-EXEMPT from
     TenantMiddleware (does not match any EXEMPT_PATH_PREFIX).
     """
 
     def test_returns_403_for_anonymous(self, api_client, form):
         """Anonymous user cannot access admin form list"""
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = api_client.get(url)
         assert response.status_code in (401, 403)
 
     def test_superuser_sees_all_forms(self, superuser_client, form):
         """Superuser can access admin form list and sees all forms."""
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = superuser_client.get(url)
         assert response.status_code == 200
         assert len(response.data) >= 1
@@ -597,7 +597,7 @@ class TestAdminFormListAPIView:
         coverage is ``test_staff_session_active_org_sees_own_org_forms``
         and ``test_staff_session_cross_org_excluded``.
         """
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = staff_client.get(url)
         assert response.status_code == 200
         assert len(response.data) == 0, (
@@ -611,7 +611,7 @@ class TestAdminFormListAPIView:
         The superuser operator path (all_objects) returns it regardless
         of org context.
         """
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = superuser_client.get(url)
         assert response.status_code == 200
         slugs = [item["slug"] for item in response.data]
@@ -650,7 +650,7 @@ class TestAdminFormListAPIView:
             )
 
             rf = APIRequestFactory()
-            wsgi_request = rf.get("/api/admin/forms/")
+            wsgi_request = rf.get("/forms/api/admin/forms/")
             wsgi_request.user = staff_user
             drf_request = DRF_Request(wsgi_request)
             force_authenticate(drf_request, user=staff_user)
@@ -683,7 +683,7 @@ class TestAdminFormListAPIView:
     # These tests use force_login + ACTIVE_ORG_SESSION_KEY to exercise
     # the full session authentication pipeline (SessionMiddleware +
     # AuthenticationMiddleware).  The admin API path
-    # (/api/admin/forms/) is NON-EXEMPT from TenantMiddleware (it does
+    # (/forms/api/admin/forms/) is NON-EXEMPT from TenantMiddleware (it does
     # not start with /admin/ or any other exempt prefix), so the
     # middleware DOES run and populates the ContextVar from the session.
     #
@@ -709,7 +709,7 @@ class TestAdminFormListAPIView:
         only forms belonging to their active org.
 
         Real session-auth pipeline proof.
-        /api/admin/forms/ is non-exempt, so TenantMiddleware runs and
+        /forms/api/admin/forms/ is non-exempt, so TenantMiddleware runs and
         populates the ContextVar from the session.  Staff see their own
         org's form and do NOT see forms from other orgs.
         """
@@ -748,7 +748,7 @@ class TestAdminFormListAPIView:
         session[ACTIVE_ORG_SESSION_KEY] = str(own_org.pk)
         session.save()
 
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
 
         response = api_client.get(url)
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -809,7 +809,7 @@ class TestAdminFormListAPIView:
         session[ACTIVE_ORG_SESSION_KEY] = str(own_org.pk)
         session.save()
 
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = api_client.get(url)
         assert response.status_code == 200
         slugs = [item["slug"] for item in response.data]
@@ -875,7 +875,7 @@ class TestAdminFormListAPIView:
         session[ACTIVE_ORG_SESSION_KEY] = str(active_org.pk)
         session.save()
 
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = api_client.get(url)
         assert response.status_code == 200
         slugs = [item["slug"] for item in response.data]
@@ -890,14 +890,14 @@ class TestAdminFormListAPIView:
     # ------------------------------------------------------------------
     # no-active-org redirect proofs
     # ------------------------------------------------------------------
-    # These tests hit /api/admin/forms/ which is NON-EXEMPT from
+    # These tests hit /forms/api/admin/forms/ which is NON-EXEMPT from
     # TenantMiddleware.  Without ACTIVE_ORG_SESSION_KEY, the middleware
     # redirects to /orgs/ before the view executes — for both regular
     # staff and superusers.
 
     def test_staff_session_no_active_org_redirects(self, staff_user, api_client, db):
         """Regular staff without ACTIVE_ORG_SESSION_KEY gets 302
-        redirect to /orgs/ on the admin-form-list path.
+        redirect to /orgs/ on the admin_form_list path.
 
         Proves TenantMiddleware redirects to /orgs/
         when an authenticated user has no active org selected on the
@@ -907,7 +907,7 @@ class TestAdminFormListAPIView:
         # Do NOT set ACTIVE_ORG_SESSION_KEY — middleware should
         # redirect before the view runs.
 
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = api_client.get(url)
 
         assert response.status_code == 302, (
@@ -919,7 +919,7 @@ class TestAdminFormListAPIView:
 
     def test_superuser_session_no_active_org_redirects(self, superuser, api_client, db):
         """Superuser without ACTIVE_ORG_SESSION_KEY also gets 302
-        redirect to /orgs/ on the admin-form-list path.
+        redirect to /orgs/ on the admin_form_list path.
 
         Proves TenantMiddleware applies the same
         no-active-org redirect to superusers before the view executes
@@ -928,7 +928,7 @@ class TestAdminFormListAPIView:
         api_client.force_login(user=superuser)
         # Do NOT set ACTIVE_ORG_SESSION_KEY.
 
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = api_client.get(url)
 
         assert response.status_code == 302, (
@@ -941,7 +941,7 @@ class TestAdminFormListAPIView:
     @override_settings(FORMS_SUBMISSIONS_API=False)
     def test_returns_404_when_admin_api_disabled(self, superuser_client, form):
         """Disabling the submissions API should hide the staff admin endpoints."""
-        url = reverse("quickscale_forms:admin-form-list")
+        url = reverse("quickscale_forms:admin_form_list")
         response = superuser_client.get(url)
 
         assert response.status_code == 404
@@ -949,7 +949,7 @@ class TestAdminFormListAPIView:
 
 @pytest.mark.django_db
 class TestAdminSubmissionListAPIView:
-    """Tests for the staff GET /api/admin/forms/{id}/submissions/ endpoint
+    """Tests for the staff GET /forms/api/admin/forms/{id}/submissions/ endpoint
 
     Retained-role:
     * Superuser: cross-tenant read via ``operator_access``.
@@ -958,7 +958,7 @@ class TestAdminSubmissionListAPIView:
 
     def test_superuser_can_list_submissions(self, superuser_client, form, submission):
         """Superuser can list submissions for a given form."""
-        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        url = reverse("quickscale_forms:admin_submission_list", kwargs={"pk": form.pk})
         response = superuser_client.get(url)
         assert response.status_code == 200
         assert len(response.data) >= 1
@@ -971,7 +971,7 @@ class TestAdminSubmissionListAPIView:
         ``test_staff_session_active_org_sees_own_org_forms`` and
         ``test_staff_session_cross_org_excluded``.
         """
-        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        url = reverse("quickscale_forms:admin_submission_list", kwargs={"pk": form.pk})
         response = staff_client.get(url)
         assert response.status_code == 200
         assert len(response.data) == 0, (
@@ -980,7 +980,7 @@ class TestAdminSubmissionListAPIView:
 
     def test_filter_by_status(self, superuser_client, form, submission):
         """Submissions can be filtered by status query param."""
-        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        url = reverse("quickscale_forms:admin_submission_list", kwargs={"pk": form.pk})
         response = superuser_client.get(url, {"status": "pending"})
         assert response.status_code == 200
 
@@ -996,7 +996,7 @@ class TestAdminSubmissionListAPIView:
                 ip_address="127.0.0.2",
                 user_agent="TestBrowser/2.0",
             )
-        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        url = reverse("quickscale_forms:admin_submission_list", kwargs={"pk": form.pk})
         response = superuser_client.get(url)
 
         assert response.status_code == 200
@@ -1005,7 +1005,7 @@ class TestAdminSubmissionListAPIView:
 
 @pytest.mark.django_db
 class TestAdminSubmissionDetailAPIView:
-    """Tests for the staff GET/PATCH /api/admin/forms/{id}/submissions/{sub_id}/ endpoint
+    """Tests for the staff GET/PATCH /forms/api/admin/forms/{id}/submissions/{sub_id}/ endpoint
 
     Retained-role:
     * Superuser: cross-tenant read via ``operator_access`` (GET).
@@ -1018,7 +1018,7 @@ class TestAdminSubmissionDetailAPIView:
     ):
         """Superuser can retrieve submission detail with field values."""
         url = reverse(
-            "quickscale_forms:admin-submission-detail",
+            "quickscale_forms:admin_submission_detail",
             kwargs={"pk": form.pk, "sub_pk": submission.pk},
         )
         response = superuser_client.get(url)
@@ -1030,7 +1030,7 @@ class TestAdminSubmissionDetailAPIView:
         from quickscale_modules_orgs.current_org import org_scope
 
         url = reverse(
-            "quickscale_forms:admin-submission-detail",
+            "quickscale_forms:admin_submission_detail",
             kwargs={"pk": form.pk, "sub_pk": submission.pk},
         )
         response = superuser_client.patch(url, data={"status": "read"}, format="json")
@@ -1068,7 +1068,7 @@ class TestAdminSubmissionDetailAPIView:
         session.save()
 
         url = reverse(
-            "quickscale_forms:admin-submission-detail",
+            "quickscale_forms:admin_submission_detail",
             kwargs={"pk": form.pk, "sub_pk": submission.pk},
         )
         response = superuser_client.patch(url, data={"status": "read"}, format="json")
@@ -1096,7 +1096,7 @@ class TestAdminSubmissionDetailAPIView:
         """View-unit defense-in-depth: force-auth staff without org gets
         404 on submission detail (fail-closed)."""
         url = reverse(
-            "quickscale_forms:admin-submission-detail",
+            "quickscale_forms:admin_submission_detail",
             kwargs={"pk": form.pk, "sub_pk": submission.pk},
         )
         response = staff_client.get(url)
@@ -1115,7 +1115,7 @@ class TestAdminSubmissionExportView:
     def test_superuser_gets_csv(self, superuser_client, form, submission, field_value):
         """Superuser receives CSV file with correct content type."""
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
         assert response.status_code == 200
@@ -1126,7 +1126,7 @@ class TestAdminSubmissionExportView:
     ):
         """CSV output contains the submitted field values."""
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
         content = response.content.decode()
@@ -1145,7 +1145,7 @@ class TestAdminSubmissionExportView:
             field_value.save(update_fields=["field_name", "value"])
 
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
 
@@ -1160,7 +1160,7 @@ class TestAdminSubmissionExportView:
         """View-unit defense-in-depth: force-auth staff without org gets
         404 on CSV export (fail-closed)."""
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = staff_client.get(url)
         assert response.status_code == 404
@@ -1168,14 +1168,14 @@ class TestAdminSubmissionExportView:
     def test_returns_403_for_anonymous(self, api_client, form):
         """Anonymous user cannot export submissions"""
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = api_client.get(url)
         assert response.status_code == 403
 
     def test_superuser_gets_404_for_missing_form(self, superuser_client):
         """Export view returns 404 when form pk does not exist."""
-        url = reverse("quickscale_forms:admin-submission-export", kwargs={"pk": 99999})
+        url = reverse("quickscale_forms:admin_submission_export", kwargs={"pk": 99999})
         response = superuser_client.get(url)
         assert response.status_code == 404
 
@@ -1196,20 +1196,20 @@ class TestAdminSubmissionListFilters:
         with org_scope(submission.organization):
             submission.is_spam = True
             submission.save()
-        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        url = reverse("quickscale_forms:admin_submission_list", kwargs={"pk": form.pk})
         response = superuser_client.get(url, {"is_spam": "true"})
         assert response.status_code == 200
         assert all(s["is_spam"] for s in response.data)
 
     def test_filter_by_date_gte(self, superuser_client, form, submission):
         """submitted_at__date__gte filter is accepted without error"""
-        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        url = reverse("quickscale_forms:admin_submission_list", kwargs={"pk": form.pk})
         response = superuser_client.get(url, {"submitted_at__date__gte": "2000-01-01"})
         assert response.status_code == 200
 
     def test_filter_by_date_lte(self, superuser_client, form, submission):
         """submitted_at__date__lte filter is accepted without error"""
-        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        url = reverse("quickscale_forms:admin_submission_list", kwargs={"pk": form.pk})
         response = superuser_client.get(url, {"submitted_at__date__lte": "2099-12-31"})
         assert response.status_code == 200
 
@@ -1221,7 +1221,7 @@ class TestAdminSubmissionDetailNotFound:
     def test_superuser_gets_404_for_unknown_submission(self, superuser_client, form):
         """Submission detail returns 404 when sub_pk does not exist."""
         url = reverse(
-            "quickscale_forms:admin-submission-detail",
+            "quickscale_forms:admin_submission_detail",
             kwargs={"pk": form.pk, "sub_pk": 99999},
         )
         response = superuser_client.get(url)
@@ -1248,7 +1248,7 @@ class TestFormSubmissionCanonicalIp:
         from quickscale_modules_forms.models import FormSubmission
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         with override_settings(
@@ -1280,7 +1280,7 @@ class TestFormSubmissionCanonicalIp:
         from quickscale_modules_forms.models import FormSubmission
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Bob", "email": "bob@example.com"}
 
         response = api_client.post(
@@ -1309,7 +1309,7 @@ class TestFormSubmissionCanonicalIp:
         from quickscale_modules_forms.models import FormSubmission
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {
             "full_name": "Bot",
             "email": "bot@spam.com",
@@ -1392,7 +1392,7 @@ class TestFormSubmissionClientIpParity:
         from quickscale_modules_forms.models import FormSubmission
         from quickscale_modules_orgs.current_org import get_client_ip, org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         request_kwargs: dict[str, str] = {"REMOTE_ADDR": "10.0.0.1"}
         if xff is not None:
             request_kwargs["HTTP_X_FORWARDED_FOR"] = xff
@@ -1443,7 +1443,7 @@ class TestFormSubmissionClientIpParity:
         from quickscale_modules_forms.throttles import FormSubmitThrottle
         from quickscale_modules_orgs.current_org import get_client_ip, org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         request_kwargs = {
             "REMOTE_ADDR": "10.0.0.1",
             "HTTP_X_FORWARDED_FOR": "198.51.100.1",
@@ -1520,7 +1520,7 @@ class TestPublicViewsDbOrgScope:
             _track_db_set,
         )
 
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_schema", kwargs={"slug": "test-contact"})
         api_client.get(url)
 
         assert called_with is not None, (
@@ -1549,7 +1549,7 @@ class TestPublicViewsDbOrgScope:
             _track_db_set,
         )
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
         api_client.post(url, data=data, format="json")
 
@@ -1581,7 +1581,7 @@ class TestFormCallerParity:
     ):
         """Anonymous form submission returns 201 with message, redirect_url,
         and notification_status fields."""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         response = api_client.post(url, data=data, format="json")
@@ -1602,7 +1602,7 @@ class TestFormCallerParity:
 
         system_org = Organization.objects.get_system_org()
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         api_client.post(url, data=data, format="json")
@@ -1673,7 +1673,7 @@ class TestFormCallerParity:
         session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
         session.save()
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "auth-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "auth-contact"})
         data = {"full_name": "Bob", "email": "bob@example.com"}
 
         response = api_client.post(url, data=data, format="json")
@@ -1743,7 +1743,7 @@ class TestFormCallerParity:
         session.save()
 
         url = reverse(
-            "quickscale_forms:form-schema", kwargs={"slug": "org-specific-form"}
+            "quickscale_forms:form_schema", kwargs={"slug": "org-specific-form"}
         )
         response = api_client.get(url)
 
@@ -1760,7 +1760,7 @@ class TestFormCallerParity:
         with org_scope(form.organization):
             form.save(update_fields=["redirect_url"])
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         response = api_client.post(url, data=data, format="json")
@@ -1776,7 +1776,7 @@ class TestFormCallerParity:
         intentionally absent in the honeypot fast-path response."""
         from quickscale_modules_orgs.current_org import org_scope
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {
             "full_name": "Bot",
             "email": "bot@spam.com",
@@ -1817,7 +1817,7 @@ class TestFormCallerParity:
             _track_notification,
         )
 
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         response = api_client.post(url, data=data, format="json")
@@ -1855,7 +1855,7 @@ class TestNotificationContentAfterPostCommit:
         _build_submission_notification_content reads field values via
         FormFieldValue.all_objects (not the TenantManager) after the
         tenant_context() window has closed."""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         response = api_client.post(url, data=data, format="json")
@@ -2023,7 +2023,7 @@ class TestPostCommitTransactionBoundary:
         )
 
         # ---- POST — triggers the view's org_scope + transaction.atomic() --
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": form_slug})
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": form_slug})
         data = {"full_name": "Boundary Alice", "email": "boundary@example.com"}
         response = api_client.post(url, data=data, format="json")
 

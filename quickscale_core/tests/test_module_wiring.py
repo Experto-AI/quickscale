@@ -598,7 +598,9 @@ def test_crm_module_dashboard_route_moved_to_crm_dashboard() -> None:
     assert r"^orgs/[^/]+/crm" not in template_content
     assert r"/crm/dashboard" not in template_content
 
-    # The actual CRM module urls.py registers the dashboard at /crm/dashboard/.
+    # The actual CRM module urls.py is module-relative: the manifest's
+    # url_includes entry mounts it at crm/, so the dashboard registers at
+    # dashboard/ and no crm/ prefix lives in the module URLconf (rule 7).
     crm_urls_module = (
         Path(__file__).resolve().parents[2]
         / "quickscale_modules"
@@ -608,5 +610,5 @@ def test_crm_module_dashboard_route_moved_to_crm_dashboard() -> None:
         / "urls.py"
     )
     crm_content = crm_urls_module.read_text()
-    assert 'path("crm/dashboard/",' in crm_content
-    assert 'path("crm/",' not in crm_content
+    assert 'path("dashboard/",' in crm_content
+    assert 'path("crm/' not in crm_content
