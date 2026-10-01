@@ -7,7 +7,6 @@ Public/anonymous reads resolve the System org (D2).
 
 import logging
 from collections.abc import Mapping
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.conf import settings
@@ -15,7 +14,6 @@ from django.db import IntegrityError
 from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils.html import escape
-from django.utils.text import slugify
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
 from rest_framework.authentication import SessionAuthentication
@@ -27,105 +25,20 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from quickscale_modules_orgs.current_org import get_current_org_id
-from quickscale_modules_orgs.models import Organization
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 from quickscale_modules_orgs.sanitization import sanitize_rendered_html
 
 from .exceptions import (
-    ListingPublishConflictError,
     ListingPublishError,
     ListingPublishValidationError,
 )
 from .filters import get_listing_filter
 from .models import Listing
 from .permissions import IsStaffUser
+from .services import create_published_listing_from_payload
 
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Publish API helpers
-# ---------------------------------------------------------------------------
-
-
-def create_published_listing_from_payload(
-    payload: Mapping[str, Any],
-    organization: Any = None,
-) -> Listing:
-    """Create and return a published listing from validated API payload.
-
-    If *organization* is provided it is used directly; otherwise the ambient
-    org is resolved from the ContextVar (set by ``TenantMiddleware``).
-    """
-    errors: dict[str, str] = {}
-
-    title = payload.get("title")
-    if not isinstance(title, str) or not title.strip():
-        errors["title"] = "This field is required"
-    elif not slugify(title.strip()):
-        errors["title"] = "Must include at least one letter or number"
-
-    description = payload.get("description")
-    if not isinstance(description, str) or not description.strip():
-        errors["description"] = "This field is required"
-
-    location = payload.get("location")
-    if location is not None and not isinstance(location, str):
-        errors["location"] = "Must be a string"
-
-    price = payload.get("price")
-    parsed_price: Decimal | None = None
-    if price is not None:
-        if isinstance(price, bool):
-            errors["price"] = "Must be a number or numeric string"
-        else:
-            try:
-                parsed_price = Decimal(str(price))
-            except InvalidOperation:
-                errors["price"] = "Must be a number or numeric string"
-            except TypeError:
-                errors["price"] = "Must be a number or numeric string"
-            except ValueError:
-                errors["price"] = "Must be a number or numeric string"
-
-    if errors:
-        raise ListingPublishValidationError(errors)
-
-    title_text = str(title).strip()
-    description_text = str(description).strip()
-    generated_slug = slugify(title_text)
-
-    if organization is None:
-        org_id = get_current_org_id()
-        if org_id is not None:
-            organization = Organization.objects.get(pk=org_id)
-        else:
-            organization = Organization.objects.get_system_org()
-
-    if Listing.objects.filter(organization=organization, slug=generated_slug).exists():
-        raise ListingPublishConflictError("Listing already exists for generated slug")
-
-    try:
-        listing = Listing.objects.create(
-            title=title_text,
-            slug=generated_slug,
-            description=description_text,
-            location=location.strip() if isinstance(location, str) else "",
-            price=parsed_price,
-            status=Listing.Status.PUBLISHED,
-            organization=organization,
-        )
-    except IntegrityError as exc:
-        if Listing.objects.filter(
-            organization=organization, slug=generated_slug
-        ).exists():
-            raise ListingPublishConflictError(
-                "Listing already exists for generated slug"
-            ) from exc
-        raise
-
-    return listing
 
 
 class ListingsSessionAuthentication(SessionAuthentication):

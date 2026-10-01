@@ -43,7 +43,7 @@ DECOMPRESSION_BOMB_PATHS = (
     ),
     pytest.param(
         True,
-        "quickscale_modules_blog.views.Image.open",
+        "quickscale_modules_blog.services.Image.open",
         id="storage-absent",
     ),
 )
