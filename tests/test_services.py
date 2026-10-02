@@ -15,6 +15,7 @@ SERVICE_SURFACE = [
     "ValidatedUpload",
     "build_public_media_url",
     "build_upload_path",
+    "is_enabled",
     "list_s3_compatible_media_inventory",
     "make_cache_friendly_name",
     "sanitize_relative_media_path",
@@ -161,3 +162,11 @@ class TestServiceErrors:
 
     def test_storage_error_is_the_module_error_base(self) -> None:
         assert issubclass(services.StorageError, Exception)
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_STORAGE_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_STORAGE_ENABLED=True):
+        assert services.is_enabled() is True
+    with override_settings(QUICKSCALE_STORAGE_ENABLED=False):
+        assert services.is_enabled() is False
