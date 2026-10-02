@@ -14,6 +14,7 @@ from unittest import mock
 import pytest
 
 from django.db import connection, transaction
+from django.test import override_settings
 
 from quickscale_modules_crm import services
 from quickscale_modules_crm.exceptions import CrmError
@@ -310,6 +311,7 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
         "CrmError",
         "DEFAULT_STAGE_BLUEPRINT",
         "ensure_org_default_stages",
+        "is_enabled",
     ]
     for name in services.__all__:
         assert hasattr(services, name)
@@ -322,3 +324,11 @@ def test_missing_organization_raises_module_error(org_a) -> None:
 
     with pytest.raises(CrmError, match="no longer exists"):
         ensure_org_default_stages(org_a)
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_CRM_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_CRM_ENABLED=True):
+        assert services.is_enabled() is True
+    with override_settings(QUICKSCALE_CRM_ENABLED=False):
+        assert services.is_enabled() is False

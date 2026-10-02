@@ -3502,3 +3502,11 @@ def test_cancel_current_subscription_translates_provider_errors(
             organization=organization,
             stripe_client=fake_client,
         )
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_BILLING_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_BILLING_ENABLED=True):
+        assert billing_services.is_enabled() is True
+    with override_settings(QUICKSCALE_BILLING_ENABLED=False):
+        assert billing_services.is_enabled() is False

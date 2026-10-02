@@ -39,6 +39,16 @@ from quickscale_modules_notifications.models import (
     NotificationSettings,
 )
 
+
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_NOTIFICATIONS_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_NOTIFICATIONS_ENABLED)
+
+
 __all__ = [
     "DeliveryMailer",
     "NotificationConfigurationError",
@@ -56,6 +66,7 @@ __all__ = [
     "dispatch_notification_message",
     "ensure_default_settings",
     "ingest_webhook_event",
+    "is_enabled",
     "load_settings_snapshot",
     "render_notification",
     "sanitize_provider_metadata",

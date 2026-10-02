@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from django.test import override_settings
 
 from quickscale_modules_blog import services
 from quickscale_modules_blog.exceptions import (
@@ -24,6 +25,7 @@ SERVICE_SURFACE = [
     "BlogError",
     "create_blog_media_asset_from_request",
     "create_published_post_from_payload",
+    "is_enabled",
 ]
 
 
@@ -309,3 +311,11 @@ class TestCreateBlogMediaAssetFromRequest:
                     author=author_user,
                     organization=org,
                 )
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_BLOG_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_BLOG_ENABLED=True):
+        assert services.is_enabled() is True
+    with override_settings(QUICKSCALE_BLOG_ENABLED=False):
+        assert services.is_enabled() is False

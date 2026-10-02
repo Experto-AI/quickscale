@@ -24,10 +24,9 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | — | Deferred |
-| SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
+| SA226 | Authorize tenant modules by org role | post-v88 | 3 | — | Deferred |
 | SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | SA220, SA226 | Deferred |
+| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | SA226 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -39,17 +38,18 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA231 (until SA215 lands) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA220
+Track 2: — (queue complete)
 Track 3: SA215 (rules already met) · SA226 ──► SA215 (remaining rules) ──► SA216
-     critical path: SA220 → SA226 → SA215 → SA191 → SA153
+     critical path: SA226 → SA215 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
 ported, and SA204 has not frozen the migration history. SA219 landed the settings family, the
-`_ENABLED` switches, and the rule 35 secret projection; SA220's `is_enabled()` reads those
-`_ENABLED` settings, and SA226's org-role authorization needs SA220's capabilities. SA204 freezes
+`_ENABLED` switches, and the rule 35 secret projection; SA220 landed `is_enabled()` on every
+module's public service surface and made `required_modules` cover every reference, so SA226's
+org-role authorization follows it. SA204 freezes
 migration history before any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA215 runs on Track 3, which owns SA230's harness that SA215 adds rules
@@ -64,7 +64,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA231 | yes | yes | yes | **yes** | no |
-| 2 | SA220 | yes | yes | yes | **yes** | **yes** |
+| 2 | — | — | — | — | **yes** | no |
 | 3 | SA215 (first slice) | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
@@ -125,7 +125,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Start early:** SA230 and SA228 have merged, so the first slice moves rules 4, 5, and 23 (the
   cross-module, import-graph, and `services.py` rules, already met on `v89`) out of the harness's
-  `OPEN_RULES`, each with its control case; the rest waits for SA220 and SA226.
+  `OPEN_RULES`, each with its control case; the rest waits for SA226.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
@@ -174,18 +174,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
-- [ ] **SA220 — Give every module `is_enabled()` and make `required_modules` cover every import.**
-
-  **Context:** the part of the dependency convention that needs SA219's `_ENABLED` settings.
-
-  **Scope:** every `services.py` gains `is_enabled()` reading SA219's `_ENABLED`; `required_modules`
-  covers every remaining cross-module import (including `blog` → `storage`), and the import-graph test checks
-  them against it.
-
-  **Acceptance:** each module's `is_enabled()` has a test for both settings; the import-graph test
-  fails when an import or reference by name is missing from `required_modules`.
-
-  **Surfaces:** every `services.py` and manifest; the import-graph test.
+- [x] **SA220 — Give every module `is_enabled()` and make `required_modules` cover every import.**
 
 - [ ] **SA226 — Authorize tenant modules by org role.**
 

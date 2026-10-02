@@ -882,8 +882,8 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         _assert_physical_module_manifest_names(project_path, inventory)
 
         # quickscale.yml: blog with rss_enabled=False; auth and orgs are
-        # installed.  Orgs requires notifications which is materialized
-        # by _load_and_validate_config.
+        # installed.  Orgs requires notifications and blog requires storage;
+        # both are materialized by _load_and_validate_config.
         config_data = {
             "version": "1",
             "project": {
@@ -944,6 +944,16 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
                     "branch": "splits/notifications-module",
                     "installed_at": "2025-01-01",
                 },
+                "storage": {
+                    "name": "storage",
+                    "version": "0.86.0",
+                    "commit_sha": "abc123",
+                    "embedded_at": "2025-01-01T00:00:00",
+                    "options": {},
+                    "prefix": "modules/storage",
+                    "branch": "splits/storage-module",
+                    "installed_at": "2025-01-01",
+                },
                 "blog": {
                     "name": "blog",
                     "version": "0.73.0",
@@ -982,6 +992,12 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
                     "installed_version": "0.78.0",
                     "installed_at": "2025-01-01",
                 },
+                "storage": {
+                    "prefix": "modules/storage",
+                    "branch": "splits/storage-module",
+                    "installed_version": "0.86.0",
+                    "installed_at": "2025-01-01",
+                },
                 "blog": {
                     "prefix": "modules/blog",
                     "branch": "splits/blog-module",
@@ -997,8 +1013,8 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         _assert_scenario_module_sets(
             project_path,
             desired_names={"auth", "orgs", "blog"},
-            applied_names={"auth", "orgs", "notifications", "blog"},
-            tracked_names={"auth", "orgs", "notifications", "blog"},
+            applied_names={"auth", "orgs", "notifications", "storage", "blog"},
+            tracked_names={"auth", "orgs", "notifications", "storage", "blog"},
         )
 
         with (
@@ -1041,13 +1057,14 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         assert "No new modules to embed" in result.output
         assert mock_embed_modules_step.call_args.args[1] == []
         _assert_physical_module_manifest_names(project_path, inventory)
-        # Config validation materializes orgs' notifications dependency in
-        # desired state; the pre-apply explicit set remains auth/orgs/blog.
+        # Config validation materializes orgs' notifications and blog's
+        # storage dependencies in desired state; the pre-apply explicit set
+        # remains auth/orgs/blog.
         _assert_scenario_module_sets(
             project_path,
-            desired_names={"auth", "orgs", "notifications", "blog"},
-            applied_names={"auth", "orgs", "notifications", "blog"},
-            tracked_names={"auth", "orgs", "notifications", "blog"},
+            desired_names={"auth", "orgs", "notifications", "storage", "blog"},
+            applied_names={"auth", "orgs", "notifications", "storage", "blog"},
+            tracked_names={"auth", "orgs", "notifications", "storage", "blog"},
         )
 
         settings_modules = (package_dir / "settings" / "modules.py").read_text()

@@ -723,6 +723,7 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
         "dispatch_notification_message",
         "ensure_default_settings",
         "ingest_webhook_event",
+        "is_enabled",
         "load_settings_snapshot",
         "render_notification",
         "sanitize_provider_metadata",
@@ -748,3 +749,11 @@ def test_dispatch_notification_message_translates_missing_message() -> None:
     """Rule 23: a stale message id answers through the module's error base."""
     with pytest.raises(NotificationError, match="does not exist"):
         services.dispatch_notification_message(999999)
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_NOTIFICATIONS_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=True):
+        assert services.is_enabled() is True
+    with override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False):
+        assert services.is_enabled() is False

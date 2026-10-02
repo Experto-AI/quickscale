@@ -5000,6 +5000,7 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
         "ensure_default_policy",
         "get_backup_snapshot",
         "get_local_backup_directory",
+        "is_enabled",
         "is_restore_stale",
         "load_policy_snapshot",
         "prepare_admin_uploaded_restore_artifact",
@@ -5031,3 +5032,11 @@ def test_restore_prepare_service_takes_one_subject_then_keyword_only() -> None:
     assert all(
         parameter.kind is inspect.Parameter.KEYWORD_ONLY for parameter in parameters[1:]
     )
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_BACKUPS_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_BACKUPS_ENABLED=True):
+        assert backup_services.is_enabled() is True
+    with override_settings(QUICKSCALE_BACKUPS_ENABLED=False):
+        assert backup_services.is_enabled() is False

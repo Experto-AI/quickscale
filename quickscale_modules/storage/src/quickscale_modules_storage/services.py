@@ -27,12 +27,23 @@ from quickscale_modules_storage.helpers import (
     validate_file_upload as _validate_file_upload,
 )
 
+
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_STORAGE_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_STORAGE_ENABLED)
+
+
 __all__ = [
     "StorageBackendSelection",
     "StorageError",
     "ValidatedUpload",
     "build_public_media_url",
     "build_upload_path",
+    "is_enabled",
     "list_s3_compatible_media_inventory",
     "make_cache_friendly_name",
     "sanitize_relative_media_path",

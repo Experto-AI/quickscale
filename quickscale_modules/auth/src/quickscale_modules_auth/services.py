@@ -13,8 +13,21 @@ the callers' one auth surface today.
 
 from __future__ import annotations
 
+from django.conf import settings
+
 from .exceptions import AuthError
+
+
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_AUTH_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_AUTH_ENABLED)
+
 
 __all__ = [
     "AuthError",
+    "is_enabled",
 ]

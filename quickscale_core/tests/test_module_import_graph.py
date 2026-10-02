@@ -25,7 +25,11 @@ What one source file contributes:
   (dependencies, model labels, table names) -- a reference to another
   module's ``models`` (an import path, or a ``get_model`` label) is excepted
   by rule 34, and a registry or import call argument that cannot be resolved
-  to a literal fails closed, so a bound target cannot pass silently.
+  to a literal fails closed, so a bound target cannot pass silently;
+- the layer scan excepts a migration's model references (rule 34), but every
+  such reference is still recorded as a declaration: ``required_modules``
+  must list every module a source imports, so the dependency check reads the
+  declaration set.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ import re
 from typing import Final
 
 import pytest
+import yaml
 
 from quickscale_core.contracts.module_discovery import (
     discover_shipped_module_names,
@@ -132,6 +137,7 @@ class ReferenceScan:
 
     references: tuple[ModuleReference, ...]
     dynamic: tuple[DynamicReference, ...]
+    declarations: tuple[ModuleReference, ...]
 
 
 def _module_names_in(text: str) -> set[str]:
@@ -318,12 +324,25 @@ class _FileReferenceCollector(ast.NodeVisitor):
         self._import_module_aliases = import_module_aliases
         self.references: list[ModuleReference] = []
         self.dynamic: list[DynamicReference] = []
+        self.declarations: list[ModuleReference] = []
 
     def _record(self, target: str, line: int) -> None:
         if target != self._module_name:
-            self.references.append(
+            reference = ModuleReference(self._module_name, target, self._path, line)
+            self.references.append(reference)
+            self.declarations.append(reference)
+
+    def _record_declaration(self, target: str, line: int) -> None:
+        """Record a reference the layer rules except but a manifest must declare."""
+        if target != self._module_name:
+            self.declarations.append(
                 ModuleReference(self._module_name, target, self._path, line)
             )
+
+    def _declare_text(self, text: str, line: int) -> None:
+        """Declare every module named by a layer-excepted reference."""
+        for target in sorted(_module_names_in(text)):
+            self._record_declaration(target, line)
 
     def _record_text(self, text: str, line: int, *, check_labels: bool) -> None:
         for target in sorted(_module_names_in(text)):
@@ -350,6 +369,7 @@ class _FileReferenceCollector(ast.NodeVisitor):
         """Read a plain import; migrations except another module's models."""
         for alias in node.names:
             if self._is_migration and _is_model_import_path(alias.name):
+                self._declare_text(alias.name, node.lineno)
                 continue
             self._record_text(alias.name, node.lineno, check_labels=False)
 
@@ -360,6 +380,7 @@ class _FileReferenceCollector(ast.NodeVisitor):
         if self._is_migration:
             imported_paths = [f"{node.module}.{alias.name}" for alias in node.names]
             if all(_is_model_import_path(path) for path in imported_paths):
+                self._declare_text(node.module, node.lineno)
                 return
         self._record_text(node.module, node.lineno, check_labels=False)
 
@@ -429,6 +450,7 @@ class _FileReferenceCollector(ast.NodeVisitor):
             self._fail_closed(name_expr)
             return
         if _is_model_import_path(target):
+            self._declare_text(target, name_expr.lineno)
             return
         self._record_text(target, name_expr.lineno, check_labels=False)
 
@@ -450,6 +472,7 @@ class _FileReferenceCollector(ast.NodeVisitor):
         resolved = _static_string(argument)
         if resolved is not None:
             if name == "get_model" or _is_model_import_path(resolved):
+                self._declare_text(resolved, argument.lineno)
                 return
             self._record_text(resolved, argument.lineno, check_labels=False)
             return
@@ -497,6 +520,7 @@ def _collect_module_references(package_dirs: Mapping[str, Path]) -> ReferenceSca
     """Parse every module source and report each cross-module reference."""
     references: list[ModuleReference] = []
     dynamic: list[DynamicReference] = []
+    declarations: list[ModuleReference] = []
     for module_name in sorted(package_dirs):
         package_dir = package_dirs[module_name]
         assert package_dir.is_dir(), (
@@ -514,7 +538,8 @@ def _collect_module_references(package_dirs: Mapping[str, Path]) -> ReferenceSca
             collector.visit(tree)
             references.extend(collector.references)
             dynamic.extend(collector.dynamic)
-    return ReferenceScan(tuple(references), tuple(dynamic))
+            declarations.extend(collector.declarations)
+    return ReferenceScan(tuple(references), tuple(dynamic), tuple(declarations))
 
 
 def _reference_graph(
@@ -581,6 +606,27 @@ def _scan_shipped_sources() -> ReferenceScan:
     return _collect_module_references(_shipped_package_dirs())
 
 
+def _manifest_required_modules() -> dict[str, frozenset[str]]:
+    """Return each shipped module manifest's declared ``required_modules``."""
+    declared: dict[str, frozenset[str]] = {}
+    for name, module_path in discover_shipped_module_paths().items():
+        manifest = yaml.safe_load((module_path / "module.yml").read_text()) or {}
+        declared[name] = frozenset(manifest.get("required_modules") or [])
+    return declared
+
+
+def _undeclared_references(
+    references: Iterable[ModuleReference],
+    declared: Mapping[str, frozenset[str]],
+) -> list[ModuleReference]:
+    """Return the references whose target no manifest declares as required."""
+    return [
+        reference
+        for reference in references
+        if reference.target not in declared.get(reference.source, frozenset())
+    ]
+
+
 def test_layer_table_mirrors_the_shipped_module_inventory() -> None:
     """The test-owned layer table covers exactly the shipped modules."""
     assert set(discover_shipped_module_names()) == set(MODULE_LAYERS)
@@ -608,6 +654,21 @@ def test_shipped_sources_have_no_unresolved_module_identity() -> None:
     scan = _scan_shipped_sources()
     assert scan.dynamic == (), "Unresolved module identities:\n" + "\n".join(
         str(reference) for reference in scan.dynamic
+    )
+
+
+def test_shipped_modules_declare_every_reference_in_required_modules() -> None:
+    """Every referenced module is declared in ``required_modules`` (rules 5, 34).
+
+    A module that reaches into another module's package or app label must
+    list it in its manifest, or ``plan``/``apply`` assemble a project with
+    the reference but without the module it names.
+    """
+    scan = _scan_shipped_sources()
+    declared = _manifest_required_modules()
+    violations = _undeclared_references(scan.declarations, declared)
+    assert violations == [], "Undeclared module references:\n" + "\n".join(
+        str(reference) for reference in violations
     )
 
 
@@ -699,6 +760,52 @@ def test_downward_and_same_layer_references_pass(tmp_path: Path) -> None:
         'import quickscale_modules_orgs.models\nLABEL = "quickscale_orgs:detail"\n',
     )
     assert _upward_references(scan.references, MODULE_LAYERS) == []
+
+
+def test_undeclared_reference_is_reported(tmp_path: Path) -> None:
+    """A reference to a module absent from ``required_modules`` is reported."""
+    scan = _scan_source(tmp_path, "forms", "import quickscale_modules_storage\n")
+    violations = _undeclared_references(scan.declarations, {"forms": frozenset()})
+    assert [violation.target for violation in violations] == ["storage"]
+
+
+def test_declared_reference_passes(tmp_path: Path) -> None:
+    """A reference to a declared module passes the required-modules check."""
+    scan = _scan_source(tmp_path, "forms", "import quickscale_modules_storage\n")
+    declared = {"forms": frozenset({"storage"})}
+    assert _undeclared_references(scan.declarations, declared) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from quickscale_modules_billing.models import Subscription\n",
+        "import quickscale_modules_billing.models\n",
+        'import_module("quickscale_modules_billing.models")\n',
+        'apps.get_model("quickscale_billing", "Subscription")\n',
+        'apps.get_model("quickscale_billing.Subscription")\n',
+    ],
+)
+def test_undeclared_migration_model_reference_is_reported(
+    tmp_path: Path, source: str
+) -> None:
+    """A migration's model reference is excepted from layers, not from required_modules."""
+    scan = _scan_source(tmp_path, "orgs", source, "migrations/0001_initial.py")
+    assert scan.references == ()
+    violations = _undeclared_references(scan.declarations, {"orgs": frozenset()})
+    assert [violation.target for violation in violations] == ["billing"]
+
+
+def test_declared_migration_model_reference_passes(tmp_path: Path) -> None:
+    """A declared migration model reference passes the required-modules check."""
+    scan = _scan_source(
+        tmp_path,
+        "orgs",
+        "from quickscale_modules_billing.models import Subscription\n",
+        "migrations/0001_initial.py",
+    )
+    declared = {"orgs": frozenset({"billing"})}
+    assert _undeclared_references(scan.declarations, declared) == []
 
 
 def test_self_references_are_ignored(tmp_path: Path) -> None:

@@ -15,16 +15,28 @@ from __future__ import annotations
 
 from typing import Sequence
 
+from django.conf import settings
 from django.db import transaction
 
 from quickscale_modules_crm.exceptions import CrmError
 from quickscale_modules_crm.models import Stage
 from quickscale_modules_orgs.models import Organization
 
+
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_CRM_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_CRM_ENABLED)
+
+
 __all__ = [
     "CrmError",
     "DEFAULT_STAGE_BLUEPRINT",
     "ensure_org_default_stages",
+    "is_enabled",
 ]
 
 # Canonical default stage blueprint, matching the shipped migration 0001.

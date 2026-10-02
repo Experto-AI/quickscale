@@ -493,7 +493,7 @@ def test_org_dependants_require_bare_orgs() -> None:
     """Each orgs dependant declares orgs as a bare name, with no floor."""
     for module_name in ORG_DEPENDANTS:
         manifest = load_manifest_from_path(_manifest_path(module_name))
-        assert manifest.required_modules == ["orgs"], (
+        assert "orgs" in manifest.required_modules, (
             f"{module_name} must require bare 'orgs', got {manifest.required_modules!r}"
         )
 

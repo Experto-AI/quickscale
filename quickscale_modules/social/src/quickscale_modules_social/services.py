@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db.utils import OperationalError, ProgrammingError
 
@@ -524,6 +525,15 @@ def organization_cache_keys(organization_id: object) -> tuple[str, ...]:
     )
 
 
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_SOCIAL_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_SOCIAL_ENABLED)
+
+
 # ``invalidate_social_cache()`` intentionally stays out of ``__all__``: it only
 # clears bare keys and is unsafe to advertise as a tenant-aware bulk
 # invalidation API.
@@ -534,6 +544,7 @@ __all__ = [
     "SocialLinkRecord",
     "build_social_embeds_payload",
     "build_social_link_tree_payload",
+    "is_enabled",
     "list_published_social_embeds",
     "list_published_social_links",
     "organization_cache_keys",

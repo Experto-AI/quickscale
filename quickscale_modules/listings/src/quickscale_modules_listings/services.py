@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from django.conf import settings
 from django.db import DatabaseError, transaction
 from django.utils.text import slugify
 
@@ -32,9 +33,20 @@ from .exceptions import (
 )
 from .models import Listing
 
+
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_LISTINGS_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_LISTINGS_ENABLED)
+
+
 __all__ = [
     "ListingsError",
     "create_published_listing_from_payload",
+    "is_enabled",
 ]
 
 logger = logging.getLogger(__name__)

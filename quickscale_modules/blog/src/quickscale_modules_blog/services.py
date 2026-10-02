@@ -37,10 +37,21 @@ from .exceptions import (
 )
 from .models import BlogMediaAsset, Category, Post, Tag
 
+
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_BLOG_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_BLOG_ENABLED)
+
+
 __all__ = [
     "BlogError",
     "create_blog_media_asset_from_request",
     "create_published_post_from_payload",
+    "is_enabled",
 ]
 
 IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
