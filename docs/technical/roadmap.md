@@ -39,7 +39,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA231 (until SA215 lands) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: — (queue complete)
-Track 3: SA215 (rules already met) · SA226 ──► SA215 (remaining rules) ──► SA216
+Track 3: SA226 ──► SA215 (remaining rules) ──► SA216
      critical path: SA226 → SA215 → SA191 → SA153
 ```
 
@@ -53,7 +53,7 @@ org-role authorization follows it. SA204 freezes
 migration history before any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA215 runs on Track 3, which owns SA230's harness that SA215 adds rules
-to: its first slice runs now, ahead of SA226, and shortens the critical path's SA215 segment. SA231
+to: its first slice landed ahead of SA226, and the rest follows SA226 on the same track. SA231
 (Track 1) fills its track until SA215 lands and SA191 can start. SA216 waits for SA215
 because both change auth's views, orgs' removal path, and the user-referencing models.
 
@@ -65,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA231 | yes | yes | yes | **yes** | no |
 | 2 | — | — | — | — | **yes** | no |
-| 3 | SA215 (first slice) | yes | yes | yes | **yes** | **yes** |
+| 3 | SA226 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
