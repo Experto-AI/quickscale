@@ -171,7 +171,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   facades over focused sibling modules, each under 800 lines, re-exporting their full prior
   surfaces; all five remaining functions at CC >= 11 and all five remaining accepted complexity
   entries in this batch are resolved, `contracts/module_options.py` included. Batch 1 is complete;
-  batch 2 (CLI commands) is next.
+  the module batch and the closing gate batch remain, the gate waiting on SA232.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
