@@ -512,7 +512,7 @@ class TestBackupLifecycle:
         local_backup_settings: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import quickscale_modules_storage.helpers as storage_helpers
+        import quickscale_modules_storage.services as storage_services
 
         backup_policy.local_directory = str(local_backup_settings)
         backup_policy.save(update_fields=["local_directory", "updated_at"])
@@ -530,7 +530,7 @@ class TestBackupLifecycle:
             return expected_inventory
 
         monkeypatch.setattr(
-            storage_helpers,
+            storage_services,
             "list_s3_compatible_media_inventory",
             fake_inventory,
         )
