@@ -730,7 +730,7 @@ class TestAdminFormListAPIView:
         populates the ContextVar from the session.  Members see their own
         org's form and do NOT see forms from other orgs.
         """
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
         from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -786,7 +786,7 @@ class TestAdminFormListAPIView:
         Proves cross-tenant isolation through the
         full middleware + RLS pipeline on the non-exempt admin path.
         """
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
         from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -839,7 +839,7 @@ class TestAdminFormListAPIView:
 
     def test_viewer_session_reads_active_org_forms(self, user, api_client, db):
         """A viewer-role session can read its active org's forms (rule 19)."""
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
         from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -889,7 +889,7 @@ class TestAdminFormListAPIView:
         authentication), not ``force_authenticate``, so the full
         middleware + RLS pipeline is exercised.
         """
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
         from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -1102,7 +1102,7 @@ class TestAdminSubmissionDetailAPIView:
         the response materialized correctly (serializer.data evaluated inside
         org_scope).  Also proves the persisted value survives a DB refresh.
         """
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
         from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -1168,7 +1168,7 @@ class TestAdminSubmissionDetailAPIView:
 
     def _login_with_org_session(self, api_client, user, organization):
         """Log *user* in with *organization* active in the session."""
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 
         api_client.force_login(user=user)
         session = api_client.session
@@ -1808,7 +1808,7 @@ class TestFormCallerParity:
 
         api_client.force_login(user)
         session = api_client.session
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 
         session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
         session.save()
@@ -1877,7 +1877,7 @@ class TestFormCallerParity:
 
         api_client.force_login(user)
         session = api_client.session
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 
         session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
         session.save()
