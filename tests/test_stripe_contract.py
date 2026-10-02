@@ -16,6 +16,7 @@ import time
 from typing import Any
 
 import pytest
+from django.conf import settings
 import stripe
 
 from quickscale_modules_billing import services as billing_services
@@ -156,7 +157,7 @@ def test_handle_stripe_event_rejects_a_different_named_release(
         stripe_customer_id="cus_contract_basil",
         status=Subscription.Status.ACTIVE,
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", WEBHOOK_SECRET)
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", WEBHOOK_SECRET)
     payload = invoice_event(
         event_id="evt_contract_basil",
         event_type="invoice.paid",
@@ -196,7 +197,7 @@ def test_dahlia_invoice_paid_grants_exactly_one_plan_credit(
         stripe_customer_id="cus_contract_cycle",
         status=Subscription.Status.ACTIVE,
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", WEBHOOK_SECRET)
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", WEBHOOK_SECRET)
     payload = invoice_event(
         event_id="evt_contract_cycle",
         event_type="invoice.paid",
@@ -250,7 +251,7 @@ def test_dahlia_subscription_updated_keeps_item_derived_period_bounds(
             1_600_086_400
         ),
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", WEBHOOK_SECRET)
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", WEBHOOK_SECRET)
 
     updated_event = subscription_event(
         event_id="evt_contract_bounds",

@@ -32,8 +32,10 @@ Boundaries:
   purchaseable but do not ship through a public catalog endpoint.
 - Checkout success, cancel, and portal return URLs are server-owned; callers may not supply
   them in API requests.
-- Stripe keys are resolved from environment variables at runtime and are never stored in the
-  database.
+- Stripe keys reach billing code as the `QUICKSCALE_BILLING_PUBLISHABLE_KEY`,
+  `QUICKSCALE_BILLING_SECRET_KEY`, and `QUICKSCALE_BILLING_WEBHOOK_SECRET` settings; `quickscale
+  apply` renders each one from the environment variable its `_ENV_VAR` option names (rule 35), and
+  the credential values are never stored in the database.
 
 ## Configuration
 
@@ -62,8 +64,10 @@ export QUICKSCALE_BILLING_WEBHOOK_SECRET=whsec_...
 ```
 
 The `*_env_var` options name the environment variables that carry the real credentials; only
-the credential values themselves are deploy-time environment variables. Keep Stripe key wiring
-runtime-owned and never hardcode the publishable key in the frontend source tree.
+the credential values themselves are deploy-time environment variables. `apply` renders each one
+into the projected setting above, so billing code reads the setting rather than the environment.
+Keep Stripe key wiring runtime-owned and never hardcode the publishable key in the frontend
+source tree.
 
 ## Public surface
 
@@ -121,7 +125,7 @@ disabled billing runtime answers `404`.
 
 | Route | Method | Auth | Request | Success contract | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `billing/api/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": {"code": "configuration_error", "message": "Stripe publishable key is not configured in the runtime environment."}}` when missing. |
+| `billing/api/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": {"code": "configuration_error", "message": "Stripe publishable key is not configured in the runtime settings."}}` when missing. |
 | `billing/api/plans/` | `GET` | Public | None | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. |
 | `billing/api/balance/` | `GET` | Session auth | None | `{"balance": 0, "updated_at": null}` | A missing balance is returned as a read-only zero snapshot without creating a row. Persisted balances include their `updated_at` timestamp. |
 | `billing/api/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Fixed page size of `25`; client `page_size` overrides are ignored. |

@@ -24,6 +24,16 @@ _DECLARED_SETTINGS = (
     "QUICKSCALE_BILLING_CURRENCY",
 )
 
+#: The projected secret settings apply writes from the `_ENV_VAR` options
+#: (rule 35).  They are not manifest options, so the generic settings check
+#: does not report them; a missing one is reported here instead of raising
+#: while resolving.
+_PROJECTED_SECRETS = (
+    "QUICKSCALE_BILLING_PUBLISHABLE_KEY",
+    "QUICKSCALE_BILLING_SECRET_KEY",
+    "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+)
+
 
 def check_billing_settings(
     app_configs: object = None,
@@ -45,23 +55,38 @@ def check_billing_settings(
     if not snapshot.enabled:
         return messages
 
+    missing_projected = [
+        name for name in _PROJECTED_SECRETS if not hasattr(settings, name)
+    ]
+    if missing_projected:
+        return [
+            Error(
+                f"{', '.join(missing_projected)} not set. "
+                "Run `quickscale apply` to regenerate the managed settings.",
+                id="quickscale_billing.E001",
+            )
+        ]
+
     if not snapshot.resolve_secret_key():
         messages.append(
             Error(
-                "Billing is enabled but the Stripe secret key environment "
-                f"variable {snapshot.secret_key_env_var!r} named by "
-                "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR is empty. Set the key "
-                "or set QUICKSCALE_BILLING_ENABLED=False.",
+                "Billing is enabled but the applied Stripe secret key setting "
+                "QUICKSCALE_BILLING_SECRET_KEY is empty (it renders the "
+                f"environment variable {snapshot.secret_key_env_var!r} named "
+                "by QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR). Set the key or set "
+                "QUICKSCALE_BILLING_ENABLED=False.",
                 id="quickscale_billing.E002",
             )
         )
     if not snapshot.resolve_webhook_secret():
         messages.append(
             Error(
-                "Billing is enabled but the Stripe webhook signing secret "
-                f"environment variable {snapshot.webhook_secret_env_var!r} "
-                "named by QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR is empty. "
-                "Set the secret or set QUICKSCALE_BILLING_ENABLED=False.",
+                "Billing is enabled but the applied Stripe webhook signing "
+                "secret setting QUICKSCALE_BILLING_WEBHOOK_SECRET is empty (it "
+                f"renders the environment variable "
+                f"{snapshot.webhook_secret_env_var!r} named by "
+                "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR). Set the secret or "
+                "set QUICKSCALE_BILLING_ENABLED=False.",
                 id="quickscale_billing.E003",
             )
         )

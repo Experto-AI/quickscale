@@ -11,7 +11,6 @@ import hashlib
 from importlib import import_module
 import json
 import logging
-import os
 from typing import Any, Final, ParamSpec, TypeVar, cast
 
 from django.apps import apps
@@ -127,21 +126,36 @@ class BillingSettingsSnapshot:
         )
 
     def resolve_publishable_key(self) -> str:
-        """Resolve the Stripe publishable key from the configured env var."""
-        publishable_key = os.getenv(self.publishable_key_env_var, "").strip()
+        """Resolve the Stripe publishable key from the applied secret setting (rule 35).
+
+        Rule 3: the applied setting is the only source.  An empty setting
+        resolves to no key and is refused here, because the key is served to
+        the checkout client rather than gatekeeping startup.
+        """
+        publishable_key = str(settings.QUICKSCALE_BILLING_PUBLISHABLE_KEY).strip()
         if not publishable_key:
             raise BillingConfigurationError(
-                "Stripe publishable key is not configured in the runtime environment."
+                "Stripe publishable key is not configured in the runtime settings."
             )
         return publishable_key
 
     def resolve_secret_key(self) -> str:
-        """Resolve the Stripe secret key from the configured env var."""
-        return os.getenv(self.secret_key_env_var, "").strip()
+        """Resolve the Stripe secret key from the applied secret setting (rule 35).
+
+        Rule 3: the applied setting is the only source.  An empty setting
+        resolves to no key, and the startup check refuses the enabled module
+        rather than this method substituting a runtime fallback.
+        """
+        return str(settings.QUICKSCALE_BILLING_SECRET_KEY).strip()
 
     def resolve_webhook_secret(self) -> str:
-        """Resolve the Stripe webhook secret from the configured env var."""
-        return os.getenv(self.webhook_secret_env_var, "").strip()
+        """Resolve the Stripe webhook signing secret from the applied setting (rule 35).
+
+        Rule 3: the applied setting is the only source.  An empty setting
+        resolves to no secret, and the startup check refuses the enabled
+        module rather than this method substituting a runtime fallback.
+        """
+        return str(settings.QUICKSCALE_BILLING_WEBHOOK_SECRET).strip()
 
 
 @dataclass(frozen=True)
@@ -489,7 +503,7 @@ def get_stripe_client(
     secret_key = snapshot.resolve_secret_key()
     if not secret_key:
         raise BillingConfigurationError(
-            "Stripe secret key is not configured in the runtime environment."
+            "Stripe secret key is not configured in the runtime settings."
         )
     try:
         stripe_module = import_module("stripe")
@@ -1869,7 +1883,7 @@ def handle_stripe_event(
     webhook_secret = snapshot.resolve_webhook_secret()
     if not webhook_secret:
         raise BillingConfigurationError(
-            "Stripe webhook secret is not configured in the runtime environment."
+            "Stripe webhook secret is not configured in the runtime settings."
         )
 
     resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
