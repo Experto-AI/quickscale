@@ -329,7 +329,7 @@ def test_operator_guidance_states_the_pinned_stripe_api_version() -> None:
         / "src"
         / "quickscale_cli"
         / "commands"
-        / "apply_command.py",
+        / "_finalize.py",
     )
 
     for path in guidance_paths:
