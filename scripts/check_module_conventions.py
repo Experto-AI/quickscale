@@ -152,10 +152,10 @@ CORE_RUNTIME_ROLE_ENV_VARS = (
 RETIRED_SETTINGS_NAME = "RETIRED_SETTINGS"
 # Rule 19's forbidden tokens and the listed operator paths where a superuser
 # check is sanctioned (audited cross-tenant operator access).  The scan set is
-# every Django view module plus the private ``_view*.py`` / ``*_views.py``
-# siblings rule 28 splits move view code into, so the check follows the code
-# rather than a fixed list of basenames; a token is sanctioned only by an
-# explicit ``OPERATOR_VIEW_TOKENS`` entry.
+# the Django view modules plus their rule 28 private siblings named
+# ``_view*.py`` or ``*_views.py``; it follows those filenames, so view code a
+# split files under another private name stays outside the check.  A token is
+# sanctioned only by an explicit ``OPERATOR_VIEW_TOKENS`` entry.
 VIEW_FILE_NAMES = ("views.py", "debug_views.py")
 VIEW_FILE_PRIVATE_PREFIX = "_view"
 VIEW_FILE_PRIVATE_SUFFIX = "_views.py"
@@ -166,7 +166,6 @@ OPERATOR_VIEW_TOKENS: dict[tuple[str, str], frozenset[str]] = {
     ("orgs", "_view_context.py"): frozenset({"is_superuser"}),
     ("orgs", "_view_org_management.py"): frozenset({"is_superuser"}),
     ("orgs", "debug_views.py"): frozenset({"is_superuser"}),
-    ("orgs", "views.py"): frozenset({"is_superuser"}),
 }
 TICKET_IN_TEST = re.compile(r"(?<![A-Za-z0-9])(?:SA|AF)\d+|CR-SA\d+")
 RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
@@ -2761,12 +2760,13 @@ def _view_token(node: ast.AST) -> str | None:
 
 def _is_view_file(rel: str) -> bool:
     """
-    Return whether a module file belongs to rule 19's view scan set.
+    Return whether a module file is named as one of rule 19's view modules.
 
     ``views.py`` and ``debug_views.py`` are the Django view modules; the
-    private ``_view*.py`` and ``*_views.py`` siblings hold the view code rule
-    28 splits move out of them, so the scan follows the code rather than a
-    fixed list of basenames.
+    private ``_view*.py`` and ``*_views.py`` siblings are the names rule 28
+    splits give the view code they move out of them.  The scan set follows
+    those names, so a split that files view code under another private name
+    stays outside this check.
     """
     if not rel.endswith(".py"):
         return False

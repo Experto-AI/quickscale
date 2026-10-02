@@ -4438,9 +4438,26 @@ def test_authorization_controls() -> None:
     )
     operator = _with_files(
         _golden_module("orgs"),
-        views='def index(request, user):\n    return getattr(user, "is_superuser", False)\n',
+        **{
+            "_view_context.py": (
+                'def index(request, user):\n    return getattr(user, "is_superuser", False)\n'
+            )
+        },
     )
     assert _violations(checker.rule_19_authorization, operator) == []
+    suffix_sibling = _with_files(
+        module,
+        **{
+            "_profile_views.py": (
+                "from rest_framework.permissions import IsAdminUser\n\n"
+                "class IndexView:\n    permission_classes = [IsAdminUser]\n"
+            )
+        },
+    )
+    assert any(
+        "IsAdminUser" in violation
+        for violation in _violations(checker.rule_19_authorization, suffix_sibling)
+    )
     documented = _with_files(
         module,
         views='"""Views never use is_staff or redirect_to_login, by rule 19."""\n',
