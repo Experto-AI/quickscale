@@ -10,7 +10,6 @@ from typing import Any, cast
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ValidationError
 from django.db import connection, transaction
 from django.db.models import QuerySet
@@ -393,7 +392,7 @@ class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
         return redirect(cast(str, next_url))
 
 
-class OrgInvitationAcceptView(SaasModeRequiredMixin, TemplateView):
+class OrgInvitationAcceptView(SaasModeRequiredMixin, LoginRequiredMixin, TemplateView):
     """Render the public org invitation accept page."""
 
     template_name = "quickscale_orgs/org_invitation_accept.html"
@@ -430,7 +429,7 @@ class OrgInvitationAcceptView(SaasModeRequiredMixin, TemplateView):
 
         if session is not None:
             session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
-        return redirect_to_login(request.get_full_path())
+        return self.handle_no_permission()
 
     def get_invitation(self) -> OrganizationInvitation:
         if self._invitation is None:
