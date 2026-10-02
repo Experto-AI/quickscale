@@ -42,6 +42,48 @@ def regular_user(db):
     return user
 
 
+@pytest.fixture
+def viewer_user(db):
+    """Create a user who is only a viewer in their personal org."""
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="viewer",
+        email="viewer@example.com",
+        password="viewerpass123",
+    )
+    organization = Organization.objects.create_personal_for(user)
+    OrganizationMembership.objects.filter(user=user, organization=organization).update(
+        role=OrgRole.VIEWER
+    )
+    return user
+
+
+@pytest.fixture
+def member_user(db):
+    """Create a user whose only org role is member."""
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="member",
+        email="member@example.com",
+        password="memberpass123",
+    )
+    organization = Organization.objects.create_personal_for(user)
+    OrganizationMembership.objects.filter(user=user, organization=organization).update(
+        role=OrgRole.MEMBER
+    )
+    return user
+
+
 def _login_with_org(client, user):
     """Log in *user* and activate their personal org in the session.
 
@@ -94,9 +136,9 @@ class TestPublishListingApi:
         assert response.status_code == 401
         assert _error(response)["code"] == "not_authenticated"
 
-    def test_publish_listing_api_non_staff_returns_403(self, client, regular_user):
-        """Test API requires staff permissions"""
-        _login_with_org(client, regular_user)
+    def test_publish_listing_api_viewer_role_returns_403(self, client, viewer_user):
+        """Test API requires at least the member org role"""
+        _login_with_org(client, viewer_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -105,9 +147,22 @@ class TestPublishListingApi:
         )
 
         assert response.status_code == 403
-        error = _error(response)
-        assert error["code"] == "permission_denied"
-        assert error["message"] == "Staff access required"
+        assert _error(response)["code"] == "permission_denied"
+
+    def test_publish_listing_api_member_role_creates_published_listing(
+        self, client, member_user
+    ):
+        """Test API admits an org member at the member role"""
+        _login_with_org(client, member_user)
+
+        response = client.post(
+            reverse("quickscale_listings:api_publish_listing"),
+            data=json.dumps({"title": "Member Listing", "description": "Body"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        assert response.json()["status"] == "published"
 
     def test_publish_listing_api_foreign_session_org_is_refused_before_the_view(
         self, client, staff_user, regular_user

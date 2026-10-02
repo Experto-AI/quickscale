@@ -52,7 +52,8 @@ Module-to-module use goes through `services.py` (Module Conventions rule 4):
 ### Publish API
 
 `POST listings/api/publish/` creates and publishes a listing from a JSON payload for
-authenticated staff users. It is a DRF `APIView` with session authentication only (CSRF is
+authenticated organization members (minimum role: `member`; a `viewer` is refused). It is a DRF
+`APIView` with session authentication only (CSRF is
 enforced) and the JSON renderer alone. Every error the view answers takes the shared QuickScale
 shape `{"error": {"code", "message", "fields"}}`, produced by
 `quickscale_core.runtime.conventions.exception_handler` — the handler `quickscale apply`
@@ -81,7 +82,7 @@ The list view supports query parameters:
 |----------|------|---------|
 | `quickscale_listings:listing_list` | `listings/` | Paginated, filterable listing list |
 | `quickscale_listings:listing_detail` | `listings/<slug>/` | Listing detail |
-| `quickscale_listings:api_publish_listing` | `listings/api/publish/` | Staff publish endpoint (JSON) |
+| `quickscale_listings:api_publish_listing` | `listings/api/publish/` | Member-role publish endpoint (JSON) |
 
 Project-owned verticals typically override the list and detail views with subclasses that set
 their own concrete model and mount them under their own paths (for example `properties/`), as
