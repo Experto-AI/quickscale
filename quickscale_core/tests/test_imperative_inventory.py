@@ -4,6 +4,11 @@ Validates that the symbol inventories for each module manifest file are
 internally consistent and meet basic structural expectations.
 """
 
+import importlib
+from pathlib import Path
+
+import pytest
+
 from quickscale_core.contracts.imperative_inventory import (
     ADAPTER_ONLY,
     ADAPTER_ONLY_SYMBOLS,
@@ -193,3 +198,23 @@ class TestManifestInventoryHelpers:
             + count_inventory_category(ADAPTER_ONLY)
         )
         assert total == categorized
+
+
+def test_inventory_import_does_not_read_the_filesystem(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Importing the inventory never runs filesystem discovery.
+
+    Module discovery is lazy by decision (no import-time filesystem
+    discovery): a caller must be able to import the contracts package and
+    configure a module base path before any discovery runs.
+    """
+    import quickscale_core.contracts.imperative_inventory as inventory
+
+    def _forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("filesystem discovery ran during import")
+
+    monkeypatch.setattr(Path, "iterdir", _forbidden)
+    module = importlib.reload(inventory)
+    assert set(module.MANIFEST_INVENTORY) == set(AUTHORIZED_IMPERATIVE_MODULES)
+    assert module.MANIFEST_INVENTORY.keys() == MANIFEST_INVENTORY.keys()

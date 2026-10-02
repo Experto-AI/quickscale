@@ -29,7 +29,7 @@ from django.test import Client, RequestFactory
 from django.test.client import WSGIRequest
 from django.urls import reverse
 
-from quickscale_modules_orgs.constants import (
+from quickscale_modules_orgs._constants import (
     ACTIVE_ORG_SESSION_KEY,
     DEBUG_AS_ORG_SESSION_KEY,
 )
@@ -44,7 +44,7 @@ from quickscale_modules_social.admin import (
     _persist_org_to_session,
     _resolve_active_org_id,
 )
-from quickscale_modules_social.contracts import SocialEmbedResolution
+from quickscale_modules_social._contracts import SocialEmbedResolution
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
 # ---------------------------------------------------------------------------

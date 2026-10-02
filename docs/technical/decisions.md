@@ -905,6 +905,10 @@ public surface is `services.py` (rule 4).
   `quickscale_<module>_<model>_<purpose>` (at most 63 characters); an index is
   `qs_<module>_<model>_<field>_idx`, abbreviated to fit Django's 30-character limit. PostgreSQL
   index and unique-constraint names are one namespace per schema, shared with the project.
+- ✅ Exception: an `Index` declared in a `Meta` with `abstract = True` may stay unnamed. A fixed or
+  templated name is inherited by every concrete subclass, so two subclasses collide in the shared
+  schema or exceed Django's 30-character `models.E034` check; Django generates a unique, bounded
+  name per concrete subclass instead.
 - ❌ `unique_together`, `index_together`, an unnamed `Index`, or a name without the prefix.
 
 **26. Inbound webhooks.**
@@ -939,8 +943,10 @@ public surface is `services.py` (rule 4).
 `urls`, `admin`, `forms`, `serializers`, `managers`, `filters`, `feeds`, `middleware`, `validators`,
 `throttles`, `permissions`, `templatetags/`, `management/`, `migrations/`); `templates/` and
 `static/` (rule 8); rule 4's listed
-foundation surface files; the listed extras backups' `persistence.py` (rule 10's port) and orgs'
-`debug_views.py`; and private files named `_<name>.py`. Any other name needs a decision edit.
+foundation surface files; the listed extras backups' `persistence.py` (rule 10's port), orgs'
+`debug_views.py`, and blog's and listings' `markdownx_urls.py` (the staff-guarded MarkdownX
+endpoint URLconf each module mounts in place of the vendor's unguarded one); and private files
+named `_<name>.py`. Any other name needs a decision edit.
 
 **29. Test names.** Test files are `test_<subject>.py`, named for what they protect; neither the file
 name nor its docstrings and comments carry a ticket number (`SA<n>`, `AF<n>`, `CR-SA<n>-<n>`); the
@@ -1043,8 +1049,11 @@ test checks both. Other files in `tests/` are `conftest.py`,
   or removal fail-hard until the shipped contract — inventory, count, and manifests — is
   deliberately updated together.
 - ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
-  test-owned mapping, the theme's TypeScript module surfaces (rule 31), and core's declared release
-  inventory above.
+  test-owned mapping, the theme's module surfaces (rule 31), its server-side seam producer
+  (`generator/seam._SEAM_MODULE_PATHS`) included, core's declared release inventory above, and the
+  `.env.example` managed-block catalog (`apply/steps/env_sync.ENV_EXAMPLE_MODULE_SPECS`), whose
+  per-module prose and block order are presentation data pinned by the env-example conformance
+  suite.
 
 **38. README content.** Rule 11's Configuration heading names every manifest option key, and its
 Management commands heading every command the module ships; the test checks both, besides the

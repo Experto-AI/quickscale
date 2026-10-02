@@ -125,14 +125,19 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Landed (first three slices):** rules 4, 5, and 23 (cross-module public surface, dependency
+  **Landed (first four slices):** rules 4, 5, and 23 (cross-module public surface, dependency
   layers, and the `services.py` public surface), rules 1, 3, 31, and 35 (settings names and the
-  enabled switch, setting reads, the theme seam, and secrets), and rules 6, 19, and 34 (no legacy
-  names, authorization by org role, and references by name) are enforced by the conformance test
-  with a control case each; orgs' invitation redirect now goes through the login-required mixin.
-  The rest covers rule 11's one-off file privatization (`orgs/constants.py`,
-  `social/contracts.py`, `storage/helpers.py`), SA215's own drift fixes (rules 25, 28, 36, 37),
-  and SA216's write-effect rule.
+  enabled switch, setting reads, the theme seam, and secrets), rules 6, 19, and 34 (no legacy
+  names, authorization by org role, and references by name), and rules 11, 25, 28, 36, and 37
+  (one-off file privatization, package files and tests, constraint and index names, module file
+  names, type-check configuration, and module lists derived from discovery) are enforced by the
+  conformance test with a control case each; orgs' invitation redirect now goes through the
+  login-required mixin. The one-off files are private (`orgs/_constants.py`,
+  `social/_contracts.py`, `storage/_helpers.py`), analytics' `events.py` is gone, listings'
+  abstract indexes stay unnamed under rule 25's recorded abstract-base exception, backups has its
+  missing `mypy.ini` section, and the imperative inventory and CLI configurator registry derive
+  their module set from discovery. The rest covers SA216's write-effect rule, the release notes,
+  decisions' quoted names, and the inventory's closing pass.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no

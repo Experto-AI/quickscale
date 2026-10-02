@@ -90,7 +90,7 @@ def _login_with_org(client, user):
     TenantMiddleware in SaaS mode requires ACTIVE_ORG_SESSION_KEY for
     authenticated users; without it the middleware redirects to /orgs/.
     """
-    from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+    from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
     from quickscale_modules_orgs.models import OrganizationMembership
 
     client.force_login(user)
@@ -174,7 +174,7 @@ class TestPublishListingApi:
         the middleware's empty ``403`` rather than the one QuickScale shape.
         This pre-dates the DRF conversion and belongs to the orgs surface.
         """
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 
         _login_with_org(client, staff_user)
         foreign_org = Organization.objects.get(

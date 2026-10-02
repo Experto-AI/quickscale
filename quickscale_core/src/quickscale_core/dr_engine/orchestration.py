@@ -179,7 +179,7 @@ class _StorageBackendSelectionLike(Protocol):
 
 
 class _StorageHelpersModule(Protocol):
-    """Typed subset of the storage helper module used by backups."""
+    """Typed subset of storage's public service surface used by backups."""
 
     def list_s3_compatible_media_inventory(
         self,
@@ -245,9 +245,9 @@ def _get_git_revision() -> str | None:
 
 
 def _load_storage_helpers() -> _StorageHelpersModule:
-    """Load the storage helper module behind a typed local boundary."""
+    """Load storage's public service module behind a typed local boundary."""
     return cast(
-        _StorageHelpersModule, import_module("quickscale_modules_storage.helpers")
+        _StorageHelpersModule, import_module("quickscale_modules_storage.services")
     )
 
 
@@ -1941,7 +1941,7 @@ def _resolve_media_runtime(
     except ModuleNotFoundError as exc:
         if exc.name in (
             "quickscale_modules_storage",
-            "quickscale_modules_storage.helpers",
+            "quickscale_modules_storage.services",
         ):
             selection = None
         else:

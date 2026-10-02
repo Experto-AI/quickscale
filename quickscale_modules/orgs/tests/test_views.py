@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from quickscale_modules_orgs import forms as org_forms
 from quickscale_modules_orgs import views as org_views
-from quickscale_modules_orgs.constants import (
+from quickscale_modules_orgs._constants import (
     PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
 )
 from quickscale_modules_orgs.models import (

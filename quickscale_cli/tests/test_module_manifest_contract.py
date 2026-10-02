@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import re
 import tomllib
 from pathlib import Path
+
+import pytest
 
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
@@ -579,3 +582,21 @@ def test_required_module_paths_are_available() -> None:
     assert not missing, (
         "The following required module paths are missing:\n" + "\n".join(missing)
     )
+
+
+def test_configurator_registry_import_does_not_read_the_filesystem(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Importing the configurator registry never runs filesystem discovery.
+
+    Module discovery is lazy by decision (no import-time filesystem
+    discovery), so the registry reads the static declared catalog instead.
+    """
+    import quickscale_cli.commands.module_config as module_config
+
+    def _forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("filesystem discovery ran during import")
+
+    monkeypatch.setattr(Path, "iterdir", _forbidden)
+    module = importlib.reload(module_config)
+    assert set(module.MODULE_CONFIGURATOR_REGISTRY) == set(MODULE_CONFIGURATOR_REGISTRY)

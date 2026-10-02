@@ -11,6 +11,7 @@ from typing import Any, Callable, Mapping
 
 import click
 
+from quickscale_core.contracts.module_catalog import MODULE_CATALOG
 from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 from quickscale_core.manifest.option_validation import (
     collect_option_validation_issues,
@@ -253,74 +254,23 @@ class ModuleConfigurator:
 
 
 def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
-    """Build the canonical module configurator registry.
+    """Build the canonical module configurator registry from the declared catalog.
 
-    Centralising registration here keeps the manifest-backed surface in one
-    place.
+    Every declared module configures through its manifest, so the registry
+    derives from core's declared release inventory (Module Conventions rule 37's
+    allowed exception, kept equal to discovery by the catalog consistency test)
+    instead of a hand-written module list.  The static catalog is read at
+    import without filesystem discovery (decisions.md: no import-time discovery),
+    and the manifest-backed surface stays centralised here.
     """
-    entries: list[ModuleConfigurator] = [
-        ModuleConfigurator(
-            name="auth",
-            configure=partial(configure_module_from_manifest, "auth"),
-            get_defaults=partial(default_module_config_from_manifest, "auth"),
-        ),
-        ModuleConfigurator(
-            name="blog",
-            configure=partial(configure_module_from_manifest, "blog"),
-            get_defaults=partial(default_module_config_from_manifest, "blog"),
-        ),
-        ModuleConfigurator(
-            name="crm",
-            configure=partial(configure_module_from_manifest, "crm"),
-            get_defaults=partial(default_module_config_from_manifest, "crm"),
-        ),
-        ModuleConfigurator(
-            name="forms",
-            configure=partial(configure_module_from_manifest, "forms"),
-            get_defaults=partial(default_module_config_from_manifest, "forms"),
-        ),
-        ModuleConfigurator(
-            name="listings",
-            configure=partial(configure_module_from_manifest, "listings"),
-            get_defaults=partial(default_module_config_from_manifest, "listings"),
-        ),
-        ModuleConfigurator(
-            name="storage",
-            configure=partial(configure_module_from_manifest, "storage"),
-            get_defaults=partial(default_module_config_from_manifest, "storage"),
-        ),
-        ModuleConfigurator(
-            name="backups",
-            configure=partial(configure_module_from_manifest, "backups"),
-            get_defaults=partial(default_module_config_from_manifest, "backups"),
-        ),
-        ModuleConfigurator(
-            name="billing",
-            configure=partial(configure_module_from_manifest, "billing"),
-            get_defaults=partial(default_module_config_from_manifest, "billing"),
-        ),
-        ModuleConfigurator(
-            name="notifications",
-            configure=partial(configure_module_from_manifest, "notifications"),
-            get_defaults=partial(default_module_config_from_manifest, "notifications"),
-        ),
-        ModuleConfigurator(
-            name="orgs",
-            configure=partial(configure_module_from_manifest, "orgs"),
-            get_defaults=partial(default_module_config_from_manifest, "orgs"),
-        ),
-        ModuleConfigurator(
-            name="analytics",
-            configure=partial(configure_module_from_manifest, "analytics"),
-            get_defaults=partial(default_module_config_from_manifest, "analytics"),
-        ),
-        ModuleConfigurator(
-            name="social",
-            configure=partial(configure_module_from_manifest, "social"),
-            get_defaults=partial(default_module_config_from_manifest, "social"),
-        ),
-    ]
-    return {entry.name: entry for entry in entries}
+    return {
+        entry.name: ModuleConfigurator(
+            name=entry.name,
+            configure=partial(configure_module_from_manifest, entry.name),
+            get_defaults=partial(default_module_config_from_manifest, entry.name),
+        )
+        for entry in MODULE_CATALOG
+    }
 
 
 MODULE_CONFIGURATOR_REGISTRY: dict[str, ModuleConfigurator] = (

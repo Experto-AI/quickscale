@@ -11,7 +11,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
-from .constants import RESERVED_ORG_SLUGS
+from ._constants import RESERVED_ORG_SLUGS
 from .models import (
     OrgRole,
     Organization,

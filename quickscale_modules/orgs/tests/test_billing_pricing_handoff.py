@@ -15,7 +15,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from quickscale_modules_orgs import views as org_views
-from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.models import (
     OrgRole,
     Organization,

@@ -15,7 +15,7 @@ import logging
 
 from django.http import HttpRequest
 
-from .constants import DEBUG_AS_ORG_SESSION_KEY
+from ._constants import DEBUG_AS_ORG_SESSION_KEY
 from .models import Organization
 
 logger = logging.getLogger(__name__)

@@ -38,7 +38,7 @@ STORAGE_PATHS = (
 DECOMPRESSION_BOMB_PATHS = (
     pytest.param(
         False,
-        "quickscale_modules_storage.helpers.Image.open",
+        "quickscale_modules_storage._helpers.Image.open",
         id="storage-installed",
     ),
     pytest.param(
@@ -94,7 +94,7 @@ def _login_with_org(client, user):
     TenantMiddleware in SaaS mode requires ACTIVE_ORG_SESSION_KEY for
     authenticated users; without it the middleware redirects to /orgs/.
     """
-    from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+    from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
     from quickscale_modules_orgs.models import OrganizationMembership
 
     client.force_login(user)

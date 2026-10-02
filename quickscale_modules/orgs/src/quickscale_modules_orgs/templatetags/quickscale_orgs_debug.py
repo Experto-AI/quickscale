@@ -5,7 +5,7 @@ from __future__ import annotations
 from django import template
 from django.http import HttpRequest
 
-from ..constants import DEBUG_AS_ORG_SESSION_KEY
+from .._constants import DEBUG_AS_ORG_SESSION_KEY
 
 register = template.Library()
 

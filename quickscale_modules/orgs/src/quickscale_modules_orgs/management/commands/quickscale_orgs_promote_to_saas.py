@@ -10,7 +10,7 @@ from django.core.management.base import BaseCommand
 from django.db import models
 from django.utils.text import slugify
 
-from quickscale_modules_orgs.constants import RESERVED_ORG_SLUGS
+from quickscale_modules_orgs._constants import RESERVED_ORG_SLUGS
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
 
 

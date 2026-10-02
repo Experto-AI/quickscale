@@ -18,7 +18,7 @@ from django.conf import settings
 from django.core.checks import CheckMessage, Error
 from django.core.exceptions import ImproperlyConfigured
 
-from quickscale_modules_storage.helpers import select_storage_backend
+from quickscale_modules_storage._helpers import select_storage_backend
 
 #: The declared settings the backend selection reads.  While any is absent
 #: the check stays silent: the generic settings check reports the missing

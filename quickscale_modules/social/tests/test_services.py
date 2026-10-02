@@ -12,7 +12,7 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.test import override_settings
 
 import quickscale_modules_social.services as social_services
-from quickscale_modules_social.contracts import (
+from quickscale_modules_social._contracts import (
     SOCIAL_EMBEDS_CACHE_KEY,
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,

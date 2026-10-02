@@ -23,6 +23,7 @@ Exit codes:
 from __future__ import annotations
 
 import ast
+import configparser
 import io
 import os
 import re
@@ -166,6 +167,150 @@ RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
 SIGNATURE_METHOD_DERIVATIONS = frozenset(
     {"casefold", "decode", "encode", "lower", "lstrip", "rstrip", "strip", "upper"}
 )
+# Rule 11's required package files and tests.  The manifest is guaranteed by
+# the loader; the root files are checked through ``Module.root_files``.
+RULE_11_REQUIRED_FILES = ("apps.py", "adapter.py", "services.py", "py.typed")
+RULE_11_REQUIRED_ROOT_FILES = ("pyproject.toml", "poetry.toml", "README.md")
+# Rule 11's one-off public files fold into a standard file or become private.
+RULE_11_ONE_OFF_FILES = ("contracts.py", "helpers.py", "constants.py")
+RULE_11_REQUIRED_TESTS = ("test_apps.py", "test_services.py")
+# Rule 28's allowed package-file names: rule 11's files, rule 10's files,
+# rule 16's files, the Django and DRF names, and auth's allauth adapter.
+RULE_28_ALLOWED_FILES = frozenset(
+    {
+        "__init__.py",
+        "admin.py",
+        "adapter.py",
+        "allauth_adapter.py",
+        "apps.py",
+        "checks.py",
+        "exceptions.py",
+        "feeds.py",
+        "filters.py",
+        "forms.py",
+        "managers.py",
+        "middleware.py",
+        "models.py",
+        "permissions.py",
+        "receivers.py",
+        "serializers.py",
+        "services.py",
+        "signals.py",
+        "throttles.py",
+        "urls.py",
+        "validators.py",
+        "views.py",
+    }
+)
+RULE_28_ALLOWED_DIRS = frozenset(
+    {"templatetags", "management", "migrations", "templates", "static"}
+)
+# Rule 28's listed extras: the public-looking names decision §28 names.
+RULE_28_LISTED_EXTRA_FILES: dict[str, frozenset[str]] = {
+    "backups": frozenset({"persistence.py"}),
+    "orgs": frozenset({"debug_views.py"}),
+    "blog": frozenset({"markdownx_urls.py"}),
+    "listings": frozenset({"markdownx_urls.py"}),
+}
+RULE_28_ALLOWED_NON_PYTHON = frozenset({"py.typed"})
+# Rule 36's bounded relaxations: the section may turn off the three standard
+# strictness flags and disable only the ``var-annotated`` error code.  Any
+# other setting is allowed when it is not a relaxation — "stricter is allowed"
+# — so the known relaxation forms below are rejected and unlisted settings are
+# treated as stricter or neutral.  ``ignore_missing_imports`` stays an explicit
+# prohibition, and an additional section targeting the module is rejected.
+RULE_36_ALLOWED_RELAXATION_KEYS = (
+    "disallow_untyped_defs",
+    "warn_return_any",
+    "warn_unused_ignores",
+)
+RULE_36_ALLOWED_DISABLED_CODES = frozenset({"var-annotated"})
+RULE_36_FORBIDDEN_SECTION_KEYS = frozenset({"ignore_missing_imports"})
+RULE_36_FALSE_VALUES = frozenset({"false", "no", "0", "off"})
+RULE_36_TRUE_VALUES = frozenset({"true", "yes", "1", "on"})
+#: mypy's per-module options that relax checking at the listed effective
+#: value.  A section may relax at most the three standard flags and the
+#: ``var-annotated`` code, so any other effective lenient value is a
+#: violation, whether or not it matches a mypy default; the permitted
+#: relaxations are exempted before this table is consulted.
+RULE_36_RELAXED_VALUES: dict[str, str] = {
+    "allow_redefinition": "true",
+    "allow_redefinition_old": "true",
+    "allow_untyped_globals": "true",
+    "check_untyped_defs": "false",
+    "disallow_any_decorated": "false",
+    "disallow_any_explicit": "false",
+    "disallow_any_expr": "false",
+    "disallow_any_generics": "false",
+    "disallow_any_unimported": "false",
+    "disallow_incomplete_defs": "false",
+    "disallow_subclassing_any": "false",
+    "disallow_untyped_calls": "false",
+    "disallow_untyped_decorators": "false",
+    "disallow_untyped_defs": "false",
+    "extra_checks": "false",
+    "follow_untyped_imports": "true",
+    "ignore_errors": "true",
+    "ignore_missing_imports": "true",
+    "implicit_optional": "true",
+    "implicit_reexport": "true",
+    "local_partial_types": "false",
+    "strict_concatenate": "false",
+    "strict_equality": "false",
+    "strict_equality_for_none": "false",
+    "strict_optional": "false",
+    "warn_no_return": "false",
+    "warn_return_any": "false",
+    "warn_unreachable": "false",
+    "warn_unused_ignores": "false",
+}
+#: ``follow_imports`` relaxes checking on these values.
+RULE_36_RELAXED_FOLLOW_IMPORTS = frozenset({"silent", "skip"})
+#: The effective option names the alias spellings invert.
+RULE_36_KNOWN_EFFECTIVE_KEYS = frozenset({*RULE_36_RELAXED_VALUES, "follow_imports"})
+RULE_36_SECTION_TEMPLATE = "mypy-quickscale_modules_{module}.*"
+#: The module pattern mypy matches after it strips the section's ``mypy-``
+#: marker once and splits the remainder on commas.
+RULE_36_MODULE_GLOB = "quickscale_modules_{module}"
+# Rule 37's allowed literal collections: core's declared release inventory and
+# two recorded presentation catalogs (the `.env.example` managed-block specs,
+# whose per-module prose and block order are presentation data pinned by the
+# env-example conformance suite, and the theme seam's server-resolved path
+# table), plus the rule-40 harness itself, which is the test-owned mapping the
+# rule names as an exception.  The theme's TypeScript module surfaces are
+# rule 31's, outside this corpus.
+RULE_37_ALLOWED_LITERAL_FILES: frozenset[tuple[str, str]] = frozenset(
+    {("scripts", "check_module_conventions.py")}
+)
+RULE_37_ALLOWED_LITERALS: dict[tuple[str, str, str], str] = {
+    ("core", "contracts/module_catalog.py", "MODULE_CATALOG"): (
+        "rule 37's declared release inventory"
+    ),
+    ("core", "apply/steps/env_sync.py", "ENV_EXAMPLE_MODULE_SPECS"): (
+        "the .env.example managed-block presentation catalog"
+    ),
+    ("core", "generator/seam.py", "_SEAM_MODULE_PATHS"): (
+        "the theme seam's server-resolved path table (rule 31)"
+    ),
+    ("core", "generator/seam.py", "_NON_SEAM_MODULES"): (
+        "the theme's documented orgs exclusion (rule 31)"
+    ),
+    ("cli", "utils/auth_migration.py", "_CORE_AUTH_APPS"): (
+        "Django contrib app labels, not QuickScale module names"
+    ),
+    ("scripts", "check_module_core_compatibility.py", "SKIP_INSTALL_PROBE_MODULES"): (
+        "the documented install/import probe exclusion"
+    ),
+    ("scripts", "check_org_context_primitives.py", "EXEMPT_MODULES"): (
+        "the documented orgs lint exemption"
+    ),
+}
+#: Two or more distinct module names in one literal is a module enumeration
+#: (rule 37's prohibition).  A single name counts when it is an assigned
+#: constant, which is a registry or an exclusion; the recorded allowlist above
+#: carries the legitimate exclusions, and a one-name expression inside a call
+#: is a reference, not an enumeration.
+RULE_37_MINIMUM_MODULE_NAMES = 2
 
 Skipped = (".pytest_cache", ".ruff_cache", "__pycache__", ".mypy_cache")
 
@@ -221,6 +366,7 @@ class Corpus:
     module_dir_names: tuple[str, ...]
     core_files: Mapping[str, str]
     cli_files: Mapping[str, str]
+    script_files: Mapping[str, str]
     mypy_ini: str
 
 
@@ -341,6 +487,7 @@ def load_corpus(repo_root: Path) -> Corpus:
         module_dir_names=tuple(dir_names),
         core_files=_read_tree(repo_root / CORE_PACKAGE, repo_root),
         cli_files=_read_tree(repo_root / CLI_PACKAGE, repo_root),
+        script_files=_read_tree(repo_root / "scripts", repo_root),
         mypy_ini=mypy_ini,
     )
 
@@ -4040,6 +4187,451 @@ def rule_34_name_references(corpus: Corpus) -> list[str]:
     return violations
 
 
+# ---------------------------------------------------------------------------
+# SA215's remaining rules: package files, constraint names, file names,
+# type-check configuration, and module lists outside the modules.
+# ---------------------------------------------------------------------------
+
+
+def _has_tenant_model(text: str) -> bool:
+    """Return whether a ``models.py`` declares a TenantModel subclass."""
+    tree = _parse(text)
+    classes = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+    for node in _model_classes(tree):
+        if node.name == "TenantModel":
+            continue
+        bases = [
+            *_class_names(node),
+            *(ancestor.name for ancestor in _ancestors(node, classes)),
+        ]
+        if "TenantModel" in bases or any(base in MODULE_ABSTRACT_BASES for base in bases):
+            return True
+    return False
+
+
+def rule_11_package_files(corpus: Corpus) -> list[str]:
+    """Rule 11: required package files and tests, and no one-off public files."""
+    violations: list[str] = []
+    for module in corpus.modules:
+        for name in RULE_11_REQUIRED_FILES:
+            if name not in module.files:
+                violations.append(f"rule 11: {module.name}: missing {name}")
+        for name in RULE_11_REQUIRED_ROOT_FILES:
+            if name not in module.root_files:
+                violations.append(f"rule 11: {module.name}: missing {name}")
+        services = module.files.get("services.py")
+        if services is not None:
+            declared = _declared_exports(_parse(services))
+            if declared is None or "is_enabled" not in declared:
+                violations.append(
+                    f"rule 11: {module.name}: services.py does not publish is_enabled()"
+                )
+        for name in RULE_11_ONE_OFF_FILES:
+            if name in module.files:
+                violations.append(
+                    f"rule 11: {module.name}: {name} must fold into a standard file "
+                    "or become private"
+                )
+        for name in RULE_11_REQUIRED_TESTS:
+            if name not in module.tests:
+                violations.append(f"rule 11: {module.name}: missing tests/{name}")
+        models = module.files.get("models.py")
+        if models is not None and "test_migrations.py" not in module.tests:
+            violations.append(f"rule 11: {module.name}: missing tests/test_migrations.py")
+        if models is not None and _has_tenant_model(models):
+            for name in ("test_isolation.py", "test_rls_boundary.py"):
+                if name not in module.tests:
+                    violations.append(f"rule 11: {module.name}: missing tests/{name}")
+    return violations
+
+
+def _abstract_meta_calls(tree: ast.Module) -> set[int]:
+    """
+    Return the ids of calls declared inside an ``abstract = True`` Meta.
+
+    Rule 25's recorded exception: an abstract base's ``Index`` entries may stay
+    unnamed, because a fixed or templated name is inherited by every concrete
+    subclass and either collides in the shared schema or breaks Django's
+    30-character ``models.E034`` check.  Django generates a unique, bounded
+    name per concrete subclass instead.  Constraints are not exempt: a
+    ``UniqueConstraint`` or ``CheckConstraint`` still needs its explicit name.
+    """
+    abstract_calls: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != "Meta":
+            continue
+        if not any(
+            isinstance(statement, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "abstract"
+                for target in statement.targets
+            )
+            and isinstance(statement.value, ast.Constant)
+            and statement.value.value is True
+            for statement in node.body
+        ):
+            continue
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Call):
+                abstract_calls.add(id(inner))
+    return abstract_calls
+
+
+def rule_25_constraint_names(corpus: Corpus) -> list[str]:
+    """Rule 25: every constraint and index sets a stemmed name."""
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            tree = _parse(text)
+            abstract_calls = _abstract_meta_calls(tree)
+            for meta in (
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ClassDef) and node.name == "Meta"
+            ):
+                for statement in meta.body:
+                    targets: list[ast.expr] = []
+                    if isinstance(statement, ast.Assign):
+                        targets = list(statement.targets)
+                    elif isinstance(statement, ast.AnnAssign):
+                        targets = [statement.target]
+                    for target in targets:
+                        if isinstance(target, ast.Name) and target.id in {
+                            "unique_together",
+                            "index_together",
+                        }:
+                            violations.append(
+                                f"rule 25: {module.name}: {rel}:{statement.lineno} uses {target.id}"
+                            )
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                kind = _call_func_name(node)
+                if kind not in {"UniqueConstraint", "CheckConstraint", "Index"}:
+                    continue
+                name = _literal(_keyword(node, "name"))
+                if not isinstance(name, str) or not name:
+                    if kind == "Index" and id(node) in abstract_calls:
+                        continue
+                    violations.append(
+                        f"rule 25: {module.name}: {rel}:{node.lineno} {kind} without a name"
+                    )
+                    continue
+                if kind == "Index":
+                    if not name.startswith(f"qs_{module.name}_") or not name.endswith("_idx"):
+                        violations.append(
+                            f"rule 25: {module.name}: {rel}:{node.lineno} index {name!r} "
+                            f"must be qs_{module.name}_<model>_<field>_idx"
+                        )
+                    elif len(name) > 30:
+                        violations.append(
+                            f"rule 25: {module.name}: {rel}:{node.lineno} index {name!r} "
+                            "exceeds Django's 30-character limit"
+                        )
+                else:
+                    if not name.startswith(f"quickscale_{module.name}_"):
+                        violations.append(
+                            f"rule 25: {module.name}: {rel}:{node.lineno} constraint {name!r} "
+                            f"must start with quickscale_{module.name}_"
+                        )
+                    elif len(name) > 63:
+                        violations.append(
+                            f"rule 25: {module.name}: {rel}:{node.lineno} constraint {name!r} "
+                            "exceeds PostgreSQL's 63-character limit"
+                        )
+    return violations
+
+
+def rule_28_file_names(corpus: Corpus) -> list[str]:
+    """Rule 28: a package holds only its allowed public and private files."""
+    violations: list[str] = []
+    orgs_surface = {f"{stem}.py" for stem in ORG_PUBLIC_SURFACE}
+    for module in corpus.modules:
+        allowed_extras = RULE_28_LISTED_EXTRA_FILES.get(module.name, frozenset())
+        for entry in sorted({rel.split("/", 1)[0] for rel in module.files}):
+            if entry in RULE_28_ALLOWED_DIRS or entry in RULE_28_ALLOWED_FILES:
+                continue
+            if entry in RULE_28_ALLOWED_NON_PYTHON:
+                continue
+            if entry.startswith("_") and entry.endswith(".py"):
+                continue
+            if module.name == "orgs" and entry in orgs_surface:
+                continue
+            if entry in allowed_extras:
+                continue
+            violations.append(
+                f"rule 28: {module.name}: {entry} is not an allowed package file name"
+            )
+    return violations
+
+
+def _module_literal_names(
+    tree: ast.Module, vocabulary: set[str]
+) -> list[tuple[int, str, list[str]]]:
+    """
+    Return literal collections holding several module names.
+
+    Every string constant inside the collection counts, so a hand-written
+    registry of constructor calls (``Entry(name="auth")``) is caught, not only
+    a flat list of string literals.  A one-name collection counts when it is an
+    assigned constant (a singleton registry or an exclusion) or a returned
+    list/tuple/set (a function-provided inventory); a one-name expression
+    inside a call is a reference and does not.
+    """
+    symbols: dict[int, str] = {}
+    for node in ast.walk(tree):
+        targets: list[ast.expr] = []
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        if value is None:
+            continue
+        if isinstance(value, ast.Call) and len(value.args) == 1 and not value.keywords:
+            value = value.args[0]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                symbols[id(value)] = target.id
+    for function in (
+        node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ):
+        for statement in ast.walk(function):
+            if isinstance(statement, ast.Return) and isinstance(
+                statement.value, (ast.List, ast.Tuple, ast.Set)
+            ):
+                symbols[id(statement.value)] = f"return:{function.name}"
+    found: list[tuple[int, str, list[str]]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.List, ast.Tuple, ast.Set, ast.Dict)):
+            continue
+        names = [
+            inner.value
+            for inner in ast.walk(node)
+            if isinstance(inner, ast.Constant) and isinstance(inner.value, str)
+        ]
+        matched = sorted({name for name in names if name in vocabulary})
+        symbol = symbols.get(id(node), "<expression>")
+        if len(matched) >= RULE_37_MINIMUM_MODULE_NAMES or (
+            len(matched) == 1 and symbol != "<expression>"
+        ):
+            found.append((node.lineno, symbol, matched))
+    return found
+
+
+def rule_37_module_lists(corpus: Corpus) -> list[str]:
+    """Rule 37: no literal module-name list outside the modules."""
+    violations: list[str] = []
+    vocabulary = {module.name for module in corpus.modules}
+    for tree_name, files in (
+        ("core", corpus.core_files),
+        ("cli", corpus.cli_files),
+        ("scripts", corpus.script_files),
+    ):
+        for rel, text in files.items():
+            if not rel.endswith(".py"):
+                continue
+            if tree_name == "scripts" and rel.split("/")[-1].startswith("test_"):
+                continue
+            if (tree_name, rel) in RULE_37_ALLOWED_LITERAL_FILES:
+                continue
+            for lineno, symbol, names in _module_literal_names(_parse(text), vocabulary):
+                if (tree_name, rel, symbol) in RULE_37_ALLOWED_LITERALS:
+                    continue
+                count = len(names)
+                label = "module name" if count == 1 else "module names"
+                violations.append(
+                    f"rule 37: {tree_name}/{rel}:{lineno} literal {symbol} lists "
+                    f"{count} {label}: {', '.join(names)}"
+                )
+    return violations
+
+
+def _mypy_effective_option(key: str, value: str) -> tuple[str, str]:
+    """
+    Return mypy's effective option key and value for an alias spelling.
+
+    mypy maps ``allow_redefinition_new`` to ``allow_redefinition`` and inverts
+    ``no_<x>``, ``allow<X>`` (when ``disallow<X>`` exists), and ``disallow<X>``
+    spellings, so the detector classifies the effective form, not the spelling.
+    """
+    lowered = value.strip().lower()
+
+    def _canonical() -> str:
+        if lowered in RULE_36_TRUE_VALUES:
+            return "true"
+        if lowered in RULE_36_FALSE_VALUES:
+            return "false"
+        return lowered
+
+    def _inverted() -> str:
+        canonical = _canonical()
+        if canonical == "true":
+            return "false"
+        if canonical == "false":
+            return "true"
+        return canonical
+
+    if key == "allow_redefinition_new":
+        return "allow_redefinition", _canonical()
+    if key.startswith("no_") and key[3:] in RULE_36_KNOWN_EFFECTIVE_KEYS:
+        return key[3:], _inverted()
+    if key.startswith("allow") and f"dis{key}" in RULE_36_KNOWN_EFFECTIVE_KEYS:
+        return f"dis{key}", _inverted()
+    if key.startswith("disallow") and key[3:] in RULE_36_KNOWN_EFFECTIVE_KEYS:
+        return key[3:], _inverted()
+    return key, _canonical()
+
+
+def _mypy_glob_targets_module(glob: str, package: str) -> bool:
+    """
+    Return whether a mypy per-module glob applies to a package's code.
+
+    Mirrors mypy's two matching paths: a well-structured pattern (a concrete
+    name or a trailing ``.*``) matches its own module and submodules, while an
+    unstructured pattern containing ``*`` is a regex over dotted components
+    (``*`` matches zero or more components).  Path separators normalize to
+    dots, as mypy's parser does.
+    """
+    glob = glob.replace(os.sep, ".")
+    if os.altsep:
+        glob = glob.replace(os.altsep, ".")
+    package_parts = package.split(".")
+    if "*" not in glob[:-1]:
+        # Structured: exact entries match themselves; ``prefix.*`` matches the
+        # prefix and every submodule.
+        if glob.endswith(".*"):
+            prefix_parts = glob[:-2].split(".")
+            return (
+                package_parts[: len(prefix_parts)] == prefix_parts
+                or prefix_parts[: len(package_parts)] == package_parts
+            )
+        return glob == package or glob.startswith(f"{package}.")
+
+    parts = glob.split(".")
+
+    def matches(path_parts: list[str]) -> bool:
+        def rec(pattern_index: int, path_index: int) -> bool:
+            if pattern_index == len(parts):
+                return path_index == len(path_parts)
+            part = parts[pattern_index]
+            if part == "*":
+                return any(
+                    rec(pattern_index + 1, path_index + consumed)
+                    for consumed in range(len(path_parts) - path_index + 1)
+                )
+            return (
+                path_index < len(path_parts)
+                and path_parts[path_index] == part
+                and rec(pattern_index + 1, path_index + 1)
+            )
+
+        return rec(0, 0)
+
+    if matches(package_parts):
+        return True
+
+    def prefix_matches(length: int) -> bool:
+        def rec(pattern_index: int, path_index: int) -> bool:
+            if pattern_index == length:
+                return path_index == len(package_parts)
+            part = parts[pattern_index]
+            if part == "*":
+                return any(
+                    rec(pattern_index + 1, path_index + consumed)
+                    for consumed in range(len(package_parts) - path_index + 1)
+                )
+            return (
+                path_index < len(package_parts)
+                and package_parts[path_index] == part
+                and rec(pattern_index + 1, path_index + 1)
+            )
+
+        return rec(0, 0)
+
+    for split in range(len(parts)):
+        if not prefix_matches(split):
+            continue
+        suffix = [part if part != "*" else "probe" for part in parts[split:]]
+        if matches([*package_parts, *suffix]):
+            return True
+    return False
+
+
+def rule_36_typecheck_config(corpus: Corpus) -> list[str]:
+    """Rule 36: one root mypy.ini section per module, within the allowed set."""
+    violations: list[str] = []
+    parser = configparser.RawConfigParser()
+    if corpus.mypy_ini.strip():
+        parser.read_string(corpus.mypy_ini)
+    for module in corpus.modules:
+        section = RULE_36_SECTION_TEMPLATE.format(module=module.name)
+        module_glob = RULE_36_MODULE_GLOB.format(module=module.name)
+        targeting: list[str] = []
+        for name in parser.sections():
+            if not name.startswith("mypy-"):
+                continue
+            globs = [glob.strip() for glob in name[5:].split(",")]
+            if any(_mypy_glob_targets_module(glob, module_glob) for glob in globs):
+                targeting.append(name)
+        for extra in sorted(name for name in targeting if name != section):
+            violations.append(
+                f"rule 36: {module.name}: mypy.ini declares an extra section [{extra}]"
+            )
+        if section not in targeting:
+            violations.append(f"rule 36: {module.name}: mypy.ini has no [{section}] section")
+            continue
+        for key, value in parser.items(section):
+            if key in RULE_36_FORBIDDEN_SECTION_KEYS:
+                violations.append(
+                    f"rule 36: {module.name}: mypy.ini section key {key!r} is not allowed"
+                )
+                continue
+            if key == "disable_error_code":
+                codes = {code.strip() for code in re.split(r"[,\n]", value) if code.strip()}
+                unexpected = sorted(codes - RULE_36_ALLOWED_DISABLED_CODES)
+                if unexpected:
+                    violations.append(
+                        f"rule 36: {module.name}: mypy.ini disables {', '.join(unexpected)}"
+                    )
+                continue
+            effective_key, effective_value = _mypy_effective_option(key, value)
+            if effective_key in RULE_36_ALLOWED_RELAXATION_KEYS:
+                continue
+            if RULE_36_RELAXED_VALUES.get(effective_key) == effective_value or (
+                effective_key == "follow_imports"
+                and effective_value in RULE_36_RELAXED_FOLLOW_IMPORTS
+            ):
+                violations.append(
+                    f"rule 36: {module.name}: mypy.ini section {key!r} relaxes "
+                    "outside the allowed set"
+                )
+        pyproject = module.root_files.get("pyproject.toml")
+        if pyproject is None:
+            continue
+        try:
+            data = tomllib.loads(pyproject)
+        except tomllib.TOMLDecodeError:
+            violations.append(f"rule 36: {module.name}: pyproject.toml cannot be parsed")
+            continue
+        tool = data.get("tool")
+        mypy = tool.get("mypy") if isinstance(tool, Mapping) else None
+        if isinstance(mypy, Mapping):
+            # ``[[tool.mypy.overrides]]`` only carries third-party stub
+            # exemptions; the rule forbids the per-module type-check options.
+            configured = sorted(key for key in mypy if key != "overrides")
+            if configured:
+                violations.append(
+                    f"rule 36: {module.name}: pyproject.toml declares per-module "
+                    f"[tool.mypy] keys: {', '.join(configured)}"
+                )
+    return violations
+
+
 RULES: tuple[Rule, ...] = (
     Rule(1, "settings names and the enabled switch", rule_1_settings_names),
     Rule(2, "identity names", rule_2_identity_names),
@@ -4051,6 +4643,7 @@ RULES: tuple[Rule, ...] = (
     Rule(8, "templates, static files, template tags", rule_8_templates),
     Rule(9, "HTTP APIs", rule_9_http_apis),
     Rule(10, "checks, errors, core ports", rule_10_checks_errors),
+    Rule(11, "package files, tests, and one-off file privatization", rule_11_package_files),
     Rule(12, "manifest option schema", rule_12_manifest_options),
     Rule(13, "tenant models", rule_13_tenant_models),
     Rule(14, "model basics", rule_14_model_basics),
@@ -4063,7 +4656,9 @@ RULES: tuple[Rule, ...] = (
     Rule(22, "analytics events", rule_22_analytics_events),
     Rule(23, "service surface", rule_23_service_surface),
     Rule(24, "small conventions", rule_24_small_conventions),
+    Rule(25, "constraint and index names", rule_25_constraint_names),
     Rule(26, "inbound webhooks", rule_26_webhooks),
+    Rule(28, "module file names", rule_28_file_names),
     Rule(29, "test names", rule_29_test_names),
     Rule(31, "the theme seam", rule_31_theme_seam),
     Rule(32, "throttles", rule_32_throttles),
@@ -4074,6 +4669,8 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(34, "references by name", rule_34_name_references),
     Rule(35, "secrets", rule_35_secrets),
+    Rule(36, "type-check configuration", rule_36_typecheck_config),
+    Rule(37, "module lists outside the modules", rule_37_module_lists),
     Rule(38, "README content", rule_38_readme_content),
     Rule(39, "module dependencies", rule_39_module_dependencies),
 )
@@ -4082,14 +4679,9 @@ RULES: tuple[Rule, ...] = (
 # landed, or another gate already enforces them.  The coverage test keeps this
 # a partition with RULES over 1-39, so SA215 cannot forget a rule.
 OPEN_RULES: tuple[tuple[int, str], ...] = (
-    (11, "SA215 (the one-off file privatization slice)"),
     (21, "SA216 (rule 21 is a review rule; each module's write-effect rollback test)"),
-    (25, "SA215"),
     (27, "SA215 (user-FK conformance gate orgs/tests/test_user_fk_conformance.py)"),
-    (28, "SA215"),
     (30, "SA215 (enforced in apply itself, core collect_wiring)"),
-    (36, "SA215"),
-    (37, "SA215"),
 )
 
 

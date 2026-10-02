@@ -61,7 +61,7 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
     except ModuleNotFoundError as exc:
         if exc.name in (
             "quickscale_modules_storage",
-            "quickscale_modules_storage.helpers",
+            "quickscale_modules_storage.services",
         ):
             selection = None
         else:

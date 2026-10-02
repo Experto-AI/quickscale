@@ -11,7 +11,7 @@ from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from quickscale_modules_orgs.admin import OrganizationInvitationAdminForm
-from quickscale_modules_orgs.constants import SYSTEM_ORG_NAME, SYSTEM_ORG_SLUG
+from quickscale_modules_orgs._constants import SYSTEM_ORG_NAME, SYSTEM_ORG_SLUG
 from quickscale_modules_orgs.models import (
     OrgRole,
     Organization,

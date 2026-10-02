@@ -436,14 +436,14 @@
         "symbol": "MemberListView.post",
         "type": "method"
       },
-      "quickscale_modules/social/src/quickscale_modules_social/contracts.py::get_social_runtime_settings": {
-        "file": "quickscale_modules/social/src/quickscale_modules_social/contracts.py",
+      "quickscale_modules/social/src/quickscale_modules_social/_contracts.py::get_social_runtime_settings": {
+        "file": "quickscale_modules/social/src/quickscale_modules_social/_contracts.py",
         "max_complexity": 11,
         "symbol": "get_social_runtime_settings",
         "type": "function"
       },
-      "quickscale_modules/social/src/quickscale_modules_social/contracts.py::resolve_social_target": {
-        "file": "quickscale_modules/social/src/quickscale_modules_social/contracts.py",
+      "quickscale_modules/social/src/quickscale_modules_social/_contracts.py::resolve_social_target": {
+        "file": "quickscale_modules/social/src/quickscale_modules_social/_contracts.py",
         "max_complexity": 11,
         "symbol": "resolve_social_target",
         "type": "function"
@@ -454,14 +454,14 @@
         "symbol": "list_published_social_embeds",
         "type": "function"
       },
-      "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py::list_s3_compatible_media_inventory": {
-        "file": "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py",
+      "quickscale_modules/storage/src/quickscale_modules_storage/_helpers.py::list_s3_compatible_media_inventory": {
+        "file": "quickscale_modules/storage/src/quickscale_modules_storage/_helpers.py",
         "max_complexity": 18,
         "symbol": "list_s3_compatible_media_inventory",
         "type": "function"
       },
-      "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py::validate_file_upload": {
-        "file": "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py",
+      "quickscale_modules/storage/src/quickscale_modules_storage/_helpers.py::validate_file_upload": {
+        "file": "quickscale_modules/storage/src/quickscale_modules_storage/_helpers.py",
         "max_complexity": 12,
         "symbol": "validate_file_upload",
         "type": "function"

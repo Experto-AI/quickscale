@@ -6,7 +6,7 @@ Service-style PostHog analytics foundation for QuickScale-generated projects.
 
 Analytics is a service-style integration module: it ships no models, admin, migrations, or
 data tables. It initializes the PostHog Python SDK safely during startup without blocking
-Django boot, exposes server-side capture helpers with a stable event vocabulary, and offers
+Django boot, exposes a generic server-side capture helper, and offers
 template tags for manual server-rendered adoption without a context processor.
 
 - A flat `QUICKSCALE_ANALYTICS_*` settings surface owned by the module manifest.
@@ -52,9 +52,9 @@ modules:
 - `configure_analytics_client()` initializes the PostHog client; `capture_event()` sends an event
   the sending module names; `get_distinct_id()` resolves the active distinct ID.
 - `get_template_analytics_context()` builds the dictionary the template tags render.
-- `events.py` holds PostHog's pageview name: `ANALYTICS_EVENT_PAGEVIEW` (`$pageview`). Feature
-  modules name their own events in their `services.py` under the `quickscale_<module>_<event>`
-  stem — forms, for example, emits `quickscale_forms_submitted`.
+- Feature modules name their own events in their `services.py` under the
+  `quickscale_<module>_<event>` stem — forms, for example, emits `quickscale_forms_submitted`.
+  PostHog's `$pageview` name stays the sending client's concern (rule 22's listed exception).
 - Template tags, loaded with `{% load quickscale_analytics %}`:
   `analytics_public_config` returns the resolved runtime config dictionary for the current
   request, and `analytics_public_config_json` returns the same payload as JSON for inline

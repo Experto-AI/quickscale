@@ -119,15 +119,25 @@ def _golden_module(name: str = "demo") -> Module:
                 "from quickscale_modules_orgs.models import TenantModel\n\n\n"
                 "class Widget(TenantModel):\n"
                 "    class Meta(TenantModel.Meta):\n"
-                "        ordering = ['pk']\n\n"
+                "        ordering = ['pk']\n"
+                "        indexes = [\n"
+                "            models.Index(fields=['name'], name='qs_demo_widget_name_idx'),\n"
+                "        ]\n"
+                "        constraints = [\n"
+                "            models.UniqueConstraint(\n"
+                "                fields=['slug'], name='quickscale_demo_widget_slug_unique'\n"
+                "            ),\n"
+                "        ]\n\n"
                 "    def __str__(self) -> str:\n"
                 "        return 'widget'\n"
             ),
             "services.py": (
                 '"""Demo service surface."""\n\n'
-                '__all__ = ["demo_query"]\n\n\n'
+                '__all__ = ["demo_query", "is_enabled"]\n\n\n'
                 "def demo_query(*, subject: str) -> str:\n"
-                "    return subject\n"
+                "    return subject\n\n\n"
+                "def is_enabled() -> bool:\n"
+                "    return True\n"
             ),
             "urls.py": (
                 '"""Demo URLs."""\n\nfrom django.urls import path\n\n'
@@ -162,6 +172,21 @@ def _golden_module(name: str = "demo") -> Module:
                 "QUICKSCALE_DEMO_ENABLED = True\n"
                 "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
             ),
+            "test_apps.py": (
+                '"""App configuration behaviour."""\n\n\ndef test_config():\n    assert True\n'
+            ),
+            "test_migrations.py": (
+                '"""Migration contract."""\n\n\ndef test_migration():\n    assert True\n'
+            ),
+            "test_services.py": (
+                '"""Service surface behaviour."""\n\n\ndef test_service():\n    assert True\n'
+            ),
+            "test_isolation.py": (
+                '"""Tenant isolation behaviour."""\n\n\ndef test_isolation():\n    assert True\n'
+            ),
+            "test_rls_boundary.py": (
+                '"""RLS boundary behaviour."""\n\n\ndef test_boundary():\n    assert True\n'
+            ),
             "test_widget.py": '"""Widget behaviour."""\n\n\ndef test_widget():\n    assert True\n',
         },
     )
@@ -169,12 +194,20 @@ def _golden_module(name: str = "demo") -> Module:
 
 def _corpus(*modules: Module, extra_dirs: tuple[str, ...] = ()) -> Corpus:
     names = tuple(module.name for module in modules) + extra_dirs
+    mypy_ini = "\n".join(
+        f"[mypy-quickscale_modules_{module.name}.*]\n"
+        "disallow_untyped_defs = False\n"
+        "warn_return_any = False\n"
+        "warn_unused_ignores = False\n"
+        for module in modules
+    )
     return Corpus(
         modules=tuple(modules),
         module_dir_names=names,
         core_files={},
         cli_files={},
-        mypy_ini="",
+        script_files={},
+        mypy_ini=mypy_ini,
     )
 
 
@@ -3789,7 +3822,7 @@ def test_cross_module_import_outside_public_surface_control() -> None:
     module = _golden_module()
     broken = _with_files(
         module,
-        views="from quickscale_modules_storage.helpers import select_storage_backend\n",
+        views="from quickscale_modules_storage._helpers import select_storage_backend\n",
     )
     assert any(
         "outside the module's public surface" in violation
@@ -4521,6 +4554,488 @@ def test_name_reference_controls() -> None:
         "cycle" in violation
         for violation in _violations(checker.rule_34_name_references, orgs_reference, notifications)
     )
+
+
+def test_package_file_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_11_package_files, module) == []
+    missing = replace(
+        module,
+        files={key: value for key, value in module.files.items() if key != "py.typed"},
+    )
+    assert any(
+        "missing py.typed" in violation
+        for violation in _violations(checker.rule_11_package_files, missing)
+    )
+    one_off = _with_files(module, **{"helpers.py": "VALUE = 1\n"})
+    assert any(
+        "must fold into a standard file or become private" in violation
+        for violation in _violations(checker.rule_11_package_files, one_off)
+    )
+    missing_test = replace(
+        module,
+        tests={key: value for key, value in module.tests.items() if key != "test_apps.py"},
+    )
+    assert any(
+        "missing tests/test_apps.py" in violation
+        for violation in _violations(checker.rule_11_package_files, missing_test)
+    )
+    missing_isolation = replace(
+        module,
+        tests={key: value for key, value in module.tests.items() if key != "test_isolation.py"},
+    )
+    assert any(
+        "missing tests/test_isolation.py" in violation
+        for violation in _violations(checker.rule_11_package_files, missing_isolation)
+    )
+    no_enabled = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query"]\n\n\n'
+            "def demo_query(*, subject: str) -> str:\n"
+            "    return subject\n"
+        ),
+    )
+    assert any(
+        "does not publish is_enabled()" in violation
+        for violation in _violations(checker.rule_11_package_files, no_enabled)
+    )
+
+
+def test_constraint_name_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_25_constraint_names, module) == []
+    unnamed = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        indexes = [models.Index(fields=['name'])]\n"
+        ),
+    )
+    assert any(
+        "Index without a name" in violation
+        for violation in _violations(checker.rule_25_constraint_names, unnamed)
+    )
+    bad_prefix = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.UniqueConstraint(fields=['slug'], name='widget_slug_unique')\n"
+            "        ]\n"
+        ),
+    )
+    assert any(
+        "must start with quickscale_demo_" in violation
+        for violation in _violations(checker.rule_25_constraint_names, bad_prefix)
+    )
+    together = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        unique_together = [('a', 'b')]\n"
+        ),
+    )
+    assert any(
+        "uses unique_together" in violation
+        for violation in _violations(checker.rule_25_constraint_names, together)
+    )
+    abstract = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        abstract = True\n"
+            "        indexes = [models.Index(fields=['name'])]\n"
+        ),
+    )
+    assert _violations(checker.rule_25_constraint_names, abstract) == []
+    abstract_constraint = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        abstract = True\n"
+            "        constraints = [models.UniqueConstraint(fields=['slug'])]\n"
+        ),
+    )
+    assert any(
+        "UniqueConstraint without a name" in violation
+        for violation in _violations(checker.rule_25_constraint_names, abstract_constraint)
+    )
+
+
+def test_package_file_name_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_28_file_names, module) == []
+    extra = _with_files(module, **{"utils.py": "def helper():\n    return None\n"})
+    assert any(
+        "utils.py is not an allowed package file name" in violation
+        for violation in _violations(checker.rule_28_file_names, extra)
+    )
+    private = _with_files(module, **{"_utils.py": "def helper():\n    return None\n"})
+    assert _violations(checker.rule_28_file_names, private) == []
+    events = _with_files(module, **{"events.py": 'PAGEVIEW = "$pageview"\n'})
+    assert any(
+        "events.py is not an allowed package file name" in violation
+        for violation in _violations(checker.rule_28_file_names, events)
+    )
+    markdownx = _with_files(_golden_module("blog"), **{"markdownx_urls.py": "urlpatterns = []\n"})
+    assert _violations(checker.rule_28_file_names, markdownx) == []
+    demo_markdownx = _with_files(module, **{"markdownx_urls.py": "urlpatterns = []\n"})
+    assert any(
+        "markdownx_urls.py is not an allowed package file name" in violation
+        for violation in _violations(checker.rule_28_file_names, demo_markdownx)
+    )
+
+
+def test_typecheck_config_controls() -> None:
+    module = _golden_module()
+    corpus = _corpus(module)
+    assert checker.rule_36_typecheck_config(corpus) == []
+    missing = replace(corpus, mypy_ini="")
+    assert any(
+        "has no [mypy-quickscale_modules_demo.*] section" in violation
+        for violation in checker.rule_36_typecheck_config(missing)
+    )
+    ignored = replace(
+        corpus,
+        mypy_ini=(
+            "[mypy-quickscale_modules_demo.*]\n"
+            "disallow_untyped_defs = False\n"
+            "ignore_missing_imports = True\n"
+        ),
+    )
+    assert any(
+        "section key 'ignore_missing_imports' is not allowed" in violation
+        for violation in checker.rule_36_typecheck_config(ignored)
+    )
+    extra_codes = replace(
+        corpus,
+        mypy_ini=(
+            "[mypy-quickscale_modules_demo.*]\ndisable_error_code = var-annotated, assignment\n"
+        ),
+    )
+    assert any(
+        "disables assignment" in violation
+        for violation in checker.rule_36_typecheck_config(extra_codes)
+    )
+    allowed_code = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\ndisable_error_code = var-annotated\n",
+    )
+    assert checker.rule_36_typecheck_config(allowed_code) == []
+    stricter = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\ndisallow_any_generics = True\n",
+    )
+    assert checker.rule_36_typecheck_config(stricter) == []
+    relaxed = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\nwarn_no_return = False\n",
+    )
+    assert any(
+        "relaxes outside the allowed set" in violation
+        for violation in checker.rule_36_typecheck_config(relaxed)
+    )
+    extra_section = replace(
+        corpus,
+        mypy_ini=(
+            "[mypy-quickscale_modules_demo.*]\n"
+            "disallow_untyped_defs = False\n"
+            "[mypy-quickscale_modules_demo.models]\n"
+            "ignore_missing_imports = True\n"
+        ),
+    )
+    assert any(
+        "declares an extra section [mypy-quickscale_modules_demo.models]" in violation
+        for violation in checker.rule_36_typecheck_config(extra_section)
+    )
+    grouped_section = replace(
+        corpus,
+        mypy_ini=(
+            "[mypy-quickscale_modules_demo.*]\n"
+            "disallow_untyped_defs = False\n"
+            "[mypy-third_party.*,quickscale_modules_demo.models]\n"
+            "ignore_errors = True\n"
+        ),
+    )
+    assert any(
+        "declares an extra section [mypy-third_party.*,quickscale_modules_demo.models]" in violation
+        for violation in checker.rule_36_typecheck_config(grouped_section)
+    )
+    wildcard_section = replace(
+        corpus,
+        mypy_ini=(
+            "[mypy-quickscale_modules_demo.*]\n"
+            "disallow_untyped_defs = False\n"
+            "[mypy-*.models]\n"
+            "ignore_errors = True\n"
+        ),
+    )
+    assert any(
+        "declares an extra section [mypy-*.models]" in violation
+        for violation in checker.rule_36_typecheck_config(wildcard_section)
+    )
+    parent_section = replace(
+        corpus,
+        mypy_ini=(
+            "[mypy-quickscale_modules_demo.*]\n"
+            "disallow_untyped_defs = False\n"
+            "[mypy-quickscale_modules_demo.models.*]\n"
+            "ignore_errors = True\n"
+        ),
+    )
+    assert any(
+        "declares an extra section [mypy-quickscale_modules_demo.models.*]" in violation
+        for violation in checker.rule_36_typecheck_config(parent_section)
+    )
+    unrelated_section = replace(
+        corpus,
+        mypy_ini=(
+            "[mypy-quickscale_modules_demo.*]\n"
+            "disallow_untyped_defs = False\n"
+            "[mypy-third_party.*]\n"
+            "ignore_missing_imports = True\n"
+        ),
+    )
+    assert checker.rule_36_typecheck_config(unrelated_section) == []
+    separator_section = replace(
+        corpus,
+        mypy_ini=(
+            "[mypy-quickscale_modules_demo.*]\n"
+            "disallow_untyped_defs = False\n"
+            "[mypy-quickscale_modules_demo/models.*]\n"
+            "ignore_errors = True\n"
+        ),
+    )
+    assert any(
+        "declares an extra section [mypy-quickscale_modules_demo/models.*]" in violation
+        for violation in checker.rule_36_typecheck_config(separator_section)
+    )
+    aliased_relaxation = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\nallow_untyped_calls = True\n",
+    )
+    assert any(
+        "relaxes outside the allowed set" in violation
+        for violation in checker.rule_36_typecheck_config(aliased_relaxation)
+    )
+    permitted_alias = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\nallow_untyped_defs = True\n",
+    )
+    assert checker.rule_36_typecheck_config(permitted_alias) == []
+    permitted_no_alias = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\nno_warn_return_any = True\n",
+    )
+    assert checker.rule_36_typecheck_config(permitted_no_alias) == []
+    redefinition_new = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\nallow_redefinition_new = True\n",
+    )
+    assert any(
+        "relaxes outside the allowed set" in violation
+        for violation in checker.rule_36_typecheck_config(redefinition_new)
+    )
+    for option in (
+        "implicit_optional = True",
+        "allow_untyped_globals = True",
+        "allow_redefinition_old = True",
+        "strict_optional = False",
+        "local_partial_types = False",
+    ):
+        relaxed_option = replace(
+            corpus,
+            mypy_ini=f"[mypy-quickscale_modules_demo.*]\n{option}\n",
+        )
+        assert any(
+            "relaxes outside the allowed set" in violation
+            for violation in checker.rule_36_typecheck_config(relaxed_option)
+        ), option
+    for option in (
+        "implicit_optional = False",
+        "allow_untyped_globals = False",
+        "strict_optional = True",
+    ):
+        stricter_option = replace(
+            corpus,
+            mypy_ini=f"[mypy-quickscale_modules_demo.*]\n{option}\n",
+        )
+        assert checker.rule_36_typecheck_config(stricter_option) == [], option
+    for option in (
+        "implicit_optional = yes",
+        "allow_untyped_globals = 1",
+        "allow_redefinition_old = on",
+        "strict_optional = no",
+        "local_partial_types = off",
+    ):
+        spelled_option = replace(
+            corpus,
+            mypy_ini=f"[mypy-quickscale_modules_demo.*]\n{option}\n",
+        )
+        assert any(
+            "relaxes outside the allowed set" in violation
+            for violation in checker.rule_36_typecheck_config(spelled_option)
+        ), option
+    reexport = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\nimplicit_reexport = False\n",
+    )
+    assert checker.rule_36_typecheck_config(reexport) == []
+    ignore_errors = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\nignore_errors = True\n",
+    )
+    assert any(
+        "relaxes outside the allowed set" in violation
+        for violation in checker.rule_36_typecheck_config(ignore_errors)
+    )
+    follow_imports = replace(
+        corpus,
+        mypy_ini="[mypy-quickscale_modules_demo.*]\nfollow_imports = skip\n",
+    )
+    assert any(
+        "relaxes outside the allowed set" in violation
+        for violation in checker.rule_36_typecheck_config(follow_imports)
+    )
+    per_module = replace(
+        module,
+        root_files={
+            **module.root_files,
+            "pyproject.toml": module.root_files["pyproject.toml"]
+            + "\n[tool.mypy]\ndisallow_untyped_defs = false\n",
+        },
+    )
+    assert any(
+        "declares per-module [tool.mypy]" in violation
+        for violation in checker.rule_36_typecheck_config(_corpus(per_module))
+    )
+
+
+def test_module_list_controls() -> None:
+    corpus = _corpus(
+        _golden_module("alpha"),
+        _golden_module("beta"),
+        _golden_module("gamma"),
+    )
+    assert checker.rule_37_module_lists(corpus) == []
+    core_literal = replace(
+        corpus,
+        core_files={"contracts/registry.py": "REGISTRY = ('alpha', 'beta', 'gamma')\n"},
+    )
+    assert any(
+        "literal REGISTRY lists 3 module names" in violation
+        for violation in checker.rule_37_module_lists(core_literal)
+    )
+    cli_literal = replace(
+        corpus,
+        cli_files={"commands/registry.py": "SETTINGS = {'alpha': 1, 'beta': 2, 'gamma': 3}\n"},
+    )
+    assert any(
+        "literal SETTINGS lists 3 module names" in violation
+        for violation in checker.rule_37_module_lists(cli_literal)
+    )
+    script_literal = replace(
+        corpus,
+        script_files={"other.py": "NAMES = ['alpha', 'beta', 'gamma']\n"},
+    )
+    assert any(
+        "literal NAMES lists 3 module names" in violation
+        for violation in checker.rule_37_module_lists(script_literal)
+    )
+    script_test = replace(
+        corpus,
+        script_files={"test_helper.py": "NAMES = ['alpha', 'beta', 'gamma']\n"},
+    )
+    assert checker.rule_37_module_lists(script_test) == []
+    catalog = replace(
+        corpus,
+        core_files={"contracts/module_catalog.py": "MODULE_CATALOG = ('alpha', 'beta', 'gamma')\n"},
+    )
+    assert checker.rule_37_module_lists(catalog) == []
+    harness = replace(
+        corpus,
+        script_files={
+            "check_module_conventions.py": "MODULE_LAYERS = {'alpha': 1, 'beta': 2, 'gamma': 3}\n"
+        },
+    )
+    assert checker.rule_37_module_lists(harness) == []
+    registry = replace(
+        corpus,
+        cli_files={
+            "commands/registry.py": (
+                "ENTRIES = [\n"
+                "    Entry(name='alpha'),\n"
+                "    Entry(name='beta'),\n"
+                "    Entry(name='gamma'),\n"
+                "]\n"
+            )
+        },
+    )
+    assert any(
+        "literal ENTRIES lists 3 module names" in violation
+        for violation in checker.rule_37_module_lists(registry)
+    )
+    small_registry = replace(
+        corpus,
+        cli_files={"commands/small_registry.py": "MODULES = ['alpha', 'beta']\n"},
+    )
+    assert any(
+        "literal MODULES lists 2 module names" in violation
+        for violation in checker.rule_37_module_lists(small_registry)
+    )
+    singleton = replace(
+        corpus,
+        cli_files={"commands/singleton.py": "MODULES = ['alpha']\n"},
+    )
+    assert any(
+        "literal MODULES lists 1 module name" in violation
+        for violation in checker.rule_37_module_lists(singleton)
+    )
+    exclusion = replace(
+        corpus,
+        core_files={"generator/seam.py": "_NON_SEAM_MODULES = frozenset({'alpha'})\n"},
+    )
+    assert checker.rule_37_module_lists(exclusion) == []
+    returned = replace(
+        corpus,
+        cli_files={"commands/returned.py": "def get_modules():\n    return ['alpha']\n"},
+    )
+    assert any(
+        "literal return:get_modules lists 1 module name" in violation
+        for violation in checker.rule_37_module_lists(returned)
+    )
+    presentation = replace(
+        corpus,
+        core_files={
+            "apply/steps/env_sync.py": (
+                "ENV_EXAMPLE_MODULE_SPECS = (\n"
+                "    Spec(module='alpha'),\n"
+                "    Spec(module='beta'),\n"
+                "    Spec(module='gamma'),\n"
+                ")\n"
+            ),
+            "generator/seam.py": (
+                "_SEAM_MODULE_PATHS = (\n"
+                "    ('alpha', '{% url one %}'),\n"
+                "    ('beta', '{% url two %}'),\n"
+                "    ('gamma', '{% url three %}'),\n"
+                ")\n"
+            ),
+        },
+    )
+    assert checker.rule_37_module_lists(presentation) == []
 
 
 def test_layer_table_mirrors_the_shipped_modules() -> None:

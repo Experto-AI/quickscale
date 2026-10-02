@@ -637,7 +637,7 @@ class TestAdminSubmissionExportViewAllObjects:
         """
         from django.urls import reverse
 
-        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
         from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrgRole,

@@ -51,7 +51,7 @@ from django.http import HttpRequest, HttpResponse
 from django.test import RequestFactory, override_settings
 from django.test.utils import CaptureQueriesContext
 
-from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import (
     get_current_org_id,
     reset_current_org_id,

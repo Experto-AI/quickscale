@@ -10,7 +10,7 @@ from django.shortcuts import resolve_url
 from rest_framework import status
 
 from quickscale_modules_crm.models import Deal, Stage
-from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import org_scope
 
 

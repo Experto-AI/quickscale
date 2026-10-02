@@ -6,6 +6,11 @@ ownership category.  Later phases (Track 2 Phase 3+) use this inventory
 to decide which symbols can be deleted when the corresponding manifest
 adapter is migrated to the declarative path.
 
+Every per-module inventory is empty since SA217 cleared the last entry, so
+the module keys come from core's declared release inventory instead of a
+hand-written list (Module Conventions rule 37).  The categories below remain
+the classification vocabulary.
+
 Ownership categories
 --------------------
 - ``declarative_target``
@@ -40,6 +45,8 @@ from __future__ import annotations
 
 from typing import Final
 
+from quickscale_core.contracts.module_catalog import MODULE_CATALOG
+
 # ---------------------------------------------------------------------------
 # Ownership categories (string literals for readability)
 # ---------------------------------------------------------------------------
@@ -50,147 +57,29 @@ MANIFEST_RESOLVER: Final[str] = "manifest_resolver"
 ADAPTER_ONLY: Final[str] = "adapter_only"
 
 # ---------------------------------------------------------------------------
-# Per-module inventories
+# Declared inventory
 #
-# Each module entry is a list of (symbol_name, category, phase) tuples.
-# Symbols that are already migrated (shared_helper) reference the
-# canonical location in a comment.
-# ---------------------------------------------------------------------------
-
-# SA5.1: Analytics imperative inventory cleared — all symbols are now
-# served by the manifest-driven bridge in quickscale_core.contracts.resolvers.
-# The analytics key remains in MANIFEST_INVENTORY with an empty list so that
-# callers of get_manifest_inventory("analytics") continue to succeed.
-ANALYTICS_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: Auth imperative inventory cleared — the manifest owns its option
-# defaults, normalization, validation, and its retired-key refusals
-# (`retired_options`), and its CLI configurator reads the manifest.  The auth
-# key remains in MANIFEST_INVENTORY with an empty list so that callers of
-# get_manifest_inventory("auth") continue to succeed.
-AUTH_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: Backups imperative inventory cleared — the manifest owns its option
-# defaults, normalization, validation, its retired raw-secret keys
-# (`retired_options`), and its CLI configurator reads the manifest.  The
-# backups key remains in MANIFEST_INVENTORY with an empty list so that
-# callers of get_manifest_inventory("backups") continue to succeed.
-BACKUPS_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: Billing imperative inventory cleared — the manifest owns its option
-# defaults, normalization, and validation, and its CLI configurator reads the
-# manifest.  The billing key remains in MANIFEST_INVENTORY with an empty list
-# so that callers of get_manifest_inventory("billing") continue to succeed.
-BILLING_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: Blog imperative inventory cleared — the manifest owns its option
-# defaults, normalization, and validation, its adapter runs through the
-# manifest engine, and its CLI configurator reads the manifest.  The blog
-# key remains in MANIFEST_INVENTORY with an empty list so that callers of
-# get_manifest_inventory("blog") continue to succeed.
-BLOG_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: CRM imperative inventory cleared — the manifest owns its option
-# defaults, normalization, validation, and its retired-key refusal
-# (`retired_options`), and its CLI configurator reads the manifest.  The CRM
-# key remains in MANIFEST_INVENTORY with an empty list so that callers of
-# get_manifest_inventory("crm") continue to succeed.
-CRM_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-FORMS_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA6.2: Listings imperative inventory cleared — all symbols are now
-# served by the manifest-driven derivation path in module.yml.
-# The listings key remains in MANIFEST_INVENTORY with an empty list so that
-# callers of get_manifest_inventory("listings") continue to succeed.
-LISTINGS_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: Notifications imperative inventory cleared — the manifest owns its
-# option defaults, normalization, validation, and its retired raw-secret keys
-# (`retired_options`), its CLI configurator reads the manifest, and its runtime
-# backend predicates live in the module adapter.  The notifications key remains
-# in MANIFEST_INVENTORY with an empty list so that callers of
-# get_manifest_inventory("notifications") continue to succeed.
-NOTIFICATIONS_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: Orgs imperative inventory cleared — the manifest owns its option
-# defaults, normalization, and validation, and its CLI configurator reads the
-# manifest.  The orgs key remains in MANIFEST_INVENTORY with an empty list so
-# that callers of get_manifest_inventory("orgs") continue to succeed.
-ORGS_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: Social imperative inventory cleared — the manifest owns its option
-# defaults, normalization (provider alias expansion and dedupe), and
-# validation, and its CLI configurator reads the manifest.  The social key
-# remains in MANIFEST_INVENTORY with an empty list so that callers of
-# get_manifest_inventory("social") continue to succeed.
-SOCIAL_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# SA217: Storage imperative inventory cleared — the manifest owns its option
-# defaults, normalization, validation, its retired raw-credential keys
-# (`retired_options`), and its CLI configurator reads the manifest.  The
-# storage key remains in MANIFEST_INVENTORY with an empty list so that callers
-# of get_manifest_inventory("storage") continue to succeed.
-STORAGE_MANIFEST: Final[list[tuple[str, str, str]]] = []
-
-# ---------------------------------------------------------------------------
-# Freeze guardrail baseline
-#
-# SA5.2 freeze guardrail: grandfathered set of module names that still
-# carry imperative inventory entries.  Any module NOT in this set that
-# appears in MANIFEST_INVENTORY will fail CI — new modules must go through
-# the manifest/derivation path, not add imperative inventory entries.
-#
-# This set is a **grandfathered freeze** that may only SHRINK when a
-# module's imperative entries have been fully migrated to the
-# manifest/derivation path (e.g. analytics after SA5.1).  Adding a new
-# name here is a freeze-busting event that requires explicit documented
-# approval.
-#
-# Manifest-only / derivation-only modules that ship without imperative
-# inventory entries do NOT need to be added to this set.
-# ---------------------------------------------------------------------------
-
-#: Grandfathered module names that may still carry imperative inventory
-#: entries.  SA5.2 freeze guardrail baseline — this is a grandfathered
-#: freeze, not a mutable allowlist (see module docstring for rules).
-AUTHORIZED_IMPERATIVE_MODULES: Final[frozenset[str]] = frozenset(
-    {
-        "analytics",
-        "auth",
-        "backups",
-        "billing",
-        "blog",
-        "crm",
-        "forms",
-        "listings",
-        "notifications",
-        "orgs",
-        "social",
-        "storage",
-    }
-)
-
-# ---------------------------------------------------------------------------
-# Combined inventory
+# The per-module keys come from core's declared release inventory (Module
+# Conventions rule 37's allowed exception), which the catalog consistency test
+# keeps equal to manifest discovery.  Reading it never touches the filesystem,
+# so importing this module cannot run discovery (decisions.md: no import-time
+# filesystem discovery).  The SA5.2 freeze guardrail stays as the companion
+# test that rejects an inventory key which is not a shipped module; a future
+# module carries its options through the manifest/derivation path, not through
+# a new literal entry here.
 # ---------------------------------------------------------------------------
 
 #: Mapping from module name to its symbol inventory list.
 #: Each value is a list of ``(symbol_name, category, phase)`` tuples.
 MANIFEST_INVENTORY: Final[dict[str, list[tuple[str, str, str]]]] = {
-    "analytics": ANALYTICS_MANIFEST,
-    "auth": AUTH_MANIFEST,
-    "backups": BACKUPS_MANIFEST,
-    "billing": BILLING_MANIFEST,
-    "blog": BLOG_MANIFEST,
-    "crm": CRM_MANIFEST,
-    "forms": FORMS_MANIFEST,
-    "listings": LISTINGS_MANIFEST,
-    "notifications": NOTIFICATIONS_MANIFEST,
-    "orgs": ORGS_MANIFEST,
-    "social": SOCIAL_MANIFEST,
-    "storage": STORAGE_MANIFEST,
+    entry.name: [] for entry in MODULE_CATALOG
 }
+
+#: Grandfathered module names that may still carry imperative inventory
+#: entries.  SA5.2 freeze guardrail baseline: every declared module is
+#: authorized in the cleared state, and the companion test keeps the set a
+#: superset of the inventory keys.
+AUTHORIZED_IMPERATIVE_MODULES: Final[frozenset[str]] = frozenset(MANIFEST_INVENTORY)
 
 #: Set of all symbols that are classified as ``declarative_target`` and
 #: should move to ``module.yml`` derivation/validation sections.
