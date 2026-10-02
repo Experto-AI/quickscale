@@ -304,7 +304,7 @@ files.
 - ✅ Destructive restore is guarded on both supported surfaces: BackupPolicy-admin
   restore requires exact filename confirmation plus the environment gate; CLI
   restore keeps its existing syntax under the same guardrails
-- ✅ Scheduled execution is command-driven only (`manage.py backups_create
+- ✅ Scheduled execution is command-driven only (`manage.py quickscale_backups_create
   --scheduled`, or an equivalent platform cron job)
 - ✅ Private-remote credentials are referenced by environment-variable **name**
   only
@@ -620,9 +620,9 @@ unprojected manifest keys" prohibition. Moving a module between layers is a deci
 - ✅ The layer order covers references by name as well as imports (rule 34).
 
 **6. No legacy names.** Renames land in one release, in modules, core, CLI, generator templates,
-tests, fixtures, and docs together — including names quoted elsewhere in this file, which describe
-the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
-`quickscale_modules_<module>` labels).
+tests, fixtures, and docs together — including names quoted elsewhere in this file, which now
+carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
+`quickscale_<module>` app labels).
 - ❌ Aliases, `LegacyKeyAlias` entries, or fallback reads for a renamed option or setting.
 - ✅ `apply` refuses a retired option key — in `quickscale.yml` and in `.quickscale/state.yml` — and
   the startup check refuses a retired setting, each naming its replacement.
@@ -1002,9 +1002,9 @@ test checks both. Other files in `tests/` are `conftest.py`,
   `apps.get_model`, `apps.is_installed`, or `apps.get_app_config`. An upward need uses a capability
   (rule 4). Migrations referencing another module's models are excepted.
 - ✅ Applied: orgs' `require_org_feature` (it reads billing's plan features) moves to billing's
-  published surface; the purge command's billing steps and
-  `removal.BOUNDARY_GUARDED_OBLIGATIONS` become billing's removal declarations (the SA213
-  pattern), and its blog and crm label prefixes come from those modules' own declarations; orgs'
+  published surface; the purge command's billing steps become billing's `removal_obligations`
+  declaration with its boundary-guarded fields and hooks (the SA213 pattern), and its blog and crm
+  label prefixes come from those modules' own declarations; orgs'
   `checks.py` boundary table is declared by each boundary's owner (auth declares
   account deletion); `TENANT_TABLE_REGISTRY`, a CI parity oracle only
   (§[Multi-tenant SaaS Architecture](#multitenant-saas-architecture)), is test-owned and absent
@@ -1067,8 +1067,9 @@ headings.
   is a requirement under rule 20).
 
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–39 (rule 27 through the user-FK conformance gate; rule 30
-in `apply` itself): names, suffixes and types, `_ENABLED`
+and the CLI's option handling fails on each of rules 1–39 (rule 21 stays a review rule with each
+module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30 in
+`apply` itself): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
@@ -1624,7 +1625,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 **RLS enforcement rule (critical):**
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
-- **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
+- **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_ORGS_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
   1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `orgs` module guard (`_PRIVILEGED_COMMANDS` in `checks.py`), the `quickscale_core.runtime.settings` facade, the CLI producer, and the generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — non-serving environment-variable escape hatch for intentional single-tenant/development use. It is never a production serving mode.
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; supplied argv exits 2 without a privileged path; `runserver`/`gunicorn` must still use the restricted runtime role

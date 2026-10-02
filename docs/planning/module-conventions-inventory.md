@@ -1,6 +1,7 @@
 # Module Conventions Inventory
 
 Audited: 58e73cc7 (v89) · 2026-09-28 · working tree clean · prompt: deep-coherence-audit v1 · passes: 6
+**Closed:** 2026-10-02 (SA215) · every index item resolved · see [Closing pass](#closing-pass-sa215-2026-10-02)
 
 ## Coherence audit re-run (2026-09-28)
 
@@ -33,10 +34,12 @@ that ticket now says so.
 - **Declared conventions.** [decisions.md § Module Conventions](../technical/decisions.md#module-conventions)
   rules 1–30 when audited (1–40 after D33–D42), linked from module-extension.md's authoring
   checklist (where a module author looks).
-  Checks that exist today: the core ↔ module import linter, `.env.example` conformance, SA35's
-  `on_delete` gate (rule 27), the PostgreSQL isolation gate, core's page-style contract, and
-  `scripts/check_security_gates.py`. **The conformance test (rule 30, now rule 40) does not exist
-  yet**, so every rule except rule 27 is enforced by nothing (see [Enforcement gaps](#enforcement-gaps)).
+  Checks: the rule 40 conformance harness
+  ([`scripts/check_module_conventions.py`](../../scripts/check_module_conventions.py)), the core ↔
+  module import linter, `.env.example` conformance, the user-FK `on_delete` gate (rule 27), the
+  PostgreSQL isolation gate, core's page-style contract, and `scripts/check_security_gates.py`.
+  See the [Closing pass](#closing-pass-sa215-2026-10-02) for what the harness covers and the rules
+  it delegates.
 - **Reference members.** crm (on `TenantModel`, `services.py`, the most complete test set) and
   notifications (`transaction.on_commit`, one error base, keyword-only services). Neither is complete:
   crm has hand-written `is_staff` checks, and notifications' README documents none of its options.
@@ -64,51 +67,51 @@ schema: coherence-audit/v1
 audited: 58e73cc7
 items:
   # sixth pass — new, ranked (see D33–D42)
-  - {id: shared-setting-writes, status: decided, rule: "rule 30 (D33)", aspect: A, cost: [collision, defect], members_diverging: [auth, orgs, blog, listings, billing], population: modules(12), check: apply-time, closed_world: true, handoff: [tech, arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: theme-module-presence, status: decided, rule: "rule 31 (D34)", aspect: P, cost: [ambiguity, defect], members_diverging: [auth, blog, listings, crm, forms, storage, backups, notifications, analytics, billing, social, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [tech], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: throttle-scopes-and-rates, status: decided, rule: "rule 32 (D35)", aspect: A, cost: [collision, tax], members_diverging: [billing, blog, forms], population: throttled-modules(3), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: namespace-prefix-principle, status: decided, rule: "rule 33 (D36)", aspect: A, cost: [ambiguity, collision], members_diverging: [backups, billing, blog, crm, forms, orgs], population: shared-namespaces(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: upward-name-references, status: decided, rule: "rule 34 (D37)", aspect: C, cost: [ambiguity, tax], members_diverging: [orgs, auth, blog], population: modules(12), check: conformance, closed_world: true, handoff: [arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: secret-resolution-path, status: decided, rule: "rule 35 (D38)", aspect: B, cost: [ambiguity, tax], members_diverging: [analytics, billing, notifications, storage, backups], population: secret-modules(5), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: type-check-config, status: decided, rule: "rule 36 (D39)", aspect: N, cost: [ambiguity], members_diverging: [orgs, social, forms, notifications, billing, blog, listings, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: module-lists-outside-members, status: decided, rule: "rule 37 (D40)", aspect: L, cost: [tax, ambiguity], members_diverging: [core, cli, scripts, theme, orgs], population: lists(10), check: conformance, closed_world: true, handoff: [arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: readme-content-accuracy, status: decided, rule: "rule 38 (D41)", aspect: O, cost: [tax], members_diverging: [notifications, billing, storage, backups, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  - {id: manifest-dependency-spec, status: decided, rule: "rule 39 (D42)", aspect: C, cost: [ambiguity, tax], members_diverging: [auth, billing, blog, crm, listings, social, orgs], population: manifests-with-deps(7), check: loader, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
-  # passes 1–5 — decided rules, members not yet changed
-  - {id: settings-names, status: decided, aspect: A, cost: [collision, tax], members_diverging: [billing, blog, crm, forms, listings, notifications, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 1 (D1, D2)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: module-enabled-switch, status: decided, aspect: B, cost: [ambiguity], members_diverging: [auth, backups, blog, crm, forms, listings, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 1 (D3)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: settings-readers-and-defaults, status: decided, aspect: B, cost: [tax, ambiguity], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: startup+conformance, closed_world: true, handoff: [], rule: "rule 3 (D4)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: cross-module-settings-reads, status: decided, aspect: C, cost: [ambiguity], members_diverging: [blog, forms, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rules 3–4 (D5)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: secret-env-var-names, status: decided, aspect: A, cost: [collision], members_diverging: [backups], population: secret-modules(5), check: conformance, closed_world: true, handoff: [], rule: "rule 1", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: module-dependency-direction, status: decided, aspect: C, cost: [ambiguity, tax], members_diverging: [auth, orgs, forms, blog], population: modules(12), check: conformance, closed_world: true, handoff: [arch], rule: "rules 4–5 (D5, D6)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: identity-stem, status: decided, aspect: A, cost: [collision, tax], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 2 (D7, D7b)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: url-mounts-and-names, status: decided, aspect: H, cost: [tax, ambiguity], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-urls(9), check: conformance, closed_world: true, handoff: [], rule: "rule 7 (D10)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: templates-static-tags, status: decided, aspect: A, cost: [collision, tax], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-templates(10), check: conformance, closed_world: true, handoff: [], rule: "rule 8 (D11)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: http-api-shape, status: decided, aspect: H, cost: [ambiguity], members_diverging: [billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-apis(7), check: conformance, closed_world: true, handoff: [], rule: "rule 9 (D12)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: startup-checks-and-errors, status: decided, aspect: D, cost: [ambiguity], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 10 (D13)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: package-files, status: decided, aspect: L, cost: [tax, ambiguity], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rules 11, 28 (D14, D31)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: required-tests, status: decided, aspect: M, cost: [tax], members_diverging: [auth, billing, blog, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: readme-outline, status: decided, aspect: O, cost: [tax], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: model-choices, status: decided, aspect: G, cost: [tax], members_diverging: [backups, blog, crm, forms, listings, notifications, social], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14, D17)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: option-schema-and-validation, status: decided, aspect: B, cost: [ambiguity, tax], members_diverging: [analytics, backups, billing, blog, crm, forms, listings, notifications, social, storage, core, cli], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 12 (D15)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: tenant-model-base, status: decided, aspect: G, cost: [tax], members_diverging: [billing, blog, forms, listings, social], population: tenant-modules(6), check: startup+conformance, closed_world: true, handoff: [], rule: "rule 13 (D16)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: model-basics, status: decided, aspect: G, cost: [collision, tax], members_diverging: [billing, blog, crm, forms, orgs], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 14 (D17)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: package-root-init, status: decided, aspect: D, cost: [tax], members_diverging: [auth, blog, crm, forms, listings, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 15 (D18)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: signals-vs-receivers, status: decided, aspect: L, cost: [ambiguity], members_diverging: [auth, crm, orgs], population: modules-with-signals(3), check: conformance, closed_world: true, handoff: [], rule: "rule 16 (D19)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: command-behavior, status: decided, aspect: J, cost: [tax], members_diverging: [backups, forms, orgs], population: commands(15), check: conformance, closed_world: true, handoff: [], rule: "rule 17 (D20)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: package-tooling, status: decided, aspect: N, cost: [tax], members_diverging: [analytics, notifications, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 18 (D21); mypy part superseded by type-check-config", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: tenant-authorization, status: decided, aspect: E, cost: [ambiguity], members_diverging: [blog, crm, forms, listings], population: tenant-modules(6), check: conformance, closed_world: false, handoff: [], rule: "rule 19 (D22)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: email-sender, status: decided, aspect: I, cost: [ambiguity], members_diverging: [forms], population: emailing-modules(4), check: conformance, closed_world: true, handoff: [], rule: "rule 20 (D23)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: write-effects-on-commit, status: decided, aspect: F, cost: [defect], members_diverging: [crm, forms, orgs, social], population: modules-with-effects(5), check: review+rollback-test, closed_world: false, handoff: [], rule: "rule 21 (D24)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: analytics-event-ownership, status: decided, aspect: C, cost: [tax], members_diverging: [analytics, forms, social], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 22 (D25)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: service-surface, status: decided, aspect: D, cost: [ambiguity], members_diverging: [analytics, backups, billing, crm, notifications], population: modules-with-services(6), check: conformance, closed_world: true, handoff: [], rule: "rule 23 (D26)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: current-time-call, status: decided, aspect: G, cost: [tax], members_diverging: [storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 24 (D27)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: cache-key-stem, status: decided, aspect: A, cost: [collision], members_diverging: [social], population: caching-modules(1), check: conformance, closed_world: true, handoff: [], rule: "rule 24 (D27)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: constraint-index-names, status: decided, aspect: A, cost: [collision], members_diverging: [blog, crm, forms, listings, orgs], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 25 (D28)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: inbound-webhooks, status: decided, aspect: H, cost: [ambiguity], members_diverging: [billing, notifications], population: webhook-modules(2), check: conformance, closed_world: true, handoff: [], rule: "rule 26 (D29)", first_seen: 2026-09-26, last_verified: 2026-09-28}
-  - {id: test-file-names, status: decided, aspect: M, cost: [tax], members_diverging: [auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 29 (D32)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: shared-setting-writes, status: resolved, rule: "rule 30 (D33)", aspect: A, cost: [collision, defect], members_diverging: [auth, orgs, blog, listings, billing], population: modules(12), check: apply-time, closed_world: true, handoff: [tech, arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: theme-module-presence, status: resolved, rule: "rule 31 (D34)", aspect: P, cost: [ambiguity, defect], members_diverging: [auth, blog, listings, crm, forms, storage, backups, notifications, analytics, billing, social, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [tech], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: throttle-scopes-and-rates, status: resolved, rule: "rule 32 (D35)", aspect: A, cost: [collision, tax], members_diverging: [billing, blog, forms], population: throttled-modules(3), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: namespace-prefix-principle, status: resolved, rule: "rule 33 (D36)", aspect: A, cost: [ambiguity, collision], members_diverging: [backups, billing, blog, crm, forms, orgs], population: shared-namespaces(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: upward-name-references, status: resolved, rule: "rule 34 (D37)", aspect: C, cost: [ambiguity, tax], members_diverging: [orgs, auth, blog], population: modules(12), check: conformance, closed_world: true, handoff: [arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: secret-resolution-path, status: resolved, rule: "rule 35 (D38)", aspect: B, cost: [ambiguity, tax], members_diverging: [analytics, billing, notifications, storage, backups], population: secret-modules(5), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: type-check-config, status: resolved, rule: "rule 36 (D39)", aspect: N, cost: [ambiguity], members_diverging: [orgs, social, forms, notifications, billing, blog, listings, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: module-lists-outside-members, status: resolved, rule: "rule 37 (D40)", aspect: L, cost: [tax, ambiguity], members_diverging: [core, cli, scripts, theme, orgs], population: lists(10), check: conformance, closed_world: true, handoff: [arch], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: readme-content-accuracy, status: resolved, rule: "rule 38 (D41)", aspect: O, cost: [tax], members_diverging: [notifications, billing, storage, backups, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  - {id: manifest-dependency-spec, status: resolved, rule: "rule 39 (D42)", aspect: C, cost: [ambiguity, tax], members_diverging: [auth, billing, blog, crm, listings, social, orgs], population: manifests-with-deps(7), check: loader, closed_world: true, handoff: [], first_seen: 2026-09-28, last_verified: 2026-09-28}
+  # passes 1–5
+  - {id: settings-names, status: resolved, aspect: A, cost: [collision, tax], members_diverging: [billing, blog, crm, forms, listings, notifications, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 1 (D1, D2)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: module-enabled-switch, status: resolved, aspect: B, cost: [ambiguity], members_diverging: [auth, backups, blog, crm, forms, listings, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 1 (D3)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: settings-readers-and-defaults, status: resolved, aspect: B, cost: [tax, ambiguity], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: startup+conformance, closed_world: true, handoff: [], rule: "rule 3 (D4)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: cross-module-settings-reads, status: resolved, aspect: C, cost: [ambiguity], members_diverging: [blog, forms, orgs], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rules 3–4 (D5)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: secret-env-var-names, status: resolved, aspect: A, cost: [collision], members_diverging: [backups], population: secret-modules(5), check: conformance, closed_world: true, handoff: [], rule: "rule 1", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: module-dependency-direction, status: resolved, aspect: C, cost: [ambiguity, tax], members_diverging: [auth, orgs, forms, blog], population: modules(12), check: conformance, closed_world: true, handoff: [arch], rule: "rules 4–5 (D5, D6)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: identity-stem, status: resolved, aspect: A, cost: [collision, tax], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 2 (D7, D7b)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: url-mounts-and-names, status: resolved, aspect: H, cost: [tax, ambiguity], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-urls(9), check: conformance, closed_world: true, handoff: [], rule: "rule 7 (D10)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: templates-static-tags, status: resolved, aspect: A, cost: [collision, tax], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-templates(10), check: conformance, closed_world: true, handoff: [], rule: "rule 8 (D11)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: http-api-shape, status: resolved, aspect: H, cost: [ambiguity], members_diverging: [billing, blog, crm, forms, listings, notifications, orgs], population: modules-with-apis(7), check: conformance, closed_world: true, handoff: [], rule: "rule 9 (D12)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: startup-checks-and-errors, status: resolved, aspect: D, cost: [ambiguity], members_diverging: [analytics, auth, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 10 (D13)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: package-files, status: resolved, aspect: L, cost: [tax, ambiguity], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rules 11, 28 (D14, D31)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: required-tests, status: resolved, aspect: M, cost: [tax], members_diverging: [auth, billing, blog, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: readme-outline, status: resolved, aspect: O, cost: [tax], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: model-choices, status: resolved, aspect: G, cost: [tax], members_diverging: [backups, blog, crm, forms, listings, notifications, social], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 11 (D14, D17)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: option-schema-and-validation, status: resolved, aspect: B, cost: [ambiguity, tax], members_diverging: [analytics, backups, billing, blog, crm, forms, listings, notifications, social, storage, core, cli], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 12 (D15)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: tenant-model-base, status: resolved, aspect: G, cost: [tax], members_diverging: [billing, blog, forms, listings, social], population: tenant-modules(6), check: startup+conformance, closed_world: true, handoff: [], rule: "rule 13 (D16)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: model-basics, status: resolved, aspect: G, cost: [collision, tax], members_diverging: [billing, blog, crm, forms, orgs], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 14 (D17)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: package-root-init, status: resolved, aspect: D, cost: [tax], members_diverging: [auth, blog, crm, forms, listings, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 15 (D18)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: signals-vs-receivers, status: resolved, aspect: L, cost: [ambiguity], members_diverging: [auth, crm, orgs], population: modules-with-signals(3), check: conformance, closed_world: true, handoff: [], rule: "rule 16 (D19)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: command-behavior, status: resolved, aspect: J, cost: [tax], members_diverging: [backups, forms, orgs], population: commands(15), check: conformance, closed_world: true, handoff: [], rule: "rule 17 (D20)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: package-tooling, status: resolved, aspect: N, cost: [tax], members_diverging: [analytics, notifications, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 18 (D21); mypy part superseded by type-check-config", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: tenant-authorization, status: resolved, aspect: E, cost: [ambiguity], members_diverging: [blog, crm, forms, listings], population: tenant-modules(6), check: conformance, closed_world: false, handoff: [], rule: "rule 19 (D22)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: email-sender, status: resolved, aspect: I, cost: [ambiguity], members_diverging: [forms], population: emailing-modules(4), check: conformance, closed_world: true, handoff: [], rule: "rule 20 (D23)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: write-effects-on-commit, status: resolved, aspect: F, cost: [defect], members_diverging: [crm, forms, orgs, social], population: modules-with-effects(5), check: review+rollback-test, closed_world: false, handoff: [], rule: "rule 21 (D24)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: analytics-event-ownership, status: resolved, aspect: C, cost: [tax], members_diverging: [analytics, forms, social], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 22 (D25)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: service-surface, status: resolved, aspect: D, cost: [ambiguity], members_diverging: [analytics, backups, billing, crm, notifications], population: modules-with-services(6), check: conformance, closed_world: true, handoff: [], rule: "rule 23 (D26)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: current-time-call, status: resolved, aspect: G, cost: [tax], members_diverging: [storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 24 (D27)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: cache-key-stem, status: resolved, aspect: A, cost: [collision], members_diverging: [social], population: caching-modules(1), check: conformance, closed_world: true, handoff: [], rule: "rule 24 (D27)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: constraint-index-names, status: resolved, aspect: A, cost: [collision], members_diverging: [blog, crm, forms, listings, orgs], population: modules-with-models(10), check: conformance, closed_world: true, handoff: [], rule: "rule 25 (D28)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: inbound-webhooks, status: resolved, aspect: H, cost: [ambiguity], members_diverging: [billing, notifications], population: webhook-modules(2), check: conformance, closed_world: true, handoff: [], rule: "rule 26 (D29)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: test-file-names, status: resolved, aspect: M, cost: [tax], members_diverging: [auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], rule: "rule 29 (D32)", first_seen: 2026-09-26, last_verified: 2026-09-28}
   # log only
-  - {id: user-fk-on-delete, status: resolved, aspect: G, cost: [defect], members_diverging: [], population: modules-with-models(10), check: "SA35 gate", closed_world: true, handoff: [], rule: "rule 27 (D30)", first_seen: 2026-09-26, last_verified: 2026-09-28}
+  - {id: user-fk-on-delete, status: resolved, aspect: G, cost: [defect], members_diverging: [], population: modules-with-models(10), check: "user-FK conformance gate (orgs/tests/test_user_fk_conformance.py)", closed_world: true, handoff: [], rule: "rule 27 (D30)", first_seen: 2026-09-26, last_verified: 2026-09-28}
   - {id: py-typed, status: resolved, aspect: D, cost: [], members_diverging: [], population: modules(12), check: none, closed_world: false, handoff: [], rule: "rule 24 (D27)", first_seen: 2026-09-26, last_verified: 2026-09-28}
 ```
 
@@ -116,20 +119,64 @@ items:
 
 | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|
-| `shared-setting-writes` | A | collision, defect (latent) | 5 / 12 | decided |
-| `theme-module-presence` | P | ambiguity, defect (latent) | 12 / 12 | decided |
-| `throttle-scopes-and-rates` | A | collision, tax | 3 / 3 | decided |
-| `namespace-prefix-principle` | A | ambiguity, collision | 2 rules / 12 namespaces | decided |
-| `upward-name-references` | C | ambiguity, tax | 3 / 12 | decided |
-| `secret-resolution-path` | B | ambiguity, tax | 5 / 5 | decided |
-| `type-check-config` | N | ambiguity | 8 / 12 | decided |
-| `module-lists-outside-members` | L | tax, ambiguity | 10 lists | decided |
-| `readme-content-accuracy` | O | tax | 5 / 12 | decided |
-| `manifest-dependency-spec` | C | ambiguity, tax | 7 / 7 | decided |
-| 34 items of passes 1–5 | A–O | see index | see index | decided (32), resolved (2) |
+| `shared-setting-writes` | A | collision, defect (latent) | 5 / 12 | resolved |
+| `theme-module-presence` | P | ambiguity, defect (latent) | 12 / 12 | resolved |
+| `throttle-scopes-and-rates` | A | collision, tax | 3 / 3 | resolved |
+| `namespace-prefix-principle` | A | ambiguity, collision | 2 rules / 12 namespaces | resolved |
+| `upward-name-references` | C | ambiguity, tax | 3 / 12 | resolved |
+| `secret-resolution-path` | B | ambiguity, tax | 5 / 5 | resolved |
+| `type-check-config` | N | ambiguity | 8 / 12 | resolved |
+| `module-lists-outside-members` | L | tax, ambiguity | 10 lists | resolved |
+| `readme-content-accuracy` | O | tax | 5 / 12 | resolved |
+| `manifest-dependency-spec` | C | ambiguity, tax | 7 / 7 | resolved |
+| 34 items of passes 1–5 | A–O | see index | see index | resolved (34) |
 
-All 42 decided items wait on one thing: SA217–SA227 landing the code changes and SA215 landing
-rule 40's test. None of them needs more analysis; delivery is what reduces them.
+All 42 decided items are resolved: the convention tickets landed the code changes and SA215 landed
+rule 40's harness, which passes over the shipped tree. The rules the harness delegates and the
+limitations the audit accepted are recorded in the [Closing pass](#closing-pass-sa215-2026-10-02).
+
+## Closing pass (SA215, 2026-10-02)
+
+Rule 40's conformance harness (`scripts/check_module_conventions.py`, registered gate
+`check-module-conventions`) covers rules 1–20, 22–26, 28–29, and 31–39 over every `module.yml`,
+every module's source, and core's and the CLI's option handling, with a control case per covered
+rule in `scripts/test_check_module_conventions.py`; the live tree passes. Rules 27 and 30 stay out
+of the harness by rule 40's own carve-out; rule 21 is a review rule under rule 21 itself. Their
+owning checks:
+
+- **Rule 21 (effects of a write)** is a review rule with a rollback test per module; SA216 rebuilds
+  the account-removal path that uses it.
+- **Rule 27 (`on_delete` on `User`)** is enforced by the user-FK conformance gate
+  (`orgs/tests/test_user_fk_conformance.py`). Its reach is the apps that suite installs, so a
+  generated project's own apps remain a review-rule boundary; the reason is recorded in
+  decisions.md rule 27.
+- **Rule 30 (settings written by module wiring)** is enforced in `apply` by
+  `quickscale_core.module_wiring.collect_wiring`, which fails on an unequal shared key and
+  deep-merges `REST_FRAMEWORK`; its control cases are in
+  `quickscale_core/tests/test_module_wiring.py`.
+
+The enforcement gaps the audit recorded are closed or accepted:
+
+- Gap 1 (no conformance test) is closed by the harness above.
+- Gaps 2 and 4–12 are closed by the convention tickets and the harness clauses they landed: the
+  page-style contract is discovery-driven and flat, the isolation gates derive their module sets and
+  social ships its `test_rls_boundary.py`, the README check reads option keys and command names,
+  references by name are checked over the layer table, the root `mypy.ini` carries one section per
+  module with no per-module `[tool.mypy]`, option `validation:` blocks are read by core, the
+  manifest loader refuses version specifiers, `collect_wiring` refuses unequal shared values, the
+  gate is renamed, and `TENANT_TABLE_REGISTRY` is test-owned.
+- Gap 3 (the user-FK gate sees only its suite's apps) is accepted, as recorded in decisions.md
+  rule 27.
+- Three residuals are accepted as properties of the fixed checks: a module's `test_isolation.py` is
+  invoked explicitly by the PostgreSQL gate and does not self-enroll; rule 38's README match is a
+  substring anywhere in the file (a floor, as D41 records); and rule 19's detector scans `views.py`
+  and `debug_views.py`, so the forbidden tokens in rule 28's private view modules (`_view_*.py`,
+  `_api_views.py`) remain a review boundary until the detector is widened.
+
+The names decisions.md quoted from the audit-time shipped state now carry the renamed forms
+(`QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`, `backups_create` → `quickscale_backups_create`,
+`quickscale_modules_<module>` app labels → `quickscale_<module>`). The evidence cells in
+sections 1–41 above remain the 2026-09-28 audit record, not a description of the current tree.
 
 ---
 
@@ -2307,6 +2354,14 @@ any difference from this summary. Rules 2, 9, 11, 13, 14, 18, 22, and 27 were am
 12. **A shipped-source oracle.** `TENANT_TABLE_REGISTRY` is recorded as a CI parity oracle but lives
     in orgs' `tenancy.py` (D37).
 
+**Closing note (SA215, 2026-10-02).** Gaps 1, 2, and 4–12 are closed: the rule 40 harness covers
+the statically checkable rules, the page-style contract is discovery-driven, the isolation gates
+derive their module sets, the README check reads option and command names, references by name are
+checked, the root `mypy.ini` carries one section per module, option `validation:` blocks are read,
+`required_modules` refuses specifiers, `collect_wiring` refuses unequal values, the gate is renamed,
+and the tenant registry is test-owned. Gap 3 is accepted with its reason in decisions.md rule 27.
+The list above is the audit-time record, not a description of the current tree.
+
 ## Consistent by design
 
 - **Outbound vendor clients follow their SDKs:** billing builds a `StripeClient` per call; analytics
@@ -2470,3 +2525,6 @@ in the code.
 - 2026-09-28 — `module-lists-outside-members`: decided (rule 37, D40) — maintainer decision; members not yet changed.
 - 2026-09-28 — `readme-content-accuracy`: decided (rule 38, D41) — maintainer decision; members not yet changed.
 - 2026-09-28 — `manifest-dependency-spec`: decided (rule 39, D42) — maintainer decision; members not yet changed.
+- 2026-10-02 — closing pass (SA215): every index item resolved. The convention tickets landed the
+  code changes and rule 40's harness enforces the statically checkable rules over the shipped tree;
+  rules 21, 27, and 30 keep their delegated checks. Sections 1–41 remain the 2026-09-28 evidence.

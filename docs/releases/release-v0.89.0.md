@@ -175,6 +175,15 @@ kebab-case billing route names (`billing-dashboard`, `pricing-page`, `stripe-web
 rest), which become the namespaced snake_case names under `quickscale_billing:` (`dashboard`,
 `pricing_page`, `stripe_webhook`, and the rest).
 
+**Webhook endpoints.** Neither provider webhook URL moves: the billing Stripe webhook stays at
+`/billing/webhooks/stripe/`, and the notifications Resend webhook stays at
+`/notifications/webhooks/resend/` (now reversed as `quickscale_notifications:resend_webhook`), so
+no provider URL update is required. Stripe still needs its operator step: recreate the webhook
+endpoint at API version `2026-06-24.dahlia` and resend the events the old endpoint refused,
+crediting an affected invoice once through `credit_user` when it is still refused after the resend
+or is outside the resend window — an endpoint left on the older API version stops processing
+billing webhooks.
+
 **CRM and forms URLs.** The crm module declares its `crm/` mount in its manifest and every route
 name becomes snake_case under `quickscale_crm:` (`api_root`, `tag_list`, `contact_notes`,
 `deal_bulk_update_stage`, and the rest); its Django page and JSON API keep their existing
