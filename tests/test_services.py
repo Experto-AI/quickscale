@@ -650,3 +650,11 @@ def test_capture_event_logs_generic_client_errors(caplog) -> None:
         )
 
     assert "failed to capture event 'broken_event'" in caplog.text
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_ANALYTICS_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_ANALYTICS_ENABLED=True):
+        assert services.is_enabled() is True
+    with override_settings(QUICKSCALE_ANALYTICS_ENABLED=False):
+        assert services.is_enabled() is False

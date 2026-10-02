@@ -313,6 +313,15 @@ def capture_event(
         )
 
 
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_ANALYTICS_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_ANALYTICS_ENABLED)
+
+
 __all__ = [
     "ANALYTICS_POSTHOG_DEFAULT_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
@@ -324,4 +333,5 @@ __all__ = [
     "get_distinct_id",
     "get_template_analytics_context",
     "is_analytics_active",
+    "is_enabled",
 ]
