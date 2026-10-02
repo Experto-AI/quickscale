@@ -4274,6 +4274,255 @@ def test_secrets_control() -> None:
     )
 
 
+def test_legacy_name_controls() -> None:
+    module = _golden_module()
+    declaration = (
+        "from collections.abc import Mapping\n\n"
+        "RETIRED_SETTINGS: Mapping[str, str] = {\n"
+        '    "QUICKSCALE_DEMO_MODE": "Use QUICKSCALE_DEMO_ENABLED instead.",\n'
+        '    "DEMO_POSTS_PER_PAGE": "Use QUICKSCALE_DEMO_POSTS_PER_PAGE instead.",\n'
+        "}\n"
+    )
+    declared = _with_files(module, checks=declaration)
+    assert _violations(checker.rule_6_no_legacy_names, declared) == []
+    attribute_read = _with_files(
+        declared,
+        views=("from django.conf import settings\n\nMODE = settings.QUICKSCALE_DEMO_MODE\n"),
+    )
+    assert any(
+        "reads retired setting QUICKSCALE_DEMO_MODE" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, attribute_read)
+    )
+    unprefixed_read = _with_files(
+        declared,
+        views=("from django.conf import settings\n\nPAGE = settings.DEMO_POSTS_PER_PAGE\n"),
+    )
+    assert any(
+        "reads retired setting DEMO_POSTS_PER_PAGE" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, unprefixed_read)
+    )
+    getattr_read = _with_files(
+        declared,
+        views=(
+            "from django.conf import settings\n\n"
+            'MODE = getattr(settings, "QUICKSCALE_DEMO_MODE", "solo")\n'
+        ),
+    )
+    assert any(
+        "names retired setting QUICKSCALE_DEMO_MODE" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, getattr_read)
+    )
+    aliased_manifest = copy.deepcopy(module.manifest)
+    aliased_manifest["derivation"]["legacy_aliases"] = [{"old": "enabled"}]
+    assert any(
+        "legacy alias" in violation
+        for violation in _violations(
+            checker.rule_6_no_legacy_names, replace(module, manifest=aliased_manifest)
+        )
+    )
+    hidden_option = copy.deepcopy(module.manifest)
+    hidden_option["retired_options"] = {"enabled": "Retired."}
+    assert any(
+        "still accepted" in violation
+        for violation in _violations(
+            checker.rule_6_no_legacy_names, replace(module, manifest=hidden_option)
+        )
+    )
+
+
+def test_authorization_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_19_authorization, module) == []
+    staff = _with_files(module, views="def index(request, user):\n    return user.is_staff\n")
+    assert any(
+        "is_staff" in violation for violation in _violations(checker.rule_19_authorization, staff)
+    )
+    flag = _with_files(
+        module,
+        views='def index(request, user):\n    return getattr(user, "is_superuser", False)\n',
+    )
+    assert any(
+        "is_superuser" in violation
+        for violation in _violations(checker.rule_19_authorization, flag)
+    )
+    admin = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import IsAdminUser\n\n"
+            "class IndexView:\n    permission_classes = [IsAdminUser]\n"
+        ),
+    )
+    assert any(
+        "IsAdminUser" in violation
+        for violation in _violations(checker.rule_19_authorization, admin)
+    )
+    aliased_admin = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import IsAdminUser as AdminOnly\n\n"
+            "class IndexView:\n    permission_classes = [AdminOnly]\n"
+        ),
+    )
+    assert any(
+        "IsAdminUser" in violation
+        for violation in _violations(checker.rule_19_authorization, aliased_admin)
+    )
+    aliased_login = _with_files(
+        module,
+        views=(
+            "from django.contrib.auth.views import redirect_to_login as login_redirect\n\n"
+            "def index(request):\n    return login_redirect(request.get_full_path())\n"
+        ),
+    )
+    assert any(
+        "redirect_to_login" in violation
+        for violation in _violations(checker.rule_19_authorization, aliased_login)
+    )
+    login = _with_files(
+        module,
+        views=(
+            "from django.contrib.auth.views import redirect_to_login\n\n"
+            "def index(request):\n    return redirect_to_login(request.get_full_path())\n"
+        ),
+    )
+    assert any(
+        "redirect_to_login" in violation
+        for violation in _violations(checker.rule_19_authorization, login)
+    )
+    operator = _with_files(
+        _golden_module("orgs"),
+        views='def index(request, user):\n    return getattr(user, "is_superuser", False)\n',
+    )
+    assert _violations(checker.rule_19_authorization, operator) == []
+    documented = _with_files(
+        module,
+        views='"""Views never use is_staff or redirect_to_login, by rule 19."""\n',
+    )
+    assert _violations(checker.rule_19_authorization, documented) == []
+
+
+def test_name_reference_controls() -> None:
+    orgs = _golden_module("orgs")
+    assert _violations(checker.rule_34_name_references, orgs) == []
+    upward = _with_files(
+        orgs,
+        services=(
+            "from django.apps import apps\n\nPLAN = apps.get_model('quickscale_billing', 'Plan')\n"
+        ),
+    )
+    assert any(
+        "references billing by name upward" in violation
+        for violation in _violations(checker.rule_34_name_references, upward)
+    )
+    namespace = _with_files(
+        orgs,
+        services=(
+            "from django.urls import reverse\n\nURL = reverse('quickscale_billing:pricing')\n"
+        ),
+    )
+    assert any(
+        "references billing by name upward" in violation
+        for violation in _violations(checker.rule_34_name_references, namespace)
+    )
+    label_prefix = _with_files(orgs, services="LABEL = 'quickscale_billing_'\n")
+    assert any(
+        "references billing by name upward" in violation
+        for violation in _violations(checker.rule_34_name_references, label_prefix)
+    )
+    lookalike = _with_files(orgs, services="LABEL = 'quickscale_billingx'\n")
+    assert _violations(checker.rule_34_name_references, lookalike) == []
+    downward = _with_files(
+        _golden_module("blog"),
+        **{
+            "services.py": (
+                "from django.apps import apps\n\n"
+                'X = apps.is_installed("quickscale_modules_storage")\n'
+            )
+        },
+    )
+    assert _violations(checker.rule_34_name_references, downward) == []
+    self_reference = _with_files(
+        orgs,
+        services=(
+            "from importlib import import_module\n\n"
+            "mod = import_module('quickscale_modules_orgs.checks')\n"
+        ),
+    )
+    assert _violations(checker.rule_34_name_references, self_reference) == []
+    migration = _with_files(
+        orgs,
+        **{
+            "migrations/0002_extra.py": (
+                "from django.apps import apps\n\n"
+                "PLAN = apps.get_model('quickscale_billing', 'Plan')\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_34_name_references, migration) == []
+    service_migration = _with_files(
+        orgs,
+        **{
+            "migrations/0003_extra.py": (
+                "from importlib import import_module\n\n"
+                "mod = import_module('quickscale_modules_billing.services')\n"
+            )
+        },
+    )
+    assert any(
+        "references billing by name upward" in violation
+        for violation in _violations(checker.rule_34_name_references, service_migration)
+    )
+    app_config_migration = _with_files(
+        orgs,
+        **{
+            "migrations/0004_extra.py": (
+                "from django.apps import apps\n\n"
+                "config = apps.get_app_config('quickscale_billing')\n"
+            )
+        },
+    )
+    assert any(
+        "references billing by name upward" in violation
+        for violation in _violations(checker.rule_34_name_references, app_config_migration)
+    )
+    keyword_migration = _with_files(
+        orgs,
+        **{
+            "migrations/0005_extra.py": (
+                "from django.apps import apps\n\n"
+                "PLAN = apps.get_model(app_label='quickscale_billing', model_name='Plan')\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_34_name_references, keyword_migration) == []
+    annotated_dependencies = _with_files(
+        orgs,
+        **{
+            "migrations/0006_extra.py": (
+                "dependencies: list[tuple[str, str]] = [('quickscale_billing', '0001_initial')]\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_34_name_references, annotated_dependencies) == []
+    notifications = _with_files(
+        _golden_module("notifications"),
+        services=(
+            'from django.apps import apps\n\nX = apps.is_installed("quickscale_modules_orgs")\n'
+        ),
+    )
+    orgs_reference = _with_files(
+        orgs,
+        services=(
+            "from django.apps import apps\n\n"
+            'X = apps.is_installed("quickscale_modules_notifications")\n'
+        ),
+    )
+    assert any(
+        "cycle" in violation
+        for violation in _violations(checker.rule_34_name_references, orgs_reference, notifications)
+    )
+
+
 def test_layer_table_mirrors_the_shipped_modules() -> None:
     corpus = checker.load_corpus(REPO_ROOT)
     assert {module.name for module in corpus.modules} == set(checker.MODULE_LAYERS)
