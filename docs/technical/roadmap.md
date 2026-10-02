@@ -186,6 +186,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   three largest: billing `services.py` (4,575), `apply_command.py` (3,989), and
   `dr_engine/orchestration.py` (2,897). Billing's convention tickets (SA219, SA220) have merged.
 
+  **Landed (billing slice):** billing `services.py` is a facade over fifteen private `_<name>.py`
+  modules, all under the 800-line ceiling; every prior name is re-exported, the rule 26 webhook
+  entry point stays in `services.py`, and the existing tests and public import paths are unchanged.
+  The eleven accepted complexity entries are re-keyed to their new files with rename waivers; the
+  pre-existing billing complexity regressions are unchanged and remain for the closing
+  re-tightening. The CLI and `dr_engine` slices remain.
+
   **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:
   `quickscale_cli` commands and utilities (`apply_command.py`, `module_commands.py`,
   `plan_command.py`, `dr_commands.py`, `status_command.py`, `deployment_commands.py`,

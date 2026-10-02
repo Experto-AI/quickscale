@@ -131,6 +131,116 @@
       "reason": "SA231 splits beta_migration.py into the beta_migration package; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
       "expires_on": "2027-03-31",
       "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W016",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_credits.py::_has_matching_business_reference",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W017",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_customers.py::get_or_create_stripe_customer",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W018",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_payload.py::_extract_price_id",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W019",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_payload.py::_extract_subscription_price_id",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W020",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout.py::create_subscription_checkout_session",
+      "base_ceiling": 0,
+      "ceiling": 25,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W021",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_subscription_events.py::_upsert_subscription_from_payload",
+      "base_ceiling": 0,
+      "ceiling": 27,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W022",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_subscription_mutations.py::cancel_current_subscription",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W023",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_validation.py::_validate_stripe_price_parity",
+      "base_ceiling": 0,
+      "ceiling": 14,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W024",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks.py::_handle_checkout_session_completed_event",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W026",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py::_handle_invoice_paid_event",
+      "base_ceiling": 0,
+      "ceiling": 27,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W027",
+      "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py::_handle_invoice_payment_failed_event",
+      "base_ceiling": 0,
+      "ceiling": 19,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits billing's services.py into private _<name>.py modules that services.py re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
     }
   ]
 }

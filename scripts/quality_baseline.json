@@ -455,78 +455,6 @@
         "symbol": "prepare_admin_uploaded_restore_artifact",
         "type": "function"
       },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::_extract_price_id": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 15,
-        "symbol": "_extract_price_id",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::_extract_subscription_price_id": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 15,
-        "symbol": "_extract_subscription_price_id",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::_handle_checkout_session_completed_event": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 15,
-        "symbol": "_handle_checkout_session_completed_event",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::_handle_invoice_paid_event": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 27,
-        "symbol": "_handle_invoice_paid_event",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::_handle_invoice_payment_failed_event": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 19,
-        "symbol": "_handle_invoice_payment_failed_event",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::_has_matching_business_reference": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 11,
-        "symbol": "_has_matching_business_reference",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::_upsert_subscription_from_payload": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 27,
-        "symbol": "_upsert_subscription_from_payload",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::_validate_stripe_price_parity": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 14,
-        "symbol": "_validate_stripe_price_parity",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::cancel_current_subscription": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 15,
-        "symbol": "cancel_current_subscription",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::create_subscription_checkout_session": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 25,
-        "symbol": "create_subscription_checkout_session",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::get_or_create_stripe_customer": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 11,
-        "symbol": "get_or_create_stripe_customer",
-        "type": "function"
-      },
-      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::handle_stripe_event": {
-        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
-        "max_complexity": 15,
-        "symbol": "handle_stripe_event",
-        "type": "function"
-      },
       "quickscale_modules/blog/src/quickscale_modules_blog/apps.py::QuickscaleBlogConfig": {
         "file": "quickscale_modules/blog/src/quickscale_modules_blog/apps.py",
         "max_complexity": 13,
@@ -675,6 +603,78 @@
         "file": "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py",
         "max_complexity": 12,
         "symbol": "validate_file_upload",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_payload.py::_extract_price_id": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_payload.py",
+        "max_complexity": 15,
+        "symbol": "_extract_price_id",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_payload.py::_extract_subscription_price_id": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_payload.py",
+        "max_complexity": 15,
+        "symbol": "_extract_subscription_price_id",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_webhooks.py::_handle_checkout_session_completed_event": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_webhooks.py",
+        "max_complexity": 15,
+        "symbol": "_handle_checkout_session_completed_event",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py::_handle_invoice_paid_event": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py",
+        "max_complexity": 27,
+        "symbol": "_handle_invoice_paid_event",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py::_handle_invoice_payment_failed_event": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py",
+        "max_complexity": 19,
+        "symbol": "_handle_invoice_payment_failed_event",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_credits.py::_has_matching_business_reference": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_credits.py",
+        "max_complexity": 11,
+        "symbol": "_has_matching_business_reference",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_subscription_events.py::_upsert_subscription_from_payload": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_subscription_events.py",
+        "max_complexity": 27,
+        "symbol": "_upsert_subscription_from_payload",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_validation.py::_validate_stripe_price_parity": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_validation.py",
+        "max_complexity": 14,
+        "symbol": "_validate_stripe_price_parity",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_subscription_mutations.py::cancel_current_subscription": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_subscription_mutations.py",
+        "max_complexity": 15,
+        "symbol": "cancel_current_subscription",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout.py::create_subscription_checkout_session": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout.py",
+        "max_complexity": 25,
+        "symbol": "create_subscription_checkout_session",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/_customers.py::get_or_create_stripe_customer": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/_customers.py",
+        "max_complexity": 11,
+        "symbol": "get_or_create_stripe_customer",
+        "type": "function"
+      },
+      "quickscale_modules/billing/src/quickscale_modules_billing/services.py::handle_stripe_event": {
+        "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
+        "max_complexity": 15,
+        "symbol": "handle_stripe_event",
         "type": "function"
       }
     }
