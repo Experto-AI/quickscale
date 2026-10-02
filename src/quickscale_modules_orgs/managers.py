@@ -9,7 +9,7 @@ from django.db import IntegrityError, models, transaction
 from django.utils.text import slugify
 
 if TYPE_CHECKING:
-    from .models import Organization
+    from .models import Organization, OrganizationMembership
 
 
 class TenantManager(models.Manager):
@@ -144,19 +144,34 @@ class OrganizationManager(models.Manager["Organization"]):
         self._validate_system_org(row)
         return row
 
-    def create_personal_for(self, user: Any) -> "Organization":
-        """Return the user's personal organization, creating it if needed."""
-        from ._constants import RESERVED_ORG_SLUGS
-        from .models import OrgRole, OrganizationMembership
+    @staticmethod
+    def _existing_personal_membership(user: Any) -> "OrganizationMembership | None":
+        """Return the user's personal-org membership, or ``None``."""
+        from .models import OrganizationMembership
 
-        existing_membership = (
+        return (
             OrganizationMembership.objects.select_related("organization")
             .filter(user=user, organization__is_personal=True)
             .first()
         )
-        if existing_membership is not None:
-            return existing_membership.organization
 
+    @staticmethod
+    def _lock_existing_personal_membership(
+        user: Any,
+    ) -> "OrganizationMembership | None":
+        """Return the user's personal-org membership under a row lock."""
+        from .models import OrganizationMembership
+
+        return (
+            OrganizationMembership.objects.select_for_update()
+            .select_related("organization")
+            .filter(user=user, organization__is_personal=True)
+            .first()
+        )
+
+    @staticmethod
+    def _personal_slug_identity(user: Any) -> tuple[str, list[str]]:
+        """Return the personal organization's display name and slug candidates."""
         username = getattr(user, "username", "") or ""
         fallback_slug = slugify(getattr(user, "email", "")) or f"user-{user.pk}"
         slug = slugify(username) or fallback_slug
@@ -177,6 +192,17 @@ class OrganizationManager(models.Manager["Organization"]):
             slug_candidates.extend(f"{base}-{suffix}" for base in unique_bases)
             if len(slug_candidates) >= len(unique_bases) * 10:
                 break
+        return name, slug_candidates
+
+    def _create_personal_organization(
+        self,
+        user: Any,
+        name: str,
+        slug_candidates: list[str],
+    ) -> "Organization":
+        """Create the personal organization under the first non-reserved slug."""
+        from ._constants import RESERVED_ORG_SLUGS
+        from .models import OrgRole, OrganizationMembership
 
         seen_slugs: set[str] = set()
         for candidate in slug_candidates:
@@ -188,12 +214,7 @@ class OrganizationManager(models.Manager["Organization"]):
 
             try:
                 with transaction.atomic():
-                    existing_membership = (
-                        OrganizationMembership.objects.select_for_update()
-                        .select_related("organization")
-                        .filter(user=user, organization__is_personal=True)
-                        .first()
-                    )
+                    existing_membership = self._lock_existing_personal_membership(user)
                     if existing_membership is not None:
                         return existing_membership.organization
 
@@ -210,12 +231,17 @@ class OrganizationManager(models.Manager["Organization"]):
                     self._send_org_created(organization)
                     return organization
             except IntegrityError:
-                existing_membership = (
-                    OrganizationMembership.objects.select_related("organization")
-                    .filter(user=user, organization__is_personal=True)
-                    .first()
-                )
+                existing_membership = self._existing_personal_membership(user)
                 if existing_membership is not None:
                     return existing_membership.organization
 
         raise IntegrityError("Unable to create a unique personal organization slug.")
+
+    def create_personal_for(self, user: Any) -> "Organization":
+        """Return the user's personal organization, creating it if needed."""
+        existing_membership = self._existing_personal_membership(user)
+        if existing_membership is not None:
+            return existing_membership.organization
+
+        name, slug_candidates = self._personal_slug_identity(user)
+        return self._create_personal_organization(user, name, slug_candidates)
