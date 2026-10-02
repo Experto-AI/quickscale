@@ -30,7 +30,7 @@ every RLS-gated query returns zero rows.
 
 import pytest
 from django.db import connection as dj_connection
-from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 from tests_shared.isolation import assert_org_scoped_response
 
 # ---------------------------------------------------------------------------
